@@ -19,6 +19,9 @@ struct ChatDetailView: View {
     // live edge; streaming deltas never yank the transcript back down.
     @State private var userIsReading = false
 
+    // Read-aloud — on-device speech, silent when the device has no voice.
+    @StateObject private var speech = SpeechPlayer()
+
     init(conversationID: String?, prefill: String? = nil) {
         _vm = StateObject(wrappedValue: ChatViewModel(conversationID: conversationID))
         self.prefill = prefill
@@ -47,6 +50,9 @@ struct ChatDetailView: View {
         }
         .background(Aero.background.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
+        .onDisappear {
+            speech.stop()
+        }
         .onAppear {
             if let prefill, vm.draft.isEmpty, !vm.isStreaming {
                 vm.draft = prefill
@@ -78,10 +84,12 @@ struct ChatDetailView: View {
                     ForEach(vm.messages) { message in
                         MessageBubble(
                             message: message,
+                            isSpeaking: speech.speakingMessageID == message.id,
                             onRegenerate: {
                                 userIsReading = false
                                 vm.regenerate()
                             },
+                            onReadAloud: { speech.toggle(messageID: message.id, text: message.content) },
                             onTranslate: { showToast("Translation arrives with the language pack build") },
                             onSave: { showToast("Saved to Library") }
                         )
@@ -245,7 +253,9 @@ struct ChatDetailView: View {
 private struct MessageBubble: View {
 
     let message: ChatViewModel.ChatMessage
+    var isSpeaking: Bool = false
     var onRegenerate: () -> Void = {}
+    var onReadAloud: () -> Void = {}
     var onTranslate: () -> Void = {}
     var onSave: () -> Void = {}
 
@@ -309,10 +319,9 @@ private struct MessageBubble: View {
             ShareLink(item: message.content) {
                 Image(systemName: "square.and.arrow.up")
             }
-            Button {
-                // Read aloud — wired with TTS in a later pass.
-            } label: {
-                Image(systemName: "speaker.wave.2")
+            Button(action: onReadAloud) {
+                Image(systemName: isSpeaking ? "stop.fill" : "speaker.wave.2")
+                    .foregroundStyle(isSpeaking ? Aero.accent : Aero.textMuted)
             }
             Button(action: onTranslate) {
                 Image(systemName: "translate")

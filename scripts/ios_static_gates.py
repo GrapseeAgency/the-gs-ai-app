@@ -5,6 +5,7 @@ import sys
 
 FILES = [
     "/home/z/my-project/ios/App/Sources/Features/Voice/VoiceDictation.swift",
+    "/home/z/my-project/ios/App/Sources/Features/Voice/SpeechPlayer.swift",
     "/home/z/my-project/ios/App/Sources/Features/Home/HomeView.swift",
     "/home/z/my-project/ios/App/Sources/Navigation/AppRouter.swift",
     "/home/z/my-project/ios/App/Sources/Features/Chats/ChatDetailView.swift",

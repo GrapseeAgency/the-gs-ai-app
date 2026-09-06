@@ -1,5 +1,7 @@
 package com.grapsee.gsai.ui.chat
 
+import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.fadeIn
@@ -52,6 +54,7 @@ import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.StickyNote2
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Translate
+import androidx.compose.material.icons.outlined.VolumeOff
 import androidx.compose.material.icons.outlined.VolumeUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -67,6 +70,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -80,6 +84,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
@@ -144,6 +149,28 @@ fun ChatScreen(
             val info = listState.layoutInfo
             val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: -1
             lastVisible >= info.totalItemsCount - 1
+        }
+    }
+
+    // Read-aloud: on-device TTS, silent fallback when the device has no engine.
+    val context = LocalContext.current
+    var ttsReady by remember { mutableStateOf(false) }
+    val tts = remember {
+        TextToSpeech(context) { status -> ttsReady = status == TextToSpeech.SUCCESS }
+    }
+    var speakingMessageId by remember { mutableStateOf<String?>(null) }
+    DisposableEffect(tts) {
+        tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) {}
+            override fun onDone(utteranceId: String?) { speakingMessageId = null }
+            @Deprecated("Deprecated in Java")
+            override fun onError(utteranceId: String?) { speakingMessageId = null }
+        })
+        onDispose {
+            runCatching {
+                tts.stop()
+                tts.shutdown()
+            }
         }
     }
 
@@ -238,6 +265,21 @@ fun ChatScreen(
         dispatch(userText, echoUser = false)
     }
 
+    fun readAloud(messageId: String, content: String) {
+        // Second tap on the speaking bubble stops playback.
+        if (speakingMessageId == messageId) {
+            runCatching { tts.stop() }
+            speakingMessageId = null
+            return
+        }
+        runCatching { tts.stop() }
+        val result = if (ttsReady) {
+            tts.speak(content, TextToSpeech.QUEUE_FLUSH, null, messageId)
+        } else TextToSpeech.ERROR
+        if (result == TextToSpeech.SUCCESS) speakingMessageId = messageId
+        else showSnack("Read aloud isn't set up on this device yet")
+    }
+
     GsScreenScaffold(
         title = conversationTitle,
         onBack = onBack,
@@ -274,8 +316,10 @@ fun ChatScreen(
                             } else {
                                 AssistantMessage(
                                     message = message,
+                                    isSpeaking = speakingMessageId == message.id,
                                     onCopy = copyText,
                                     onRegenerate = { regenerate(message.id) },
+                                    onReadAloud = { readAloud(message.id, message.content) },
                                     onContextAction = showSnack
                                 )
                             }
@@ -405,8 +449,10 @@ private fun JumpToLatestPill(onClick: () -> Unit) {
 @Composable
 private fun AssistantMessage(
     message: ChatUiMessage,
+    isSpeaking: Boolean,
     onCopy: (String) -> Unit,
     onRegenerate: () -> Unit,
+    onReadAloud: () -> Unit = {},
     onContextAction: (String) -> Unit = {}
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
@@ -435,7 +481,11 @@ private fun AssistantMessage(
                         Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                             BubbleAction(Icons.Outlined.ContentCopy, "Copy") { onCopy(message.content) }
                             BubbleAction(Icons.Outlined.Refresh, "Regenerate", onRegenerate)
-                            BubbleAction(Icons.Outlined.VolumeUp, "Read aloud") {}
+                            BubbleAction(
+                                if (isSpeaking) Icons.Outlined.VolumeOff else Icons.Outlined.VolumeUp,
+                                if (isSpeaking) "Stop reading" else "Read aloud",
+                                onReadAloud
+                            )
                             BubbleAction(Icons.Outlined.Share, "Share") {}
                         }
                     }
@@ -456,13 +506,16 @@ private fun AssistantMessage(
                     }
                 )
                 DropdownMenuItem(
-                    text = { Text("Read aloud") },
+                    text = { Text(if (isSpeaking) "Stop reading" else "Read aloud") },
                     leadingIcon = {
-                        Icon(Icons.Outlined.VolumeUp, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Icon(
+                            if (isSpeaking) Icons.Outlined.VolumeOff else Icons.Outlined.VolumeUp,
+                            contentDescription = null, modifier = Modifier.size(18.dp)
+                        )
                     },
                     onClick = {
                         menuExpanded = false
-                        onContextAction("Read aloud arrives with the voice pack build")
+                        onReadAloud()
                     }
                 )
                 DropdownMenuItem(

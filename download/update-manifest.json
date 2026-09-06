@@ -1,6 +1,6 @@
 {
-  "versionCode": 6,
-  "versionName": "0.6.0",
+  "versionCode": 7,
+  "versionName": "0.7.0",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "Chat reading protection — scroll up mid-answer without being pulled back, plus a jump-to-latest pill"
+  "notes": "Read aloud — tap the speaker on any reply and GS reads it out, right on your device"
 }
