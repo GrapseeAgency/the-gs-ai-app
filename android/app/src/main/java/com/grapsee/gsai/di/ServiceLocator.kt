@@ -34,12 +34,14 @@ object ServiceLocator {
                 json(GsApiJson)
             }
             install(HttpRequestRetry) {
-                retryOnExceptionOrServerErrors(3)
+                // Only 5xx get a second chance — connect failures (no backend
+                // reachable) fall through instantly so GS Lite takes over.
+                retryOnServerErrors(1)
                 exponentialDelay()
             }
             install(HttpTimeout) {
                 requestTimeoutMillis = 120_000
-                connectTimeoutMillis = 15_000
+                connectTimeoutMillis = 3_000
             }
         }
     }

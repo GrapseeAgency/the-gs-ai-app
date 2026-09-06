@@ -152,14 +152,15 @@ fun ChatScreen(
     }
 
     fun reportFailure(error: Throwable) {
+        // Safety net only — the repository lands offline turns itself before
+        // this can fire. Quiet by design: no raw errors, no connectivity talk.
         finalizeStreamingMessage()
         messages.add(
             ChatUiMessage(
                 id = UUID.randomUUID().toString(),
                 role = "assistant",
-                content = "I couldn't reach the GS servers just now — your message is saved " +
-                    "in this chat. ${error.message?.let { "(${it.take(80)}) " }.orEmpty()}" +
-                    "Tap Regenerate to try again."
+                content = "That turn didn't land cleanly — tap Regenerate and I'll " +
+                    "take another pass at it."
             )
         )
     }

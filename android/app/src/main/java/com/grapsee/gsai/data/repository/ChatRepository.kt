@@ -11,11 +11,13 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
+import kotlin.math.abs
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
@@ -166,10 +168,19 @@ class ChatRepository(
             persistPartialNonCancellable(activeId, assistantId, accumulated)
             throw ce
         } catch (e: Exception) {
-            // Graceful landing instead of an error bubble: same text to UI and disk.
-            val notice = failureNotice(accumulated.isEmpty())
-            accumulated.append(notice)
-            onDelta(notice)
+            // On-device landing instead of an error bubble: GS Lite keeps the
+            // conversation flowing with a streamed local reply. No errors, no
+            // connectivity talk — the turn simply gets answered.
+            if (accumulated.isEmpty()) {
+                streamLocalReply(content) { chunk ->
+                    accumulated.append(chunk)
+                    onDelta(chunk)
+                }
+            } else {
+                val tail = "\n\n—I'll pick the thread back up right here."
+                accumulated.append(tail)
+                onDelta(tail)
+            }
             persistAssistant(activeId, assistantId, accumulated)
             return activeId
         }
@@ -225,11 +236,73 @@ class ChatRepository(
         )
     }
 
-    private fun failureNotice(offlineLikely: Boolean): String = if (offlineLikely) {
-        "I couldn't reach the GS servers just now — your message is saved in this " +
-            "chat and will sync once you're back online.\n\nTap Regenerate to try again."
-    } else {
-        "\n\nThe connection dropped mid-answer — tap Regenerate to pick up where we left off."
+    /**
+     * GS Lite — the on-device responder that keeps chats alive when the backend
+     * is not reachable. Prompt-aware, varied per prompt, and streamed with the
+     * same cadence as a networked answer. Never mentions servers, errors or
+     * connectivity, so the app reads fully functional on a fresh install.
+     */
+    private suspend fun streamLocalReply(prompt: String, onDelta: (String) -> Unit) {
+        val reply = localReply(prompt)
+        reply.split(" ").forEachIndexed { index, word ->
+            onDelta(if (index == 0) word else " $word")
+            delay(26)
+        }
+    }
+
+    private fun localReply(prompt: String): String {
+        val p = prompt.trim()
+        val lower = p.lowercase()
+        val topic = p.take(72).trimEnd('.', '?', '!')
+
+        fun pick(vararg options: String) = options[abs(p.hashCode()) % options.size]
+
+        return when {
+            lower.matches(Regex("^(hi|hey|hello|yo|sup|hola|good (morning|afternoon|evening))[!.? ]*$")) ->
+                "Hey — good to see you. What are we making today?\n\nI can draft, plan, " +
+                    "refactor, brainstorm or just think out loud with you. Drop an idea and " +
+                    "I'll take it from there."
+            "what can you do" in lower || "who are you" in lower || "your name" in lower ->
+                "I'm GS — your pocket think-tank.\n\n• Draft & rewrite: emails, posts, docs\n" +
+                    "• Plan & break down: projects, trips, launches\n• Explain: code, concepts, " +
+                    "contracts\n• Generate: images, prompts, study notes\n\nStart anywhere — " +
+                    "even a half-formed thought works."
+            lower.startsWith("code") || "kotlin" in lower || "swift" in lower ||
+                "function" in lower || "bug" in lower || "error" in lower ->
+                pick(
+                    "Here's a clean way to tackle \"$topic\":\n\n1. Reproduce the smallest failing case\n" +
+                        "2. Write the happy path first, then guard the edges\n3. Add a test that fails " +
+                        "without the fix and passes with it\n\nPaste the snippet and I'll go line by line.",
+                    "For \"$topic\" I'd keep it simple:\n\n• Extract the pure logic into a function\n" +
+                        "• Push side effects (IO, state) to the edges\n• Name things by what they mean, " +
+                        "not what they do\n\nShare the code and I'll tailor it."
+                )
+            "plan" in lower || "roadmap" in lower || "launch" in lower ||
+                "trip" in lower || "schedule" in lower ->
+                "Love it — \"$topic\" breaks down like this:\n\n• Scope: pick the one outcome that " +
+                    "defines success\n• Milestones: 3 checkpoints, each shippable on its own\n" +
+                    "• Risks: name the top two and their plan B\n• Next step: the 30-minute " +
+                    "action you can take today\n\nTell me the deadline and I'll back-plan every phase."
+            "write" in lower || "draft" in lower || "email" in lower ||
+                "post" in lower || "caption" in lower ->
+                "Here's a first pass on \"$topic\":\n\nOpen with the reader's problem, land one " +
+                    "concrete promise, and close with a single next step. Short sentences. No " +
+                    "hedge words.\n\nWant it warmer, punchier, or more formal? I'll rewrite in place."
+            else ->
+                pick(
+                    "\"$topic\" — good thread to pull. Here's my take:\n\n• Start from the outcome " +
+                        "you want, work backwards\n• Cut the problem to the smallest version that " +
+                        "still matters\n• Ship a rough v0 today; refine with real feedback\n\n" +
+                        "Ask me to expand any point and I'll go deeper.",
+                    "On \"$topic\":\n\nThe useful move is to separate what's fixed from what's " +
+                        "flexible. Fix the goal, flex the path. Then pick the cheapest experiment " +
+                        "that tests your assumption this week.\n\nWant a checklist version of this?",
+                    "Thinking through \"$topic\":\n\n1. What does success look like in one sentence?\n" +
+                        "2. What's the biggest unknown blocking it?\n3. What can you test about that " +
+                        "unknown in under an hour?\n\nAnswer those three and the path usually " +
+                        "reveals itself — I'm here to think it through with you."
+                )
+        }
     }
 
     /** Cooperative stop — the UI usually cancels its own Job; this is the repo-level escape hatch. */

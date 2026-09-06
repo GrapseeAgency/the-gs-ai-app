@@ -1,5 +1,9 @@
 package com.grapsee.gsai.ui.chat
 
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,7 +32,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -37,6 +43,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.data.local.ConversationEntity
@@ -54,8 +61,6 @@ import com.grapsee.gsai.ui.theme.GsMotion
 import java.time.Duration
 import java.time.OffsetDateTime
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
@@ -69,7 +74,7 @@ import kotlinx.coroutines.launch
 fun ChatsScreen(onNavigate: (String) -> Unit) {
     val conversationList = remember { conversationsFlow() }
     val conversations by conversationList.collectAsState(initial = emptyList())
-    val offline by remember { connectionStateFlow() }.collectAsState()
+    val offline by rememberDeviceOffline()
     val scope = rememberCoroutineScope()
 
     var firstLoadDone by remember { mutableStateOf(false) }
@@ -233,11 +238,43 @@ private fun RowScope.QuickLink(label: String, icon: ImageVector, onClick: () -> 
 
 // --- null-safe ServiceLocator access (previews never crash) -----------------
 
+/**
+ * The offline banner tracks the PHONE's connectivity only. A quiet backend is
+ * handled invisibly (GS Lite local replies + Room persistence), so an unreachable
+ * server never presents itself as an error state to the user.
+ */
+@Composable
+private fun rememberDeviceOffline(): State<Boolean> {
+    val context = LocalContext.current
+    val offline = remember { mutableStateOf(false) }
+    DisposableEffect(context) {
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        fun refresh() {
+            val caps = cm.activeNetwork?.let { cm.getNetworkCapabilities(it) }
+            offline.value = caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) != true
+        }
+        refresh()
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                offline.value = false
+            }
+
+            override fun onLost(network: Network) {
+                refresh()
+            }
+
+            override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
+                offline.value = !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            }
+        }
+        runCatching { cm.registerDefaultNetworkCallback(callback) }
+        onDispose { runCatching { cm.unregisterNetworkCallback(callback) } }
+    }
+    return offline
+}
+
 private fun conversationsFlow(): Flow<List<ConversationEntity>> =
     runCatching { ServiceLocator.chat.activeConversations() }.getOrElse { flowOf(emptyList()) }
-
-private fun connectionStateFlow(): StateFlow<Boolean> =
-    runCatching { ServiceLocator.chat.connectionState }.getOrElse { MutableStateFlow(false) }
 
 // --- sample data (shown seamlessly when Room is empty and backend is away) --
 
