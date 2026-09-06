@@ -61,6 +61,7 @@ android/local.properties
 android/.idea/
 android/captures/
 *.apk
+!download/*.apk
 !android/**/*.apk.idsig
 
 # ---- iOS ----

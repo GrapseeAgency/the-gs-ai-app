@@ -49,6 +49,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -58,8 +59,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.grapsee.gsai.data.liveupdate.LiveUpdateState
+import com.grapsee.gsai.data.liveupdate.LiveUpdater
 import com.grapsee.gsai.ui.navigation.GsRoutes
 import com.grapsee.gsai.ui.theme.Aeruo
 import com.grapsee.gsai.ui.theme.GsMotion
@@ -78,6 +82,10 @@ fun HomeScreen(
     onNavigate: (String) -> Unit,
     onOpenDrawer: () -> Unit = {}
 ) {
+    val context = LocalContext.current
+    // GS LiveUpdate: quiet GitHub manifest check on every Home appearance (10-min throttle).
+    LaunchedEffect(Unit) { LiveUpdater.syncFrom(context) }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -103,6 +111,9 @@ fun HomeScreen(
             Spacer(Modifier.height(GsMotion.spaceM))
             QuickChips(onNavigate = onNavigate)
             Spacer(Modifier.height(GsMotion.spaceM))
+            // GS LiveUpdate — appears only when a newer build exists on GitHub.
+            LiveUpdatePill()
+            Spacer(Modifier.height(GsMotion.spaceS))
             HeroInput(onNavigate = onNavigate)
             Spacer(Modifier.height(GsMotion.spaceS))
             Text(
@@ -337,6 +348,61 @@ private fun RotatingTagline(modifier: Modifier = Modifier) {
 
 private const val TAGLINE_ROTATE_MS = 5_200L
 private const val TAGLINE_FADE_MS = 700
+
+/**
+ * GS LiveUpdate pill — benchmark-quiet surface (raised dark + aurora dot, same
+ * language as the model pill). Only rendered when a newer build is published:
+ * "v0.2.0 ready" → tap → "Downloading update · 42%" → "Update ready · tap to
+ * install" → system installer. Every failure path dissolves back to invisible.
+ */
+@Composable
+private fun LiveUpdatePill() {
+    val state by LiveUpdater.state.collectAsState()
+    when (val current = state) {
+        is LiveUpdateState.Available -> UpdatePill(
+            text = "GS LiveUpdate · v${current.versionName} ready",
+            onClick = { LiveUpdater.beginInstallFlow() }
+        )
+        is LiveUpdateState.Downloading -> UpdatePill(
+            text = "Downloading update · ${current.percent}%",
+            onClick = {}
+        )
+        LiveUpdateState.Ready -> UpdatePill(
+            text = "Update ready · tap to install",
+            onClick = { LiveUpdater.beginInstallFlow() }
+        )
+        LiveUpdateState.Idle -> Unit
+    }
+}
+
+@Composable
+private fun UpdatePill(text: String, onClick: () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(GsMotion.radiusChip),
+        color = Aeruo.RaisedDark,
+        modifier = Modifier.kineticPress()
+    ) {
+        Row(
+            modifier = Modifier
+                .clickable(onClick = onClick)
+                .padding(horizontal = GsMotion.spaceM, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(rememberAuroraBrush(CircleShape))
+            )
+            Text(
+                text,
+                style = MaterialTheme.typography.labelLarge,
+                color = Aeruo.TextDark
+            )
+        }
+    }
+}
 
 @Composable
 private fun SuggestionRows(onNavigate: (String) -> Unit) {

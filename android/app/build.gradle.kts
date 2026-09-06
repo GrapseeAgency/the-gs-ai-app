@@ -15,16 +15,34 @@ android {
         applicationId = "com.grapsee.gsai"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
 
         // Backend origin for the Android emulator (host loopback). Override per build type if needed.
         buildConfigField("String", "BASE_URL", "\"http://10.0.2.2:3000\"")
     }
 
+    /**
+     * GS LiveUpdate signing — the committed gs-live.keystore gives EVERY build
+     * (debug and release, this machine or any fresh sandbox) the same signature,
+     * so in-app updates install straight over the installed app.
+     */
+    signingConfigs {
+        create("liveUpdate") {
+            storeFile = file("gs-live.keystore")
+            storePassword = "gsai-live-update"
+            keyAlias = "gsai"
+            keyPassword = "gsai-live-update"
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("liveUpdate")
+        }
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("liveUpdate")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

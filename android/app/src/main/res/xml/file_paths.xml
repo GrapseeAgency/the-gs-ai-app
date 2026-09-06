@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- GS LiveUpdate: the downloaded update APK lives in cacheDir/liveupdate/. -->
+<paths>
+    <cache-path name="liveupdate" path="liveupdate/" />
+</paths>
