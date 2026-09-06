@@ -15,6 +15,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -88,7 +89,10 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.di.ServiceLocator
 import com.grapsee.gsai.ui.components.GsCard
@@ -102,6 +106,53 @@ import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+
+/** Words tinted in code blocks — a deliberately small cross-language set. */
+private val codeKeywords = setOf(
+    "val", "var", "fun", "func", "function", "def", "class", "struct", "enum", "interface",
+    "object", "trait", "impl", "type", "if", "else", "elif", "for", "while", "switch", "case",
+    "match", "when", "break", "continue", "return", "yield", "import", "from", "package",
+    "public", "private", "protected", "static", "final", "const", "new", "this", "self",
+    "super", "null", "nil", "none", "true", "false", "try", "catch", "finally", "throw",
+    "throws", "await", "async", "let", "in", "is", "as", "of", "do", "end", "override",
+    "open", "suspend", "data", "where", "with", "lambda", "and", "or", "not"
+)
+
+/** Languages whose line comments start with '#' rather than '//'. */
+private val hashCommentLanguages = setOf("python", "py", "bash", "sh", "shell", "ruby", "rb", "yaml", "yml", "toml")
+
+private val codeTokenRegex = Regex(
+    "(//[^\\n]*|\"(?:\\\\.|[^\"\\\\])*\"|'(?:\\\\.|[^'\\\\])*'|\\b\\d+(?:\\.\\d+)?\\b|[A-Za-z_][A-Za-z0-9_]*)"
+)
+
+/**
+ * Lightweight syntax colouring — comments, strings, numbers, keywords.
+ * Purely cosmetic: an unknown token stays plain, nothing can break the layout.
+ */
+private fun highlightCode(code: String, language: String?, dark: Boolean): AnnotatedString {
+    val kw = if (dark) androidx.compose.ui.graphics.Color(0xFFC792EA) else androidx.compose.ui.graphics.Color(0xFF6C3FE0)
+    val str = if (dark) androidx.compose.ui.graphics.Color(0xFFC3E88D) else androidx.compose.ui.graphics.Color(0xFF2E7D32)
+    val com = if (dark) androidx.compose.ui.graphics.Color(0xFF7E8C99) else androidx.compose.ui.graphics.Color(0xFF6B7C8C)
+    val num = if (dark) androidx.compose.ui.graphics.Color(0xFFF78C6C) else androidx.compose.ui.graphics.Color(0xFFD84315)
+    val hashComments = hashCommentLanguages.contains(language?.lowercase() ?: "")
+    return buildAnnotatedString {
+        var index = 0
+        for (match in codeTokenRegex.findAll(code)) {
+            append(code.substring(index, match.range.first))
+            val token = match.value
+            val color = when {
+                token.startsWith("//") || (hashComments && token.startsWith("#")) -> com
+                token.startsWith("\"") || token.startsWith("'") -> str
+                token.first().isDigit() -> num
+                codeKeywords.contains(token) -> kw
+                else -> null
+            }
+            if (color != null) withStyle(SpanStyle(color = color)) { append(token) } else append(token)
+            index = match.range.last + 1
+        }
+        append(code.substring(index))
+    }
+}
 
 /** One renderable chat turn. role is "user" or "assistant" (error bubbles included). */
 private data class ChatUiMessage(
@@ -667,7 +718,14 @@ private fun CodeBlock(segment: ContentSegment, onCopyCode: (String) -> Unit) {
                 }
             }
             Text(
-                text = segment.text.ifBlank { "…" },
+                text = if (segment.text.isBlank()) {
+                    AnnotatedString("…")
+                } else {
+                    val dark = isSystemInDarkTheme()
+                    remember(segment.text, segment.language, dark) {
+                        highlightCode(segment.text, segment.language, dark)
+                    }
+                },
                 style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier

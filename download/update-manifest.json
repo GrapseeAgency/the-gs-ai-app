@@ -1,6 +1,6 @@
 {
-  "versionCode": 9,
-  "versionName": "0.9.0",
+  "versionCode": 10,
+  "versionName": "0.10.0",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "Code blocks in replies now render properly — labeled, styled, with one-tap copy"
+  "notes": "Syntax highlighting in code blocks — comments, strings, numbers and keywords now read like real code"
 }

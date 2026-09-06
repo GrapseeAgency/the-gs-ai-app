@@ -315,6 +315,62 @@ private func parseContentSegments(_ content: String) -> [ContentSegment] {
     return segments
 }
 
+/// Languages whose line comments start with '#' rather than '//'.
+private let hashCommentLanguages: Set<String> = ["python", "py", "bash", "sh", "shell", "ruby", "rb", "yaml", "yml", "toml"]
+
+/// Words tinted in code blocks — a deliberately small cross-language set.
+private let codeKeywords: Set<String> = [
+    "val", "var", "fun", "func", "function", "def", "class", "struct", "enum", "interface",
+    "object", "trait", "impl", "type", "if", "else", "elif", "for", "while", "switch", "case",
+    "match", "when", "break", "continue", "return", "yield", "import", "from", "package",
+    "public", "private", "protected", "static", "final", "const", "new", "this", "self",
+    "super", "null", "nil", "none", "true", "false", "try", "catch", "finally", "throw",
+    "throws", "await", "async", "let", "in", "is", "as", "of", "do", "end", "override",
+    "open", "suspend", "data", "where", "with", "lambda", "and", "or", "not"
+]
+
+/// Lightweight syntax colouring — comments, strings, numbers, keywords.
+/// Purely cosmetic: an unknown token stays plain, nothing can break the layout.
+private func highlightedCode(_ code: String, language: String?) -> Text {
+    let dark = UITraitCollection.current.userInterfaceStyle == .dark
+    let kw = dark ? UIColor(red: 0.78, green: 0.57, blue: 0.92, alpha: 1) : UIColor(red: 0.42, green: 0.25, blue: 0.88, alpha: 1)
+    let st = dark ? UIColor(red: 0.76, green: 0.91, blue: 0.55, alpha: 1) : UIColor(red: 0.18, green: 0.49, blue: 0.20, alpha: 1)
+    let cm = dark ? UIColor(red: 0.49, green: 0.55, blue: 0.60, alpha: 1) : UIColor(red: 0.42, green: 0.49, blue: 0.55, alpha: 1)
+    let nm = dark ? UIColor(red: 0.97, green: 0.55, blue: 0.42, alpha: 1) : UIColor(red: 0.85, green: 0.26, blue: 0.08, alpha: 1)
+    let hashComments = hashCommentLanguages.contains((language ?? "").lowercased())
+
+    let result = NSMutableAttributedString(string: "")
+    let ns = code as NSString
+    let pattern = "(//[^\\n]*|\"(?:\\\\.|[^\"\\\\])*\"|'(?:\\\\.|[^'\\\\])*'|\\b\\d+(?:\\.\\d+)?\\b|[A-Za-z_][A-Za-z0-9_]*)"
+    guard let regex = try? NSRegularExpression(pattern: pattern) else { return Text(code) }
+    var cursor = 0
+    for match in regex.matches(in: code, range: NSRange(location: 0, length: ns.length)) {
+        if match.range.location > cursor {
+            result.append(NSAttributedString(string: ns.substring(with: NSRange(location: cursor, length: match.range.location - cursor))))
+        }
+        let token = ns.substring(with: match.range)
+        let color: UIColor? = {
+            if token.hasPrefix("//") || (hashComments && token.hasPrefix("#")) { return cm }
+            if token.hasPrefix("\"") || token.hasPrefix("'") { return st }
+            if let first = token.first, first.isNumber { return nm }
+            if codeKeywords.contains(token) { return kw }
+            return nil
+        }()
+        if let color = color {
+            result.append(NSAttributedString(string: token, attributes: [.foregroundColor: color]))
+        } else {
+            result.append(NSAttributedString(string: token))
+        }
+        cursor = match.range.location + match.range.length
+    }
+    if cursor < ns.length {
+        result.append(NSAttributedString(string: ns.substring(from: cursor)))
+    }
+    var attributed = AttributedString(result)
+    attributed.font = .system(size: 12, weight: .regular, design: .monospaced)
+    return Text(attributed)
+}
+
 // MARK: - Bubble
 
 private struct MessageBubble: View {
@@ -400,12 +456,19 @@ private struct MessageBubble: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
-            Text(segment.text.isEmpty ? "…" : segment.text)
-                .font(.system(size: 12, weight: .regular, design: .monospaced))
-                .foregroundStyle(Aero.text)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 12)
-                .padding(.bottom, 10)
+            if segment.text.isEmpty {
+                Text("…")
+                    .font(.system(size: 12, weight: .regular, design: .monospaced))
+                    .foregroundStyle(Aero.text)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 10)
+            } else {
+                highlightedCode(segment.text, language: segment.language)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 10)
+            }
         }
         .background(RoundedRectangle(cornerRadius: 12).fill(Aero.container))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Aero.outline, lineWidth: 1))
