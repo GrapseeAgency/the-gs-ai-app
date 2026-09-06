@@ -109,6 +109,20 @@ struct CreateConversationRequest: Codable, Equatable {
     }
 }
 
+/// PATCH /conversations/{id} body — synthesized encoding omits nil fields,
+/// so only the flags the user actually touched travel on the wire.
+struct UpdateConversationRequest: Codable, Equatable {
+    var title: String?
+    var pinned: Bool?
+    var archived: Bool?
+
+    init(title: String? = nil, pinned: Bool? = nil, archived: Bool? = nil) {
+        self.title = title
+        self.pinned = pinned
+        self.archived = archived
+    }
+}
+
 // MARK: - Model catalogue (`#/components/schemas/Model`)
 
 struct ModelEntry: Codable, Identifiable, Equatable, Hashable {

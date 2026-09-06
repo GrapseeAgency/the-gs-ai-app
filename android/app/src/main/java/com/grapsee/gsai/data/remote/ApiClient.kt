@@ -5,6 +5,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.parameter
+import io.ktor.client.request.patch
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
@@ -58,6 +59,16 @@ class ApiClient(
 
     suspend fun deleteConversation(id: String): Boolean =
         client.delete("$root/conversations/$id").status.isSuccess()
+
+    /**
+     * Pin / archive / rename. The server is the echo, not the gate: callers
+     * already applied the change locally and only sync here (best-effort).
+     */
+    suspend fun updateConversation(id: String, patch: UpdateConversationRequest): Boolean =
+        client.patch("$root/conversations/$id") {
+            contentType(ContentType.Application.Json)
+            setBody(patch)
+        }.status.isSuccess()
 
     suspend fun messages(id: String): List<MessageDto> {
         val response = client.get("$root/conversations/$id/messages")

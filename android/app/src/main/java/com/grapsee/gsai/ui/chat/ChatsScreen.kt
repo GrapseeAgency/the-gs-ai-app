@@ -19,6 +19,7 @@ import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Inbox
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Icon
@@ -32,6 +33,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,6 +41,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.data.local.ConversationEntity
 import com.grapsee.gsai.di.ServiceLocator
+import com.grapsee.gsai.ui.components.ConversationActionsSheet
 import com.grapsee.gsai.ui.components.GsCard
 import com.grapsee.gsai.ui.components.GsChip
 import com.grapsee.gsai.ui.components.GsEmptyState
@@ -54,20 +57,24 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 
 /**
  * Chats hub — Room conversation list as the source of truth with the
  * backend sync engine behind it. Falls back to tasteful sample rows while
- * the backend is unreachable so the surface is never dead.
+ * the backend is unreachable so the surface is never dead. Rows carry the
+ * benchmark action set (pin / archive / delete) via the overflow menu.
  */
 @Composable
 fun ChatsScreen(onNavigate: (String) -> Unit) {
     val conversationList = remember { conversationsFlow() }
     val conversations by conversationList.collectAsState(initial = emptyList())
     val offline by remember { connectionStateFlow() }.collectAsState()
+    val scope = rememberCoroutineScope()
 
     var firstLoadDone by remember { mutableStateOf(false) }
     var filter by remember { mutableStateOf(FILTER_ALL) }
+    var actionTarget by remember { mutableStateOf<ConversationEntity?>(null) }
 
     LaunchedEffect(Unit) {
         runCatching { ServiceLocator.chat.refreshConversations() }
@@ -76,9 +83,9 @@ fun ChatsScreen(onNavigate: (String) -> Unit) {
 
     val display = conversations.ifEmpty { if (firstLoadDone) sampleConversations() else emptyList() }
     val rows = when (filter) {
-        FILTER_PINNED -> display.filter { it.pinned }.sortedByDescending { it.pinned }
+        FILTER_PINNED -> display.filter { it.pinned }
         FILTER_UNREAD -> emptyList()
-        else -> display.sortedByDescending { it.pinned }
+        else -> display
     }
     val loading = !firstLoadDone && conversations.isEmpty()
 
@@ -152,13 +159,26 @@ fun ChatsScreen(onNavigate: (String) -> Unit) {
                                 }
                             },
                             trailing = {
-                                if (entity.pinned) {
-                                    Icon(
-                                        Icons.Filled.Star,
-                                        contentDescription = "Pinned",
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(18.dp)
-                                    )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    if (entity.pinned) {
+                                        Icon(
+                                            Icons.Filled.Star,
+                                            contentDescription = "Pinned",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                    IconButton(
+                                        onClick = { actionTarget = entity },
+                                        modifier = Modifier.size(30.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Outlined.MoreVert,
+                                            contentDescription = "Conversation actions",
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
                                 }
                             },
                             onClick = { onNavigate(GsRoutes.chat(entity.id)) }
@@ -167,6 +187,27 @@ fun ChatsScreen(onNavigate: (String) -> Unit) {
                 }
             }
         }
+    }
+
+    val target = actionTarget
+    if (target != null) {
+        ConversationActionsSheet(
+            title = target.title,
+            pinned = target.pinned,
+            onDismiss = { actionTarget = null },
+            onTogglePin = {
+                actionTarget = null
+                scope.launch { runCatching { ServiceLocator.chat.setPinned(target.id, !target.pinned) } }
+            },
+            onArchive = {
+                actionTarget = null
+                scope.launch { runCatching { ServiceLocator.chat.setArchived(target.id, true) } }
+            },
+            onDelete = {
+                actionTarget = null
+                scope.launch { runCatching { ServiceLocator.chat.delete(target.id) } }
+            }
+        )
     }
 }
 
@@ -189,7 +230,7 @@ private fun RowScope.QuickLink(label: String, icon: ImageVector, onClick: () -> 
 // --- null-safe ServiceLocator access (previews never crash) -----------------
 
 private fun conversationsFlow(): Flow<List<ConversationEntity>> =
-    runCatching { ServiceLocator.chat.conversations() }.getOrElse { flowOf(emptyList()) }
+    runCatching { ServiceLocator.chat.activeConversations() }.getOrElse { flowOf(emptyList()) }
 
 private fun connectionStateFlow(): StateFlow<Boolean> =
     runCatching { ServiceLocator.chat.connectionState }.getOrElse { MutableStateFlow(false) }

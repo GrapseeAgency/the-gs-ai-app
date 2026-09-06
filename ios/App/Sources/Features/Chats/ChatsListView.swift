@@ -1,9 +1,10 @@
 import SwiftUI
 
-/// Chats tab root — quick access cards, filter chips, conversation list.
-/// Live data from `APIClient.shared.conversations()` (Task 7-a): Room-equivalent
-/// freshness via pull-to-refresh + on-appear reload; falls back to the sample
-/// seed when the backend is unreachable (OfflineBanner shown).
+/// Chats hub — `ConversationStore` is the source of truth (JSON-persisted,
+/// offline-first); a pull-to-refresh best-effort syncs server rows on top.
+/// Falls back to the sample seed on a fresh install. Rows carry the benchmark
+/// action set (pin / archive / delete) via context menu, mirroring the
+/// Android drawer.
 struct ChatsListView: View {
 
     private enum Filter: String, CaseIterable, Identifiable {
@@ -22,12 +23,14 @@ struct ChatsListView: View {
         var unread: Bool = false
     }
 
+    @ObservedObject private var store = ConversationStore.shared
+
     @State private var filter: Filter = .all
-    @State private var liveConversations: [ConversationRow] = []
     @State private var isLoading = false
     @State private var isOffline = false
     @State private var reloadToken = 0
-    @State private var conversations: [ConversationRow] = [
+
+    private let demoRows: [ConversationRow] = [
         ConversationRow(id: "demo-1", title: "Q3 pricing strategy", preview: "You: send the revised deck?", time: "2h", pinned: true),
         ConversationRow(id: "demo-2", title: "Kyoto trip planning", preview: "GS: temples worth the early train…", time: "5h", unread: true),
         ConversationRow(id: "demo-3", title: "Kotlin coroutines debug", preview: "You: why does launch block here?", time: "1d"),
@@ -70,25 +73,36 @@ struct ChatsListView: View {
         return relative.localizedString(for: date, relativeTo: Date())
     }
 
+    /// Best-effort server merge: remote rows upserted on top of the local
+    /// store (server flags win for server-owned rows; local-only rows stay).
     private func load() async {
         isLoading = true
         defer { isLoading = false }
         do {
             let remote = try await APIClient.shared.conversations(limit: 30)
-            liveConversations = remote.map { conversation in
-                ConversationRow(
+            for conversation in remote {
+                let existing = store.conversation(withID: conversation.id)
+                let row = StoredConversation(
                     id: conversation.id,
                     title: conversation.title,
-                    preview: "Synced with GS",
-                    time: Self.relativeTime(from: conversation.updatedAt),
-                    pinned: conversation.pinned ?? false
-                )
+                    modelId: conversation.modelId,
+                    pinned: conversation.pinned ?? existing?.pinned ?? false,
+                    archived: conversation.archived ?? existing?.archived ?? false,
+                    createdAt: conversation.createdAt.isEmpty ? (existing?.createdAt ?? ConversationStore.now()) : conversation.createdAt,
+                    updatedAt: conversation.updatedAt.isEmpty ? (existing?.updatedAt ?? ConversationStore.now()) : conversation.updatedAt)
+                store.upsert(row)
             }
             isOffline = false
         } catch {
-            // Backend unreachable (or simulator against a stopped server):
-            // keep the sample seed visible so the surface never feels dead.
+            // Backend unreachable: the store (and demo seed) keeps the surface alive.
             isOffline = true
+        }
+    }
+
+    private func sync(_ id: String, pinned: Bool? = nil, archived: Bool? = nil) {
+        guard !id.hasPrefix("demo-"), !id.hasPrefix("local-") else { return }
+        Task {
+            try? await APIClient.shared.updateConversation(id: id, pinned: pinned, archived: archived)
         }
     }
 
@@ -161,9 +175,22 @@ struct ChatsListView: View {
 
     // MARK: Conversation list
 
-    /// Live rows win when present; samples only fill an offline/empty first run.
+    /// Store rows win when present; samples only fill a fresh, offline first run.
     private var rows: [ConversationRow] {
-        liveConversations.isEmpty ? conversations : liveConversations
+        let active = store.activeConversations
+        if active.isEmpty { return demoRows }
+        return active.map { conversation in
+            let last = store.messages(for: conversation.id).last
+            let speaker = last?.role == "user" ? "You" : "GS"
+            let body = last?.content.replacingOccurrences(of: "\n", with: " ") ?? "Synced with GS"
+            let preview = body.count > 42 ? String(body.prefix(42)) + "…" : body
+            return ConversationRow(
+                id: conversation.id,
+                title: conversation.title,
+                preview: "\(speaker): \(preview)",
+                time: Self.relativeTime(from: conversation.updatedAt),
+                pinned: conversation.pinned)
+        }
     }
 
     private var filtered: [ConversationRow] {
@@ -214,8 +241,34 @@ struct ChatsListView: View {
                         )
                     }
                     .buttonStyle(KineticPressStyle())
+                    .contextMenu {
+                        Button {
+                            let target = !row.pinned
+                            store.setPinned(id: row.id, target)
+                            sync(row.id, pinned: target)
+                        } label: {
+                            Label(row.pinned ? "Unpin" : "Pin to top", systemImage: "pin")
+                        }
+                        Button {
+                            store.setArchived(id: row.id, true)
+                            sync(row.id, archived: true)
+                        } label: {
+                            Label("Archive", systemImage: "archivebox")
+                        }
+                        Button(role: .destructive) {
+                            store.delete(id: row.id)
+                            syncDelete(row.id)
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
                 }
             }
         }
+    }
+
+    private func syncDelete(_ id: String) {
+        guard !id.hasPrefix("demo-"), !id.hasPrefix("local-") else { return }
+        Task { try? await APIClient.shared.deleteConversation(id: id) }
     }
 }

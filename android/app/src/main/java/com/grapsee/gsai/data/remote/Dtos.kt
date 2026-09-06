@@ -50,6 +50,17 @@ data class SendMessageRequest(
     val modelId: String? = null
 )
 
+/**
+ * PATCH /conversations/{id} body. Nullable fields are omitted (explicitNulls=false),
+ * so only the flags the user actually touched travel on the wire.
+ */
+@Serializable
+data class UpdateConversationRequest(
+    val title: String? = null,
+    val pinned: Boolean? = null,
+    val archived: Boolean? = null
+)
+
 @Serializable
 data class ModelDto(
     val id: String,

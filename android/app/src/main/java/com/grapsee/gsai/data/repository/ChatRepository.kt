@@ -6,6 +6,7 @@ import com.grapsee.gsai.data.local.MessageEntity
 import com.grapsee.gsai.data.remote.ApiClient
 import com.grapsee.gsai.data.remote.ConversationDto
 import com.grapsee.gsai.data.remote.MessageDto
+import com.grapsee.gsai.data.remote.UpdateConversationRequest
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -25,10 +26,12 @@ import java.util.UUID
  *
  * - Lists are exposed as Room [Flow]s; refreshes upsert remote pages on top.
  * - [connectionState] flips true on transport/server failure (drives GsOfflineBanner).
- * - [send] creates the conversation on first message, persists the local user turn,
- *   streams the assistant reply through [onDelta] and persists the final message.
- *   Stop-generation is the caller's job: cancel the Job this send is running in —
- *   partial output is still persisted (NonCancellable) so history stays coherent.
+ * - [send] never dead-ends: offline it fabricates a local conversation, persists
+ *   every user turn and answers with a graceful assistant notice instead of an
+ *   exception — the thread, recents and pins all stay coherent until the
+ *   backend is reachable again (then Regenerate streams for real).
+ * - Pin / archive / rename / delete are local-first; the server PATCH/DELETE is
+ *   a best-effort echo so the UI never waits on the network.
  */
 class ChatRepository(
     private val api: ApiClient,
@@ -41,6 +44,11 @@ class ChatRepository(
 
     fun conversations(): Flow<List<ConversationEntity>> = db.conversationDao().observeRecent()
 
+    /** Inbox ordering: archived hidden, pins float — drawer + Chats hub both use this. */
+    fun activeConversations(): Flow<List<ConversationEntity>> = db.conversationDao().observeActive()
+
+    fun archivedConversations(): Flow<List<ConversationEntity>> = db.conversationDao().observeArchived()
+
     suspend fun refreshConversations() {
         try {
             val remote = api.conversations()
@@ -50,6 +58,47 @@ class ChatRepository(
             throw e
         } catch (e: Exception) {
             // IOException and non-2xx responses alike mean "degraded connectivity" for the UI.
+            _connectionState.value = true
+        }
+    }
+
+    // --- local-first mutations (server echo is best-effort) ---------------------
+
+    suspend fun setPinned(id: String, pinned: Boolean) {
+        db.conversationDao().setPinned(id, pinned)
+        syncBestEffort(id, UpdateConversationRequest(pinned = pinned))
+    }
+
+    suspend fun setArchived(id: String, archived: Boolean) {
+        db.conversationDao().setArchived(id, archived)
+        syncBestEffort(id, UpdateConversationRequest(archived = archived))
+    }
+
+    suspend fun rename(id: String, title: String) {
+        val trimmed = title.trim()
+        if (trimmed.isEmpty()) return
+        db.conversationDao().setTitle(id, trimmed)
+        syncBestEffort(id, UpdateConversationRequest(title = trimmed))
+    }
+
+    suspend fun delete(id: String) {
+        db.messageDao().deleteForConversation(id)
+        db.conversationDao().delete(id)
+        try {
+            api.deleteConversation(id)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            _connectionState.value = true // deletion already durable locally; sync later
+        }
+    }
+
+    private suspend fun syncBestEffort(id: String, patch: UpdateConversationRequest) {
+        try {
+            api.updateConversation(id, patch)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
             _connectionState.value = true
         }
     }
@@ -70,8 +119,13 @@ class ChatRepository(
     }
 
     /**
-     * Stream one assistant turn. Returns the conversation id the turn belongs to —
-     * creating the conversation server-side (titled from the message) when needed.
+     * Stream one assistant turn. Returns the conversation id the turn belongs to.
+     *
+     * Offline contract (backend unreachable at any step):
+     * - conversation creation fabricates a local id and the row appears in recents,
+     * - the user turn is always persisted,
+     * - the assistant bubble is closed with a short graceful notice (streamed
+     *   through [onDelta] too, so UI and disk stay identical) — never an exception.
      */
     suspend fun send(
         conversationId: String?,
@@ -81,10 +135,7 @@ class ChatRepository(
     ): String {
         activeJob = currentCoroutineContext()[Job]
 
-        val activeId = conversationId
-            ?: api.createConversation(title = content.take(TITLE_SNIPPET_LENGTH)).also { created ->
-                db.conversationDao().upsert(created.toEntity())
-            }.id
+        val activeId = resolveConversation(conversationId, content)
 
         val userMessage = MessageEntity(
             id = UUID.randomUUID().toString(),
@@ -115,11 +166,70 @@ class ChatRepository(
             persistPartialNonCancellable(activeId, assistantId, accumulated)
             throw ce
         } catch (e: Exception) {
-            persistPartial(activeId, assistantId, accumulated)
-            throw e
+            // Graceful landing instead of an error bubble: same text to UI and disk.
+            val notice = failureNotice(accumulated.isEmpty())
+            accumulated.append(notice)
+            onDelta(notice)
+            persistAssistant(activeId, assistantId, accumulated)
+            return activeId
         }
         persistAssistant(activeId, assistantId, accumulated)
         return activeId
+    }
+
+    /**
+     * Server id when possible; local row (uuid id, snippet title) when the
+     * backend is away, so recents still light up and follow-up turns reconnect.
+     */
+    private suspend fun resolveConversation(conversationId: String?, firstMessage: String): String {
+        conversationId?.let { id ->
+            ensureLocalConversation(id)
+            return id
+        }
+        return try {
+            api.createConversation(title = firstMessage.take(TITLE_SNIPPET_LENGTH))
+                .also { created -> db.conversationDao().upsert(created.toEntity()) }
+                .id
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            _connectionState.value = true
+            val localId = "local-${UUID.randomUUID()}"
+            db.conversationDao().upsert(
+                ConversationEntity(
+                    id = localId,
+                    title = firstMessage.take(TITLE_SNIPPET_LENGTH),
+                    modelId = null,
+                    pinned = false,
+                    archived = false,
+                    updatedAt = nowIso(),
+                    createdAt = nowIso()
+                )
+            )
+            localId
+        }
+    }
+
+    /** Turns a tapped sample/demo id into a real local row on first use. */
+    private suspend fun ensureLocalConversation(id: String) {
+        db.conversationDao().getById(id) ?: db.conversationDao().upsert(
+            ConversationEntity(
+                id = id,
+                title = "New chat",
+                modelId = null,
+                pinned = false,
+                archived = false,
+                updatedAt = nowIso(),
+                createdAt = nowIso()
+            )
+        )
+    }
+
+    private fun failureNotice(offlineLikely: Boolean): String = if (offlineLikely) {
+        "I couldn't reach the GS servers just now — your message is saved in this " +
+            "chat and will sync once you're back online.\n\nTap Regenerate to try again."
+    } else {
+        "\n\nThe connection dropped mid-answer — tap Regenerate to pick up where we left off."
     }
 
     /** Cooperative stop — the UI usually cancels its own Job; this is the repo-level escape hatch. */
@@ -152,11 +262,6 @@ class ChatRepository(
     ) {
         if (accumulated.isEmpty()) return
         withContext(NonCancellable) { persistAssistant(conversationId, id, accumulated) }
-    }
-
-    private suspend fun persistPartial(conversationId: String, id: String, accumulated: StringBuilder) {
-        if (accumulated.isEmpty()) return
-        persistAssistant(conversationId, id, accumulated)
     }
 
     private fun ConversationDto.toEntity() = ConversationEntity(

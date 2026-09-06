@@ -50,6 +50,22 @@ interface ConversationDao {
     @Query("SELECT * FROM conversations WHERE id = :id LIMIT 1")
     suspend fun getById(id: String): ConversationEntity?
 
+    @Query("UPDATE conversations SET pinned = :pinned WHERE id = :id")
+    suspend fun setPinned(id: String, pinned: Boolean)
+
+    @Query("UPDATE conversations SET archived = :archived WHERE id = :id")
+    suspend fun setArchived(id: String, archived: Boolean)
+
+    @Query("UPDATE conversations SET title = :title WHERE id = :id")
+    suspend fun setTitle(id: String, title: String)
+
+    /** Inbox view: archived hidden, pins float — same ordering language as the benchmark apps. */
+    @Query("SELECT * FROM conversations WHERE archived = 0 ORDER BY pinned DESC, updatedAt DESC")
+    fun observeActive(): Flow<List<ConversationEntity>>
+
+    @Query("SELECT * FROM conversations WHERE archived = 1 ORDER BY updatedAt DESC")
+    fun observeArchived(): Flow<List<ConversationEntity>>
+
     @Query("DELETE FROM conversations WHERE id = :id")
     suspend fun delete(id: String)
 
@@ -73,6 +89,9 @@ interface MessageDao {
 
     @Query("SELECT * FROM messages WHERE conversationId = :conversationId ORDER BY createdAt DESC LIMIT 1")
     suspend fun lastForConversation(conversationId: String): MessageEntity?
+
+    @Query("DELETE FROM messages WHERE conversationId = :conversationId")
+    suspend fun deleteForConversation(conversationId: String)
 }
 
 @Database(

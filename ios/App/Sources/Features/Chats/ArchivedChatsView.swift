@@ -1,21 +1,12 @@
 import SwiftUI
 
-/// Archived conversations — unarchive is local-only this pass (no DELETE of
-/// the archived flag server-side yet; noted in worklog, Task 6-e).
+/// Archive shelf — live from `ConversationStore` (everything the user archived,
+/// not a demo subset) with restore + delete affordances; the server PATCH is a
+/// best-effort echo once the backend is reachable.
 struct ArchivedChatsView: View {
 
-    private struct ArchivedItem: Identifiable {
-        let id = UUID()
-        let title: String
-        let subtitle: String
-    }
-
-    @State private var items: [ArchivedItem] = [
-        ArchivedItem(title: "Q3 pricing strategy", subtitle: "Archived 2 weeks ago · 24 messages"),
-        ArchivedItem(title: "Kyoto trip planning", subtitle: "Archived last month · 41 messages"),
-        ArchivedItem(title: "Old design critique", subtitle: "Archived last month · 9 messages"),
-        ArchivedItem(title: "Weekly sync notes", subtitle: "Archived 2 months ago · 12 messages")
-    ]
+    @ObservedObject private var store = ConversationStore.shared
+    @State private var reloadToken = 0
 
     var body: some View {
         ScrollView {
@@ -27,7 +18,7 @@ struct ArchivedChatsView: View {
                     .font(Aero.caption())
                     .foregroundStyle(Aero.textMuted)
 
-                if items.isEmpty {
+                if store.archivedConversations.isEmpty {
                     EmptyStateView(
                         icon: "archivebox",
                         title: "Nothing archived",
@@ -35,10 +26,10 @@ struct ArchivedChatsView: View {
                     )
                 } else {
                     VStack(spacing: Aero.Spacing.s) {
-                        ForEach(items) { item in
+                        ForEach(store.archivedConversations) { conversation in
                             AeroListRow(
-                                title: item.title,
-                                subtitle: item.subtitle,
+                                title: conversation.title,
+                                subtitle: "Archived · \(Self.relativeTime(from: conversation.updatedAt))",
                                 leading: {
                                     Image(systemName: "archivebox")
                                         .font(.system(size: 14))
@@ -47,16 +38,40 @@ struct ArchivedChatsView: View {
                                         .background(Circle().fill(Aero.containerHigh))
                                 },
                                 trailing: {
-                                    Button {
-                                        unarchive(item)
-                                    } label: {
-                                        Image(systemName: "arrow.up.circle")
-                                            .font(.system(size: 18))
-                                            .foregroundStyle(Aero.accent)
+                                    HStack(spacing: 10) {
+                                        Button {
+                                            restore(conversation)
+                                        } label: {
+                                            Image(systemName: "arrow.up.circle")
+                                                .font(.system(size: 18))
+                                                .foregroundStyle(Aero.accent)
+                                        }
+                                        .buttonStyle(KineticPressStyle())
+                                        Button {
+                                            store.delete(id: conversation.id)
+                                            syncDelete(conversation.id)
+                                        } label: {
+                                            Image(systemName: "trash")
+                                                .font(.system(size: 16))
+                                                .foregroundStyle(Aero.textMuted)
+                                        }
+                                        .buttonStyle(KineticPressStyle())
                                     }
-                                    .buttonStyle(KineticPressStyle())
                                 }
                             )
+                            .contextMenu {
+                                Button {
+                                    restore(conversation)
+                                } label: {
+                                    Label("Unarchive", systemImage: "arrow.up.circle")
+                                }
+                                Button(role: .destructive) {
+                                    store.delete(id: conversation.id)
+                                    syncDelete(conversation.id)
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                            }
                         }
                     }
                 }
@@ -66,11 +81,38 @@ struct ArchivedChatsView: View {
             .padding(.bottom, Aero.Spacing.xl)
         }
         .background(Aero.background.ignoresSafeArea())
+        .onAppear { reloadToken += 1 }
     }
 
-    private func unarchive(_ item: ArchivedItem) {
+    private func restore(_ conversation: StoredConversation) {
         withAnimation(Aero.snappy) {
-            items.removeAll { $0.id == item.id }
+            store.setArchived(id: conversation.id, false)
         }
+        syncSet(conversation.id, archived: false)
+    }
+
+    private func syncSet(_ id: String, archived: Bool) {
+        guard !id.hasPrefix("demo-"), !id.hasPrefix("local-") else { return }
+        Task { try? await APIClient.shared.updateConversation(id: id, archived: archived) }
+    }
+
+    private func syncDelete(_ id: String) {
+        guard !id.hasPrefix("demo-"), !id.hasPrefix("local-") else { return }
+        Task { try? await APIClient.shared.deleteConversation(id: id) }
+    }
+
+    /// ISO-8601 → "2h ago"-style relative label (graceful fallback to raw string).
+    private static func relativeTime(from iso: String) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        var date = formatter.date(from: iso)
+        if date == nil {
+            formatter.formatOptions = [.withInternetDateTime]
+            date = formatter.date(from: iso)
+        }
+        guard let date else { return "" }
+        let relative = RelativeDateTimeFormatter()
+        relative.unitsStyle = .abbreviated
+        return relative.localizedString(for: date, relativeTo: Date())
     }
 }

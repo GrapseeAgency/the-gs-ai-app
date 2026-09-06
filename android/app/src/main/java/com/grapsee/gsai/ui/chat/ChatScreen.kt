@@ -157,7 +157,9 @@ fun ChatScreen(
             ChatUiMessage(
                 id = UUID.randomUUID().toString(),
                 role = "assistant",
-                content = "⚠️ ${error.message ?: "Something went wrong"} — check backend"
+                content = "I couldn't reach the GS servers just now — your message is saved " +
+                    "in this chat. ${error.message?.let { "(${it.take(80)}) " }.orEmpty()}" +
+                    "Tap Regenerate to try again."
             )
         )
     }

@@ -1,10 +1,15 @@
 import SwiftUI
 import Combine
 
-/// Owns one conversation: history load, optimistic send, SSE streaming with
-/// live accumulation, stop, retry/regenerate. All state mutations happen on
-/// the main actor; the streaming connection itself runs on URLSession's
-/// background plumbing and hops back via `Task { @MainActor in … }`.
+/**
+ * Owns one conversation: history load (store first, then network), optimistic
+ * send, SSE streaming with live accumulation, stop, retry/regenerate. Every
+ * turn is persisted to `ConversationStore` so threads survive relaunches, and
+ * a dead backend never dead-ends the thread — the assistant bubble closes
+ * with a graceful saved-offline notice (never an error screen). All state
+ * mutations happen on the main actor; the streaming connection itself runs on
+ * URLSession's background plumbing and hops back via `Task { @MainActor in … }`.
+ */
 @MainActor
 final class ChatViewModel: ObservableObject {
 
@@ -91,6 +96,14 @@ final class ChatViewModel: ObservableObject {
         streamTask = Task {
             do {
                 let conversationID = try await self.ensureConversation(for: text)
+                if appendUserMessage {
+                    ConversationStore.shared.append(StoredMessage(
+                        id: UUID().uuidString,
+                        conversationId: conversationID,
+                        role: "user",
+                        content: text,
+                        createdAt: ConversationStore.now()))
+                }
                 try await APIClient.shared.stream(
                     message: text,
                     conversationID: conversationID,
@@ -114,7 +127,13 @@ final class ChatViewModel: ObservableObject {
                 if Self.isCancellation(error) {
                     self.finalizeLocal()
                 } else {
-                    self.errorMessage = Self.friendly(error)
+                    // Graceful landing instead of an error banner: same text on
+                    // screen and on disk, Regenerate picks it up when online.
+                    let notice = (self.streamingAccumulator.isEmpty ? "" : "\n\n") +
+                        "I couldn't reach the GS servers just now — your message is saved " +
+                        "in this chat and will sync once you're back online.\n\nTap Regenerate to try again."
+                    self.streamingAccumulator += notice
+                    self.updateLastStreaming(with: self.streamingAccumulator)
                     self.finalizeLocal()
                 }
             }
@@ -122,12 +141,19 @@ final class ChatViewModel: ObservableObject {
     }
 
     /// A nil conversationID means "first message of a brand-new chat":
-    /// create the conversation server-side, titled from the user's text.
+    /// create it server-side; offline, fabricate a local row so the thread,
+    /// recents and pins keep working until the backend is reachable again.
     private func ensureConversation(for text: String) async throws -> String {
         if let conversationID { return conversationID }
-        let conversation = try await APIClient.shared.createConversation(title: String(text.prefix(40)))
-        conversationID = conversation.id
-        return conversation.id
+        do {
+            let conversation = try await APIClient.shared.createConversation(title: String(text.prefix(40)))
+            conversationID = conversation.id
+            return conversation.id
+        } catch {
+            let local = ConversationStore.shared.createLocalConversation(title: String(text.prefix(40)))
+            conversationID = local.id
+            return local.id
+        }
     }
 
     private func updateLastStreaming(with content: String) {
@@ -147,26 +173,45 @@ final class ChatViewModel: ObservableObject {
         guard let index = messages.indices.last, messages[index].isStreaming else { return }
         messages[index].content = message.content
         messages[index].isStreaming = false
+        persistAssistant(content: message.content)
     }
 
-    /// Keeps whatever streamed so far and closes the bubble.
+    /// Keeps whatever streamed so far (offline notice included) and closes the
+    /// bubble; the same text lands in the store so history is identical.
     private func finalizeLocal() {
-        if let index = messages.indices.last, messages[index].isStreaming {
-            if messages[index].content.isEmpty {
-                messages.remove(at: index)
-            } else {
-                messages[index].isStreaming = false
-            }
+        defer {
+            isStreaming = false
+            streamTask = nil
         }
-        isStreaming = false
-        streamTask = nil
+        guard let index = messages.indices.last, messages[index].isStreaming else { return }
+        if messages[index].content.isEmpty {
+            messages.remove(at: index)
+        } else {
+            messages[index].isStreaming = false
+            persistAssistant(content: messages[index].content)
+        }
+    }
+
+    private func persistAssistant(content: String) {
+        guard let conversationID, !content.isEmpty else { return }
+        ConversationStore.shared.append(StoredMessage(
+            id: UUID().uuidString,
+            conversationId: conversationID,
+            role: "assistant",
+            content: content,
+            createdAt: ConversationStore.now()))
     }
 
     // MARK: - History
 
     private func loadHistory(conversationID: String) {
-        // Static demo conversations (ChatsListView seeds "demo-N" ids this
-        // pass; real IDs hit the API below).
+        // Store first — threads must survive relaunches even fully offline.
+        let stored = ConversationStore.shared.messages(for: conversationID)
+        if !stored.isEmpty {
+            messages = stored.map { ChatMessage(role: $0.role, content: $0.content) }
+            return
+        }
+        // Untouched static demo conversations (drawer seeds "demo-N" ids).
         if conversationID.hasPrefix("demo-") {
             messages = Self.sampleTranscript(for: conversationID)
             return
@@ -181,7 +226,10 @@ final class ChatViewModel: ObservableObject {
             } catch {
                 guard let self else { return }
                 self.isLoadingHistory = false
-                self.errorMessage = Self.friendly(error)
+                // A cold cache + offline is survivable: start the thread empty;
+                // the first send will fabricate the conversation row locally.
+                if Self.isCancellation(error) { return }
+                self.messages = []
             }
         }
     }

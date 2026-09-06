@@ -71,6 +71,27 @@ final class APIClient {
         _ = try await validatedData(for: request)
     }
 
+    /// PATCH /api/v1/conversations/{id} — pin / archive / rename echo.
+    /// The UI already applied the change locally; this is the sync step.
+    @discardableResult
+    func updateConversation(
+        id: String,
+        pinned: Bool? = nil,
+        archived: Bool? = nil,
+        title: String? = nil
+    ) async throws -> Bool {
+        var patch = UpdateConversationRequest()
+        patch.pinned = pinned
+        patch.archived = archived
+        patch.title = title
+        let request = try buildRequest(
+            path: "/api/v1/conversations/\(Self.escaped(id))",
+            method: "PATCH",
+            body: try encoded(patch))
+        let data = try await validatedData(for: request)
+        return (try? decoder.decode(Conversation.self, from: data)) != nil || data.isEmpty
+    }
+
     // MARK: - Model catalogue
 
     /// GET /api/v1/models
@@ -98,7 +119,7 @@ final class APIClient {
         conversationID: String,
         onDelta: @escaping (String) -> Void,
         onDone: @escaping (Message?) -> Void,
-        onError: @escaping (Error) -> Void
+        onError: @escaping (Error) -> Void = { _ in }
     ) async throws {
         var request = try buildRequest(
             path: "/api/v1/conversations/\(Self.escaped(conversationID))/messages",

@@ -3,12 +3,15 @@ import SwiftUI
 /**
  * AERUO KINETIC drawer — the primary navigation, benchmark pattern
  * (ChatGPT / Claude / Kimi): obsidian panel sliding over the canvas,
- * account header, one-tap new chat, recents, and the section map.
+ * account header, one-tap new chat, LIVE recents from `ConversationStore`
+ * (pin / archive / delete on long-press), and the section map.
  */
 struct AeroDrawer: View {
 
     var onRoute: (AeroRoute) -> Void
     var onClose: () -> Void
+
+    @ObservedObject private var store = ConversationStore.shared
 
     // Forced-obsidian palette (fixed benchmark-dark in both appearances)
     private let panel = Aero.dynamic(
@@ -38,11 +41,17 @@ struct AeroDrawer: View {
                         newChat
                         Group {
                             sectionLabel("Recent")
-                            row(title: "Q3 pricing strategy", icon: nil) { onRoute(.chat("demo-1")) }
-                            row(title: "Kyoto trip plan", icon: nil) { onRoute(.chat("demo-2")) }
-                            row(title: "Kotlin coroutines notes", icon: nil) { onRoute(.chat("demo-3")) }
-                            row(title: "Brand voice guidelines", icon: nil) { onRoute(.chat("demo-4")) }
-                            row(title: "Research: AI market", icon: nil) { onRoute(.chat("demo-5")) }
+                            if recentRows.isEmpty {
+                                ForEach(demoRecents, id: \.id) { sample in
+                                    row(title: sample.title, icon: nil) { onRoute(.chat(sample.id)) }
+                                }
+                            } else {
+                                ForEach(recentRows) { conversation in
+                                    recentRow(conversation)
+                                }
+                                row(title: "All chats", icon: "tray") { onRoute(.chats) }
+                                row(title: "Archived", icon: "archivebox") { onRoute(.chatArchive) }
+                            }
                         }
                         divider
                         Group {
@@ -75,6 +84,63 @@ struct AeroDrawer: View {
             .transition(.move(edge: .leading).combined(with: .opacity))
         }
     }
+
+    // MARK: Live recents
+
+    private var recentRows: [StoredConversation] {
+        Array(store.activeConversations.prefix(5))
+    }
+
+    /// One live recent: tap to open, long-press for the benchmark action set.
+    private func recentRow(_ conversation: StoredConversation) -> some View {
+        row(title: conversation.title, icon: nil, isPinned: conversation.pinned) {
+            onRoute(.chat(conversation.id))
+        }
+        .contextMenu {
+            Button {
+                let target = !conversation.pinned
+                store.setPinned(id: conversation.id, target)
+                sync(conversation.id, pinned: target)
+            } label: {
+                Label(conversation.pinned ? "Unpin" : "Pin to top", systemImage: "pin")
+            }
+            Button {
+                store.setArchived(id: conversation.id, true)
+                sync(conversation.id, archived: true)
+            } label: {
+                Label("Archive", systemImage: "archivebox")
+            }
+            Button(role: .destructive) {
+                store.delete(id: conversation.id)
+                syncDelete(conversation.id)
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+    }
+
+    private func sync(_ id: String, pinned: Bool? = nil, archived: Bool? = nil) {
+        guard !id.hasPrefix("demo-"), !id.hasPrefix("local-") else { return }
+        Task { try? await APIClient.shared.updateConversation(id: id, pinned: pinned, archived: archived) }
+    }
+
+    private func syncDelete(_ id: String) {
+        guard !id.hasPrefix("demo-"), !id.hasPrefix("local-") else { return }
+        Task { try? await APIClient.shared.deleteConversation(id: id) }
+    }
+
+    private struct DemoRecent: Identifiable {
+        let id: String
+        let title: String
+    }
+
+    private let demoRecents: [DemoRecent] = [
+        DemoRecent(id: "demo-1", title: "Q3 pricing strategy"),
+        DemoRecent(id: "demo-2", title: "Kyoto trip plan"),
+        DemoRecent(id: "demo-3", title: "Kotlin coroutines notes"),
+        DemoRecent(id: "demo-4", title: "Brand voice guidelines"),
+        DemoRecent(id: "demo-5", title: "Research: AI market")
+    ]
 
     // MARK: Header
 
@@ -136,7 +202,7 @@ struct AeroDrawer: View {
             .padding(.bottom, Aero.Spacing.s)
     }
 
-    private func row(title: String, icon: String?, action: @escaping () -> Void) -> some View {
+    private func row(title: String, icon: String?, isPinned: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: Aero.Spacing.s) {
                 if let icon {
@@ -150,6 +216,11 @@ struct AeroDrawer: View {
                     .foregroundColor(ink)
                     .lineLimit(1)
                 Spacer()
+                if isPinned {
+                    Image(systemName: "star.fill")
+                        .font(.system(size: 10))
+                        .foregroundColor(Aero.accent)
+                }
             }
             .padding(.horizontal, Aero.Spacing.m)
             .padding(.vertical, 11)
