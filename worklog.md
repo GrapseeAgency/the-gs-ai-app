@@ -696,3 +696,22 @@ Stage Summary:
 - Assistant replies now carry benchmark-grade code typography — the single most visible remaining chat-surface gap closed
 - Parser shared semantics on both platforms (same regex, same live-streaming behavior)
 - Backlog remaining: assistants CRUD + pin/archive native wiring (deferred until live backend ask), syntax highlighting (later pass), iOS FTS5/shared-store groundwork
+
+---
+Task ID: 23 (cron cycle — design parity: syntax highlighting in code blocks + v0.10.0 shipped via LiveUpdate)
+Agent: Z.ai Code (main)
+Task: Build QA, advance backlog (design parity: code-block syntax colouring, both platforms), publish v0.10.0.
+
+Work Log:
+- BUILD QA: :app:assembleDebug BUILD SUCCESSFUL (1m31s with highlighter changes); toolchain intact
+- SHARED DESIGN: one tokenizer spec on both platforms — regex pass classifying // line comments (plus #-comments only for python/bash/ruby/yaml/toml families), double/single-quoted strings with escapes, numbers, and a ~70-word cross-language keyword set; purely cosmetic (unknown tokens stay plain, nothing can break layout); identical Paenlight-ish palettes with light/dark variants
+- ANDROID (ChatScreen.kt): highlightCode() pure function → AnnotatedString via buildAnnotatedString/withStyle; CodeBlock body renders it through remember(text, language, dark); blank mid-stream body still shows "…"
+- iOS (ChatDetailView.swift): mirrored highlightedCode() → NSMutableAttributedString → AttributedString → Text, monospaced 12pt font set on the attributed run; adaptive UIColors via UITraitCollection.current; codeBlock swaps between "…" placeholder and highlighted body
+- iOS STATIC GATES: all 5 files CLEAN (Font.system(design:) only — no .fontDesign)
+- VERSION: versionCode 10 / versionName 0.10.0; APK copied to download/GS-AI-App.apk (aapt verified versionCode 10); update-manifest.json bumped
+- PUBLISHED: commit 6754a6d pushed; GitHub Release v0.10.0 created (REL_ID 383746090, asset upload HTTP 201); /releases/latest/download/ permalink verified serving versionCode 10; stable signature b1ffd75d… intact
+
+Stage Summary:
+- Code answers now read like real code — the chat surface matches the benchmark apps on typography, blocks, and colour
+- Two digits on the version: ten shipped cycles, all signature-stable, all install-over
+- Backlog remaining: assistants CRUD + pin/archive native wiring (deferred until live backend ask), markdown-lite prose rendering (bold/lists/headings), iOS FTS5/shared-store groundwork
