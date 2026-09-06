@@ -550,3 +550,18 @@ Stage Summary:
 - THE "LIVE CHANGING" LOOP IS CLOSED: edit code → bump versionCode → build → cp APK to download/ + bump manifest versionCode → push → installed phones show the LiveUpdate pill → one tap → new build running. Only manifest-level changes (new permissions etc.) need manual reinstall — documented
 - Three permanent download paths: raw.githubusercontent direct, repo blob page (Download raw file button), GitHub Release asset page
 - Next cycle protocol is written into the cron payload implicitly: future feature batches must bump versionCode + refresh both files in download/ before pushing
+---
+Task ID: 15 (verification round — GS LiveUpdate end-to-end, no code changes)
+Agent: Z.ai Code (main)
+Task: Verify the one-click download URLs + self-update loop are live before handing links to the user.
+
+Work Log:
+- aapt badging on download/GS-AI-App.apk: com.grapsee.gsai versionCode 2 / versionName 0.2.0 — LiveUpdate build confirmed
+- Public URL checks (all HTTP 200): raw update-manifest.json (versionCode 2, apkUrl → raw APK), raw APK (application/octet-stream), Release v0.2.0 page, and the /releases/latest/download/GS-AI-App.apk one-click permalink (redirects to release-assets with attachment disposition)
+- HomeScreen wiring grep-confirmed: LaunchedEffect { LiveUpdater.syncFrom(context) } silent check + UpdatePill for Available / Downloading / Ready states
+- Manifest versionCode 2 == installed 2 → pill correctly hidden now; will reappear on the next versionCode bump (Task 16+ protocol)
+- No code changes; tree clean at 53261ad
+
+Stage Summary:
+- User-facing handover ready: one-click download link + in-app update loop verified live end-to-end
+- Publish protocol for every future batch: edit code → bump versionCode → build → cp APK to download/ + bump download/update-manifest.json → push (APK + manifest are tracked via .gitignore exception)
