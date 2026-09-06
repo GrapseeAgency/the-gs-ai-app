@@ -642,3 +642,21 @@ Stage Summary:
 - Chat scroll now behaves like the benchmark apps: reading is protected, the live edge is one tap away, copying confirms quietly
 - No new permissions, no data-model changes — pure UX-parity build, installs straight over v0.5.0
 - Backlog remaining: assistants CRUD + pin/archive native wiring (deferred until live backend ask), design-parity detail passes (read-aloud/translate wiring), FTS5 search upgrade groundwork
+
+---
+Task ID: 20 (cron cycle — design-parity detail pass: read-aloud TTS on assistant replies + v0.7.0 shipped via LiveUpdate)
+Agent: Z.ai Code (main)
+Task: Build QA, advance backlog (design parity: benchmark read-aloud on chat bubbles, both platforms), publish v0.7.0.
+
+Work Log:
+- BUILD QA: :app:assembleDebug BUILD SUCCESSFUL (1m44s with TTS changes); toolchain intact
+- ANDROID (ChatScreen.kt): on-device TextToSpeech (remember + DisposableEffect shutdown on leave); UtteranceProgressListener clears the speaking state on done/error; readAloud toggles per message — second tap stops, QUEUE_FLUSH switches cleanly between bubbles; icon swaps VolumeUp → VolumeOff ("Stop reading") while that bubble speaks, in both the action row and the long-press menu; device without a TTS engine → quiet honest snack, never an error dialog
+- iOS (SpeechPlayer.swift, new): AVSpeechSynthesizer wrapper, delegate hops didFinish/didCancel to main to clear speakingMessageID; system default voice, no error surface; ChatDetailView holds it as @StateObject, stops speech onDisappear; MessageBubble speaker button wired (speaker.wave.2 → stop.fill, accent tint while speaking)
+- iOS STATIC GATES: all 5 files CLEAN (SpeechPlayer added to scripts/ios_static_gates.py)
+- VERSION: versionCode 7 / versionName 0.7.0; APK copied to download/GS-AI-App.apk (aapt verified versionCode 7); update-manifest.json bumped
+- PUBLISHED: commit 928354b pushed; GitHub Release v0.7.0 created (REL_ID 383736565, asset upload HTTP 201); /releases/latest/download/ permalink verified serving versionCode 7; stable signature b1ffd75d… intact — installs straight over v0.6.0
+
+Stage Summary:
+- Read-aloud is now real on both platforms — a headline benchmark behaviour, fully local so it works offline with zero error exposure
+- No new permissions, no data changes; pure parity build
+- Backlog remaining: assistants CRUD + pin/archive native wiring (deferred until live backend ask), translate wiring (needs backend), FTS5 search upgrade groundwork
