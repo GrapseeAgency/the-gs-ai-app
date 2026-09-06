@@ -9,6 +9,9 @@ FILES = [
     "/home/z/my-project/ios/App/Sources/Features/Home/HomeView.swift",
     "/home/z/my-project/ios/App/Sources/Navigation/AppRouter.swift",
     "/home/z/my-project/ios/App/Sources/Features/Chats/ChatDetailView.swift",
+    "/home/z/my-project/ios/App/Sources/Networking/SQLiteChatStore.swift",
+    "/home/z/my-project/ios/App/Sources/Networking/ConversationStore.swift",
+    "/home/z/my-project/ios/App/Sources/Features/Chats/ChatSearchView.swift",
 ]
 
 BANNED = [

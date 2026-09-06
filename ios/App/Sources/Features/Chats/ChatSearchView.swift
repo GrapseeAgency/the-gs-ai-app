@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Chat search over the on-device store — real hits from `ConversationStore`
+/// Chat search over the on-device SQLite store — FTS5 full-text over `ConversationStore`
 /// (titles + message bodies) with honest edge states: a start-typing hint, a
 /// no-matches empty state, and tap-through into the conversation. Store
 /// hiccups resolve to "no matches", never an error.
@@ -29,27 +29,26 @@ struct ChatSearchView: View {
         let withinWeek = activeFilters.contains("This week")
 
         var hits: [SearchHit] = []
-        for convo in store.conversations where !convo.archived {
-            var titleMatched = false
-            if convo.title.localizedCaseInsensitiveContains(term) {
-                titleMatched = true
-                hits.append(SearchHit(
-                    id: convo.id,
-                    routeID: convo.id,
-                    title: convo.title,
-                    snippet: "Chat title match",
-                    when: Self.relative(convo.updatedAt)))
-            }
-            for message in store.messages(for: convo.id)
-            where message.content.localizedCaseInsensitiveContains(term) {
-                if titleMatched { break }   // one row per conversation, title hit wins
-                hits.append(SearchHit(
-                    id: convo.id + "#" + message.id,
-                    routeID: convo.id,
-                    title: convo.title,
-                    snippet: Self.snippet(message.content, term: term),
-                    when: Self.relative(message.createdAt)))
-            }
+        var seen = Set<String>()
+        for convo in store.searchTitles(term) where !convo.archived {
+            seen.insert(convo.id)
+            hits.append(SearchHit(
+                id: convo.id,
+                routeID: convo.id,
+                title: convo.title,
+                snippet: "Chat title match",
+                when: Self.relative(convo.updatedAt)))
+        }
+        for messageHit in store.searchMessages(term) {
+            let convo = messageHit.conversation
+            guard !convo.archived, !seen.contains(convo.id) else { continue }
+            seen.insert(convo.id)
+            hits.append(SearchHit(
+                id: convo.id + "#" + messageHit.messageID,
+                routeID: convo.id,
+                title: convo.title,
+                snippet: Self.snippet(messageHit.content, term: term),
+                when: Self.relative(messageHit.createdAt)))
         }
 
         if withinWeek {

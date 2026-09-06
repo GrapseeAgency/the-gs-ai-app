@@ -1,6 +1,6 @@
 {
-  "versionCode": 11,
-  "versionName": "0.11.0",
+  "versionCode": 12,
+  "versionName": "0.12.0",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "Markdown replies — headings, bullet lists, bold, italic and inline code now render styled, like the benchmark chat apps"
+  "notes": "iOS groundwork: chats moved to a real SQLite store with full-text search — Android parity under the hood"
 }

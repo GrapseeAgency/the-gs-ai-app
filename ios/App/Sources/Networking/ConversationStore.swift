@@ -21,11 +21,12 @@ struct StoredMessage: Codable, Identifiable, Equatable {
 }
 
 /**
- * Offline-first source of truth on iOS: a single JSON document in Application
- * Support (SwiftData is off-limits on the iOS 16.0 target). Every chat turn,
- * pin, archive, rename and delete lands here first; the backend syncs when
- * reachable. The drawer recents, Chats list and Archive shelf all observe
- * this store — exactly the Room+Flow contract the Android build uses.
+ * Offline-first source of truth on iOS: a durable SQLite document in
+ * Application Support (one-time import from the legacy JSON document; the
+ * higher-level object store is off-limits on the iOS 16.0 target). Every
+ * chat turn, pin, archive, rename and delete lands here first; the backend
+ * syncs when reachable. The drawer recents, Chats list and Archive shelf all
+ * observe this store — exactly the Room+Flow contract the Android build uses.
  */
 @MainActor
 final class ConversationStore: ObservableObject {
@@ -35,7 +36,8 @@ final class ConversationStore: ObservableObject {
     @Published private(set) var conversations: [StoredConversation] = []
     @Published private(set) var messages: [StoredMessage] = []
 
-    private let fileURL: URL
+    /// Durable layer: SQLite + FTS5 (imports the legacy JSON document once).
+    private let sql = SQLiteChatStore()
 
     /// Fixed-width ISO-8601 keeps lexicographic createdAt ordering chronological.
     private static let timestamp: ISO8601DateFormatter = {
@@ -47,10 +49,21 @@ final class ConversationStore: ObservableObject {
     static func now() -> String { timestamp.string(from: Date()) }
 
     private init() {
+        conversations = sql.loadConversations()
+        messages = sql.loadMessages()
+        if conversations.isEmpty && messages.isEmpty {
+            // Storage hiccup or fresh install with a legacy document — keep the
+            // old in-memory JSON path alive so nothing ever looks "lost".
+            loadLegacyJSON()
+        }
+    }
+
+    private func loadLegacyJSON() {
         let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        fileURL = directory.appendingPathComponent("gsai-store.json")
-        load()
+        guard let data = try? Data(contentsOf: directory.appendingPathComponent("gsai-store.json")),
+              let document = try? JSONDecoder().decode(StoreDocument.self, from: data) else { return }
+        conversations = document.conversations
+        messages = document.messages
     }
 
     // MARK: - Queries
@@ -81,6 +94,32 @@ final class ConversationStore: ObservableObject {
             .sorted { $0.createdAt < $1.createdAt }
     }
 
+    // MARK: - Search (FTS5, mirrors Android's Room FTS contract)
+
+    struct MessageSearchHit {
+        let conversation: StoredConversation
+        let messageID: String
+        let content: String
+        let createdAt: String
+    }
+
+    func searchTitles(_ term: String) -> [StoredConversation] {
+        sql.searchTitleIDs(term).compactMap { id in
+            conversations.first { $0.id == id }
+        }
+    }
+
+    func searchMessages(_ term: String) -> [MessageSearchHit] {
+        sql.searchMessageHits(term).compactMap { hit in
+            guard let conversation = conversations.first(where: { $0.id == hit.conversationID }) else { return nil }
+            return MessageSearchHit(
+                conversation: conversation,
+                messageID: hit.messageID,
+                content: hit.content,
+                createdAt: hit.createdAt)
+        }
+    }
+
     // MARK: - Mutations (local-first, persisted on every change)
 
     func upsert(_ conversation: StoredConversation) {
@@ -89,7 +128,7 @@ final class ConversationStore: ObservableObject {
         } else {
             conversations.append(conversation)
         }
-        persist()
+        sql.upsertConversation(conversation)
     }
 
     /// Offline-safe stand-in for `POST /conversations` — visible in recents immediately.
@@ -126,7 +165,7 @@ final class ConversationStore: ObservableObject {
             touch(message.conversationId)
         }
         messages.append(message)
-        persist()
+        sql.upsertMessage(message)
     }
 
     func setPinned(id: String, _ pinned: Bool) { mutate(id) { $0.pinned = pinned } }
@@ -141,7 +180,7 @@ final class ConversationStore: ObservableObject {
     func delete(id: String) {
         conversations.removeAll { $0.id == id }
         messages.removeAll { $0.conversationId == id }
-        persist()
+        sql.deleteConversation(id: id)
     }
 
     func touch(id: String) { mutate(id) { $0.updatedAt = Self.now() } }
@@ -149,23 +188,10 @@ final class ConversationStore: ObservableObject {
     private func mutate(_ id: String, _ change: (inout StoredConversation) -> Void) {
         guard let index = conversations.firstIndex(where: { $0.id == id }) else { return }
         change(&conversations[index])
-        persist()
+        sql.upsertConversation(conversations[index])
     }
 
-    // MARK: - Persistence
-
-    private func load() {
-        guard let data = try? Data(contentsOf: fileURL) else { return }
-        guard let document = try? JSONDecoder().decode(StoreDocument.self, from: data) else { return }
-        conversations = document.conversations
-        messages = document.messages
-    }
-
-    private func persist() {
-        let document = StoreDocument(conversations: conversations, messages: messages)
-        guard let data = try? JSONEncoder().encode(document) else { return }
-        try? data.write(to: fileURL, options: .atomic)
-    }
+    // MARK: - Legacy document (in-memory fallback only)
 
     private struct StoreDocument: Codable {
         var conversations: [StoredConversation]
