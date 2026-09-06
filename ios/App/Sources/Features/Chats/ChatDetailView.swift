@@ -371,6 +371,84 @@ private func highlightedCode(_ code: String, language: String?) -> Text {
     return Text(attributed)
 }
 
+// MARK: - Markdown-lite prose (headings, lists, bold/italic/inline code)
+
+private enum ProseKind { case plain, h1, h2, h3, bullet, numbered }
+
+private struct ProseLine {
+    let kind: ProseKind
+    let marker: String
+    let text: String
+}
+
+private let numberedLineRegex = try! NSRegularExpression(pattern: "^(\\d{1,2})[.)]\\s+(.+)$")
+
+/// Inline pass: `code` | **bold** | *italic* — unclosed markers stay literal mid-stream.
+private let inlineMdRegex = try! NSRegularExpression(
+    pattern: "`([^`\\n]+)`|\\*\\*([^*\\n]+?)\\*\\*|(?<!\\*)\\*([^*\\n]+?)\\*(?!\\*)")
+
+/// Classify one markdown-lite line; blank lines drop (spacing handles rhythm).
+private func classifyProseLine(_ raw: String) -> ProseLine? {
+    let line = raw.replacingOccurrences(of: "\\s+$", with: "", options: .regularExpression)
+    if line.isEmpty { return nil }
+    let ns = line as NSString
+    if line.hasPrefix("### ") { return ProseLine(kind: .h3, marker: "", text: String(line.dropFirst(4))) }
+    if line.hasPrefix("## ") { return ProseLine(kind: .h2, marker: "", text: String(line.dropFirst(3))) }
+    if line.hasPrefix("# ") { return ProseLine(kind: .h1, marker: "", text: String(line.dropFirst(2))) }
+    if line.hasPrefix("- ") || line.hasPrefix("* ") {
+        return ProseLine(kind: .bullet, marker: "\u{2022}", text: String(line.dropFirst(2)))
+    }
+    let numbered = numberedLineRegex.firstMatch(
+        in: line, range: NSRange(location: 0, length: ns.length))
+    if let m = numbered, m.range.length == ns.length {
+        let marker = ns.substring(with: m.range(at: 1))
+        return ProseLine(kind: .numbered, marker: marker + ".", text: ns.substring(with: m.range(at: 2)))
+    }
+    return ProseLine(kind: .plain, marker: "", text: line)
+}
+
+/// Inline markdown → AttributedString; unmatched markers render literally, so streaming never flickers.
+private func renderInline(_ text: String, monoBackground: Color) -> AttributedString {
+    var result = AttributedString()
+    let ns = text as NSString
+    var cursor = 0
+    for match in inlineMdRegex.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
+        if match.range.location > cursor {
+            result.append(AttributedString(
+                ns.substring(with: NSRange(location: cursor, length: match.range.location - cursor))))
+        }
+        if match.range(at: 1).length > 0 {
+            var run = AttributedString(ns.substring(with: match.range(at: 1)))
+            run.font = .system(size: 12, weight: .regular, design: .monospaced)
+            run.backgroundColor = monoBackground
+            result.append(run)
+        } else if match.range(at: 2).length > 0 {
+            var run = AttributedString(ns.substring(with: match.range(at: 2)))
+            run.inlinePresentationIntent = .stronglyEmphasized
+            result.append(run)
+        } else if match.range(at: 3).length > 0 {
+            var run = AttributedString(ns.substring(with: match.range(at: 3)))
+            run.inlinePresentationIntent = .emphasized
+            result.append(run)
+        }
+        cursor = match.range.location + match.range.length
+    }
+    if cursor < ns.length {
+        result.append(AttributedString(ns.substring(from: cursor)))
+    }
+    return result
+}
+
+/// Heading hierarchy inside bubbles; everything else rides the body voice.
+private func proseFont(_ kind: ProseKind) -> Font {
+    switch kind {
+    case .h1: return .system(size: 16, weight: .bold)
+    case .h2: return .system(size: 15, weight: .bold)
+    case .h3: return .system(size: 14, weight: .bold)
+    case .plain, .bullet, .numbered: return Aero.body()
+    }
+}
+
 // MARK: - Bubble
 
 private struct MessageBubble: View {
@@ -410,10 +488,7 @@ private struct MessageBubble: View {
                     if segment.isCode {
                         codeBlock(segment)
                     } else {
-                        Text(segment.text)
-                            .font(Aero.body())
-                            .foregroundStyle(Aero.text)
-                            .textSelection(.enabled)
+                        proseBlock(segment)
                     }
                 }
                 if message.isStreaming {
@@ -436,6 +511,34 @@ private struct MessageBubble: View {
             return [ContentSegment(id: 0, text: bubbleText, isCode: false, language: nil)]
         }
         return parseContentSegments(message.content)
+    }
+
+    /// One prose segment rendered as markdown-lite: headings, bullets, numbered
+    /// lists, inline styling — mirror of the Android ProseBlock.
+    private func proseBlock(_ segment: ContentSegment) -> some View {
+        let lines = segment.text
+            .components(separatedBy: "\n")
+            .compactMap(classifyProseLine)
+        return VStack(alignment: .leading, spacing: 4) {
+            if lines.isEmpty {
+                Text(" ")
+                    .font(Aero.body())
+            } else {
+                ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        if !line.marker.isEmpty {
+                            Text(line.marker)
+                                .font(Aero.body())
+                                .foregroundStyle(Aero.accent)
+                        }
+                        Text(renderInline(line.text, monoBackground: Aero.container))
+                            .font(proseFont(line.kind))
+                            .foregroundStyle(Aero.text)
+                            .textSelection(.enabled)
+                    }
+                }
+            }
+        }
     }
 
     /// Fenced code block styled like the benchmark apps: language label, copy,

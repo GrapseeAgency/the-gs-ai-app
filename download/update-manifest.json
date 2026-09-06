@@ -1,6 +1,6 @@
 {
-  "versionCode": 10,
-  "versionName": "0.10.0",
+  "versionCode": 11,
+  "versionName": "0.11.0",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "Syntax highlighting in code blocks — comments, strings, numbers and keywords now read like real code"
+  "notes": "Markdown replies — headings, bullet lists, bold, italic and inline code now render styled, like the benchmark chat apps"
 }

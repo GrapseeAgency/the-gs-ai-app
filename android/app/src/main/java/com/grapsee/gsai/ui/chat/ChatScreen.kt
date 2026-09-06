@@ -92,6 +92,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.di.ServiceLocator
@@ -666,7 +668,7 @@ private fun parseContentSegments(content: String): List<ContentSegment> {
     return segments
 }
 
-/** Assistant reply body: prose paragraphs, code blocks styled like the benchmark apps. */
+/** Assistant reply body: markdown-lite prose + code blocks styled like the benchmark apps. */
 @Composable
 private fun SegmentedContent(content: String, isStreaming: Boolean, onCopyCode: (String) -> Unit) {
     val segments = remember(content) { parseContentSegments(content) }
@@ -675,14 +677,96 @@ private fun SegmentedContent(content: String, isStreaming: Boolean, onCopyCode: 
             if (segment.isCode) {
                 CodeBlock(segment = segment, onCopyCode = onCopyCode)
             } else {
-                Row(verticalAlignment = Alignment.Bottom) {
+                ProseBlock(
+                    segment = segment,
+                    showCaret = isStreaming && index == segments.lastIndex
+                )
+            }
+        }
+    }
+}
+
+// --- markdown-lite prose (headings, lists, bold/italic/inline code) ------------
+
+private enum class ProseKind { PLAIN, H1, H2, H3, BULLET, NUMBERED }
+
+private data class ProseLine(val kind: ProseKind, val marker: String, val text: String)
+
+private val headingRegex = Regex("^(#{1,3})\\s+(.+)$")
+private val bulletRegex = Regex("^[-*]\\s+(.+)$")
+private val numberedRegex = Regex("^(\\d{1,2})[.)]\\s+(.+)$")
+
+/** Classify one markdown-lite line; blank lines drop (spacing handles rhythm). */
+private fun classifyProseLine(raw: String): ProseLine? {
+    val line = raw.trimEnd()
+    if (line.isBlank()) return null
+    headingRegex.matchEntire(line)?.let { m ->
+        return when (m.groupValues[1].length) {
+            1 -> ProseLine(ProseKind.H1, "", m.groupValues[2])
+            2 -> ProseLine(ProseKind.H2, "", m.groupValues[2])
+            else -> ProseLine(ProseKind.H3, "", m.groupValues[2])
+        }
+    }
+    bulletRegex.matchEntire(line)?.let { return ProseLine(ProseKind.BULLET, "\u2022", it.groupValues[1]) }
+    numberedRegex.matchEntire(line)?.let { return ProseLine(ProseKind.NUMBERED, it.groupValues[1] + ".", it.groupValues[2]) }
+    return ProseLine(ProseKind.PLAIN, "", line)
+}
+
+// Inline pass: `code` | **bold** | *italic* — order matters, unclosed markers stay literal mid-stream.
+private val inlineMdRegex = Regex("`([^`\\n]+)`|\\*\\*([^*\\n]+?)\\*\\*|(?<!\\*)\\*([^*\\n]+?)\\*(?!\\*)")
+
+/** Inline markdown → styled spans; unmatched markers render literally, so streaming never flickers. */
+private fun renderInline(text: String, codeBackground: androidx.compose.ui.graphics.Color): AnnotatedString = buildAnnotatedString {
+    var i = 0
+    while (i < text.length) {
+        val m = inlineMdRegex.find(text, startIndex = i)
+        if (m == null) {
+            append(text.substring(i))
+            break
+        }
+        if (m.range.first > i) append(text.substring(i, m.range.first))
+        when {
+            m.groupValues[1].isNotEmpty() -> withStyle(
+                SpanStyle(fontFamily = FontFamily.Monospace, background = codeBackground)
+            ) { append(m.groupValues[1]) }
+            m.groupValues[2].isNotEmpty() -> withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(m.groupValues[2]) }
+            else -> withStyle(SpanStyle(fontStyle = FontStyle.Italic)) { append(m.groupValues[3]) }
+        }
+        i = m.range.last + 1
+    }
+}
+
+/** One prose segment: headings, bullets, numbered lists, inline styling — caret rides the last line. */
+@Composable
+private fun ProseBlock(segment: ContentSegment, showCaret: Boolean) {
+    val codeBg = MaterialTheme.colorScheme.surfaceContainerHighest
+    val lines = remember(segment.text) { segment.text.split('\n').mapNotNull(::classifyProseLine) }
+    if (lines.isEmpty()) {
+        if (showCaret) Row(verticalAlignment = Alignment.Bottom) { StreamingCaret() }
+        return
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        lines.forEachIndexed { li, line ->
+            Row(verticalAlignment = Alignment.Bottom) {
+                if (line.marker.isNotEmpty()) {
                     Text(
-                        text = segment.text,
+                        text = line.marker,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.primary
                     )
-                    if (isStreaming && index == segments.lastIndex) StreamingCaret()
+                    Spacer(Modifier.width(6.dp))
                 }
+                Text(
+                    text = renderInline(line.text, codeBg),
+                    style = when (line.kind) {
+                        ProseKind.H1 -> MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                        ProseKind.H2 -> MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
+                        ProseKind.H3 -> MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold)
+                        else -> MaterialTheme.typography.bodyMedium
+                    },
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                if (showCaret && li == lines.lastIndex) StreamingCaret()
             }
         }
     }
