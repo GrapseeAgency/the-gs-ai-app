@@ -102,5 +102,51 @@ Stage Summary:
 - NATIVE (reaffirmed): Android Kotlin+Compose+Room+WorkManager+Coroutines; iOS Swift+SwiftUI+SwiftData+BackgroundTasks+Swift Concurrency; shared backend contracts.
 - NEXT: user will teach more lessons before any build begins.
 
+---
+Task ID: 5-b
+Agent: Z.ai Code (Android scaffold sub-agent)
+Task: Scaffold Android native project
+Work Log:
+- android/settings.gradle.kts — rootProject "the-gs-ai-app", :app module, FAIL_ON_PROJECT_REPOS
+- android/build.gradle.kts — plugin aliases apply-false (android-application, kotlin-android, kotlin-compose, hilt, ksp)
+- android/gradle.properties — 2GB JVM, parallel + caching, AndroidX + non-transitive R
+- android/gradle/wrapper/gradle-wrapper.properties — Gradle 8.9 bin dist; gradlew/gradlew.bat/gradle-wrapper.jar intentionally NOT committed (CI bootstraps)
+- android/gradle/libs.versions.toml — pinned catalog: AGP 8.5.2, Kotlin 2.0.20, KSP 2.0.20-1.0.25, Hilt 2.52, Compose BOM 2024.09.03, activity-compose 1.9.2, navigation-compose 2.8.1, core-ktx 1.13.1, lifecycle 2.8.6, coroutines 1.9.0, hilt-navigation-compose 1.2.0
+- android/app/build.gradle.kts — com.grapsee.gsai, compileSdk/targetSdk 35, minSdk 26, versionCode 1 / versionName 0.1.0, JDK 17, Compose enabled, Hilt via KSP, full dependency set
+- android/app/proguard-rules.pro — header comment only (minify disabled)
+- android/app/src/main/AndroidManifest.xml — GSApplication + MainActivity (MAIN/LAUNCHER), INTERNET permission
+- android/app/src/main/res/values/strings.xml (app_name "GS AI") + themes.xml (Theme.TheGsAiApp on android:Theme.Material.NoActionBar)
+- Kotlin sources under app/src/main/java/com/grapsee/gsai/: GSApplication.kt (@HiltAndroidApp), MainActivity.kt (@AndroidEntryPoint, enableEdgeToEdge + setContent), ui/theme/Color.kt (paper-and-ink light + deep-ink dark palette), ui/theme/Type.kt (serif display/headline editorial typography), ui/theme/Theme.kt (TheGsAiTheme, light/dark schemes incl. surface-container roles), ui/home/HomeScreen.kt (static AI command centre: bottom nav Home/Chats/Create/Library, universal input bar, 8-item quick-action grid, 2 resume cards)
+- android/README.md — structure tree, pinned stack, CI wrapper-bootstrap note, local requirements (JDK 17+, Android SDK 35), Room-arrives-later note
+
+Stage Summary:
+- Versions pinned (known-good combo): AGP 8.5.2 / Kotlin 2.0.20 / KSP 2.0.20-1.0.25 / Compose BOM 2024.09.03 / Hilt 2.52 / Gradle 8.9; minSdk 26, target+compileSdk 35, JDK 17
+- Package com.grapsee.gsai; Hilt wired end-to-end (@HiltAndroidApp → @AndroidEntryPoint → KSP compiler)
+- "Premium intelligent editorial" theme seeded: Paper/Ink light palette, deep-ink (near-black navy) dark palette, copper accent, serif display/headline typography
+- HomeScreen = static seed of the blueprint HOME subproduct (universal input, quick actions, resume cards); compiles logically against BOM 2024.09 APIs (HorizontalDivider, surfaceContainer roles); no TODOs/crashes
+- Wrapper bootstrapped in CI (no gradlew committed); local builds need JDK 17+ + Android SDK 35
+- Deviations (documented): Material3 lightColorScheme/darkColorScheme used instead of lightColors/darkColors (those are Material2 names — material3-only classpath would not compile); AccentSoft given 0xFFF5E4D7 (spec left the value open); enableEdgeToEdge() added (targetSdk 35 forces edge-to-edge)
+- Room/WorkManager/Ktor/JNI intentionally deferred until first data/network features
+
+---
+Task ID: 5-c
+Agent: Z.ai Code (subagent 5-c)
+Task: Scaffold iOS native project
+
+Work Log:
+- Created ios/project.yml — XcodeGen 2.43+ spec: app target "App" (bundle com.grapsee.gsai, display name "GS AI", iOS 16.0, Swift 5.9, GENERATE_INFOPLIST_FILE, TARGETED_DEVICE_FAMILY 1,2), unit-test target "AppTests" (depends on App → XcodeGen wires TEST_HOST), scheme "GSApp" (build App: all, test AppTests), CODE_SIGNING_ALLOWED=NO + empty DEVELOPMENT_TEAM for headless CI
+- Created ios/.gitignore — *.xcodeproj, DerivedData/, .build/, xcuserdata/, *.xcuserstate, .DS_Store (generated project file stays out of git)
+- Created ios/App/Sources/GSApp.swift — @main SwiftUI entry → HomeView
+- Created ios/App/Sources/Theme/DesignSystem.swift — GSTheme tokens: Color extension (paper/ink/inkMuted/copper accent/darkSurface/darkElevated/darkText), Palette struct + palette(dark:) helper for light/dark sets, serif displayTitle() + headline()/body()/caption() typography, Spacing enum (xs 4 / s 8 / m 16 / l 24 / xl 32), Radius.card 12, Shadow token, gsCardShadow() view helper
+- Created ios/App/Sources/Features/Home/HomeView.swift — Home tab = AI command centre seed (static): greeting header ("Good day" serif display + "Your AI command centre"), universal input bar (sparkles + "Ask anything…" + mic/camera in rounded card), quick actions 8 items in 4-column LazyVGrid (New chat/Voice/Image/Files/Write/Research/Code/Translate), "Continue where you left off" with two placeholder cards; TabView with placeholder tabs Chats/Create/Library; iOS 16-safe SwiftUI only (no .fontDesign, no iOS 17 APIs)
+- Created ios/App/Tests/AppTests/DesignSystemTests.swift — XCTest, @testable import GSApp, asserts on Spacing tokens (positive, ordered) and Radius.card == 12
+- Created ios/README.md — structure, XcodeGen workflow (brew install xcodegen; xcodegen generate; open GSApp.xcodeproj), CI note (macOS runner, CODE_SIGNING_ALLOWED=NO), stack list, roadmap
+- No builds run (Linux sandbox); .xcodeproj generation happens in CI via XcodeGen
+
+Stage Summary:
+- KEY DECISIONS: XcodeGen-driven project generation in CI (project.yml is the single source of truth; .xcodeproj git-ignored and regenerated by `xcodegen generate`), iOS 16.0 deployment target, Swift 5.9, code signing disabled for CI (CODE_SIGNING_ALLOWED=NO, Automatic style, empty team), scheme GSApp with unit test target AppTests (host app wired automatically via target dependency), "Premium intelligent editorial" design tokens seeded (paper/ink/copper light palette + deep navy dark palette, serif display type, 4-8-16-24-32 spacing scale, radius 12, soft shadow token)
+- Home tab matches Task 4 blueprint HOME section (universal input, quick actions, resume-where-you-left-off); Chats/Create/Library tabs are placeholders
+- NEXT: add GitHub Actions workflow (macos runner) that runs `xcodegen generate` + xcodebuild test with CODE_SIGNING_ALLOWED=NO; then first real feature (chat + streaming) per Task 4 blueprint
+
 
 

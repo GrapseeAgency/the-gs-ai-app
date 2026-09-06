@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Launch theme only; real theming is done by TheGsAiTheme in Compose. -->
+    <style name="Theme.TheGsAiApp" parent="android:Theme.Material.NoActionBar" />
+</resources>
