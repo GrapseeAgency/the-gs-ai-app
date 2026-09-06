@@ -22,3 +22,21 @@ Stage Summary:
 - Remote repo was empty at first push — clean baseline established
 - Planned next: GitHub Actions for CI/CD and iOS/Android app conversion (user will define what to build next)
 - No website development has started yet — user wants to discuss requirements first
+
+---
+Task ID: 2
+Agent: Z.ai Code (main)
+Task: Agree on mobile architecture stack for the-gs-ai-app
+
+Work Log:
+- User defined the target mobile stack; reviewed and agreed (no blocking concerns)
+- Logged the full stack table for future sessions (see Stage Summary)
+
+Stage Summary:
+- AGREED MOBILE STACK:
+  - Android: Kotlin + Jetpack Compose, Clean Architecture + MVVM, Room/SQLite + FTS5, Ktor, Hilt, WorkManager, Android Keystore, C++ core engine via JNI, Gradle + GitHub Actions
+  - iOS: Swift + SwiftUI, Clean Architecture + MVVM, SwiftData/SQLite + FTS5, Ktor shared layer, native/lightweight DI, BackgroundTasks, Keychain/Secure Enclave, C++ core via Objective-C++, Xcode/SPM + GitHub Actions
+  - Shared: Kotlin Multiplatform (KMM) for shared logic where useful
+- Dev loop in this sandbox: write/scaffold Kotlin/Swift/C++ code + GitHub Actions workflows here → push to GitHub (as Grapsee-Official) → Actions runners compile/test (macOS runners needed for iOS builds)
+- Next: user to provide further assessment (app requirements/domain) before implementation
+
