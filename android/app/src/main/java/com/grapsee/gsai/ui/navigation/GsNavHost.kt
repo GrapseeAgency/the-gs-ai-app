@@ -143,13 +143,20 @@ fun GsNavHost(modifier: Modifier = Modifier) {
 
         composable(
             route = GsRoutes.CHAT,
-            arguments = listOf(navArgument(GsRoutes.ARG_CONVERSATION) {
-                type = NavType.StringType; defaultValue = "new"
-            })
+            arguments = listOf(
+                navArgument(GsRoutes.ARG_CONVERSATION) {
+                    type = NavType.StringType; defaultValue = "new"
+                },
+                navArgument(GsRoutes.ARG_PROMPT) {
+                    type = NavType.StringType; defaultValue = ""
+                }
+            )
         ) { entry ->
             val id = entry.arguments?.getString(GsRoutes.ARG_CONVERSATION)
+            val prompt = entry.arguments?.getString(GsRoutes.ARG_PROMPT).orEmpty()
             ChatScreen(
                 conversationId = if (id == "new") null else id,
+                prefillPrompt = prompt.takeIf { it.isNotBlank() },
                 onBack = back,
                 onNavigateVoice = { navController.navigate(GsRoutes.VOICE) }
             )

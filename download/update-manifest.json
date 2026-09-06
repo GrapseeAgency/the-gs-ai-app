@@ -1,6 +1,6 @@
 {
-  "versionCode": 3,
-  "versionName": "0.3.0",
+  "versionCode": 4,
+  "versionName": "0.4.0",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "ChatGPT-style trending/explore rows on the home canvas"
+  "notes": "Voice press-and-hold on the hero orb — hold to talk, release to send"
 }

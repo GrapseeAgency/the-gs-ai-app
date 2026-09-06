@@ -8,12 +8,16 @@ struct ChatDetailView: View {
 
     @StateObject private var vm: ChatViewModel
 
+    // Voice press-and-hold handoff — seeds the composer once on arrival.
+    private let prefill: String?
+
     // Attach + local toasts (added 8-d; streaming/VM logic untouched)
     @State private var showingAttachments = false
     @State private var toast: String?
 
-    init(conversationID: String?) {
+    init(conversationID: String?, prefill: String? = nil) {
         _vm = StateObject(wrappedValue: ChatViewModel(conversationID: conversationID))
+        self.prefill = prefill
     }
 
     var body: some View {
@@ -39,6 +43,11 @@ struct ChatDetailView: View {
         }
         .background(Aero.background.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            if let prefill, vm.draft.isEmpty, !vm.isStreaming {
+                vm.draft = prefill
+            }
+        }
         .sheet(isPresented: $showingAttachments) {
             AttachmentSheetView { option in
                 showToast(attachmentMessage(for: option))

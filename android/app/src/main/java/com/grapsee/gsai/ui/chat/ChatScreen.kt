@@ -109,6 +109,8 @@ private data class ChatUiMessage(
 fun ChatScreen(
     conversationId: String?,
     onBack: () -> Unit,
+    // Voice press-and-hold hands its transcript to the composer through this.
+    prefillPrompt: String? = null,
     // Optional voice entry point — the main agent wires this to GsRoutes.VOICE in GsNavHost.
     onNavigateVoice: (() -> Unit)? = null
 ) {
@@ -135,6 +137,11 @@ fun ChatScreen(
         val loadedTitle = runCatching { ServiceLocator.db.conversationDao().getById(id) }
             .getOrNull()?.title
         if (!loadedTitle.isNullOrBlank()) conversationTitle = loadedTitle
+    }
+
+    // Voice press-and-hold: seed the composer with the transcript once.
+    LaunchedEffect(prefillPrompt) {
+        if (!prefillPrompt.isNullOrBlank()) draft = prefillPrompt
     }
 
     // Keep the newest turn in view while messages arrive and grow.

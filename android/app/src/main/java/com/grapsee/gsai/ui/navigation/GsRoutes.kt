@@ -1,5 +1,7 @@
 package com.grapsee.gsai.ui.navigation
 
+import android.net.Uri
+
 /** AERUO KINETIC — route map. Screens are plain composables; this file owns all routing. */
 object GsRoutes {
     const val HOME = "home"
@@ -37,9 +39,15 @@ object GsRoutes {
     const val CODE_WORKSPACE = "create/code"
     const val PROMPT_BUILDER = "create/prompt"
 
-    const val CHAT = "chat/{conversationId}"
+    const val CHAT = "chat/{conversationId}?prompt={prompt}"
     const val ARG_CONVERSATION = "conversationId"
-    fun chat(conversationId: String?) = "chat/${conversationId ?: "new"}"
+    const val ARG_PROMPT = "prompt"
+
+    /** Voice press-and-hold hands its transcript to the composer via ?prompt=. */
+    fun chat(conversationId: String?, prompt: String? = null): String {
+        val base = "chat/${conversationId ?: "new"}"
+        return if (prompt.isNullOrBlank()) base else "$base?prompt=${Uri.encode(prompt)}"
+    }
 
     const val PROJECT_DETAIL = "project/{projectId}"
     const val ARG_PROJECT = "projectId"

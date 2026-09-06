@@ -9,6 +9,7 @@ import SwiftUI
 
 enum AeroRoute: Hashable {
     case chat(String?)                 // nil = new chat
+    case chatPrefill(String)           // voice press-and-hold hands its transcript here
     case assistant(String)
     case assistantCreate
     case project(String)
@@ -67,7 +68,8 @@ struct RootView: View {
         ZStack {
             NavigationStack(path: $path) {
                 HomeView(
-                    onOpenDrawer: { withAnimation(Aero.spring) { showDrawer = true } }
+                    onOpenDrawer: { withAnimation(Aero.spring) { showDrawer = true } },
+                    onRoute: { path.append($0) }
                 )
                 .aeroDestinations()
             }
@@ -96,6 +98,7 @@ struct AeroDestinations: ViewModifier {
         content.navigationDestination(for: AeroRoute.self) { route in
             switch route {
             case .chat(let id): ChatDetailView(conversationID: id)
+            case .chatPrefill(let prompt): ChatDetailView(conversationID: nil, prefill: prompt)
             case .assistant(let id): AssistantDetailView(assistantID: id)
             case .assistantCreate: AssistantCreateView()
             case .project(let id): ProjectDetailView(projectID: id)

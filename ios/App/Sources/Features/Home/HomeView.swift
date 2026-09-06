@@ -9,6 +9,9 @@ import SwiftUI
 struct HomeView: View {
 
     var onOpenDrawer: (() -> Void)? = nil
+    /// Programmatic route bridge — the hero orb's voice hold hands its
+    /// transcript to a brand-new chat through `.chatPrefill`.
+    var onRoute: ((AeroRoute) -> Void)? = nil
 
     private enum HomeWorkspace: String, Identifiable {
         case research, vision, writing, code, image
@@ -17,6 +20,12 @@ struct HomeView: View {
     @State private var activeWorkspace: HomeWorkspace?
     @State private var breathe: CGFloat = 1.0
     @State private var taglineIndex = 0
+
+    // Voice press-and-hold on the hero orb
+    @StateObject private var dictation = VoiceDictation()
+    @State private var holdTimer: Task<Void, Never>?
+    @State private var holdTriggered = false
+    @State private var haloPulse: CGFloat = 1.0
 
     // Forced-obsidian canvas (fixed benchmark-dark in both appearances)
     private let canvas = Aero.dynamic(
@@ -49,6 +58,12 @@ struct HomeView: View {
         .onAppear {
             withAnimation(.easeInOut(duration: 2.4).repeatForever(autoreverses: true)) {
                 breathe = 1.06
+            }
+            // Voice press-and-hold: a finished hold hands its transcript to
+            // a fresh chat composer (blank transcripts quietly do nothing).
+            dictation.onFinish = { text in
+                guard !text.isEmpty else { return }
+                onRoute?(.chatPrefill(text))
             }
         }
         .task {
@@ -356,14 +371,18 @@ struct HomeView: View {
             .accessibilityLabel("Attach — new chat")
 
             NavigationLink(value: AeroRoute.chat(nil)) {
-                Text("Ask anything")
+                Text(dictation.isListening
+                    ? (dictation.transcript.isEmpty ? "Listening…" : dictation.transcript)
+                    : "Ask anything")
                     .font(Aero.body())
-                    .foregroundColor(muted)
+                    .foregroundColor(dictation.isListening ? ink : muted)
+                    .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, Aero.Spacing.s)
                     .contentShape(Rectangle())
             }
             .buttonStyle(KineticPressStyle())
+            .disabled(dictation.isListening)
 
             NavigationLink(value: AeroRoute.voice) {
                 Image(systemName: "mic")
@@ -375,22 +394,71 @@ struct HomeView: View {
             .buttonStyle(KineticPressStyle())
             .accessibilityLabel("Voice input")
 
-            NavigationLink(value: AeroRoute.voice) {
-                ZStack {
-                    Circle()
-                        .fill(LinearGradient(
-                            colors: Aero.aurora,
-                            startPoint: .topLeading, endPoint: .bottomTrailing))
-                        .frame(width: 44, height: 44)
-                    Image(systemName: "waveform")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(ink)
-                }
-            }
-            .buttonStyle(KineticPressStyle())
-            .accessibilityLabel("Voice mode")
+            voiceHoldOrb
         }
         .padding(Aero.Spacing.s)
         .background(RoundedRectangle(cornerRadius: 28).fill(raised))
+    }
+
+    // MARK: Voice press-and-hold — the hero affordance
+
+    /// Aurora orb: hold past the threshold to dictate (live transcript in the
+    /// hero line), quick tap still opens full voice mode. Every failure path
+    /// dissolves quietly — nothing is ever shown as an error.
+    private var voiceHoldOrb: some View {
+        ZStack {
+            if dictation.isListening {
+                Circle()
+                    .fill(LinearGradient(
+                        colors: Aero.aurora,
+                        startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .frame(width: 46, height: 46)
+                    .scaleEffect(haloPulse)
+                    .opacity(0.45)
+            }
+            ZStack {
+                Circle()
+                    .fill(LinearGradient(
+                        colors: Aero.aurora,
+                        startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .frame(width: 44, height: 44)
+                Image(systemName: "waveform")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(ink)
+            }
+        }
+        .frame(width: 62, height: 62)
+        .contentShape(Circle())
+        .gesture(voiceHoldGesture)
+    }
+
+    private var voiceHoldGesture: some Gesture {
+        DragGesture(minimumDistance: 0, coordinateSpace: .local)
+            .onChanged { _ in
+                guard holdTimer == nil else { return }
+                holdTriggered = false
+                holdTimer = Task {
+                    try? await Task.sleep(nanoseconds: 280_000_000)
+                    guard !Task.isCancelled else { return }
+                    await MainActor.run {
+                        holdTriggered = true
+                        withAnimation(.easeInOut(duration: 0.85).repeatForever(autoreverses: true)) {
+                            haloPulse = 1.42
+                        }
+                        dictation.begin()
+                    }
+                }
+            }
+            .onEnded { _ in
+                holdTimer?.cancel()
+                holdTimer = nil
+                if holdTriggered {
+                    dictation.end()
+                } else {
+                    onRoute?(.voice)   // quick tap — full voice mode
+                }
+                holdTriggered = false
+                haloPulse = 1.0
+            }
     }
 }

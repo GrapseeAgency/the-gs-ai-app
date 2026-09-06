@@ -1,5 +1,14 @@
 package com.grapsee.gsai.ui.home
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Bundle
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -11,6 +20,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -53,16 +63,21 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import com.grapsee.gsai.data.liveupdate.LiveUpdateState
 import com.grapsee.gsai.data.liveupdate.LiveUpdater
 import com.grapsee.gsai.ui.navigation.GsRoutes
@@ -70,6 +85,8 @@ import com.grapsee.gsai.ui.theme.Aeruo
 import com.grapsee.gsai.ui.theme.GsMotion
 import com.grapsee.gsai.ui.theme.kineticPress
 import com.grapsee.gsai.ui.theme.rememberAuroraBrush
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.util.Calendar
 
 /**
@@ -582,6 +599,96 @@ private fun QuickChips(onNavigate: (String) -> Unit) {
 
 @Composable
 private fun HeroInput(onNavigate: (String) -> Unit) {
+    val context = LocalContext.current
+
+    // --- Voice press-and-hold -------------------------------------------------
+    // Hold the aurora orb to dictate: live partials fill the hero line, release
+    // hands the transcript to the chat composer. A quick tap still opens full
+    // voice mode. Every failure path dissolves quietly — nothing surfaces as
+    // an error.
+    var listening by remember { mutableStateOf(false) }
+    var transcript by remember { mutableStateOf("") }
+    val recognizerRef = remember { mutableStateOf<SpeechRecognizer?>(null) }
+
+    fun quietReset() {
+        listening = false
+        transcript = ""
+    }
+
+    fun startRecognizer() {
+        if (!SpeechRecognizer.isRecognitionAvailable(context)) {
+            // Device has no speech service — hand the user to full voice mode.
+            quietReset()
+            onNavigate(GsRoutes.VOICE)
+            return
+        }
+        runCatching {
+            val recognizer = SpeechRecognizer.createSpeechRecognizer(context)
+            recognizerRef.value = recognizer
+            recognizer.setRecognitionListener(object : RecognitionListener {
+                override fun onReadyForSpeech(params: Bundle?) {
+                    listening = true
+                }
+
+                override fun onBeginningOfSpeech() {}
+                override fun onRmsChanged(rmsdB: Float) {}
+                override fun onBufferReceived(buffer: ByteArray?) {}
+                override fun onEndOfSpeech() {}
+
+                override fun onError(error: Int) {
+                    // No match / timeout / busy — dissolve back to idle quietly.
+                    quietReset()
+                }
+
+                override fun onResults(results: Bundle?) {
+                    listening = false
+                    val text = results
+                        ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                        ?.firstOrNull()
+                    transcript = ""
+                    if (!text.isNullOrBlank()) onNavigate(GsRoutes.chat(null, text))
+                }
+
+                override fun onPartialResults(partialResults: Bundle?) {
+                    transcript = partialResults
+                        ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                        ?.firstOrNull()
+                        .orEmpty()
+                }
+
+                override fun onEvent(eventType: Int, params: Bundle?) {}
+            })
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(
+                    RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                    RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+                )
+                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            }
+            recognizer.startListening(intent)
+        }.onFailure { quietReset() }
+    }
+
+    fun beginVoiceHold() {
+        val granted = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+        when {
+            granted -> startRecognizer()
+            // The system dialog covers the app; if the user is still holding
+            // when they return, the grant callback picks the hold right up.
+            else -> listening = true
+        }
+    }
+
+    val micPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) startRecognizer() else quietReset()
+    }
+    val holdScope = rememberCoroutineScope()
+
     Surface(
         shape = RoundedCornerShape(28.dp),
         color = Aeruo.RaisedDark,
@@ -618,9 +725,15 @@ private fun HeroInput(onNavigate: (String) -> Unit) {
             Spacer(Modifier.width(GsMotion.spaceS))
 
             Text(
-                "Ask anything",
+                when {
+                    listening && transcript.isBlank() -> "Listening…"
+                    listening -> transcript
+                    else -> "Ask anything"
+                },
                 style = MaterialTheme.typography.bodyMedium,
-                color = Aeruo.TextMutedDark,
+                color = if (listening) Aeruo.TextDark else Aeruo.TextMutedDark,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                 modifier = Modifier
                     .weight(1f)
                     .clip(RoundedCornerShape(12.dp))
@@ -628,7 +741,7 @@ private fun HeroInput(onNavigate: (String) -> Unit) {
                     .padding(vertical = GsMotion.spaceS)
             )
 
-            // Mic — voice mode
+            // Mic — full voice mode
             Surface(
                 shape = CircleShape,
                 color = androidx.compose.ui.graphics.Color.Transparent,
@@ -649,28 +762,87 @@ private fun HeroInput(onNavigate: (String) -> Unit) {
                 }
             }
 
-            // Aurora wave — full voice mode (the hero affordance)
-            Surface(
-                shape = CircleShape,
-                color = Aeruo.AccentSoftDark,
+            // Aurora orb — press-and-hold to dictate (the hero affordance)
+            Box(
                 modifier = Modifier
-                    .size(44.dp)
-                    .kineticPress()
+                    .size(62.dp)
+                    .pointerInput(Unit) {
+                        detectTapGestures(
+                            onPress = {
+                                var isHold = false
+                                val timer = holdScope.launch {
+                                    delay(VOICE_HOLD_TRIGGER_MS)
+                                    isHold = true
+                                    beginVoiceHold()
+                                }
+                                val released = tryAwaitRelease()
+                                timer.cancel()
+                                when {
+                                    isHold -> recognizerRef.value?.stopListening()
+                                    released -> onNavigate(GsRoutes.VOICE)
+                                    // else — gesture cancelled: quiet no-op
+                                }
+                            }
+                        )
+                    },
+                contentAlignment = Alignment.Center
             ) {
-                Box(
+                if (listening) VoicePulseHalo()
+                Surface(
+                    shape = CircleShape,
+                    color = Aeruo.AccentSoftDark,
                     modifier = Modifier
-                        .background(rememberAuroraBrush(CircleShape), CircleShape)
-                        .clickable { onNavigate(GsRoutes.VOICE) },
-                    contentAlignment = Alignment.Center
+                        .size(44.dp)
+                        .kineticPress()
                 ) {
-                    Icon(
-                        Icons.Outlined.GraphicEq,
-                        contentDescription = "Voice mode",
-                        tint = Aeruo.TextDark,
-                        modifier = Modifier.size(20.dp)
-                    )
+                    Box(
+                        modifier = Modifier
+                            .background(rememberAuroraBrush(CircleShape), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Outlined.GraphicEq,
+                            contentDescription = "Hold to talk",
+                            tint = Aeruo.TextDark,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
         }
     }
 }
+
+/** Breathing aurora halo around the hero orb while dictation is live. */
+@Composable
+private fun VoicePulseHalo() {
+    val transition = rememberInfiniteTransition(label = "voiceHalo")
+    val pulse by transition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.42f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(850),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "voiceHaloPulse"
+    )
+    val fade by transition.animateFloat(
+        initialValue = 0.5f,
+        targetValue = 0.1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(850),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "voiceHaloFade"
+    )
+    Box(
+        modifier = Modifier
+            .size(46.dp)
+            .scale(pulse)
+            .graphicsLayer { alpha = fade }
+            .clip(CircleShape)
+            .background(rememberAuroraBrush(CircleShape))
+    )
+}
+
+private const val VOICE_HOLD_TRIGGER_MS = 280L

@@ -31,6 +31,8 @@ targets:
         UILaunchScreen: {}
         CFBundleDisplayName: GS AI
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        NSSpeechRecognitionUsageDescription: GS turns your voice into text for your prompts when you hold the voice orb.
+        NSMicrophoneUsageDescription: GS uses the microphone when you hold the voice orb to talk.
   AppTests:
     type: bundle.unit-test
     platform: iOS
