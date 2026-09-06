@@ -15,7 +15,7 @@ struct GSApp: App {
         WindowGroup {
             if sessionActive {
                 if onboarded {
-                    RootTabView()
+                    RootView()
                 } else {
                     OnboardingView {
                         onboarded = true

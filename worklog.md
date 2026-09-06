@@ -442,3 +442,23 @@ Stage Summary:
 - New routes exposed for next rounds: Android "auth/onboarding/billing/research/vision/create/image|writing|code|prompt"; iOS workspaces presented via fullScreenCover from Create/Home (no router change needed)
 - Known deferred: real auth backend (both stores are local-first), iOS router untouched (still 14 cases), Android HomeScreen "Analyse document" still chat(null), shared-collab real-time, notifications backend
 - APK: app-debug.apk rebuilt successfully with all new screens
+---
+Task ID: 9 (autonomous cycle round 2 → user design correction)
+Agent: Z.ai Code (main)
+Task: Benchmark-driven redesign — Home canvas + drawer navigation (Kimi / Claude / ChatGPT pattern), native-only
+
+Work Log:
+- USER DIRECTIVES APPLIED: (1) no web preview at all, native Android+iOS only; (2) do NOT run the Next.js dev server (stopped it); (3) app design must match the three famous AI chat apps — user supplied screenshots of Kimi, Claude, ChatGPT (obsidian canvas, centred brand orb + serif greeting, upgrade pill, quick chips row, single hero input bar, drawer navigation, NO tab clutter)
+- Shared design synthesis implemented on BOTH platforms (Aeruo Kinetic identity kept — obsidian + serif + aurora):
+  • Top bar: menu circle → drawer · centre model pill "GS Balanced · High" (aurora dot) → Models · trailing new-chat circle
+  • Centre: breathing aurora brand orb (84dp/84pt, sanctioned gradient) + time-aware serif greeting ("Good morning/afternoon/evening, Admin" · "Up late, Admin?" 23:00–04:59 — the Claude move) + "What should we make today?" + Upgrade plan pill → Billing (Kimi pattern)
+  • Bottom: 2 ChatGPT-style suggestion rows → new chat · horizontal quick chips (Projects/Research/Vision/Image/Writing/Code/Voice/Library/Models → their routes/workspaces) · hero input bar (plus→chat, "Ask anything"→chat, mic→Voice, aurora waveform circle→Voice) · "GS can make mistakes" disclaimer caption
+- ANDROID: new ui/navigation/GsDrawer.kt (304dp obsidian panel: account header w/ Pro chip, New chat card, 5 recents, Explore/Account link groups, kinetic press rows); GsNavHost wrapped in ModalNavigationDrawer (edge-swipe enabled) with HomeScreen gaining onOpenDrawer; HomeScreen.kt REWRITTEN to the canvas (old dense dashboard retired)
+- iOS: AppRouter REWRITTEN — TabView replaced by RootView = single NavigationStack(path:) + drawer overlay (dim + sliding 304pt panel); AeroRoute gains 8 section-root cases (chats/explore/createTab/library/projects/assistants/profile/billing) all resolved in AeroDestinations; typealias RootTabView kept for compat; new Components/AeroDrawer.swift; HomeView REWRITTEN as forced-obsidian canvas (Aero.dynamic fixed dark hexes) preserving 8-d's fullScreenCover workspace pattern and extending it with .image → ImageStudioView; GSApp now renders RootView
+- BUILD VERIFICATION: Android :app:assembleDebug BUILD SUCCESSFUL after 3 fixes (remember{} in non-composable greeting(), Icons.Outlined.Safari doesn't exist → Explore, M3 1.3.0 ModalNavigationDrawer has no drawerContainerColor/drawerShape params → styling moved into drawer content w/ rounded-end clip); iOS state-machine brace/paren check + banned-API sweep CLEAN on all touched files, symbol wiring verified (RootView, 8 new route cases, drawer callbacks)
+
+Stage Summary:
+- The app now OPENS like the benchmark AI apps: obsidian canvas + greeting + one input bar; history/sections live in the drawer — no dashboard feed, no tabs
+- Round-2's backend-wiring plan (assistants/models live load, pin/archive PATCH) is DEFERRED per the user's no-dev-server directive — native apps stay sample-data driven until the user asks for live backend again
+- Navigation contract change documented: drawer is now primary nav on both platforms; iOS has no TabView anymore (single stack); Android home no longer embeds any section links (all in drawer)
+- Next steps backlog: ChatGPT-style explore/trending rows under the canvas greeting, drawer recents fed from Room/live conversations, Claude-style time-variant tagline rotation, voice-mode from hero orb (press-and-hold), iOS drawer drag-to-close gesture, Android predictive-back for drawer

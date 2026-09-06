@@ -1,6 +1,12 @@
 package com.grapsee.gsai.ui.home
 
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,483 +24,473 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.Balance
-import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.Bookmarks
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Description
-import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.EditNote
 import androidx.compose.material.icons.outlined.Folder
-import androidx.compose.material.icons.outlined.History
-import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.GraphicEq
+import androidx.compose.material.icons.outlined.Menu
 import androidx.compose.material.icons.outlined.Mic
-import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Palette
-import androidx.compose.material.icons.outlined.Psychology
-import androidx.compose.material.icons.outlined.Public
-import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Speed
-import androidx.compose.material.icons.outlined.Subject
 import androidx.compose.material.icons.outlined.TravelExplore
-import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.grapsee.gsai.ui.components.GsCard
-import com.grapsee.gsai.ui.components.GsChip
-import com.grapsee.gsai.ui.components.GsInputBar
-import com.grapsee.gsai.ui.components.GsListItem
-import com.grapsee.gsai.ui.components.GsQuickActionTile
-import com.grapsee.gsai.ui.components.GsSectionHeader
 import com.grapsee.gsai.ui.navigation.GsRoutes
+import com.grapsee.gsai.ui.theme.Aeruo
 import com.grapsee.gsai.ui.theme.GsMotion
 import com.grapsee.gsai.ui.theme.kineticPress
 import com.grapsee.gsai.ui.theme.rememberAuroraBrush
-import java.text.SimpleDateFormat
 import java.util.Calendar
-import java.util.Date
-import java.util.Locale
 
 /**
- * AERUO KINETIC — HOME, the AI command centre.
- * Editorial greeting → universal input → quick actions → discovery ladder.
- * Aurora gradient appears exactly once: today's AI activity meter.
+ * AERUO KINETIC home canvas — benchmark pattern (ChatGPT · Claude · Kimi):
+ * obsidian full-bleed, top bar (menu · model pill · new chat), centred brand
+ * orb + time-aware serif greeting + upgrade pill, quick-action chips and one
+ * hero input bar pinned to the bottom. Navigation lives in the drawer.
  */
-
-private data class HomeAction(val label: String, val icon: ImageVector, val route: String)
-
-private val homeActions = listOf(
-    HomeAction("New chat", Icons.Outlined.Add, GsRoutes.chat(null)),
-    HomeAction("Voice", Icons.Outlined.Mic, GsRoutes.VOICE),
-    HomeAction("Analyse image", Icons.Outlined.Image, "vision"),
-    HomeAction("Analyse document", Icons.Outlined.Description, GsRoutes.chat(null)),
-    HomeAction("Write", Icons.Outlined.Edit, "create/writing"),
-    HomeAction("Research", Icons.Outlined.TravelExplore, "research"),
-    HomeAction("Code", Icons.Outlined.Code, "create/code"),
-    HomeAction("Translate", Icons.Outlined.Translate, GsRoutes.chat(null)),
-    HomeAction("Summarise", Icons.Outlined.Subject, GsRoutes.chat(null)),
-    HomeAction("Brainstorm", Icons.Outlined.Psychology, GsRoutes.chat(null)),
-    HomeAction("Generate image", Icons.Outlined.Palette, GsRoutes.chat(null))
-)
-
-private val suggestedPrompts = listOf(
-    "Draft a launch plan",
-    "Explain quantum computing",
-    "Debug my Kotlin code",
-    "Plan a trip to Kyoto"
-)
-
-private data class ResumeItem(val title: String, val subtitle: String, val route: String)
-
-private val resumeItems = listOf(
-    ResumeItem("Brand voice guidelines", "Chat · 2h ago", GsRoutes.chat("demo-1")),
-    ResumeItem("Market research summary", "Research · yesterday", GsRoutes.chat("demo-2"))
-)
-
-private data class ConversationItem(val title: String, val subtitle: String, val route: String)
-
-private val recentConversations = listOf(
-    ConversationItem("Packaging copy round 2", "Yesterday · 24 messages", GsRoutes.chat("demo-3")),
-    ConversationItem("Kotlin coroutine debug", "2 days ago · 12 messages", GsRoutes.chat("demo-4")),
-    ConversationItem("Kyoto itinerary", "Last week · 31 messages", GsRoutes.chat("demo-5"))
-)
-
-private data class PinnedAssistant(val name: String, val category: String)
-
-private val pinnedAssistants = listOf(
-    PinnedAssistant("WriteWell", "Writing"),
-    PinnedAssistant("CodeCompanion", "Coding")
-)
-
-private data class ProjectRowItem(val title: String, val subtitle: String, val route: String)
-
-private val recentProjects = listOf(
-    ProjectRowItem("Brand Refresh 2025", "8 chats · 14 files · 3 members", GsRoutes.project("project-brand")),
-    ProjectRowItem("Q3 Launch Plan", "12 chats · 9 files · 2 members", GsRoutes.project("project-launch"))
-)
-
-private data class ModelCard(val name: String, val tagline: String, val icon: ImageVector)
-
-private val recommendedModels = listOf(
-    ModelCard("GS Swift", "Fast", Icons.Outlined.Speed),
-    ModelCard("GS Balanced", "Everyday reasoning", Icons.Outlined.Balance),
-    ModelCard("GS Deep", "Long-horizon reasoning", Icons.Outlined.Psychology)
-)
-
-private data class DiscoverCard(val label: String, val blurb: String, val icon: ImageVector, val route: String)
-
-private val discoverCards = listOf(
-    DiscoverCard("Vision", "Analyse any image", Icons.Outlined.Visibility, GsRoutes.chat(null)),
-    DiscoverCard("Voice mode", "Talk it through", Icons.Outlined.Mic, GsRoutes.VOICE),
-    DiscoverCard("Web research", "Cited answers", Icons.Outlined.Public, GsRoutes.chat(null))
-)
-
-private fun greetingForHour(hour: Int): String = when (hour) {
-    in 5..11 -> "Good morning"
-    in 12..17 -> "Good afternoon"
-    else -> "Good evening"
-}
-
 @Composable
-fun HomeScreen(onNavigate: (String) -> Unit) {
-    Column(
+fun HomeScreen(
+    onNavigate: (String) -> Unit,
+    onOpenDrawer: () -> Unit = {}
+) {
+    Box(
         modifier = Modifier
             .fillMaxSize()
+            .background(Aeruo.Obsidian)
             .statusBarsPadding()
             .navigationBarsPadding()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = GsMotion.spaceM),
-        verticalArrangement = Arrangement.spacedBy(GsMotion.spaceL)
     ) {
-        Spacer(Modifier.height(GsMotion.spaceS))
-        GreetingHeader(onNavigate)
-        UniversalInput(onNavigate)
-        QuickActionsSection(onNavigate)
-        SuggestedPromptsSection(onNavigate)
-        ContinueSection(onNavigate)
-        RecentConversationsSection(onNavigate)
-        PinnedAssistantsSection(onNavigate)
-        RecentProjectsSection(onNavigate)
-        RecommendedModelsSection(onNavigate)
-        ActivityTodaySection()
-        DiscoverSection(onNavigate)
-        Spacer(Modifier.height(GsMotion.spaceL))
-    }
-}
-
-@Composable
-private fun GreetingHeader(onNavigate: (String) -> Unit) {
-    Row(verticalAlignment = Alignment.Top) {
         Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(GsMotion.spaceXS)
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = GsMotion.spaceM)
         ) {
-            Text(
-                text = greetingForHour(Calendar.getInstance().get(Calendar.HOUR_OF_DAY)),
-                style = MaterialTheme.typography.displayLarge,
-                color = MaterialTheme.colorScheme.onBackground
+            TopBar(
+                onOpenDrawer = onOpenDrawer,
+                onNavigate = onNavigate
             )
+
+            Spacer(Modifier.weight(1.1f))
+            HeroBlock(onNavigate = onNavigate)
+            Spacer(Modifier.weight(1f))
+
+            SuggestionRows(onNavigate = onNavigate)
+            Spacer(Modifier.height(GsMotion.spaceM))
+            QuickChips(onNavigate = onNavigate)
+            Spacer(Modifier.height(GsMotion.spaceM))
+            HeroInput(onNavigate = onNavigate)
+            Spacer(Modifier.height(GsMotion.spaceS))
             Text(
-                text = SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()).format(Date()),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                "GS can make mistakes — double-check important info.",
+                style = MaterialTheme.typography.labelMedium,
+                color = Aeruo.TextMutedDark,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = GsMotion.spaceS),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
             )
         }
-        HeaderIcon(Icons.Outlined.Notifications, "Notifications") { onNavigate(GsRoutes.NOTIFICATIONS) }
-        HeaderIcon(Icons.Outlined.Settings, "Settings") { onNavigate(GsRoutes.SETTINGS) }
-        HeaderIcon(Icons.Outlined.Search, "Search") { onNavigate(GsRoutes.SEARCH) }
     }
 }
 
 @Composable
-private fun HeaderIcon(icon: ImageVector, label: String, onClick: () -> Unit) {
-    IconButton(onClick = onClick) {
-        Icon(
-            imageVector = icon,
-            contentDescription = label,
-            tint = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.size(22.dp)
-        )
-    }
-}
-
-@Composable
-private fun UniversalInput(onNavigate: (String) -> Unit) {
-    // InputBar is intentionally disabled; the wrapping Surface owns the click
-    // so the whole pill feels kinetic and opens a fresh chat.
-    Surface(
-        onClick = { onNavigate(GsRoutes.chat(null)) },
+private fun TopBar(
+    onOpenDrawer: () -> Unit,
+    onNavigate: (String) -> Unit
+) {
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .kineticPress(),
-        shape = RoundedCornerShape(GsMotion.radiusInput),
-        color = MaterialTheme.colorScheme.surfaceContainerLow
+            .padding(vertical = GsMotion.spaceS),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        GsInputBar(
-            value = "",
-            onValueChange = {},
-            onSend = {},
-            enabled = false,
-            placeholder = "Ask anything…"
+        // Menu — opens the drawer
+        CircleButton(
+            icon = Icons.Outlined.Menu,
+            contentDescription = "Open menu",
+            onClick = onOpenDrawer
+        )
+
+        Spacer(Modifier.weight(1f))
+
+        // Model pill — "Instant High" pattern
+        Surface(
+            shape = RoundedCornerShape(GsMotion.radiusChip),
+            color = Aeruo.RaisedDark,
+            modifier = Modifier.kineticPress()
+        ) {
+            Row(
+                modifier = Modifier.clickable { onNavigate(GsRoutes.MODELS) }.padding(
+                    horizontal = GsMotion.spaceM,
+                    vertical = 10.dp
+                ),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(rememberAuroraBrush(CircleShape))
+                )
+                Text(
+                    "GS Balanced · High",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = Aeruo.TextDark
+                )
+            }
+        }
+
+        Spacer(Modifier.weight(1f))
+
+        CircleButton(
+            icon = Icons.Outlined.Add,
+            contentDescription = "New chat",
+            onClick = { onNavigate(GsRoutes.chat(null)) }
         )
     }
 }
 
 @Composable
-private fun QuickActionsSection(onNavigate: (String) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceM)) {
-        GsSectionHeader(title = "Quick actions")
-        ActionRow(homeActions.take(6), onNavigate)
-        ActionRow(homeActions.drop(6), onNavigate)
-    }
-}
-
-@Composable
-private fun ActionRow(actions: List<HomeAction>, onNavigate: (String) -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
-    ) {
-        actions.forEach { action ->
-            GsQuickActionTile(
-                label = action.label,
-                icon = action.icon,
-                onClick = { onNavigate(action.route) },
-                modifier = Modifier.weight(1f)
-            )
-        }
-    }
-}
-
-@Composable
-private fun SuggestedPromptsSection(onNavigate: (String) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)) {
-        GsSectionHeader(title = "Suggested prompts")
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
-        ) {
-            suggestedPrompts.forEach { prompt ->
-                GsChip(text = prompt, selected = false) { onNavigate(GsRoutes.chat(null)) }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ContinueSection(onNavigate: (String) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)) {
-        GsSectionHeader(title = "Continue where you left off")
-        resumeItems.forEach { item ->
-            GsListItem(
-                title = item.title,
-                subtitle = item.subtitle,
-                leading = { IconBadge(Icons.Outlined.History) },
-                onClick = { onNavigate(item.route) }
-            )
-        }
-    }
-}
-
-@Composable
-private fun RecentConversationsSection(onNavigate: (String) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)) {
-        GsSectionHeader(title = "Recent conversations")
-        recentConversations.forEach { item ->
-            GsListItem(
-                title = item.title,
-                subtitle = item.subtitle,
-                leading = { IconBadge(Icons.Outlined.ChatBubbleOutline) },
-                onClick = { onNavigate(item.route) }
-            )
-        }
-    }
-}
-
-@Composable
-private fun PinnedAssistantsSection(onNavigate: (String) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)) {
-        GsSectionHeader(title = "Pinned assistants")
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
-        ) {
-            pinnedAssistants.forEach { assistant ->
-                GsCard(
-                    modifier = Modifier.width(160.dp),
-                    onClick = { onNavigate(GsRoutes.ASSISTANTS) }
-                ) {
-                    Text(
-                        text = assistant.name,
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = assistant.category,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun RecentProjectsSection(onNavigate: (String) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)) {
-        GsSectionHeader(title = "Recent projects")
-        recentProjects.forEach { item ->
-            GsListItem(
-                title = item.title,
-                subtitle = item.subtitle,
-                leading = { IconBadge(Icons.Outlined.Folder) },
-                onClick = { onNavigate(item.route) }
-            )
-        }
-    }
-}
-
-@Composable
-private fun RecommendedModelsSection(onNavigate: (String) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)) {
-        GsSectionHeader(title = "Recommended models")
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
-        ) {
-            recommendedModels.forEach { model ->
-                GsCard(
-                    modifier = Modifier.width(150.dp),
-                    onClick = { onNavigate(GsRoutes.MODELS) }
-                ) {
-                    IconBadge(icon = model.icon, tint = MaterialTheme.colorScheme.primary)
-                    Spacer(Modifier.height(GsMotion.spaceS))
-                    Text(
-                        text = model.name,
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = model.tagline,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ActivityTodaySection() {
-    Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)) {
-        GsSectionHeader(title = "Today's AI activity")
-        GsCard(onClick = null) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
-            ) {
-                Text(
-                    text = "12 chats",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = "·",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = "3 docs",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = "·",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = "45m voice",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            }
-            Spacer(Modifier.height(GsMotion.spaceM))
-            // The one sanctioned aurora moment on Home — AI was alive today.
-            Box(
-                modifier = Modifier
-                    .width(120.dp)
-                    .height(10.dp)
-                    .background(
-                        brush = rememberAuroraBrush(),
-                        shape = RoundedCornerShape(5.dp)
-                    )
-            )
-        }
-    }
-}
-
-@Composable
-private fun DiscoverSection(onNavigate: (String) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)) {
-        GsSectionHeader(title = "Discover more")
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
-        ) {
-            discoverCards.forEach { card ->
-                GsCard(
-                    modifier = Modifier.weight(1f),
-                    onClick = { onNavigate(card.route) }
-                ) {
-                    IconBadge(icon = card.icon)
-                    Spacer(Modifier.height(GsMotion.spaceS))
-                    Text(
-                        text = card.label,
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = card.blurb,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun IconBadge(
+private fun CircleButton(
     icon: ImageVector,
-    modifier: Modifier = Modifier,
-    container: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
-    tint: Color = MaterialTheme.colorScheme.onSurfaceVariant
+    contentDescription: String,
+    onClick: () -> Unit
 ) {
     Surface(
         shape = CircleShape,
-        color = container,
-        modifier = modifier.size(38.dp)
+        color = Aeruo.RaisedDark,
+        modifier = Modifier
+            .size(44.dp)
+            .kineticPress()
     ) {
-        Box(contentAlignment = Alignment.Center) {
+        Box(
+            modifier = Modifier.clickable(onClick = onClick),
+            contentAlignment = Alignment.Center
+        ) {
             Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = tint,
-                modifier = Modifier.size(18.dp)
+                icon,
+                contentDescription = contentDescription,
+                tint = Aeruo.TextDark,
+                modifier = Modifier.size(20.dp)
             )
+        }
+    }
+}
+
+@Composable
+private fun HeroBlock(onNavigate: (String) -> Unit) {
+    val transition = rememberInfiniteTransition(label = "orb")
+    val breathe by transition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.06f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2400),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "orbBreathe"
+    )
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // Brand orb — the one sanctioned aurora mark on the canvas
+        Box(
+            modifier = Modifier
+                .size(84.dp)
+                .scale(breathe)
+                .clip(CircleShape)
+                .background(rememberAuroraBrush(CircleShape)),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(66.dp)
+                    .clip(CircleShape)
+                    .background(Aeruo.Obsidian.copy(alpha = 0.35f))
+            )
+            Icon(
+                Icons.Outlined.AutoAwesome,
+                contentDescription = "GS",
+                tint = Aeruo.TextDark,
+                modifier = Modifier.size(22.dp)
+            )
+        }
+
+        Spacer(Modifier.height(GsMotion.spaceL))
+
+        Text(
+            greeting(),
+            style = MaterialTheme.typography.displayLarge,
+            color = Aeruo.TextDark,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
+        Spacer(Modifier.height(GsMotion.spaceS))
+        Text(
+            "What should we make today?",
+            style = MaterialTheme.typography.bodyMedium,
+            color = Aeruo.TextMutedDark
+        )
+
+        Spacer(Modifier.height(GsMotion.spaceM))
+
+        // Upgrade pill — subtle, under the greeting (Kimi pattern)
+        Surface(
+            shape = RoundedCornerShape(GsMotion.radiusChip),
+            color = Aeruo.RaisedDark,
+            modifier = Modifier.kineticPress()
+        ) {
+            Row(
+                modifier = Modifier.clickable { onNavigate(GsRoutes.BILLING) }.padding(
+                    horizontal = GsMotion.spaceM,
+                    vertical = 10.dp
+                ),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Icon(
+                    Icons.Outlined.AutoAwesome,
+                    contentDescription = null,
+                    tint = Aeruo.Accent,
+                    modifier = Modifier.size(14.dp)
+                )
+                Text(
+                    "Upgrade plan",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = Aeruo.TextDark
+                )
+            }
+        }
+    }
+}
+
+private fun greeting(): String {
+    val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+    return when {
+        hour in 23..24 || hour in 0..4 -> "Up late, Admin?"
+        hour in 5..11 -> "Good morning, Admin"
+        hour in 12..17 -> "Good afternoon, Admin"
+        else -> "Good evening, Admin"
+    }
+}
+
+@Composable
+private fun SuggestionRows(onNavigate: (String) -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
+    ) {
+        SuggestionRow(Icons.Outlined.Description, "Summarise a PDF into a brief") {
+            onNavigate(GsRoutes.chat(null))
+        }
+        SuggestionRow(Icons.Outlined.EditNote, "Draft a launch email") {
+            onNavigate(GsRoutes.chat(null))
+        }
+    }
+}
+
+@Composable
+private fun SuggestionRow(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .kineticPress()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 6.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceM)
+    ) {
+        Surface(
+            shape = CircleShape,
+            color = Aeruo.RaisedDark,
+            modifier = Modifier.size(38.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = Aeruo.TextDark,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = Aeruo.TextDark
+        )
+    }
+}
+
+@Composable
+private fun QuickChips(onNavigate: (String) -> Unit) {
+    data class Chip(val label: String, val icon: ImageVector, val route: String)
+
+    val chips = remember {
+        listOf(
+            Chip("Projects", Icons.Outlined.Folder, GsRoutes.PROJECTS),
+            Chip("Research", Icons.Outlined.TravelExplore, GsRoutes.RESEARCH),
+            Chip("Vision", Icons.Outlined.Visibility, GsRoutes.VISION),
+            Chip("Image", Icons.Outlined.Palette, GsRoutes.IMAGE_STUDIO),
+            Chip("Writing", Icons.Outlined.EditNote, GsRoutes.WRITING_STUDIO),
+            Chip("Code", Icons.Outlined.Code, GsRoutes.CODE_WORKSPACE),
+            Chip("Voice", Icons.Outlined.Mic, GsRoutes.VOICE),
+            Chip("Library", Icons.Outlined.Bookmarks, GsRoutes.LIBRARY),
+            Chip("Models", Icons.Outlined.Speed, GsRoutes.MODELS)
+        )
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
+    ) {
+        chips.forEach { chip ->
+            Surface(
+                shape = RoundedCornerShape(GsMotion.radiusChip),
+                color = Aeruo.RaisedDark,
+                modifier = Modifier.kineticPress()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .clickable { onNavigate(chip.route) }
+                        .padding(horizontal = GsMotion.spaceM, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        chip.icon,
+                        contentDescription = null,
+                        tint = Aeruo.TextMutedDark,
+                        modifier = Modifier.size(15.dp)
+                    )
+                    Text(
+                        chip.label,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = Aeruo.TextDark
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HeroInput(onNavigate: (String) -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(28.dp),
+        color = Aeruo.RaisedDark,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(
+                horizontal = GsMotion.spaceS,
+                vertical = GsMotion.spaceS
+            ),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Attach — opens a new chat with the attach sheet
+            Surface(
+                shape = CircleShape,
+                color = Aeruo.AccentSoftDark,
+                modifier = Modifier
+                    .size(42.dp)
+                    .kineticPress()
+            ) {
+                Box(
+                    modifier = Modifier.clickable { onNavigate(GsRoutes.chat(null)) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Outlined.Add,
+                        contentDescription = "Attach and new chat",
+                        tint = Aeruo.Accent,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+
+            Spacer(Modifier.width(GsMotion.spaceS))
+
+            Text(
+                "Ask anything",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Aeruo.TextMutedDark,
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable { onNavigate(GsRoutes.chat(null)) }
+                    .padding(vertical = GsMotion.spaceS)
+            )
+
+            // Mic — voice mode
+            Surface(
+                shape = CircleShape,
+                color = androidx.compose.ui.graphics.Color.Transparent,
+                modifier = Modifier
+                    .size(42.dp)
+                    .kineticPress()
+            ) {
+                Box(
+                    modifier = Modifier.clickable { onNavigate(GsRoutes.VOICE) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Outlined.Mic,
+                        contentDescription = "Voice input",
+                        tint = Aeruo.TextMutedDark,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+
+            // Aurora wave — full voice mode (the hero affordance)
+            Surface(
+                shape = CircleShape,
+                color = Aeruo.AccentSoftDark,
+                modifier = Modifier
+                    .size(44.dp)
+                    .kineticPress()
+            ) {
+                Box(
+                    modifier = Modifier
+                        .background(rememberAuroraBrush(CircleShape), CircleShape)
+                        .clickable { onNavigate(GsRoutes.VOICE) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Outlined.GraphicEq,
+                        contentDescription = "Voice mode",
+                        tint = Aeruo.TextDark,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
         }
     }
 }

@@ -1,8 +1,15 @@
 package com.grapsee.gsai.ui.navigation
 
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -40,11 +47,12 @@ import com.grapsee.gsai.ui.search.SearchScreen
 import com.grapsee.gsai.ui.vision.VisionScreen
 import com.grapsee.gsai.ui.settings.SettingsScreen
 import com.grapsee.gsai.ui.voice.VoiceScreen
+import kotlinx.coroutines.launch
 
 /**
- * AERUO KINETIC nav graph. Bottom tabs: Home · Chats · Explore · Create · Library.
- * Everything else (Projects, Assistants, Models, Search, Profile, Settings,
- * Voice, Notifications) is pushed from within — nav bar stays clean.
+ * AERUO KINETIC nav graph. The home canvas is the hub; the obsidian drawer
+ * is the primary navigation (benchmark AI-app pattern) and everything else
+ * is pushed from within.
  */
 @Composable
 fun GsNavHost(modifier: Modifier = Modifier) {
@@ -55,8 +63,29 @@ fun GsNavHost(modifier: Modifier = Modifier) {
     // Session gate — first launch walks Auth → Onboarding; later launches go straight Home.
     val start = if (SessionStore.isSessionActive(context)) GsRoutes.HOME else GsRoutes.AUTH
 
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
+    val closeDrawer: () -> Unit = { scope.launch { drawerState.close() } }
+
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            GsDrawerContent(
+                onNavigate = { route ->
+                    closeDrawer()
+                    open(route)
+                },
+                onClose = closeDrawer
+            )
+        }
+    ) {
     NavHost(navController = navController, startDestination = start, modifier = modifier) {
-        composable(GsRoutes.HOME) { HomeScreen(onNavigate = open) }
+        composable(GsRoutes.HOME) {
+            HomeScreen(
+                onNavigate = open,
+                onOpenDrawer = { scope.launch { drawerState.open() } }
+            )
+        }
         composable(GsRoutes.CHATS) { ChatsScreen(onNavigate = open) }
         composable(GsRoutes.EXPLORE) { ExploreScreen(onNavigate = open) }
         composable(GsRoutes.CREATE) { CreateScreen(onNavigate = open) }
@@ -145,5 +174,6 @@ fun GsNavHost(modifier: Modifier = Modifier) {
                 onBack = back
             )
         }
+    }
     }
 }

@@ -1,9 +1,10 @@
 import SwiftUI
 
 /**
- * AERUO KINETIC navigation shell — 5 bottom tabs (Home · Chats · Explore ·
- * Create · Library). Everything else is pushed: Projects, Assistants, Models,
- * Search, Profile, Settings, Voice, Notifications. Nav bar stays clean.
+ * AERUO KINETIC navigation shell — benchmark AI-app architecture:
+ * one Home canvas + an obsidian drawer as primary navigation
+ * (ChatGPT / Claude / Kimi pattern). Everything else is pushed onto
+ * the single NavigationStack.
  */
 
 enum AeroRoute: Hashable {
@@ -21,6 +22,16 @@ enum AeroRoute: Hashable {
     case chatFolders
     case chatShared
     case chatSearch
+
+    // Section roots — reached from the drawer (no tab bar anywhere)
+    case chats
+    case explore
+    case createTab
+    case library
+    case projects
+    case assistants
+    case profile
+    case billing
 }
 
 private enum AeroTab: String, CaseIterable {
@@ -47,34 +58,37 @@ private enum AeroTab: String, CaseIterable {
     }
 }
 
-struct RootTabView: View {
-    @State private var selection: AeroTab = .home
+/// Root shell — Home canvas + drawer overlay over one NavigationStack.
+struct RootView: View {
+    @State private var path: [AeroRoute] = []
+    @State private var showDrawer = false
 
     var body: some View {
-        TabView(selection: $selection) {
-            ForEach(AeroTab.allCases, id: \.rawValue) { tab in
-                NavigationStack {
-                    root(for: tab)
-                        .aeroDestinations()
-                }
-                .tabItem { Label(tab.title, systemImage: tab.icon) }
-                .tag(tab)
+        ZStack {
+            NavigationStack(path: $path) {
+                HomeView(
+                    onOpenDrawer: { withAnimation(Aero.spring) { showDrawer = true } }
+                )
+                .aeroDestinations()
+            }
+
+            if showDrawer {
+                AeroDrawer(
+                    onRoute: { route in
+                        withAnimation(Aero.spring) { showDrawer = false }
+                        path.append(route)
+                    },
+                    onClose: { withAnimation(Aero.spring) { showDrawer = false } }
+                )
+                .transition(.opacity)
             }
         }
         .tint(Aero.accent)
     }
-
-    @ViewBuilder
-    private func root(for tab: AeroTab) -> some View {
-        switch tab {
-        case .home: HomeView()
-        case .chats: ChatsListView()
-        case .explore: ExploreView()
-        case .create: CreateView()
-        case .library: LibraryView()
-        }
-    }
 }
+
+/// Legacy alias — kept so any external reference keeps compiling.
+typealias RootTabView = RootView
 
 /// Install once per NavigationStack: resolves every pushed route.
 struct AeroDestinations: ViewModifier {
@@ -95,6 +109,16 @@ struct AeroDestinations: ViewModifier {
             case .chatFolders: FoldersView()
             case .chatShared: SharedChatsView()
             case .chatSearch: ChatSearchView()
+
+            // Section roots (drawer)
+            case .chats: ChatsListView()
+            case .explore: ExploreView()
+            case .createTab: CreateView()
+            case .library: LibraryView()
+            case .projects: ProjectsView()
+            case .assistants: AssistantsView()
+            case .profile: ProfileView()
+            case .billing: BillingView()
             }
         }
     }

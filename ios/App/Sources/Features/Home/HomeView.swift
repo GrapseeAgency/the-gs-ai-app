@@ -1,495 +1,321 @@
 import SwiftUI
 
-// MARK: - Stagger entrance (private per-file helper)
-
-/// Fades + lifts a section into place, delayed by its index —
-/// the Aeruo Kinetic section entrance.
-private struct StaggerIn<Content: View>: View {
-    let index: Int
-    @ViewBuilder var content: () -> Content
-
-    @State private var appeared = false
-
-    var body: some View {
-        content()
-            .opacity(appeared ? 1 : 0)
-            .offset(y: appeared ? 0 : 16)
-            .onAppear {
-                withAnimation(Aero.spring.delay(Aero.stagger(index))) {
-                    appeared = true
-                }
-            }
-    }
-}
-
-// MARK: - Home — the AI command centre
-
-/// HOME tab root (installed by the frozen router). Static sample content;
-/// every tappable pushes an `AeroRoute` through NavigationLink(value:).
-///
-/// Body is split into two ViewBuilder groups to stay inside the classic
-/// 10-children ViewBuilder limit (keeps Xcode 14 / iOS 16 SDK compatible).
+/**
+ * AERUO KINETIC home canvas — benchmark pattern (ChatGPT · Claude · Kimi):
+ * obsidian full-bleed, top bar (menu · model pill · new chat), centred brand
+ * orb + time-aware serif greeting + upgrade pill, quick chips and one hero
+ * input bar pinned to the bottom. Navigation lives in the drawer.
+ */
 struct HomeView: View {
 
-    /// Full-screen workspaces opened straight from quick actions
-    /// (Research / Vision / Writing / Code) instead of routing to chat.
-    private enum HomeWorkspace: String, Identifiable {
-        case research, vision, writing, code
+    var onOpenDrawer: (() -> Void)? = nil
 
+    private enum HomeWorkspace: String, Identifiable {
+        case research, vision, writing, code, image
         var id: String { rawValue }
     }
-
     @State private var activeWorkspace: HomeWorkspace?
+    @State private var breathe: CGFloat = 1.0
 
-    // MARK: Sample data
-
-    private struct QuickAction: Identifiable {
-        let id = UUID()
-        let label: String
-        let icon: String
-        let route: AeroRoute
-        var workspace: HomeWorkspace? = nil
-    }
-
-    private struct ConversationRow: Identifiable {
-        let id: String
-        let title: String
-        let subtitle: String
-        let icon: String
-    }
-
-    private struct AssistantPin: Identifiable {
-        let id: String
-        let name: String
-        let category: String
-    }
-
-    private struct ProjectRow: Identifiable {
-        let id: String
-        let name: String
-        let meta: String
-    }
-
-    private struct ModelPick: Identifiable {
-        let id: String
-        let name: String
-        let tier: String
-        let icon: String
-    }
-
-    private let quickActions: [QuickAction] = [
-        .init(label: "New chat", icon: "ellipsis.bubble", route: .chat(nil)),
-        .init(label: "Voice", icon: "mic", route: .voice),
-        .init(label: "Analyse image", icon: "photo", route: .chat(nil), workspace: .vision),
-        .init(label: "Analyse document", icon: "doc.text", route: .chat(nil)),
-        .init(label: "Write", icon: "pencil", route: .chat(nil), workspace: .writing),
-        .init(label: "Research", icon: "magnifyingglass", route: .chat(nil), workspace: .research),
-        .init(label: "Code", icon: "chevron.left.forwardslash.chevron.right", route: .chat(nil), workspace: .code),
-        .init(label: "Translate", icon: "globe", route: .chat(nil)),
-        .init(label: "Summarise", icon: "text.alignleft", route: .chat(nil)),
-        .init(label: "Brainstorm", icon: "lightbulb", route: .chat(nil)),
-        .init(label: "Generate image", icon: "wand.and.stars", route: .chat(nil))
-    ]
-
-    private let prompts = [
-        "Plan a product launch",
-        "Explain quantum computing simply",
-        "Draft a cold email",
-        "Debug my Swift code"
-    ]
-
-    private let continuing: [ConversationRow] = [
-        .init(id: "demo-1", title: "Q3 pricing strategy", subtitle: "12 messages · 2h ago", icon: "clock.arrow.circlepath"),
-        .init(id: "demo-2", title: "Kyoto trip plan", subtitle: "8 messages · yesterday", icon: "clock.arrow.circlepath")
-    ]
-
-    private let recents: [ConversationRow] = [
-        .init(id: "demo-1", title: "Q3 pricing strategy", subtitle: "12 messages · 2h ago", icon: "bubble.left"),
-        .init(id: "demo-2", title: "Kyoto trip plan", subtitle: "8 messages · yesterday", icon: "bubble.left"),
-        .init(id: "demo-3", title: "API error debugging", subtitle: "21 messages · 3 days ago", icon: "bubble.left")
-    ]
-
-    private let assistants: [AssistantPin] = [
-        .init(id: "asst-1", name: "Research Scout", category: "Research"),
-        .init(id: "asst-2", name: "Copysmith", category: "Writing")
-    ]
-
-    private let projects: [ProjectRow] = [
-        .init(id: "project-brand", name: "Brand Refresh 2025", meta: "8 chats · 14 files"),
-        .init(id: "project-launch", name: "Q3 Launch Plan", meta: "5 chats · 9 files")
-    ]
-
-    private let models: [ModelPick] = [
-        .init(id: "swift", name: "GS Swift", tier: "Fast", icon: "bolt.fill"),
-        .init(id: "balanced", name: "GS Balanced", tier: "Everyday", icon: "slider.horizontal.3"),
-        .init(id: "deep", name: "GS Deep", tier: "Deep reasoning", icon: "hourglass")
-    ]
-
-    // MARK: Greeting
-
-    private var greeting: String {
-        switch Calendar.current.component(.hour, from: Date()) {
-        case 5..<12: return "Good morning"
-        case 12..<18: return "Good afternoon"
-        default: return "Good evening"
-        }
-    }
-
-    private var dateCaption: String {
-        Date().formatted(date: .abbreviated, time: .omitted)
-    }
-
-    // MARK: Body
+    // Forced-obsidian canvas (fixed benchmark-dark in both appearances)
+    private let canvas = Aero.dynamic(
+        light: UIColor(red: 0.039, green: 0.051, blue: 0.071, alpha: 1),
+        dark: UIColor(red: 0.039, green: 0.051, blue: 0.071, alpha: 1))
+    private let raised = Aero.dynamic(
+        light: UIColor(red: 0.094, green: 0.118, blue: 0.157, alpha: 1),
+        dark: UIColor(red: 0.094, green: 0.118, blue: 0.157, alpha: 1))
+    private let ink = Aero.dynamic(
+        light: UIColor(red: 0.929, green: 0.937, blue: 0.949, alpha: 1),
+        dark: UIColor(red: 0.929, green: 0.937, blue: 0.949, alpha: 1))
+    private let muted = Aero.dynamic(
+        light: UIColor(red: 0.545, green: 0.576, blue: 0.631, alpha: 1),
+        dark: UIColor(red: 0.545, green: 0.576, blue: 0.631, alpha: 1))
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                VStack(alignment: .leading, spacing: Aero.Spacing.l) {
-                    StaggerIn(index: 0) { header }
-                    StaggerIn(index: 1) { universalInput }
-                    StaggerIn(index: 2) { quickActionsSection }
-                    StaggerIn(index: 3) { suggestedPrompts }
-                    StaggerIn(index: 4) { continueSection }
-                }
-                VStack(alignment: .leading, spacing: Aero.Spacing.l) {
-                    StaggerIn(index: 5) { recentSection }
-                    StaggerIn(index: 6) { pinnedAssistants }
-                    StaggerIn(index: 7) { recentProjects }
-                    StaggerIn(index: 8) { recommendedModels }
-                    StaggerIn(index: 9) { todaySection }
-                    StaggerIn(index: 10) { capabilitiesRow }
-                }
-                .padding(.top, Aero.Spacing.l)
+        ZStack {
+            canvas.ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                topBar
+                Spacer(minLength: 8)
+                hero
+                Spacer(minLength: 8)
+                bottomCluster
             }
             .padding(.horizontal, Aero.Spacing.m)
-            .padding(.top, Aero.Spacing.s)
-            .padding(.bottom, Aero.Spacing.xl)
         }
-        .background(Aero.background.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
+        .onAppear {
+            withAnimation(.easeInOut(duration: 2.4).repeatForever(autoreverses: true)) {
+                breathe = 1.06
+            }
+        }
         .fullScreenCover(item: $activeWorkspace) { workspace in
             switch workspace {
             case .research: ResearchView()
             case .vision: VisionView()
             case .writing: WritingStudioView()
             case .code: CodeWorkspaceView()
+            case .image: ImageStudioView()
             }
         }
     }
 
-    // MARK: Greeting header + toolbar links
+    // MARK: Top bar — menu · model pill · new chat
 
-    private var header: some View {
-        HStack(alignment: .center, spacing: Aero.Spacing.s) {
-            VStack(alignment: .leading, spacing: Aero.Spacing.xs) {
-                Text(greeting)
-                    .font(Aero.displayTitle())
-                    .foregroundStyle(Aero.text)
-                Text(dateCaption)
-                    .font(Aero.caption())
-                    .foregroundStyle(Aero.textMuted)
+    private var topBar: some View {
+        HStack(spacing: Aero.Spacing.s) {
+            Button {
+                onOpenDrawer?()
+            } label: {
+                circleIcon("line.3.horizontal")
             }
+            .buttonStyle(KineticPressStyle())
+            .accessibilityLabel("Open menu")
+
             Spacer()
-            HStack(spacing: Aero.Spacing.s) {
-                headerLink("bell", .notifications)
-                headerLink("gearshape", .settings)
-                headerLink("magnifyingglass", .search)
-            }
-        }
-    }
 
-    private func headerLink(_ icon: String, _ route: AeroRoute) -> some View {
-        NavigationLink(value: route) {
-            Image(systemName: icon)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(Aero.text)
-                .frame(width: 34, height: 34)
-                .background(Circle().fill(Aero.surface))
-                .overlay(Circle().stroke(Aero.outline, lineWidth: 1))
-        }
-        .buttonStyle(KineticPressStyle())
-    }
-
-    // MARK: Universal input (static row → new chat)
-
-    private var universalInput: some View {
-        NavigationLink(value: AeroRoute.chat(nil)) {
-            HStack(spacing: Aero.Spacing.s) {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(Aero.accent)
-                Text("Ask anything…")
-                    .font(Aero.body())
-                    .foregroundStyle(Aero.textMuted)
-                Spacer()
-                Image(systemName: "mic.fill")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(Aero.textMuted)
-            }
-            .padding(.horizontal, Aero.Spacing.m)
-            .padding(.vertical, 14)
-            .background(Capsule().fill(Aero.container))
-            .overlay(Capsule().stroke(Aero.outline, lineWidth: 1))
-        }
-        .buttonStyle(KineticPressStyle())
-    }
-
-    // MARK: Quick actions (11 tiles)
-
-    private var quickActionsSection: some View {
-        VStack(alignment: .leading, spacing: Aero.Spacing.m) {
-            SectionHeader(title: "Quick actions")
-            LazyVGrid(
-                columns: [
-                    GridItem(.flexible(), spacing: 12),
-                    GridItem(.flexible(), spacing: 12),
-                    GridItem(.flexible(), spacing: 12),
-                    GridItem(.flexible(), spacing: 12)
-                ],
-                spacing: 12
-            ) {
-                ForEach(quickActions) { action in
-                    if let workspace = action.workspace {
-                        Button {
-                            activeWorkspace = workspace
-                        } label: {
-                            QuickActionTile(label: action.label, icon: action.icon)
-                                .allowsHitTesting(false)   // frozen tile embeds a Button — let the wrapper take the tap
-                        }
-                        .buttonStyle(KineticPressStyle())
-                    } else {
-                        NavigationLink(value: action.route) {
-                            QuickActionTile(label: action.label, icon: action.icon)
-                                .allowsHitTesting(false)   // frozen tile embeds a Button — let the link take the tap
-                        }
-                        .buttonStyle(KineticPressStyle())
-                    }
-                }
-            }
-        }
-    }
-
-    // MARK: Suggested prompts (horizontal chips → new chat)
-
-    private var suggestedPrompts: some View {
-        VStack(alignment: .leading, spacing: Aero.Spacing.m) {
-            SectionHeader(title: "Suggested prompts")
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: Aero.Spacing.s) {
-                    ForEach(prompts, id: \.self) { prompt in
-                        NavigationLink(value: AeroRoute.chat(nil)) {
-                            AeroChip(text: prompt)
-                                .allowsHitTesting(false)   // frozen chip embeds a Button
-                        }
-                        .buttonStyle(KineticPressStyle())
-                    }
-                }
-                .padding(.vertical, 2)
-            }
-        }
-    }
-
-    // MARK: Continue where you left off
-
-    private var continueSection: some View {
-        VStack(alignment: .leading, spacing: Aero.Spacing.m) {
-            SectionHeader(title: "Continue where you left off")
-            VStack(spacing: Aero.Spacing.s) {
-                ForEach(continuing) { row in
-                    chatRow(row)
-                }
-            }
-        }
-    }
-
-    // MARK: Recent conversations
-
-    private var recentSection: some View {
-        VStack(alignment: .leading, spacing: Aero.Spacing.m) {
-            SectionHeader(title: "Recent conversations")
-            VStack(spacing: Aero.Spacing.s) {
-                ForEach(recents) { row in
-                    chatRow(row)
-                }
-            }
-        }
-    }
-
-    // MARK: Pinned assistants
-
-    private var pinnedAssistants: some View {
-        VStack(alignment: .leading, spacing: Aero.Spacing.m) {
-            SectionHeader(title: "Pinned assistants")
-            HStack(spacing: Aero.Spacing.m) {
-                ForEach(assistants) { assistant in
-                    NavigationLink(value: AeroRoute.assistant(assistant.id)) {
-                        AeroCard {
-                            HStack(spacing: Aero.Spacing.s) {
-                                Image(systemName: "smarttoy")
-                                    .font(.system(size: 15, weight: .medium))
-                                    .foregroundStyle(Aero.text)
-                                    .frame(width: 36, height: 36)
-                                    .background(Circle().fill(Aero.container))
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(assistant.name)
-                                        .font(Aero.title())
-                                        .foregroundStyle(Aero.text)
-                                        .lineLimit(1)
-                                        .minimumScaleFactor(0.7)
-                                    Text(assistant.category)
-                                        .font(Aero.caption())
-                                        .foregroundStyle(Aero.textMuted)
-                                        .lineLimit(1)
-                                }
-                                Spacer(minLength: 0)
-                            }
-                        }
-                    }
-                    .buttonStyle(KineticPressStyle())
-                }
-            }
-        }
-    }
-
-    // MARK: Recent projects
-
-    private var recentProjects: some View {
-        VStack(alignment: .leading, spacing: Aero.Spacing.m) {
-            SectionHeader(title: "Recent projects")
-            VStack(spacing: Aero.Spacing.s) {
-                ForEach(projects) { project in
-                    NavigationLink(value: AeroRoute.project(project.id)) {
-                        AeroListRow(
-                            title: project.name,
-                            subtitle: project.meta,
-                            leading: {
-                                Image(systemName: "folder")
-                                    .font(.system(size: 14, weight: .medium))
-                                    .foregroundStyle(Aero.text)
-                                    .frame(width: 36, height: 36)
-                                    .background(Circle().fill(Aero.containerHigh))
-                            },
-                            trailing: {
-                                Image(systemName: "chevron.right")
-                                    .font(.system(size: 12, weight: .semibold))
-                                    .foregroundStyle(Aero.textMuted)
-                            }
-                        )
-                    }
-                    .buttonStyle(KineticPressStyle())
-                }
-            }
-        }
-    }
-
-    // MARK: Recommended models
-
-    private var recommendedModels: some View {
-        VStack(alignment: .leading, spacing: Aero.Spacing.m) {
-            SectionHeader(title: "Recommended models")
-            HStack(spacing: Aero.Spacing.m) {
-                ForEach(models) { model in
-                    NavigationLink(value: AeroRoute.models) {
-                        AeroCard {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Image(systemName: model.icon)
-                                    .font(.system(size: 14, weight: .medium))
-                                    .foregroundStyle(Aero.text)
-                                Text(model.name)
-                                    .font(Aero.label())
-                                    .foregroundStyle(Aero.text)
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.7)
-                                Text(model.tier)
-                                    .font(Aero.caption())
-                                    .foregroundStyle(Aero.textMuted)
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.7)
-                            }
-                        }
-                    }
-                    .buttonStyle(KineticPressStyle())
-                }
-            }
-        }
-    }
-
-    // MARK: Today stat (aurora = AI activity, the one allowed gradient here)
-
-    private var todaySection: some View {
-        VStack(alignment: .leading, spacing: Aero.Spacing.m) {
-            SectionHeader(title: "Today")
-            AeroCard {
-                VStack(alignment: .leading, spacing: Aero.Spacing.s) {
-                    Text("12 chats · 3 docs · 45m voice")
-                        .font(Aero.title())
-                        .foregroundStyle(Aero.text)
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(Aero.container).frame(height: 8)
-                        Rectangle()
-                            .fill(LinearGradient(colors: Aero.aurora, startPoint: .leading, endPoint: .trailing))
-                            .frame(width: 120, height: 8)
-                            .clipShape(Capsule())
-                    }
-                    Text("45m of 8h daily AI activity")
+            NavigationLink(value: AeroRoute.models) {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(LinearGradient(
+                            colors: Aero.aurora,
+                            startPoint: .topLeading, endPoint: .bottomTrailing))
+                        .frame(width: 8, height: 8)
+                    Text("GS Balanced · High")
                         .font(Aero.label())
-                        .foregroundStyle(Aero.textMuted)
+                        .foregroundColor(ink)
                 }
-            }
-        }
-    }
-
-    // MARK: Capabilities row
-
-    private var capabilitiesRow: some View {
-        HStack(spacing: Aero.Spacing.m) {
-            AeroCard {   // static — task defines no route for Vision
-                capability("eye", "Vision")
-            }
-            NavigationLink(value: AeroRoute.voice) {
-                AeroCard { capability("waveform", "Voice") }
+                .padding(.horizontal, Aero.Spacing.m)
+                .padding(.vertical, 10)
+                .background(Capsule().fill(raised))
             }
             .buttonStyle(KineticPressStyle())
+
+            Spacer()
+
             NavigationLink(value: AeroRoute.chat(nil)) {
-                AeroCard { capability("document.magnifyingglass", "Research") }
+                circleIcon("plus")
             }
             .buttonStyle(KineticPressStyle())
+            .accessibilityLabel("New chat")
+        }
+        .padding(.vertical, Aero.Spacing.s)
+    }
+
+    private func circleIcon(_ symbol: String) -> some View {
+        ZStack {
+            Circle().fill(raised).frame(width: 44, height: 44)
+            Image(systemName: symbol)
+                .font(.system(size: 16, weight: .medium))
+                .foregroundColor(ink)
         }
     }
 
-    private func capability(_ icon: String, _ label: String) -> some View {
-        VStack(spacing: Aero.Spacing.xs) {
-            Image(systemName: icon)
-                .font(.system(size: 18, weight: .medium))
-                .foregroundStyle(Aero.text)
-            Text(label)
-                .font(Aero.label())
-                .foregroundStyle(Aero.textMuted)
+    // MARK: Hero — orb · greeting · upgrade
+
+    private var hero: some View {
+        VStack(spacing: Aero.Spacing.s) {
+            ZStack {
+                Circle()
+                    .fill(LinearGradient(
+                        colors: Aero.aurora,
+                        startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .frame(width: 84, height: 84)
+                    .scaleEffect(breathe)
+                Circle()
+                    .fill(canvas.opacity(0.35))
+                    .frame(width: 66, height: 66)
+                Image(systemName: "sparkles")
+                    .font(.system(size: 20))
+                    .foregroundColor(ink)
+            }
+            .padding(.bottom, Aero.Spacing.m)
+
+            Text(greeting)
+                .font(Aero.displayTitle())
+                .foregroundColor(ink)
+                .multilineTextAlignment(.center)
+
+            Text("What should we make today?")
+                .font(Aero.body())
+                .foregroundColor(muted)
+                .padding(.bottom, Aero.Spacing.s)
+
+            NavigationLink(value: AeroRoute.billing) {
+                HStack(spacing: 6) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 11))
+                        .foregroundColor(Aero.accent)
+                    Text("Upgrade plan")
+                        .font(Aero.label())
+                        .foregroundColor(ink)
+                }
+                .padding(.horizontal, Aero.Spacing.m)
+                .padding(.vertical, 10)
+                .background(Capsule().fill(raised))
+            }
+            .buttonStyle(KineticPressStyle())
         }
         .frame(maxWidth: .infinity)
     }
 
-    // MARK: Row builder
+    private var greeting: String {
+        let hour = Calendar.current.component(.hour, from: Date())
+        switch hour {
+        case 23, 0...4: return "Up late, Admin?"
+        case 5...11: return "Good morning, Admin"
+        case 12...17: return "Good afternoon, Admin"
+        default: return "Good evening, Admin"
+        }
+    }
 
-    private func chatRow(_ row: ConversationRow) -> some View {
-        NavigationLink(value: AeroRoute.chat(row.id)) {
-            AeroListRow(
-                title: row.title,
-                subtitle: row.subtitle,
-                leading: {
-                    Image(systemName: row.icon)
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(Aero.text)
-                        .frame(width: 36, height: 36)
-                        .background(Circle().fill(Aero.containerHigh))
-                },
-                trailing: {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(Aero.textMuted)
+    // MARK: Bottom cluster — suggestions · chips · hero input
+
+    private var bottomCluster: some View {
+        VStack(spacing: Aero.Spacing.m) {
+            VStack(spacing: Aero.Spacing.xs) {
+                suggestion("doc.text", "Summarise a PDF into a brief")
+                suggestion("pencil.line", "Draft a launch email")
+            }
+
+            chips
+
+            heroInput
+
+            Text("GS can make mistakes — double-check important info.")
+                .font(Aero.caption())
+                .foregroundColor(muted)
+                .frame(maxWidth: .infinity)
+                .padding(.bottom, Aero.Spacing.s)
+        }
+    }
+
+    private func suggestion(_ symbol: String, _ label: String) -> some View {
+        NavigationLink(value: AeroRoute.chat(nil)) {
+            HStack(spacing: Aero.Spacing.m) {
+                ZStack {
+                    Circle().fill(raised).frame(width: 38, height: 38)
+                    Image(systemName: symbol)
+                        .font(.system(size: 14))
+                        .foregroundColor(ink)
                 }
-            )
+                Text(label)
+                    .font(Aero.body())
+                    .foregroundColor(ink)
+                Spacer()
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 6)
+            .contentShape(Rectangle())
         }
         .buttonStyle(KineticPressStyle())
+    }
+
+    private var chips: some View {
+        let items: [(String, String, HomeWorkspace?)] = [
+            ("Projects", "folder", nil),
+            ("Research", "safari", .research),
+            ("Vision", "eye", .vision),
+            ("Image", "photo", .image),
+            ("Writing", "pencil.line", .writing),
+            ("Code", "curlybraces", .code),
+            ("Voice", "mic", nil),
+            ("Library", "books.vertical", nil),
+            ("Models", "speed", nil)
+        ]
+        let routes: [String: AeroRoute] = [
+            "Projects": .projects,
+            "Voice": .voice,
+            "Library": .library,
+            "Models": .models
+        ]
+        return ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: Aero.Spacing.s) {
+                ForEach(items, id: \.0) { label, symbol, workspace in
+                    if let workspace {
+                        Button {
+                            activeWorkspace = workspace
+                        } label: {
+                            chipLabel(label, symbol)
+                        }
+                        .buttonStyle(KineticPressStyle())
+                    } else if let route = routes[label] {
+                        NavigationLink(value: route) {
+                            chipLabel(label, symbol)
+                        }
+                        .buttonStyle(KineticPressStyle())
+                    }
+                }
+            }
+            .padding(.horizontal, 2)
+            .padding(.vertical, 2)
+        }
+    }
+
+    private func chipLabel(_ label: String, _ symbol: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: symbol)
+                .font(.system(size: 11))
+                .foregroundColor(muted)
+            Text(label)
+                .font(Aero.label())
+                .foregroundColor(ink)
+        }
+        .padding(.horizontal, Aero.Spacing.m)
+        .padding(.vertical, 10)
+        .background(Capsule().fill(raised))
+    }
+
+    private var heroInput: some View {
+        HStack(spacing: Aero.Spacing.s) {
+            NavigationLink(value: AeroRoute.chat(nil)) {
+                ZStack {
+                    Circle().fill(Aero.accent.opacity(0.16)).frame(width: 42, height: 42)
+                    Image(systemName: "plus")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(Aero.accent)
+                }
+            }
+            .buttonStyle(KineticPressStyle())
+            .accessibilityLabel("Attach — new chat")
+
+            NavigationLink(value: AeroRoute.chat(nil)) {
+                Text("Ask anything")
+                    .font(Aero.body())
+                    .foregroundColor(muted)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, Aero.Spacing.s)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(KineticPressStyle())
+
+            NavigationLink(value: AeroRoute.voice) {
+                Image(systemName: "mic")
+                    .font(.system(size: 16))
+                    .foregroundColor(muted)
+                    .frame(width: 42, height: 42)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(KineticPressStyle())
+            .accessibilityLabel("Voice input")
+
+            NavigationLink(value: AeroRoute.voice) {
+                ZStack {
+                    Circle()
+                        .fill(LinearGradient(
+                            colors: Aero.aurora,
+                            startPoint: .topLeading, endPoint: .bottomTrailing))
+                        .frame(width: 44, height: 44)
+                    Image(systemName: "waveform")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(ink)
+                }
+            }
+            .buttonStyle(KineticPressStyle())
+            .accessibilityLabel("Voice mode")
+        }
+        .padding(Aero.Spacing.s)
+        .background(RoundedRectangle(cornerRadius: 28).fill(raised))
     }
 }
