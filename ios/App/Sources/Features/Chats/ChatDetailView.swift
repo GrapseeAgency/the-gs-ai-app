@@ -248,6 +248,73 @@ struct ChatDetailView: View {
     }
 }
 
+// MARK: - Reply content segmentation (text + fenced code blocks)
+
+/// One renderable chunk of an assistant reply: plain text or a fenced code block.
+private struct ContentSegment: Identifiable {
+    let id: Int
+    let text: String
+    let isCode: Bool
+    let language: String?
+}
+
+/// Split on ``` fences; an unterminated trailing fence (mid-stream) still renders as code.
+private func parseContentSegments(_ content: String) -> [ContentSegment] {
+    var segments: [ContentSegment] = []
+    var id = 0
+    let ns = content as NSString
+    guard let regex = try? NSRegularExpression(pattern: "```(\\w*)\\n?([\\s\\S]*?)```") else {
+        return [ContentSegment(id: 0, text: content, isCode: false, language: nil)]
+    }
+    var cursor = 0
+    for match in regex.matches(in: content, range: NSRange(location: 0, length: ns.length)) {
+        if match.range.location > cursor {
+            segments.append(ContentSegment(
+                id: id,
+                text: ns.substring(with: NSRange(location: cursor, length: match.range.location - cursor)),
+                isCode: false,
+                language: nil
+            ))
+            id += 1
+        }
+        let language = match.range(at: 1).length > 0 ? ns.substring(with: match.range(at: 1)) : nil
+        let bodyRange = match.range(at: 2)
+        let body = bodyRange.length > 0
+            ? ns.substring(with: bodyRange).trimmingCharacters(in: CharacterSet(charactersIn: "\n"))
+            : ""
+        segments.append(ContentSegment(id: id, text: body, isCode: true, language: language))
+        id += 1
+        cursor = match.range.location + match.range.length
+    }
+    if cursor < ns.length {
+        let tail = ns.substring(from: cursor)
+        if let openRange = tail.range(of: "```") {
+            let before = String(tail[..<openRange.lowerBound])
+            if !before.isEmpty {
+                segments.append(ContentSegment(id: id, text: before, isCode: false, language: nil))
+                id += 1
+            }
+            let rest = String(tail[openRange.upperBound...])
+            var language: String? = nil
+            var body = rest
+            if let newline = rest.firstIndex(of: "\n") {
+                let candidate = String(rest[..<newline]).trimmingCharacters(in: .whitespaces)
+                language = candidate.isEmpty ? nil : candidate
+                body = String(rest[rest.index(after: newline)...])
+            }
+            segments.append(ContentSegment(id: id, text: body, isCode: true, language: language))
+            id += 1
+        } else if !tail.isEmpty {
+            segments.append(ContentSegment(id: id, text: tail, isCode: false, language: nil))
+            id += 1
+        }
+    }
+    if segments.isEmpty {
+        segments.append(ContentSegment(id: 0, text: content, isCode: false, language: nil))
+    }
+    return segments
+}
+
 // MARK: - Bubble
 
 private struct MessageBubble: View {
@@ -282,11 +349,17 @@ private struct MessageBubble: View {
 
     private var assistantBubble: some View {
         HStack(alignment: .top, spacing: 0) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(bubbleText)
-                    .font(Aero.body())
-                    .foregroundStyle(Aero.text)
-                    .textSelection(.enabled)
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(parsedSegments) { segment in
+                    if segment.isCode {
+                        codeBlock(segment)
+                    } else {
+                        Text(segment.text)
+                            .font(Aero.body())
+                            .foregroundStyle(Aero.text)
+                            .textSelection(.enabled)
+                    }
+                }
                 if message.isStreaming {
                     AuroraIndicator()
                 } else if !message.content.isEmpty {
@@ -296,10 +369,46 @@ private struct MessageBubble: View {
             .padding(14)
             .background(RoundedRectangle(cornerRadius: 18).fill(Aero.surface))
             .overlay(RoundedRectangle(cornerRadius: 18).stroke(Aero.outline, lineWidth: 1))
-            .frame(maxWidth: 300, alignment: .leading)
+            .frame(maxWidth: 320, alignment: .leading)
             .contextMenu { bubbleMenu }
             Spacer(minLength: 40)
         }
+    }
+
+    private var parsedSegments: [ContentSegment] {
+        if message.content.isEmpty {
+            return [ContentSegment(id: 0, text: bubbleText, isCode: false, language: nil)]
+        }
+        return parseContentSegments(message.content)
+    }
+
+    /// Fenced code block styled like the benchmark apps: language label, copy,
+    /// monospaced body. An unterminated trailing fence (mid-stream) renders live.
+    private func codeBlock(_ segment: ContentSegment) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text(segment.language ?? "code")
+                    .font(Aero.label())
+                    .foregroundStyle(Aero.textMuted)
+                Spacer()
+                Button {
+                    UIPasteboard.general.string = segment.text
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                }
+                .buttonStyle(KineticPressStyle())
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            Text(segment.text.isEmpty ? "…" : segment.text)
+                .font(.system(size: 12, weight: .regular, design: .monospaced))
+                .foregroundStyle(Aero.text)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 12)
+                .padding(.bottom, 10)
+        }
+        .background(RoundedRectangle(cornerRadius: 12).fill(Aero.container))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Aero.outline, lineWidth: 1))
     }
 
     private var bubbleText: String {

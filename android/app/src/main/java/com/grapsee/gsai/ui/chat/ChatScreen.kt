@@ -14,6 +14,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -87,6 +88,7 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.di.ServiceLocator
 import com.grapsee.gsai.ui.components.GsCard
@@ -468,14 +470,11 @@ private fun AssistantMessage(
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
             ) {
                 Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-                    Row(verticalAlignment = Alignment.Bottom) {
-                        Text(
-                            text = message.content,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        if (message.isStreaming) StreamingCaret()
-                    }
+                    SegmentedContent(
+                        content = message.content,
+                        isStreaming = message.isStreaming,
+                        onCopyCode = onCopy
+                    )
                     if (!message.isStreaming) {
                         Spacer(Modifier.height(6.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -573,6 +572,110 @@ private fun StreamingCaret() {
         color = MaterialTheme.colorScheme.primary,
         modifier = Modifier.padding(start = 2.dp).alpha(alpha)
     )
+}
+
+// --- reply content segmentation (text + fenced code blocks) --------------------
+
+/** One renderable chunk of an assistant reply: plain text or a fenced code block. */
+private data class ContentSegment(val text: String, val isCode: Boolean = false, val language: String? = null)
+
+private val fenceRegex = Regex("```(\\w*)\\n?([\\s\\S]*?)```")
+
+/** Split on ``` fences; an unterminated trailing fence (mid-stream) still renders as code. */
+private fun parseContentSegments(content: String): List<ContentSegment> {
+    if (content.isEmpty()) return listOf(ContentSegment(content))
+    val segments = mutableListOf<ContentSegment>()
+    var last = 0
+    for (match in fenceRegex.findAll(content)) {
+        if (match.range.first > last) {
+            segments += ContentSegment(content.substring(last, match.range.first))
+        }
+        segments += ContentSegment(
+            text = match.groupValues[2].trimEnd('\n'),
+            isCode = true,
+            language = match.groupValues[1].takeIf { it.isNotBlank() }
+        )
+        last = match.range.last + 1
+    }
+    if (last < content.length) {
+        val tail = content.substring(last)
+        val open = tail.indexOf("```")
+        if (open >= 0) {
+            // Streaming hasn't closed this fence yet — render what we have as code.
+            if (open > 0) segments += ContentSegment(tail.substring(0, open))
+            val rest = tail.substring(open + 3)
+            val newline = rest.indexOf('\n')
+            val language = if (newline >= 0) rest.substring(0, newline).trim().takeIf { it.isNotEmpty() } else null
+            val body = if (newline >= 0) rest.substring(newline + 1).trimEnd('\n') else ""
+            segments += ContentSegment(body, true, language)
+        } else {
+            segments += ContentSegment(tail)
+        }
+    }
+    return segments
+}
+
+/** Assistant reply body: prose paragraphs, code blocks styled like the benchmark apps. */
+@Composable
+private fun SegmentedContent(content: String, isStreaming: Boolean, onCopyCode: (String) -> Unit) {
+    val segments = remember(content) { parseContentSegments(content) }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        segments.forEachIndexed { index, segment ->
+            if (segment.isCode) {
+                CodeBlock(segment = segment, onCopyCode = onCopyCode)
+            } else {
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        text = segment.text,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    if (isStreaming && index == segments.lastIndex) StreamingCaret()
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CodeBlock(segment: ContentSegment, onCopyCode: (String) -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 12.dp, end = 4.dp, top = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = segment.language ?: "code",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(onClick = { onCopyCode(segment.text) }, modifier = Modifier.size(28.dp)) {
+                    Icon(
+                        Icons.Outlined.ContentCopy,
+                        contentDescription = "Copy code",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
+            }
+            Text(
+                text = segment.text.ifBlank { "…" },
+                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier
+                    .padding(start = 12.dp, end = 12.dp, bottom = 10.dp)
+                    .horizontalScroll(rememberScrollState())
+            )
+        }
+    }
 }
 
 /** Aurora life-sign above the input while the model is generating. */
