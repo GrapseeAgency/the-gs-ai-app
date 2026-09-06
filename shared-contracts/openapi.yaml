@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: GS AI Platform API
-  version: 0.1.0
+  version: 0.2.0
   description: >
     Contract-first API for the GS AI platform. Native clients (Kotlin/Compose,
     Swift/SwiftUI) consume this contract via Ktor. Streaming uses SSE; WebSocket
@@ -13,6 +13,7 @@ tags:
   - name: system
   - name: models
   - name: conversations
+  - name: assistants
 paths:
   /health:
     get:
@@ -96,6 +97,24 @@ paths:
       responses:
         '204': { description: Deleted }
         '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [conversations]
+      summary: Update pin/archive/title/model
+      operationId: updateConversation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateConversationInput'
+      responses:
+        '200':
+          description: Updated conversation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Conversation'
+        '404': { $ref: '#/components/responses/NotFound' }
   /v1/conversations/{id}/messages:
     parameters:
       - $ref: '#/components/parameters/ConversationId'
@@ -137,6 +156,99 @@ paths:
                   event: { type: string, enum: [delta, done, error] }
                   data: { type: string }
         '404': { $ref: '#/components/responses/NotFound' }
+  /v1/assistants:
+    get:
+      tags: [assistants]
+      summary: List assistant catalogue (favourites first)
+      operationId: listAssistants
+      parameters:
+        - name: category
+          in: query
+          schema: { type: string }
+        - name: favourite
+          in: query
+          schema: { type: boolean }
+      responses:
+        '200':
+          description: Assistant catalogue
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistantList'
+    post:
+      tags: [assistants]
+      summary: Create an assistant
+      operationId: createAssistant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAssistantInput'
+      responses:
+        '201':
+          description: Created assistant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Assistant'
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/assistants/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [assistants]
+      summary: Fetch one assistant (with conversation count)
+      operationId: getAssistant
+      responses:
+        '200':
+          description: Assistant detail
+          content:
+            application/json:
+              schema:
+                type: object
+                allOf:
+                  - $ref: '#/components/schemas/Assistant'
+                  - type: object
+                    properties:
+                      conversationCount: { type: integer }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [assistants]
+      summary: Update assistant (favourite, publish, edits)
+      operationId: updateAssistant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAssistantInput'
+      responses:
+        '200':
+          description: Updated assistant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Assistant'
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [assistants]
+      summary: Delete an assistant (linked conversations are unlinked)
+      operationId: deleteAssistant
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted: { type: boolean }
+                  id: { type: string }
+        '404': { $ref: '#/components/responses/NotFound' }
 components:
   parameters:
     ConversationId:
@@ -147,6 +259,16 @@ components:
   responses:
     NotFound:
       description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    RateLimited:
+      description: Client exceeded a rate limit
+      headers:
+        Retry-After:
+          schema: { type: string }
+          description: Seconds until the client may retry
       content:
         application/json:
           schema:
@@ -186,6 +308,7 @@ components:
         id: { type: string, format: uuid }
         title: { type: string }
         modelId: { type: string }
+        assistantId: { type: string }
         pinned: { type: boolean, default: false }
         archived: { type: boolean, default: false }
         createdAt: { type: string, format: date-time }
@@ -202,6 +325,14 @@ components:
       type: object
       properties:
         title: { type: string }
+        modelId: { type: string }
+        assistantId: { type: string }
+    UpdateConversationInput:
+      type: object
+      properties:
+        title: { type: string, maxLength: 120 }
+        pinned: { type: boolean }
+        archived: { type: boolean }
         modelId: { type: string }
     Message:
       type: object
@@ -228,6 +359,59 @@ components:
         content: { type: string, minLength: 1, maxLength: 32000 }
         stream: { type: boolean, default: false }
         modelId: { type: string }
+    Assistant:
+      type: object
+      required: [id, slug, name, starters]
+      properties:
+        id: { type: string }
+        slug: { type: string }
+        name: { type: string }
+        description: { type: string }
+        instructions: { type: string }
+        category:
+          type: string
+          enum: [general, research, writing, coding, productivity, learning]
+        starters:
+          type: array
+          items: { type: string }
+        published: { type: boolean, default: false }
+        favourite: { type: boolean, default: false }
+        uses: { type: integer, default: 0 }
+        rating: { type: number, default: 0 }
+        createdAt: { type: string, format: date-time }
+    AssistantList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Assistant' }
+    CreateAssistantInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        description: { type: string }
+        instructions: { type: string }
+        category: { type: string }
+        starters:
+          type: array
+          maxItems: 6
+          items: { type: string }
+        published: { type: boolean }
+    UpdateAssistantInput:
+      type: object
+      properties:
+        name: { type: string, maxLength: 80 }
+        description: { type: string }
+        instructions: { type: string }
+        category: { type: string }
+        starters:
+          type: array
+          maxItems: 6
+          items: { type: string }
+        favourite: { type: boolean }
+        published: { type: boolean }
     Error:
       type: object
       required: [code, message]

@@ -10,12 +10,13 @@
  * Dates are serialized as ISO-8601 date-time strings.
  */
 
-import type { Conversation, Message } from '@prisma/client'
+import type { Assistant, Conversation, Message } from '@prisma/client'
 
 export type ConversationJson = {
   id: string
   title: string
   modelId?: string
+  assistantId?: string
   pinned: boolean
   archived: boolean
   createdAt: string
@@ -30,11 +31,53 @@ export type MessageJson = {
   createdAt: string
 }
 
-export function conversationToJson(c: Conversation): ConversationJson {
+export type AssistantJson = {
+  id: string
+  slug: string
+  name: string
+  description: string
+  instructions: string
+  category: string
+  starters: string[]
+  published: boolean
+  favourite: boolean
+  uses: number
+  rating: number
+  createdAt: string
+}
+
+function parseStarters(raw: string): string[] {
+  try {
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed.filter((s): s is string => typeof s === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+export function assistantToJson(a: Assistant): AssistantJson {
+  return {
+    id: a.id,
+    slug: a.slug,
+    name: a.name,
+    description: a.description,
+    instructions: a.instructions,
+    category: a.category,
+    starters: parseStarters(a.starters),
+    published: a.published,
+    favourite: a.favourite,
+    uses: a.uses,
+    rating: a.rating,
+    createdAt: a.createdAt.toISOString(),
+  }
+}
+
+export function conversationToJson(c: Conversation & { assistant?: Assistant | null }): ConversationJson {
   return {
     id: c.id,
     title: c.title,
     ...(c.modelId ? { modelId: c.modelId } : {}),
+    ...(c.assistantId ? { assistantId: c.assistantId } : {}),
     pinned: c.pinned,
     archived: c.archived,
     createdAt: c.createdAt.toISOString(),

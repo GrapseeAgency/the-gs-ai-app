@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { conversationToJson } from '@/lib/serializers'
+import { clientKey, rateLimit } from '@/lib/rate-limit'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,18 +21,31 @@ export async function GET(req: NextRequest) {
   const conversations = await db.conversation.findMany({
     orderBy: { updatedAt: 'desc' },
     take: limit,
+    include: { assistant: { select: { id: true, name: true } } },
   })
   return NextResponse.json({
-    items: conversations.map(conversationToJson),
+    items: conversations.map((c) => ({
+      ...conversationToJson(c),
+      ...(c.assistant ? { assistantName: c.assistant.name } : {}),
+    })),
     nextCursor: null,
   })
 }
 
-// POST /api/v1/conversations — { title?, modelId? } → 201 Conversation
+// POST /api/v1/conversations — { title?, modelId?, assistantId? } → 201 Conversation
 export async function POST(req: NextRequest) {
-  let body: { title?: unknown; modelId?: unknown }
+  // Guardrail: 30 creations / minute / client (in-memory; Redis at scale).
+  const limit = rateLimit(clientKey(req, 'convs:create'), 30, 60_000)
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { code: 'rate_limited', message: 'Too many conversations — slow down a little.' },
+      { status: 429, headers: { 'Retry-After': String(limit.retryAfterSec) } }
+    )
+  }
+
+  let body: { title?: unknown; modelId?: unknown; assistantId?: unknown }
   try {
-    body = (await req.json()) as { title?: unknown; modelId?: unknown }
+    body = (await req.json()) as { title?: unknown; modelId?: unknown; assistantId?: unknown }
   } catch {
     body = {}
   }
@@ -42,11 +56,26 @@ export async function POST(req: NextRequest) {
     typeof body?.modelId === 'string' && body.modelId.trim().length > 0
       ? body.modelId.trim()
       : undefined
+  const assistantId =
+    typeof body?.assistantId === 'string' && body.assistantId.trim().length > 0
+      ? body.assistantId.trim()
+      : undefined
+
+  if (assistantId) {
+    const assistant = await db.assistant.findUnique({ where: { id: assistantId } })
+    if (!assistant) {
+      return NextResponse.json(
+        { code: 'bad_request', message: 'assistantId does not reference a known assistant' },
+        { status: 400 }
+      )
+    }
+  }
 
   const conversation = await db.conversation.create({
     data: {
       ...(title ? { title } : {}),
       ...(modelId ? { modelId } : {}),
+      ...(assistantId ? { assistantId } : {}),
     },
   })
 

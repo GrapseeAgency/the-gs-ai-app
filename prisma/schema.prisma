@@ -45,6 +45,7 @@ model Conversation {
   id           String    @id @default(cuid())
   title        String    @default("New chat")
   modelId      String?
+  assistantId  String?
   pinned       Boolean   @default(false)
   archived     Boolean   @default(false)
   folder       String?
@@ -52,8 +53,10 @@ model Conversation {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   messages     Message[]
+  assistant    Assistant? @relation(fields: [assistantId], references: [id])
 
   @@index([updatedAt])
+  @@index([assistantId])
 }
 
 model Message {
@@ -69,15 +72,18 @@ model Message {
 
 model Assistant {
   id           String   @id @default(cuid())
+  slug         String   @unique
   name         String
   description  String   @default("")
   instructions String   @default("")
   category     String   @default("general")
   starters     String   @default("[]")
   published    Boolean  @default(false)
+  favourite    Boolean  @default(false)
   uses         Int      @default(0)
   rating       Float    @default(0)
   createdAt    DateTime @default(now())
+  conversations Conversation[]
 }
 
 model Project {

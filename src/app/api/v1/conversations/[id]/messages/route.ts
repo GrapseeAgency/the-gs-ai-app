@@ -63,7 +63,10 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     )
   }
 
-  const conversation = await db.conversation.findUnique({ where: { id } })
+  const conversation = await db.conversation.findUnique({
+    where: { id },
+    include: { assistant: true },
+  })
   if (!conversation) {
     return NextResponse.json({ code: 'not_found', message: 'Conversation not found' }, { status: 404 })
   }
@@ -89,6 +92,13 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     })
   }
 
+  // Assistant persona: when the conversation is linked to an assistant, its
+  // instructions become the primary system context (platform prompt stays as
+  // a base below it).
+  const systemPrompt = conversation.assistant?.instructions
+    ? `${conversation.assistant.instructions}\n\n(Platform persona base: ${SYSTEM_PROMPT})`
+    : SYSTEM_PROMPT
+
   // Build model context: system prompt + last 20 prior messages + the new user message.
   const recentDesc = await db.message.findMany({
     where: { conversationId: id, id: { not: userMessage.id } },
@@ -97,10 +107,17 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
   })
   const history = recentDesc.reverse()
   const modelMessages = [
-    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'system', content: systemPrompt },
     ...history.map((m) => ({ role: m.role.toLowerCase(), content: m.content })),
     { role: 'user', content },
   ]
+
+  // Catalogue telemetry — count a use when this is the first message.
+  if (conversation.assistantId && history.length === 0) {
+    db.assistant
+      .update({ where: { id: conversation.assistantId }, data: { uses: { increment: 1 } } })
+      .catch(() => undefined) // telemetry must never break the chat path
+  }
 
   // Non-streaming: single JSON reply.
   if (!stream) {

@@ -109,6 +109,28 @@ async function consumeSseStream(
 }
 
 /**
+ * Provider resilience:
+ * - TIMEOUT: every upstream attempt is bounded (slow streams that have already
+ *   produced output are NOT aborted mid-flight — only the initial connection
+ *   is raced against the deadline).
+ * - RETRY: non-streaming calls retry once on failure. Streaming calls retry
+ *   only when the failure happens BEFORE the first delta was forwarded —
+ *   restarting mid-stream would duplicate output for the consumer.
+ */
+
+const CONNECT_TIMEOUT_MS = 15_000
+const COMPLETION_TIMEOUT_MS = 60_000
+const MAX_ATTEMPTS = 2
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function errMessage(e: unknown): string {
+  return e instanceof Error ? e.message : String(e)
+}
+
+/**
  * Streaming chat completion. Calls `onDelta` for every token/chunk received
  * and resolves with the complete assistant text.
  */
@@ -116,33 +138,74 @@ export async function streamChat(
   messages: ChatMessageInput[],
   onDelta: (t: string) => Promise<void> | void
 ): Promise<string> {
-  const zai = await ZAI.create()
-  const response: unknown = await zai.chat.completions.create({
-    messages: toSdkMessages(messages),
-    stream: true,
-    thinking: { type: 'disabled' },
-  })
+  let lastError = 'Upstream unavailable'
 
-  if (isWebReadableStream(response)) {
-    return consumeSseStream(response, onDelta)
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    let forwarded = false
+    try {
+      const zai = await ZAI.create()
+      const response: unknown = await Promise.race([
+        zai.chat.completions.create({
+          messages: toSdkMessages(messages),
+          stream: true,
+          thinking: { type: 'disabled' },
+        }),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Upstream connect timeout')), CONNECT_TIMEOUT_MS)
+        ),
+      ])
+
+      if (isWebReadableStream(response)) {
+        const guardedOnDelta = (t: string) => {
+          forwarded = true
+          return onDelta(t)
+        }
+        return await consumeSseStream(response, guardedOnDelta)
+      }
+
+      // Upstream ignored `stream: true` — fall back to a single full-text delta.
+      const completion = response as { choices?: { message?: { content?: unknown } }[] } | null
+      const text = completion?.choices?.[0]?.message?.content
+      const full = typeof text === 'string' ? text : ''
+      if (full) {
+        forwarded = true
+        await onDelta(full)
+      }
+      return full
+    } catch (e) {
+      lastError = errMessage(e)
+      // Mid-stream failure after output was already forwarded: restarting
+      // would duplicate text on the client — surface the error instead.
+      if (forwarded) throw new Error(lastError)
+      if (attempt < MAX_ATTEMPTS) await sleep(400 * attempt)
+    }
   }
-
-  // Upstream ignored `stream: true` — fall back to a single full-text delta.
-  const completion = response as { choices?: { message?: { content?: unknown } }[] } | null
-  const text = completion?.choices?.[0]?.message?.content
-  const full = typeof text === 'string' ? text : ''
-  if (full) await onDelta(full)
-  return full
+  throw new Error(lastError)
 }
 
 /** Non-streaming chat completion. Resolves with the assistant text. */
 export async function completeChat(messages: ChatMessageInput[]): Promise<string> {
-  const zai = await ZAI.create()
-  const completion = (await zai.chat.completions.create({
-    messages: toSdkMessages(messages),
-    stream: false,
-    thinking: { type: 'disabled' },
-  })) as { choices?: { message?: { content?: unknown } }[] } | null
-  const text = completion?.choices?.[0]?.message?.content
-  return typeof text === 'string' ? text : ''
+  let lastError = 'Upstream unavailable'
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      const zai = await ZAI.create()
+      const completion = (await Promise.race([
+        zai.chat.completions.create({
+          messages: toSdkMessages(messages),
+          stream: false,
+          thinking: { type: 'disabled' },
+        }),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Upstream completion timeout')), COMPLETION_TIMEOUT_MS)
+        ),
+      ])) as { choices?: { message?: { content?: unknown } }[] } | null
+      const text = completion?.choices?.[0]?.message?.content
+      return typeof text === 'string' ? text : ''
+    } catch (e) {
+      lastError = errMessage(e)
+      if (attempt < MAX_ATTEMPTS) await sleep(400 * attempt)
+    }
+  }
+  throw new Error(lastError)
 }
