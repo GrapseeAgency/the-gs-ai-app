@@ -1,6 +1,9 @@
 package com.grapsee.gsai.ui.chat
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
@@ -31,6 +34,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.outlined.ArrowDownward
 import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.CallSplit
 import androidx.compose.material.icons.outlined.CameraAlt
@@ -64,6 +68,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -128,6 +133,19 @@ fun ChatScreen(
     val showSnack: (String) -> Unit = { message ->
         scope.launch { snackbarHostState.showSnackbar(message) }
     }
+    // Every copy path funnels here so the action always confirms quietly.
+    val copyText: (String) -> Unit = { text ->
+        clipboard.setText(AnnotatedString(text))
+        showSnack("Copied")
+    }
+    // True while the newest turn is on screen — the reader is at the live edge.
+    val isAtBottom by remember {
+        derivedStateOf {
+            val info = listState.layoutInfo
+            val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: -1
+            lastVisible >= info.totalItemsCount - 1
+        }
+    }
 
     LaunchedEffect(conversationId) {
         val id = conversationId ?: return@LaunchedEffect
@@ -144,9 +162,10 @@ fun ChatScreen(
         if (!prefillPrompt.isNullOrBlank()) draft = prefillPrompt
     }
 
-    // Keep the newest turn in view while messages arrive and grow.
+    // Follow the stream only while the reader stays at the live edge —
+    // scrolling up to reread is never yanked back down mid-generation.
     LaunchedEffect(messages.size, messages.lastOrNull()?.content?.length) {
-        if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
+        if (messages.isNotEmpty() && isAtBottom) listState.animateScrollToItem(messages.size - 1)
     }
 
     fun finalizeStreamingMessage() {
@@ -182,6 +201,8 @@ fun ChatScreen(
         if (activeConversationId == null) conversationTitle = prompt.take(40)
         val assistantId = UUID.randomUUID().toString()
         messages.add(ChatUiMessage(assistantId, "assistant", "", isStreaming = true))
+        // Sending always returns the reader to the live edge (benchmark behaviour).
+        scope.launch { listState.animateScrollToItem(messages.lastIndex) }
         streamingJob = scope.launch {
             try {
                 val returnedId = ServiceLocator.chat.send(
@@ -249,17 +270,31 @@ fun ChatScreen(
                     ) {
                         itemsIndexed(messages, key = { _, message -> message.id }) { _, message ->
                             if (message.role == "user") {
-                                UserMessage(message)
+                                UserMessage(message, onCopy = copyText)
                             } else {
                                 AssistantMessage(
                                     message = message,
-                                    onCopy = { text -> clipboard.setText(AnnotatedString(text)) },
+                                    onCopy = copyText,
                                     onRegenerate = { regenerate(message.id) },
                                     onContextAction = showSnack
                                 )
                             }
                         }
                     }
+                }
+                // Reading protection companion: appears only when the reader
+                // has scrolled away from the newest turn.
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = !isAtBottom && messages.isNotEmpty(),
+                    enter = fadeIn(),
+                    exit = fadeOut(),
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = GsMotion.spaceM, bottom = GsMotion.spaceS)
+                ) {
+                    JumpToLatestPill(onClick = {
+                        scope.launch { listState.animateScrollToItem(messages.lastIndex) }
+                    })
                 }
             }
 
@@ -323,10 +358,15 @@ fun ChatScreen(
 
 // --- bubbles ----------------------------------------------------------------
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun UserMessage(message: ChatUiMessage) {
+private fun UserMessage(message: ChatUiMessage, onCopy: (String) -> Unit = {}) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
         Surface(
+            modifier = Modifier.combinedClickable(
+                onClick = {},
+                onLongClick = { onCopy(message.content) }
+            ),
             shape = RoundedCornerShape(18.dp),
             color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
         ) {
@@ -335,6 +375,27 @@ private fun UserMessage(message: ChatUiMessage) {
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+            )
+        }
+    }
+}
+
+/** Floating jump-back-to-the-live-edge control, mirroring the benchmark apps. */
+@Composable
+private fun JumpToLatestPill(onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        shadowElevation = 4.dp
+    ) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(40.dp)) {
+            Icon(
+                Icons.Outlined.ArrowDownward,
+                contentDescription = "Jump to latest",
+                tint = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.size(18.dp)
             )
         }
     }

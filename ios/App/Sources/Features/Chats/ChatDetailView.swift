@@ -15,6 +15,10 @@ struct ChatDetailView: View {
     @State private var showingAttachments = false
     @State private var toast: String?
 
+    // Reading protection — true while the reader has scrolled away from the
+    // live edge; streaming deltas never yank the transcript back down.
+    @State private var userIsReading = false
+
     init(conversationID: String?, prefill: String? = nil) {
         _vm = StateObject(wrappedValue: ChatViewModel(conversationID: conversationID))
         self.prefill = prefill
@@ -74,7 +78,10 @@ struct ChatDetailView: View {
                     ForEach(vm.messages) { message in
                         MessageBubble(
                             message: message,
-                            onRegenerate: { vm.regenerate() },
+                            onRegenerate: {
+                                userIsReading = false
+                                vm.regenerate()
+                            },
                             onTranslate: { showToast("Translation arrives with the language pack build") },
                             onSave: { showToast("Saved to Library") }
                         )
@@ -84,11 +91,41 @@ struct ChatDetailView: View {
                 .padding(.horizontal, Aero.Spacing.m)
                 .padding(.vertical, Aero.Spacing.m)
             }
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 3).onChanged { _ in
+                    userIsReading = true
+                }
+            )
             .onChange(of: vm.messages.last?.content) { _ in
+                guard !userIsReading else { return }
                 withAnimation(Aero.gentle) {
                     if let last = vm.messages.last {
                         proxy.scrollTo(last.id, anchor: .bottom)
                     }
+                }
+            }
+            .overlay(alignment: .bottomTrailing) {
+                if userIsReading && !vm.messages.isEmpty {
+                    Button {
+                        userIsReading = false
+                        withAnimation(Aero.gentle) {
+                            if let last = vm.messages.last {
+                                proxy.scrollTo(last.id, anchor: .bottom)
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "arrow.down")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(Aero.text)
+                            .frame(width: 36, height: 36)
+                            .background(Circle().fill(Aero.surface))
+                            .overlay(Circle().stroke(Aero.outline, lineWidth: 1))
+                            .shadow(color: Color.black.opacity(0.18), radius: 8, y: 2)
+                    }
+                    .buttonStyle(KineticPressStyle())
+                    .padding(.trailing, Aero.Spacing.m)
+                    .padding(.bottom, Aero.Spacing.m)
+                    .transition(.opacity)
                 }
             }
         }
@@ -119,7 +156,10 @@ struct ChatDetailView: View {
     // MARK: Input
 
     private var inputBar: some View {
-        AeroInputBar(text: $vm.draft, action: { vm.send() })
+        AeroInputBar(text: $vm.draft, action: {
+            userIsReading = false
+            vm.send()
+        })
             .padding(.horizontal, Aero.Spacing.m)
             .padding(.vertical, Aero.Spacing.s)
             .background(Aero.surface.ignoresSafeArea(edges: .bottom))
