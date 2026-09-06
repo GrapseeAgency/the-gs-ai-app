@@ -622,3 +622,23 @@ Stage Summary:
 - Edge states advanced concretely: search now answers every state honestly (idle / typing / no matches / live results) with zero fake demo rows
 - Search is the first screen wired fully to local persistence beyond the chat thread itself — groundwork for FTS5 later
 - Backlog remaining: assistants CRUD + pin/archive native wiring (deferred until live backend ask), Room/SwiftData polish (offline persistence already solid), design-parity detail passes
+
+---
+Task ID: 19 (cron cycle — design-parity detail pass: chat reading protection + jump-to-latest + v0.6.0 shipped via LiveUpdate)
+Agent: Z.ai Code (main)
+Task: Build QA, advance backlog (design parity: benchmark-style scroll behaviour in the chat transcript, both platforms), publish v0.6.0.
+
+Work Log:
+- BUILD QA: :app:assembleDebug BUILD SUCCESSFUL (16s baseline, 52s fail + 1m28s pass after changes); toolchain intact
+- GAP FOUND: both platforms force-scrolled the transcript to the newest turn on EVERY streaming delta — a reader scrolling up to reread got yanked back down constantly; benchmark apps (ChatGPT/Claude) protect the reader and offer a jump pill instead
+- ANDROID (ChatScreen.kt): isAtBottom via derivedStateOf over listState.layoutInfo (last visible index vs totalItemsCount); follow-stream LaunchedEffect now scrolls only while at the live edge; sending/regenerating force-returns the reader to the newest turn; floating JumpToLatestPill (40dp circle, ArrowDownward, outline+shadow) fades in bottom-end when scrolled away — one tap animates back to the live edge; fixed ColumnScope.AnimatedVisibility implicit-receiver clash by fully-qualifying androidx.compose.animation.AnimatedVisibility inside the Box
+- ANDROID copy polish: shared copyText lambda — every copy path now confirms with a quiet "Copied" snackbar; user bubbles gained long-press-to-copy (combinedClickable)
+- iOS (ChatDetailView.swift): userIsReading state flipped by a simultaneousGesture DragGesture on the transcript; onChange auto-scroll guarded by !userIsReading; jump-to-latest 36pt circle overlay (arrow.down, Aero.surface/outline/shadow, KineticPressStyle, opacity transition) inside the ScrollViewReader; send + regenerate reset to the live edge; static-verified (no banned APIs)
+- iOS STATIC GATES: all 4 files CLEAN (braces/parens/banned sweep)
+- VERSION: versionCode 6 / versionName 0.6.0; APK copied to download/GS-AI-App.apk (aapt verified versionCode 6); update-manifest.json bumped
+- PUBLISHED: commit bfcf028 pushed; GitHub Release v0.6.0 created (REL_ID 383733857, asset upload HTTP 201); /releases/latest/download/ permalink verified serving versionCode 6 (19,469,244 bytes); stable signature b1ffd75d… intact — v0.5.0 phones will surface the LiveUpdate pill
+
+Stage Summary:
+- Chat scroll now behaves like the benchmark apps: reading is protected, the live edge is one tap away, copying confirms quietly
+- No new permissions, no data-model changes — pure UX-parity build, installs straight over v0.5.0
+- Backlog remaining: assistants CRUD + pin/archive native wiring (deferred until live backend ask), design-parity detail passes (read-aloud/translate wiring), FTS5 search upgrade groundwork
