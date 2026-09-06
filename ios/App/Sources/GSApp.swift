@@ -4,7 +4,7 @@ import SwiftUI
 struct GSApp: App {
     var body: some Scene {
         WindowGroup {
-            HomeView()
+            RootTabView()
         }
     }
 }

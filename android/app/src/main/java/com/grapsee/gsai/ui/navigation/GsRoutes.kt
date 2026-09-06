@@ -1,0 +1,36 @@
+package com.grapsee.gsai.ui.navigation
+
+/** AERUO KINETIC — route map. Screens are plain composables; this file owns all routing. */
+object GsRoutes {
+    const val HOME = "home"
+    const val CHATS = "chats"
+    const val EXPLORE = "explore"
+    const val CREATE = "create"
+    const val LIBRARY = "library"
+    const val PROJECTS = "projects"
+    const val ASSISTANTS = "assistants"
+    const val SEARCH = "search"
+    const val MODELS = "models"
+    const val MODEL_COMPARE = "models/compare"
+    const val PROFILE = "profile"
+    const val SETTINGS = "settings"
+    const val NOTIFICATIONS = "notifications"
+    const val VOICE = "voice"
+    const val ASSISTANT_CREATE = "assistants/create"
+    const val CHAT_ARCHIVE = "chats/archived"
+    const val CHAT_FOLDERS = "chats/folders"
+    const val CHAT_SHARED = "chats/shared"
+    const val CHAT_SEARCH = "chats/search"
+
+    const val CHAT = "chat/{conversationId}"
+    const val ARG_CONVERSATION = "conversationId"
+    fun chat(conversationId: String?) = "chat/${conversationId ?: "new"}"
+
+    const val PROJECT_DETAIL = "project/{projectId}"
+    const val ARG_PROJECT = "projectId"
+    fun project(id: String) = "project/$id"
+
+    const val ASSISTANT_DETAIL = "assistant/{assistantId}"
+    const val ARG_ASSISTANT = "assistantId"
+    fun assistant(id: String) = "assistant/$id"
+}

@@ -30,3 +30,77 @@ model Post {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+// ---- GS AI platform models (Task 6-g) ----
+// NOTE: SQLite datasource — no primitive array fields; list values are stored as JSON strings.
+
+model UserDevice {
+  id        String   @id @default(cuid())
+  deviceId  String   @unique
+  label     String?
+  createdAt DateTime @default(now())
+}
+
+model Conversation {
+  id           String    @id @default(cuid())
+  title        String    @default("New chat")
+  modelId      String?
+  pinned       Boolean   @default(false)
+  archived     Boolean   @default(false)
+  folder       String?
+  userDeviceId String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  messages     Message[]
+
+  @@index([updatedAt])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String
+  content        String
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId])
+}
+
+model Assistant {
+  id           String   @id @default(cuid())
+  name         String
+  description  String   @default("")
+  instructions String   @default("")
+  category     String   @default("general")
+  starters     String   @default("[]")
+  published    Boolean  @default(false)
+  uses         Int      @default(0)
+  rating       Float    @default(0)
+  createdAt    DateTime @default(now())
+}
+
+model Project {
+  id           String   @id @default(cuid())
+  name         String
+  description  String   @default("")
+  instructions String   @default("")
+  createdAt    DateTime @default(now())
+}
+
+model LibraryItem {
+  id        String   @id @default(cuid())
+  kind      String
+  title     String
+  content   String   @default("")
+  createdAt DateTime @default(now())
+}
+
+model NotificationItem {
+  id        String   @id @default(cuid())
+  type      String
+  title     String
+  body      String   @default("")
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}

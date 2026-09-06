@@ -4,24 +4,25 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import com.grapsee.gsai.ui.home.HomeScreen
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.ui.Modifier
+import com.grapsee.gsai.ui.navigation.GsNavHost
 import com.grapsee.gsai.ui.theme.TheGsAiTheme
-import dagger.hilt.android.AndroidEntryPoint
 
-/**
- * Single-activity host. All navigation (once wired) happens inside Compose
- * via Navigation Compose; system bars are drawn edge-to-edge and handled by
- * Material 3 [androidx.compose.material3.Scaffold] window insets.
- */
-@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             TheGsAiTheme {
-                HomeScreen()
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    GsNavHost()
+                }
             }
         }
     }

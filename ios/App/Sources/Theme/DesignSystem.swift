@@ -1,40 +1,73 @@
 import SwiftUI
 
-// MARK: - Color tokens (raw brand constants)
+/**
+ * AERUO KINETIC — single source of design truth for iOS.
+ * "Kinetic aurora over obsidian": disciplined editorial surfaces,
+ * energy reserved for motion + one aurora accent family.
+ * Mirrors android/.../ui/theme/Color.kt + Type.kt + Motion.kt exactly.
+ */
+enum Aero {
+    // MARK: Palette (dynamic — responds to system appearance)
+    static func dynamic(light: UIColor, dark: UIColor) -> Color {
+        Color(UIColor { $0.userInterfaceStyle == .dark ? dark : light })
+    }
 
-extension Color {
-    /// Editorial paper — warm off-white page background (light mode).
-    static let gsPaper = Color(red: 0.980, green: 0.976, blue: 0.965)
+    static let background = dynamic(
+        light: UIColor(red: 0.969, green: 0.969, blue: 0.961, alpha: 1),   // F7F7F5
+        dark: UIColor(red: 0.039, green: 0.051, blue: 0.071, alpha: 1))    // 0A0D12
+    static let surface = dynamic(
+        light: .white,
+        dark: UIColor(red: 0.067, green: 0.082, blue: 0.110, alpha: 1))    // 11151C
+    static let raised = dynamic(
+        light: .white,
+        dark: UIColor(red: 0.094, green: 0.118, blue: 0.157, alpha: 1))    // 181E28
+    static let text = dynamic(
+        light: UIColor(red: 0.078, green: 0.086, blue: 0.102, alpha: 1),   // 14161A
+        dark: UIColor(red: 0.929, green: 0.937, blue: 0.949, alpha: 1))    // EDEFF2
+    static let textMuted = dynamic(
+        light: UIColor(red: 0.420, green: 0.443, blue: 0.478, alpha: 1),   // 6B7280
+        dark: UIColor(red: 0.545, green: 0.576, blue: 0.631, alpha: 1))    // 8B93A1
+    static let outline = dynamic(
+        light: UIColor(red: 0.898, green: 0.898, blue: 0.882, alpha: 1),   // E5E5E1
+        dark: UIColor(red: 0.137, green: 0.169, blue: 0.216, alpha: 1))    // 232B37
+    static let container = dynamic(
+        light: UIColor(red: 0.941, green: 0.941, blue: 0.929, alpha: 1),   // F0F0ED
+        dark: UIColor(red: 0.078, green: 0.098, blue: 0.137, alpha: 1))    // 141923
+    static let containerHigh = dynamic(
+        light: UIColor(red: 0.886, green: 0.886, blue: 0.867, alpha: 1),   // E2E2DD
+        dark: UIColor(red: 0.137, green: 0.169, blue: 0.227, alpha: 1))    // 232B3A
 
-    /// Primary ink — near-black with a cool blue cast (light mode).
-    static let gsInk = Color(red: 0.102, green: 0.114, blue: 0.137)
+    /// The single accent family — aurora teal
+    static let accent = Color(red: 0.176, green: 0.831, blue: 0.659)        // 2DD4A8
+    static let accentDeep = Color(red: 0.059, green: 0.639, blue: 0.494)    // 0FA37E
 
-    /// Muted ink — secondary copy (light mode).
-    static let gsInkMuted = Color(red: 0.412, green: 0.431, blue: 0.478)
+    /// Kinetic aurora gradient — ONLY for AI-active moments
+    /// (streaming caret, generation progress, voice waveform, primary CTA)
+    static let aurora: [Color] = [
+        Color(red: 0.176, green: 0.831, blue: 0.659),   // 2DD4A8
+        Color(red: 0.298, green: 0.765, blue: 1.000),   // 4CC3FF
+        Color(red: 0.616, green: 0.482, blue: 1.000)    // 9D7BFF
+    ]
 
-    /// Copper — the single brand accent.
-    static let gsAccent = Color(red: 0.706, green: 0.388, blue: 0.173)
+    // MARK: Typography — serif display voice, sans interface
+    static func displayTitle() -> Font { .system(size: 34, weight: .semibold, design: .serif) }
+    static func display() -> Font { .system(size: 28, weight: .semibold, design: .serif) }
+    static func headline() -> Font { .system(size: 22, weight: .semibold, design: .serif) }
+    static func title() -> Font { .system(size: 17, weight: .semibold, design: .default) }
+    static func body() -> Font { .system(size: 15, weight: .regular, design: .default) }
+    static func caption() -> Font { .system(size: 13, weight: .regular, design: .default) }
+    static func label() -> Font { .system(size: 12, weight: .medium, design: .default) }
 
-    /// Deep navy-black app surface (dark mode — deep, not flat grey).
-    static let gsDarkSurface = Color(red: 0.043, green: 0.055, blue: 0.075)
+    // MARK: Motion — springs over eases, stagger entrances, press scales
+    static let spring = Animation.spring(response: 0.35, dampingFraction: 0.8)
+    static let snappy = Animation.spring(response: 0.28, dampingFraction: 0.75)
+    static let gentle = Animation.spring(response: 0.5, dampingFraction: 0.9)
+    static let pressScale: CGFloat = 0.97
+    static let staggerStep: Double = 0.03
 
-    /// Elevated surface for cards/sheets on dark.
-    static let gsDarkElevated = Color(red: 0.102, green: 0.122, blue: 0.157)
+    static func stagger(_ index: Int) -> Double { Double(index) * staggerStep }
 
-    /// Warm off-white text (dark mode).
-    static let gsDarkText = Color(red: 0.949, green: 0.941, blue: 0.922)
-}
-
-// MARK: - Design system
-
-/// "Premium intelligent editorial" design tokens.
-///
-/// Layered surfaces, subtle tonal differences, strong dark mode,
-/// editorial serif for display headlines, system sans everywhere else.
-enum GSTheme {
-
-    // MARK: Spacing
-
+    // MARK: Metrics
     enum Spacing {
         static let xs: CGFloat = 4
         static let s: CGFloat = 8
@@ -42,91 +75,42 @@ enum GSTheme {
         static let l: CGFloat = 24
         static let xl: CGFloat = 32
     }
-
-    // MARK: Corner radius
-
     enum Radius {
-        /// Standard card / input bar radius (moderate, editorial).
-        static let card: CGFloat = 12
-    }
-
-    // MARK: Elevation
-
-    enum Shadow {
-        static let color = Color.black.opacity(0.08)
-        static let radius: CGFloat = 6
-        static let x: CGFloat = 0
-        static let y: CGFloat = 2
-    }
-
-    // MARK: Typography
-
-    /// Editorial serif for big display headlines / branding moments.
-    static func displayTitle() -> Font {
-        .system(size: 34, weight: .semibold, design: .serif)
-    }
-
-    /// Section headings, card titles.
-    static func headline() -> Font {
-        .system(size: 20, weight: .semibold)
-    }
-
-    /// Default reading size.
-    static func body() -> Font {
-        .system(size: 16)
-    }
-
-    /// Supporting copy, labels, timestamps.
-    static func caption() -> Font {
-        .system(size: 13)
-    }
-
-    // MARK: Light / dark token sets
-
-    /// Semantic tokens resolved per appearance.
-    struct Palette {
-        let background: Color
-        let surface: Color
-        let elevatedSurface: Color
-        let text: Color
-        let textMuted: Color
-        let accent: Color
-
-        static let light = Palette(
-            background: .gsPaper,
-            surface: .white,
-            elevatedSurface: .white,
-            text: .gsInk,
-            textMuted: .gsInkMuted,
-            accent: .gsAccent
-        )
-
-        static let dark = Palette(
-            background: .gsDarkSurface,
-            surface: .gsDarkElevated,
-            elevatedSurface: .gsDarkElevated,
-            text: .gsDarkText,
-            textMuted: Color.white.opacity(0.55),
-            accent: .gsAccent
-        )
-    }
-
-    /// Resolves the correct token set for a given appearance.
-    static func palette(dark: Bool) -> Palette {
-        dark ? .dark : .light
+        static let card: CGFloat = 16
+        static let chip: CGFloat = 999
+        static let sheet: CGFloat = 24
+        static let input: CGFloat = 26
     }
 }
 
-// MARK: - View helpers
+// MARK: - Press feedback (kinetic scale)
+
+struct KineticPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? Aero.pressScale : 1)
+            .animation(Aero.spring, value: configuration.isPressed)
+    }
+}
+
+// MARK: - Card shadow (soft elevation)
+
+struct AeroCardShadow: ViewModifier {
+    func body(content: Content) -> some View {
+        content.shadow(color: Color.black.opacity(0.06), radius: 12, x: 0, y: 4)
+    }
+}
 
 extension View {
-    /// Standard soft elevation used across editorial cards.
-    func gsCardShadow() -> some View {
-        shadow(
-            color: GSTheme.Shadow.color,
-            radius: GSTheme.Shadow.radius,
-            x: GSTheme.Shadow.x,
-            y: GSTheme.Shadow.y
-        )
-    }
+    func aeroCardShadow() -> some View { modifier(AeroCardShadow()) }
+}
+
+// MARK: - Legacy token bridge (kept for earlier scaffold references)
+
+enum GSTheme {
+    static let accent = Aero.accent
+    static func displayTitle() -> Font { Aero.displayTitle() }
+    static func headline() -> Font { Aero.headline() }
+    static func body() -> Font { Aero.body() }
+    static func caption() -> Font { Aero.caption() }
 }

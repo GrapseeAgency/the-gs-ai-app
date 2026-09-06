@@ -1,6 +1,7 @@
 package com.grapsee.gsai
 
 import android.app.Application
+import com.grapsee.gsai.di.ServiceLocator
 import dagger.hilt.android.HiltAndroidApp
 
 /**
@@ -9,4 +10,9 @@ import dagger.hilt.android.HiltAndroidApp
  * fragments, ViewModels, workers) resolves from it.
  */
 @HiltAndroidApp
-class GSApplication : Application()
+class GSApplication : Application() {
+    override fun onCreate() {
+        super.onCreate()
+        ServiceLocator.init(this)
+    }
+}

@@ -1,6 +1,7 @@
 package com.grapsee.gsai.ui.home
 
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,299 +10,491 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.AddCircleOutline
+import androidx.compose.material.icons.outlined.Balance
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.History
-import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Mic
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.Psychology
+import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Speed
+import androidx.compose.material.icons.outlined.Subject
 import androidx.compose.material.icons.outlined.TravelExplore
 import androidx.compose.material.icons.outlined.Translate
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.grapsee.gsai.ui.components.GsCard
+import com.grapsee.gsai.ui.components.GsChip
+import com.grapsee.gsai.ui.components.GsInputBar
+import com.grapsee.gsai.ui.components.GsListItem
+import com.grapsee.gsai.ui.components.GsQuickActionTile
+import com.grapsee.gsai.ui.components.GsSectionHeader
+import com.grapsee.gsai.ui.navigation.GsRoutes
+import com.grapsee.gsai.ui.theme.GsMotion
+import com.grapsee.gsai.ui.theme.kineticPress
+import com.grapsee.gsai.ui.theme.rememberAuroraBrush
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 
 /**
- * Static seed of the HOME "AI command centre" per the product blueprint:
- * universal input bar, quick actions, resume-where-you-left-off. Pure static
- * UI for now — real state, navigation and data wiring arrive with the first
- * feature slices.
+ * AERUO KINETIC — HOME, the AI command centre.
+ * Editorial greeting → universal input → quick actions → discovery ladder.
+ * Aurora gradient appears exactly once: today's AI activity meter.
  */
 
-private data class Destination(
-    val label: String,
-    val icon: ImageVector
+private data class HomeAction(val label: String, val icon: ImageVector, val route: String)
+
+private val homeActions = listOf(
+    HomeAction("New chat", Icons.Outlined.Add, GsRoutes.chat(null)),
+    HomeAction("Voice", Icons.Outlined.Mic, GsRoutes.VOICE),
+    HomeAction("Analyse image", Icons.Outlined.Image, GsRoutes.chat(null)),
+    HomeAction("Analyse document", Icons.Outlined.Description, GsRoutes.chat(null)),
+    HomeAction("Write", Icons.Outlined.Edit, GsRoutes.chat(null)),
+    HomeAction("Research", Icons.Outlined.TravelExplore, GsRoutes.chat(null)),
+    HomeAction("Code", Icons.Outlined.Code, GsRoutes.chat(null)),
+    HomeAction("Translate", Icons.Outlined.Translate, GsRoutes.chat(null)),
+    HomeAction("Summarise", Icons.Outlined.Subject, GsRoutes.chat(null)),
+    HomeAction("Brainstorm", Icons.Outlined.Psychology, GsRoutes.chat(null)),
+    HomeAction("Generate image", Icons.Outlined.Palette, GsRoutes.chat(null))
 )
 
-private val destinations = listOf(
-    Destination("Home", Icons.Outlined.Home),
-    Destination("Chats", Icons.Outlined.ChatBubbleOutline),
-    Destination("Create", Icons.Outlined.AddCircleOutline),
-    Destination("Library", Icons.Outlined.Folder)
+private val suggestedPrompts = listOf(
+    "Draft a launch plan",
+    "Explain quantum computing",
+    "Debug my Kotlin code",
+    "Plan a trip to Kyoto"
 )
 
-private data class QuickAction(
-    val label: String,
-    val icon: ImageVector
+private data class ResumeItem(val title: String, val subtitle: String, val route: String)
+
+private val resumeItems = listOf(
+    ResumeItem("Brand voice guidelines", "Chat · 2h ago", GsRoutes.chat("demo-1")),
+    ResumeItem("Market research summary", "Research · yesterday", GsRoutes.chat("demo-2"))
 )
 
-private val quickActions = listOf(
-    QuickAction("New chat", Icons.Outlined.Add),
-    QuickAction("Voice", Icons.Outlined.Mic),
-    QuickAction("Image", Icons.Outlined.Image),
-    QuickAction("Files", Icons.Outlined.Description),
-    QuickAction("Write", Icons.Outlined.Edit),
-    QuickAction("Research", Icons.Outlined.TravelExplore),
-    QuickAction("Code", Icons.Outlined.Code),
-    QuickAction("Translate", Icons.Outlined.Translate)
+private data class ConversationItem(val title: String, val subtitle: String, val route: String)
+
+private val recentConversations = listOf(
+    ConversationItem("Packaging copy round 2", "Yesterday · 24 messages", GsRoutes.chat("demo-3")),
+    ConversationItem("Kotlin coroutine debug", "2 days ago · 12 messages", GsRoutes.chat("demo-4")),
+    ConversationItem("Kyoto itinerary", "Last week · 31 messages", GsRoutes.chat("demo-5"))
 )
 
-@Composable
-fun HomeScreen(modifier: Modifier = Modifier) {
-    var selectedDestination by remember { mutableIntStateOf(0) }
+private data class PinnedAssistant(val name: String, val category: String)
 
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
-        containerColor = MaterialTheme.colorScheme.background,
-        bottomBar = {
-            NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
-                destinations.forEachIndexed { index, destination ->
-                    NavigationBarItem(
-                        selected = selectedDestination == index,
-                        onClick = { selectedDestination = index },
-                        icon = {
-                            Icon(
-                                imageVector = destination.icon,
-                                contentDescription = destination.label
-                            )
-                        },
-                        label = { Text(destination.label) }
-                    )
-                }
-            }
-        }
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp)
-        ) {
-            Spacer(modifier = Modifier.height(8.dp))
-            GreetingHeader()
-            UniversalInputBar()
-            QuickActionsSection()
-            HorizontalDivider(
-                thickness = 1.dp,
-                color = MaterialTheme.colorScheme.outlineVariant
-            )
-            ContinueSection()
-            Spacer(modifier = Modifier.height(16.dp))
-        }
-    }
+private val pinnedAssistants = listOf(
+    PinnedAssistant("WriteWell", "Writing"),
+    PinnedAssistant("CodeCompanion", "Coding")
+)
+
+private data class ProjectRowItem(val title: String, val subtitle: String, val route: String)
+
+private val recentProjects = listOf(
+    ProjectRowItem("Brand Refresh 2025", "8 chats · 14 files · 3 members", GsRoutes.project("project-brand")),
+    ProjectRowItem("Q3 Launch Plan", "12 chats · 9 files · 2 members", GsRoutes.project("project-launch"))
+)
+
+private data class ModelCard(val name: String, val tagline: String, val icon: ImageVector)
+
+private val recommendedModels = listOf(
+    ModelCard("GS Swift", "Fast", Icons.Outlined.Speed),
+    ModelCard("GS Balanced", "Everyday reasoning", Icons.Outlined.Balance),
+    ModelCard("GS Deep", "Long-horizon reasoning", Icons.Outlined.Psychology)
+)
+
+private data class DiscoverCard(val label: String, val blurb: String, val icon: ImageVector, val route: String)
+
+private val discoverCards = listOf(
+    DiscoverCard("Vision", "Analyse any image", Icons.Outlined.Visibility, GsRoutes.chat(null)),
+    DiscoverCard("Voice mode", "Talk it through", Icons.Outlined.Mic, GsRoutes.VOICE),
+    DiscoverCard("Web research", "Cited answers", Icons.Outlined.Public, GsRoutes.chat(null))
+)
+
+private fun greetingForHour(hour: Int): String = when (hour) {
+    in 5..11 -> "Good morning"
+    in 12..17 -> "Good afternoon"
+    else -> "Good evening"
 }
 
 @Composable
-private fun GreetingHeader() {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(
-            text = "Good day",
-            style = MaterialTheme.typography.headlineLarge, // serif — editorial voice
-            color = MaterialTheme.colorScheme.onBackground
-        )
-        Text(
-            text = "Your AI command centre",
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-}
-
-@Composable
-private fun UniversalInputBar() {
-    // Disabled-looking universal input: non-clickable Surface, muted palette.
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(28.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+fun HomeScreen(onNavigate: (String) -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = GsMotion.spaceM),
+        verticalArrangement = Arrangement.spacedBy(GsMotion.spaceL)
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Spacer(Modifier.height(GsMotion.spaceS))
+        GreetingHeader(onNavigate)
+        UniversalInput(onNavigate)
+        QuickActionsSection(onNavigate)
+        SuggestedPromptsSection(onNavigate)
+        ContinueSection(onNavigate)
+        RecentConversationsSection(onNavigate)
+        PinnedAssistantsSection(onNavigate)
+        RecentProjectsSection(onNavigate)
+        RecommendedModelsSection(onNavigate)
+        ActivityTodaySection()
+        DiscoverSection(onNavigate)
+        Spacer(Modifier.height(GsMotion.spaceL))
+    }
+}
+
+@Composable
+private fun GreetingHeader(onNavigate: (String) -> Unit) {
+    Row(verticalAlignment = Alignment.Top) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(GsMotion.spaceXS)
         ) {
-            Icon(
-                imageVector = Icons.Outlined.Search,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.width(12.dp))
             Text(
-                text = "Ask anything…",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                text = greetingForHour(Calendar.getInstance().get(Calendar.HOUR_OF_DAY)),
+                style = MaterialTheme.typography.displayLarge,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+            Text(
+                text = SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()).format(Date()),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        HeaderIcon(Icons.Outlined.Notifications, "Notifications") { onNavigate(GsRoutes.NOTIFICATIONS) }
+        HeaderIcon(Icons.Outlined.Settings, "Settings") { onNavigate(GsRoutes.SETTINGS) }
+        HeaderIcon(Icons.Outlined.Search, "Search") { onNavigate(GsRoutes.SEARCH) }
+    }
+}
+
+@Composable
+private fun HeaderIcon(icon: ImageVector, label: String, onClick: () -> Unit) {
+    IconButton(onClick = onClick) {
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            tint = MaterialTheme.colorScheme.onBackground,
+            modifier = Modifier.size(22.dp)
+        )
+    }
+}
+
+@Composable
+private fun UniversalInput(onNavigate: (String) -> Unit) {
+    // InputBar is intentionally disabled; the wrapping Surface owns the click
+    // so the whole pill feels kinetic and opens a fresh chat.
+    Surface(
+        onClick = { onNavigate(GsRoutes.chat(null)) },
+        modifier = Modifier
+            .fillMaxWidth()
+            .kineticPress(),
+        shape = RoundedCornerShape(GsMotion.radiusInput),
+        color = MaterialTheme.colorScheme.surfaceContainerLow
+    ) {
+        GsInputBar(
+            value = "",
+            onValueChange = {},
+            onSend = {},
+            enabled = false,
+            placeholder = "Ask anything…"
+        )
+    }
+}
+
+@Composable
+private fun QuickActionsSection(onNavigate: (String) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceM)) {
+        GsSectionHeader(title = "Quick actions")
+        ActionRow(homeActions.take(6), onNavigate)
+        ActionRow(homeActions.drop(6), onNavigate)
+    }
+}
+
+@Composable
+private fun ActionRow(actions: List<HomeAction>, onNavigate: (String) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
+    ) {
+        actions.forEach { action ->
+            GsQuickActionTile(
+                label = action.label,
+                icon = action.icon,
+                onClick = { onNavigate(action.route) },
                 modifier = Modifier.weight(1f)
             )
-            Icon(
-                imageVector = Icons.Outlined.Mic,
-                contentDescription = "Voice input",
-                tint = MaterialTheme.colorScheme.primary
+        }
+    }
+}
+
+@Composable
+private fun SuggestedPromptsSection(onNavigate: (String) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)) {
+        GsSectionHeader(title = "Suggested prompts")
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
+        ) {
+            suggestedPrompts.forEach { prompt ->
+                GsChip(text = prompt, selected = false) { onNavigate(GsRoutes.chat(null)) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ContinueSection(onNavigate: (String) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)) {
+        GsSectionHeader(title = "Continue where you left off")
+        resumeItems.forEach { item ->
+            GsListItem(
+                title = item.title,
+                subtitle = item.subtitle,
+                leading = { IconBadge(Icons.Outlined.History) },
+                onClick = { onNavigate(item.route) }
             )
         }
     }
 }
 
 @Composable
-private fun QuickActionsSection() {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(
-            text = "Quick actions",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onBackground
-        )
-        // Fixed-height grid (2 rows x 4 columns) nested inside a scrollable
-        // column; scrolling is delegated to the parent column.
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(4),
+private fun RecentConversationsSection(onNavigate: (String) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)) {
+        GsSectionHeader(title = "Recent conversations")
+        recentConversations.forEach { item ->
+            GsListItem(
+                title = item.title,
+                subtitle = item.subtitle,
+                leading = { IconBadge(Icons.Outlined.ChatBubbleOutline) },
+                onClick = { onNavigate(item.route) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun PinnedAssistantsSection(onNavigate: (String) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)) {
+        GsSectionHeader(title = "Pinned assistants")
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(200.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            userScrollEnabled = false
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
         ) {
-            items(quickActions) { action ->
-                QuickActionCell(action)
-            }
-        }
-    }
-}
-
-@Composable
-private fun QuickActionCell(action: QuickAction) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Surface(
-            shape = RoundedCornerShape(18.dp),
-            color = MaterialTheme.colorScheme.surfaceContainer,
-            modifier = Modifier.size(56.dp)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = action.icon,
-                    contentDescription = action.label,
-                    tint = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-        }
-        Text(
-            text = action.label,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
-}
-
-@Composable
-private fun ContinueSection() {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(
-            text = "Continue where you left off",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onBackground
-        )
-        ResumeCard(
-            title = "Brand voice guidelines",
-            subtitle = "Chat · Yesterday"
-        )
-        ResumeCard(
-            title = "Market research summary",
-            subtitle = "Research · 2 days ago"
-        )
-    }
-}
-
-@Composable
-private fun ResumeCard(title: String, subtitle: String) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-    ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Surface(
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                modifier = Modifier.size(40.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = Icons.Outlined.History,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(20.dp)
+            pinnedAssistants.forEach { assistant ->
+                GsCard(
+                    modifier = Modifier.width(160.dp),
+                    onClick = { onNavigate(GsRoutes.ASSISTANTS) }
+                ) {
+                    Text(
+                        text = assistant.name,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = assistant.category,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        }
+    }
+}
+
+@Composable
+private fun RecentProjectsSection(onNavigate: (String) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)) {
+        GsSectionHeader(title = "Recent projects")
+        recentProjects.forEach { item ->
+            GsListItem(
+                title = item.title,
+                subtitle = item.subtitle,
+                leading = { IconBadge(Icons.Outlined.Folder) },
+                onClick = { onNavigate(item.route) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun RecommendedModelsSection(onNavigate: (String) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)) {
+        GsSectionHeader(title = "Recommended models")
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
+        ) {
+            recommendedModels.forEach { model ->
+                GsCard(
+                    modifier = Modifier.width(150.dp),
+                    onClick = { onNavigate(GsRoutes.MODELS) }
+                ) {
+                    IconBadge(icon = model.icon, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.height(GsMotion.spaceS))
+                    Text(
+                        text = model.name,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = model.tagline,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ActivityTodaySection() {
+    Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)) {
+        GsSectionHeader(title = "Today's AI activity")
+        GsCard(onClick = null) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
+            ) {
                 Text(
-                    text = title,
+                    text = "12 chats",
                     style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
+                    text = "·",
+                    style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                Text(
+                    text = "3 docs",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "·",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "45m voice",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
             }
+            Spacer(Modifier.height(GsMotion.spaceM))
+            // The one sanctioned aurora moment on Home — AI was alive today.
+            Box(
+                modifier = Modifier
+                    .width(120.dp)
+                    .height(10.dp)
+                    .background(
+                        brush = rememberAuroraBrush(),
+                        shape = RoundedCornerShape(5.dp)
+                    )
+            )
+        }
+    }
+}
+
+@Composable
+private fun DiscoverSection(onNavigate: (String) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)) {
+        GsSectionHeader(title = "Discover more")
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
+        ) {
+            discoverCards.forEach { card ->
+                GsCard(
+                    modifier = Modifier.weight(1f),
+                    onClick = { onNavigate(card.route) }
+                ) {
+                    IconBadge(icon = card.icon)
+                    Spacer(Modifier.height(GsMotion.spaceS))
+                    Text(
+                        text = card.label,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = card.blurb,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun IconBadge(
+    icon: ImageVector,
+    modifier: Modifier = Modifier,
+    container: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    tint: Color = MaterialTheme.colorScheme.onSurfaceVariant
+) {
+    Surface(
+        shape = CircleShape,
+        color = container,
+        modifier = modifier.size(38.dp)
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = tint,
+                modifier = Modifier.size(18.dp)
+            )
         }
     }
 }

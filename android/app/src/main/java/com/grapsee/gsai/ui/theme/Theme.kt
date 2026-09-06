@@ -5,90 +5,50 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
 
-/**
- * Material 3 color schemes for the "premium intelligent editorial" direction.
- *
- * Light: warm paper surfaces, strong ink text, copper accent.
- * Dark: deep ink surfaces (near-black navy, not flat grey), warm text,
- * copper accent lifted for dark surfaces. Surface-container roles are set
- * explicitly so layered surfaces tone-step through the palette instead of
- * Material's baseline purple-tinted defaults.
- */
-private val LightColors = lightColorScheme(
-    primary = AccentCopper,
-    onPrimary = PaperElevated,
-    primaryContainer = AccentSoft,
-    onPrimaryContainer = EmberDeep,
-    inversePrimary = AccentSoft,
-    secondary = Ink,
-    onSecondary = Paper,
-    secondaryContainer = PaperShade,
-    onSecondaryContainer = Ink,
-    tertiary = EmberDeep,
-    onTertiary = Paper,
-    tertiaryContainer = SandContainer,
-    onTertiaryContainer = SandDeep,
-    background = Paper,
-    onBackground = Ink,
-    surface = Paper,
-    onSurface = Ink,
-    surfaceVariant = PaperShade,
-    onSurfaceVariant = InkMuted,
-    surfaceTint = AccentCopper,
-    inverseSurface = Ink,
-    inverseOnSurface = Paper,
-    outline = InkOutline,
-    outlineVariant = PaperBorder,
-    surfaceDim = PaperDim,
-    surfaceBright = PaperElevated,
-    surfaceContainerLowest = PaperElevated,
-    surfaceContainerLow = PaperContainerLow,
-    surfaceContainer = PaperContainer,
-    surfaceContainerHigh = PaperContainerHigh,
-    surfaceContainerHighest = PaperContainerHighest,
-    primaryFixed = AccentSoft,
-    primaryFixedDim = CopperFixedDim,
-    onPrimaryFixed = EmberDeep,
-    onPrimaryFixedVariant = EmberDeep
+private val LightScheme = lightColorScheme(
+    primary = Aeruo.Accent,
+    onPrimary = Color.White,
+    primaryContainer = Aeruo.ContainerLight,
+    onPrimaryContainer = Aeruo.Ink,
+    secondary = Aeruo.AccentDeep,
+    onSecondary = Color.White,
+    background = Aeruo.Paper,
+    onBackground = Aeruo.Ink,
+    surface = Aeruo.SurfaceLight,
+    onSurface = Aeruo.Ink,
+    surfaceVariant = Aeruo.ContainerLowLight,
+    onSurfaceVariant = Aeruo.InkMuted,
+    surfaceContainerLowest = Aeruo.SurfaceLight,
+    surfaceContainerLow = Aeruo.ContainerLowLight,
+    surfaceContainer = Aeruo.ContainerLight,
+    surfaceContainerHigh = Aeruo.ContainerHighLight,
+    surfaceContainerHighest = Aeruo.ContainerHighLight,
+    outline = Aeruo.OutlineLight,
+    outlineVariant = Aeruo.OutlineLight
 )
 
-private val DarkColors = darkColorScheme(
-    primary = AccentCopperDark,
-    onPrimary = InkBlack,
-    primaryContainer = AccentSoftDark,
-    onPrimaryContainer = EmberSoftDark,
-    inversePrimary = AccentCopper,
-    secondary = TextPrimary,
-    onSecondary = InkBlack,
-    secondaryContainer = InkContainer,
-    onSecondaryContainer = TextPrimary,
-    tertiary = EmberSoftDark,
-    onTertiary = InkBlack,
-    tertiaryContainer = EmberContainerDark,
-    onTertiaryContainer = EmberSoftDark,
-    background = InkBlack,
-    onBackground = TextPrimary,
-    surface = InkBlack,
-    onSurface = TextPrimary,
-    surfaceVariant = SurfaceDark,
-    onSurfaceVariant = TextMuted,
-    surfaceTint = AccentCopperDark,
-    inverseSurface = TextPrimary,
-    inverseOnSurface = InkBlack,
-    outline = InkOutlineDark,
-    outlineVariant = SurfaceBorderDark,
-    surfaceDim = InkBlack,
-    surfaceBright = SurfaceBrightDark,
-    surfaceContainerLowest = InkContainerLowest,
-    surfaceContainerLow = SurfaceDark,
-    surfaceContainer = InkContainer,
-    surfaceContainerHigh = SurfaceElevated,
-    surfaceContainerHighest = InkContainerHighest,
-    primaryFixed = AccentSoft,
-    primaryFixedDim = CopperFixedDim,
-    onPrimaryFixed = EmberDeep,
-    onPrimaryFixedVariant = EmberDeep
+private val DarkScheme = darkColorScheme(
+    primary = Aeruo.Accent,
+    onPrimary = Color(0xFF06231C),
+    primaryContainer = Aeruo.ContainerDark,
+    onPrimaryContainer = Aeruo.TextDark,
+    secondary = Aeruo.Accent,
+    onSecondary = Color(0xFF06231C),
+    background = Aeruo.Obsidian,
+    onBackground = Aeruo.TextDark,
+    surface = Aeruo.SurfaceDark,
+    onSurface = Aeruo.TextDark,
+    surfaceVariant = Aeruo.RaisedDark,
+    onSurfaceVariant = Aeruo.TextMutedDark,
+    surfaceContainerLowest = Aeruo.Obsidian,
+    surfaceContainerLow = Aeruo.ContainerLowDark,
+    surfaceContainer = Aeruo.ContainerDark,
+    surfaceContainerHigh = Aeruo.ContainerHighDark,
+    surfaceContainerHighest = Aeruo.ContainerHighDark,
+    outline = Aeruo.OutlineDark,
+    outlineVariant = Aeruo.OutlineDark
 )
 
 @Composable
@@ -97,7 +57,7 @@ fun TheGsAiTheme(
     content: @Composable () -> Unit
 ) {
     MaterialTheme(
-        colorScheme = if (darkTheme) DarkColors else LightColors,
+        colorScheme = if (darkTheme) DarkScheme else LightScheme,
         typography = GsTypography,
         content = content
     )
