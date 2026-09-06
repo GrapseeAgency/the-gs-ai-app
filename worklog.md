@@ -320,3 +320,22 @@ Stage Summary:
 - Sample-data coherence across screens: demo-1="Q3 pricing strategy", demo-2="Kyoto trip plan"; asst-1="Research Scout", asst-2="Copysmith"; project ids/names match ProjectsView ↔ ProjectDetailView; Library's saved message matches Search's message sample.
 - Deviations: (1) Vision capability card is static — task defines routes only for Voice (.voice) and Research (.chat(nil)); (2) Home quick actions follow task routes exactly (Voice→.voice, others→.chat(nil)); (3) Project detail chats use demo-1/2/3 per the demo-N pattern; Files/Activity/Members rows are static (task gives no routes); (4) Library rows/collections are static display (task gives no routes; ellipsis is a static affordance); (5) Projects creation is an alert placeholder per the task's "better" option; (6) Home body split into two stacked ViewBuilder groups (11 staggered sections) to respect the classic 10-children ViewBuilder limit on older Xcode/iOS 16 SDKs; (7) nav bar hidden on Home/Explore/Create (custom headers), visible on Library/Projects (toolbar items) and on pushed ProjectDetail/Search — with .toolbar(.visible) re-asserted on pushed screens to survive hidden-bar roots.
 - Style discipline: Aero tokens only (zero raw colors), serif reserved for display/hero headlines, aurora gradient only in the Home "Today" AI-activity bar, Spacing.m horizontal rhythm, KineticPressStyle on every tappable, staggered entrances everywhere.
+---
+Task ID: 7-a (autonomous cycle round 1)
+Agent: Z.ai Code (cron webDevReview)
+Task: QA + web dashboard + backend hardening + iOS Chats wiring
+
+Work Log:
+- Status assessment: backend QA green (health/models/conversations), dev.log clean, found + pushed stray subagent worklog auto-commit (479d35e)
+- agent-browser QA of old page (template) → built src/app/page.tsx: Aeruo Kinetic command centre — health pill, stat cards, live model catalogue (speed dots), recent conversations, LIVE STREAMING CHAT panel (fetch + ReadableStream SSE parser, delta rendering with pulsing aurora caret, stop-generation, error banner, Enter-to-send), obsidian palette + serif display + sticky footer
+- Fixed regression mid-round: sed &-expansion mangled layout.tsx description (build error caught by agent-browser snapshot) → repaired via Edit; metadata now GS AI brand
+- End-to-end proof in real browser: typed "Reply with exactly: Aeruo Kinetic confirmed" → streamed reply rendered in DOM (conversation cmtq3tfwz0…), screenshot at download/dashboard-qa.png
+- src/lib/rate-limit.ts: sliding-window in-memory limiter; applied to messages POST (20/min/client → 429 + Retry-After). Verified: 20×200 → 429 429
+- iOS ChatsListView wired to APIClient: live conversation rows (relative-time formatter), pull-to-refresh + on-appear reload, SkeletonBlocks while loading, OfflineBanner + sample fallback when backend down
+- Pushed 103787a (7 files)
+
+Stage Summary:
+- Web preview is now a REAL client of the platform contract — the user can see and use the app in the preview panel
+- Rate limiting live (in-memory; swap to Redis at scale). NOTE: observed one transient 502 on upstream LLM call — next round add provider-retry on non-stream path
+- iOS compile still pending CI (workflow scope blocker unchanged — workflows stay quarantined)
+- Recommended next round: provider-retry/timeout hardening → web dashboard polish (conversation click loads history) → Android ChatsScreen already live — add backend-driven unread/pin actions → start Prisma-backed Assistant endpoints
