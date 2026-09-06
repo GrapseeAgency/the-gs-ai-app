@@ -103,6 +103,25 @@ Stage Summary:
 - NEXT: user will teach more lessons before any build begins.
 
 ---
+Task ID: 5 (5-a main + 5-b/5-c subagents)
+Agent: Z.ai Code (main) + 2 general-purpose subagents
+Task: Set up the development environment — monorepo, native scaffolds, CI, contracts, docs
+
+Work Log:
+- Audited sandbox: JDK 21, bun 1.3.14, node 24, no gradle/kotlinc/xcodegen locally (expected), network OK, repo is PUBLIC (macOS runners free)
+- 5-b (subagent): Android scaffold — settings.gradle.kts, root build.gradle.kts, gradle.properties (+android.suppressUnsupportedCompileSdk=35 added by main), wrapper properties (Gradle 8.9), libs.versions.toml (AGP 8.5.2, Kotlin 2.0.20, KSP 2.0.20-1.0.25, Hilt 2.52, Compose BOM 2024.09.03, minSdk 26/target 35), app module with @HiltAndroidApp + MainActivity + editorial theme (Color/Type/Theme, lightColorScheme/darkColorScheme Material3) + HomeScreen command-centre (NavigationBar, input bar, 8 quick actions, resume cards). Uses Material3 lightColorScheme (not M2 lightColors) — correct
+- 5-c (subagent): iOS scaffold — project.yml (XcodeGen: app target com.grapsee.gsai iOS 16.0, Swift 5.9, CODE_SIGNING_ALLOWED NO, AppTests target, GSApp scheme), GSApp.swift, DesignSystem.swift (GSTheme tokens), HomeView.swift (TabView + command centre seed, iOS 16-safe APIs), DesignSystemTests.swift, ios/.gitignore
+- 5-a (main): .github/workflows/{android-ci.yml (ubuntu, JDK17, gradle wrapper bootstrap, assembleDebug+lintDebug, APK artifact), ios-ci.yml (macos-14, brew xcodegen, xcodegen generate, xcodebuild generic simulator build; tests commented until phase 2), backend-ci.yml (bun install + lint)}; shared-contracts/{README.md, openapi.yaml v0.1.0 (health, models, conversations CRUD, messages POST with SSE)}; docs/{ARCHITECTURE.md, DECISIONS.md (ADR-001..007 incl. OPEN BYOK question), ROADMAP.md (Phase 0-3)}; infrastructure/README.md; scripts/verify-env.sh; root README rewritten (monorepo + badges); root .gitignore + android/ios ignores
+- verify-env.sh passes all critical checks
+- Commit 21ec34c pushed to origin/main (Grapsee-Official)
+
+Stage Summary:
+- ⚠️ BLOCKER: GitHub token lacks `workflow` scope → pushes containing .github/workflows/*.yml are REJECTED. Workflows are written locally but quarantined via .git/info/exclude (local-only). NEXT SESSION: once user adds `workflow` scope to PAT (classic PAT: Settings→Developer settings→Tokens→edit→check "workflow"; fine-grained: enable "Workflows" permission), remove the exclude line, `git add -A`, push. Then CI runs green and produces first APK/simulator build artifacts.
+- OPEN DECISION (ADR-005, user must answer): platform-managed model keys only (recommended for MVP) vs bring-your-own-key (BYOK) — affects auth, security, billing, model routing.
+- Phase 0 complete per docs/ROADMAP.md. Next phase: chat MVP walking skeleton (Prisma schema + SSE backend + chat screens both platforms).
+
+
+---
 Task ID: 5-b
 Agent: Z.ai Code (Android scaffold sub-agent)
 Task: Scaffold Android native project
