@@ -582,3 +582,24 @@ Stage Summary:
 - First real LiveUpdate delivery: v0.2.0 phones → pill → one tap → v0.3.0 with the new trending rows (loop proven end-to-end)
 - Design parity with the three benchmark apps advanced: home canvas now carries explore/trending content, not just static suggestions
 - Backlog remaining: voice press-and-hold from the hero orb, assistants CRUD native wiring (deferred until user asks for live backend), edge states, Room/SwiftData polish
+
+---
+Task ID: 17 (cron cycle — voice press-and-hold from the hero orb + v0.4.0 shipped via LiveUpdate)
+Agent: Z.ai Code (main)
+Task: Build QA, advance top backlog item (voice press-and-hold on the hero input, both platforms), publish v0.4.0.
+
+Work Log:
+- BUILD QA: :app:assembleDebug BUILD SUCCESSFUL (16s up-to-date baseline, 1m25s/1m28s after changes); toolchain intact (Gradle 8.9 / JDK 17 / SDK 35)
+- ANDROID (HomeScreen.kt): hero aurora orb now press-and-hold to dictate — pointerInput detectTapGestures onPress with 280ms hold timer (holdScope.launch); quick tap still opens full voice mode (GsRoutes.VOICE); SpeechRecognizer with EXTRA_PARTIAL_RESULTS streams live transcript into the hero line ("Listening…" → partial text), pulsing aurora halo (VoicePulseHalo, scale+alpha infinite transition) while listening; release → stopListening → onResults navigates GsRoutes.chat(null, transcript); RECORD_AUDIO runtime request via rememberLauncherForActivityResult, grant picks the hold back up, deny dissolves to idle; every failure path quiet (onError → quietReset, runCatching around recognizer setup, no-recognition-service → silent VOICE fallback)
+- ANDROID plumbing: GsRoutes.chat(conversationId, prompt) gains ?prompt= query arg (Uri.encode); GsNavHost passes ARG_PROMPT → ChatScreen(prefillPrompt:) which seeds the composer once (LaunchedEffect); AndroidManifest += RECORD_AUDIO (manifest-level note: system installer still applies this as a normal update install, permission shows in the install dialog)
+- iOS (HomeView.swift): mirrored voiceHoldOrb — DragGesture(minimumDistance:0) press/release with 280ms Task timer; hold → VoiceDictation.begin(), release → end(); live partials replace "Ask anything" (lineLimit 1, link disabled while listening); aurora halo scaleEffect pulse; quick tap → onRoute(.voice) via new programmatic route bridge (RootView passes path.append)
+- iOS (VoiceDictation.swift, new): SFSpeechRecognizer + AVAudioEngine buffer recognition; sequential permission resolution (speech auth → mic) re-entered until both settle; 0.7s grace after endAudio for isFinal, partial fallback; onFinish("") ignored at call site; teardownCapture on every exit — nothing surfaces as an error
+- iOS plumbing: AeroRoute.chatPrefill(String) + destination → ChatDetailView(conversationID: nil, prefill:); composer seeded in onAppear; project.yml info properties += NSSpeechRecognitionUsageDescription + NSMicrophoneUsageDescription
+- iOS STATIC GATES (scripts/ios_static_gates.py): brace/paren balance CLEAN on all 4 touched files, banned-API sweep CLEAN (no fontDesign/SwiftData/@Observable/ContentUnavailableView/symbolEffect/two-param onChange/AVAudioApplication)
+- VERSION: versionCode 4 / versionName 0.4.0; APK copied to download/GS-AI-App.apk; update-manifest.json bumped (versionCode 4) — v0.3.0 phones will surface the LiveUpdate pill for this build
+- PUBLISHED: commit 237980a pushed; GitHub Release v0.4.0 created (REL_ID 383728825, asset upload HTTP 201) — /releases/latest/download/ permalink verified serving versionCode 4 (19,452,860 bytes), stable signature b1ffd75d… intact (install-over works)
+
+Stage Summary:
+- Headline benchmark feature landed: ChatGPT-style hold-to-talk on the hero input, both platforms, with silent failure paths everywhere
+- Manifest note: this build ADDS RECORD_AUDIO — the in-app update installs fine via the system installer (dialog lists the new permission); no uninstall needed
+- Backlog remaining: assistants CRUD + pin/archive native wiring (deferred until live backend ask), edge states, Room/SwiftData polish
