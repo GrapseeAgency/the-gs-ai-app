@@ -156,6 +156,10 @@ fun ArchivedChatsScreen(onBack: () -> Unit) {
             onDelete = {
                 actionTarget = null
                 scope.launch { runCatching { ServiceLocator.chat.delete(target.id) } }
+            },
+            onRename = { name ->
+                actionTarget = null
+                scope.launch { runCatching { ServiceLocator.chat.rename(target.id, name) } }
             }
         )
     }

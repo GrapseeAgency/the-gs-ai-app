@@ -263,7 +263,14 @@ fun GsDrawerContent(
             onDismiss = { actionTarget = null },
             onTogglePin = { mutate { c -> ServiceLocator.chat.setPinned(c.id, !c.pinned) } },
             onArchive = { mutate { c -> ServiceLocator.chat.setArchived(c.id, true) } },
-            onDelete = { mutate { c -> ServiceLocator.chat.delete(c.id) } }
+            onDelete = { mutate { c -> ServiceLocator.chat.delete(c.id) } },
+            onRename = { name ->
+                val target = actionTarget
+                actionTarget = null
+                if (target != null) {
+                    scope.launch { runCatching { ServiceLocator.chat.rename(target.id, name) } }
+                }
+            }
         )
     }
 }

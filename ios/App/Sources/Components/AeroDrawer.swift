@@ -13,6 +13,9 @@ struct AeroDrawer: View {
 
     @ObservedObject private var store = ConversationStore.shared
 
+    @State private var renameTarget: StoredConversation?
+    @State private var renameDraft = ""
+
     // Forced-obsidian palette (fixed benchmark-dark in both appearances)
     private let panel = Aero.dynamic(
         light: UIColor(red: 0.039, green: 0.051, blue: 0.071, alpha: 1),
@@ -32,6 +35,9 @@ struct AeroDrawer: View {
             Color.black.opacity(0.5)
                 .ignoresSafeArea()
                 .onTapGesture { onClose() }
+                .gesture(DragGesture(minimumDistance: 25).onEnded { value in
+                    if value.translation.width < -50 { onClose() }
+                })
                 .transition(.opacity)
 
             VStack(alignment: .leading, spacing: 0) {
@@ -81,7 +87,27 @@ struct AeroDrawer: View {
             .padding(.top, Aero.Spacing.xl)
             .frame(maxHeight: .infinity, alignment: .top)
             .background(panel)
+            .gesture(DragGesture(minimumDistance: 25).onEnded { value in
+                // Horizontal left-swipe anywhere on the panel dismisses.
+                if value.translation.width < -60 { onClose() }
+            })
             .transition(.move(edge: .leading).combined(with: .opacity))
+        }
+        .alert("Rename chat", isPresented: Binding(
+            get: { renameTarget != nil },
+            set: { if !$0 { renameTarget = nil } }
+        )) {
+            TextField("Chat name", text: $renameDraft)
+            Button("Rename") {
+                if let target = renameTarget {
+                    store.rename(id: target.id, to: renameDraft)
+                    sync(target.id, title: renameDraft)
+                }
+                renameTarget = nil
+            }
+            Button("Cancel", role: .cancel) { renameTarget = nil }
+        } message: {
+            Text("Give this conversation a name you'll recognise.")
         }
     }
 
@@ -105,6 +131,12 @@ struct AeroDrawer: View {
                 Label(conversation.pinned ? "Unpin" : "Pin to top", systemImage: "pin")
             }
             Button {
+                renameTarget = conversation
+                renameDraft = conversation.title
+            } label: {
+                Label("Rename…", systemImage: "pencil")
+            }
+            Button {
                 store.setArchived(id: conversation.id, true)
                 sync(conversation.id, archived: true)
             } label: {
@@ -119,9 +151,9 @@ struct AeroDrawer: View {
         }
     }
 
-    private func sync(_ id: String, pinned: Bool? = nil, archived: Bool? = nil) {
+    private func sync(_ id: String, pinned: Bool? = nil, archived: Bool? = nil, title: String? = nil) {
         guard !id.hasPrefix("demo-"), !id.hasPrefix("local-") else { return }
-        Task { try? await APIClient.shared.updateConversation(id: id, pinned: pinned, archived: archived) }
+        Task { try? await APIClient.shared.updateConversation(id: id, pinned: pinned, archived: archived, title: title) }
     }
 
     private func syncDelete(_ id: String) {

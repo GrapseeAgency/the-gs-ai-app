@@ -16,6 +16,7 @@ struct HomeView: View {
     }
     @State private var activeWorkspace: HomeWorkspace?
     @State private var breathe: CGFloat = 1.0
+    @State private var taglineIndex = 0
 
     // Forced-obsidian canvas (fixed benchmark-dark in both appearances)
     private let canvas = Aero.dynamic(
@@ -48,6 +49,13 @@ struct HomeView: View {
         .onAppear {
             withAnimation(.easeInOut(duration: 2.4).repeatForever(autoreverses: true)) {
                 breathe = 1.06
+            }
+        }
+        .task {
+            // Claude-style tagline rotation — one quiet crossfade every few seconds.
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 5_200_000_000)
+                withAnimation(.easeInOut(duration: 0.7)) { taglineIndex += 1 }
             }
         }
         .fullScreenCover(item: $activeWorkspace) { workspace in
@@ -137,9 +145,11 @@ struct HomeView: View {
                 .foregroundColor(ink)
                 .multilineTextAlignment(.center)
 
-            Text("What should we make today?")
+            Text(taglines[taglineIndex % taglines.count])
                 .font(Aero.body())
                 .foregroundColor(muted)
+                .id(taglineIndex)
+                .transition(.opacity)
                 .padding(.bottom, Aero.Spacing.s)
 
             NavigationLink(value: AeroRoute.billing) {
@@ -168,6 +178,13 @@ struct HomeView: View {
         case 12...17: return "Good afternoon, Admin"
         default: return "Good evening, Admin"
         }
+    }
+
+    /// Time-aware tagline set; the hero crossfades one line every few seconds.
+    private var taglines: [String] {
+        let hour = Calendar.current.component(.hour, from: Date())
+        let first = (hour >= 23 || hour < 5) ? "Working while the world sleeps?" : "What should we make today?"
+        return [first, "Ask, build, refine — all in one thread.", "Your move. GS is listening."]
     }
 
     // MARK: Bottom cluster — suggestions · chips · hero input

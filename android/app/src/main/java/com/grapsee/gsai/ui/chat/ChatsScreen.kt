@@ -206,6 +206,10 @@ fun ChatsScreen(onNavigate: (String) -> Unit) {
             onDelete = {
                 actionTarget = null
                 scope.launch { runCatching { ServiceLocator.chat.delete(target.id) } }
+            },
+            onRename = { name ->
+                actionTarget = null
+                scope.launch { runCatching { ServiceLocator.chat.rename(target.id, name) } }
             }
         )
     }

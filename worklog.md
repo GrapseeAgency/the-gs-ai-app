@@ -483,3 +483,18 @@ Stage Summary:
 - Chat history is now REAL on both platforms: threads survive relaunch (Room / JSON store), drawer + Chats + Archive read live data with benchmark pin/archive/delete, and a stopped backend never breaks the experience (graceful offline notice + local conversation creation) — flipping the backend on resumes live streaming with zero code changes
 - Known trade-offs documented: server refresh overwrites locally-pinned server rows when the PATCH echo never got through (both platforms); demo-/local- ids never sync
 - Next backlog: ChatGPT-style explore rows under the home canvas greeting, Claude-style rotating taglines, voice press-and-hold from the hero orb, iOS drawer drag-to-close, Room-facing rename UI in Chats
+
+---
+Task ID: 11 (autonomous cycle round 3, part 2 — polish backlog)
+Agent: Z.ai Code (main)
+Task: Rename actions (full CRUD), Claude-style rotating tagline, iOS drawer swipe-to-close
+
+Work Log:
+- ANDROID: shared ConversationActionsSheet gained "Rename" (DriveFileRenameOutline) with an inline AlertDialog (OutlinedTextField pre-filled, Rename gated on non-blank) — wired into GsDrawer, ChatsScreen and ArchivedChatsScreen via ChatRepository.rename (local-first + best-effort PATCH); HomeScreen hero's static line replaced by RotatingTagline (AnimatedContent crossfade 700ms, 5.2s cadence, time-aware first line "Working while the world sleeps?" 23:00–04:59)
+- iOS: AeroDrawer recent rows gained "Rename…" (alert with TextField — iOS16-safe) + horizontal swipe-to-close on BOTH the dim (50pt threshold) and the panel (60pt); ChatsListView + ArchivedChatsView gained the same Rename… context-menu entry + alert, syncing through APIClient.updateConversation(title:); HomeView hero got the same rotating tagline (.task timer + .id/.transition(.opacity) crossfade), taglineIndex state added
+- VERIFY: Android :app:assembleDebug BUILD SUCCESSFUL; iOS brace/paren balance clean across all sources, banned-API sweep clean (only a comment mentions SwiftData), no two-param onChange introduced
+
+Stage Summary:
+- Conversation CRUD is now complete and identical on both platforms: pin, rename, archive, delete — drawer, Chats list and Archive shelf all share the same action semantics and local-first sync
+- Home canvas now breathes like Claude: orb + personalised greeting + slowly rotating tagline
+- Remaining backlog (untouched): ChatGPT-style explore/trending rows under the greeting, voice press-and-hold from the hero orb, Room-fed rename UX parity notes; token still lacks workflow scope (CI files stay local-only)

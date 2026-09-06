@@ -1,10 +1,14 @@
 package com.grapsee.gsai.ui.home
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -44,8 +48,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -245,11 +252,9 @@ private fun HeroBlock(onNavigate: (String) -> Unit) {
             textAlign = androidx.compose.ui.text.style.TextAlign.Center
         )
         Spacer(Modifier.height(GsMotion.spaceS))
-        Text(
-            "What should we make today?",
-            style = MaterialTheme.typography.bodyMedium,
-            color = Aeruo.TextMutedDark
-        )
+
+        // Claude-style rotating tagline — one quiet line that slowly cycles
+        RotatingTagline(modifier = Modifier)
 
         Spacer(Modifier.height(GsMotion.spaceM))
 
@@ -292,6 +297,46 @@ private fun greeting(): String {
         else -> "Good evening, Admin"
     }
 }
+
+/** Time-aware tagline set; the hero crossfades one line every few seconds. */
+private fun taglines(): List<String> {
+    val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+    val first = if (hour >= 23 || hour < 5) "Working while the world sleeps?" else "What should we make today?"
+    return listOf(
+        first,
+        "Ask, build, refine — all in one thread.",
+        "Your move. GS is listening."
+    )
+}
+
+@Composable
+private fun RotatingTagline(modifier: Modifier = Modifier) {
+    val lines = remember { taglines() }
+    var index by remember { mutableIntStateOf(0) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(TAGLINE_ROTATE_MS)
+            index = (index + 1) % lines.size
+        }
+    }
+    AnimatedContent(
+        targetState = index,
+        transitionSpec = {
+            fadeIn(tween(TAGLINE_FADE_MS)) togetherWith fadeOut(tween(TAGLINE_FADE_MS))
+        },
+        label = "tagline",
+        modifier = modifier
+    ) { current ->
+        Text(
+            lines[current],
+            style = MaterialTheme.typography.bodyMedium,
+            color = Aeruo.TextMutedDark
+        )
+    }
+}
+
+private const val TAGLINE_ROTATE_MS = 5_200L
+private const val TAGLINE_FADE_MS = 700
 
 @Composable
 private fun SuggestionRows(onNavigate: (String) -> Unit) {

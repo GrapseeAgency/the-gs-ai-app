@@ -29,6 +29,8 @@ struct ChatsListView: View {
     @State private var isLoading = false
     @State private var isOffline = false
     @State private var reloadToken = 0
+    @State private var renameTarget: StoredConversation?
+    @State private var renameDraft = ""
 
     private let demoRows: [ConversationRow] = [
         ConversationRow(id: "demo-1", title: "Q3 pricing strategy", preview: "You: send the revised deck?", time: "2h", pinned: true),
@@ -54,6 +56,22 @@ struct ChatsListView: View {
         .task(id: reloadToken) { await load() }
         .refreshable { await load() }
         .onAppear { reloadToken += 1 }
+        .alert("Rename chat", isPresented: Binding(
+            get: { renameTarget != nil },
+            set: { if !$0 { renameTarget = nil } }
+        )) {
+            TextField("Chat name", text: $renameDraft)
+            Button("Rename") {
+                if let target = renameTarget {
+                    store.rename(id: target.id, to: renameDraft)
+                    sync(target.id, title: renameDraft)
+                }
+                renameTarget = nil
+            }
+            Button("Cancel", role: .cancel) { renameTarget = nil }
+        } message: {
+            Text("Give this conversation a name you'll recognise.")
+        }
     }
 
     // MARK: Live data
@@ -99,10 +117,10 @@ struct ChatsListView: View {
         }
     }
 
-    private func sync(_ id: String, pinned: Bool? = nil, archived: Bool? = nil) {
+    private func sync(_ id: String, pinned: Bool? = nil, archived: Bool? = nil, title: String? = nil) {
         guard !id.hasPrefix("demo-"), !id.hasPrefix("local-") else { return }
         Task {
-            try? await APIClient.shared.updateConversation(id: id, pinned: pinned, archived: archived)
+            try? await APIClient.shared.updateConversation(id: id, pinned: pinned, archived: archived, title: title)
         }
     }
 
@@ -248,6 +266,12 @@ struct ChatsListView: View {
                             sync(row.id, pinned: target)
                         } label: {
                             Label(row.pinned ? "Unpin" : "Pin to top", systemImage: "pin")
+                        }
+                        Button {
+                            renameTarget = store.conversation(withID: row.id)
+                            renameDraft = row.title
+                        } label: {
+                            Label("Rename…", systemImage: "pencil")
                         }
                         Button {
                             store.setArchived(id: row.id, true)

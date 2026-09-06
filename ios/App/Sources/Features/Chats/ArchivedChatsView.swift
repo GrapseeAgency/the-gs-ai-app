@@ -7,6 +7,8 @@ struct ArchivedChatsView: View {
 
     @ObservedObject private var store = ConversationStore.shared
     @State private var reloadToken = 0
+    @State private var renameTarget: StoredConversation?
+    @State private var renameDraft = ""
 
     var body: some View {
         ScrollView {
@@ -65,6 +67,12 @@ struct ArchivedChatsView: View {
                                 } label: {
                                     Label("Unarchive", systemImage: "arrow.up.circle")
                                 }
+                                Button {
+                                    renameTarget = conversation
+                                    renameDraft = conversation.title
+                                } label: {
+                                    Label("Rename…", systemImage: "pencil")
+                                }
                                 Button(role: .destructive) {
                                     store.delete(id: conversation.id)
                                     syncDelete(conversation.id)
@@ -82,6 +90,22 @@ struct ArchivedChatsView: View {
         }
         .background(Aero.background.ignoresSafeArea())
         .onAppear { reloadToken += 1 }
+        .alert("Rename chat", isPresented: Binding(
+            get: { renameTarget != nil },
+            set: { if !$0 { renameTarget = nil } }
+        )) {
+            TextField("Chat name", text: $renameDraft)
+            Button("Rename") {
+                if let target = renameTarget {
+                    store.rename(id: target.id, to: renameDraft)
+                    syncSet(target.id, title: renameDraft)
+                }
+                renameTarget = nil
+            }
+            Button("Cancel", role: .cancel) { renameTarget = nil }
+        } message: {
+            Text("Give this conversation a name you'll recognise.")
+        }
     }
 
     private func restore(_ conversation: StoredConversation) {
@@ -91,9 +115,9 @@ struct ArchivedChatsView: View {
         syncSet(conversation.id, archived: false)
     }
 
-    private func syncSet(_ id: String, archived: Bool) {
+    private func syncSet(_ id: String, archived: Bool? = nil, title: String? = nil) {
         guard !id.hasPrefix("demo-"), !id.hasPrefix("local-") else { return }
-        Task { try? await APIClient.shared.updateConversation(id: id, archived: archived) }
+        Task { try? await APIClient.shared.updateConversation(id: id, archived: archived, title: title) }
     }
 
     private func syncDelete(_ id: String) {
