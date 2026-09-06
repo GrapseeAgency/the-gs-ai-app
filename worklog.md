@@ -603,3 +603,22 @@ Stage Summary:
 - Headline benchmark feature landed: ChatGPT-style hold-to-talk on the hero input, both platforms, with silent failure paths everywhere
 - Manifest note: this build ADDS RECORD_AUDIO — the in-app update installs fine via the system installer (dialog lists the new permission); no uninstall needed
 - Backlog remaining: assistants CRUD + pin/archive native wiring (deferred until live backend ask), edge states, Room/SwiftData polish
+
+---
+Task ID: 18 (cron cycle — edge-states pass: real chat search on-device + v0.5.0 shipped via LiveUpdate)
+Agent: Z.ai Code (main)
+Task: Build QA, advance backlog (edge states: chat search edge states wired to real local data, both platforms), publish v0.5.0.
+
+Work Log:
+- BUILD QA: :app:assembleDebug BUILD SUCCESSFUL (15s baseline, 1m41s + 1m23s after changes); toolchain intact
+- AUDIT: GsEmptyState already covers Chats/Explore/Search/Research/Library/Assistants/Create/Notifications + ChatScreen starters; the real gap was ChatSearchScreen — it always rendered 3 seeded demo rows regardless of query, and empty query showed "results"
+- ANDROID (ChatSearchScreen.kt rewritten): real Room-backed search — ConversationDao.searchByTitle + MessageDao.searchContent (LIKE, LIMIT 20) added to ChatDatabase; 220ms keystroke debounce via LaunchedEffect; hits = title matches + message-body matches (windowed snippet around the term, "…"-prefixed), deduped per conversation, 24 max; "This week" filter now actually filters (ISO recency check); honest edge states: <2 chars → "Search your chats" hint (ManageSearch), searched + 0 hits → "No matches" (SearchOff), hits → live rows with relative moments (just now/5m/2h/3d/earlier); store hiccups resolve to no-matches, never an error; tap opens the conversation via new onOpenConversation → GsRoutes.chat(id)
+- iOS (ChatSearchView.swift rewritten): mirrored over ConversationStore.shared (titles + message bodies, archived excluded, title hit wins per conversation), same hint/no-results/rows edge states, snippet + relative helpers; NavigationLink into .chat(routeID)
+- iOS STATIC GATES: ChatSearchView CLEAN (braces/parens/banned); ConversationStore flagged match is a pre-existing comment mentioning "SwiftData is off-limits" (false positive, file untouched)
+- VERSION: versionCode 5 / versionName 0.5.0; APK copied to download/GS-AI-App.apk (aapt verified versionCode 5); update-manifest.json bumped
+- PUBLISHED: commit fd7a655 pushed; GitHub Release v0.5.0 created (REL_ID 383731276, asset upload HTTP 201); /releases/latest/download/ permalink verified serving versionCode 5; stable signature intact
+
+Stage Summary:
+- Edge states advanced concretely: search now answers every state honestly (idle / typing / no matches / live results) with zero fake demo rows
+- Search is the first screen wired fully to local persistence beyond the chat thread itself — groundwork for FTS5 later
+- Backlog remaining: assistants CRUD + pin/archive native wiring (deferred until live backend ask), Room/SwiftData polish (offline persistence already solid), design-parity detail passes
