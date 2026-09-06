@@ -565,3 +565,20 @@ Work Log:
 Stage Summary:
 - User-facing handover ready: one-click download link + in-app update loop verified live end-to-end
 - Publish protocol for every future batch: edit code → bump versionCode → build → cp APK to download/ + bump download/update-manifest.json → push (APK + manifest are tracked via .gitignore exception)
+---
+Task ID: 16 (cron cycle — trending/explore rows + v0.3.0 shipped via LiveUpdate)
+Agent: Z.ai Code (main)
+Task: Build QA, advance top backlog item (ChatGPT-style explore rows on home canvas, both platforms), publish v0.3.0.
+
+Work Log:
+- BUILD QA: :app:assembleDebug BUILD SUCCESSFUL (17s up-to-date on clean tree, then 1m33s after changes); toolchain intact (Gradle 8.9 / JDK 17 / SDK 35, no re-provision needed)
+- ANDROID (HomeScreen.kt): new TrendingRow — horizontal 5-card strip between SuggestionRows and QuickChips: {Trending · Deep research agent → RESEARCH} {Popular · Prompt builder → PROMPT_BUILDER} {New · Image studio → IMAGE_STUDIO} {For you · Code workspace → CODE_WORKSPACE} {Browse all · All assistants → EXPLORE}; compact 176dp RaisedDark cards (16dp radius, aurora-tinted 13dp icon + labelSmall category + single-line bodyMedium title, kineticPress) — benchmark pattern (Kimi trending prompts + ChatGPT suggestion depth) without crowding the canvas
+- iOS (HomeView.swift): mirrored `trending` strip + trendCard() — same 5 cards; workspaces route via fullScreenCover (research/image/code), Prompt builder → AeroRoute.createTab, Browse all → AeroRoute.explore (case names verified in AppRouter); SF symbols safari/sparkles/photo/curlybraces/arrow.forward
+- iOS STATIC GATES: brace/paren balance CLEAN, banned-API sweep CLEAN (no fontDesign/SwiftData/@Observable/ContentUnavailableView/symbolEffect), no two-param onChange
+- VERSION: versionCode 3 / versionName 0.3.0; APK copied to download/GS-AI-App.apk; download/update-manifest.json bumped (versionCode 3, new notes) — installed v0.2.0 phones will surface the LiveUpdate pill for this build
+- PUBLISHED: commit f5bc000 pushed; GitHub Release v0.3.0 created (REL_ID 383723521, asset upload HTTP 201) — the /releases/latest/download/ permalink now serves v0.3.0
+
+Stage Summary:
+- First real LiveUpdate delivery: v0.2.0 phones → pill → one tap → v0.3.0 with the new trending rows (loop proven end-to-end)
+- Design parity with the three benchmark apps advanced: home canvas now carries explore/trending content, not just static suggestions
+- Backlog remaining: voice press-and-hold from the hero orb, assistants CRUD native wiring (deferred until user asks for live backend), edge states, Room/SwiftData polish
