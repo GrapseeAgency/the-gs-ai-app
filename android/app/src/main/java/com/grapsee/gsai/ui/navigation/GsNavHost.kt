@@ -104,7 +104,12 @@ fun GsNavHost(modifier: Modifier = Modifier) {
         composable(GsRoutes.CHAT_ARCHIVE) { ArchivedChatsScreen(onBack = back) }
         composable(GsRoutes.CHAT_FOLDERS) { ConversationFoldersScreen(onBack = back) }
         composable(GsRoutes.CHAT_SHARED) { SharedChatsScreen(onBack = back) }
-        composable(GsRoutes.CHAT_SEARCH) { ChatSearchScreen(onBack = back) }
+        composable(GsRoutes.CHAT_SEARCH) {
+            ChatSearchScreen(
+                onBack = back,
+                onOpenConversation = { id -> navController.navigate(GsRoutes.chat(id)) }
+            )
+        }
 
         // Session
         composable(GsRoutes.AUTH) {

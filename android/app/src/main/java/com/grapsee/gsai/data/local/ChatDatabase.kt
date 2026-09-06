@@ -66,6 +66,10 @@ interface ConversationDao {
     @Query("SELECT * FROM conversations WHERE archived = 1 ORDER BY updatedAt DESC")
     fun observeArchived(): Flow<List<ConversationEntity>>
 
+    /** Edge-states pass: chat-scoped search across local titles. */
+    @Query("SELECT * FROM conversations WHERE title LIKE '%' || :query || '%' ORDER BY updatedAt DESC LIMIT 20")
+    suspend fun searchByTitle(query: String): List<ConversationEntity>
+
     @Query("DELETE FROM conversations WHERE id = :id")
     suspend fun delete(id: String)
 
@@ -92,6 +96,10 @@ interface MessageDao {
 
     @Query("DELETE FROM messages WHERE conversationId = :conversationId")
     suspend fun deleteForConversation(conversationId: String)
+
+    /** Edge-states pass: chat-scoped search across local message bodies. */
+    @Query("SELECT * FROM messages WHERE content LIKE '%' || :query || '%' ORDER BY createdAt DESC LIMIT 20")
+    suspend fun searchContent(query: String): List<MessageEntity>
 }
 
 @Database(
