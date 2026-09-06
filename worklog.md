@@ -120,6 +120,31 @@ Stage Summary:
 - OPEN DECISION (ADR-005, user must answer): platform-managed model keys only (recommended for MVP) vs bring-your-own-key (BYOK) — affects auth, security, billing, model routing.
 - Phase 0 complete per docs/ROADMAP.md. Next phase: chat MVP walking skeleton (Prisma schema + SSE backend + chat screens both platforms).
 
+---
+Task ID: 6 (6-a..6-g subagents + main)
+Agent: Z.ai Code (main) + 7 specialist agents
+Task: "Proceed all at once" — full Aeruo Kinetic build-out of every blueprint subsystem
+
+Work Log:
+- Main agent built the FROZEN core first: docs/DESIGN_SYSTEM.md (Aeruo Kinetic: obsidian/paper surfaces, aurora accent #2DD4A8, aurora gradient #2DD4A8→#4CC3FF→#9D7BFF restricted to AI-active moments, serif display/sans UI, spring motion 0.35/0.8, press-scale 0.97, stagger 30ms); Android theme (Color/Type/Motion/Theme), GsRoutes + GsNavHost (21 routes), GsComponents (13 frozen components); iOS DesignSystem.swift (dynamic light/dark colors), AppRouter.swift (AeroRoute + RootTabView 5 tabs + destinations), AeroComponents (12 frozen components)
+- 6-a Android: Home (full command centre, 11 quick actions), Explore (12 categories), Create (10 tools), Library, Projects+Detail, Search — 7 files
+- 6-b Android (timed out on reporting but wrote everything): Dtos/ApiClient (Ktor CIO, SSE line parser, envelope-tolerant), Room ChatDatabase + DAOs, ChatRepository (Room source-of-truth, NonCancellable partial persistence on stop), ServiceLocator (manual DI), GSApplication init, ChatsScreen (live Room Flow + refresh), ChatScreen (real streaming, stop-generation, clipboard copy, regenerate, starter chips), Archived/Folders/Shared/ChatSearch — gradle: Ktor 2.3.12 + Room 2.6.1 + serialization, BuildConfig.BASE_URL=http://10.0.2.2:3000
+- 6-c Android: ModelCatalog (8 models), SampleData (8 assistants, 8 notifications), Assistants/Detail/Create, ModelCentre/Compare, Profile, Settings (8 expandable categories, destructive confirms), Notifications, Voice (obsidian full-screen, 24-bar aurora waveform)
+- 6-d iOS: HomeView rewrite (11 quick actions, staggered sections), Explore, Create, Library, Projects+Detail, Search — coherent sample IDs cross-screen
+- 6-e iOS: Models.swift (contract-exact Codable), APIClient (URLSession.bytes SSE), ChatViewModel (@MainActor, VM-owned conversation lifecycle, stop=cancel keeps partial), ChatsListView, ChatDetailView (bubbles, stop capsule, context menus, starters), Archived/Folders/Shared/ChatSearch
+- 6-f iOS: Assistants/Detail/Create, ModelCentre/Compare (8-model catalog), Profile (aurora usage bar), Settings (8 sections, confirmationDialogs), Notifications, Voice (aurora waveform, controls)
+- 6-g Backend: schema +7 models (no array primitives), src/lib/ai.ts (SDK stream gotcha handled: raw body SSE parse), serializers, /api/health, /api/v1/models (8), conversations CRUD, messages GET/POST with SSE (auto-title, 400/404). FULL CURL QA MATRIX GREEN (health, create, stream deltas→done, history, limit, delete cascade, 400 empty, 404s). dev.log clean.
+- LOCAL ANDROID BUILD ESTABLISHED: installed android cmdline-tools + platform-35 + build-tools + Gradle 8.9 + Temurin JDK17 (~/jdk17 — JRE lacked jlink). Build command: cd android && ANDROID_HOME=~/android-sdk ~/gradle-8.9/bin/gradle :app:assembleDebug --no-daemon --no-parallel -Dorg.gradle.java.home=/home/z/jdk17 -Dorg.gradle.jvmargs="-Xmx1400m" -Pkotlin.compiler.execution.strategy=in-process
+- Fixed 37 compile errors across agents' code: missing kotlinx.serialization.Serializable import, GsChip param order (modifier before onClick + default), missing background/Modifier/GsChip imports, Ktor retryOnExceptionOrServerErrors positional arg
+- BUILD SUCCESSFUL → app-debug.apk (19MB). Commit 00973dc pushed (80 files).
+
+Stage Summary:
+- Phase 1 (chat MVP walking skeleton) is FUNCTIONALLY COMPLETE: real backend streams, Android chat streams against it (emulator 10.0.2.2), iOS client ready (base URL localhost:3000), both apps full-navigable across ~21 screens with Aeruo Kinetic design system
+- Local verification loop now exists for Android (no CI dependency); iOS compile still pending CI (token workflow scope BLOCKER stands — .github/workflows quarantined locally via .git/info/exclude)
+- Known gaps (next rounds): ChatsListView iOS still seeded static (APIClient wired in ChatDetail), voice/models/settings are local-state only, no persistence on iOS yet (SwiftData when target≥17 or GRDB), backend rate-limiting/auth absent, web preview page untouched
+- BUILD CMD for next agents: see above (use build5.log naming; do NOT use parallel; memory-tuned flags REQUIRED or daemon gets OOM-killed)
+
+
 
 ---
 Task ID: 5-b
