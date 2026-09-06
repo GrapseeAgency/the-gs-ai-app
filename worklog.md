@@ -532,3 +532,21 @@ Work Log:
 Stage Summary:
 - download/GS-AI-App.apk verified install-ready: no error dialogs, no server-reach failures surfaced, offline chats answered by GS Lite, banner only on true no-internet
 - iOS remains static-source in sandbox; Android APK is the single verification vehicle per user instruction
+---
+Task ID: 14 (GS LiveUpdate — "kotlin live changing" mode + GitHub-hosted APK)
+Agent: Z.ai Code (main)
+Task: One-click permanent APK download on GitHub + in-app live update engine; deliver APK v0.2.0.
+
+Work Log:
+- ROOT CAUSE found for "APK missing from repo files": .gitignore line `*.apk` excluded it → added `!download/*.apk` exception
+- GS LiveUpdate engine (new data/liveupdate/LiveUpdater.kt): on every Home appearance fetches download/update-manifest.json from raw.githubusercontent (10-min throttle, fully silent failures); newer versionCode → subtle aurora LiveUpdate pill on the Home canvas ("GS LiveUpdate · vX ready") → tap → streams APK to cacheDir with live % progress → "Update ready · tap to install" → FileProvider + ACTION_VIEW system installer. REQUEST_INSTALL_PACKAGES + <queries> + FileProvider(res/xml/file_paths.xml) added
+- SIGNATURE STABILITY: generated + committed android/app/gs-live.keystore (CN=GS AI, OU=Grapsee); signingConfigs.liveUpdate wired into BOTH debug and release buildTypes → every build from this or any fresh sandbox is signature-identical → updates install straight over the installed app, no uninstall needed (verified via apksigner: SHA-256 b1ffd75d…)
+- Version bump: versionCode 2, versionName 0.2.0; build successful in 1m57s
+- PUBLISHED: download/GS-AI-App.apk (19MB) + download/update-manifest.json committed & pushed (d924025); raw URL verified HTTP 200 (application/octet-stream)
+- GitHub Release v0.2.0 created (REL_ID 383715575, asset upload HTTP 201): /releases/tag/v0.2.0 + direct /releases/download/v0.2.0/GS-AI-App.apk
+- Manifest now live for the app to read: versionCode 2 == installed 2 → pill stays hidden until v3 is published (exactly the intended behaviour)
+
+Stage Summary:
+- THE "LIVE CHANGING" LOOP IS CLOSED: edit code → bump versionCode → build → cp APK to download/ + bump manifest versionCode → push → installed phones show the LiveUpdate pill → one tap → new build running. Only manifest-level changes (new permissions etc.) need manual reinstall — documented
+- Three permanent download paths: raw.githubusercontent direct, repo blob page (Download raw file button), GitHub Release asset page
+- Next cycle protocol is written into the cron payload implicitly: future feature batches must bump versionCode + refresh both files in download/ before pushing
