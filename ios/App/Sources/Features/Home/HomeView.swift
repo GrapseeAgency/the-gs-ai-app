@@ -196,6 +196,8 @@ struct HomeView: View {
                 suggestion("pencil.line", "Draft a launch email")
             }
 
+            trending
+
             chips
 
             heroInput
@@ -227,6 +229,62 @@ struct HomeView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(KineticPressStyle())
+    }
+
+    /// ChatGPT-style explore/trending strip — benchmark pattern (Kimi trending
+    /// prompts + ChatGPT suggestion depth) in Aeruo Kinetic surfaces.
+    private var trending: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: Aero.Spacing.s) {
+                Button { activeWorkspace = .research } label: {
+                    trendCard("safari", "Trending", "Deep research agent")
+                }
+                .buttonStyle(KineticPressStyle())
+
+                NavigationLink(value: AeroRoute.createTab) {
+                    trendCard("sparkles", "Popular", "Prompt builder")
+                }
+                .buttonStyle(KineticPressStyle())
+
+                Button { activeWorkspace = .image } label: {
+                    trendCard("photo", "New", "Image studio")
+                }
+                .buttonStyle(KineticPressStyle())
+
+                Button { activeWorkspace = .code } label: {
+                    trendCard("curlybraces", "For you", "Code workspace")
+                }
+                .buttonStyle(KineticPressStyle())
+
+                NavigationLink(value: AeroRoute.explore) {
+                    trendCard("arrow.forward", "Browse all", "All assistants")
+                }
+                .buttonStyle(KineticPressStyle())
+            }
+            .padding(.horizontal, 2)
+            .padding(.vertical, 2)
+        }
+    }
+
+    private func trendCard(_ symbol: String, _ category: String, _ title: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: symbol)
+                    .font(.system(size: 10))
+                    .foregroundColor(Aero.accent)
+                Text(category)
+                    .font(Aero.caption())
+                    .foregroundColor(muted)
+            }
+            Text(title)
+                .font(Aero.body())
+                .foregroundColor(ink)
+                .lineLimit(1)
+        }
+        .frame(width: 176, alignment: .leading)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(RoundedRectangle(cornerRadius: 16).fill(raised))
     }
 
     private var chips: some View {

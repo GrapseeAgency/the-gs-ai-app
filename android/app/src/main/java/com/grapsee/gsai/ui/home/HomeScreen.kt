@@ -30,6 +30,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Bookmarks
 import androidx.compose.material.icons.outlined.Code
@@ -108,6 +109,8 @@ fun HomeScreen(
             Spacer(Modifier.weight(1f))
 
             SuggestionRows(onNavigate = onNavigate)
+            Spacer(Modifier.height(GsMotion.spaceM))
+            TrendingRow(onNavigate = onNavigate)
             Spacer(Modifier.height(GsMotion.spaceM))
             QuickChips(onNavigate = onNavigate)
             Spacer(Modifier.height(GsMotion.spaceM))
@@ -400,6 +403,72 @@ private fun UpdatePill(text: String, onClick: () -> Unit) {
                 style = MaterialTheme.typography.labelLarge,
                 color = Aeruo.TextDark
             )
+        }
+    }
+}
+
+/**
+ * ChatGPT-style explore/trending strip — one horizontal row of compact cards
+ * surfacing Explore-section content on the canvas. Benchmark pattern: Kimi's
+ * trending prompts + ChatGPT's suggestion depth, in Aeruo Kinetic surfaces.
+ */
+@Composable
+private fun TrendingRow(onNavigate: (String) -> Unit) {
+    data class TrendCard(val category: String, val title: String, val icon: ImageVector, val route: String)
+
+    val cards = remember {
+        listOf(
+            TrendCard("Trending", "Deep research agent", Icons.Outlined.TravelExplore, GsRoutes.RESEARCH),
+            TrendCard("Popular", "Prompt builder", Icons.Outlined.AutoAwesome, GsRoutes.PROMPT_BUILDER),
+            TrendCard("New", "Image studio", Icons.Outlined.Palette, GsRoutes.IMAGE_STUDIO),
+            TrendCard("For you", "Code workspace", Icons.Outlined.Code, GsRoutes.CODE_WORKSPACE),
+            TrendCard("Browse all", "All assistants", Icons.Outlined.ArrowForward, GsRoutes.EXPLORE)
+        )
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
+    ) {
+        cards.forEach { card ->
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = Aeruo.RaisedDark,
+                modifier = Modifier
+                    .width(176.dp)
+                    .kineticPress()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .clickable { onNavigate(card.route) }
+                        .padding(horizontal = 14.dp, vertical = 12.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            card.icon,
+                            contentDescription = null,
+                            tint = Aeruo.Accent,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            card.category,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Aeruo.TextMutedDark
+                        )
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        card.title,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Aeruo.TextDark,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
+                }
+            }
         }
     }
 }
