@@ -3,6 +3,8 @@ import SwiftUI
 /// Profile — identity, monthly AI usage, account rows.
 struct ProfileView: View {
 
+    @State private var showBilling = false
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Aero.Spacing.l) {
@@ -18,6 +20,9 @@ struct ProfileView: View {
             .padding(.bottom, Aero.Spacing.xl)
         }
         .background(Aero.background.ignoresSafeArea())
+        .sheet(isPresented: $showBilling) {
+            BillingView()
+        }
         .toolbar {
             ToolbarItemGroup(placement: .navigationBarTrailing) {
                 NavigationLink(value: AeroRoute.settings) {
@@ -106,7 +111,7 @@ struct ProfileView: View {
                     .font(.system(size: 12))
                     .foregroundStyle(Aero.textMuted)
             }
-            accountRow("Subscription", icon: "creditcard") {
+            accountRow("Subscription", icon: "creditcard", action: { showBilling = true }) {
                 AeroChip(text: "Pro", selected: true)
             }
             accountRow("Connected services", icon: "link") {
@@ -135,12 +140,14 @@ struct ProfileView: View {
     private func accountRow<Trailing: View>(
         _ title: String,
         icon: String,
+        action: (() -> Void)? = nil,
         @ViewBuilder trailing: () -> Trailing
     ) -> some View {
         AeroListRow(
             title: title,
             leading: { leadingIcon(icon) },
-            trailing: trailing
+            trailing: trailing,
+            action: action
         )
     }
 

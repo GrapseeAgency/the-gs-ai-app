@@ -6,7 +6,9 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,22 +25,41 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.outlined.AttachFile
+import androidx.compose.material.icons.outlined.CallSplit
+import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.Mic
+import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.StickyNote2
 import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material.icons.outlined.VolumeUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -85,7 +106,12 @@ private data class ChatUiMessage(
  * Stop-generation cancels the streaming Job; partial output stays on screen and disk.
  */
 @Composable
-fun ChatScreen(conversationId: String?, onBack: () -> Unit) {
+fun ChatScreen(
+    conversationId: String?,
+    onBack: () -> Unit,
+    // Optional voice entry point — the main agent wires this to GsRoutes.VOICE in GsNavHost.
+    onNavigateVoice: (() -> Unit)? = null
+) {
     val scope = rememberCoroutineScope()
     var activeConversationId by remember { mutableStateOf(conversationId) }
     val messages = remember { mutableStateListOf<ChatUiMessage>() }
@@ -93,8 +119,13 @@ fun ChatScreen(conversationId: String?, onBack: () -> Unit) {
     var streamingJob by remember { mutableStateOf<Job?>(null) }
     var conversationTitle by remember { mutableStateOf("New chat") }
     val clipboard = LocalClipboardManager.current
+    val snackbarHostState = remember { SnackbarHostState() }
+    var attachSheetOpen by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     val isStreaming = streamingJob?.isActive == true
+    val showSnack: (String) -> Unit = { message ->
+        scope.launch { snackbarHostState.showSnackbar(message) }
+    }
 
     LaunchedEffect(conversationId) {
         val id = conversationId ?: return@LaunchedEffect
@@ -213,7 +244,8 @@ fun ChatScreen(conversationId: String?, onBack: () -> Unit) {
                                 AssistantMessage(
                                     message = message,
                                     onCopy = { text -> clipboard.setText(AnnotatedString(text)) },
-                                    onRegenerate = { regenerate(message.id) }
+                                    onRegenerate = { regenerate(message.id) },
+                                    onContextAction = showSnack
                                 )
                             }
                         }
@@ -222,12 +254,22 @@ fun ChatScreen(conversationId: String?, onBack: () -> Unit) {
             }
 
             if (!isStreaming) {
-                GsInputBar(
-                    value = draft,
-                    onValueChange = { draft = it },
-                    onSend = { text -> dispatch(text, echoUser = true) },
-                    placeholder = "Ask anything…"
-                )
+                Row(verticalAlignment = Alignment.Bottom) {
+                    IconButton(onClick = { attachSheetOpen = true }) {
+                        Icon(
+                            Icons.Outlined.AttachFile,
+                            contentDescription = "Attach",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    GsInputBar(
+                        value = draft,
+                        onValueChange = { draft = it },
+                        onSend = { text -> dispatch(text, echoUser = true) },
+                        placeholder = "Ask anything…",
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             } else {
                 Button(
                     onClick = {
@@ -247,7 +289,25 @@ fun ChatScreen(conversationId: String?, onBack: () -> Unit) {
                     Text("Stop generating")
                 }
             }
+
+            SnackbarHost(hostState = snackbarHostState)
         }
+    }
+
+    if (attachSheetOpen) {
+        AttachSheet(
+            onDismiss = { attachSheetOpen = false },
+            onVoice = {
+                attachSheetOpen = false
+                val navigateVoice = onNavigateVoice
+                if (navigateVoice != null) navigateVoice()
+                else showSnack("Voice note arrives with the device permissions build")
+            },
+            onFallback = { label ->
+                attachSheetOpen = false
+                showSnack("$label arrives with the device permissions build")
+            }
+        )
     }
 }
 
@@ -270,36 +330,90 @@ private fun UserMessage(message: ChatUiMessage) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun AssistantMessage(
     message: ChatUiMessage,
     onCopy: (String) -> Unit,
-    onRegenerate: () -> Unit
+    onRegenerate: () -> Unit,
+    onContextAction: (String) -> Unit = {}
 ) {
+    var menuExpanded by remember { mutableStateOf(false) }
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
-        Surface(
-            shape = RoundedCornerShape(18.dp),
-            color = MaterialTheme.colorScheme.surface,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
-        ) {
-            Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-                Row(verticalAlignment = Alignment.Bottom) {
-                    Text(
-                        text = message.content,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    if (message.isStreaming) StreamingCaret()
-                }
-                if (!message.isStreaming) {
-                    Spacer(Modifier.height(6.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                        BubbleAction(Icons.Outlined.ContentCopy, "Copy") { onCopy(message.content) }
-                        BubbleAction(Icons.Outlined.Refresh, "Regenerate", onRegenerate)
-                        BubbleAction(Icons.Outlined.VolumeUp, "Read aloud") {}
-                        BubbleAction(Icons.Outlined.Share, "Share") {}
+        Box {
+            Surface(
+                modifier = Modifier.combinedClickable(
+                    onClick = {},
+                    onLongClick = { menuExpanded = true }
+                ),
+                shape = RoundedCornerShape(18.dp),
+                color = MaterialTheme.colorScheme.surface,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Text(
+                            text = message.content,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        if (message.isStreaming) StreamingCaret()
+                    }
+                    if (!message.isStreaming) {
+                        Spacer(Modifier.height(6.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                            BubbleAction(Icons.Outlined.ContentCopy, "Copy") { onCopy(message.content) }
+                            BubbleAction(Icons.Outlined.Refresh, "Regenerate", onRegenerate)
+                            BubbleAction(Icons.Outlined.VolumeUp, "Read aloud") {}
+                            BubbleAction(Icons.Outlined.Share, "Share") {}
+                        }
                     }
                 }
+            }
+            DropdownMenu(
+                expanded = menuExpanded,
+                onDismissRequest = { menuExpanded = false }
+            ) {
+                DropdownMenuItem(
+                    text = { Text("Translate…") },
+                    leadingIcon = {
+                        Icon(Icons.Outlined.Translate, contentDescription = null, modifier = Modifier.size(18.dp))
+                    },
+                    onClick = {
+                        menuExpanded = false
+                        onContextAction("Translation arrives with the language pack build")
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("Read aloud") },
+                    leadingIcon = {
+                        Icon(Icons.Outlined.VolumeUp, contentDescription = null, modifier = Modifier.size(18.dp))
+                    },
+                    onClick = {
+                        menuExpanded = false
+                        onContextAction("Read aloud arrives with the voice pack build")
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("Save to Library") },
+                    leadingIcon = {
+                        Icon(Icons.Outlined.Save, contentDescription = null, modifier = Modifier.size(18.dp))
+                    },
+                    onClick = {
+                        menuExpanded = false
+                        onContextAction("Saved to Library")
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("Branch new chat") },
+                    leadingIcon = {
+                        Icon(Icons.Outlined.CallSplit, contentDescription = null, modifier = Modifier.size(18.dp))
+                    },
+                    onClick = {
+                        menuExpanded = false
+                        onContextAction("Branched")
+                    }
+                )
             }
         }
     }
@@ -380,6 +494,105 @@ private fun StarterPrompts(onPick: (String) -> Unit) {
                     color = MaterialTheme.colorScheme.onSurface
                 )
             }
+        }
+    }
+}
+
+// --- attach sheet -------------------------------------------------------------
+
+private data class AttachOption(val label: String, val icon: ImageVector, val isVoice: Boolean = false)
+
+private val attachOptions = listOf(
+    AttachOption("Camera Photo", Icons.Outlined.PhotoCamera),
+    AttachOption("Gallery", Icons.Outlined.Image),
+    AttachOption("Files", Icons.Outlined.Folder),
+    AttachOption("Camera", Icons.Outlined.CameraAlt),
+    AttachOption("Code snippet", Icons.Outlined.Code),
+    AttachOption("Document", Icons.Outlined.Description),
+    AttachOption("Prompt template", Icons.Outlined.StickyNote2),
+    AttachOption("Voice note", Icons.Outlined.Mic, isVoice = true)
+)
+
+/** 2-column grid of attach entry points; non-voice options wait for the device-permissions build. */
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun AttachSheet(
+    onDismiss: () -> Unit,
+    onVoice: () -> Unit,
+    onFallback: (String) -> Unit
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = GsMotion.spaceM)
+                .padding(bottom = GsMotion.spaceL),
+            verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
+        ) {
+            Text(
+                text = "Attach",
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+            attachOptions.chunked(2).forEach { rowOptions ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
+                ) {
+                    rowOptions.forEach { option ->
+                        AttachTile(
+                            option = option,
+                            modifier = Modifier.weight(1f),
+                            onClick = {
+                                if (option.isVoice) onVoice() else onFallback(option.label)
+                            }
+                        )
+                    }
+                    if (rowOptions.size == 1) {
+                        Spacer(Modifier.weight(1f))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AttachTile(
+    option: AttachOption,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier,
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = option.icon,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+            Text(
+                text = option.label,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurface
+            )
         }
     }
 }

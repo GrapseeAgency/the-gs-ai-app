@@ -57,16 +57,18 @@ private data class CreateTool(
     val route: String
 )
 
+// Workspace tools route to their dedicated studios (Task 8-c — wired in GsNavHost);
+// everything else still funnels into a fresh chat.
 private val createTools = listOf(
-    CreateTool("AI image", "Generate art from a prompt", Icons.Outlined.Palette, GsRoutes.chat(null)),
-    CreateTool("Image edit", "Retouch and restyle", Icons.Outlined.AutoFixHigh, GsRoutes.chat(null)),
+    CreateTool("AI image", "Generate art from a prompt", Icons.Outlined.Palette, "create/image"),
+    CreateTool("Image edit", "Retouch and restyle", Icons.Outlined.AutoFixHigh, "create/image"),
     CreateTool("Document", "Reports, briefs and memos", Icons.Outlined.Description, GsRoutes.chat(null)),
     CreateTool("Presentation", "Decks from a single prompt", Icons.Outlined.Slideshow, GsRoutes.chat(null)),
     CreateTool("Spreadsheet", "Tables with live formulas", Icons.Outlined.TableChart, GsRoutes.chat(null)),
-    CreateTool("Writing", "Drafts in your voice", Icons.Outlined.EditNote, GsRoutes.chat(null)),
-    CreateTool("Code", "Snippets and scaffolds", Icons.Outlined.Code, GsRoutes.chat(null)),
+    CreateTool("Writing", "Drafts in your voice", Icons.Outlined.EditNote, "create/writing"),
+    CreateTool("Code", "Snippets and scaffolds", Icons.Outlined.Code, "create/code"),
     CreateTool("Diagram", "Architecture and flows", Icons.Outlined.AccountTree, GsRoutes.chat(null)),
-    CreateTool("Prompt builder", "Compose reusable prompts", Icons.Outlined.TipsAndUpdates, GsRoutes.chat(null)),
+    CreateTool("Prompt builder", "Compose reusable prompts", Icons.Outlined.TipsAndUpdates, "create/prompt"),
     CreateTool("Assistant builder", "Design your own AI", Icons.Outlined.SmartToy, GsRoutes.ASSISTANT_CREATE)
 )
 

@@ -24,10 +24,22 @@ private struct StaggerIn<Content: View>: View {
 
 // MARK: - Create — every generator, one place
 
-/// CREATE tab root. Ten tool cards in a 2-column grid; each opens its own
-/// workspace later — for now every generator hands off to chat, except the
-/// assistant builder which routes to `.assistantCreate`.
+/// CREATE tab root. Ten tool cards in a 2-column grid. Five tools open their
+/// own full-screen workspaces (AI image / Image edit / Writing / Code /
+/// Prompt builder); the rest hand off to chat, and the assistant builder
+/// routes to `.assistantCreate`.
 struct CreateView: View {
+
+    /// Full-screen workspaces opened straight from the tool tiles
+    /// (Image / Code / Writing / Prompt builder) instead of routing to chat.
+    /// Named CreateToolKind because the sample-data struct above owns CreateTool.
+    private enum CreateToolKind: String, Identifiable {
+        case image, code, writing, prompt
+
+        var id: String { rawValue }
+    }
+
+    @State private var activeTool: CreateToolKind?
 
     // MARK: Sample data
 
@@ -37,18 +49,19 @@ struct CreateView: View {
         let icon: String
         let detail: String
         let route: AeroRoute
+        var workspace: CreateToolKind? = nil
     }
 
     private let tools: [CreateTool] = [
-        .init(label: "AI image", icon: "wand.and.stars", detail: "Generate art from a prompt", route: .chat(nil)),
-        .init(label: "Image edit", icon: "wand.and.rays", detail: "Retouch, extend, restyle", route: .chat(nil)),
+        .init(label: "AI image", icon: "wand.and.stars", detail: "Generate art from a prompt", route: .chat(nil), workspace: .image),
+        .init(label: "Image edit", icon: "wand.and.rays", detail: "Retouch, extend, restyle", route: .chat(nil), workspace: .image),
         .init(label: "Document", icon: "doc.text", detail: "Reports, briefs and memos", route: .chat(nil)),
         .init(label: "Presentation", icon: "rectangle.on.rectangle", detail: "Decks from an outline", route: .chat(nil)),
         .init(label: "Spreadsheet", icon: "tablecells", detail: "Tables with formulas", route: .chat(nil)),
-        .init(label: "Writing", icon: "pencil.line", detail: "Drafts in your voice", route: .chat(nil)),
-        .init(label: "Code", icon: "chevron.left.forwardslash.chevron.right", detail: "Snippets, reviews and fixes", route: .chat(nil)),
+        .init(label: "Writing", icon: "pencil.line", detail: "Drafts in your voice", route: .chat(nil), workspace: .writing),
+        .init(label: "Code", icon: "chevron.left.forwardslash.chevron.right", detail: "Snippets, reviews and fixes", route: .chat(nil), workspace: .code),
         .init(label: "Diagram", icon: "rectangle.3.group", detail: "Flows, maps and schemas", route: .chat(nil)),
-        .init(label: "Prompt builder", icon: "lightbulb", detail: "Sharper prompts, faster", route: .chat(nil)),
+        .init(label: "Prompt builder", icon: "lightbulb", detail: "Sharper prompts, faster", route: .chat(nil), workspace: .prompt),
         .init(label: "Assistant builder", icon: "smarttoy", detail: "Build your own persona", route: .assistantCreate)
     ]
 
@@ -76,6 +89,14 @@ struct CreateView: View {
         }
         .background(Aero.background.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
+        .fullScreenCover(item: $activeTool) { tool in
+            switch tool {
+            case .image: ImageStudioView()
+            case .code: CodeWorkspaceView()
+            case .writing: WritingStudioView()
+            case .prompt: PromptBuilderView()
+            }
+        }
     }
 
     // MARK: Header
@@ -102,27 +123,43 @@ struct CreateView: View {
             spacing: 12
         ) {
             ForEach(tools) { tool in
-                NavigationLink(value: tool.route) {
-                    AeroCard {
-                        VStack(alignment: .leading, spacing: Aero.Spacing.s) {
-                            Image(systemName: tool.icon)
-                                .font(.system(size: 17, weight: .medium))
-                                .foregroundStyle(Aero.text)
-                                .frame(width: 44, height: 44)
-                                .background(RoundedRectangle(cornerRadius: 14).fill(Aero.container))
-                            Text(tool.label)
-                                .font(Aero.title())
-                                .foregroundStyle(Aero.text)
-                                .lineLimit(1)
-                            Text(tool.detail)
-                                .font(Aero.caption())
-                                .foregroundStyle(Aero.textMuted)
-                                .lineLimit(2)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
+                if let workspace = tool.workspace {
+                    Button {
+                        activeTool = workspace
+                    } label: {
+                        toolCard(tool)
                     }
+                    .buttonStyle(KineticPressStyle())
+                } else {
+                    NavigationLink(value: tool.route) {
+                        toolCard(tool)
+                    }
+                    .buttonStyle(KineticPressStyle())
                 }
-                .buttonStyle(KineticPressStyle())
+            }
+        }
+    }
+
+    /// The card content is shared by both the NavigationLink (chat-routed
+    /// tools) and the Button (full-screen workspace tools) — identical layout
+    /// and styling to the original grid.
+    private func toolCard(_ tool: CreateTool) -> some View {
+        AeroCard {
+            VStack(alignment: .leading, spacing: Aero.Spacing.s) {
+                Image(systemName: tool.icon)
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundStyle(Aero.text)
+                    .frame(width: 44, height: 44)
+                    .background(RoundedRectangle(cornerRadius: 14).fill(Aero.container))
+                Text(tool.label)
+                    .font(Aero.title())
+                    .foregroundStyle(Aero.text)
+                    .lineLimit(1)
+                Text(tool.detail)
+                    .font(Aero.caption())
+                    .foregroundStyle(Aero.textMuted)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

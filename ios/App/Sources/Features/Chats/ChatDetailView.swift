@@ -8,6 +8,10 @@ struct ChatDetailView: View {
 
     @StateObject private var vm: ChatViewModel
 
+    // Attach + local toasts (added 8-d; streaming/VM logic untouched)
+    @State private var showingAttachments = false
+    @State private var toast: String?
+
     init(conversationID: String?) {
         _vm = StateObject(wrappedValue: ChatViewModel(conversationID: conversationID))
     }
@@ -30,10 +34,16 @@ struct ChatDetailView: View {
             }
 
             Divider().overlay(Aero.outline)
+            attachRow
             inputBar
         }
         .background(Aero.background.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $showingAttachments) {
+            AttachmentSheetView { option in
+                showToast(attachmentMessage(for: option))
+            }
+        }
     }
 
     // MARK: Transcript
@@ -53,8 +63,13 @@ struct ChatDetailView: View {
                     }
 
                     ForEach(vm.messages) { message in
-                        MessageBubble(message: message, onRegenerate: { vm.regenerate() })
-                            .id(message.id)
+                        MessageBubble(
+                            message: message,
+                            onRegenerate: { vm.regenerate() },
+                            onTranslate: { showToast("Translation arrives with the language pack build") },
+                            onSave: { showToast("Saved to Library") }
+                        )
+                        .id(message.id)
                     }
                 }
                 .padding(.horizontal, Aero.Spacing.m)
@@ -101,6 +116,58 @@ struct ChatDetailView: View {
             .background(Aero.surface.ignoresSafeArea(edges: .bottom))
     }
 
+    // MARK: Attach row (sits above the input bar — outside the frozen AeroInputBar)
+
+    private var attachRow: some View {
+        HStack(spacing: Aero.Spacing.s) {
+            Button {
+                showingAttachments = true
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Aero.text)
+                    .frame(width: 30, height: 30)
+                    .background(Circle().fill(Aero.container))
+                    .overlay(Circle().stroke(Aero.outline, lineWidth: 1))
+            }
+            .buttonStyle(KineticPressStyle())
+            if let message = toast {
+                Image(systemName: "checkmark.circle")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Aero.accent)
+                Text(message)
+                    .font(Aero.label())
+                    .foregroundStyle(Aero.textMuted)
+                    .lineLimit(1)
+            }
+            Spacer()
+        }
+        .padding(.horizontal, Aero.Spacing.m)
+        .padding(.top, Aero.Spacing.s)
+    }
+
+    private func attachmentMessage(for option: String) -> String {
+        switch option {
+        case "Camera": return "Camera capture arrives with device builds"
+        case "Gallery": return "Gallery import arrives with device builds"
+        case "Files": return "File import arrives with the files build"
+        case "Document": return "Document upload arrives with the files build"
+        case "Code": return "Code attachments arrive with the repo build"
+        case "Prompt template": return "Prompt templates arrive with the library build"
+        default: return "Attachment support lands with the next build"
+        }
+    }
+
+    private func showToast(_ message: String) {
+        toast = message
+        Task {
+            try? await Task.sleep(nanoseconds: 1_800_000_000)
+            if toast == message {
+                toast = nil
+            }
+        }
+    }
+
     // MARK: Empty state
 
     private let starters = ["Draft a launch plan", "Explain quantum computing", "Plan a Kyoto itinerary"]
@@ -130,6 +197,8 @@ private struct MessageBubble: View {
 
     let message: ChatViewModel.ChatMessage
     var onRegenerate: () -> Void = {}
+    var onTranslate: () -> Void = {}
+    var onSave: () -> Void = {}
 
     var body: some View {
         if message.role == "user" {
@@ -195,6 +264,12 @@ private struct MessageBubble: View {
                 // Read aloud — wired with TTS in a later pass.
             } label: {
                 Image(systemName: "speaker.wave.2")
+            }
+            Button(action: onTranslate) {
+                Image(systemName: "translate")
+            }
+            Button(action: onSave) {
+                Image(systemName: "bookmark")
             }
         }
         .font(.system(size: 13))

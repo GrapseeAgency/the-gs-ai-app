@@ -31,6 +31,16 @@ private struct StaggerIn<Content: View>: View {
 /// 10-children ViewBuilder limit (keeps Xcode 14 / iOS 16 SDK compatible).
 struct HomeView: View {
 
+    /// Full-screen workspaces opened straight from quick actions
+    /// (Research / Vision / Writing / Code) instead of routing to chat.
+    private enum HomeWorkspace: String, Identifiable {
+        case research, vision, writing, code
+
+        var id: String { rawValue }
+    }
+
+    @State private var activeWorkspace: HomeWorkspace?
+
     // MARK: Sample data
 
     private struct QuickAction: Identifiable {
@@ -38,6 +48,7 @@ struct HomeView: View {
         let label: String
         let icon: String
         let route: AeroRoute
+        var workspace: HomeWorkspace? = nil
     }
 
     private struct ConversationRow: Identifiable {
@@ -69,11 +80,11 @@ struct HomeView: View {
     private let quickActions: [QuickAction] = [
         .init(label: "New chat", icon: "ellipsis.bubble", route: .chat(nil)),
         .init(label: "Voice", icon: "mic", route: .voice),
-        .init(label: "Analyse image", icon: "photo", route: .chat(nil)),
+        .init(label: "Analyse image", icon: "photo", route: .chat(nil), workspace: .vision),
         .init(label: "Analyse document", icon: "doc.text", route: .chat(nil)),
-        .init(label: "Write", icon: "pencil", route: .chat(nil)),
-        .init(label: "Research", icon: "magnifyingglass", route: .chat(nil)),
-        .init(label: "Code", icon: "chevron.left.forwardslash.chevron.right", route: .chat(nil)),
+        .init(label: "Write", icon: "pencil", route: .chat(nil), workspace: .writing),
+        .init(label: "Research", icon: "magnifyingglass", route: .chat(nil), workspace: .research),
+        .init(label: "Code", icon: "chevron.left.forwardslash.chevron.right", route: .chat(nil), workspace: .code),
         .init(label: "Translate", icon: "globe", route: .chat(nil)),
         .init(label: "Summarise", icon: "text.alignleft", route: .chat(nil)),
         .init(label: "Brainstorm", icon: "lightbulb", route: .chat(nil)),
@@ -156,6 +167,14 @@ struct HomeView: View {
         }
         .background(Aero.background.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
+        .fullScreenCover(item: $activeWorkspace) { workspace in
+            switch workspace {
+            case .research: ResearchView()
+            case .vision: VisionView()
+            case .writing: WritingStudioView()
+            case .code: CodeWorkspaceView()
+            }
+        }
     }
 
     // MARK: Greeting header + toolbar links
@@ -230,11 +249,21 @@ struct HomeView: View {
                 spacing: 12
             ) {
                 ForEach(quickActions) { action in
-                    NavigationLink(value: action.route) {
-                        QuickActionTile(label: action.label, icon: action.icon)
-                            .allowsHitTesting(false)   // frozen tile embeds a Button — let the link take the tap
+                    if let workspace = action.workspace {
+                        Button {
+                            activeWorkspace = workspace
+                        } label: {
+                            QuickActionTile(label: action.label, icon: action.icon)
+                                .allowsHitTesting(false)   // frozen tile embeds a Button — let the wrapper take the tap
+                        }
+                        .buttonStyle(KineticPressStyle())
+                    } else {
+                        NavigationLink(value: action.route) {
+                            QuickActionTile(label: action.label, icon: action.icon)
+                                .allowsHitTesting(false)   // frozen tile embeds a Button — let the link take the tap
+                        }
+                        .buttonStyle(KineticPressStyle())
                     }
-                    .buttonStyle(KineticPressStyle())
                 }
             }
         }

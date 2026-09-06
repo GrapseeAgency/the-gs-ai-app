@@ -147,7 +147,7 @@ fun ProfileScreen(onNavigate: (String) -> Unit) {
                     title = "Subscription",
                     leading = { AccountIcon(Icons.Outlined.WorkspacePremium) },
                     trailing = { GsChip(text = "Pro", selected = true, onClick = {}) },
-                    onClick = {}
+                    onClick = { onNavigate(GsRoutes.BILLING) }
                 )
                 GsListItem(
                     title = "Connected services",

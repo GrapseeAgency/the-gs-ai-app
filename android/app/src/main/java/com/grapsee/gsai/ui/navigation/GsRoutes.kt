@@ -22,6 +22,21 @@ object GsRoutes {
     const val CHAT_SHARED = "chats/shared"
     const val CHAT_SEARCH = "chats/search"
 
+    // Session — first launch walks Auth → Onboarding before the command centre.
+    const val AUTH = "auth"
+    const val ONBOARDING = "onboarding"
+
+    // Billing / subscription (reached from Profile).
+    const val BILLING = "billing"
+
+    // Blueprint workspaces — each Create tool gets its own room, not a chat dump.
+    const val RESEARCH = "research"
+    const val VISION = "vision"
+    const val IMAGE_STUDIO = "create/image"
+    const val WRITING_STUDIO = "create/writing"
+    const val CODE_WORKSPACE = "create/code"
+    const val PROMPT_BUILDER = "create/prompt"
+
     const val CHAT = "chat/{conversationId}"
     const val ARG_CONVERSATION = "conversationId"
     fun chat(conversationId: String?) = "chat/${conversationId ?: "new"}"
