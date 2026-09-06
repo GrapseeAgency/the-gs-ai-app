@@ -715,3 +715,22 @@ Stage Summary:
 - Code answers now read like real code — the chat surface matches the benchmark apps on typography, blocks, and colour
 - Two digits on the version: ten shipped cycles, all signature-stable, all install-over
 - Backlog remaining: assistants CRUD + pin/archive native wiring (deferred until live backend ask), markdown-lite prose rendering (bold/lists/headings), iOS FTS5/shared-store groundwork
+
+---
+Task ID: 24 (cron cycle — design parity: markdown-lite prose rendering in assistant replies + v0.11.0 shipped via LiveUpdate)
+Agent: Z.ai Code (main)
+Task: Build QA, advance backlog (design parity: markdown replies — headings/lists/bold/italic/inline code, both platforms), publish v0.11.0.
+
+Work Log:
+- BUILD QA: :app:assembleDebug BUILD SUCCESSFUL (1m47s with markdown-lite changes); toolchain intact
+- SHARED DESIGN: line classifier (#{1,3} headings, -/* bullets, 1./1) numbered, plain) + inline pass (`code` | **bold** | *italic*) — one regex spec on both platforms; unclosed markers stay literal so mid-stream text never flickers; blank lines drop (spacing handles rhythm)
+- ANDROID (ChatScreen.kt): ProseBlock replaces the plain Text branch in SegmentedContent — headings map to titleMedium/titleSmall/bodyLarge (all bold), bullet/numbered markers tinted primary with 6dp gap, caret rides the last prose line; renderInline → AnnotatedString (monospace + surfaceContainerHighest background for inline code); renderInline takes fully-qualified Color per file style
+- iOS (ChatDetailView.swift): mirrored — ProseKind/ProseLine/classifyProseLine (trailing-whitespace-only trim, prefix checks + NSRegularExpression numbered), renderInline → AttributedString (monospaced 12pt + Aero.container background via run.font/backgroundColor, inlinePresentationIntent .stronglyEmphasized/.emphasized), proseFont 16/15/14 bold hierarchy; proseBlock wired into assistantBubble ForEach
+- iOS STATIC GATES: all 5 files CLEAN (Font.system(design:) only — no .fontDesign)
+- VERSION: versionCode 11 / versionName 0.11.0; APK copied to download/GS-AI-App.apk (aapt verified versionCode 11); update-manifest.json bumped
+- PUBLISHED: commit 7d341a6 pushed; GitHub Release v0.11.0 created (REL_ID 383749909, asset upload HTTP 201, 19,485,632 bytes); /releases/latest/download/ permalink verified serving versionCode 11; stable signature b1ffd75d… intact
+
+Stage Summary:
+- Assistant replies now read like the benchmark apps end to end: styled prose, real lists, real code — the markdown gap is closed
+- Eleven shipped cycles, all signature-stable, all install-over, zero error paths added
+- Backlog remaining: assistants CRUD + pin/archive native wiring (deferred until live backend ask), iOS FTS5/shared-store groundwork, explore rows
