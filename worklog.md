@@ -40,3 +40,28 @@ Stage Summary:
 - Dev loop in this sandbox: write/scaffold Kotlin/Swift/C++ code + GitHub Actions workflows here → push to GitHub (as Grapsee-Official) → Actions runners compile/test (macOS runners needed for iOS builds)
 - Next: user to provide further assessment (app requirements/domain) before implementation
 
+---
+Task ID: 3
+Agent: Z.ai Code (main)
+Task: Lesson — AI chat app end-to-end architecture (taught by user, NO build yet)
+
+Work Log:
+- User taught the full AI chat app playbook. Studied and internalized. No development started (explicitly forbidden until lessons complete).
+
+Stage Summary:
+- KNOWLEDGE BASE ACQUIRED (key models to apply later):
+  1. REFRAME: model = rented commodity (API); product = orchestration layer. Moat = UX, memory, integrations, trust, niche — never the model.
+  2. 5 LAYERS: Product (features/UX) → Brain (prompts, RAG, tools, agents) → Backend (gateway, orchestrator, streaming) → Inference (token gen) → Data (Postgres/Redis/vector/S3).
+  3. SPEED = 5 compounding tricks: continuous batching + PagedAttention (~20x throughput), prompt caching (~90% cost / ~85% latency cut on cached prefix), speculative decoding (2-3x, identical output), MoE (Kimi K2: 1T params, ~32B active/token), model routing (~60% savings). Plus quantization + geo-distribution.
+  4. STREAMING RULE: start SSE (simple, auto-reconnect); move to WebSockets only for mid-stream client input (stop button, live tools, collab/voice).
+  5. REQUEST LIFECYCLE: gateway (auth/rate-limit) → orchestrator (history+retrieval+tools+system prompt) → inference → stream tokens → persist + memory update.
+  6. RAG PIPELINE: ingest → chunk (300-500 tok) → embed → vector store → hybrid search (keyword+vector) + rerank. Skip RAG if KB fits in context window.
+  7. MEMORY LADDER: truncation → rolling summarization → vector long-term memory → hybrid (verbatim recent buffer + session summary + retrieved cross-session facts).
+  8. RELIABILITY: smart LB, cost-aware autoscaling, rate limiting/queues, circuit breakers/failover, health checks, multi-region, observability (Grafana + Langfuse/LangSmith).
+  9. SAFETY: guardrails at gateway (input/output filtering, LlamaGuard-class classifiers), tool permissioning — destructive tools need confirmation.
+  10. DATA DEFAULTS: Postgres (+pgvector first), Redis for sessions/rate-limits/semantic cache, S3 for files.
+  11. COSTS: inference = utility bill, 40-50% of early revenue; API $0.20-21/M tok; open MoE <$1/M; build phases 0-3 (prove → MVP/SSE → RAG+guardrails+billing → routing/scale).
+- RELEVANCE TO OUR STACK: mobile (Ktor) + Next.js backend; z-ai-web-dev-sdk = "rented brain" in sandbox; stop-generating button → WebSocket (matches sandbox socket.io setup); hybrid memory for mobile assistant; single /chat endpoint with filter-style params (lesson: API design from previous lesson).
+- NEXT: user will teach more lessons before any build begins.
+
+
