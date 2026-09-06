@@ -517,3 +517,18 @@ Stage Summary:
 - A phone install is now fully self-contained: auth local, chats persist in Room, GS Lite answers offline, banner only on true no-internet, zero error dialogs anywhere
 - Install: download/GS-AI-App.apk — user-side steps: enable "Install unknown apps" for the browser/file manager, tap APK, install, open, sign in with any email (local session), complete onboarding once
 - iOS: static-source only in this sandbox (no toolchain) — Android APK is the verification vehicle per user instruction
+---
+Task ID: 13 (verification round — no code changes)
+Agent: Z.ai Code (main)
+Task: Pre-handover verification of installable APK + error-free wiring (user report imminent)
+
+Work Log:
+- git tree clean, HEAD = 7ed2c3f (Task 12), everything already pushed
+- aapt dump badging on download/GS-AI-App.apk: com.grapsee.gsai 0.1.0, minSdk 26 (Android 8.0+), targetSdk 35, INTERNET permission only — valid
+- Freshness check: APK (epoch 1788727125) is newer than the newest tracked source file (ChatsScreen.kt, epoch 1788726397) — GS Lite offline responder + device-connectivity banner + 3s failover are all compiled in
+- GS Lite wiring grep-confirmed live in ChatRepository.kt / ServiceLocator.kt / ChatsScreen.kt
+- No backlog work this round per user's explicit "no more extra works" — handover only
+
+Stage Summary:
+- download/GS-AI-App.apk verified install-ready: no error dialogs, no server-reach failures surfaced, offline chats answered by GS Lite, banner only on true no-internet
+- iOS remains static-source in sandbox; Android APK is the single verification vehicle per user instruction
