@@ -14,15 +14,15 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Z.ai Code Scaffold - AI-Powered Development",
-  description: "Modern Next.js scaffold optimized for AI-powered development with Z.ai. Built with TypeScript, Tailwind CSS, and shadcn/ui.",
+  title: "GS AI — Grapsee Agency",
+  description: "GS AI platform command centre — native Android & iOS clients, one streaming API contract, built by Grapsee Agency.",
   keywords: ["Z.ai", "Next.js", "TypeScript", "Tailwind CSS", "shadcn/ui", "AI development", "React"],
-  authors: [{ name: "Z.ai Team" }],
+  authors: [{ name: "Grapsee Agency" }],
   icons: {
     icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
   },
   openGraph: {
-    title: "Z.ai Code Scaffold",
+    title: "GS AI",
     description: "AI-powered development with modern React stack",
     url: "https://chat.z.ai",
     siteName: "Z.ai",
@@ -30,7 +30,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Z.ai Code Scaffold",
+    title: "GS AI",
     description: "AI-powered development with modern React stack",
   },
 };

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { messageToJson } from '@/lib/serializers'
 import { SYSTEM_PROMPT, streamChat, completeChat } from '@/lib/ai'
+import { clientKey, rateLimit } from '@/lib/rate-limit'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,6 +29,15 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
 // POST /api/v1/conversations/:id/messages — { content, stream?, modelId? }
 export async function POST(req: NextRequest, { params }: RouteContext) {
   const { id } = await params
+
+  // Guardrail: 20 messages / minute / client (in-memory; Redis at scale).
+  const limit = rateLimit(clientKey(req, `msgs:${id}`), 20, 60_000)
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { code: 'rate_limited', message: 'Too many messages — slow down a little.' },
+      { status: 429, headers: { 'Retry-After': String(limit.retryAfterSec) } }
+    )
+  }
 
   let body: { content?: unknown; stream?: unknown; modelId?: unknown }
   try {
