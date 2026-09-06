@@ -660,3 +660,21 @@ Stage Summary:
 - Read-aloud is now real on both platforms — a headline benchmark behaviour, fully local so it works offline with zero error exposure
 - No new permissions, no data changes; pure parity build
 - Backlog remaining: assistants CRUD + pin/archive native wiring (deferred until live backend ask), translate wiring (needs backend), FTS5 search upgrade groundwork
+
+---
+Task ID: 21 (cron cycle — Room polish: FTS-backed chat search + v0.8.0 shipped via LiveUpdate)
+Agent: Z.ai Code (main)
+Task: Build QA, advance backlog (Room polish: full-text search groundwork, Android), publish v0.8.0.
+
+Work Log:
+- BUILD QA: :app:assembleDebug BUILD SUCCESSFUL (1m54s with FTS changes); toolchain intact
+- ANDROID (ChatDatabase.kt): @Fts4(contentEntity=...) shadow tables conversations_fts/messages_fts — Room content triggers keep them in sync with every future insert/update/delete; FTS DAO paths searchByTitleFts/searchContentFts (JOIN on rowid, MATCH, recency-ordered, LIMIT 20); DB version 1→2 with a real MIGRATION_1_2 that creates the shadows and backfills via 'rebuild' — chats written by v0.7.x survive the upgrade (fallbackToDestructiveMigration stays only as a last-resort net); ftsMatchQuery() tokenizer quotes every word so operators/quotes/wildcards in user input can never break MATCH, returns null for non-ASCII (CJK) input
+- ANDROID (ChatSearchScreen.kt): searchChats now routes ASCII word queries to the FTS paths and CJK/symbol queries to the existing LIKE paths; edge states, snippets, "This week" filter and dedup unchanged
+- iOS: untouched this cycle — ConversationStore search already ranks (title hit wins, recency order); SQLite FTS5 on iOS deferred until a shared store layer lands (raw C API not worth the static-verification risk now)
+- VERSION: versionCode 8 / versionName 0.8.0; APK copied to download/GS-AI-App.apk (aapt verified versionCode 8); update-manifest.json bumped
+- PUBLISHED: commit 77e71d9 pushed; GitHub Release v0.8.0 created (REL_ID 383739768, asset upload HTTP 201); /releases/latest/download/ permalink verified serving versionCode 8; stable signature b1ffd75d… intact
+
+Stage Summary:
+- On-device search is now indexed rather than scanned — instant results at any history size, and the DB schema graduated to a migration-managed v2
+- Note: MIGRATION_1_2 schema equivalence is compile-validated by Room (query + entity checks); runtime open-helper validation happens on first launch of the new build on-device
+- Backlog remaining: assistants CRUD + pin/archive native wiring (deferred until live backend ask), iOS FTS5/shared-store groundwork, design-parity detail passes
