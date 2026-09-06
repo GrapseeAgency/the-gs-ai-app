@@ -1,6 +1,6 @@
 {
-  "versionCode": 7,
-  "versionName": "0.7.0",
+  "versionCode": 8,
+  "versionName": "0.8.0",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "Read aloud — tap the speaker on any reply and GS reads it out, right on your device"
+  "notes": "Search engine upgrade — full-text index over all your chats, faster and smarter matches; existing chats preserved"
 }

@@ -28,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import com.grapsee.gsai.data.local.ftsMatchQuery
 import com.grapsee.gsai.di.ServiceLocator
 import com.grapsee.gsai.ui.components.GsChip
 import com.grapsee.gsai.ui.components.GsEmptyState
@@ -149,17 +150,26 @@ fun ChatSearchScreen(
     }
 }
 
-/** Room-backed search; any store hiccup quietly reads as "no matches". */
+/** Room-backed search; any store hiccup quietly reads as "no matches".
+ *  ASCII word queries ride the FTS full-text index; CJK/symbol input falls
+ *  back to the LIKE path, where the simple tokenizer can't follow. */
 private suspend fun searchChats(term: String, filter: String?): List<ChatHit> {
     return runCatching {
         val db = ServiceLocator.db
         val withinWeek = filter == "This week"
-        val titleHits = db.conversationDao().searchByTitle(term)
+        val match = ftsMatchQuery(term)
+        val titleHits = (
+            if (match != null) db.conversationDao().searchByTitleFts(match)
+            else db.conversationDao().searchByTitle(term)
+            )
             .filter { !withinWeek || recentInstant(it.updatedAt) }
             .map { convo ->
                 ChatHit(convo.id, convo.title, "Chat title match", relativeMoment(convo.updatedAt))
             }
-        val messageHits = db.messageDao().searchContent(term)
+        val messageHits = (
+            if (match != null) db.messageDao().searchContentFts(match)
+            else db.messageDao().searchContent(term)
+            )
             .filter { !withinWeek || recentInstant(it.createdAt) }
             .mapNotNull { message ->
                 val convo = db.conversationDao().getById(message.conversationId) ?: return@mapNotNull null

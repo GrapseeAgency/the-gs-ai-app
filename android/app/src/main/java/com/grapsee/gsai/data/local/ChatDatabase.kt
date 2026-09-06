@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
+import androidx.room.Fts4
 import androidx.room.Index
 import androidx.room.Insert
 import androidx.room.PrimaryKey
@@ -11,6 +12,8 @@ import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Upsert
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
 @Entity(tableName = "conversations")
@@ -70,6 +73,15 @@ interface ConversationDao {
     @Query("SELECT * FROM conversations WHERE title LIKE '%' || :query || '%' ORDER BY updatedAt DESC LIMIT 20")
     suspend fun searchByTitle(query: String): List<ConversationEntity>
 
+    /** FTS path — full-text index over titles, kept in sync by Room's content triggers. */
+    @Query(
+        "SELECT conversations.* FROM conversations " +
+            "JOIN conversations_fts ON conversations.rowid = conversations_fts.rowid " +
+            "WHERE conversations_fts MATCH :matchQuery " +
+            "ORDER BY conversations.updatedAt DESC LIMIT 20"
+    )
+    suspend fun searchByTitleFts(matchQuery: String): List<ConversationEntity>
+
     @Query("DELETE FROM conversations WHERE id = :id")
     suspend fun delete(id: String)
 
@@ -100,11 +112,54 @@ interface MessageDao {
     /** Edge-states pass: chat-scoped search across local message bodies. */
     @Query("SELECT * FROM messages WHERE content LIKE '%' || :query || '%' ORDER BY createdAt DESC LIMIT 20")
     suspend fun searchContent(query: String): List<MessageEntity>
+
+    /** FTS path — full-text index over message bodies, synced by Room's content triggers. */
+    @Query(
+        "SELECT messages.* FROM messages " +
+            "JOIN messages_fts ON messages.rowid = messages_fts.rowid " +
+            "WHERE messages_fts MATCH :matchQuery " +
+            "ORDER BY messages.createdAt DESC LIMIT 20"
+    )
+    suspend fun searchContentFts(matchQuery: String): List<MessageEntity>
+}
+
+// --- full-text search plumbing -------------------------------------------------
+
+/** FTS shadow of the conversations table — content sync handled by Room triggers. */
+@Fts4(contentEntity = ConversationEntity::class)
+@Entity(tableName = "conversations_fts")
+data class ConversationFtsEntity(val title: String)
+
+/** FTS shadow of the messages table — content sync handled by Room triggers. */
+@Fts4(contentEntity = MessageEntity::class)
+@Entity(tableName = "messages_fts")
+data class MessageFtsEntity(val content: String)
+
+/**
+ * Turn raw user input into a safe FTS MATCH expression — each word becomes a
+ * quoted token so operators/wildcards in the input can never break the query.
+ * Returns null for non-ASCII input (CJK and friends), where the simple
+ * tokenizer is useless and the LIKE fallback matches better.
+ */
+fun ftsMatchQuery(raw: String): String? {
+    val trimmed = raw.trim()
+    if (trimmed.isEmpty()) return null
+    if (trimmed.any { !it.isLetterOrDigit() && !it.isWhitespace() }) return null
+    if (trimmed.any { it.code > 0x7F }) return null
+    return trimmed.split(Regex("\\s+"))
+        .mapNotNull { token -> token.filter { it.isLetterOrDigit() }.takeIf { it.isNotEmpty() } }
+        .joinToString(" ") { "\"$it\"" }
+        .ifEmpty { null }
 }
 
 @Database(
-    entities = [ConversationEntity::class, MessageEntity::class],
-    version = 1,
+    entities = [
+        ConversationEntity::class,
+        MessageEntity::class,
+        ConversationFtsEntity::class,
+        MessageFtsEntity::class
+    ],
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -112,8 +167,26 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun messageDao(): MessageDao
 
     companion object {
+        /** v1 → v2: add the FTS shadows and backfill them from existing rows —
+         *  user chats written by earlier builds survive the upgrade untouched. */
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE VIRTUAL TABLE IF NOT EXISTS `conversations_fts` " +
+                        "USING FTS4(`title` TEXT NOT NULL, content=`conversations`)"
+                )
+                db.execSQL("INSERT INTO conversations_fts(conversations_fts) VALUES('rebuild')")
+                db.execSQL(
+                    "CREATE VIRTUAL TABLE IF NOT EXISTS `messages_fts` " +
+                        "USING FTS4(`content` TEXT NOT NULL, content=`messages`)"
+                )
+                db.execSQL("INSERT INTO messages_fts(messages_fts) VALUES('rebuild')")
+            }
+        }
+
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "gsai-chat.db")
+                .addMigrations(MIGRATION_1_2)
                 .fallbackToDestructiveMigration()
                 .build()
     }
