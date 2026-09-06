@@ -678,3 +678,21 @@ Stage Summary:
 - On-device search is now indexed rather than scanned — instant results at any history size, and the DB schema graduated to a migration-managed v2
 - Note: MIGRATION_1_2 schema equivalence is compile-validated by Room (query + entity checks); runtime open-helper validation happens on first launch of the new build on-device
 - Backlog remaining: assistants CRUD + pin/archive native wiring (deferred until live backend ask), iOS FTS5/shared-store groundwork, design-parity detail passes
+
+---
+Task ID: 22 (cron cycle — design parity: code-block rendering in assistant replies + v0.9.0 shipped via LiveUpdate)
+Agent: Z.ai Code (main)
+Task: Build QA, advance backlog (design parity: benchmark code-block typography in chat, both platforms), publish v0.9.0.
+
+Work Log:
+- BUILD QA: :app:assembleDebug BUILD SUCCESSFUL (1m40s with code-block changes); toolchain intact
+- ANDROID (ChatScreen.kt): parseContentSegments splits replies on ``` fences (closed + unterminated trailing fence mid-stream renders live as code); SegmentedContent lays prose + code segments in one bubble, streaming caret rides the last text segment; CodeBlock = surfaceContainerHighest 12dp rounded block, language label (defaults "code"), one-tap copy, monospaced bodySmall with horizontalScroll for long lines
+- iOS (ChatDetailView.swift): mirrored — ContentSegment + parseContentSegments via NSRegularExpression with identical unterminated-fence handling; codeBlock() = Aero.container fill, outline stroke, language label, UIPasteboard copy, 12pt monospaced body; bubble widened 300→320 to host code; bubbleText "…" fallback preserved for the pre-first-token state
+- iOS STATIC GATES: all 5 files CLEAN (Font.system(design:) used, NOT the banned .fontDesign modifier)
+- VERSION: versionCode 9 / versionName 0.9.0; APK copied to download/GS-AI-App.apk (aapt verified versionCode 9); update-manifest.json bumped
+- PUBLISHED: commit 89f0d88 pushed; GitHub Release v0.9.0 created (REL_ID 383743029, asset upload HTTP 201); /releases/latest/download/ permalink verified serving versionCode 9; stable signature b1ffd75d… intact
+
+Stage Summary:
+- Assistant replies now carry benchmark-grade code typography — the single most visible remaining chat-surface gap closed
+- Parser shared semantics on both platforms (same regex, same live-streaming behavior)
+- Backlog remaining: assistants CRUD + pin/archive native wiring (deferred until live backend ask), syntax highlighting (later pass), iOS FTS5/shared-store groundwork
