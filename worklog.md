@@ -849,3 +849,20 @@ Stage Summary:
 - Threads are now searchable the way the benchmark apps are: magnifier in the thread, live match count, up/down stepping that scrolls each hit to center, and the active turn visibly lit — identical semantics on Compose and SwiftUI, zero new error surfaces
 - Seventeen shipped cycles, all signature-stable, all install-over
 - Backlog remaining: assistants CRUD + pin/archive native wiring (deferred until live backend ask), further parity sweeps
+
+---
+Task ID: 31 (cron cycle — parity/edge states: per-conversation draft persistence, v0.18.0 shipped via LiveUpdate)
+Agent: Z.ai Code (main)
+Task: Build QA, advance backlog (draft persistence — leave a thread mid-thought, the composer keeps your words, both platforms), publish v0.18.0.
+
+Work Log:
+- ANDROID: ChatScreen gains file-level draft helpers over SharedPreferences (gs_chat_drafts / draft_<id>, all runCatching-silent); DisposableEffect(activeConversationId) parks the unsent composer text on dispose — also covers in-place conversation switches, since delegates read the latest state; history load restores it only when the composer is blank (voice prefill keeps precedence, runs after); dispatch() clears the slot the moment a send lands; blank saves just remove the key, no garbage accumulates
+- iOS: ChatDetailView onDisappear parks vm.draft under draft_<conversationID> in UserDefaults (blank clears the slot); onAppear restores it only when draft is empty and no voice prefill is present (else-branch keeps prefill precedence); sendAndClearDraft() wraps vm.send() — clears the key when the composer actually empties — and both send call sites (input bar, starter chips) route through it; regenerate/edit flows leave the parked draft untouched
+- iOS STATIC GATES: 13 files CLEAN
+- VERSION: versionCode 18 / versionName 0.18.0; APK copied to download/GS-AI-App.apk (aapt verified versionCode 18); update-manifest.json bumped
+- PUBLISHED: commit a201c68 pushed; GitHub Release v0.18.0 created (REL_ID 383780540, asset HTTP 201, 19,518,404 bytes); /releases/latest/download/ permalink verified serving versionCode 18; stable signature b1ffd75d… intact
+
+Stage Summary:
+- The composer is now forgiving the way the benchmark apps are: back out of any thread mid-sentence, reopen it, and your unsent text is sitting there — identical semantics on Compose and SwiftUI, zero new error surfaces
+- Eighteen shipped cycles, all signature-stable, all install-over
+- Backlog remaining: assistants CRUD + pin/archive native wiring (deferred until live backend ask), further parity sweeps
