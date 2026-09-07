@@ -164,6 +164,26 @@ final class ChatViewModel: ObservableObject {
 
     // MARK: - Streaming pipeline
 
+    /// Remote model ids, fetched once per process; nil = unknown/unchecked.
+    private static var cachedRemoteModelIDs: [String]?
+
+    /**
+     * The preferred model id (persisted by the Model Centre in UserDefaults)
+     * only travels when the backend's registry advertises it — otherwise the
+     * server default applies silently. Registry fetch failures just mean nil.
+     */
+    private func resolvePreferredModelID() async -> String? {
+        guard let preferred = UserDefaults.standard.string(forKey: "gs.models.defaultId"),
+              !preferred.isEmpty else { return nil }
+        if let cached = Self.cachedRemoteModelIDs {
+            return cached.contains(preferred) ? preferred : nil
+        }
+        guard let remote = try? await APIClient.shared.models() else { return nil }
+        let ids = remote.map { $0.id }
+        Self.cachedRemoteModelIDs = ids
+        return ids.contains(preferred) ? preferred : nil
+    }
+
     private func beginStreaming(text: String, appendUserMessage: Bool) {
         errorMessage = nil
         if appendUserMessage {
@@ -185,6 +205,7 @@ final class ChatViewModel: ObservableObject {
         streamTask = Task {
             do {
                 let conversationID = try await self.ensureConversation(for: text)
+                let modelID = await self.resolvePreferredModelID()
                 if appendUserMessage {
                     ConversationStore.shared.append(StoredMessage(
                         id: UUID().uuidString,
@@ -196,6 +217,7 @@ final class ChatViewModel: ObservableObject {
                 try await APIClient.shared.stream(
                     message: text,
                     conversationID: conversationID,
+                    modelId: modelID,
                     onDelta: { delta in
                         Task { @MainActor in
                             self.streamingAccumulator += delta

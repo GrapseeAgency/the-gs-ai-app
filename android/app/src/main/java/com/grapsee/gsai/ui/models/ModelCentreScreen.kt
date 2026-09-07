@@ -27,7 +27,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.grapsee.gsai.data.ModelPrefs
 import com.grapsee.gsai.data.model.ModelCatalog
 import com.grapsee.gsai.ui.components.GsCard
 import com.grapsee.gsai.ui.components.GsChip
@@ -45,9 +47,12 @@ private val reasoningModes = listOf(
 
 @Composable
 fun ModelCentreScreen(onNavigate: (String) -> Unit) {
-    var defaultId by remember { mutableStateOf(ModelCatalog.default.id) }
+    val context = LocalContext.current
+    // Preference-backed: the pick survives relaunches and the chat send path
+    // reads the same id (ChatRepository gates it against the remote registry).
+    var defaultId by remember { mutableStateOf(ModelPrefs.defaultId(context)) }
     var expandedId by remember { mutableStateOf<String?>(null) }
-    var selectedMode by remember { mutableStateOf("Balanced") }
+    var selectedMode by remember { mutableStateOf(ModelPrefs.mode(context)) }
 
     val current = ModelCatalog.byId(defaultId) ?: ModelCatalog.default
 
@@ -105,7 +110,10 @@ fun ModelCentreScreen(onNavigate: (String) -> Unit) {
                         GsChip(
                             text = mode,
                             selected = mode == selectedMode,
-                            onClick = { selectedMode = mode }
+                            onClick = {
+                                selectedMode = mode
+                                ModelPrefs.setMode(context, mode)
+                            }
                         )
                     }
                 }
@@ -169,7 +177,10 @@ fun ModelCentreScreen(onNavigate: (String) -> Unit) {
                                             GsChip(text = mode, selected = false, onClick = {})
                                         }
                                     }
-                                    TextButton(onClick = { defaultId = model.id }) {
+                                    TextButton(onClick = {
+                                        defaultId = model.id
+                                        ModelPrefs.setDefaultId(context, model.id)
+                                    }) {
                                         Text(
                                             text = "Set as default",
                                             color = MaterialTheme.colorScheme.primary

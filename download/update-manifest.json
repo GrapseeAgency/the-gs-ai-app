@@ -1,6 +1,6 @@
 {
-  "versionCode": 31,
-  "versionName": "0.31.0",
+  "versionCode": 32,
+  "versionName": "0.32.0",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "Notifications are alive: tapping one marks it read and opens the related surface — finished work in a fresh chat, activity in its hub."
+  "notes": "Your model pick now sticks: Set as default and reasoning mode survive relaunches, and chats actually send with the chosen model when the server offers it."
 }

@@ -43,6 +43,26 @@ class ChatRepository(
     private val _connectionState = MutableStateFlow(false)
     val connectionState: StateFlow<Boolean> = _connectionState.asStateFlow()
 
+    /** Remote model ids, fetched once per process; null = unknown/unchecked. */
+    private var remoteModelIds: Set<String>? = null
+
+    /**
+     * The preferred model id only travels when the backend's registry
+     * advertises it — otherwise the server default applies silently. The
+     * registry is fetched once and cached; any failure just means null.
+     */
+    private suspend fun resolveRemoteModelId(modelId: String?): String? {
+        if (modelId.isNullOrBlank()) return null
+        val ids = remoteModelIds ?: try {
+            api.models().map { it.id }.toSet().also { remoteModelIds = it }
+        } catch (ce: CancellationException) {
+            throw ce
+        } catch (e: Exception) {
+            null
+        }
+        return if (ids != null && modelId in ids) modelId else null
+    }
+
     private var activeJob: Job? = null
 
     fun conversations(): Flow<List<ConversationEntity>> = db.conversationDao().observeRecent()
@@ -264,7 +284,7 @@ class ChatRepository(
             api.sendMessageStream(
                 conversationId = activeId,
                 content = content,
-                modelId = modelId,
+                modelId = resolveRemoteModelId(modelId),
                 onDelta = { delta ->
                     accumulated.append(delta)
                     onDelta(delta)

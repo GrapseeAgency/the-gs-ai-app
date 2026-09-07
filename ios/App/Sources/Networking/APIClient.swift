@@ -117,6 +117,7 @@ final class APIClient {
     func stream(
         message content: String,
         conversationID: String,
+        modelId: String? = nil,
         onDelta: @escaping (String) -> Void,
         onDone: @escaping (Message?) -> Void,
         onError: @escaping (Error) -> Void = { _ in }
@@ -124,7 +125,7 @@ final class APIClient {
         var request = try buildRequest(
             path: "/api/v1/conversations/\(Self.escaped(conversationID))/messages",
             method: "POST",
-            body: try encoded(SendMessageRequest(content: content, stream: true, modelId: nil))
+            body: try encoded(SendMessageRequest(content: content, stream: true, modelId: modelId))
         )
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
 

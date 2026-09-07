@@ -116,6 +116,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import com.grapsee.gsai.data.ModelPrefs
 import com.grapsee.gsai.data.repository.ChatRepository
 import com.grapsee.gsai.di.ServiceLocator
 import com.grapsee.gsai.ui.components.GsCard
@@ -385,6 +386,7 @@ fun ChatScreen(
                 val returnedId = ServiceLocator.chat.send(
                     conversationId = activeConversationId,
                     content = prompt,
+                    modelId = ModelPrefs.defaultId(context),
                     onDelta = { delta ->
                         val index = messages.indexOfFirst { it.id == assistantId }
                         if (index >= 0) {

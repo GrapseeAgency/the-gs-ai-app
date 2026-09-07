@@ -28,11 +28,14 @@ struct ModelInfo: Identifiable, Hashable {
 }
 
 /// Model centre — default card, reasoning modes, expandable model browser.
+/// The pick persists in UserDefaults ("gs.models.defaultId" / "gs.models.mode");
+/// the chat send path reads the same id (ChatViewModel gates it against the
+/// remote registry, so unknown ids silently fall back to the server default).
 struct ModelCentreView: View {
 
     @State private var expandedID: String?
-    @State private var defaultID = "gs-balanced"
-    @State private var selectedMode = "Balanced"
+    @State private var defaultID = UserDefaults.standard.string(forKey: "gs.models.defaultId") ?? "gs-balanced"
+    @State private var selectedMode = UserDefaults.standard.string(forKey: "gs.models.mode") ?? "Balanced"
 
     private let modes = [
         "Fast", "Balanced", "Deep reasoning", "Research",
@@ -112,6 +115,7 @@ struct ModelCentreView: View {
                     ForEach(modes, id: \.self) { mode in
                         AeroChip(text: mode, selected: selectedMode == mode) {
                             selectedMode = mode
+                            UserDefaults.standard.set(mode, forKey: "gs.models.mode")
                         }
                     }
                 }
@@ -184,7 +188,10 @@ struct ModelCentreView: View {
     private func setDefaultButton(_ model: ModelInfo) -> some View {
         let isCurrent = model.id == defaultID
         return Button {
-            withAnimation(Aero.snappy) { defaultID = model.id }
+            withAnimation(Aero.snappy) {
+                defaultID = model.id
+                UserDefaults.standard.set(model.id, forKey: "gs.models.defaultId")
+            }
         } label: {
             Text(isCurrent ? "Current default" : "Set as default")
                 .font(Aero.title())
