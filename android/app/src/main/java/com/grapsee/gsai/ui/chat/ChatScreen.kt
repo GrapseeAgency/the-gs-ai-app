@@ -729,10 +729,20 @@ private fun UserMessage(
                     )
                 }
             }
+            val stamp = timeLabel(message.createdAt)
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
             ) {
+                if (stamp.isNotEmpty()) {
+                    Text(
+                        text = stamp,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline,
+                        modifier = Modifier.padding(end = 6.dp)
+                    )
+                }
                 BubbleAction(Icons.Outlined.ContentCopy, "Copy") { onCopy(message.content) }
                 if (editEnabled) {
                     BubbleAction(Icons.Outlined.Edit, "Edit", onEditStart)
@@ -804,7 +814,19 @@ private fun AssistantMessage(
                     )
                     if (!message.isStreaming) {
                         Spacer(Modifier.height(6.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            val stamp = timeLabel(message.createdAt)
+                            if (stamp.isNotEmpty()) {
+                                Text(
+                                    text = stamp,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.outline,
+                                    modifier = Modifier.padding(end = 4.dp)
+                                )
+                            }
                             BubbleAction(Icons.Outlined.ContentCopy, "Copy") { onCopy(message.content) }
                             BubbleAction(Icons.Outlined.Refresh, "Regenerate", onRegenerate)
                             BubbleAction(
@@ -1283,6 +1305,11 @@ private fun DaySeparator(label: String) {
 private fun dayKey(iso: String): String? = runCatching {
     OffsetDateTime.parse(iso).toLocalDate().toString()
 }.getOrNull()
+
+/** Quiet per-turn clock in the action row — the benchmark timestamp treatment. */
+private fun timeLabel(iso: String): String = runCatching {
+    OffsetDateTime.parse(iso).format(DateTimeFormatter.ofPattern("HH:mm"))
+}.getOrDefault("")
 
 private fun dayLabel(iso: String): String? = runCatching {
     val date = OffsetDateTime.parse(iso).toLocalDate()

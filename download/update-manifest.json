@@ -1,6 +1,6 @@
 {
-  "versionCode": 21,
-  "versionName": "0.21.0",
+  "versionCode": 22,
+  "versionName": "0.22.0",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "The Share button actually shares now — the system share sheet, on any app you choose — and long-presses confirm with a haptic tick. Both platforms."
+  "notes": "Every turn now carries a quiet HH:MM clock beside its actions — the benchmark timestamp treatment, on both platforms."
 }

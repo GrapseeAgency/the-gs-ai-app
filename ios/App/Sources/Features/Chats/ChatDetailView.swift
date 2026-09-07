@@ -669,6 +669,11 @@ private struct MessageBubble: View {
                     .frame(maxWidth: 280, alignment: .trailing)
             }
             HStack(spacing: 10) {
+                if let stamp = timeLabel(message.createdAt) {
+                    Text(stamp)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Aero.textMuted)
+                }
                 Button {
                     UIPasteboard.general.string = message.content
                 } label: {
@@ -799,6 +804,11 @@ private struct MessageBubble: View {
 
     private var actionRow: some View {
         HStack(spacing: 18) {
+            if let stamp = timeLabel(message.createdAt) {
+                Text(stamp)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Aero.textMuted)
+            }
             Button {
                 UIPasteboard.general.string = message.content
             } label: {
@@ -872,6 +882,14 @@ private func dayKey(_ iso: String) -> String? {
     guard let date = parseISODate(iso) else { return nil }
     let formatter = DateFormatter()
     formatter.dateFormat = "yyyy-MM-dd"
+    return formatter.string(from: date)
+}
+
+/// Quiet per-turn clock in the action row — the benchmark timestamp treatment.
+private func timeLabel(_ iso: String) -> String? {
+    guard let date = parseISODate(iso) else { return nil }
+    let formatter = DateFormatter()
+    formatter.dateFormat = "HH:mm"
     return formatter.string(from: date)
 }
 
