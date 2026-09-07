@@ -59,8 +59,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -104,6 +107,9 @@ fun VoiceScreen(
 ) {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
+    // Platform touch confirmation for committed actions (send/copy).
+    val view = LocalView.current
+    val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
 
     var phase by remember { mutableStateOf(VoicePhase.Idle) }
     // Live text while listening; final text once the result lands.
@@ -330,6 +336,7 @@ fun VoiceScreen(
                                 onClick = {
                                     // The recognizer is done with the mic before
                                     // the hand-off — close the session cleanly.
+                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                                     recognizer.value?.runCatching { destroy() }
                                     recognizer.value = null
                                     onSendToChat(finalTranscript)
@@ -340,13 +347,17 @@ fun VoiceScreen(
                                 selected = false,
                                 onClick = {
                                     clipboard.setText(AnnotatedString(finalTranscript))
+                                    view.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
                                     Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
                                 }
                             )
                             GsChip(
                                 text = "Try again",
                                 selected = false,
-                                onClick = { sessionTick++ }
+                                onClick = {
+                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    sessionTick++
+                                }
                             )
                         }
                     }

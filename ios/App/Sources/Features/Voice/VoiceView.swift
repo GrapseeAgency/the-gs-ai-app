@@ -152,12 +152,15 @@ struct VoiceView: View {
                         AeroChip(text: "Send to chat", selected: true) {
                             // The engine has finished with the mic by now;
                             // the chat opens on top, voice mode stays beneath.
+                            GSHaptics.success()
                             router.path.append(.chatPrefill(dictation.lastResult))
                         }
                         AeroChip(text: "Copy", selected: false) {
                             UIPasteboard.general.string = dictation.lastResult
+                            GSHaptics.success()
                         }
                         AeroChip(text: "Try again", selected: false) {
+                            GSHaptics.tap()
                             dictation.startSession()
                         }
                     }

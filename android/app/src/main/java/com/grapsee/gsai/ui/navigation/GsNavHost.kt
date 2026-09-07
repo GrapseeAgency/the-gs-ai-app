@@ -1,5 +1,11 @@
 package com.grapsee.gsai.ui.navigation
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ModalNavigationDrawer
@@ -93,7 +99,32 @@ fun GsNavHost(modifier: Modifier = Modifier) {
             )
         }
     ) {
-    NavHost(navController = navController, startDestination = start, modifier = modifier) {
+    NavHost(
+        navController = navController,
+        startDestination = start,
+        modifier = modifier,
+        // Platform push/pop choreography: the incoming screen slides from the
+        // trailing edge while the outgoing one parallax-fades backwards — the
+        // same horizontal grammar Android system apps use. Navigation 2.8
+        // seeks these pop transitions under the Android 14+ predictive-back
+        // gesture, so the back swipe scrubs the animation, not skip it.
+        enterTransition = {
+            slideInHorizontally(tween(320, easing = FastOutSlowInEasing)) { it } +
+                fadeIn(tween(200, easing = FastOutSlowInEasing))
+        },
+        exitTransition = {
+            slideOutHorizontally(tween(320, easing = FastOutSlowInEasing)) { -it / 4 } +
+                fadeOut(tween(200, easing = FastOutSlowInEasing))
+        },
+        popEnterTransition = {
+            slideInHorizontally(tween(320, easing = FastOutSlowInEasing)) { -it / 4 } +
+                fadeIn(tween(200, easing = FastOutSlowInEasing))
+        },
+        popExitTransition = {
+            slideOutHorizontally(tween(320, easing = FastOutSlowInEasing)) { it } +
+                fadeOut(tween(200, easing = FastOutSlowInEasing))
+        }
+    ) {
         composable(GsRoutes.HOME) {
             HomeScreen(
                 onNavigate = open,

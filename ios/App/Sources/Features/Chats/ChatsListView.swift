@@ -281,6 +281,7 @@ struct ChatsListView: View {
                         Button {
                             let target = !row.pinned
                             store.setPinned(id: row.id, target)
+                            GSHaptics.success()
                             sync(row.id, pinned: target)
                         } label: {
                             Label(row.pinned ? "Unpin" : "Pin to top", systemImage: "pin")
@@ -293,12 +294,14 @@ struct ChatsListView: View {
                         }
                         Button {
                             store.setArchived(id: row.id, true)
+                            GSHaptics.success()
                             sync(row.id, archived: true)
                         } label: {
                             Label("Archive", systemImage: "archivebox")
                         }
                         Button(role: .destructive) {
                             store.delete(id: row.id)
+                            GSHaptics.warning()
                             syncDelete(row.id)
                         } label: {
                             Label("Delete", systemImage: "trash")

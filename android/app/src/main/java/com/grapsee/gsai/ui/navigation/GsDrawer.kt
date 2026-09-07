@@ -54,6 +54,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -82,6 +84,7 @@ fun GsDrawerContent(
     onClose: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
+    val haptics = LocalHapticFeedback.current
     val recents by remember {
         runCatching { ServiceLocator.chat.activeConversations() }.getOrElse { flowOf(emptyList()) }
     }.collectAsState(initial = emptyList())
@@ -192,7 +195,11 @@ fun GsDrawerContent(
                         onClose()
                         onNavigate(GsRoutes.chat(conversation.id))
                     },
-                    onActions = { actionTarget = conversation }
+                    onActions = {
+                        // The reveal haptic the system lists play on long-press.
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        actionTarget = conversation
+                    }
                 )
             }
             Spacer(Modifier.height(GsMotion.spaceXS))

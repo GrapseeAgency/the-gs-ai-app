@@ -3,6 +3,7 @@ package com.grapsee.gsai.ui.chat
 import android.content.Context
 import android.content.Intent
 import android.speech.tts.TextToSpeech
+import android.view.HapticFeedbackConstants
 import android.speech.tts.UtteranceProgressListener
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
@@ -27,7 +28,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imeNestedScroll
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -106,6 +109,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.text.AnnotatedString
@@ -243,6 +247,7 @@ private fun clearDraft(context: Context, conversationId: String?) {
  * so a brand-new chat adopts its server id after the first turn completes.
  * Stop-generation cancels the streaming Job; partial output stays on screen and disk.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ChatScreen(
     conversationId: String?,
@@ -283,6 +288,9 @@ fun ChatScreen(
     val streamText = remember { mutableStateOf("") }
     val isStreaming = streamingJob?.isActive == true
     val context = LocalContext.current
+    // System-grade touch confirmation: the same Taptic-lite tick the platform
+    // uses for key presses, applied when a send actually commits.
+    val view = LocalView.current
     val showSnack: (String) -> Unit = { message ->
         scope.launch { snackbarHostState.showSnackbar(message) }
     }
@@ -444,6 +452,9 @@ fun ChatScreen(
     fun dispatch(text: String, echoUser: Boolean) {
         val prompt = text.trim()
         if (prompt.isEmpty() || streamingJob?.isActive == true) return
+        // A committed send gets the platform's virtual-key tick — the touch
+        // confirmation native keyboards and dial pads use.
+        view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
         draft = ""
         clearDraft(context, activeConversationId)
         if (echoUser) {
@@ -717,7 +728,12 @@ fun ChatScreen(
                 } else {
                     LazyColumn(
                         state = listState,
-                        modifier = Modifier.fillMaxSize(),
+                        // imeNestedScroll: dragging the transcript hands the
+                        // gesture to the IME — the keyboard tracks the finger
+                        // downward exactly like the platform chat apps.
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .imeNestedScroll(),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         itemsIndexed(

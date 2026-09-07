@@ -50,13 +50,13 @@ enum Aero {
     ]
 
     // MARK: Typography — serif display voice, sans interface
-    static func displayTitle() -> Font { .system(size: 34, weight: .semibold, design: .serif) }
-    static func display() -> Font { .system(size: 28, weight: .semibold, design: .serif) }
-    static func headline() -> Font { .system(size: 22, weight: .semibold, design: .serif) }
-    static func title() -> Font { .system(size: 17, weight: .semibold, design: .default) }
-    static func body() -> Font { .system(size: 15, weight: .regular, design: .default) }
-    static func caption() -> Font { .system(size: 13, weight: .regular, design: .default) }
-    static func label() -> Font { .system(size: 12, weight: .medium, design: .default) }
+    static func displayTitle() -> Font { .system(size: 34, weight: .semibold, design: .serif, relativeTo: .largeTitle) }
+    static func display() -> Font { .system(size: 28, weight: .semibold, design: .serif, relativeTo: .title) }
+    static func headline() -> Font { .system(size: 22, weight: .semibold, design: .serif, relativeTo: .title2) }
+    static func title() -> Font { .system(size: 17, weight: .semibold, design: .default, relativeTo: .headline) }
+    static func body() -> Font { .system(size: 15, weight: .regular, design: .default, relativeTo: .body) }
+    static func caption() -> Font { .system(size: 13, weight: .regular, design: .default, relativeTo: .caption) }
+    static func label() -> Font { .system(size: 12, weight: .medium, design: .default, relativeTo: .caption2) }
 
     // MARK: Motion — springs over eases, stagger entrances, press scales
     static let spring = Animation.spring(response: 0.35, dampingFraction: 0.8)

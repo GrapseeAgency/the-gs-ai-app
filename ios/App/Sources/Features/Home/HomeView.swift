@@ -459,6 +459,8 @@ struct HomeView: View {
                     guard !Task.isCancelled else { return }
                     await MainActor.run {
                         holdTriggered = true
+                        // Hold threshold crossed — the mic is genuinely opening.
+                        GSHaptics.press()
                         withAnimation(.easeInOut(duration: 0.85).repeatForever(autoreverses: true)) {
                             haloPulse = 1.42
                         }
@@ -472,7 +474,8 @@ struct HomeView: View {
                 if holdTriggered {
                     dictation.end()
                 } else {
-                    onRoute?(.voice)   // quick tap — full voice mode
+                    GSHaptics.tap()   // quick tap — full voice mode
+                    onRoute?(.voice)
                 }
                 holdTriggered = false
                 haloPulse = 1.0

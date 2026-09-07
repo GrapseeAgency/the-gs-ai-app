@@ -1,6 +1,6 @@
 {
-  "versionCode": 58,
-  "versionName": "0.57.1",
+  "versionCode": 59,
+  "versionName": "0.58.0",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "GS LiveUpdate is fixed. The in-app updater now resumes downloads from the exact byte a dropped connection broke at instead of restarting at 1%, only ever runs one download at a time, and verifies every package before the system installer sees it (ZIP magic, a real package-manager parse, our own signature identity, and the full advertised byte length) — so a truncated download can never again end in 'problem parsing the package'. When a download genuinely cannot finish, the pill says so and stays tappable to resume; nothing dissolves into nothing. Everything else in the app is untouched."
+  "notes": "The native-feel pass. Android now navigates like Android: real push/pop transitions (incoming screen slides in, outgoing parallax-fades back) that scrub under the Android 14+ predictive-back gesture, and the chat transcript's keyboard now tracks your finger downward as you drag — exactly like the platform chat apps. Committed sends, long-press reveals and copy confirmations answer with the system's own touch ticks. iOS behaves like iOS: the keyboard in chat now follows your finger interactively instead of vanishing on touch, the Taptic Engine answers sends, copies, pins, deletes and the voice hold-threshold with real haptics (and the Settings Haptics toggle now actually controls them), and every font scales with your Dynamic Type setting. Same design, same features — each platform simply feels like it was built for it."
 }

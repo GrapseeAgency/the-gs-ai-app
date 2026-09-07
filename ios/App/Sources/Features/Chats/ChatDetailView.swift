@@ -103,6 +103,7 @@ struct ChatDetailView: View {
             }
         }
         .onAppear {
+            GSHaptics.prepare()
             if let prefill, vm.draft.isEmpty, !vm.isStreaming {
                 vm.draft = prefill
             } else if let id = vm.conversationID, vm.draft.isEmpty, !vm.isStreaming {
@@ -260,7 +261,7 @@ struct ChatDetailView: View {
                     scheduleDisengage(after: 0.25)
                 }
             )
-            .scrollDismissesKeyboard(.immediately)
+            .scrollDismissesKeyboard(.interactively)
             .onChange(of: vm.messages.count) { _ in
                 // Prepend restore: the captured anchor row (first visible when
                 // the page was pulled) returns to the viewport top — instant,
@@ -395,6 +396,8 @@ struct ChatDetailView: View {
 
     /// Sends and, when the composer actually empties, drops the parked draft.
     private func sendAndClearDraft() {
+        // Committed send — the Taptic tick the system keyboard plays on keys.
+        GSHaptics.tap()
         let pendingID = vm.conversationID
         vm.send()
         if vm.draft.isEmpty, let pendingID {
@@ -857,6 +860,7 @@ private struct MessageBubble: View, Equatable {
     /// the SwiftUI counterpart of Android's "Copied" snack.
     private func copyAndConfirm(_ text: String) {
         UIPasteboard.general.string = text
+        GSHaptics.success()
         withAnimation(.easeOut(duration: 0.15)) { copied = true }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
             withAnimation(.easeIn(duration: 0.2)) { copied = false }
@@ -1105,6 +1109,7 @@ private struct CodeCopyButton: View {
     var body: some View {
         Button {
             UIPasteboard.general.string = text
+            GSHaptics.success()
             withAnimation(.easeOut(duration: 0.15)) { copied = true }
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
                 withAnimation(.easeIn(duration: 0.2)) { copied = false }
