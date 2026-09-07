@@ -15,8 +15,8 @@ android {
         applicationId = "com.grapsee.gsai"
         minSdk = 26
         targetSdk = 35
-        versionCode = 47
-        versionName = "0.47.0"
+        versionCode = 48
+        versionName = "0.48.0"
 
         // Backend origin for the Android emulator (host loopback). Override per build type if needed.
         buildConfigField("String", "BASE_URL", "\"http://10.0.2.2:3000\"")
@@ -67,6 +67,11 @@ android {
 
 dependencies {
     implementation(libs.androidx.core.ktx)
+    // Baseline-profile installer: on API 26-28 devices the merged library
+    // profile (Compose/Room/Lifecycle ship one in each AAR) is installed at
+    // first run by this artifact; API 29+ installs it at package time.
+    // Startup AOT coverage without any hand-tuned rules.
+    implementation(libs.androidx.profileinstaller)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.activity.compose)

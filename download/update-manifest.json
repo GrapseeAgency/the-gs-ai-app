@@ -1,6 +1,6 @@
 {
-  "versionCode": 47,
-  "versionName": "0.47.0",
+  "versionCode": 48,
+  "versionName": "0.48.0",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "Stability pass: dictation now closes its microphone session the moment the app goes to the background or is interrupted, and recognizer cleanup no longer accumulates between sessions. Streaming replies, chat history paging and the update engine are unchanged. Same design, same features, same stable signature."
+  "notes": "Startup pass: the app now ships a baseline profile \u2014 the system pre-compiles the hot startup and chat paths before the app ever runs, so cold starts feel snappier, especially on older Android 8/9 devices. Includes all previous performance and stability passes. Same design, same features, same stable signature."
 }

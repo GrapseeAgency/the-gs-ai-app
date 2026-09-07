@@ -1,0 +1,33 @@
+# GS AI App — hand-curated baseline profile (deep perf pass #5).
+#
+# Scope discipline: only the two paths a user touches in the first seconds
+# (cold start to the first painted frame, then the chat surfaces they open
+# next) plus the data layer they immediately hit. Library hot paths are
+# already covered by the merged AAR profiles; this file adds what only the
+# app itself can know. Compiled by AGP's profgen into assets/dexopt/
+# baseline.prof; ProfileInstaller drives it onto API 26-28 at first run.
+#
+# Startup: what runs before the first frame paints.
+HSPLcom/grapsee/gsai/GSApplication;->**(**)**
+HSPLcom/grapsee/gsai/GSApplication$*;->**(**)**
+HSPLcom/grapsee/gsai/MainActivity;->**(**)**
+HSPLcom/grapsee/gsai/ShortcutBus;->**(**)**
+HSPLcom/grapsee/gsai/di/ServiceLocator;->**(**)**
+HSPLcom/grapsee/gsai/ui/theme/ThemeKt;->**(**)**
+HSPLcom/grapsee/gsai/ui/theme/ColorKt;->**(**)**
+HSPLcom/grapsee/gsai/ui/theme/TypeKt;->**(**)**
+HSPLcom/grapsee/gsai/ui/theme/MotionKt;->**(**)**
+HSPLcom/grapsee/gsai/ui/navigation/GsNavHostKt;->**(**)**
+# Chat hot path: conversation open, list composition, streaming pipeline.
+HSPLcom/grapsee/gsai/ui/chat/ChatScreenKt;->**(**)**
+HSPLcom/grapsee/gsai/ui/chat/ChatsScreenKt;->**(**)**
+HSPLcom/grapsee/gsai/data/repository/ChatRepository;->**(**)**
+HSPLcom/grapsee/gsai/data/repository/ChatRepository$*;->**(**)**
+HSPLcom/grapsee/gsai/data/remote/ApiClient;->**(**)**
+HSPLcom/grapsee/gsai/data/remote/ApiClient$*;->**(**)**
+# Room: the database engine and the three DAOs' generated implementations —
+# the indexed windowed reads (pass #1) run on exactly these classes.
+HSPLcom/grapsee/gsai/data/local/AppDatabase_Impl;->**(**)**
+HSPLcom/grapsee/gsai/data/local/ConversationDao_Impl;->**(**)**
+HSPLcom/grapsee/gsai/data/local/MessageDao_Impl;->**(**)**
+HSPLcom/grapsee/gsai/data/local/SavedItemDao_Impl;->**(**)**
