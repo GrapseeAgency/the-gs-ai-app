@@ -1447,3 +1447,21 @@ Stage Summary:
 - The typing path — the last unaudited hot path — is confirmed optimal; the app's frame pipeline is now fully mapped end-to-end without a device
 - Forty-three shipped cycles stand (v0.43.0 performance rebuild); this cycle added the final closed audit, not surface
 - Next candidates: user reaction to v0.43.0 (which screens still lag? which device tier?) unlocks baseline profiles / startup Macrobenchmark; otherwise QA + hold continues
+
+---
+Task ID: 62 (cron cycle — FIRST LINT SWEEP found a real crash-class bug: ACCESS_NETWORK_STATE, v0.44.0 shipped via LiveUpdate)
+Agent: Z.ai Code (main)
+Task: Build QA, advance backlog (hot-path audit map complete per Task 61 — this cycle introduced a brand-new verification dimension never run in the project's history: a full Android lint sweep), ship if findings warrant.
+
+Work Log:
+- FIRST :app:lintDebug SWEEP ever run: 3 Errors + 38 Warnings + 5 Info. All 3 Errors were MissingPermission with ONE root cause; all 38 Warnings benign (30 GradleDependency version notices, 3 ObsoleteLintCustomCheck, 3 AndroidGradlePluginVersion, 1 ModifierParameter, 1 ObsoleteSdkInt — no correctness/security items)
+- REAL BUG (crash-class, latent since Task 12 / v0.1x): ChatsScreen.rememberDeviceOffline() — the connectivity monitor behind the offline banner — calls cm.activeNetwork, getNetworkCapabilities and registerDefaultNetworkCallback, but the manifest never declared ACCESS_NETWORK_STATE (only INTERNET / REQUEST_INSTALL_PACKAGES / RECORD_AUDIO). On a real device those calls throw SecurityException; the initial refresh() is unwrapped, and the register/unregister runCatching guards wouldn't have covered it. Likely manifestation on the user's device: a crash or a permanently-false offline banner when Chats opens — plausibly the "even app itself has problem as well" half of the first test report
+- FIX: one manifest declaration — android.permission.ACCESS_NETWORK_STATE (normal-level: auto-granted at install, no prompt, no Play policy impact), with a comment documenting why. Lint re-run: 0 errors (BUILD SUCCESSFUL 2m50s)
+- iOS parity unaffected: the equivalent monitor uses NWPathMonitor — no permission concept on iOS; zero iOS changes, static gates 46/46 PASS
+- VERSION: versionCode 44 / versionName 0.44.0; assembleRelease green 2m39s; release APK copied to download/GS-AI-App.apk (aapt verified 44 + ACCESS_NETWORK_STATE present in built APK + zero debuggable flags; apksigner b1ffd75d… intact); update-manifest.json bumped with the stability note
+- PUBLISHED: commit 17ab480 pushed; GitHub Release v0.44.0 created (REL_ID 383966316, asset HTTP 201, 12,839,501 bytes byte-exact); /releases/latest/download/ permalink verified serving versionCode 44 byte-identical
+
+Stage Summary:
+- The lint gate just earned its place: first-ever sweep found a genuine on-device crash risk that five hot-path audits structurally could not see (it was a manifest/runtime-contract bug, not a frame-path bug). Lint is now part of the standing QA rotation
+- Forty-four shipped cycles, all signature-stable, all install-over — v0.44.0 carries the stability fix plus the v0.43.0 performance rebuild
+- Next candidates: user reaction to v0.44.0 (smoothness + does Chats open reliably now?); remaining warnings are dependency-version churn, deliberately untouched without a device to retest on
