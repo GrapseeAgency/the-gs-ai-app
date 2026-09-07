@@ -1793,3 +1793,25 @@ Stage Summary:
 - Projects now tell the truth on both platforms: what you create persists, what you link lists, what you do logs, what you edit saves, what you delete leaves — and search answers from the same store. The last whole-fake surface outside the parallel loop's claimed line is retired
 - Fifty-four shipped cycles, all signature-stable, all install-over; permalink serving v0.54.0
 - Backlog now: recents/drawer, model centre, voice (the parallel loop's claimed line) — then device-gated holdovers (#4 R8/minify, req 14 device matrix, req 15 profiler) waiting on the user's device report, and notifications real-event wiring waiting on a backend
+
+---
+Task ID: 79
+Agent: Z.ai Code (main)
+Task: USER-DIRECTED P0 (chat, not the loop queue) — answer the size question and fix the reported launch crash ("app opens, instantly closes, every time") on the latest version; check the iOS side too. Drawer/recents work deferred — the user said no extra stuff.
+
+Work Log:
+- SIZE ANSWER: v0.54.0 APK = 12,888,653 bytes = 12.29 MiB (v0.52/0.53 were 12,872,269 ≈ 12.28 MiB) — matches the user's "12 MiB" observation. Only native lib is libandroidx.graphics.path.so (Compose-brought, 4 ABIs); R8/minify (#4, device-gated holdover) is the big size lever waiting on the user's performance talk
+- CRASH HUNT (no device/emulator in sandbox — static + hardening): launch path read end to end (GSApplication → MainActivity → GsNavHost start → HomeScreen). Static shortcuts.xml clean (valid targetClass, safe extras); ShortcutBus null-safe; reportFullyDrawn already runCatching'd. Found the deterministic install-over crash class: SettingsStore.init read 21 prefs BARE — getBoolean/getFloat throw ClassCastException if any key was written by an older build under a different type, inside Application.onCreate → instant close on EVERY launch, exactly the reported symptom
+- FIX 1 — SettingsStore per-key hydration: private SharedPreferences.bool/string/flt extensions, each runCatching'd with getOrDefault — one type-mangled key costs that key its default, never the launch; the other 20 prefs still restore
+- FIX 2 — GSApplication survivability contract: CrashReporter.install FIRST, then ServiceLocator/AssistantsStore/SettingsStore/ProjectStore inits each in runCatching + Log.e — no startup step can kill the process anymore
+- FIX 3 — data/CrashReporter.kt: default uncaught-exception handler chained to the system one; writes app version, device (model + Android release + SDK), thread and full stack (+cause) to files/crash-reports/last-crash.txt, all runCatching-guarded
+- FIX 4 — Settings "Send crash report" ActionRow: visible ONLY while a report exists; ACTION_SEND text (80 KB cap), clears after leaving the device — the diagnosis loop closes with facts from a non-technical user, no adb needed
+- iOS SIDE CHECK (user asked): GSApp launch path clean (AppStorage session gates, deferred singletons); QuickActionAppDelegate event-driven, not launch-crashing; ConversationStore.init fully try?-guarded (SQL load + legacy JSON import). NOTE: an apparent source corruption ("lastMessageByConversation[message.conversationId]" displaying as "...Conversationessage...") turned out to be a TOOL-DISPLAY ARTIFACT — hex-level verification (5b 6d = "[m" present in file) proved the code intact; the "[m" substring gets eaten by the output renderer (ANSI SGR reset). Static gates 48/48 PASS stand; no iOS changes needed
+- GATES: assembleDebug green 2m12s, lintDebug green, assembleRelease green 3m56s; aapt-verified 55 inside the artifact before publish
+- VERSION: versionCode 55 / versionName 0.55.0; release APK copied to download/; update-manifest.json bumped
+- PUBLISHED: commit bf28f43 pushed (workflows never staged); GitHub Release v0.55.0 (REL_ID 384156843, target_commitish = FULL SHA bf28f4396842f66cad165a22489d6752b3e656bf), asset HTTP 201, 12,888,653 bytes = local exactly; permalink re-verified serving versionCode 55, sha256 0db4bcfd… == download/, NOT debuggable, apksigner b1ffd75d… stable; raw manifest serving 55/0.55.0
+
+Stage Summary:
+- The user's device now has two ways to be heard: v0.55.0 either fixes the launch outright (if the ClassCastException class was the cause) or captures the true stack trace and offers it in Settings → Send crash report
+- Follow-ups pending the user's answer: device model + Android version + whether a "keeps stopping" dialog appears + (if it still closes) the shared crash report; then the performance talk they queued (size/R8, startup, memory)
+- Backlog unchanged: recents/drawer (loop line, claim stale since T75), model centre, voice — device-gated holdovers (#4 R8/minify now ALSO answers the size question, req 14 device matrix, req 15 profiler) waiting on this device report too
