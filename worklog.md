@@ -1197,3 +1197,22 @@ Stage Summary:
 - Dead raw-error passthrough helper removed from the codebase
 - Thirty-five shipped cycles, all signature-stable, all install-over
 - Backlog remaining: assistants CRUD (edit button) parked until live backend ask; next candidates: remaining sample-parity details (credit pack prices differ £2/£8/£25 vs £4/£16/£49 — deliberate?), offline-banner coverage beyond the chats list (Explore/Model Centre fetch surfaces), design parity pass with the three benchmark AI chat apps
+
+---
+Task ID: 49 (cron cycle — billing sample parity, v0.36.0 shipped via LiveUpdate)
+Agent: Z.ai Code (main)
+Task: Build QA, advance backlog (worklog Task 48 candidates: credit-pack price parity / offline-banner coverage / benchmark design parity — surveyed both; chose price parity, offline banner was a dead end), publish v0.36.0.
+
+Work Log:
+- SURVEY: offline-banner coverage candidate died on inspection — Explore (sample catalogue) and Model Centre (local prefs editor; the /models registry fetch lives inside the send path, which GS Lite already covers) have no live fetch that visibly fails offline, so a banner there would be noise. Price-parity candidate confirmed real: Android packs £2/£8/£25 vs iOS £4/£16/£49 (+ "+2000" missing its comma); iOS Pro plan missing "2,000 message quota"; iOS Team missing "Everything in Pro"; Free copy "40 messages/day" vs "40 messages a day"
+- IOS (Android canonical, no changes needed): BillingView chips unified to "+100 · £2" / "+500 · £8" / "+2,000 · £25"; planCard features arrays brought to exact Android wording; all four edits are string-literal changes inside existing calls — zero structural risk; verified no other surface quotes the old prices (paywalls/upsells clean); checkout toast strings (Play vs App Store) are platform-appropriate, deliberately NOT unified
+- PARITY CHECK: invoices (Jul/Jun/May 2025 · £16.00 · Paid), balances (240 credits), usage rows (1,284/2,000 · 45m/120m · 32/100), plan prices (£0/£16/£39), renewal dates (12 Aug 2025) all already identical — the four drifts above were the complete set
+- iOS STATIC GATES: 44 files CLEAN
+- ANDROID BUILD: green (up-to-date cache, no Android changes) + version-bump build 1m30s
+- VERSION: versionCode 36 / versionName 0.36.0; APK copied to download/GS-AI-App.apk (aapt verified versionCode 36); update-manifest.json bumped
+- PUBLISHED: commit c6f6726 pushed; GitHub Release v0.36.0 created (REL_ID 383858608, asset HTTP 201, 19,567,556 bytes); /releases/latest/download/ permalink verified serving versionCode 36; stable signature b1ffd75d… intact
+
+Stage Summary:
+- Billing quotes are now word-for-word identical on both platforms: same packs, same prices, same feature lists — the "deliberate?" question is resolved in favor of Android's set; no platform tells a different price story anymore
+- Thirty-six shipped cycles, all signature-stable, all install-over
+- Backlog remaining: assistants CRUD (edit button) parked until live backend ask; next candidates: design parity pass with the three benchmark AI chat apps, notification deep-link for billing surfaces, sample-data freshness sweep (dates say 12 Aug 2025 / Jul 2025)
