@@ -1132,3 +1132,26 @@ Stage Summary:
 - The Model Centre is a real control now: your default model and reasoning mode survive relaunches, and every chat turn actually sends with the chosen model whenever the server offers it — gated, silent, identical semantics on both platforms
 - Thirty-two shipped cycles, all signature-stable, all install-over
 - Backlog remaining: assistants CRUD (edit button) parked until live backend ask; next candidates: Create tab real flows, billing rows + model compare actions, remaining sample-parity details
+
+---
+Task ID: 46 (cron cycle — Create tab real flows, v0.33.0 shipped via LiveUpdate)
+Agent: Z.ai Code (main)
+Task: Build QA, advance backlog (worklog Task 45 candidates: Create tab real flows / billing rows / parity details — chose Create tab real flows), publish v0.33.0.
+
+Work Log:
+- DISCOVERY: four fake saves and a static section — ImageStudio + WritingStudio "Save to Library" was a toast/snackbar with nothing persisted on BOTH platforms (chat's save was already real via Room/UserDefaults); Create's "Recent creations" was a permanent empty state even when the Library held real saves; and the Document/Presentation/Spreadsheet/Diagram tool tiles funnelled into BLANK chats — the same unseeded class Tasks 42/43 eliminated elsewhere
+- DESIGN: saveToLibrary gains a kind param (default "message"); studios save images/documents under their own kind; Library filters map kind → chip so real saves show under Images/Documents too (was Messages-only); Recent creations renders the real store newest-first with tap-through to a seeded chat; tool tiles get task-appropriate starters — all purely local, silent failure, identical semantics on both platforms
+- ANDROID: ChatRepository.saveToLibrary(content, kind); ImageStudioScreen + WritingStudioScreen persist via ServiceLocator.chat (runCatching, "Couldn't save right now" on failure); LibraryScreen gains filterLabelFor() + kind-aware badges/subtitles (image/document/message) incl. the reader sheet; CreateScreen tool tiles seeded (chat(null, starter)) and RecentCreationsSection now collects savedItems(), take(6), GsListItem rows → chat(null, content)
+- IOS: ConversationStore.saveToLibrary(content:kind:) (default param keeps ChatDetailView source-compatible); ImageStudioView + WritingStudioView persist then toast; LibraryView gains filterForKind() + kind-aware realRow; CreateView gains @State creations (onAppear load), creationRow → NavigationLink(.chatPrefill(content)), kindLabel/kindSymbol helpers; four tiles .chatPrefill(...)
+- GATE HARDENING: ios_static_gates.py had a HARDCODED 13-file list that missed 31 sources — now auto-globs all .swift under Sources (44 files); the expanded scan IMMEDIATELY caught a real v0.31.0 defect: NotificationRow.body was missing its closing brace (static func icon sat inside body; struct never closed). Fixed — the old gate could never have seen it
+- PROPERTY-ACCESS CROSS-CHECK: AeroListRow.action defaults nil (creationRow omits it), LibraryItem is file-internal and visible to CreateView, chatPrefill case exists, default kind param keeps both old call sites compiling — verified by hand
+- iOS STATIC GATES: 44 files CLEAN (expanded scan)
+- ANDROID BUILD: one fix round (missing remember + Icons.Outlined.Image imports in CreateScreen), green 1m25s; version-bump build 1m28s
+- VERSION: versionCode 33 / versionName 0.33.0; APK copied to download/GS-AI-App.apk (aapt verified versionCode 33); update-manifest.json bumped
+- PUBLISHED: commit 9978564 pushed; GitHub Release v0.33.0 created (REL_ID 383846381, asset HTTP 201, 19,567,556 bytes); /releases/latest/download/ permalink verified serving versionCode 33; stable signature b1ffd75d… intact
+
+Stage Summary:
+- The Create tab is a real loop now: generate in a studio → save lands in the Library under the right filter → it appears under Recent creations → tap re-opens the work in a seeded chat; every tile seeds its composer; zero fake saves remain anywhere in the app
+- Bonus: the static gate's blind spot is gone and a latent iOS compile-breaker (shipped v0.31.0) is fixed
+- Thirty-three shipped cycles, all signature-stable, all install-over
+- Backlog remaining: assistants CRUD (edit button) parked until live backend ask; next candidates: billing rows + model compare actions, remaining sample-parity details, edge states sweep (empty/error/offline copy)
