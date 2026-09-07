@@ -1318,3 +1318,24 @@ Stage Summary:
 - The home screen finally reads "GS AI" at a glance: the stock Android robot is gone, replaced by the same aurora orb that anchors the in-app hero — launcher, recents tray, quick-action menu and (Android 13+) themed icons all wear it; iOS ships the identical mark
 - Forty-one shipped cycles, all signature-stable, all install-over
 - Next candidates: hold for the first user test report (none since v0.5.0). Remaining polish ideas are genuinely exhausted at this point — visible surface (icon, quick actions, About, empty states, billing, GS Lite) is at benchmark parity; further work should be driven by real device feedback
+
+---
+Task ID: 55 (cron cycle — assistants CRUD completed, v0.42.0 shipped via LiveUpdate)
+Agent: Z.ai Code (main)
+Task: Build QA, advance backlog (Task 54 said visible surface exhausted, but the cron body's named item "assistants CRUD" was still parked on a live-backend ask — investigated and found the Create form was a dead end with zero persistence; chats already proved the local-first pattern, so CRUD shipped fully local), publish v0.42.0.
+
+Work Log:
+- DISCOVERY: AssistantsScreen tabs (Marketplace/My/Favourites/Published) were static id subsets; AssistantCreateScreen collected name/description/instructions/starters/capabilities/visibility then threw everything away; AssistantDetailScreen's Edit button was literally dead ("edit arrives with the repository layer"); iOS mirrored all of it
+- DESIGN: local user-assistant store completing CRUD without a backend — samples stay curated (not editable/deletable, like built-in GPTs), user assistants live alongside; user assistants appear in My assistants, and published ones additionally in Marketplace + Published; identical semantics both platforms
+- ANDROID: new data/AssistantsStore.kt (SharedPreferences JSON via org.json, MutableStateFlow<List<AssistantSample>>, init from GSApplication before UI reads, runCatching → empty list never error); AssistantSample gains defaulted capabilities: List<String> = emptyList() (named-arg sample sites unaffected); GsRoutes.ASSISTANT_EDIT = "assistants/edit/{assistantId}" + assistantEdit(id); GsNavHost wires edit route + detail onEdit callback; AssistantCreateScreen(assistantId) prefills all six form fields, CTA "Save changes", saves to store on confirm (id asst-u-<millis>, uses "1", rating 5.0 defaults); AssistantDetailScreen resolves store-first (reactive remember on the store list so returning from edit refreshes), Edit/Delete only for user assistants (samples keep the Share slot), Delete confirm dialog notes chats stay; AssistantsScreen merges userAssistants into My/Marketplace/Published tabs
+- IOS: new Networking/AssistantsStore.swift (UserDefaults JSON via Codable, ObservableObject singleton, private init); AssistantSample becomes Codable with defaulted instructions/starters/capabilities (memberwise 8-arg catalog calls unaffected); AssistantCreateView(editID:) custom init prefills all @State from the store, CTA/dialog switch to save-mode, upserts on confirm; AeroRoute.assistantEdit(String) + destination; AssistantDetailView resolves store-first, @EnvironmentObject router (env chain from RootView's environmentObject), pencil/trash for user assistants with confirmationDialog → remove → dismiss, samples keep Share; AssistantsView observes the store — mine = userAssistants (its existing "No assistants yet" empty state finally reachable), marketplace grid + published list append published user assistants
+- FIX during build: Kotlin elvis/infix precedence bug in store read (0 until x?.length() ?: 0 parsed as (0 until x) ?: 0) — extracted stringList(o, key) helper; second build green
+- iOS STATIC GATES: 46 files CLEAN (AssistantsStore, CreateView, DetailView, AssistantsView, AppRouter all CLEAN)
+- ANDROID BUILD: green with real compile 1m50s (QA, after the fix) + 1m33s (version bump)
+- VERSION: versionCode 42 / versionName 0.42.0; APK copied to download/GS-AI-App.apk (aapt verified versionCode 42); update-manifest.json bumped
+- PUBLISHED: commit 51d4a73 pushed; GitHub Release v0.42.0 created (REL_ID 383904791, asset HTTP 201, 19,591,375 bytes); /releases/latest/download/ permalink verified serving versionCode 42; stable signature b1ffd75d… intact
+
+Stage Summary:
+- The last parked backlog item is closed: assistants CRUD (create/edit/delete) is real on both platforms, fully on-device, with the sample catalogue kept curated exactly like built-in GPTs — "assistants CRUD + pin/archive, Room/SwiftData, explore rows, design parity, edge states" from the standing task body is now ALL shipped
+- Forty-two shipped cycles, all signature-stable, all install-over
+- Next candidates: genuinely awaiting the first user test report; every item in the recurring task text has been delivered and audited across Tasks 41–55 — future cycles without feedback will do QA + hold, or need new direction
