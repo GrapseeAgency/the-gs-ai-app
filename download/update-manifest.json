@@ -1,6 +1,6 @@
 {
-  "versionCode": 24,
-  "versionName": "0.24.0",
+  "versionCode": 25,
+  "versionName": "0.25.0",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "Branch new chat is real now: long-press any GS reply and everything up to it becomes a fresh chat — the original thread stays untouched. Both platforms."
+  "notes": "Save to Library is real: long-press any GS reply, tap Save to Library, and it lives in your Library — persisted, on both platforms."
 }

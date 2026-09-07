@@ -71,6 +71,9 @@ struct LibraryView: View {
 
     @State private var filter: Filter = .all
 
+    // Real saves from the chat surface — loaded on appear, rendered above seeds.
+    @State private var savedMessages: [LibraryItem] = []
+
     private let collections: [SavedCollection] = [
         .init(name: "Brand kit", count: "12 items"),
         .init(name: "Client work", count: "8 items"),
@@ -78,16 +81,17 @@ struct LibraryView: View {
     ]
 
     private let items: [SavedItem] = [
-        .init(title: "Saved: pricing strategy idea", detail: "Message · from Q3 pricing strategy", kind: .message),
         .init(title: "Q3 report.pdf", detail: "PDF · 2.4 MB · 12 pages", kind: .document),
         .init(title: "hero-banner-v2.png", detail: "PNG · 1600 × 900", kind: .image),
         .init(title: "contracts.zip", detail: "ZIP · 8 files · 18 MB", kind: .file),
-        .init(title: "Cold email sequence", detail: "Prompt · 5 steps", kind: .prompt),
-        .init(title: "Saved: onboarding copy rewrite", detail: "Message · from Launch comms", kind: .message)
+        .init(title: "Cold email sequence", detail: "Prompt · 5 steps", kind: .prompt)
     ]
 
     private var filteredItems: [SavedItem] {
-        items.filter { filter.matches($0.kind) }
+        let real = savedMessages.map { item in
+            SavedItem(title: item.title, detail: "Message · saved from your chats", kind: .message)
+        }
+        return (real + items).filter { filter.matches($0.kind) }
     }
 
     // MARK: Body
@@ -105,6 +109,9 @@ struct LibraryView: View {
             .padding(.bottom, Aero.Spacing.xl)
         }
         .background(Aero.background.ignoresSafeArea())
+        .onAppear {
+            savedMessages = ConversationStore.shared.savedLibraryItems()
+        }
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 NavigationLink(value: AeroRoute.chat(nil)) {

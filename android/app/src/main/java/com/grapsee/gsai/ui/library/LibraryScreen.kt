@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Folder
@@ -30,6 +31,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -39,6 +41,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.grapsee.gsai.di.ServiceLocator
 import com.grapsee.gsai.ui.components.GsCard
 import com.grapsee.gsai.ui.components.GsChip
 import com.grapsee.gsai.ui.components.GsEmptyState
@@ -66,8 +69,6 @@ private data class LibraryItem(
 )
 
 private val libraryItems = listOf(
-    LibraryItem("Saved: pricing strategy idea", "Saved message · 2d ago", Icons.Outlined.ChatBubbleOutline, "Messages"),
-    LibraryItem("Saved: competitor teardown thread", "Saved message · 5d ago", Icons.Outlined.ChatBubbleOutline, "Messages"),
     LibraryItem("Q3 report.pdf", "Document · 1h ago", Icons.Outlined.Description, "Documents"),
     LibraryItem("Brand guidelines.docx", "Document · 3d ago", Icons.Outlined.Description, "Documents"),
     LibraryItem("hero-banner-v2.png", "Image · yesterday", Icons.Outlined.Image, "Images"),
@@ -88,6 +89,11 @@ fun LibraryScreen(onNavigate: (String) -> Unit) {
     val filter = libraryFilters[selectedFilter]
     val visibleItems = if (selectedFilter == 0) libraryItems
     else libraryItems.filter { it.kind == filter }
+
+    // Real saves from the chat surface — persist in Room, render above seeds.
+    val savedItems by remember { ServiceLocator.chat.savedItems() }
+        .collectAsState(initial = emptyList())
+    val realVisible = savedItems.filter { selectedFilter == 0 || filter == "Messages" }
 
     Box(
         modifier = Modifier
@@ -116,13 +122,29 @@ fun LibraryScreen(onNavigate: (String) -> Unit) {
                 Spacer(Modifier.height(GsMotion.spaceS))
                 FilterChips(selectedFilter, onSelect = { selectedFilter = it })
                 CollectionsSection()
-                if (visibleItems.isEmpty()) {
+                if (realVisible.isEmpty() && visibleItems.isEmpty()) {
                     GsEmptyState(
                         icon = Icons.Outlined.Folder,
                         title = "No ${filter.lowercase()} yet",
                         message = "Saved ${filter.lowercase()} will collect here as you work."
                     )
                 } else {
+                    realVisible.forEach { item ->
+                        GsListItem(
+                            title = item.title,
+                            subtitle = "Saved message",
+                            leading = { ItemBadge(Icons.Outlined.BookmarkBorder) },
+                            trailing = {
+                                Icon(
+                                    imageVector = Icons.Outlined.MoreVert,
+                                    contentDescription = "More",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            },
+                            onClick = { onNavigate(GsRoutes.chat(null)) }
+                        )
+                    }
                     visibleItems.forEach { item ->
                         GsListItem(
                             title = item.title,

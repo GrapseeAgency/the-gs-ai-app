@@ -458,6 +458,16 @@ fun ChatScreen(
         }
     }
 
+    /** Real Save-to-Library: the turn lands in the Room saved_items table. */
+    fun saveToLibrary(content: String) {
+        if (content.isBlank()) return
+        scope.launch {
+            runCatching { ServiceLocator.chat.saveToLibrary(content) }
+                .onSuccess { showSnack("Saved to Library") }
+                .onFailure { showSnack("Couldn't save right now") }
+        }
+    }
+
     fun readAloud(messageId: String, content: String) {
         // Second tap on the speaking bubble stops playback.
         if (speakingMessageId == messageId) {
@@ -619,6 +629,7 @@ fun ChatScreen(
                                     onRegenerate = { regenerate(message.id) },
                                     onReadAloud = { readAloud(message.id, message.content) },
                                     onBranch = { branchFrom(message.id) },
+                                    onSaveToLibrary = { saveToLibrary(message.content) },
                                     onContextAction = showSnack
                                 )
                             }
@@ -816,6 +827,7 @@ private fun AssistantMessage(
     onRegenerate: () -> Unit,
     onReadAloud: () -> Unit = {},
     onBranch: () -> Unit = {},
+    onSaveToLibrary: () -> Unit = {},
     onContextAction: (String) -> Unit = {}
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
@@ -906,7 +918,7 @@ private fun AssistantMessage(
                     },
                     onClick = {
                         menuExpanded = false
-                        onContextAction("Saved to Library")
+                        onSaveToLibrary()
                     }
                 )
                 DropdownMenuItem(

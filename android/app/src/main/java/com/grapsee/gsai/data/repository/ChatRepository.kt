@@ -3,6 +3,7 @@ package com.grapsee.gsai.data.repository
 import com.grapsee.gsai.data.local.AppDatabase
 import com.grapsee.gsai.data.local.ConversationEntity
 import com.grapsee.gsai.data.local.MessageEntity
+import com.grapsee.gsai.data.local.SavedItemEntity
 import com.grapsee.gsai.data.remote.ApiClient
 import com.grapsee.gsai.data.remote.ConversationDto
 import com.grapsee.gsai.data.remote.MessageDto
@@ -145,6 +146,25 @@ class ChatRepository(
             }
         )
         return branchId
+    }
+
+    // --- Library -----------------------------------------------------------------
+
+    fun savedItems(): Flow<List<SavedItemEntity>> = db.savedItemDao().observeAll()
+
+    /** Real Save-to-Library: the tapped turn lands in the Library, Messages kind. */
+    suspend fun saveToLibrary(content: String) {
+        val trimmed = content.trim()
+        if (trimmed.isEmpty()) return
+        db.savedItemDao().upsert(
+            SavedItemEntity(
+                id = UUID.randomUUID().toString(),
+                kind = "message",
+                title = trimmed.take(48),
+                content = trimmed,
+                createdAt = nowIso()
+            )
+        )
     }
 
     /** Room first; when empty (cold cache) fetch from network and cache. */

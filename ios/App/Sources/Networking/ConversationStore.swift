@@ -207,3 +207,42 @@ final class ConversationStore: ObservableObject {
         var messages: [StoredMessage]
     }
 }
+
+// MARK: - Library (real saved-from-chat items, JSON in UserDefaults)
+
+/// One saved Library entry — mirrors Android's Room `saved_items` row.
+struct LibraryItem: Codable, Identifiable, Equatable {
+    let id: String
+    let kind: String
+    let title: String
+    let content: String
+    let createdAt: String
+}
+
+extension ConversationStore {
+
+    private static let savedLibraryKey = "gs_saved_library_items"
+
+    /// Real "Save to Library" — message content lands here from the chat surface.
+    func saveToLibrary(content: String) {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        var current = savedLibraryItems()
+        current.insert(
+            LibraryItem(
+                id: UUID().uuidString,
+                kind: "message",
+                title: String(trimmed.prefix(48)),
+                content: trimmed,
+                createdAt: Self.now()),
+            at: 0)
+        if let data = try? JSONEncoder().encode(current) {
+            UserDefaults.standard.set(data, forKey: Self.savedLibraryKey)
+        }
+    }
+
+    func savedLibraryItems() -> [LibraryItem] {
+        guard let data = UserDefaults.standard.data(forKey: Self.savedLibraryKey) else { return [] }
+        return (try? JSONDecoder().decode([LibraryItem].self, from: data)) ?? []
+    }
+}

@@ -39,6 +39,16 @@ data class MessageEntity(
     val createdAt: String
 )
 
+/** Library — content saved from the chat surface ("Save to Library"). */
+@Entity(tableName = "saved_items")
+data class SavedItemEntity(
+    @PrimaryKey val id: String,
+    val kind: String,
+    val title: String,
+    val content: String,
+    val createdAt: String
+)
+
 @Dao
 interface ConversationDao {
     @Upsert
@@ -130,6 +140,18 @@ interface MessageDao {
     suspend fun searchContentFts(matchQuery: String): List<MessageEntity>
 }
 
+@Dao
+interface SavedItemDao {
+    @Upsert
+    suspend fun upsert(item: SavedItemEntity)
+
+    @Query("SELECT * FROM saved_items ORDER BY createdAt DESC")
+    fun observeAll(): Flow<List<SavedItemEntity>>
+
+    @Query("DELETE FROM saved_items WHERE id = :id")
+    suspend fun delete(id: String)
+}
+
 // --- full-text search plumbing -------------------------------------------------
 
 /** FTS shadow of the conversations table — content sync handled by Room triggers. */
@@ -163,15 +185,17 @@ fun ftsMatchQuery(raw: String): String? {
     entities = [
         ConversationEntity::class,
         MessageEntity::class,
+        SavedItemEntity::class,
         ConversationFtsEntity::class,
         MessageFtsEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun conversationDao(): ConversationDao
     abstract fun messageDao(): MessageDao
+    abstract fun savedItemDao(): SavedItemDao
 
     companion object {
         /** v1 → v2: add the FTS shadows and backfill them from existing rows —
@@ -191,9 +215,21 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v2 → v3: add the Library saved-items table — purely additive, chat
+         *  history written by earlier builds survives the upgrade untouched. */
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `saved_items` (" +
+                        "`id` TEXT NOT NULL, `kind` TEXT NOT NULL, `title` TEXT NOT NULL, " +
+                        "`content` TEXT NOT NULL, `createdAt` TEXT NOT NULL, PRIMARY KEY(`id`)"
+                )
+            }
+        }
+
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "gsai-chat.db")
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .fallbackToDestructiveMigration()
                 .build()
     }

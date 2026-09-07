@@ -136,7 +136,10 @@ struct ChatDetailView: View {
                                 },
                                 onReadAloud: { speech.toggle(messageID: message.id, text: message.content) },
                                 onTranslate: { showToast("Translation arrives with the language pack build") },
-                                onSave: { showToast("Saved to Library") },
+                                onSave: {
+                                    ConversationStore.shared.saveToLibrary(content: message.content)
+                                    showToast("Saved to Library")
+                                },
                                 onEditStart: {
                                     editDraft = message.content
                                     editingIndex = index
