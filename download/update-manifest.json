@@ -1,6 +1,6 @@
 {
-  "versionCode": 37,
-  "versionName": "0.37.0",
+  "versionCode": 38,
+  "versionName": "0.38.0",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "Sample dates went live: renewal dates and invoice months in Billing are now computed from today, so the account never looks frozen in the past."
+  "notes": "Final billing caption pass: plan captions now read the same on iPhone as on Android — Team and Free included. The account page tells one identical story everywhere."
 }

@@ -155,8 +155,8 @@ struct BillingView: View {
 
     private var planCaption: String {
         switch currentPlan {
-        case "Team": return "£39 per user / month · renews \(Self.renewalDateText)"
-        case "Free": return "Free · 40 messages a day · 1 model"
+        case "Team": return "£39/user · renews \(Self.renewalDateText)"
+        case "Free": return "£0 · no renewal date"
         default: return "£16/month · renews \(Self.renewalDateText)"
         }
     }
