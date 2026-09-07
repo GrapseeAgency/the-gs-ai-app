@@ -883,3 +883,20 @@ Stage Summary:
 - The transcript now reads like the benchmark apps end to end: day pills, search with stepping, edit-and-resend, parked drafts, and now the keyboard steps aside the moment you drag — identical semantics on Compose and SwiftUI, zero new error surfaces
 - Nineteen shipped cycles, all signature-stable, all install-over
 - Backlog remaining: assistants CRUD + pin/archive native wiring (deferred until live backend ask), further parity sweeps
+
+---
+Task ID: 33 (cron cycle — design parity: assistant avatar on every AI turn, v0.20.0 shipped via LiveUpdate)
+Agent: Z.ai Code (main)
+Task: Build QA, advance backlog (assistant avatar — the benchmark presence badge on assistant bubbles, both platforms), publish v0.20.0.
+
+Work Log:
+- ANDROID: ChatScreen gains AssistantAvatar — 26dp circle, primary at 12% alpha, AutoAwesome sparkles glyph at 15dp, centered; AssistantMessage row now leads with the badge + 8dp spacer ahead of the bubble (streaming placeholder included); drop-shadow-free flat mark consistent with the Aero look
+- iOS: MessageBubble.assistantBubble gains assistantAvatar — 26pt circle, accent sparkles at 12pt semibold, accent 12% fill with an outline stroke (matches the attach-row control language); HStack spacing 0→8 so the badge breathes ahead of the bubble; streaming and empty-content states inherit it automatically
+- iOS STATIC GATES: 13 files CLEAN
+- VERSION: versionCode 20 / versionName 0.20.0; APK copied to download/GS-AI-App.apk (aapt verified versionCode 20); update-manifest.json bumped
+- PUBLISHED: commit 2e5bb24 pushed; GitHub Release v0.20.0 created (REL_ID 383787950, asset HTTP 201, 19,518,400 bytes); /releases/latest/download/ permalink verified serving versionCode 20; stable signature b1ffd75d… intact
+
+Stage Summary:
+- The assistant is now a visible presence in every thread — each AI turn opens with the sparkles badge exactly like the benchmark apps, identical on Compose and SwiftUI, zero new error surfaces
+- Twenty shipped cycles, all signature-stable, all install-over
+- Backlog remaining: assistants CRUD + pin/archive native wiring (deferred until live backend ask), further parity sweeps
