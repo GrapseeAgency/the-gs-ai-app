@@ -96,6 +96,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import com.grapsee.gsai.data.repository.ChatRepository
 import com.grapsee.gsai.di.ServiceLocator
 import com.grapsee.gsai.ui.components.GsCard
 import com.grapsee.gsai.ui.components.GsChip
@@ -103,6 +104,8 @@ import com.grapsee.gsai.ui.components.GsEmptyState
 import com.grapsee.gsai.ui.components.GsInputBar
 import com.grapsee.gsai.ui.components.GsScreenScaffold
 import com.grapsee.gsai.ui.theme.GsMotion
+import java.time.OffsetDateTime
+import java.time.format.DateTimeFormatter
 import com.grapsee.gsai.ui.theme.rememberAuroraBrush
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
@@ -161,7 +164,8 @@ private data class ChatUiMessage(
     val id: String,
     val role: String,
     val content: String,
-    val isStreaming: Boolean = false
+    val isStreaming: Boolean = false,
+    val createdAt: String = ""
 )
 
 /**
@@ -233,7 +237,7 @@ fun ChatScreen(
         val id = conversationId ?: return@LaunchedEffect
         val history = runCatching { ServiceLocator.chat.history(id) }.getOrElse { emptyList() }
         messages.clear()
-        messages.addAll(history.map { ChatUiMessage(it.id, it.role, it.content) })
+        messages.addAll(history.map { ChatUiMessage(it.id, it.role, it.content, createdAt = it.createdAt) })
         val loadedTitle = runCatching { ServiceLocator.db.conversationDao().getById(id) }
             .getOrNull()?.title
         if (!loadedTitle.isNullOrBlank()) conversationTitle = loadedTitle
@@ -268,7 +272,8 @@ fun ChatScreen(
                 id = UUID.randomUUID().toString(),
                 role = "assistant",
                 content = "That turn didn't land cleanly — tap Regenerate and I'll " +
-                    "take another pass at it."
+                    "take another pass at it.",
+                createdAt = ChatRepository.nowIso()
             )
         )
     }
@@ -278,11 +283,11 @@ fun ChatScreen(
         if (prompt.isEmpty() || streamingJob?.isActive == true) return
         draft = ""
         if (echoUser) {
-            messages.add(ChatUiMessage(UUID.randomUUID().toString(), "user", prompt))
+            messages.add(ChatUiMessage(UUID.randomUUID().toString(), "user", prompt, createdAt = ChatRepository.nowIso()))
         }
         if (activeConversationId == null) conversationTitle = prompt.take(40)
         val assistantId = UUID.randomUUID().toString()
-        messages.add(ChatUiMessage(assistantId, "assistant", "", isStreaming = true))
+        messages.add(ChatUiMessage(assistantId, "assistant", "", isStreaming = true, createdAt = ChatRepository.nowIso()))
         // Sending always returns the reader to the live edge (benchmark behaviour).
         scope.launch { listState.animateScrollToItem(messages.lastIndex) }
         streamingJob = scope.launch {
@@ -365,7 +370,13 @@ fun ChatScreen(
                         modifier = Modifier.fillMaxSize(),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        itemsIndexed(messages, key = { _, message -> message.id }) { _, message ->
+                        itemsIndexed(messages, key = { _, message -> message.id }) { index, message ->
+                            val stamp = dayLabel(message.createdAt)
+                            if (stamp != null &&
+                                (index == 0 || dayKey(messages[index - 1].createdAt) != dayKey(message.createdAt))
+                            ) {
+                                DaySeparator(stamp)
+                            }
                             if (message.role == "user") {
                                 UserMessage(message, onCopy = copyText)
                             } else {
@@ -965,3 +976,38 @@ private fun AttachTile(
         }
     }
 }
+
+// --- date separators ---------------------------------------------------------
+
+/**
+ * Centered day pill — the benchmark thread rhythm ("Today", "Yesterday", dates).
+ * Anything without a parsable stamp (legacy rows) simply shows no header.
+ */
+@Composable
+private fun DaySeparator(label: String) {
+    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .clip(RoundedCornerShape(50))
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                .padding(horizontal = 12.dp, vertical = 4.dp)
+        )
+    }
+}
+
+private fun dayKey(iso: String): String? = runCatching {
+    OffsetDateTime.parse(iso).toLocalDate().toString()
+}.getOrNull()
+
+private fun dayLabel(iso: String): String? = runCatching {
+    val date = OffsetDateTime.parse(iso).toLocalDate()
+    val today = OffsetDateTime.now().toLocalDate()
+    when (date) {
+        today -> "Today"
+        today.minusDays(1) -> "Yesterday"
+        else -> date.format(DateTimeFormatter.ofPattern("d MMM yyyy"))
+    }
+}.getOrNull()

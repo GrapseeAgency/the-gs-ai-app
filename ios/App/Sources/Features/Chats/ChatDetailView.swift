@@ -81,7 +81,11 @@ struct ChatDetailView: View {
                             .padding(.top, Aero.Spacing.l)
                     }
 
-                    ForEach(vm.messages) { message in
+                    ForEach(Array(vm.messages.enumerated()), id: \.element.id) { index, message in
+                        if let stamp = dayLabel(message.createdAt),
+                           index == 0 || dayKey(vm.messages[index - 1].createdAt) != dayKey(message.createdAt) {
+                            DaySeparator(label: stamp)
+                        }
                         MessageBubble(
                             message: message,
                             isSpeaking: speech.speakingMessageID == message.id,
@@ -625,4 +629,48 @@ private struct MessageBubble: View {
             }
         }
     }
+}
+
+// MARK: Date separators
+
+/// Centered day pill — the benchmark thread rhythm ("Today", "Yesterday", dates).
+/// Rows without a parsable stamp (legacy data) simply show no header.
+private struct DaySeparator: View {
+    let label: String
+    var body: some View {
+        Text(label)
+            .font(Aero.label())
+            .foregroundStyle(Aero.textMuted)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 4)
+            .background(Capsule().fill(Aero.containerHigh))
+            .frame(maxWidth: .infinity)
+    }
+}
+
+private func parseISODate(_ iso: String) -> Date? {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    if let date = formatter.date(from: iso) { return date }
+    formatter.formatOptions = [.withInternetDateTime]
+    return formatter.date(from: iso)
+}
+
+private func dayKey(_ iso: String) -> String? {
+    guard let date = parseISODate(iso) else { return nil }
+    let formatter = DateFormatter()
+    formatter.dateFormat = "yyyy-MM-dd"
+    return formatter.string(from: date)
+}
+
+private func dayLabel(_ iso: String) -> String? {
+    guard let date = parseISODate(iso) else { return nil }
+    let calendar = Calendar.current
+    let today = calendar.startOfDay(for: Date())
+    let day = calendar.startOfDay(for: date)
+    if day == today { return "Today" }
+    if day == calendar.date(byAdding: .day, value: -1, to: today) { return "Yesterday" }
+    let formatter = DateFormatter()
+    formatter.dateFormat = "d MMM yyyy"
+    return formatter.string(from: date)
 }
