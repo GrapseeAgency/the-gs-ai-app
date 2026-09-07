@@ -1070,3 +1070,23 @@ Stage Summary:
 - Explore is a launchpad now: tapping a prompt, tool or starter anywhere in the discovery layer opens a chat with the composer already seeded — and the assistant Start chat CTA works for the first time — on both platforms, via the same prefill pipe the voice handoff and Library continue already use
 - Twenty-nine shipped cycles, all signature-stable, all install-over
 - Backlog remaining: assistants CRUD (edit button) parked until live backend ask; next candidates: Room/SwiftData polish, edge states (very long content in reader sheets, deep-link from notification surface), remaining static-sample parity (Home rows, Create tab real flows)
+
+---
+Task ID: 43 (cron cycle — seeded home suggestions + scrollable reader sheets, v0.30.0 shipped via LiveUpdate)
+Agent: Z.ai Code (main)
+Task: Build QA, advance backlog (edge-state sweep round three: home suggestion rows dead-ended into blank chats, and Android reader sheets overflow on long content — both closed), publish v0.30.0.
+
+Work Log:
+- SURVEY: Home's two suggestion rows ("Summarise a PDF into a brief", "Draft a launch email") navigated to chat(null) on BOTH platforms — same dead-end class Explore had; hero inputs (attach, Ask anything, voice handoff) correctly stay blank/prefilled. Long-content audit: iOS TranslationSheet + LibraryItemSheet already scroll (ScrollView + presentationDetents); Android SavedItemSheet and TranslationSheet had NO scroll — a long saved turn or translation clipped the sheet and pushed Copy/Continue/Delete out of reach
+- ANDROID: both suggestion rows now navigate GsRoutes.chat(null, label) so the composer opens seeded; SavedItemSheet + TranslationSheet outer Columns gain .verticalScroll(rememberScrollState()) (imports already present) — the full sheet body scrolls, actions always reachable
+- IOS: suggestion() now pushes AeroRoute.chatPrefill(label); one edit accident (a closing brace of the inner VStack was swallowed) caught and restored immediately — static gates confirm balance
+- PROPERTY-ACCESS CROSS-CHECK: chatPrefill(String) case + HomeView's NavigationLink(value:) already inside the RootView stack (same pattern as its assistant links); GsRoutes.chat Uri.encodes the label — verified by hand
+- iOS STATIC GATES: 13 files CLEAN
+- ANDROID BUILD: green in 1m27s (QA) and 1m30s (version bump) — no fixes needed
+- VERSION: versionCode 30 / versionName 0.30.0; APK copied to download/GS-AI-App.apk (aapt verified versionCode 30); update-manifest.json bumped
+- PUBLISHED: commit 25b5d79 pushed; GitHub Release v0.30.0 created (REL_ID 383829361, asset HTTP 201, 19,551,168 bytes); /releases/latest/download/ permalink verified serving versionCode 30; stable signature b1ffd75d… intact
+
+Stage Summary:
+- Every suggestion surface in the app now seeds the composer (Home, Explore prompts/tools, assistant starters, Start chat) — no discovery tap anywhere dead-ends into a blank composer anymore — and the two Android reader sheets survive arbitrarily long content
+- Thirty shipped cycles, all signature-stable, all install-over
+- Backlog remaining: assistants CRUD (edit button) parked until live backend ask; next candidates: Room/SwiftData polish, deep-link from notification surface, Create tab real flows, remaining sample-parity details
