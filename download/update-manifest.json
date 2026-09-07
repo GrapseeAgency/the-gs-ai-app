@@ -1,6 +1,6 @@
 {
-  "versionCode": 43,
-  "versionName": "0.43.0",
+  "versionCode": 44,
+  "versionName": "0.44.0",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "Performance rebuild: GS AI now ships as a true release build — 34% smaller, fully runtime-optimized, no debug overhead. The aurora no longer churns frames behind every surface; motion reads in the draw phase, so scrolling, typing and streaming feel smooth."
+  "notes": "Stability fix: the offline-detection monitor was calling network-state APIs without the required ACCESS_NETWORK_STATE permission — now declared, so the Chats screen can no longer hit a SecurityException or a false offline banner. Also: first full lint sweep is clean (0 errors)."
 }

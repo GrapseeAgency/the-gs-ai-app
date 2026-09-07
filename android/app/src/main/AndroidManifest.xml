@@ -2,6 +2,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Connectivity monitor behind the offline banner (ChatsScreen) —
+         normal-level, auto-granted, no prompt. Without it ConnectivityManager
+         calls throw SecurityException on device. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- Voice press-and-hold on the hero orb (SpeechRecognizer). -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
