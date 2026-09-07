@@ -755,3 +755,22 @@ Stage Summary:
 - iOS chats now live in a real SQLite store with full-text search — same durability and search contract as Android, zero UI changes, zero error paths
 - Legacy JSON path survives as import + fallback; upgrade is invisible to existing installs
 - Backlog remaining: assistants CRUD + pin/archive native wiring (deferred until live backend ask), explore rows, edge states
+
+---
+Task ID: 26 (cron cycle — explore rows: live search filtering on Explore, both platforms + v0.13.0 shipped via LiveUpdate)
+Agent: Z.ai Code (main)
+Task: Build QA, advance backlog (ChatGPT-style explore rows — make Explore search real instead of decorative), publish v0.13.0.
+
+Work Log:
+- BUILD QA: :app:assembleDebug BUILD SUCCESSFUL (1m31s with Explore search changes); toolchain intact
+- GAP FOUND: both platforms had an Explore search bar that did nothing — Android's GsInputBar collected searchQuery but filtered nothing; iOS's search row was a static capsule with no TextField at all
+- ANDROID (ExploreScreen.kt): searchQuery now gates all three sections via matchesTerm() (empty term passes everything, else any-field contains, ignoreCase) AND-combined with the category chip filter; assistants match name/author, prompts match text/category, tools match name/blurb; empty state now speaks search — "No matches for "term"" vs the category-only message
+- iOS (ExploreView.swift): searchRow upgraded to a real TextField in the same capsule styling with a one-tap clear (xmark.circle.fill); identical combined filtering semantics (containsTerm + category), dynamic nothingMessage mirroring Android; autocorrection disabled for a search feel
+- iOS STATIC GATES: 9 files CLEAN (ExploreView.swift added to the sweep)
+- VERSION: versionCode 13 / versionName 0.13.0; APK copied to download/GS-AI-App.apk (aapt verified versionCode 13); update-manifest.json bumped
+- PUBLISHED: commit d0cd10e pushed; GitHub Release v0.13.0 created (REL_ID 383762764, asset HTTP 201, 19,485,632 bytes); /releases/latest/download/ permalink verified serving versionCode 13; stable signature b1ffd75d… intact
+
+Stage Summary:
+- Explore now behaves like the benchmark store surfaces: search + category chips filter assistants, prompts and tools together, with honest empty states on both platforms
+- Thirteen shipped cycles, all signature-stable, all install-over
+- Backlog remaining: assistants CRUD + pin/archive native wiring (deferred until live backend ask), edge states pass, deeper design parity sweeps
