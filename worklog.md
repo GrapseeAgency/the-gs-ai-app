@@ -774,3 +774,23 @@ Stage Summary:
 - Explore now behaves like the benchmark store surfaces: search + category chips filter assistants, prompts and tools together, with honest empty states on both platforms
 - Thirteen shipped cycles, all signature-stable, all install-over
 - Backlog remaining: assistants CRUD + pin/archive native wiring (deferred until live backend ask), edge states pass, deeper design parity sweeps
+
+---
+Task ID: 27 (cron cycle — edge states pass: untitled fallback, honest empty states, rename hygiene + v0.14.0 shipped via LiveUpdate)
+Agent: Z.ai Code (main)
+Task: Build QA, advance backlog (edge states pass — degenerate data can no longer produce blank or dishonest UI, both platforms), publish v0.14.0.
+
+Work Log:
+- BUILD QA: :app:assembleDebug BUILD SUCCESSFUL (1m32s with edge-state changes); toolchain intact
+- GAP FOUND: a conversation whose title is blank/whitespace (legacy import, interrupted sync, stray server row) rendered as an empty line on every list, drawer, search and archive surface — and Android's Pinned filter showed the misleading "No conversations yet / Start a chat…" copy even when the user HAS chats, just none pinned
+- SHARED FALLBACK: gsConversationTitle() added on both platforms (GsComponents.kt / AeroComponents.swift) — blank titles render as "Untitled chat"; wired into Android Chats rows + actions sheet, Archive rows + sheet, Chat search results, Drawer recents + sheet; iOS Chats rows, Archive rows, Drawer recents, Chat search results (rename seeding now reads the raw store title so the fallback never gets persisted)
+- HONEST EMPTY STATES: Android per-filter copy (Pinned → "Nothing pinned yet / Pin a chat from its overflow menu…", Unread → "All caught up", All unchanged); iOS ChatsListView emptyTitle/emptyMessage mirrored word-for-word for parity
+- RENAME HYGIENE: Android sheet now trims before onRename (blank already gated); all three iOS rename alerts (Chats/AeroDrawer/Archive) trim, guard empty, and sync the trimmed title instead of the raw draft
+- iOS STATIC GATES: 13 files CLEAN — sweep extended with ChatsListView, ArchivedChatsView, AeroDrawer, AeroComponents
+- VERSION: versionCode 14 / versionName 0.14.0; APK copied to download/GS-AI-App.apk (aapt verified versionCode 14); update-manifest.json bumped
+- PUBLISHED: commit a9a14e3 pushed; GitHub Release v0.14.0 created (REL_ID 383766438, asset HTTP 201, 19,485,636 bytes); /releases/latest/download/ permalink verified serving versionCode 14; stable signature b1ffd75d… intact
+
+Stage Summary:
+- Degenerate data can no longer produce blank or dishonest UI: every title surface has a graceful fallback, every filter has honest empty copy, rename is whitespace-proof on both platforms
+- Fourteen shipped cycles, all signature-stable, all install-over
+- Backlog remaining: assistants CRUD + pin/archive native wiring (deferred until live backend ask), deeper design parity sweeps
