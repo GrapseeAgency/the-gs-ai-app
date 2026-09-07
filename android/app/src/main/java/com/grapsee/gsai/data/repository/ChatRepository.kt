@@ -215,14 +215,15 @@ class ChatRepository(
 
     fun savedItems(): Flow<List<SavedItemEntity>> = db.savedItemDao().observeAll()
 
-    /** Real Save-to-Library: the tapped turn lands in the Library, Messages kind. */
-    suspend fun saveToLibrary(content: String) {
+    /** Real Save-to-Library: chat turns land as "message"; the studios save
+     *  images and drafts under their own kind so Library filters catch them. */
+    suspend fun saveToLibrary(content: String, kind: String = "message") {
         val trimmed = content.trim()
         if (trimmed.isEmpty()) return
         db.savedItemDao().upsert(
             SavedItemEntity(
                 id = UUID.randomUUID().toString(),
-                kind = "message",
+                kind = kind,
                 title = trimmed.take(48),
                 content = trimmed,
                 createdAt = nowIso()

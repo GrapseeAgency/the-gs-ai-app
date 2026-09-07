@@ -144,6 +144,7 @@ private struct NotificationRow: View {
             }
         }
         .buttonStyle(KineticPressStyle())
+        }
     }
 
     static func icon(for type: String) -> String {

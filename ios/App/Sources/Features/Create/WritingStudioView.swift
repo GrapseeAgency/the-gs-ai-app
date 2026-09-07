@@ -308,6 +308,9 @@ struct WritingStudioView: View {
             .buttonStyle(KineticPressStyle())
 
             Button {
+                // Real save: the finished draft lands in the Library under
+                // the Documents kind — filters catch it.
+                ConversationStore.shared.saveToLibrary(content: draftText, kind: "document")
                 showToast("Saved to Library")
             } label: {
                 Label("Save", systemImage: "bookmark")

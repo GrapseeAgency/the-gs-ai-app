@@ -223,15 +223,16 @@ extension ConversationStore {
 
     private static let savedLibraryKey = "gs_saved_library_items"
 
-    /// Real "Save to Library" — message content lands here from the chat surface.
-    func saveToLibrary(content: String) {
+    /// Real "Save to Library" — chat turns land as "message"; the studios
+    /// save images and drafts under their own kind so Library filters catch them.
+    func saveToLibrary(content: String, kind: String = "message") {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         var current = savedLibraryItems()
         current.insert(
             LibraryItem(
                 id: UUID().uuidString,
-                kind: "message",
+                kind: kind,
                 title: String(trimmed.prefix(48)),
                 content: trimmed,
                 createdAt: Self.now()),

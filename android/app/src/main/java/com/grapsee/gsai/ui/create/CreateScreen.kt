@@ -21,6 +21,7 @@ import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.EditNote
 import androidx.compose.material.icons.outlined.HourglassEmpty
+import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Slideshow
 import androidx.compose.material.icons.outlined.SmartToy
@@ -31,13 +32,18 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.grapsee.gsai.di.ServiceLocator
 import com.grapsee.gsai.ui.components.GsCard
 import com.grapsee.gsai.ui.components.GsEmptyState
+import com.grapsee.gsai.ui.components.GsListItem
 import com.grapsee.gsai.ui.components.GsScreenScaffold
 import com.grapsee.gsai.ui.components.GsSectionHeader
 import com.grapsee.gsai.ui.navigation.GsRoutes
@@ -58,16 +64,16 @@ private data class CreateTool(
 )
 
 // Workspace tools route to their dedicated studios (Task 8-c — wired in GsNavHost);
-// everything else still funnels into a fresh chat.
+// everything else seeds a fresh chat, so no tile dead-ends into a blank composer.
 private val createTools = listOf(
     CreateTool("AI image", "Generate art from a prompt", Icons.Outlined.Palette, "create/image"),
     CreateTool("Image edit", "Retouch and restyle", Icons.Outlined.AutoFixHigh, "create/image"),
-    CreateTool("Document", "Reports, briefs and memos", Icons.Outlined.Description, GsRoutes.chat(null)),
-    CreateTool("Presentation", "Decks from a single prompt", Icons.Outlined.Slideshow, GsRoutes.chat(null)),
-    CreateTool("Spreadsheet", "Tables with live formulas", Icons.Outlined.TableChart, GsRoutes.chat(null)),
+    CreateTool("Document", "Reports, briefs and memos", Icons.Outlined.Description, GsRoutes.chat(null, "Draft a document — brief, memo or report — about: ")),
+    CreateTool("Presentation", "Decks from a single prompt", Icons.Outlined.Slideshow, GsRoutes.chat(null, "Draft a slide deck outline about: ")),
+    CreateTool("Spreadsheet", "Tables with live formulas", Icons.Outlined.TableChart, GsRoutes.chat(null, "Build a spreadsheet with formulas for: ")),
     CreateTool("Writing", "Drafts in your voice", Icons.Outlined.EditNote, "create/writing"),
     CreateTool("Code", "Snippets and scaffolds", Icons.Outlined.Code, "create/code"),
-    CreateTool("Diagram", "Architecture and flows", Icons.Outlined.AccountTree, GsRoutes.chat(null)),
+    CreateTool("Diagram", "Architecture and flows", Icons.Outlined.AccountTree, GsRoutes.chat(null, "Describe the system or flow to diagram: ")),
     CreateTool("Prompt builder", "Compose reusable prompts", Icons.Outlined.TipsAndUpdates, "create/prompt"),
     CreateTool("Assistant builder", "Design your own AI", Icons.Outlined.SmartToy, GsRoutes.ASSISTANT_CREATE)
 )
@@ -110,7 +116,7 @@ fun CreateScreen(onNavigate: (String) -> Unit) {
                         }
                     }
                 }
-                RecentCreationsSection()
+                RecentCreationsSection(onNavigate)
                 Spacer(Modifier.height(GsMotion.spaceL))
             }
         }
@@ -143,16 +149,47 @@ private fun CreateToolCard(
     }
 }
 
+/**
+ * Recent creations, live: everything the studios saved to the Library, newest
+ * first — tapping one re-opens the work in a seeded chat, same continue
+ * semantics as the Library reader. Empty state holds until the first save.
+ */
 @Composable
-private fun RecentCreationsSection() {
+private fun RecentCreationsSection(onNavigate: (String) -> Unit) {
+    val savedItems by remember { ServiceLocator.chat.savedItems() }
+        .collectAsState(initial = emptyList())
+    val recent = savedItems.take(6)
     Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)) {
         GsSectionHeader(title = "Recent creations")
-        GsEmptyState(
-            icon = Icons.Outlined.HourglassEmpty,
-            title = "Nothing yet",
-            message = "Your generated images, docs and decks will live here."
-        )
+        if (recent.isEmpty()) {
+            GsEmptyState(
+                icon = Icons.Outlined.HourglassEmpty,
+                title = "Nothing yet",
+                message = "Your generated images, docs and decks will live here."
+            )
+        } else {
+            recent.forEach { item ->
+                GsListItem(
+                    title = item.title,
+                    subtitle = "${creationLabel(item.kind)} · Library",
+                    leading = { ToolBadge(creationIcon(item.kind)) },
+                    onClick = { onNavigate(GsRoutes.chat(null, item.content)) }
+                )
+            }
+        }
     }
+}
+
+private fun creationLabel(kind: String): String = when (kind) {
+    "image" -> "Image"
+    "document" -> "Document"
+    else -> "Creation"
+}
+
+private fun creationIcon(kind: String): ImageVector = when (kind) {
+    "image" -> Icons.Outlined.Image
+    "document" -> Icons.Outlined.Description
+    else -> Icons.Outlined.AutoFixHigh
 }
 
 @Composable

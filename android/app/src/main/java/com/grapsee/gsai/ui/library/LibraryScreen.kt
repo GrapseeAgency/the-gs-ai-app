@@ -98,6 +98,15 @@ private val collections = listOf(
     Collection("Design refs", "21 items")
 )
 
+/** A saved item's kind string maps onto the Library chip that owns it. */
+private fun filterLabelFor(kind: String): String = when (kind) {
+    "image" -> "Images"
+    "document" -> "Documents"
+    "file" -> "Files"
+    "prompt" -> "Prompts"
+    else -> "Messages"
+}
+
 @Composable
 fun LibraryScreen(onNavigate: (String) -> Unit) {
     var selectedFilter by remember { mutableIntStateOf(0) }
@@ -105,10 +114,11 @@ fun LibraryScreen(onNavigate: (String) -> Unit) {
     val visibleItems = if (selectedFilter == 0) libraryItems
     else libraryItems.filter { it.kind == filter }
 
-    // Real saves from the chat surface — persist in Room, render above seeds.
+    // Real saves from the chat surface and the studios — persist in Room, render
+    // under the chip that owns their kind (messages, images, documents…).
     val savedItems by remember { ServiceLocator.chat.savedItems() }
         .collectAsState(initial = emptyList())
-    val realVisible = savedItems.filter { selectedFilter == 0 || filter == "Messages" }
+    val realVisible = savedItems.filter { selectedFilter == 0 || filterLabelFor(it.kind) == filter }
 
     // Item management: tap a real save to read it in full, copy or remove it.
     val scope = rememberCoroutineScope()
@@ -154,10 +164,15 @@ fun LibraryScreen(onNavigate: (String) -> Unit) {
                     )
                 } else {
                     realVisible.forEach { item ->
+                        val (badge, label) = when (item.kind) {
+                            "image" -> Icons.Outlined.Image to "Saved image"
+                            "document" -> Icons.Outlined.Description to "Saved document"
+                            else -> Icons.Outlined.BookmarkBorder to "Saved message"
+                        }
                         GsListItem(
                             title = item.title,
-                            subtitle = "Saved message",
-                            leading = { ItemBadge(Icons.Outlined.BookmarkBorder) },
+                            subtitle = label,
+                            leading = { ItemBadge(badge) },
                             trailing = {
                                 Icon(
                                     imageVector = Icons.Outlined.MoreVert,
@@ -328,7 +343,11 @@ private fun SavedItemSheet(
                 TextButton(onClick = onDismiss) { Text("Close") }
             }
             Text(
-                text = "Saved message",
+                text = when (item.kind) {
+                    "image" -> "Saved image"
+                    "document" -> "Saved document"
+                    else -> "Saved message"
+                },
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.outline
             )

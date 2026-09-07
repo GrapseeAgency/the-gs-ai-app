@@ -41,6 +41,7 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
+import com.grapsee.gsai.di.ServiceLocator
 import com.grapsee.gsai.ui.components.GsCard
 import com.grapsee.gsai.ui.components.GsChip
 import com.grapsee.gsai.ui.components.GsListItem
@@ -296,7 +297,17 @@ fun WritingStudioScreen(onBack: () -> Unit) {
                         }
                         Spacer(Modifier.height(GsMotion.spaceS))
                         FilledTonalButton(
-                            onClick = { showSnack("Saved to Library") },
+                            onClick = {
+                                // Real save: the finished draft lands in the Library
+                                // under the Documents kind — filters catch it.
+                                scope.launch {
+                                    runCatching {
+                                        ServiceLocator.chat.saveToLibrary(draft, kind = "document")
+                                    }
+                                        .onSuccess { showSnack("Saved to Library") }
+                                        .onFailure { showSnack("Couldn't save right now") }
+                                }
+                            },
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text("Save to Library")

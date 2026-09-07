@@ -239,6 +239,9 @@ struct ImageStudioView: View {
             )
             .overlay(alignment: .topTrailing) {
                 Button {
+                    // Real save: the variation's prompt lands in the Library
+                    // under the Images kind — filters catch it.
+                    ConversationStore.shared.saveToLibrary(content: trimmedPrompt, kind: "image")
                     showToast("Saved to Library")
                 } label: {
                     Image(systemName: "arrow.down.circle")

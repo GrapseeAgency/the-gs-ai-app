@@ -203,7 +203,9 @@ struct LibraryView: View {
     private var itemsSection: some View {
         VStack(alignment: .leading, spacing: Aero.Spacing.m) {
             SectionHeader(title: "Saved items")
-            let realRows = savedMessages.filter { filter == .all || filter == .messages }
+            let realRows = savedMessages.filter { item in
+                filter == .all || filter == filterForKind(item.kind)
+            }
             if realRows.isEmpty && filteredItems.isEmpty {
                 EmptyStateView(
                     icon: "tray",
@@ -235,6 +237,17 @@ struct LibraryView: View {
         }
     }
 
+    /// A saved item's kind string maps onto the chip that owns it.
+    private func filterForKind(_ kind: String) -> Filter {
+        switch kind {
+        case "image": return .images
+        case "document": return .documents
+        case "file": return .files
+        case "prompt": return .prompts
+        default: return .messages
+        }
+    }
+
     private func itemRow(_ item: SavedItem) -> some View {
         AeroListRow(
             title: item.title,
@@ -254,14 +267,17 @@ struct LibraryView: View {
         )
     }
 
-    /// A real save: taps into the reader sheet where the full turn can be
+    /// A real save: taps into the reader sheet where the full item can be
     /// copied or removed — the sample rows above keep their plain look.
     private func realRow(_ item: LibraryItem) -> some View {
         AeroListRow(
             title: item.title,
-            subtitle: "Message · saved from your chats",
+            subtitle: item.kind == "image" ? "Image · saved from the studio"
+                : item.kind == "document" ? "Document · saved from the studio"
+                : "Message · saved from your chats",
             leading: {
-                Image(systemName: "bookmark")
+                Image(systemName: item.kind == "image" ? "photo"
+                    : item.kind == "document" ? "doc.text" : "bookmark")
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(Aero.text)
                     .frame(width: 36, height: 36)

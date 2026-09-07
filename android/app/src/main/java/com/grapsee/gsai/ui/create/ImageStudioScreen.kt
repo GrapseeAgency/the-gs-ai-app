@@ -44,6 +44,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.ui.components.GsChip
+import com.grapsee.gsai.di.ServiceLocator
 import com.grapsee.gsai.ui.components.GsScreenScaffold
 import com.grapsee.gsai.ui.components.GsSectionHeader
 import com.grapsee.gsai.ui.theme.GsMotion
@@ -186,7 +187,17 @@ fun ImageStudioScreen(onBack: () -> Unit) {
                                 rowAlphas.forEach { alpha ->
                                     ResultTile(
                                         alpha = alpha,
-                                        onDownload = { showSnack("Saved to Library") },
+                                        onDownload = {
+                                            // Real save: the variation's prompt lands in the
+                                            // Library under the Images kind — filters catch it.
+                                            scope.launch {
+                                                runCatching {
+                                                    ServiceLocator.chat.saveToLibrary(prompt, kind = "image")
+                                                }
+                                                    .onSuccess { showSnack("Saved to Library") }
+                                                    .onFailure { showSnack("Couldn't save right now") }
+                                            }
+                                        },
                                         modifier = Modifier.weight(1f)
                                     )
                                 }

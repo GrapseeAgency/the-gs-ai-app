@@ -1,6 +1,6 @@
 {
-  "versionCode": 32,
-  "versionName": "0.32.0",
+  "versionCode": 33,
+  "versionName": "0.33.0",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "Your model pick now sticks: Set as default and reasoning mode survive relaunches, and chats actually send with the chosen model when the server offers it."
+  "notes": "Create tab is real now: studio saves land in the Library under their own filter, Recent creations shows your actual work, and every tool tile seeds the composer."
 }

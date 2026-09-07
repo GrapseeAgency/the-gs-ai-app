@@ -1,23 +1,11 @@
 #!/usr/bin/env python3
 """iOS static verification: brace/paren balance + banned-API sweep (GS AI App)."""
+import glob
 import re
 import sys
 
-FILES = [
-    "/home/z/my-project/ios/App/Sources/Features/Voice/VoiceDictation.swift",
-    "/home/z/my-project/ios/App/Sources/Features/Voice/SpeechPlayer.swift",
-    "/home/z/my-project/ios/App/Sources/Features/Home/HomeView.swift",
-    "/home/z/my-project/ios/App/Sources/Navigation/AppRouter.swift",
-    "/home/z/my-project/ios/App/Sources/Features/Chats/ChatDetailView.swift",
-    "/home/z/my-project/ios/App/Sources/Networking/SQLiteChatStore.swift",
-    "/home/z/my-project/ios/App/Sources/Networking/ConversationStore.swift",
-    "/home/z/my-project/ios/App/Sources/Features/Chats/ChatSearchView.swift",
-    "/home/z/my-project/ios/App/Sources/Features/Explore/ExploreView.swift",
-    "/home/z/my-project/ios/App/Sources/Features/Chats/ChatsListView.swift",
-    "/home/z/my-project/ios/App/Sources/Features/Chats/ArchivedChatsView.swift",
-    "/home/z/my-project/ios/App/Sources/Components/AeroDrawer.swift",
-    "/home/z/my-project/ios/App/Sources/Components/AeroComponents.swift",
-]
+# Auto-cover every Swift source so new feature files can never escape the gate.
+FILES = sorted(glob.glob("/home/z/my-project/ios/App/Sources/**/*.swift", recursive=True))
 
 BANNED = [
     r"\.fontDesign", r"SwiftData", r"@Observable", r"ContentUnavailableView",
