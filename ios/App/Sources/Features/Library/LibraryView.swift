@@ -77,6 +77,8 @@ struct LibraryView: View {
     // Item management: tap a real save to read it in full, copy or remove it.
     @State private var viewingItem: LibraryItem?
 
+    @EnvironmentObject private var router: Router
+
     private let collections: [SavedCollection] = [
         .init(name: "Brand kit", count: "12 items"),
         .init(name: "Client work", count: "8 items"),
@@ -115,6 +117,10 @@ struct LibraryView: View {
         .sheet(item: $viewingItem) { item in
             LibraryItemSheet(item: item) {
                 savedMessages = ConversationStore.shared.savedLibraryItems()
+            } onContinue: { text in
+                // Bridge back to the chat surface: the saved turn seeds a
+                // fresh composer (pushed once the sheet has animated out).
+                router.path.append(.chatPrefill(text))
             }
         }
         .toolbar {
@@ -273,12 +279,14 @@ struct LibraryView: View {
 
 // MARK: - Library item reader
 
-/// One saved turn in full, selectable for partial copies — Copy hands it to
-/// the clipboard with the benchmark checkmark, Delete removes it for good and
-/// the list refreshes itself (Room on Android, the JSON store here).
+/// One saved turn in full, selectable for partial copies — Continue seeds a
+/// fresh chat composer with it, Copy hands it to the clipboard with the
+/// benchmark checkmark, Delete removes it for good and the list refreshes
+/// itself (Room on Android, the JSON store here).
 private struct LibraryItemSheet: View {
     let item: LibraryItem
     let onDeleted: () -> Void
+    var onContinue: ((String) -> Void)? = nil
 
     @Environment(\.dismiss) private var dismiss
     @State private var copied = false
@@ -306,6 +314,17 @@ private struct LibraryItemSheet: View {
                     .textSelection(.enabled)
             }
             HStack(spacing: 20) {
+                Button {
+                    let text = item.content
+                    dismiss()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                        onContinue?(text)
+                    }
+                } label: {
+                    Label("Continue in chat", systemImage: "plus.bubble")
+                        .font(.system(size: 14))
+                        .foregroundStyle(Aero.textMuted)
+                }
                 Button {
                     UIPasteboard.general.string = item.content
                     withAnimation(.easeOut(duration: 0.15)) { copied = true }

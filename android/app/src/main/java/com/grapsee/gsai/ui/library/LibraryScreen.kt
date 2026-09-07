@@ -200,6 +200,11 @@ fun LibraryScreen(onNavigate: (String) -> Unit) {
                     clipboard.setText(AnnotatedString(text))
                     showSnack("Copied")
                 },
+                onContinueInChat = {
+                    val text = item.content
+                    viewingItem = null
+                    onNavigate(GsRoutes.chat(null, text))
+                },
                 onDelete = {
                     val target = item
                     viewingItem = null
@@ -287,6 +292,7 @@ private fun SavedItemSheet(
     item: SavedItemEntity,
     onDismiss: () -> Unit,
     onCopy: (String) -> Unit,
+    onContinueInChat: () -> Unit,
     onDelete: () -> Unit
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
@@ -333,6 +339,11 @@ private fun SavedItemSheet(
                 )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)) {
+                TextButton(onClick = onContinueInChat) {
+                    Icon(Icons.Outlined.ChatBubbleOutline, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Continue in chat")
+                }
                 TextButton(onClick = { onCopy(item.content) }) {
                     Icon(Icons.Outlined.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))

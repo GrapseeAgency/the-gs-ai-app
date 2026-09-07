@@ -1,6 +1,6 @@
 {
-  "versionCode": 27,
-  "versionName": "0.27.0",
+  "versionCode": 28,
+  "versionName": "0.28.0",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "Library items are manageable now: tap any saved message to read it in full, copy it, or delete it — on both platforms."
+  "notes": "Library to chat, one tap: Continue in chat on any saved message seeds a fresh composer with it — the loop from save to reuse is closed."
 }

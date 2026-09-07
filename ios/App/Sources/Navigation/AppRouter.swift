@@ -59,26 +59,34 @@ private enum AeroTab: String, CaseIterable {
     }
 }
 
+/// Programmatic navigation: any view — including one inside a sheet — can
+/// append a route without a NavigationLink in reach. Classic ObservableObject
+/// per the project's iOS baseline (the modern observation macro is banned).
+final class Router: ObservableObject {
+    @Published var path: [AeroRoute] = []
+}
+
 /// Root shell — Home canvas + drawer overlay over one NavigationStack.
 struct RootView: View {
-    @State private var path: [AeroRoute] = []
+    @StateObject private var router = Router()
     @State private var showDrawer = false
 
     var body: some View {
         ZStack {
-            NavigationStack(path: $path) {
+            NavigationStack(path: $router.path) {
                 HomeView(
                     onOpenDrawer: { withAnimation(Aero.spring) { showDrawer = true } },
-                    onRoute: { path.append($0) }
+                    onRoute: { router.path.append($0) }
                 )
                 .aeroDestinations()
             }
+            .environmentObject(router)
 
             if showDrawer {
                 AeroDrawer(
                     onRoute: { route in
                         withAnimation(Aero.spring) { showDrawer = false }
-                        path.append(route)
+                        router.path.append(route)
                     },
                     onClose: { withAnimation(Aero.spring) { showDrawer = false } }
                 )
