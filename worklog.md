@@ -1256,3 +1256,24 @@ Stage Summary:
 - Standing backlog text is now fully consumed: assistants CRUD remains parked on the live-backend ask (pin/archive, rename, explore rows, Room/SwiftData persistence, model prefs — all shipped in Tasks 42–48); remaining ideas are backend-dependent (real checkout, real billing sync, real assistants CRUD) or net-new features
 - Thirty-eight shipped cycles, all signature-stable, all install-over
 - Next candidates: user-reported issues (awaiting first test report since v0.5.0), or net-new surface polish (home widget-grade quick actions, onboarding refresh) if no feedback lands
+
+---
+Task ID: 52 (cron cycle — About section in Settings, v0.39.0 shipped via LiveUpdate)
+Agent: Z.ai Code (main)
+Task: Build QA, advance backlog (standing backlog consumed per Task 51; chose net-new surface polish from Task 51's candidates — surveyed onboarding [complete 6-step wizard both platforms, nothing to add] and landed on the About/version surface), publish v0.39.0.
+
+Work Log:
+- DISCOVERY: no screen anywhere named the installed version — after GS LiveUpdate installs a new build the only proof was the update pill's transient toast; benchmark apps all surface version info in Settings, and with auto-updates shipping every 15 minutes it is the one row a tester needs to confirm "the update landed"
+- DESIGN: an About section as the last Settings card, identical semantics on both platforms — Version / Build / Updates rows; values read LIVE from the build (BuildConfig on Android, bundle Info.plist on iOS), never hardcoded, so the class of frozen-literal drift we just eliminated cannot come back here
+- ANDROID (SettingsScreen.kt): new ExpandCard id "about" (Icons.Outlined.Info) after Accessibility with ValueRow("Version", BuildConfig.VERSION_NAME) + ValueRow("Build", BuildConfig.VERSION_CODE.toString()) + ValueRow("Updates", "Automatic via GS LiveUpdate"); imports added (Info icon, com.grapsee.gsai.BuildConfig); buildConfig already enabled and LiveUpdater already reads VERSION_CODE, so both fields are known-generated
+- IOS (SettingsView.swift): aboutSection via the existing section() helper with three valueRow HStacks (same visual pattern as the Accessibility font-scale row); appVersion/buildNumber computed from Bundle.main CFBundleShortVersionString / CFBundleVersion with ?? fallbacks (no force unwrap); doc comment 8 → 9 sections; aboutSection appended to the section list
+- PROPERTY-ACCESS CROSS-CHECK: ValueRow(title, value) and ExpandCard(id, icon, title, expandedId, onToggle) signatures match existing call sites; iOS instance members (section/valueRow/appVersion/buildNumber) all in-struct — verified by hand
+- iOS STATIC GATES: 44 files CLEAN (SettingsView CLEAN)
+- ANDROID BUILD: green with real compile 1m27s (QA) and 1m33s (version bump) — no fixes needed
+- VERSION: versionCode 39 / versionName 0.39.0; APK copied to download/GS-AI-App.apk (aapt verified versionCode 39); update-manifest.json bumped
+- PUBLISHED: commit 7bac9f5 pushed; GitHub Release v0.39.0 created (REL_ID 383878926, asset HTTP 201, 19,567,556 bytes); /releases/latest/download/ permalink verified serving versionCode 39; stable signature b1ffd75d… intact
+
+Stage Summary:
+- The update loop now closes on itself: update pill installs → Settings › About names the exact version and build you are running — live-read, drift-proof, identical on both platforms
+- Thirty-nine shipped cycles, all signature-stable, all install-over
+- Next candidates: continue net-new polish (home quick actions: Android static shortcuts + iOS UIApplicationShortcutItems for New chat / New image / Ask GS), or hold for the first user test report
