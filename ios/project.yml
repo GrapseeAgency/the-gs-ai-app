@@ -33,8 +33,8 @@ targets:
         UILaunchScreen: {}
         CFBundleDisplayName: GS AI
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
-        NSSpeechRecognitionUsageDescription: GS turns your voice into text for your prompts when you hold the voice orb.
-        NSMicrophoneUsageDescription: GS uses the microphone when you hold the voice orb to talk.
+        NSSpeechRecognitionUsageDescription: GS turns your voice into text for your prompts when you use voice mode.
+        NSMicrophoneUsageDescription: GS uses the microphone when you talk in voice mode.
         UIApplicationShortcutItems:
           - UIApplicationShortcutItemType: com.grapsee.gsai.quick.newChat
             UIApplicationShortcutItemTitle: New chat

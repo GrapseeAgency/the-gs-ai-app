@@ -1,17 +1,19 @@
 import SwiftUI
 
 /// Full-screen voice session — kinetic aurora waveform, live transcript,
-/// call controls and voice picker. Closes itself via the environment dismiss.
+/// call controls. Now real: the on-device SpeechRecognizer (via VoiceDictation)
+/// drives the transcript, SpeechPlayer reads a finished result back, and the
+/// result hands off to a brand-new chat through `.chatPrefill`. Every status
+/// line maps to what the engine is actually doing — no decorative listening.
 struct VoiceView: View {
 
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var router: Router
+
+    @StateObject private var dictation = VoiceDictation()
+    @StateObject private var speech = SpeechPlayer()
 
     private static let endCallRed = Color(red: 0.9, green: 0.28, blue: 0.28)
-
-    @State private var animate = false
-    @State private var muted = false
-    @State private var speakerOn = true
-    @State private var voice = "GS Aurora"
 
     private let barCount = 24
 
@@ -33,13 +35,28 @@ struct VoiceView: View {
                 Spacer()
                 transcript
                 controls
-                voicePicker
+                engineCaption
             }
             .padding(.horizontal, Aero.Spacing.m)
             .padding(.top, Aero.Spacing.s)
             .padding(.bottom, Aero.Spacing.l)
         }
         .toolbar(.hidden, for: .navigationBar)
+        .onAppear {
+            // Permission already granted on a previous visit: open the mic
+            // straight away. First visit waits for one explicit tap so the
+            // system prompt never surprises.
+            if SFSpeechRecognizer.authorizationStatus() == .authorized,
+               AVAudioSession.sharedInstance().recordPermission == .granted {
+                dictation.startSession()
+            }
+        }
+        .onDisappear {
+            // The mic can never outlive the screen: leaving voice mode closes
+            // the capture and deactivates the audio session.
+            dictation.suspendForBackground()
+            speech.stop()
+        }
     }
 
     // MARK: Top bar
@@ -66,14 +83,32 @@ struct VoiceView: View {
 
     // MARK: Status
 
+    private var statusLine: String {
+        switch dictation.sessionState {
+        case .idle: return "Tap the mic and speak"
+        case .listening: return "Listening…"
+        case .processing: return dictation.transcript.isEmpty ? "Starting the mic…" : "Processing…"
+        case .result: return "Got it"
+        case .noSpeech: return "Didn't catch that — tap the mic and try again"
+        case .denied: return "Microphone access is off — enable it in Settings to speak"
+        case .unavailable: return "Speech recognition isn't available right now"
+        case .error: return "That didn't come through — tap the mic and try again"
+        }
+    }
+
+    private var statusIsTrouble: Bool {
+        switch dictation.sessionState {
+        case .noSpeech, .denied, .unavailable, .error: return true
+        default: return false
+        }
+    }
+
     private var status: some View {
         VStack(spacing: Aero.Spacing.xs) {
-            Text("Listening…")
+            Text(statusLine)
                 .font(Aero.display())
-                .foregroundStyle(Aero.text)
-            Text("\(voice) · English (UK)")
-                .font(Aero.caption())
-                .foregroundStyle(Aero.textMuted)
+                .foregroundStyle(statusIsTrouble ? Aero.textMuted : Aero.text)
+                .multilineTextAlignment(.center)
         }
     }
 
@@ -84,32 +119,50 @@ struct VoiceView: View {
             ForEach(0..<barCount, id: \.self) { index in
                 Capsule()
                     .fill(LinearGradient(colors: Aero.aurora, startPoint: .top, endPoint: .bottom))
-                    .frame(width: 4, height: animate ? heights[index] : 8)
+                    .frame(width: 4, height: dictation.isListening ? heights[index] : 8)
                     .animation(
                         .easeInOut(duration: 0.5)
                             .repeatForever(autoreverses: true)
                             .delay(Double(index) * 0.04),
-                        value: animate
+                        value: dictation.isListening
                     )
             }
         }
         .frame(height: 56)
-        .onAppear { animate = true }
     }
 
     // MARK: Transcript
 
+    private var transcriptText: String {
+        switch dictation.sessionState {
+        case .result: return dictation.lastResult
+        default: return dictation.transcript
+        }
+    }
+
     private var transcript: some View {
         AeroCard {
             VStack(spacing: Aero.Spacing.s) {
-                Text("What's on my plate this morning?")
-                    .font(Aero.caption())
-                    .foregroundStyle(Aero.textMuted)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-                Text("Three focus blocks: the design review at ten, the release-note draft, and a pairing session at noon.")
+                Text(transcriptText.isEmpty ? "Your words will appear here." : transcriptText)
                     .font(Aero.body())
-                    .foregroundStyle(Aero.text)
+                    .foregroundStyle(transcriptText.isEmpty ? Aero.textMuted : Aero.text)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                if dictation.sessionState == .result {
+                    HStack(spacing: Aero.Spacing.s) {
+                        AeroChip(text: "Send to chat", selected: true) {
+                            // The engine has finished with the mic by now;
+                            // the chat opens on top, voice mode stays beneath.
+                            router.path.append(.chatPrefill(dictation.lastResult))
+                        }
+                        AeroChip(text: "Copy", selected: false) {
+                            UIPasteboard.general.string = dictation.lastResult
+                        }
+                        AeroChip(text: "Try again", selected: false) {
+                            dictation.startSession()
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                }
             }
         }
     }
@@ -119,10 +172,14 @@ struct VoiceView: View {
     private var controls: some View {
         HStack(spacing: 24) {
             controlButton(
-                muted ? "mic.slash" : "mic",
-                dimmed: muted
+                dictation.isListening ? "mic" : "mic.slash",
+                dimmed: !dictation.isListening
             ) {
-                muted.toggle()
+                if dictation.isListening {
+                    dictation.stopSession()
+                } else {
+                    dictation.startSession()
+                }
             }
             controlButton(
                 "phone.down.fill",
@@ -133,9 +190,10 @@ struct VoiceView: View {
             }
             controlButton(
                 "speaker.wave.2.fill",
-                dimmed: !speakerOn
+                dimmed: speech.speakingMessageID != "voice-result"
             ) {
-                speakerOn.toggle()
+                guard dictation.sessionState == .result, !dictation.lastResult.isEmpty else { return }
+                speech.toggle(messageID: "voice-result", text: dictation.lastResult)
             }
         }
     }
@@ -159,16 +217,12 @@ struct VoiceView: View {
         .buttonStyle(KineticPressStyle())
     }
 
-    // MARK: Voice picker
+    // MARK: Engine caption (the honest replacement for the fake voice picker)
 
-    private var voicePicker: some View {
-        HStack(spacing: Aero.Spacing.s) {
-            ForEach(["GS Aurora", "Ember", "Slate"], id: \.self) { option in
-                AeroChip(text: option, selected: voice == option) {
-                    voice = option
-                }
-            }
-        }
-        .frame(maxWidth: .infinity)
+    private var engineCaption: some View {
+        Text("Speech stays on this device · \(Locale.current.identifier)")
+            .font(Aero.caption())
+            .foregroundStyle(Aero.textMuted)
+            .frame(maxWidth: .infinity)
     }
 }

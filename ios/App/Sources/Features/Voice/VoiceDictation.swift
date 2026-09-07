@@ -2,6 +2,20 @@ import Foundation
 import AVFoundation
 import Speech
 
+/// Full-screen voice-mode engine states — honest by contract: the UI maps
+/// every one of these to a real sentence, so voice mode never performs
+/// "Listening…" with the microphone closed.
+enum VoiceSessionState {
+    case idle
+    case listening
+    case processing
+    case result
+    case noSpeech
+    case denied
+    case unavailable
+    case error
+}
+
 /**
  * Press-and-hold dictation for the hero orb — live partial transcripts feed
  * the hero line while the finger is down, and the best available text hands
@@ -15,6 +29,11 @@ final class VoiceDictation: ObservableObject {
     @Published private(set) var isListening = false
     /// Live partial transcription while listening.
     @Published private(set) var transcript = ""
+    /// Session state for the full-screen voice surface (additive — the
+    /// hold-to-talk API above keeps working untouched).
+    @Published private(set) var sessionState: VoiceSessionState = .idle
+    /// Final text of the last completed session ("" = nothing recognized).
+    @Published private(set) var lastResult = ""
 
     /// Fires once per hold with the best available text ("" = nothing said —
     /// the call site quietly ignores that).
@@ -56,6 +75,7 @@ final class VoiceDictation: ObservableObject {
         bestText = ""
         transcript = ""
         isListening = true
+        sessionState = .listening
         requestPermissionsAndStart()
     }
 
@@ -63,6 +83,7 @@ final class VoiceDictation: ObservableObject {
     /// (a short grace period lets the final result land for the last words).
     func end() {
         holdActive = false
+        sessionState = .processing
         request?.endAudio()
         audioEngine.stop()
         audioEngine.inputNode.removeTap(onBus: 0)
@@ -70,6 +91,14 @@ final class VoiceDictation: ObservableObject {
             self?.finishHandoff()
         }
     }
+
+    // MARK: Full-screen voice mode (tap-to-talk sessions)
+
+    /// Open a listen session — identical pipeline to the hold, explicit end.
+    func startSession() { begin() }
+
+    /// Close the mic and collect the result into [lastResult].
+    func stopSession() { end() }
 
     /// The capture cannot outlive its context: scene backgrounded (no
     /// background-audio entitlement suspends the process and kills the
@@ -80,6 +109,7 @@ final class VoiceDictation: ObservableObject {
         guard holdActive || isListening else { return }
         holdActive = false
         handedOff = true // a later end()/final result must not hand off dead audio
+        sessionState = .idle
         teardownCapture()
     }
 
@@ -107,8 +137,9 @@ final class VoiceDictation: ObservableObject {
 
         guard SFSpeechRecognizer.authorizationStatus() == .authorized,
               AVAudioSession.sharedInstance().recordPermission == .granted else {
-            // Denied — quiet dissolve, no dialogs, no error copy.
+            // Denied — the screen reports it honestly, no dialogs, no error copy.
             isListening = false
+            sessionState = .denied
             return
         }
         startEngine()
@@ -122,6 +153,7 @@ final class VoiceDictation: ObservableObject {
         guard speechRecognizer?.isAvailable == true else {
             starting = false
             isListening = false
+            sessionState = .unavailable
             return
         }
         recognizer = speechRecognizer
@@ -155,8 +187,9 @@ final class VoiceDictation: ObservableObject {
                         if result.isFinal { self.finishHandoff() }
                     } else if error != nil {
                         // Hiccup mid-hold — keep whatever partials we already
-                        // have and drop back to idle quietly.
+                        // have and drop back honestly.
                         isListening = false
+                        if !handedOff { sessionState = .error }
                     }
                 }
             }
@@ -164,6 +197,7 @@ final class VoiceDictation: ObservableObject {
         } catch {
             teardownCapture()
             isListening = false
+            sessionState = .error
         }
     }
 
@@ -171,6 +205,8 @@ final class VoiceDictation: ObservableObject {
         guard !handedOff else { return }
         handedOff = true
         let text = bestText
+        lastResult = text
+        sessionState = text.isEmpty ? .noSpeech : .result
         teardownCapture()
         onFinish?(text)
     }

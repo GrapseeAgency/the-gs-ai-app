@@ -117,7 +117,14 @@ fun GsNavHost(modifier: Modifier = Modifier) {
                 onNavigate = { navController.navigate(it) }
             )
         }
-        composable(GsRoutes.VOICE) { VoiceScreen(onBack = back) }
+        composable(GsRoutes.VOICE) {
+            VoiceScreen(
+                onBack = back,
+                onSendToChat = { spoken ->
+                    navController.navigate(GsRoutes.chat(conversationId = null, prompt = spoken))
+                }
+            )
+        }
         composable(GsRoutes.MODEL_COMPARE) { ModelCompareScreen(onBack = back) }
         composable(GsRoutes.ASSISTANT_CREATE) { AssistantCreateScreen(onBack = back) }
         composable(

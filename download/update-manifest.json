@@ -1,6 +1,6 @@
 {
-  "versionCode": 56,
-  "versionName": "0.56.0",
+  "versionCode": 57,
+  "versionName": "0.57.0",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "Native performance pass, both platforms. Chat streaming now repaints at a steady ~30 Hz instead of per network chunk — only the growing bubble re-renders while the transcript, composer and scaffold stay perfectly still; the final answer is committed to the thread in one write. Typing recomposes only the composer, editing only the bubble being edited. Code blocks highlight once on completion instead of re-colouring every frame mid-stream. Timestamp formatters cached process-wide. On iOS: per-token whole-screen invalidation replaced with an off-main accumulator + 30 Hz flush, per-message render cache, Equatable bubbles that skip untouched rows, shared cached formatters, off-main SQL bootstrap and export, one-write store syncs, and animations that settle when hidden. Same design, same features — the interface just got weightless."
+  "notes": "Voice mode is real now. The obsidian voice screen runs the device's on-device speech engine: partial words stream into the transcript while you speak, the waveform only breathes while the microphone is genuinely open, and every status line tells the truth (paused, processing, didn't catch that, permission off). A finished transcript offers Send to chat — your spoken words land straight in a new conversation's composer — plus Copy and Try again. Speaker toggle reads the transcript back with on-device text-to-speech; the fake voice picker is gone, replaced by an honest on-device caption. iOS gets the identical contract over its own speech engine. Same design, zero decoration-only states."
 }
