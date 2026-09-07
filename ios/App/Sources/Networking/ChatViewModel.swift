@@ -20,6 +20,7 @@ final class ChatViewModel: ObservableObject {
         let role: String
         var content: String
         var isStreaming: Bool = false
+        var createdAt: String = ""
     }
 
     // MARK: - Published state
@@ -97,14 +98,46 @@ final class ChatViewModel: ObservableObject {
         streamTask = nil
     }
 
+    /// Benchmark branch-new-chat: everything up to and including the tapped
+    /// turn becomes the opening history of a fresh local conversation, and
+    /// this surface re-bases onto the branch. The original thread is untouched.
+    func branch(at index: Int) {
+        guard !isStreaming, messages.indices.contains(index) else { return }
+        let turns = Array(messages[...index]).filter { !$0.content.isEmpty }
+        guard !turns.isEmpty else { return }
+        let sourceTitle = conversationID.flatMap {
+            ConversationStore.shared.conversation(withID: $0)?.title
+        } ?? "New chat"
+        let conversation = ConversationStore.shared.createLocalConversation(
+            title: String("Branch: \(sourceTitle)".prefix(40)))
+        let fallbackStamp = ConversationStore.now()
+        for turn in turns {
+            ConversationStore.shared.append(StoredMessage(
+                id: UUID().uuidString,
+                conversationId: conversation.id,
+                role: turn.role,
+                content: turn.content,
+                createdAt: turn.createdAt.isEmpty ? fallbackStamp : turn.createdAt))
+        }
+        conversationID = conversation.id
+        messages = turns
+    }
+
     // MARK: - Streaming pipeline
 
     private func beginStreaming(text: String, appendUserMessage: Bool) {
         errorMessage = nil
         if appendUserMessage {
-            messages.append(ChatMessage(role: "user", content: text))
+            messages.append(ChatMessage(
+                role: "user",
+                content: text,
+                createdAt: ConversationStore.now()))
         }
-        messages.append(ChatMessage(role: "assistant", content: "", isStreaming: true))
+        messages.append(ChatMessage(
+            role: "assistant",
+            content: "",
+            isStreaming: true,
+            createdAt: ConversationStore.now()))
         streamingAccumulator = ""
         isStreaming = true
 
@@ -225,7 +258,7 @@ final class ChatViewModel: ObservableObject {
         // Store first — threads must survive relaunches even fully offline.
         let stored = ConversationStore.shared.messages(for: conversationID)
         if !stored.isEmpty {
-            messages = stored.map { ChatMessage(role: $0.role, content: $0.content) }
+            messages = stored.map { ChatMessage(role: $0.role, content: $0.content, createdAt: $0.createdAt) }
             return
         }
         // Untouched static demo conversations (drawer seeds "demo-N" ids).
@@ -238,7 +271,7 @@ final class ChatViewModel: ObservableObject {
             do {
                 let history = try await APIClient.shared.messages(conversationID: conversationID)
                 guard let self else { return }
-                self.messages = history.map { ChatMessage(role: $0.role, content: $0.content) }
+                self.messages = history.map { ChatMessage(role: $0.role, content: $0.content, createdAt: $0.createdAt) }
                 self.isLoadingHistory = false
             } catch {
                 guard let self else { return }

@@ -427,6 +427,37 @@ fun ChatScreen(
         dispatch(userText, echoUser = false)
     }
 
+    /**
+     * Benchmark branch-new-chat: the thread up to and including the tapped turn
+     * becomes the opening history of a fresh local conversation, and this
+     * surface re-bases onto the branch. The original thread stays untouched.
+     */
+    fun branchFrom(messageId: String) {
+        if (streamingJob?.isActive == true) return
+        val index = messages.indexOfFirst { it.id == messageId }
+        if (index < 0) return
+        val turns = messages.subList(0, index + 1)
+            .filter { it.content.isNotBlank() }
+            .map { listOf(it.role, it.content, it.createdAt) }
+        if (turns.isEmpty()) return
+        scope.launch {
+            runCatching {
+                val branchTitle = "Branch: $conversationTitle".take(40)
+                val newId = ServiceLocator.chat.branch(branchTitle, turns)
+                if (newId.isBlank()) return@runCatching
+                activeConversationId = newId
+                conversationTitle = branchTitle
+                messages.clear()
+                messages.addAll(
+                    turns.map {
+                        ChatUiMessage(UUID.randomUUID().toString(), it[0], it[1], createdAt = it[2])
+                    }
+                )
+                showSnack("Branched to a new chat")
+            }.onFailure { showSnack("Couldn't branch right now") }
+        }
+    }
+
     fun readAloud(messageId: String, content: String) {
         // Second tap on the speaking bubble stops playback.
         if (speakingMessageId == messageId) {
@@ -587,6 +618,7 @@ fun ChatScreen(
                                     onShare = { shareText(message.content) },
                                     onRegenerate = { regenerate(message.id) },
                                     onReadAloud = { readAloud(message.id, message.content) },
+                                    onBranch = { branchFrom(message.id) },
                                     onContextAction = showSnack
                                 )
                             }
@@ -783,6 +815,7 @@ private fun AssistantMessage(
     onShare: () -> Unit = {},
     onRegenerate: () -> Unit,
     onReadAloud: () -> Unit = {},
+    onBranch: () -> Unit = {},
     onContextAction: (String) -> Unit = {}
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
@@ -883,7 +916,7 @@ private fun AssistantMessage(
                     },
                     onClick = {
                         menuExpanded = false
-                        onContextAction("Branched")
+                        onBranch()
                     }
                 )
             }

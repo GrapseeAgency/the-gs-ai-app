@@ -111,6 +111,42 @@ class ChatRepository(
         db.messageDao().deleteFrom(conversationId, target.createdAt)
     }
 
+    /**
+     * Benchmark branch-new-chat: a fresh local conversation seeded with the
+     * source thread up to and including the tapped turn. Local-first (no
+     * server echo) so it behaves identically on and offline; the original
+     * thread stays untouched. Turns arrive as [role, content, createdAt].
+     * Returns the branch conversation id.
+     */
+    suspend fun branch(title: String, turns: List<List<String>>): String {
+        if (turns.isEmpty()) return ""
+        val branchId = "local-${UUID.randomUUID()}"
+        val now = nowIso()
+        db.conversationDao().upsert(
+            ConversationEntity(
+                id = branchId,
+                title = title.take(TITLE_SNIPPET_LENGTH),
+                modelId = null,
+                pinned = false,
+                archived = false,
+                updatedAt = now,
+                createdAt = now
+            )
+        )
+        db.messageDao().insertAll(
+            turns.map { turn ->
+                MessageEntity(
+                    id = UUID.randomUUID().toString(),
+                    conversationId = branchId,
+                    role = turn[0],
+                    content = turn[1],
+                    createdAt = turn[2].ifBlank { now }
+                )
+            }
+        )
+        return branchId
+    }
+
     /** Room first; when empty (cold cache) fetch from network and cache. */
     suspend fun history(conversationId: String): List<MessageEntity> {
         val local = db.messageDao().forConversation(conversationId)

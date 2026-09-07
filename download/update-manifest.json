@@ -1,6 +1,6 @@
 {
-  "versionCode": 23,
-  "versionName": "0.23.0",
+  "versionCode": 24,
+  "versionName": "0.24.0",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "iOS copy now confirms: every copy — bubble, code block, menu — answers with a brief accent checkmark, matching Android's Copied snack. Both platforms speak."
+  "notes": "Branch new chat is real now: long-press any GS reply and everything up to it becomes a fresh chat — the original thread stays untouched. Both platforms."
 }

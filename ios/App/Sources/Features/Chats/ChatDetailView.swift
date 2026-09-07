@@ -140,7 +140,8 @@ struct ChatDetailView: View {
                                 onEditStart: {
                                     editDraft = message.content
                                     editingIndex = index
-                                }
+                                },
+                                onBranch: { vm.branch(at: index) }
                             )
                         }
                         .id(message.id)
@@ -647,6 +648,7 @@ private struct MessageBubble: View {
     var onTranslate: () -> Void = {}
     var onSave: () -> Void = {}
     var onEditStart: () -> Void = {}
+    var onBranch: () -> Void = {}
 
     @State private var copied = false
 
@@ -857,6 +859,9 @@ private struct MessageBubble: View {
             }
             ShareLink(item: message.content) {
                 Label("Share", systemImage: "square.and.arrow.up")
+            }
+            Button(action: onBranch) {
+                Label("Branch new chat", systemImage: "arrow.triangle.branch")
             }
         }
     }
