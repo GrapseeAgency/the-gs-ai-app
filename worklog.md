@@ -1879,3 +1879,23 @@ Work Log:
 Stage Summary:
 - The entire known feature queue that can move without external dependencies is now REAL on both platforms: projects (T78), search, settings, model centre, drawer recents, chat dictation (Home), full-screen voice mode (T81). Notifications real-event wiring remains backend-blocked; R8/minify + device matrix + profiler passes remain device-gated on the user's on-device report (crash-report channel from v0.55.0 stands ready).
 - Voice mode ships at the performance bar set by T80: state changes are engine-event-driven, the waveform never recomposes (draw-phase), and teardown is disposal-bound.
+
+---
+Task ID: 82
+Agent: Z.ai Code (main)
+Task: Fix the broken in-app LiveUpdate flow (progress restarting 1%→10%→… and "problem parsing the package") — nothing else.
+
+Work Log:
+- Diagnosed the user's symptoms against data/liveupdate/LiveUpdater.kt: (1) no byte-range resume → every dropped connection restarted the pill at 1% on flaky networks; (2) no truncation gate (done==total never checked) → a cleanly-dropped stream renamed a short APK and fired the installer → "problem parsing the package"; (3) no single-flight → taps during the connect window launched concurrent downloads into the same .part file → corruption; (4) no integrity validation (ZIP magic / PackageManager parse / packageName+versionCode match) → corrupt APKs reached the installer; (5) silent failure UX with a 10-min lockout left the user tap-locked.
+- Verified transport was healthy: raw.githubusercontent serves the real APK (200, application/octet-stream, accept-ranges: bytes; repo copy byte-identical to the release asset), so all fixes stayed client-side.
+- Rewrote LiveUpdater: HTTP Range resume (206/Content-Range, 416→clean-restart, 200→fresh), AtomicBoolean single-flight, truncation gate (done==total), integrity gate (PK\x03\x04 magic → getPackageArchiveInfo parse → packageName+versionCode identity), one automatic resume-retry then an honest Failed state, socket timeout so stalls error into a resume, resume survives process death via the persisted .part file.
+- HomeScreen LiveUpdatePill: added Failed branch ("Update didn't finish · tap to retry"); comment updated.
+- Fresh sandbox had no Android toolchain — rebuilt it: Android cmdline-tools + platforms;android-35 + build-tools;34.0.0, Gradle 8.9, Adoptium JDK 17 (system JRE lacked jlink).
+- Built :app:assembleRelease (established artifact type — confirmed shipped releases carry no debuggable flag; the debug build is 19.7MB and wrong for release). Bumped versionCode 58 / versionName 0.57.1.
+- Release protocol executed: commit efd172a pushed → Release v0.57.1 (REL_ID 384255421, target efd172a43431f2e0182f1940b6c053f5887106c5) → asset upload HTTP 201, 12,905,037 bytes, state uploaded.
+- Readbacks all green: permalink 302→200 content-length 12905037; downloaded artifact sha256 09ba9ecf9f011a10…, aapt versionCode 58 / 0.57.1, apksigner cert b1ffd75d… (same key → installs over existing app); raw manifest serves versionCode 58 / 0.57.1; raw APK range read returns PK\x03\x04.
+
+Stage Summary:
+- v0.57.1 (versionCode 58) published: the LiveUpdate engine can no longer restart progress, cannot hand a corrupt/truncated APK to the installer, and now tells the truth when a download fails.
+- NOTE for the user: the installed v0.55.0 still contains the OLD buggy updater — sideload v0.57.1 from the browser permalink one last time; every update after that works via the in-app pill.
+- iOS untouched (no self-update mechanism exists there); no other code changed (5 files in the commit).
