@@ -1050,3 +1050,23 @@ Stage Summary:
 - Save → read → reuse is a loop now: Continue in chat hands any saved turn back to a fresh composer on both platforms, via the Router env-object on iOS (first programmatic-push primitive the app has — deep links and sheets can use it from here) and the prefill route on Android
 - Twenty-eight shipped cycles, all signature-stable, all install-over
 - Backlog remaining: assistants CRUD (edit button) parked until live backend ask; next candidates: explore-row polish, Room/SwiftData polish, more edge states (very long content in reader sheets, deep-link from notification surface)
+
+---
+Task ID: 42 (cron cycle — Explore-to-chat wiring: every discovery surface seeds the composer, v0.29.0 shipped via LiveUpdate)
+Agent: Z.ai Code (main)
+Task: Build QA, advance backlog (explore-row polish: prompts, tools, assistant starters and Start chat all dead-ended into a blank new chat — wire them through the Task 41 prefill primitives), publish v0.29.0.
+
+Work Log:
+- SURVEY: the Task 41 prefill primitives (Android ?prompt= route, iOS AeroRoute.chatPrefill) were the exact missing wire — a sweep found SEVEN dead-end surfaces: Android Explore prompt cards + tool cards + "Try it" chip → chat(null); Android assistant starter rows had NO onClick at all and the "Start chat" button's onStartChat callback was never passed by GsNavHost (dead no-op); iOS prompt/tool cards and assistant starters/Start chat → AeroRoute.chat(nil)
+- ANDROID: GsNavHost now passes onStartChat = navigate to AssistantDetailScreen; starter rows call GsRoutes.chat(null, starter) and Start chat pre-fills the first starter (blank-safe .orEmpty() → route degrades to plain chat); Explore gains a starter field on ExploreTool (Deep Research → "Research this topic in depth and cite your sources: ", Slide Studio → "Draft a slide deck outline about: ") — prompt cards pre-fill prompt.text, tool cards and Try it pre-fill tool.starter
+- iOS: Explore ToolCard gains the same starter field; prompt/tool NavigationLinks now push AeroRoute.chatPrefill(...); AssistantDetailView starter rows and Start chat push chatPrefill too — composer seeding is identical semantics via ChatDetailView's existing prefill consumption
+- PROPERTY-ACCESS CROSS-CHECK: AeroRoute.chatPrefill case exists and is Hashable with the navigationDestination mapping to ChatDetailView(conversationID: nil, prefill:), ToolCard memberwise order matches the labeled .init calls, starters.first ?? "" — verified by hand (static gates cannot catch these)
+- iOS STATIC GATES: 13 files CLEAN
+- ANDROID BUILD: green in 1m18s first cycle, 1m30s after the version bump — no fixes needed
+- VERSION: versionCode 29 / versionName 0.29.0; APK copied to download/GS-AI-App.apk (aapt verified versionCode 29); update-manifest.json bumped
+- PUBLISHED: commit c67ce7d pushed; GitHub Release v0.29.0 created (REL_ID 383825305, asset HTTP 201, 19,551,172 bytes); /releases/latest/download/ permalink verified serving versionCode 29; stable signature b1ffd75d… intact
+
+Stage Summary:
+- Explore is a launchpad now: tapping a prompt, tool or starter anywhere in the discovery layer opens a chat with the composer already seeded — and the assistant Start chat CTA works for the first time — on both platforms, via the same prefill pipe the voice handoff and Library continue already use
+- Twenty-nine shipped cycles, all signature-stable, all install-over
+- Backlog remaining: assistants CRUD (edit button) parked until live backend ask; next candidates: Room/SwiftData polish, edge states (very long content in reader sheets, deep-link from notification surface), remaining static-sample parity (Home rows, Create tab real flows)
