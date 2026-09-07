@@ -233,6 +233,23 @@ final class ConversationStore: ObservableObject {
         sql.deleteConversation(id: id)
     }
 
+    /// Privacy → Clear local data: every conversation, message and library
+    /// save leaves the device for good — SQLite rows, in-memory state and the
+    /// UserDefaults-backed library. Assistants and settings stay.
+    func wipeAllContent() {
+        sql.deleteAllContent()
+        conversations.removeAll()
+        messages.removeAll()
+        lastMessageByConversation.removeAll()
+        UserDefaults.standard.removeObject(forKey: Self.savedLibraryKey)
+    }
+
+    /// Settings export: the full message corpus from the durable store —
+    /// not just the in-memory window — so the export is complete.
+    func exportMessages() -> [StoredMessage] {
+        sql.loadMessages()
+    }
+
     /// Benchmark edit flow: the matching user turn and everything after it
     /// leave the store; the resend rebuilds the tail. Content-matched (most
     /// recent occurrence) because in-memory rows do not carry persisted ids.

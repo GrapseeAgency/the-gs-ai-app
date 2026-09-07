@@ -2,6 +2,7 @@ package com.grapsee.gsai
 
 import android.app.Application
 import com.grapsee.gsai.data.AssistantsStore
+import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.di.ServiceLocator
 import dagger.hilt.android.HiltAndroidApp
 
@@ -17,5 +18,7 @@ class GSApplication : Application() {
         ServiceLocator.init(this)
         // User-created assistants (local-first CRUD) load before any UI reads them.
         AssistantsStore.init(this)
+        // Remembered settings hydrate before any composable reads a switch.
+        SettingsStore.init(this)
     }
 }

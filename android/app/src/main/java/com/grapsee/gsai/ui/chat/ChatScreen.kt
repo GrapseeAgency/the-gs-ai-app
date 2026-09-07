@@ -123,6 +123,7 @@ import com.grapsee.gsai.di.ServiceLocator
 import com.grapsee.gsai.ui.components.GsCard
 import com.grapsee.gsai.ui.components.GsChip
 import com.grapsee.gsai.ui.components.GsEmptyState
+import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.ui.components.GsInputBar
 import com.grapsee.gsai.ui.components.GsScreenScaffold
 import com.grapsee.gsai.ui.theme.GsMotion
@@ -772,7 +773,8 @@ fun ChatScreen(
                         onValueChange = { draft = it },
                         onSend = { text -> dispatch(text, echoUser = true) },
                         placeholder = "Ask anything…",
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        imeAction = if (SettingsStore.enterToSend) ImeAction.Send else ImeAction.Default
                     )
                 }
             } else {

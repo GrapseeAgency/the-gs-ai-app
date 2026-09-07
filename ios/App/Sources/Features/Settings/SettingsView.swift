@@ -6,42 +6,15 @@ struct SettingsView: View {
 
     private static let dangerRed = Color(red: 0.9, green: 0.28, blue: 0.28)
 
-    // Appearance
-    @State private var theme = "System"
-    @State private var reduceAnimations = false
+    /// Every switch, chip and slider reads and writes the remembered store.
+    @ObservedObject private var settings = SettingsStore.shared
 
-    // Chat
-    @State private var enterToSend = true
-    @State private var autoTitle = true
-
-    // AI
-    @State private var memory = true
-    @State private var personalisation = true
-    @State private var reasoning = "Medium"
-
-    // Privacy
-    @State private var helpImprove = false
+    // Privacy flows (UI-local)
     @State private var showClearData = false
     @State private var showDeleteAccount = false
-
-    // Security
-    @State private var appPasscode = false
-    @State private var biometricUnlock = true
-
-    // Notifications
-    @State private var pushNotifications = true
-    @State private var taskCompleted = true
-    @State private var assistantUpdates = true
-    @State private var productNews = false
-
-    // Language
-    @State private var aiLanguage = "EN"
-
-    // Accessibility
-    @State private var fontScale: Double = 1.0
-    @State private var highContrast = false
-    @State private var reduceMotion = false
-    @State private var haptics = true
+    // Export flow (UI-local)
+    @State private var exportURL: URL?
+    @State private var showExport = false
 
     var body: some View {
         ScrollView {
@@ -67,7 +40,9 @@ struct SettingsView: View {
             isPresented: $showClearData,
             titleVisibility: .visible
         ) {
-            Button("Clear local data", role: .destructive) {}
+            Button("Clear local data", role: .destructive) {
+                ConversationStore.shared.wipeAllContent()
+            }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Cached chats, files and drafts on this device will be removed. Your account is untouched.")
@@ -82,6 +57,32 @@ struct SettingsView: View {
         } message: {
             Text("This permanently removes your account and all synced data. This cannot be undone.")
         }
+        .sheet(isPresented: $showExport) {
+            if let url = exportURL {
+                ActivitySheet(items: [url])
+            }
+        }
+    }
+
+    // MARK: Export
+
+    /// Privacy pass: the whole on-device corpus — conversations, the full
+    /// message store, library saves — as one JSON document the reader shares
+    /// anywhere via the system sheet. Encoding hiccups never open the sheet.
+    private func buildExportFile() {
+        let store = ConversationStore.shared
+        let payload = ExportPayload(
+            exportedAt: ConversationStore.now(),
+            conversations: store.conversations,
+            messages: store.exportMessages(),
+            library: store.savedLibraryItems()
+        )
+        guard let data = try? JSONEncoder().encode(payload) else { return }
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("gs-ai-export.json")
+        do { try data.write(to: url, options: .atomic) } catch { return }
+        exportURL = url
+        showExport = true
     }
 
     // MARK: Header
@@ -103,8 +104,8 @@ struct SettingsView: View {
         section("Appearance") {
             HStack(spacing: Aero.Spacing.s) {
                 ForEach(["Light", "Dark", "System"], id: \.self) { option in
-                    AeroChip(text: option, selected: theme == option) {
-                        theme = option
+                    AeroChip(text: option, selected: settings.theme == option) {
+                        settings.theme = option
                     }
                 }
                 Spacer()
@@ -118,7 +119,7 @@ struct SettingsView: View {
                     .foregroundStyle(Aero.textMuted)
                 Spacer()
             }
-            toggleRow("Reduce animations", isOn: $reduceAnimations)
+            toggleRow("Reduce animations", isOn: $settings.reduceAnimations)
         }
     }
 
@@ -145,8 +146,8 @@ struct SettingsView: View {
                 )
             }
             .buttonStyle(KineticPressStyle())
-            toggleRow("Enter to send", isOn: $enterToSend)
-            toggleRow("Auto-title chats", isOn: $autoTitle)
+            toggleRow("Enter to send", isOn: $settings.enterToSend)
+            toggleRow("Auto-title chats", isOn: $settings.autoTitle)
         }
     }
 
@@ -154,12 +155,12 @@ struct SettingsView: View {
 
     private var aiSection: some View {
         section("AI") {
-            toggleRow("Memory", isOn: $memory)
-            toggleRow("Personalisation", isOn: $personalisation)
+            toggleRow("Memory", isOn: $settings.memory)
+            toggleRow("Personalisation", isOn: $settings.personalisation)
             HStack(spacing: Aero.Spacing.s) {
                 ForEach(["Low", "Medium", "High"], id: \.self) { level in
-                    AeroChip(text: level, selected: reasoning == level) {
-                        reasoning = level
+                    AeroChip(text: level, selected: settings.reasoning == level) {
+                        settings.reasoning = level
                     }
                 }
                 Spacer()
@@ -173,15 +174,16 @@ struct SettingsView: View {
         section("Privacy") {
             AeroListRow(
                 title: "Export data",
-                leading: { leadingIcon("arrow.down.circle") },
+                subtitle: "A JSON copy of your chats, messages and library",
+                leading: { leadingIcon("square.and.arrow.up") },
                 trailing: {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 12))
                         .foregroundStyle(Aero.textMuted)
                 },
-                action: {}
+                action: { buildExportFile() }
             )
-            toggleRow("Help improve GS", isOn: $helpImprove)
+            toggleRow("Help improve GS", isOn: $settings.helpImprove)
             Button {
                 showClearData = true
             } label: {
@@ -214,8 +216,8 @@ struct SettingsView: View {
 
     private var securitySection: some View {
         section("Security") {
-            toggleRow("App passcode", isOn: $appPasscode)
-            toggleRow("Biometric unlock", isOn: $biometricUnlock)
+            toggleRow("App passcode", isOn: $settings.appPasscode)
+            toggleRow("Biometric unlock", isOn: $settings.biometricUnlock)
             AeroListRow(
                 title: "Two-factor",
                 subtitle: "Authenticator app",
@@ -238,10 +240,10 @@ struct SettingsView: View {
 
     private var notificationsSection: some View {
         section("Notifications") {
-            toggleRow("Push notifications", isOn: $pushNotifications)
-            toggleRow("Task completed", isOn: $taskCompleted)
-            toggleRow("Assistant updates", isOn: $assistantUpdates)
-            toggleRow("Product news", isOn: $productNews)
+            toggleRow("Push notifications", isOn: $settings.pushNotifications)
+            toggleRow("Task completed", isOn: $settings.taskCompleted)
+            toggleRow("Assistant updates", isOn: $settings.assistantUpdates)
+            toggleRow("Product news", isOn: $settings.productNews)
         }
     }
 
@@ -265,8 +267,8 @@ struct SettingsView: View {
                     .foregroundStyle(Aero.text)
                 HStack(spacing: Aero.Spacing.s) {
                     ForEach(["EN", "中文", "हिन्दी", "العربية"], id: \.self) { option in
-                        AeroChip(text: option, selected: aiLanguage == option) {
-                            aiLanguage = option
+                        AeroChip(text: option, selected: settings.aiLanguage == option) {
+                            settings.aiLanguage = option
                         }
                     }
                 }
@@ -294,23 +296,23 @@ struct SettingsView: View {
                         .font(Aero.body())
                         .foregroundStyle(Aero.text)
                     Spacer()
-                    Text("\(Int((fontScale * 100).rounded()))%")
+                    Text("\(Int((settings.fontScale * 100).rounded()))%")
                         .font(Aero.caption())
                         .foregroundStyle(Aero.textMuted)
                 }
-                Slider(value: $fontScale, in: 0.8...1.4)
+                Slider(value: $settings.fontScale, in: 0.8...1.4)
                     .tint(Aero.accent)
                 Text("The quick brown fox jumps over the lazy dog.")
                     .font(Aero.body())
                     .foregroundStyle(Aero.text)
-                    .scaleEffect(fontScale)
+                    .scaleEffect(settings.fontScale)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, Aero.Spacing.s)
-                    .animation(Aero.gentle, value: fontScale)
+                    .animation(Aero.gentle, value: settings.fontScale)
             }
-            toggleRow("High contrast", isOn: $highContrast)
-            toggleRow("Reduce motion", isOn: $reduceMotion)
-            toggleRow("Haptics", isOn: $haptics)
+            toggleRow("High contrast", isOn: $settings.highContrast)
+            toggleRow("Reduce motion", isOn: $settings.reduceMotion)
+            toggleRow("Haptics", isOn: $settings.haptics)
         }
     }
 
@@ -373,4 +375,25 @@ struct SettingsView: View {
             .frame(width: 34, height: 34)
             .background(Circle().fill(Aero.container))
     }
+}
+
+
+/// The export document — the same contract the Android build writes.
+private struct ExportPayload: Encodable {
+    let exportedAt: String
+    let conversations: [StoredConversation]
+    let messages: [StoredMessage]
+    let library: [LibraryItem]
+}
+
+/// The system share sheet, so "Export data" hands the JSON to Files, Mail,
+/// AirDrop — wherever the reader wants it.
+private struct ActivitySheet: UIViewControllerRepresentable {
+    let items: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }

@@ -44,6 +44,9 @@ import com.grapsee.gsai.ui.theme.Aeruo
 import com.grapsee.gsai.ui.theme.GsMotion
 import com.grapsee.gsai.ui.theme.kineticPress
 import com.grapsee.gsai.ui.theme.skeletonSurface
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
 
 /**
  * AERUO KINETIC shared components — FROZEN API. All screens compose these.
@@ -175,13 +178,20 @@ fun GsInputBar(
     onSend: (String) -> Unit,
     modifier: Modifier = Modifier,
     placeholder: String = "Ask anything…",
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    imeAction: ImeAction = ImeAction.Default
 ) {
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         modifier = modifier.fillMaxWidth(),
         enabled = enabled,
+        keyboardOptions = KeyboardOptions(imeAction = imeAction),
+        keyboardActions = if (imeAction == ImeAction.Send) {
+            KeyboardActions(onSend = { if (value.isNotBlank()) onSend(value.trim()) })
+        } else {
+            KeyboardActions.Default
+        },
         placeholder = { Text(placeholder, color = MaterialTheme.colorScheme.onSurfaceVariant) },
         shape = RoundedCornerShape(GsMotion.radiusInput),
         colors = OutlinedTextFieldDefaults.colors(

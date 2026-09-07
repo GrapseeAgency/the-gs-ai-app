@@ -119,6 +119,13 @@ final class SQLiteChatStore {
         deleteRows("DELETE FROM conversations WHERE id = ?", id)
     }
 
+    /// Privacy pass: every conversation and message row leaves the store.
+    /// Settings and assistants are not stored here and stay untouched.
+    func deleteAllContent() {
+        exec("DELETE FROM messages")
+        exec("DELETE FROM conversations")
+    }
+
     // MARK: - Row reads
 
     func loadConversations() -> [StoredConversation] {

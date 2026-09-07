@@ -1,6 +1,6 @@
 {
-  "versionCode": 52,
-  "versionName": "0.52.0",
+  "versionCode": 53,
+  "versionName": "0.53.0",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "Search everything, for real: the global search now answers from actual on-device data — conversations and message bodies (FTS full-text with LIKE fallback), Library saves, the assistant catalogue and projects — grouped with honest counts, kind filter chips and recent searches you acted on. Android + iOS one contract, same stable signature."
+  "notes": "Settings tell the truth: every switch, chip and slider now remembers its value between launches, Clear local data really wipes chats, messages and library saves on-device, and Export data writes your full corpus (conversations, messages, library) as a JSON you can share anywhere. Enter-to-send is live in the chat composer. Android + iOS one contract, same stable signature."
 }

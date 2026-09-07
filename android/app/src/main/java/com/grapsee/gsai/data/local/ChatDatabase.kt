@@ -72,6 +72,10 @@ interface ConversationDao {
     @Query("SELECT * FROM conversations WHERE id = :id LIMIT 1")
     suspend fun getById(id: String): ConversationEntity?
 
+    /** Settings export: the whole conversation book, one bounded read. */
+    @Query("SELECT * FROM conversations ORDER BY updatedAt DESC")
+    suspend fun all(): List<ConversationEntity>
+
     @Query("UPDATE conversations SET pinned = :pinned WHERE id = :id")
     suspend fun setPinned(id: String, pinned: Boolean)
 
@@ -143,6 +147,14 @@ interface MessageDao {
     @Query("DELETE FROM messages WHERE conversationId = :conversationId")
     suspend fun deleteForConversation(conversationId: String)
 
+    /** Settings export: the full message corpus, one bounded read. */
+    @Query("SELECT * FROM messages ORDER BY createdAt ASC")
+    suspend fun all(): List<MessageEntity>
+
+    /** Privacy pass: every message leaves the device. */
+    @Query("DELETE FROM messages")
+    suspend fun deleteAll()
+
     /** Edge-states pass: chat-scoped search across local message bodies. */
     @Query("SELECT * FROM messages WHERE content LIKE '%' || :query || '%' ORDER BY createdAt DESC LIMIT 20")
     suspend fun searchContent(query: String): List<MessageEntity>
@@ -167,6 +179,10 @@ interface SavedItemDao {
 
     @Query("DELETE FROM saved_items WHERE id = :id")
     suspend fun delete(id: String)
+
+    /** Privacy pass: every library save leaves the device. */
+    @Query("DELETE FROM saved_items")
+    suspend fun clear()
 }
 
 // --- full-text search plumbing -------------------------------------------------

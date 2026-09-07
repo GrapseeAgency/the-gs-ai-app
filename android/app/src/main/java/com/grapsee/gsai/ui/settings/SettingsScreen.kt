@@ -50,11 +50,22 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
 import com.grapsee.gsai.ui.components.GsCard
 import com.grapsee.gsai.ui.components.GsChip
 import com.grapsee.gsai.BuildConfig
+import com.grapsee.gsai.data.SettingsStore
+import com.grapsee.gsai.di.ServiceLocator
 import com.grapsee.gsai.ui.components.GsScreenScaffold
 import com.grapsee.gsai.ui.theme.GsMotion
+import java.time.OffsetDateTime
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import org.json.JSONArray
+import org.json.JSONObject
 
 private val themeOptions = listOf("Light", "Dark", "System")
 private val effortOptions = listOf("Low", "Medium", "High")
@@ -63,38 +74,19 @@ private val aiLanguageOptions = listOf("EN", "中文", "हिन्दी", "ا
 @Composable
 fun SettingsScreen(onBack: () -> Unit) {
     var expandedId by remember { mutableStateOf<String?>(null) }
-
-    // Appearance
-    var themeMode by remember { mutableStateOf("System") }
-    var reduceAnimations by remember { mutableStateOf(false) }
-    // Chat
-    var enterToSend by remember { mutableStateOf(true) }
-    var autoTitleChats by remember { mutableStateOf(true) }
-    var sendDoubleTap by remember { mutableStateOf(false) }
-    // AI
-    var memory by remember { mutableStateOf(true) }
-    var personalisation by remember { mutableStateOf(true) }
-    var reasoningEffort by remember { mutableStateOf("Medium") }
-    // Privacy
-    var trainingOptIn by remember { mutableStateOf(false) }
+    // Privacy flows (UI-local)
     var showClearData by remember { mutableStateOf(false) }
     var showDeleteAccount by remember { mutableStateOf(false) }
-    // Security
-    var appPasscode by remember { mutableStateOf(false) }
-    var biometricUnlock by remember { mutableStateOf(false) }
-    // Notifications
-    var pushNotifications by remember { mutableStateOf(true) }
-    var sounds by remember { mutableStateOf(true) }
-    var taskAlerts by remember { mutableStateOf(true) }
-    var emailDigest by remember { mutableStateOf(false) }
-    // Language
-    var aiLanguage by remember { mutableStateOf("EN") }
-    // Accessibility
-    var fontScale by remember { mutableStateOf(1.0f) }
-    var highContrast by remember { mutableStateOf(false) }
-    var reduceMotion by remember { mutableStateOf(false) }
-    var screenReaderHints by remember { mutableStateOf(false) }
-    var haptics by remember { mutableStateOf(true) }
+
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val exportData = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null) {
+            scope.launch { exportAllData(context, uri) }
+        }
+    }
 
     GsScreenScaffold(title = "Settings", onBack = onBack) {
         Column(
@@ -131,12 +123,12 @@ fun SettingsScreen(onBack: () -> Unit) {
                         )
                     }
                 }
-                ChipRow(options = themeOptions, selected = themeMode) { themeMode = it }
+                ChipRow(options = themeOptions, selected = SettingsStore.themeMode) { SettingsStore.updateThemeMode(it) }
                 SwitchRow(
                     title = "Reduce animations",
                     subtitle = "Skip decorative motion for a faster feel",
-                    checked = reduceAnimations,
-                    onCheckedChange = { reduceAnimations = it }
+                    checked = SettingsStore.reduceAnimations,
+                    onCheckedChange = { SettingsStore.updateReduceAnimations(it) }
                 )
             }
 
@@ -150,19 +142,19 @@ fun SettingsScreen(onBack: () -> Unit) {
                 ValueRow(title = "Default model", value = "GS Balanced")
                 SwitchRow(
                     title = "Enter to send",
-                    checked = enterToSend,
-                    onCheckedChange = { enterToSend = it }
+                    checked = SettingsStore.enterToSend,
+                    onCheckedChange = { SettingsStore.updateEnterToSend(it) }
                 )
                 SwitchRow(
                     title = "Auto-title chats",
                     subtitle = "Name conversations from their first message",
-                    checked = autoTitleChats,
-                    onCheckedChange = { autoTitleChats = it }
+                    checked = SettingsStore.autoTitleChats,
+                    onCheckedChange = { SettingsStore.updateAutoTitleChats(it) }
                 )
                 SwitchRow(
                     title = "Send on double-tap",
-                    checked = sendDoubleTap,
-                    onCheckedChange = { sendDoubleTap = it }
+                    checked = SettingsStore.sendDoubleTap,
+                    onCheckedChange = { SettingsStore.updateSendDoubleTap(it) }
                 )
             }
 
@@ -176,20 +168,20 @@ fun SettingsScreen(onBack: () -> Unit) {
                 SwitchRow(
                     title = "Memory",
                     subtitle = "Remember details across chats",
-                    checked = memory,
-                    onCheckedChange = { memory = it }
+                    checked = SettingsStore.memory,
+                    onCheckedChange = { SettingsStore.updateMemory(it) }
                 )
                 SwitchRow(
                     title = "Personalisation",
-                    checked = personalisation,
-                    onCheckedChange = { personalisation = it }
+                    checked = SettingsStore.personalisation,
+                    onCheckedChange = { SettingsStore.updatePersonalisation(it) }
                 )
                 Text(
                     text = "Reasoning effort",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                ChipRow(options = effortOptions, selected = reasoningEffort) { reasoningEffort = it }
+                ChipRow(options = effortOptions, selected = SettingsStore.reasoningEffort) { SettingsStore.updateReasoningEffort(it) }
             }
 
             ExpandCard(
@@ -203,13 +195,13 @@ fun SettingsScreen(onBack: () -> Unit) {
                     title = "Export data",
                     subtitle = "Download a copy of your data",
                     leading = Icons.Outlined.Download,
-                    onClick = { /* export flow lands with the data subsystem */ }
+                    onClick = { exportData.launch("gs-ai-export.json") }
                 )
                 SwitchRow(
                     title = "Training preferences",
                     subtitle = "Improve models with your chats",
-                    checked = trainingOptIn,
-                    onCheckedChange = { trainingOptIn = it }
+                    checked = SettingsStore.trainingOptIn,
+                    onCheckedChange = { SettingsStore.updateTrainingOptIn(it) }
                 )
                 ActionRow(
                     title = "Clear local data",
@@ -236,13 +228,13 @@ fun SettingsScreen(onBack: () -> Unit) {
             ) {
                 SwitchRow(
                     title = "App passcode",
-                    checked = appPasscode,
-                    onCheckedChange = { appPasscode = it }
+                    checked = SettingsStore.appPasscode,
+                    onCheckedChange = { SettingsStore.updateAppPasscode(it) }
                 )
                 SwitchRow(
                     title = "Biometric unlock",
-                    checked = biometricUnlock,
-                    onCheckedChange = { biometricUnlock = it }
+                    checked = SettingsStore.biometricUnlock,
+                    onCheckedChange = { SettingsStore.updateBiometricUnlock(it) }
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -268,23 +260,23 @@ fun SettingsScreen(onBack: () -> Unit) {
             ) {
                 SwitchRow(
                     title = "Push notifications",
-                    checked = pushNotifications,
-                    onCheckedChange = { pushNotifications = it }
+                    checked = SettingsStore.pushNotifications,
+                    onCheckedChange = { SettingsStore.updatePushNotifications(it) }
                 )
                 SwitchRow(
                     title = "Sounds",
-                    checked = sounds,
-                    onCheckedChange = { sounds = it }
+                    checked = SettingsStore.sounds,
+                    onCheckedChange = { SettingsStore.updateSounds(it) }
                 )
                 SwitchRow(
                     title = "AI task alerts",
-                    checked = taskAlerts,
-                    onCheckedChange = { taskAlerts = it }
+                    checked = SettingsStore.taskAlerts,
+                    onCheckedChange = { SettingsStore.updateTaskAlerts(it) }
                 )
                 SwitchRow(
                     title = "Email digest",
-                    checked = emailDigest,
-                    onCheckedChange = { emailDigest = it }
+                    checked = SettingsStore.emailDigest,
+                    onCheckedChange = { SettingsStore.updateEmailDigest(it) }
                 )
             }
 
@@ -301,7 +293,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                ChipRow(options = aiLanguageOptions, selected = aiLanguage) { aiLanguage = it }
+                ChipRow(options = aiLanguageOptions, selected = SettingsStore.aiLanguage) { SettingsStore.updateAiLanguage(it) }
                 ValueRow(title = "Voice language", value = "English (UK)")
             }
 
@@ -324,42 +316,42 @@ fun SettingsScreen(onBack: () -> Unit) {
                             modifier = Modifier.weight(1f)
                         )
                         Text(
-                            text = "${(fontScale * 100).toInt()}%",
+                            text = "${(SettingsStore.fontScale * 100).toInt()}%",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     Slider(
-                        value = fontScale,
-                        onValueChange = { fontScale = it },
+                        value = SettingsStore.fontScale,
+                        onValueChange = { SettingsStore.updateFontScale(it) },
                         valueRange = 0.8f..1.4f,
                         steps = 5
                     )
                     Text(
                         text = "Aa — How your chats will read",
-                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = (15 * fontScale).sp),
+                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = (15 * SettingsStore.fontScale).sp),
                         color = MaterialTheme.colorScheme.onSurface
                     )
                 }
                 SwitchRow(
                     title = "High contrast",
-                    checked = highContrast,
-                    onCheckedChange = { highContrast = it }
+                    checked = SettingsStore.highContrast,
+                    onCheckedChange = { SettingsStore.updateHighContrast(it) }
                 )
                 SwitchRow(
                     title = "Reduce motion",
-                    checked = reduceMotion,
-                    onCheckedChange = { reduceMotion = it }
+                    checked = SettingsStore.reduceMotion,
+                    onCheckedChange = { SettingsStore.updateReduceMotion(it) }
                 )
                 SwitchRow(
                     title = "Screen reader hints",
-                    checked = screenReaderHints,
-                    onCheckedChange = { screenReaderHints = it }
+                    checked = SettingsStore.screenReaderHints,
+                    onCheckedChange = { SettingsStore.updateScreenReaderHints(it) }
                 )
                 SwitchRow(
                     title = "Haptics",
-                    checked = haptics,
-                    onCheckedChange = { haptics = it }
+                    checked = SettingsStore.haptics,
+                    onCheckedChange = { SettingsStore.updateHaptics(it) }
                 )
             }
 
@@ -388,7 +380,17 @@ fun SettingsScreen(onBack: () -> Unit) {
             },
             confirmButton = {
                 TextButton(
-                    onClick = { showClearData = false },
+                    onClick = {
+                        showClearData = false
+                        scope.launch {
+                            runCatching {
+                                val db = ServiceLocator.db
+                                db.messageDao().deleteAll()
+                                db.savedItemDao().clear()
+                                db.conversationDao().clear()
+                            }
+                        }
+                    },
                     colors = ButtonDefaults.textButtonColors(
                         contentColor = MaterialTheme.colorScheme.error
                     )
@@ -587,6 +589,58 @@ private fun ChipRow(
                 selected = option == selected,
                 onClick = { onSelect(option) }
             )
+        }
+    }
+}
+
+
+/** Privacy pass: the whole on-device corpus — conversations, messages, library
+ *  saves — as one JSON document the user names and places via the system
+ *  picker. Store hiccups leave the destination file unwritten, never partial. */
+private suspend fun exportAllData(context: android.content.Context, uri: android.net.Uri) {
+    runCatching {
+        val db = ServiceLocator.db
+        val payload = JSONObject().apply {
+            put("exportedAt", OffsetDateTime.now().toString())
+            put("appVersion", BuildConfig.VERSION_NAME)
+            put("conversations", JSONArray().apply {
+                db.conversationDao().all().forEach { c ->
+                    put(JSONObject().apply {
+                        put("id", c.id)
+                        put("title", c.title)
+                        put("modelId", c.modelId ?: JSONObject.NULL)
+                        put("pinned", c.pinned)
+                        put("archived", c.archived)
+                        put("createdAt", c.createdAt)
+                        put("updatedAt", c.updatedAt)
+                    })
+                }
+            })
+            put("messages", JSONArray().apply {
+                db.messageDao().all().forEach { m ->
+                    put(JSONObject().apply {
+                        put("id", m.id)
+                        put("conversationId", m.conversationId)
+                        put("role", m.role)
+                        put("content", m.content)
+                        put("createdAt", m.createdAt)
+                    })
+                }
+            })
+            put("library", JSONArray().apply {
+                db.savedItemDao().observeAll().first().forEach { item ->
+                    put(JSONObject().apply {
+                        put("id", item.id)
+                        put("kind", item.kind)
+                        put("title", item.title)
+                        put("content", item.content)
+                        put("createdAt", item.createdAt)
+                    })
+                }
+            })
+        }
+        context.contentResolver.openOutputStream(uri)?.use { out ->
+            out.write(payload.toString(2).toByteArray(Charsets.UTF_8))
         }
     }
 }
