@@ -171,6 +171,10 @@ struct ChatDetailView: View {
                 }
                 ScrollView {
                 LazyVStack(spacing: 12) {
+                    // One search-match resolution per body pass — read per-row
+                    // it was O(visible rows × messages) contains() scans on
+                    // every keystroke while find-in-chat is open.
+                    let activeMatch = activeMatchID
                     // Scroll-up pagination sentinel: a 1pt row above the
                     // loaded window. Materializing near the top pulls one
                     // older page from the local store (armed by a real drag,
@@ -208,7 +212,7 @@ struct ChatDetailView: View {
                                 message: message,
                                 isSpeaking: speech.speakingMessageID == message.id,
                                 editEnabled: !vm.isStreaming && editingIndex == nil,
-                                highlight: message.id == activeMatchID,
+                                highlight: message.id == activeMatch,
                                 onRegenerate: {
                                     userIsReading = false
                                     vm.regenerate()
@@ -819,7 +823,7 @@ private struct TranslationSheet: View {
 
 // MARK: - Bubble
 
-private struct MessageBubble: View {
+private struct MessageBubble: View, Equatable {
 
     let message: ChatViewModel.ChatMessage
     var isSpeaking: Bool = false
@@ -833,6 +837,21 @@ private struct MessageBubble: View {
     var onBranch: () -> Void = {}
 
     @State private var copied = false
+
+    /**
+     * Deep-perf pass 80-b: equality covers the body's visible inputs only —
+     * the action closures are rebuilt on every parent pass but are always
+     * semantically identical. With it, SwiftUI skips this row's body whenever
+     * nothing visible changed (composer keystrokes, streaming flushes that
+     * only move the live bubble), so a 60-turn screen no longer re-runs
+     * markdown/code parsing for every visible bubble on every body pass.
+     */
+    static func == (lhs: MessageBubble, rhs: MessageBubble) -> Bool {
+        lhs.message == rhs.message &&
+        lhs.isSpeaking == rhs.isSpeaking &&
+        lhs.editEnabled == rhs.editEnabled &&
+        lhs.highlight == rhs.highlight
+    }
 
     /// Benchmark copy feedback: the icon answers with a brief checkmark —
     /// the SwiftUI counterpart of Android's "Copied" snack.
@@ -892,17 +911,28 @@ private struct MessageBubble: View {
         HStack(alignment: .top, spacing: 8) {
             assistantAvatar
             VStack(alignment: .leading, spacing: 8) {
-                ForEach(parsedSegments) { segment in
-                    if segment.isCode {
-                        codeBlock(segment)
-                    } else {
-                        proseBlock(segment)
-                    }
-                }
                 if message.isStreaming {
+                    // Deep-perf pass 80-b: the live bubble is one plain Text +
+                    // the aurora indicator. Growing text re-renders at the
+                    // ~30Hz flush cadence — no fence/markdown/syntax regex
+                    // over the whole message per flush. The styled render
+                    // below happens once on finalize.
+                    Text(message.content.isEmpty ? "…" : message.content)
+                        .font(Aero.body())
+                        .foregroundStyle(Aero.text)
+                        .textSelection(.enabled)
                     AuroraIndicator()
-                } else if !message.content.isEmpty {
-                    actionRow
+                } else {
+                    ForEach(parsedSegments) { segment in
+                        if segment.isCode {
+                            codeBlock(segment)
+                        } else {
+                            proseBlock(segment)
+                        }
+                    }
+                    if !message.content.isEmpty {
+                        actionRow
+                    }
                 }
             }
             .padding(14)
@@ -926,9 +956,31 @@ private struct MessageBubble: View {
 
     private var parsedSegments: [ContentSegment] {
         if message.content.isEmpty {
-            return [ContentSegment(id: 0, text: bubbleText, isCode: false, language: nil)]
+            return [ContentSegment(id: 0, text: "…", isCode: false, language: nil)]
         }
-        return parseContentSegments(message.content)
+        return Self.cachedSegments(for: message)
+    }
+
+    // MARK: Per-message parse cache (deep-perf pass 80-b)
+
+    /// Segment parse per finished message, keyed by turn id. LazyVStack rows
+    /// re-evaluate on every (re)materialisation — without the cache, scrolling
+    /// back through a thread re-ran the fence regex per bubble per pass.
+    /// NSCache auto-evicts under memory pressure; segments are style-free
+    /// data, so one entry serves both appearances.
+    private static let segmentCache = NSCache<NSString, SegmentBox>()
+
+    private final class SegmentBox {
+        let segments: [ContentSegment]
+        init(_ segments: [ContentSegment]) { self.segments = segments }
+    }
+
+    private static func cachedSegments(for message: ChatViewModel.ChatMessage) -> [ContentSegment] {
+        let key = message.id.uuidString as NSString
+        if let box = segmentCache.object(forKey: key) { return box.segments }
+        let segments = parseContentSegments(message.content)
+        segmentCache.setObject(SegmentBox(segments), forKey: key)
+        return segments
     }
 
     /// One prose segment rendered as markdown-lite: headings, bullets, numbered
@@ -988,10 +1040,6 @@ private struct MessageBubble: View {
         }
         .background(RoundedRectangle(cornerRadius: 12).fill(Aero.container))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Aero.outline, lineWidth: 1))
-    }
-
-    private var bubbleText: String {
-        (message.isStreaming && message.content.isEmpty) ? "…" : message.content
     }
 
     private var actionRow: some View {
@@ -1087,26 +1135,18 @@ private struct DaySeparator: View {
 }
 
 private func parseISODate(_ iso: String) -> Date? {
-    let formatter = ISO8601DateFormatter()
-    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-    if let date = formatter.date(from: iso) { return date }
-    formatter.formatOptions = [.withInternetDateTime]
-    return formatter.date(from: iso)
+    GSFormatters.date(from: iso) // cached formatters — was a fresh ISO8601DateFormatter per call
 }
 
 private func dayKey(_ iso: String) -> String? {
     guard let date = parseISODate(iso) else { return nil }
-    let formatter = DateFormatter()
-    formatter.dateFormat = "yyyy-MM-dd"
-    return formatter.string(from: date)
+    return GSFormatters.dayStamp.string(from: date)
 }
 
 /// Quiet per-turn clock in the action row — the benchmark timestamp treatment.
 private func timeLabel(_ iso: String) -> String? {
     guard let date = parseISODate(iso) else { return nil }
-    let formatter = DateFormatter()
-    formatter.dateFormat = "HH:mm"
-    return formatter.string(from: date)
+    return GSFormatters.clock.string(from: date)
 }
 
 private func dayLabel(_ iso: String) -> String? {
@@ -1116,7 +1156,5 @@ private func dayLabel(_ iso: String) -> String? {
     let day = calendar.startOfDay(for: date)
     if day == today { return "Today" }
     if day == calendar.date(byAdding: .day, value: -1, to: today) { return "Yesterday" }
-    let formatter = DateFormatter()
-    formatter.dateFormat = "d MMM yyyy"
-    return formatter.string(from: date)
+    return GSFormatters.dayTitle.string(from: date)
 }

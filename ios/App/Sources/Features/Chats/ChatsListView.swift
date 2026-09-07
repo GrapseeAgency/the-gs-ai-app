@@ -78,39 +78,37 @@ struct ChatsListView: View {
     // MARK: Live data
 
     /// ISO-8601 → "2h ago"-style relative label (graceful fallback to raw string).
+    /// Shared cached formatters — a fresh ISO8601DateFormatter +
+    /// RelativeDateTimeFormatter PER ROW PER RENDER was O(rows) locale-heavy
+    /// allocations on every body pass.
     private static func relativeTime(from iso: String) -> String {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        var date = formatter.date(from: iso)
-        if date == nil {
-            formatter.formatOptions = [.withInternetDateTime]
-            date = formatter.date(from: iso)
-        }
-        guard let date else { return "" }
-        let relative = RelativeDateTimeFormatter()
-        relative.unitsStyle = .abbreviated
-        return relative.localizedString(for: date, relativeTo: Date())
+        GSFormatters.relativeTime(from: iso)
     }
 
     /// Best-effort server merge: remote rows upserted on top of the local
     /// store (server flags win for server-owned rows; local-only rows stay).
+    /// Deep-perf pass 80-b: the page lands in ONE published write — per-row
+    /// upserts invalidated the whole list once per row (O(rows²) row rebuilds
+    /// with preview + relative-label work in every pass).
     private func load() async {
         isLoading = true
         defer { isLoading = false }
         do {
             let remote = try await APIClient.shared.conversations(limit: 30)
+            var rows: [StoredConversation] = []
+            rows.reserveCapacity(remote.count)
             for conversation in remote {
                 let existing = store.conversation(withID: conversation.id)
-                let row = StoredConversation(
+                rows.append(StoredConversation(
                     id: conversation.id,
                     title: conversation.title,
                     modelId: conversation.modelId,
                     pinned: conversation.pinned ?? existing?.pinned ?? false,
                     archived: conversation.archived ?? existing?.archived ?? false,
                     createdAt: conversation.createdAt.isEmpty ? (existing?.createdAt ?? ConversationStore.now()) : conversation.createdAt,
-                    updatedAt: conversation.updatedAt.isEmpty ? (existing?.updatedAt ?? ConversationStore.now()) : conversation.updatedAt)
-                store.upsert(row)
+                    updatedAt: conversation.updatedAt.isEmpty ? (existing?.updatedAt ?? ConversationStore.now()) : conversation.updatedAt))
             }
+            store.upsert(rows)
             isOffline = false
         } catch {
             // Backend unreachable: the store (and demo seed) keeps the surface alive.

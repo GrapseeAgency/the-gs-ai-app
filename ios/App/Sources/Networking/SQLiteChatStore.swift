@@ -7,8 +7,15 @@ import SQLite3
  * keeps every existing chat; every write path is silent on failure so a
  * storage hiccup can never surface as an error in the UI. The system
  * libsqlite3 build ships FTS5, so this stays dependency-free.
+ *
+ * Deep-perf pass 80-b: every operation is serialized through one private
+ * dispatch queue, so the bootstrap loads (and the Settings export) can run
+ * OFF the main thread while main-thread writes keep their strict ordering —
+ * a write queued after the load lands after it, never interleaved. The
+ * connection is opened with SQLITE_OPEN_FULLMUTEX and statements are
+ * prepare/step/finalize per call, so queue execution is safe.
  */
-final class SQLiteChatStore {
+final class SQLiteChatStore: @unchecked Sendable {
 
     struct MessageHit {
         let conversationID: String
@@ -18,6 +25,10 @@ final class SQLiteChatStore {
     }
 
     private var db: OpaquePointer?
+
+    /// Serializes every statement against the single connection, and keeps
+    /// bootstrap/load/write order deterministic across threads.
+    private let queue = DispatchQueue(label: "gsai-app.sqlite.store")
 
     private static let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
@@ -76,8 +87,10 @@ final class SQLiteChatStore {
         }
         db = opened
         sqlite3_exec(opened, "PRAGMA journal_mode=WAL;", nil, nil, nil)
-        exec(schemaSQL)
-        importLegacyJSONIfNeeded()
+        queue.sync {
+            exec(schemaSQL)
+            importLegacyJSONIfNeeded()
+        }
     }
 
     deinit {
@@ -87,79 +100,91 @@ final class SQLiteChatStore {
     // MARK: - Row writes (write-through from ConversationStore)
 
     func upsertConversation(_ conversation: StoredConversation) {
-        guard let stmt = prepare(
-            "INSERT OR REPLACE INTO conversations(id, title, modelId, pinned, archived, createdAt, updatedAt) " +
-            "VALUES(?, ?, ?, ?, ?, ?, ?)") else { return }
-        defer { sqlite3_finalize(stmt) }
-        bind(stmt, 1, conversation.id)
-        bind(stmt, 2, conversation.title)
-        bind(stmt, 3, conversation.modelId)
-        sqlite3_bind_int(stmt, 4, conversation.pinned ? 1 : 0)
-        sqlite3_bind_int(stmt, 5, conversation.archived ? 1 : 0)
-        bind(stmt, 6, conversation.createdAt)
-        bind(stmt, 7, conversation.updatedAt)
-        sqlite3_step(stmt)
+        queue.sync {
+            guard let stmt = prepare(
+                "INSERT OR REPLACE INTO conversations(id, title, modelId, pinned, archived, createdAt, updatedAt) " +
+                "VALUES(?, ?, ?, ?, ?, ?, ?)") else { return }
+            defer { sqlite3_finalize(stmt) }
+            bind(stmt, 1, conversation.id)
+            bind(stmt, 2, conversation.title)
+            bind(stmt, 3, conversation.modelId)
+            sqlite3_bind_int(stmt, 4, conversation.pinned ? 1 : 0)
+            sqlite3_bind_int(stmt, 5, conversation.archived ? 1 : 0)
+            bind(stmt, 6, conversation.createdAt)
+            bind(stmt, 7, conversation.updatedAt)
+            sqlite3_step(stmt)
+        }
     }
 
     func upsertMessage(_ message: StoredMessage) {
-        guard let stmt = prepare(
-            "INSERT OR REPLACE INTO messages(id, conversationId, role, content, createdAt) " +
-            "VALUES(?, ?, ?, ?, ?)") else { return }
-        defer { sqlite3_finalize(stmt) }
-        bind(stmt, 1, message.id)
-        bind(stmt, 2, message.conversationId)
-        bind(stmt, 3, message.role)
-        bind(stmt, 4, message.content)
-        bind(stmt, 5, message.createdAt)
-        sqlite3_step(stmt)
+        queue.sync {
+            guard let stmt = prepare(
+                "INSERT OR REPLACE INTO messages(id, conversationId, role, content, createdAt) " +
+                "VALUES(?, ?, ?, ?, ?)") else { return }
+            defer { sqlite3_finalize(stmt) }
+            bind(stmt, 1, message.id)
+            bind(stmt, 2, message.conversationId)
+            bind(stmt, 3, message.role)
+            bind(stmt, 4, message.content)
+            bind(stmt, 5, message.createdAt)
+            sqlite3_step(stmt)
+        }
     }
 
     func deleteConversation(id: String) {
-        deleteRows("DELETE FROM messages WHERE conversationId = ?", id)
-        deleteRows("DELETE FROM conversations WHERE id = ?", id)
+        queue.sync {
+            deleteRows("DELETE FROM messages WHERE conversationId = ?", id)
+            deleteRows("DELETE FROM conversations WHERE id = ?", id)
+        }
     }
 
     /// Privacy pass: every conversation and message row leaves the store.
     /// Settings and assistants are not stored here and stay untouched.
     func deleteAllContent() {
-        exec("DELETE FROM messages")
-        exec("DELETE FROM conversations")
+        queue.sync {
+            exec("DELETE FROM messages")
+            exec("DELETE FROM conversations")
+        }
     }
 
     // MARK: - Row reads
 
     func loadConversations() -> [StoredConversation] {
-        guard let stmt = prepare(
-            "SELECT id, title, modelId, pinned, archived, createdAt, updatedAt FROM conversations") else { return [] }
-        defer { sqlite3_finalize(stmt) }
-        var rows: [StoredConversation] = []
-        while sqlite3_step(stmt) == SQLITE_ROW {
-            rows.append(StoredConversation(
-                id: text(stmt, 0),
-                title: text(stmt, 1),
-                modelId: sqlite3_column_type(stmt, 2) == SQLITE_NULL ? nil : text(stmt, 2),
-                pinned: sqlite3_column_int(stmt, 3) != 0,
-                archived: sqlite3_column_int(stmt, 4) != 0,
-                createdAt: text(stmt, 5),
-                updatedAt: text(stmt, 6)))
+        queue.sync {
+            guard let stmt = prepare(
+                "SELECT id, title, modelId, pinned, archived, createdAt, updatedAt FROM conversations") else { return [] }
+            defer { sqlite3_finalize(stmt) }
+            var rows: [StoredConversation] = []
+            while sqlite3_step(stmt) == SQLITE_ROW {
+                rows.append(StoredConversation(
+                    id: text(stmt, 0),
+                    title: text(stmt, 1),
+                    modelId: sqlite3_column_type(stmt, 2) == SQLITE_NULL ? nil : text(stmt, 2),
+                    pinned: sqlite3_column_int(stmt, 3) != 0,
+                    archived: sqlite3_column_int(stmt, 4) != 0,
+                    createdAt: text(stmt, 5),
+                    updatedAt: text(stmt, 6)))
+            }
+            return rows
         }
-        return rows
     }
 
     func loadMessages() -> [StoredMessage] {
-        guard let stmt = prepare(
-            "SELECT id, conversationId, role, content, createdAt FROM messages") else { return [] }
-        defer { sqlite3_finalize(stmt) }
-        var rows: [StoredMessage] = []
-        while sqlite3_step(stmt) == SQLITE_ROW {
-            rows.append(StoredMessage(
-                id: text(stmt, 0),
-                conversationId: text(stmt, 1),
-                role: text(stmt, 2),
-                content: text(stmt, 3),
-                createdAt: text(stmt, 4)))
+        queue.sync {
+            guard let stmt = prepare(
+                "SELECT id, conversationId, role, content, createdAt FROM messages") else { return [] }
+            defer { sqlite3_finalize(stmt) }
+            var rows: [StoredMessage] = []
+            while sqlite3_step(stmt) == SQLITE_ROW {
+                rows.append(StoredMessage(
+                    id: text(stmt, 0),
+                    conversationId: text(stmt, 1),
+                    role: text(stmt, 2),
+                    content: text(stmt, 3),
+                    createdAt: text(stmt, 4)))
+            }
+            return rows
         }
-        return rows
     }
 
     // MARK: - Windowed reads (deep-perf pass #2b — Android's paged-history twin)
@@ -172,22 +197,24 @@ final class SQLiteChatStore {
      * stamps keep the lexicographic DESC order chronological.
      */
     func loadRecentMessages(conversationId: String, limit: Int) -> [StoredMessage] {
-        guard let stmt = prepare(
-            "SELECT id, conversationId, role, content, createdAt FROM messages " +
-            "WHERE conversationId = ? ORDER BY createdAt DESC LIMIT ?") else { return [] }
-        defer { sqlite3_finalize(stmt) }
-        bind(stmt, 1, conversationId)
-        sqlite3_bind_int(stmt, 2, Int32(clamping: limit))
-        var rows: [StoredMessage] = []
-        while sqlite3_step(stmt) == SQLITE_ROW {
-            rows.append(StoredMessage(
-                id: text(stmt, 0),
-                conversationId: text(stmt, 1),
-                role: text(stmt, 2),
-                content: text(stmt, 3),
-                createdAt: text(stmt, 4)))
+        queue.sync {
+            guard let stmt = prepare(
+                "SELECT id, conversationId, role, content, createdAt FROM messages " +
+                "WHERE conversationId = ? ORDER BY createdAt DESC LIMIT ?") else { return [] }
+            defer { sqlite3_finalize(stmt) }
+            bind(stmt, 1, conversationId)
+            sqlite3_bind_int(stmt, 2, Int32(clamping: limit))
+            var rows: [StoredMessage] = []
+            while sqlite3_step(stmt) == SQLITE_ROW {
+                rows.append(StoredMessage(
+                    id: text(stmt, 0),
+                    conversationId: text(stmt, 1),
+                    role: text(stmt, 2),
+                    content: text(stmt, 3),
+                    createdAt: text(stmt, 4)))
+            }
+            return rows.reversed()
         }
-        return rows.reversed()
     }
 
     /**
@@ -196,23 +223,25 @@ final class SQLiteChatStore {
      * reader never waits on the network to page back through history.
      */
     func loadMessagesBefore(conversationId: String, before: String, limit: Int) -> [StoredMessage] {
-        guard let stmt = prepare(
-            "SELECT id, conversationId, role, content, createdAt FROM messages " +
-            "WHERE conversationId = ? AND createdAt < ? ORDER BY createdAt DESC LIMIT ?") else { return [] }
-        defer { sqlite3_finalize(stmt) }
-        bind(stmt, 1, conversationId)
-        bind(stmt, 2, before)
-        sqlite3_bind_int(stmt, 3, Int32(clamping: limit))
-        var rows: [StoredMessage] = []
-        while sqlite3_step(stmt) == SQLITE_ROW {
-            rows.append(StoredMessage(
-                id: text(stmt, 0),
-                conversationId: text(stmt, 1),
-                role: text(stmt, 2),
-                content: text(stmt, 3),
-                createdAt: text(stmt, 4)))
+        queue.sync {
+            guard let stmt = prepare(
+                "SELECT id, conversationId, role, content, createdAt FROM messages " +
+                "WHERE conversationId = ? AND createdAt < ? ORDER BY createdAt DESC LIMIT ?") else { return [] }
+            defer { sqlite3_finalize(stmt) }
+            bind(stmt, 1, conversationId)
+            bind(stmt, 2, before)
+            sqlite3_bind_int(stmt, 3, Int32(clamping: limit))
+            var rows: [StoredMessage] = []
+            while sqlite3_step(stmt) == SQLITE_ROW {
+                rows.append(StoredMessage(
+                    id: text(stmt, 0),
+                    conversationId: text(stmt, 1),
+                    role: text(stmt, 2),
+                    content: text(stmt, 3),
+                    createdAt: text(stmt, 4)))
+            }
+            return rows.reversed()
         }
-        return rows.reversed()
     }
 
     // MARK: - Full-text search (FTS5, mirrors Android's ftsMatchQuery contract)
@@ -239,26 +268,30 @@ final class SQLiteChatStore {
 
     /// Conversation ids whose titles match — best hits first, capped like Android (20).
     func searchTitleIDs(_ term: String) -> [String] {
-        if let match = Self.matchQuery(term) {
+        queue.sync {
+            if let match = Self.matchQuery(term) {
+                return queryColumn(
+                    "SELECT c.id FROM conversations c JOIN conversations_fts f ON c.rowid = f.rowid " +
+                    "WHERE conversations_fts MATCH ? ORDER BY rank LIMIT 20", match)
+            }
             return queryColumn(
-                "SELECT c.id FROM conversations c JOIN conversations_fts f ON c.rowid = f.rowid " +
-                "WHERE conversations_fts MATCH ? ORDER BY rank LIMIT 20", match)
+                "SELECT id FROM conversations WHERE title LIKE ? ESCAPE '\\' ORDER BY updatedAt DESC LIMIT 20",
+                likePattern(term))
         }
-        return queryColumn(
-            "SELECT id FROM conversations WHERE title LIKE ? ESCAPE '\\' ORDER BY updatedAt DESC LIMIT 20",
-            likePattern(term))
     }
 
     /// Message bodies that match — best hits first, capped like Android (20).
     func searchMessageHits(_ term: String) -> [MessageHit] {
-        if let match = Self.matchQuery(term) {
+        queue.sync {
+            if let match = Self.matchQuery(term) {
+                return queryMessages(
+                    "SELECT m.conversationId, m.id, m.content, m.createdAt FROM messages m " +
+                    "JOIN messages_fts f ON m.rowid = f.rowid WHERE messages_fts MATCH ? ORDER BY rank LIMIT 20", match)
+            }
             return queryMessages(
-                "SELECT m.conversationId, m.id, m.content, m.createdAt FROM messages m " +
-                "JOIN messages_fts f ON m.rowid = f.rowid WHERE messages_fts MATCH ? ORDER BY rank LIMIT 20", match)
+                "SELECT conversationId, id, content, createdAt FROM messages " +
+                "WHERE content LIKE ? ESCAPE '\\' ORDER BY createdAt DESC LIMIT 20", likePattern(term))
         }
-        return queryMessages(
-            "SELECT conversationId, id, content, createdAt FROM messages " +
-            "WHERE content LIKE ? ESCAPE '\\' ORDER BY createdAt DESC LIMIT 20", likePattern(term))
     }
 
     // MARK: - Legacy JSON import (runs once, flag-guarded)
@@ -366,26 +399,30 @@ final class SQLiteChatStore {
 
     /// Stamp of the most recent persisted user turn with exactly this content.
     func latestUserStamp(content: String, conversationId: String) -> String? {
-        guard let stmt = prepare(
-            "SELECT createdAt FROM messages " +
-            "WHERE role = 'user' AND content = ? AND conversationId = ? " +
-            "ORDER BY createdAt DESC LIMIT 1") else { return nil }
-        defer { sqlite3_finalize(stmt) }
-        bind(stmt, 1, content)
-        bind(stmt, 2, conversationId)
-        guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
-        return text(stmt, 0)
+        queue.sync {
+            guard let stmt = prepare(
+                "SELECT createdAt FROM messages " +
+                "WHERE role = 'user' AND content = ? AND conversationId = ? " +
+                "ORDER BY createdAt DESC LIMIT 1") else { return nil }
+            defer { sqlite3_finalize(stmt) }
+            bind(stmt, 1, content)
+            bind(stmt, 2, conversationId)
+            guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
+            return text(stmt, 0)
+        }
     }
 
     /// Deletes the turn stamped `fromInclusive` and everything after it in the
     /// thread (fixed-width UTC stamps make >= lexicographic-safe). FTS syncs
     /// via the delete triggers.
     func deleteMessages(fromInclusive stamp: String, conversationId: String) {
-        guard let stmt = prepare(
-            "DELETE FROM messages WHERE conversationId = ? AND createdAt >= ?") else { return }
-        defer { sqlite3_finalize(stmt) }
-        bind(stmt, 1, conversationId)
-        bind(stmt, 2, stamp)
-        sqlite3_step(stmt)
+        queue.sync {
+            guard let stmt = prepare(
+                "DELETE FROM messages WHERE conversationId = ? AND createdAt >= ?") else { return }
+            defer { sqlite3_finalize(stmt) }
+            bind(stmt, 1, conversationId)
+            bind(stmt, 2, stamp)
+            sqlite3_step(stmt)
+        }
     }
 }

@@ -1,6 +1,6 @@
 {
-  "versionCode": 55,
-  "versionName": "0.55.0",
+  "versionCode": 56,
+  "versionName": "0.56.0",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "Launch survivability: no startup step can take the app down anymore — every store hydration is individually guarded, settings restore per-key so one bad preference from an older build can't kill the launch, and a crash catcher now saves the real stack trace on-device (Settings offers a Send crash report row only when something was captured). Signature stable, install-over any previous build."
+  "notes": "Native performance pass, both platforms. Chat streaming now repaints at a steady ~30 Hz instead of per network chunk — only the growing bubble re-renders while the transcript, composer and scaffold stay perfectly still; the final answer is committed to the thread in one write. Typing recomposes only the composer, editing only the bubble being edited. Code blocks highlight once on completion instead of re-colouring every frame mid-stream. Timestamp formatters cached process-wide. On iOS: per-token whole-screen invalidation replaced with an off-main accumulator + 30 Hz flush, per-message render cache, Equatable bubbles that skip untouched rows, shared cached formatters, off-main SQL bootstrap and export, one-write store syncs, and animations that settle when hidden. Same design, same features — the interface just got weightless."
 }

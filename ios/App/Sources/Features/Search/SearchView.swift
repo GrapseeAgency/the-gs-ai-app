@@ -159,7 +159,12 @@ struct SearchView: View {
     // MARK: Body
 
     var body: some View {
-        ScrollView {
+        // Deep-perf pass 80-b: ONE search execution per body pass. resultsSection
+        // re-filtered `matches` per kind (plus the isEmpty gate) — every
+        // keystroke ran the full query 6× (12 SQL round trips + 6 UserDefaults
+        // JSON decodes of the library).
+        let hits = matches
+        return ScrollView {
             VStack(alignment: .leading, spacing: Aero.Spacing.l) {
                 StaggerIn(index: 0) { inputBar }
                 if term.isEmpty {
@@ -180,7 +185,7 @@ struct SearchView: View {
                             message: "At least two characters to search everything on this device."
                         )
                     }
-                } else if matches.isEmpty {
+                } else if hits.isEmpty {
                     StaggerIn(index: 1) {
                         EmptyStateView(
                             icon: "tray",
@@ -189,7 +194,7 @@ struct SearchView: View {
                         )
                     }
                 } else {
-                    StaggerIn(index: 1) { resultsSection }
+                    StaggerIn(index: 1) { resultsSection(hits) }
                 }
             }
             .padding(.horizontal, Aero.Spacing.m)
@@ -253,10 +258,10 @@ struct SearchView: View {
 
     // MARK: Grouped results
 
-    private var resultsSection: some View {
+    private func resultsSection(_ hits: [SearchHit]) -> some View {
         VStack(alignment: .leading, spacing: Aero.Spacing.l) {
             ForEach(Kind.allCases, id: \.self) { kind in
-                let items = matches.filter { $0.kind == kind }
+                let items = hits.filter { $0.kind == kind }
                 if !items.isEmpty {
                     VStack(alignment: .leading, spacing: Aero.Spacing.m) {
                         SectionHeader(
@@ -313,7 +318,7 @@ struct SearchView: View {
     }
 
     private static func relative(_ iso: String) -> String {
-        guard let date = ISO8601DateFormatter().date(from: iso) else { return "earlier" }
+        guard let date = GSFormatters.date(from: iso) else { return "earlier" }
         let minutes = Int(Date().timeIntervalSince(date) / 60)
         switch minutes {
         case ..<1: return "just now"

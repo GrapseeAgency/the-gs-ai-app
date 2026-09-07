@@ -127,17 +127,9 @@ struct ArchivedChatsView: View {
     }
 
     /// ISO-8601 → "2h ago"-style relative label (graceful fallback to raw string).
+    /// Shared cached formatters — was a fresh ISO8601DateFormatter +
+    /// RelativeDateTimeFormatter PER ROW PER RENDER.
     private static func relativeTime(from iso: String) -> String {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        var date = formatter.date(from: iso)
-        if date == nil {
-            formatter.formatOptions = [.withInternetDateTime]
-            date = formatter.date(from: iso)
-        }
-        guard let date else { return "" }
-        let relative = RelativeDateTimeFormatter()
-        relative.unitsStyle = .abbreviated
-        return relative.localizedString(for: date, relativeTo: Date())
+        GSFormatters.relativeTime(from: iso)
     }
 }

@@ -43,6 +43,7 @@ final class ConversationStore: ObservableObject {
     private var lastMessageByConversation: [String: StoredMessage] = [:]
 
     /// Durable layer: SQLite + FTS5 (imports the legacy JSON document once).
+    /// Its internal serial queue makes every statement safe from any thread.
     private let sql = SQLiteChatStore()
 
     /// Fixed-width ISO-8601 keeps lexicographic createdAt ordering chronological.
@@ -55,19 +56,60 @@ final class ConversationStore: ObservableObject {
     static func now() -> String { timestamp.string(from: Date()) }
 
     private init() {
-        conversations = sql.loadConversations()
-        messages = sql.loadMessages()
-        rebuildLastMessageIndex()
-        if conversations.isEmpty && messages.isEmpty {
-            // Storage hiccup or fresh install with a legacy document — keep the
-            // old in-memory JSON path alive so nothing ever looks "lost".
-            loadLegacyJSON()
-            rebuildLastMessageIndex()
+        // Deep-perf pass 80-b: the full-table bootstrap — both loads plus the
+        // one-time legacy JSON import — used to run synchronously on whatever
+        // thread first touched `shared` (the main thread for every launch),
+        // with a cost that grows with the whole corpus. It now loads on a
+        // background task and lands with one merge; reads that must not wait
+        // (windowed history on conversation open) go straight to SQLite.
+        let sql = self.sql
+        Task.detached(priority: .userInitiated) { [weak self] in
+            var loadedConversations = sql.loadConversations()
+            var loadedMessages = sql.loadMessages()
+            if loadedConversations.isEmpty && loadedMessages.isEmpty {
+                // Storage hiccup or fresh install with a legacy document —
+                // keep the old in-memory JSON path alive so nothing ever
+                // looks "lost". File IO + decode stay off-main too.
+                if let legacy = Self.loadLegacyDocument() {
+                    loadedConversations = legacy.conversations
+                    loadedMessages = legacy.messages
+                }
+            }
+            await self?.applyBootstrap(
+                conversations: loadedConversations,
+                messages: loadedMessages)
         }
     }
 
-    /// One pass over the loaded table — O(total messages) once, then previews
-    /// are dictionary hits forever.
+    /// Applies the off-main bootstrap. Merge, not replace: a first-millisecond
+    /// mutation that raced the load (its SQLite write serialized AFTER the
+    /// load read) stays in memory exactly once.
+    private func applyBootstrap(conversations: [StoredConversation], messages: [StoredMessage]) {
+        var mergedConversations = conversations
+        for existing in self.conversations
+        where !mergedConversations.contains(where: { $0.id == existing.id }) {
+            mergedConversations.append(existing)
+        }
+        var mergedMessages = messages
+        for existing in self.messages
+        where !mergedMessages.contains(where: { $0.id == existing.id }) {
+            mergedMessages.append(existing)
+        }
+        self.conversations = mergedConversations
+        self.messages = mergedMessages
+        rebuildLastMessageIndex()
+    }
+
+    /// Legacy document read + decode for the bootstrap fallback — nonisolated
+    /// static so the file IO happens on the bootstrap task, never the main thread.
+    private nonisolated static func loadLegacyDocument() -> StoreDocument? {
+        let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        guard let data = try? Data(contentsOf: directory.appendingPathComponent("gsai-store.json")),
+              let document = try? JSONDecoder().decode(StoreDocument.self, from: data) else { return nil }
+        return document
+    }
+
+    /// O(1)-per-row inbox previews are rebuilt in one pass over the loaded table.
     private func rebuildLastMessageIndex() {
         lastMessageByConversation = [:]
         for message in messages {
@@ -75,14 +117,6 @@ final class ConversationStore: ObservableObject {
                existing.createdAt > message.createdAt { continue }
             lastMessageByConversation[message.conversationId] = message
         }
-    }
-
-    private func loadLegacyJSON() {
-        let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        guard let data = try? Data(contentsOf: directory.appendingPathComponent("gsai-store.json")),
-              let document = try? JSONDecoder().decode(StoreDocument.self, from: data) else { return }
-        conversations = document.conversations
-        messages = document.messages
     }
 
     // MARK: - Queries
@@ -245,9 +279,28 @@ final class ConversationStore: ObservableObject {
     }
 
     /// Settings export: the full message corpus from the durable store —
-    /// not just the in-memory window — so the export is complete.
-    func exportMessages() -> [StoredMessage] {
+    /// not just the in-memory window — so the export is complete. Nonisolated
+    /// (the SQLite queue makes the cross-thread read safe and ordered): the
+    /// export task assembles the corpus OFF the main thread.
+    nonisolated func exportMessages() -> [StoredMessage] {
         sql.loadMessages()
+    }
+
+    /// Refresh path: merge a whole server page in ONE published write. The
+    /// per-row upsert made the inbox re-render once per row per sync (each
+    /// pass rebuilding every row's preview + relative label).
+    func upsert(_ rows: [StoredConversation]) {
+        guard !rows.isEmpty else { return }
+        var merged = conversations
+        for row in rows {
+            if let index = merged.firstIndex(where: { $0.id == row.id }) {
+                merged[index] = row
+            } else {
+                merged.append(row)
+            }
+            sql.upsertConversation(row)
+        }
+        conversations = merged
     }
 
     /// Benchmark edit flow: the matching user turn and everything after it
@@ -272,11 +325,13 @@ final class ConversationStore: ObservableObject {
     }
 
     // MARK: - Legacy document (in-memory fallback only)
+}
 
-    private struct StoreDocument: Codable {
-        var conversations: [StoredConversation]
-        var messages: [StoredMessage]
-    }
+/// Legacy on-disk document (pre-SQLite install data). File-scope so the
+/// nonisolated bootstrap can decode it off the main thread.
+private struct StoreDocument: Codable {
+    var conversations: [StoredConversation]
+    var messages: [StoredMessage]
 }
 
 // MARK: - Library (real saved-from-chat items, JSON in UserDefaults)

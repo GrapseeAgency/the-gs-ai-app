@@ -86,9 +86,11 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import android.os.SystemClock
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -202,6 +204,12 @@ private const val DRAFTS_PREFS = "gs_chat_drafts"
  *  so conversation-open cost is O(page) no matter how long the thread grew. */
 private const val HISTORY_PAGE = 60
 
+/** Streaming repaint coalescing: network deltas arrive far faster than the eye
+ *  (often dozens per second); repainting markdown at delta cadence re-parses
+ *  and re-lays-out the growing bubble for zero visible benefit. ~30 Hz is
+ *  visually identical to per-delta and caps the streaming cost per second. */
+private const val STREAM_PAINT_MS = 33L
+
 private fun draftKey(conversationId: String) = "draft_$conversationId"
 
 private fun loadDraft(context: Context, conversationId: String?): String? =
@@ -267,8 +275,12 @@ fun ChatScreen(
     var loadingOlder by remember { mutableStateOf(false) }
     // Armed only by a real upward drag — pagination never engages on open.
     var olderArmed by remember { mutableStateOf(false) }
-    // Direct O(1) slot for streaming delta writes (set at append, cleared at finalize).
-    var streamingIndex by remember { mutableStateOf(-1) }
+    // Live streaming text lives OUTSIDE the message list. Deltas coalesce into
+    // this state at ~30 Hz and ONLY the streaming bubble reads it — the rest of
+    // the transcript, the scaffold and the composer never recompose mid-stream.
+    // The list itself is touched exactly twice per turn: bubble added, then the
+    // final text committed once at finalize.
+    val streamText = remember { mutableStateOf("") }
     val isStreaming = streamingJob?.isActive == true
     val context = LocalContext.current
     val showSnack: (String) -> Unit = { message ->
@@ -366,7 +378,6 @@ fun ChatScreen(
                     } else {
                         val anchor = listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset
                         messages.addAll(0, older.map { ChatUiMessage(it.id, it.role, it.content, createdAt = it.createdAt) })
-                        if (streamingIndex >= 0) streamingIndex += older.size
                         listState.scrollToItem(anchor.first + older.size, anchor.second)
                         hasOlder = older.size == HISTORY_PAGE
                     }
@@ -389,27 +400,36 @@ fun ChatScreen(
     }
 
     // Follow the stream only while the reader stays at the live edge —
-    // scrolling up to reread is never yanked back down mid-generation. Instant
-    // jumps: an animated follow gets cancelled and relaunched on EVERY chunk,
-    // churning the animation pipeline for a scroll the user never sees finish.
-    LaunchedEffect(messages.size, messages.lastOrNull()?.content?.length) {
-        if (messages.isNotEmpty() && isAtBottom) listState.scrollToItem(messages.size - 1)
+    // scrolling up to reread is never yanked back down mid-generation. One
+    // long-lived snapshotFlow (state reads inside it subscribe nothing in
+    // composition) replaces the old per-chunk-keyed effect that relaunched a
+    // coroutine on every delta; scrollToItem is instantaneous by design — an
+    // animated follow gets cancelled and relaunched on every chunk anyway.
+    LaunchedEffect(Unit) {
+        snapshotFlow { streamText.value.length to messages.size }
+            .collect { (_, count) ->
+                if (streamingJob?.isActive == true && isAtBottom && count > 0) {
+                    listState.scrollToItem(count - 1)
+                }
+            }
     }
 
-    fun finalizeStreamingMessage() {
-        streamingIndex = -1
-        val index = messages.indexOfLast { it.isStreaming }
+    /** Commits the streamed answer into the transcript exactly once. Runs on
+     *  the streaming coroutine (success, cancel, failure) so the growing text
+     *  it holds in its local buffer is always the source of truth. */
+    fun finalizeStreamingMessage(assistantId: String, finalText: String) {
+        streamText.value = ""
+        val index = messages.indexOfFirst { it.id == assistantId }
         if (index >= 0) {
-            val message = messages[index]
-            if (message.content.isBlank()) messages.removeAt(index)
-            else messages[index] = message.copy(isStreaming = false)
+            if (finalText.isBlank()) messages.removeAt(index)
+            else messages[index] = messages[index].copy(content = finalText, isStreaming = false)
         }
     }
 
-    fun reportFailure(error: Throwable) {
+    fun reportFailure(error: Throwable, assistantId: String, partial: String) {
         // Safety net only — the repository lands offline turns itself before
         // this can fire. Quiet by design: no raw errors, no connectivity talk.
-        finalizeStreamingMessage()
+        finalizeStreamingMessage(assistantId, partial)
         messages.add(
             ChatUiMessage(
                 id = UUID.randomUUID().toString(),
@@ -432,15 +452,16 @@ fun ChatScreen(
         if (activeConversationId == null) conversationTitle = prompt.take(40)
         val assistantId = UUID.randomUUID().toString()
         messages.add(ChatUiMessage(assistantId, "assistant", "", isStreaming = true, createdAt = ChatRepository.nowIso()))
-        streamingIndex = messages.lastIndex
         // Sending always returns the reader to the live edge (benchmark behaviour).
         scope.launch { listState.animateScrollToItem(messages.lastIndex) }
         streamingJob = scope.launch {
             // One growing buffer for the whole streamed answer — per-chunk
             // concatenation re-allocated the entire prefix on every delta
-            // (quadratic over a long stream); append is amortized O(1) and
-            // toString() is the only per-chunk allocation left.
+            // (quadratic over a long stream); append is amortized O(1). Deltas
+            // only coalesce into the paint state at ~30 Hz; the transcript list
+            // is written once, at finalize, with the complete answer.
             val streamed = StringBuilder()
+            var lastPaint = 0L
             try {
                 val returnedId = ServiceLocator.chat.send(
                     conversationId = activeConversationId,
@@ -448,28 +469,22 @@ fun ChatScreen(
                     modelId = ModelPrefs.defaultId(context),
                     onDelta = { delta ->
                         streamed.append(delta)
-                        val text = streamed.toString()
-                        // O(1) direct slot — captured at append; falls back to a
-                        // scan only if the window shifted underneath (page prepend).
-                        val i = streamingIndex
-                        if (i in messages.indices && messages[i].id == assistantId) {
-                            messages[i] = messages[i].copy(content = text)
-                        } else {
-                            val index = messages.indexOfFirst { it.id == assistantId }
-                            if (index >= 0) {
-                                streamingIndex = index
-                                messages[index] = messages[index].copy(content = text)
-                            }
+                        val now = SystemClock.uptimeMillis()
+                        if (now - lastPaint >= STREAM_PAINT_MS) {
+                            lastPaint = now
+                            streamText.value = streamed.toString()
                         }
                     }
                 )
                 activeConversationId = returnedId
-                finalizeStreamingMessage()
+                finalizeStreamingMessage(assistantId, streamed.toString())
             } catch (ce: CancellationException) {
-                finalizeStreamingMessage()
+                // Stop-generation lands here too: partial output stays on
+                // screen and disk, exactly as before.
+                finalizeStreamingMessage(assistantId, streamed.toString())
                 throw ce
             } catch (e: Exception) {
-                reportFailure(e)
+                reportFailure(e, assistantId, streamed.toString())
             } finally {
                 streamingJob = null
             }
@@ -705,7 +720,14 @@ fun ChatScreen(
                         modifier = Modifier.fillMaxSize(),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        itemsIndexed(messages, key = { _, message -> message.id }) { index, message ->
+                        itemsIndexed(
+                            messages,
+                            key = { _, message -> message.id },
+                            // User and assistant turns have structurally different
+                            // layouts — declaring contentType lets Compose reuse
+                            // the right slot when items scroll through the viewport.
+                            contentType = { _, message -> message.role }
+                        ) { index, message ->
                             val stamp = dayLabel(message.createdAt)
                             if (stamp != null &&
                                 (index == 0 || dayKey(messages[index - 1].createdAt) != dayKey(message.createdAt))
@@ -717,7 +739,10 @@ fun ChatScreen(
                                     message = message,
                                     isEditing = editingId == message.id,
                                     highlight = index == activeMatchIndex,
-                                    editingDraft = editingDraft,
+                                    // Draft text travels as a reader lambda: typing
+                                    // while editing re-renders only the bubble being
+                                    // edited, never every visible row.
+                                    editingDraft = { editingDraft },
                                     editEnabled = streamingJob?.isActive != true && editingId == null,
                                     onEditingDraftChange = { editingDraft = it },
                                     onEditStart = { editingDraft = message.content; editingId = message.id },
@@ -730,6 +755,10 @@ fun ChatScreen(
                                     message = message,
                                     isSpeaking = speakingMessageId == message.id,
                                     highlight = index == activeMatchIndex,
+                                    // The growing answer is read inside the bubble
+                                    // (State), so mid-stream flushes touch exactly
+                                    // one item instead of the whole screen.
+                                    live = if (message.isStreaming) streamText else null,
                                     onCopy = copyText,
                                     onShare = { shareText(message.content) },
                                     onRegenerate = { regenerate(message.id) },
@@ -760,29 +789,23 @@ fun ChatScreen(
             }
 
             if (!isStreaming) {
-                Row(verticalAlignment = Alignment.Bottom) {
-                    IconButton(onClick = { attachSheetOpen = true }) {
-                        Icon(
-                            Icons.Outlined.AttachFile,
-                            contentDescription = "Attach",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    GsInputBar(
-                        value = draft,
-                        onValueChange = { draft = it },
-                        onSend = { text -> dispatch(text, echoUser = true) },
-                        placeholder = "Ask anything…",
-                        modifier = Modifier.weight(1f),
-                        imeAction = if (SettingsStore.enterToSend) ImeAction.Send else ImeAction.Default
-                    )
-                }
+                // Draft text is read inside ComposerRow, so typing recomposes
+                // only the composer — not the transcript above it.
+                ComposerRow(
+                    draftText = { draft },
+                    onDraftChange = { draft = it },
+                    onSend = { text -> dispatch(text, echoUser = true) },
+                    onAttach = { attachSheetOpen = true },
+                    enterToSend = SettingsStore.enterToSend
+                )
             } else {
                 Button(
                     onClick = {
+                        // The cancelled coroutine finalizes with its own buffer,
+                        // so partial output is committed with the full text it
+                        // already holds — no second, textless finalize here.
                         streamingJob?.cancel()
                         streamingJob = null
-                        finalizeStreamingMessage()
                     },
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(
@@ -838,7 +861,7 @@ private fun UserMessage(
     message: ChatUiMessage,
     highlight: Boolean = false,
     isEditing: Boolean = false,
-    editingDraft: String = "",
+    editingDraft: () -> String = { "" },
     editEnabled: Boolean = true,
     onEditingDraftChange: (String) -> Unit = {},
     onEditStart: () -> Unit = {},
@@ -851,7 +874,7 @@ private fun UserMessage(
         if (isEditing) {
             Column {
                 OutlinedTextField(
-                    value = editingDraft,
+                    value = editingDraft(),
                     onValueChange = onEditingDraftChange,
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 2,
@@ -865,7 +888,7 @@ private fun UserMessage(
                     TextButton(onClick = onEditCancel) { Text("Cancel") }
                     Button(
                         onClick = onEditSubmit,
-                        enabled = editingDraft.isNotBlank()
+                        enabled = editingDraft().isNotBlank()
                     ) { Text("Save & resend") }
                 }
             }
@@ -915,6 +938,35 @@ private fun UserMessage(
     }
 }
 
+/** Composer row isolated into its own recompose scope: keystrokes re-render
+ *  this and only this — the transcript, scaffold and snackbar never react. */
+@Composable
+private fun ComposerRow(
+    draftText: () -> String,
+    onDraftChange: (String) -> Unit,
+    onSend: (String) -> Unit,
+    onAttach: () -> Unit,
+    enterToSend: Boolean
+) {
+    Row(verticalAlignment = Alignment.Bottom) {
+        IconButton(onClick = onAttach) {
+            Icon(
+                Icons.Outlined.AttachFile,
+                contentDescription = "Attach",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        GsInputBar(
+            value = draftText(),
+            onValueChange = onDraftChange,
+            onSend = onSend,
+            placeholder = "Ask anything…",
+            modifier = Modifier.weight(1f),
+            imeAction = if (enterToSend) ImeAction.Send else ImeAction.Default
+        )
+    }
+}
+
 /** Floating jump-back-to-the-live-edge control, mirroring the benchmark apps. */
 @Composable
 private fun JumpToLatestPill(onClick: () -> Unit) {
@@ -942,6 +994,9 @@ private fun AssistantMessage(
     message: ChatUiMessage,
     isSpeaking: Boolean,
     highlight: Boolean = false,
+    // Mid-stream the visible answer comes from this state (read below, so only
+    // this bubble recomposes on flush); once finalized the committed content wins.
+    live: State<String>? = null,
     onCopy: (String) -> Unit,
     onShare: () -> Unit = {},
     onRegenerate: () -> Unit,
@@ -974,7 +1029,7 @@ private fun AssistantMessage(
             ) {
                 Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
                     SegmentedContent(
-                        content = message.content,
+                        content = live?.value ?: message.content,
                         isStreaming = message.isStreaming,
                         onCopyCode = onCopy
                     )
@@ -1156,7 +1211,7 @@ private fun SegmentedContent(content: String, isStreaming: Boolean, onCopyCode: 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         segments.forEachIndexed { index, segment ->
             if (segment.isCode) {
-                CodeBlock(segment = segment, onCopyCode = onCopyCode)
+                CodeBlock(segment = segment, onCopyCode = onCopyCode, live = isStreaming)
             } else {
                 ProseBlock(
                     segment = segment,
@@ -1254,7 +1309,7 @@ private fun ProseBlock(segment: ContentSegment, showCaret: Boolean) {
 }
 
 @Composable
-private fun CodeBlock(segment: ContentSegment, onCopyCode: (String) -> Unit) {
+private fun CodeBlock(segment: ContentSegment, onCopyCode: (String) -> Unit, live: Boolean = false) {
     Surface(
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHighest,
@@ -1283,12 +1338,17 @@ private fun CodeBlock(segment: ContentSegment, onCopyCode: (String) -> Unit) {
                 }
             }
             Text(
-                text = if (segment.text.isBlank()) {
-                    AnnotatedString("…")
-                } else {
-                    val dark = isSystemInDarkTheme()
-                    remember(segment.text, segment.language, dark) {
-                        highlightCode(segment.text, segment.language, dark)
+                text = when {
+                    segment.text.isBlank() -> AnnotatedString("…")
+                    // While the block is still growing, per-flush full regex
+                    // colouring buys nothing — plain monospace mid-stream, one
+                    // highlight pass when the answer lands (ChatGPT-style).
+                    live -> AnnotatedString(segment.text)
+                    else -> {
+                        val dark = isSystemInDarkTheme()
+                        remember(segment.text, segment.language, dark) {
+                            highlightCode(segment.text, segment.language, dark)
+                        }
                     }
                 },
                 style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
@@ -1545,13 +1605,19 @@ private fun DaySeparator(label: String) {
     }
 }
 
+// Immutable, thread-safe formatters cached at process level — creating a
+// formatter per call re-parses the pattern and re-queries locale data on every
+// bubble stamp, on every recomposition of every visible turn.
+private val TIME_LABEL_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+private val DAY_LABEL_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM yyyy")
+
 private fun dayKey(iso: String): String? = runCatching {
     OffsetDateTime.parse(iso).toLocalDate().toString()
 }.getOrNull()
 
 /** Quiet per-turn clock in the action row — the benchmark timestamp treatment. */
 private fun timeLabel(iso: String): String = runCatching {
-    OffsetDateTime.parse(iso).format(DateTimeFormatter.ofPattern("HH:mm"))
+    OffsetDateTime.parse(iso).format(TIME_LABEL_FORMAT)
 }.getOrDefault("")
 
 private fun dayLabel(iso: String): String? = runCatching {
@@ -1560,6 +1626,6 @@ private fun dayLabel(iso: String): String? = runCatching {
     when (date) {
         today -> "Today"
         today.minusDays(1) -> "Yesterday"
-        else -> date.format(DateTimeFormatter.ofPattern("d MMM yyyy"))
+        else -> date.format(DAY_LABEL_FORMAT)
     }
 }.getOrNull()

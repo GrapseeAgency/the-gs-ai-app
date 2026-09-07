@@ -70,6 +70,12 @@ struct HomeView: View {
                 onRoute?(.chatPrefill(text))
             }
         }
+        .onDisappear {
+            // Deep-perf pass 80-b: the hero breathe is a repeatForever
+            // animation — let it settle when Home leaves the hierarchy so it
+            // never keeps ticking behind a pushed screen. onAppear restarts it.
+            breathe = 1.0
+        }
         .task {
             // Claude-style tagline rotation — one quiet crossfade every few seconds.
             while !Task.isCancelled {

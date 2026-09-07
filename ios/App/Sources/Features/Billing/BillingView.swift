@@ -13,23 +13,33 @@ struct BillingView: View {
     /// Fresh sample dates: the renewal anchor is the 12th of next month and
     /// the invoices are the three most recent completed billing months —
     /// computed so the samples never go stale (they used to say Aug 2025).
+    // Cached once — these were fresh DateFormatters on every body pass.
+    private static let monthLabelFormatter: DateFormatter = {
+        let df = DateFormatter()
+        df.dateFormat = "d MMM yyyy"
+        df.locale = Locale(identifier: "en_GB")
+        return df
+    }()
+    private static let invoiceMonthFormatter: DateFormatter = {
+        let df = DateFormatter()
+        df.dateFormat = "MMM yyyy"
+        df.locale = Locale(identifier: "en_GB")
+        return df
+    }()
+
+    /// the invoices are the three most recent completed billing months —
+    /// computed so the samples never go stale (they used to say Aug 2025).
     private static var renewalDateText: String {
         let cal = Calendar.current
         let next = cal.date(byAdding: .month, value: 1, to: Date()) ?? Date()
         var comps = cal.dateComponents([.year, .month], from: next)
         comps.day = 12
-        let df = DateFormatter()
-        df.dateFormat = "d MMM yyyy"
-        df.locale = Locale(identifier: "en_GB")
-        return df.string(from: cal.date(from: comps) ?? next)
+        return monthLabelFormatter.string(from: cal.date(from: comps) ?? next)
     }
 
     private static var recentInvoiceMonths: [String] {
-        let df = DateFormatter()
-        df.dateFormat = "MMM yyyy"
-        df.locale = Locale(identifier: "en_GB")
-        return (1...3).map { offset in
-            df.string(from: Calendar.current.date(byAdding: .month, value: -offset, to: Date()) ?? Date())
+        (1...3).map { offset in
+            invoiceMonthFormatter.string(from: Calendar.current.date(byAdding: .month, value: -offset, to: Date()) ?? Date())
         }
     }
 

@@ -83,6 +83,58 @@ enum Aero {
     }
 }
 
+// MARK: - Shared cached formatters (deep-perf pass 80-b)
+
+/**
+ * One cached formatter per shape, process-wide. View bodies used to construct
+ * ISO8601DateFormatter / DateFormatter / RelativeDateTimeFormatter PER ROW
+ * PER BODY PASS — locale-data allocation is the expensive part, and on the
+ * chat transcript that meant roughly O(visible bubbles + turns) formatter
+ * allocations on every keystroke and every streaming flush. Identical output,
+ * zero churn. Main-thread use only (view bodies, view models).
+ */
+enum GSFormatters {
+    static let isoFractional: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+    static let isoPlain = ISO8601DateFormatter()
+
+    /// Tolerant ISO-8601 read: fractional seconds first, plain seconds fallback.
+    static func date(from iso: String) -> Date? {
+        isoFractional.date(from: iso) ?? isoPlain.date(from: iso)
+    }
+
+    static let clock: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter
+    }()
+    static let dayStamp: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
+    static let dayTitle: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "d MMM yyyy"
+        return formatter
+    }()
+
+    /// "2h ago"-style label, shared by the inbox / archive surfaces.
+    static let relative: RelativeDateTimeFormatter = {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        return formatter
+    }()
+
+    static func relativeTime(from iso: String) -> String {
+        guard let date = date(from: iso) else { return "" }
+        return relative.localizedString(for: date, relativeTo: Date())
+    }
+}
+
 // MARK: - Press feedback (kinetic scale)
 
 struct KineticPressStyle: ButtonStyle {

@@ -69,20 +69,32 @@ struct SettingsView: View {
     /// Privacy pass: the whole on-device corpus — conversations, the full
     /// message store, library saves — as one JSON document the reader shares
     /// anywhere via the system sheet. Encoding hiccups never open the sheet.
+    /// Deep-perf pass 80-b: assembly (full SQL read + corpus encode + file
+    /// write) runs OFF the main thread — with a long history that was a
+    /// multi-hundred-ms UI freeze on tap. The sheet still opens from main.
     private func buildExportFile() {
         let store = ConversationStore.shared
-        let payload = ExportPayload(
-            exportedAt: ConversationStore.now(),
-            conversations: store.conversations,
-            messages: store.exportMessages(),
-            library: store.savedLibraryItems()
-        )
-        guard let data = try? JSONEncoder().encode(payload) else { return }
-        let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("gs-ai-export.json")
-        do { try data.write(to: url, options: .atomic) } catch { return }
-        exportURL = url
-        showExport = true
+        let conversations = store.conversations
+        let library = store.savedLibraryItems()
+        let exportedAt = ConversationStore.now()
+        Task {
+            let url: URL? = await Task.detached(priority: .userInitiated) { () -> URL? in
+                let messages = store.exportMessages()
+                let payload = ExportPayload(
+                    exportedAt: exportedAt,
+                    conversations: conversations,
+                    messages: messages,
+                    library: library)
+                guard let data = try? JSONEncoder().encode(payload) else { return nil }
+                let url = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("gs-ai-export.json")
+                do { try data.write(to: url, options: .atomic) } catch { return nil }
+                return url
+            }.value
+            guard let url else { return }
+            exportURL = url
+            showExport = true
+        }
     }
 
     // MARK: Header

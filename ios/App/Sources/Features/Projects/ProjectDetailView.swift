@@ -353,7 +353,7 @@ struct ProjectDetailView: View {
     // MARK: Helpers
 
     private func relative(_ iso: String) -> String {
-        guard let then = ISO8601DateFormatter().date(from: iso) else { return "earlier" }
+        guard let then = GSFormatters.date(from: iso) else { return "earlier" } // cached ISO formatter
         let interval = Date().timeIntervalSince(then)
         switch interval {
         case ..<60: return "just now"

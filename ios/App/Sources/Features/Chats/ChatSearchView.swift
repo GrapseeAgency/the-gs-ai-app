@@ -60,7 +60,10 @@ struct ChatSearchView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Aero.Spacing.l) {
+        // Deep-perf pass 80-b: ONE results evaluation per body pass — the
+        // empty-gate and the ForEach each re-ran the FTS/LIKE pair before.
+        let hits = results
+        return VStack(alignment: .leading, spacing: Aero.Spacing.l) {
             Text("Search chats")
                 .font(Aero.displayTitle())
                 .foregroundStyle(Aero.text)
@@ -89,7 +92,7 @@ struct ChatSearchView: View {
                         message: "Start typing to find any conversation or message on this device."
                     )
                     .padding(.top, Aero.Spacing.xl)
-                } else if results.isEmpty {
+                } else if hits.isEmpty {
                     EmptyStateView(
                         icon: "magnifyingglass",
                         title: "No results",
@@ -98,7 +101,7 @@ struct ChatSearchView: View {
                     .padding(.top, Aero.Spacing.xl)
                 } else {
                     VStack(spacing: Aero.Spacing.s) {
-                        ForEach(results) { hit in
+                        ForEach(hits) { hit in
                             NavigationLink(value: AeroRoute.chat(hit.routeID)) {
                                 AeroListRow(
                                     title: gsConversationTitle(hit.title),
@@ -150,7 +153,7 @@ struct ChatSearchView: View {
     }
 
     private static func relative(_ iso: String) -> String {
-        guard let date = ISO8601DateFormatter().date(from: iso) else { return "earlier" }
+        guard let date = GSFormatters.date(from: iso) else { return "earlier" }
         let minutes = Int(Date().timeIntervalSince(date) / 60)
         switch minutes {
         case ..<1: return "just now"

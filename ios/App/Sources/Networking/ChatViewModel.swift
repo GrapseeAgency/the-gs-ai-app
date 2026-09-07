@@ -10,12 +10,39 @@ import Combine
  * mutations happen on the main actor; the streaming connection itself runs on
  * URLSession's background plumbing and hops back via `Task { @MainActor in … }`.
  */
+/**
+ * Lock-guarded delta sink for one stream. SSE chunks arrive on URLSession's
+ * background plumbing and append here with no main-actor hop and no
+ * allocation per token — the UI reads it at a fixed ~30Hz cadence instead of
+ * per chunk (deep-perf pass 80-b). `@unchecked Sendable`: every access is
+ * serialized by the lock.
+ */
+final class StreamAccumulator: @unchecked Sendable {
+
+    private let lock = NSLock()
+    private var text = ""
+
+    func append(_ delta: String) {
+        lock.lock()
+        text += delta
+        lock.unlock()
+    }
+
+    func snapshot() -> String {
+        lock.lock()
+        defer { lock.unlock() }
+        return text
+    }
+
+    var isEmpty: Bool { snapshot().isEmpty }
+}
+
 @MainActor
 final class ChatViewModel: ObservableObject {
 
     // MARK: - Types
 
-    struct ChatMessage: Identifiable {
+    struct ChatMessage: Identifiable, Equatable {
         let id = UUID()
         let role: String
         var content: String
@@ -40,7 +67,13 @@ final class ChatViewModel: ObservableObject {
 
     private var streamTask: Task<Void, Never>?
     private var lastSentText: String?
-    private var streamingAccumulator = ""
+
+    /// Growing live text of the current stream. Deltas append off-main; the
+    /// flush task publishes to the transcript at display cadence, so a
+    /// per-token published storm (whole-screen re-evaluation per chunk) is
+    /// gone — one mutation per flush, committed to the store once at finalize.
+    private var streamBuffer = StreamAccumulator()
+    private var flushTask: Task<Void, Never>?
 
     /// Page size of the newest-window history load (Android's HISTORY_PAGE).
     private let historyPageSize = 60
@@ -61,6 +94,7 @@ final class ChatViewModel: ObservableObject {
 
     deinit {
         streamTask?.cancel()
+        flushTask?.cancel()
     }
 
     // MARK: - Intents
@@ -213,8 +247,9 @@ final class ChatViewModel: ObservableObject {
             content: "",
             isStreaming: true,
             createdAt: ConversationStore.now()))
-        streamingAccumulator = ""
+        streamBuffer = StreamAccumulator()
         isStreaming = true
+        startFlushLoop()
 
         // Strong self capture is intentional and bounded: the task only lives
         // as long as this stream; `stop()` cancels it, which ends the cycle.
@@ -234,11 +269,8 @@ final class ChatViewModel: ObservableObject {
                     message: text,
                     conversationID: conversationID,
                     modelId: modelID,
-                    onDelta: { delta in
-                        Task { @MainActor in
-                            self.streamingAccumulator += delta
-                            self.updateLastStreaming(with: self.streamingAccumulator)
-                        }
+                    onDelta: { [buffer = self.streamBuffer] delta in
+                        buffer.append(delta) // lock-guarded — no main hop per token
                     },
                     onDone: { message in
                         Task { @MainActor in
@@ -253,12 +285,12 @@ final class ChatViewModel: ObservableObject {
             } catch {
                 if Self.isCancellation(error) {
                     self.finalizeLocal()
-                } else if !self.streamingAccumulator.isEmpty {
+                } else if !self.streamBuffer.isEmpty {
                     // Partial stream that broke mid-flight: keep what arrived on
                     // screen and disk, close with the same tail Android appends.
                     let tail = "\n\n—I'll pick the thread back up right here."
-                    self.streamingAccumulator += tail
-                    self.updateLastStreaming(with: self.streamingAccumulator)
+                    self.streamBuffer.append(tail)
+                    self.flushStreamingText()
                     self.finalizeLocal()
                 } else {
                     // GS Lite — the on-device responder keeps the conversation
@@ -287,9 +319,36 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
-    private func updateLastStreaming(with content: String) {
+    // MARK: - Coalesced streaming publish (deep-perf pass 80-b)
+
+    /**
+     * Publish loop: reads the accumulator every ~33ms and writes the growing
+     * text into the live bubble ONLY when it changed. During a stream this is
+     * the single published mutation — the transcript re-evaluates at display
+     * cadence instead of once per SSE chunk, and untouched rows skip their
+     * bodies via MessageBubble's equality.
+     */
+    private func startFlushLoop() {
+        flushTask?.cancel()
+        flushTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 33_000_000)
+                guard let self, self.isStreaming else { break }
+                self.flushStreamingText()
+            }
+        }
+    }
+
+    private func stopFlushLoop() {
+        flushTask?.cancel()
+        flushTask = nil
+    }
+
+    private func flushStreamingText() {
         guard let index = messages.indices.last, messages[index].isStreaming else { return }
-        messages[index].content = content
+        let text = streamBuffer.snapshot()
+        guard messages[index].content != text else { return }
+        messages[index].content = text
     }
 
     private func finalize(with message: Message?) {
@@ -297,6 +356,7 @@ final class ChatViewModel: ObservableObject {
             isStreaming = false
             streamTask = nil
         }
+        stopFlushLoop()
         guard let message, !message.content.isEmpty else {
             finalizeLocal()
             return
@@ -314,6 +374,8 @@ final class ChatViewModel: ObservableObject {
             isStreaming = false
             streamTask = nil
         }
+        stopFlushLoop()
+        flushStreamingText() // land the last ≤33ms of deltas before closing
         guard let index = messages.indices.last, messages[index].isStreaming else { return }
         if messages[index].content.isEmpty {
             messages.remove(at: index)
@@ -344,8 +406,7 @@ final class ChatViewModel: ObservableObject {
         let reply = Self.localReply(prompt)
         let words = reply.split(separator: " ", omittingEmptySubsequences: false)
         for (index, word) in words.enumerated() {
-            streamingAccumulator += (index == 0 ? "" : " ") + word
-            updateLastStreaming(with: streamingAccumulator)
+            streamBuffer.append((index == 0 ? "" : " ") + word)
             do {
                 try await Task.sleep(nanoseconds: 26_000_000)
             } catch {

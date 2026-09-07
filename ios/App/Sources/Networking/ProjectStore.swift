@@ -70,48 +70,57 @@ final class ProjectStore: ObservableObject {
     }
 
     /// Edit flow: rename, re-describe, rewrite instructions — logs one event.
+    /// One array write per edit: the @Published didSet persists the whole list,
+    /// so per-field writes meant 4 JSON encodes of the full store per edit.
     func update(id: String, name: String, blurb: String, instructions: String) {
         guard let index = projects.firstIndex(where: { $0.id == id }) else { return }
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        let renamed = trimmed != projects[index].name
-        projects[index].name = trimmed
-        projects[index].blurb = blurb.trimmingCharacters(in: .whitespacesAndNewlines)
-        projects[index].instructions = instructions.trimmingCharacters(in: .whitespacesAndNewlines)
-        projects[index].updatedAt = isoNow()
-        projects[index].events.append(ProjectEvent(
+        var project = projects[index]
+        let renamed = trimmed != project.name
+        project.name = trimmed
+        project.blurb = blurb.trimmingCharacters(in: .whitespacesAndNewlines)
+        project.instructions = instructions.trimmingCharacters(in: .whitespacesAndNewlines)
+        project.updatedAt = isoNow()
+        project.events.append(ProjectEvent(
             text: renamed ? "Renamed to \"\(trimmed)\"" : "Project details edited",
             at: isoNow()
         ))
-        trimEvents(&projects[index])
+        trimEvents(&project)
+        projects[index] = project
     }
 
     func delete(id: String) {
         projects.removeAll { $0.id == id }
     }
 
-    /// Link a batch of chats picked in the detail sheet — one event per batch.
+    /// Link a batch of chats picked in the detail sheet — one event per batch,
+    /// one store write (see `update`).
     func linkChats(id: String, chatIds: [String], chatTitles: [String: String]) {
         guard let index = projects.firstIndex(where: { $0.id == id }) else { return }
         let fresh = chatIds.filter { !projects[index].chatIds.contains($0) }
         guard !fresh.isEmpty else { return }
         let label = chatTitles[fresh.first!] ?? "a chat"
-        projects[index].chatIds.append(contentsOf: fresh)
-        projects[index].updatedAt = isoNow()
-        projects[index].events.append(ProjectEvent(
+        var project = projects[index]
+        project.chatIds.append(contentsOf: fresh)
+        project.updatedAt = isoNow()
+        project.events.append(ProjectEvent(
             text: fresh.count == 1 ? "Linked chat \"\(label)\"" : "Linked \(fresh.count) chats",
             at: isoNow()
         ))
-        trimEvents(&projects[index])
+        trimEvents(&project)
+        projects[index] = project
     }
 
     func unlinkChat(id: String, chatId: String) {
         guard let index = projects.firstIndex(where: { $0.id == id }) else { return }
         guard projects[index].chatIds.contains(chatId) else { return }
-        projects[index].chatIds.removeAll { $0 == chatId }
-        projects[index].updatedAt = isoNow()
-        projects[index].events.append(ProjectEvent(text: "Removed a chat", at: isoNow()))
-        trimEvents(&projects[index])
+        var project = projects[index]
+        project.chatIds.removeAll { $0 == chatId }
+        project.updatedAt = isoNow()
+        project.events.append(ProjectEvent(text: "Removed a chat", at: isoNow()))
+        trimEvents(&project)
+        projects[index] = project
     }
 
     private func trimEvents(_ project: inout Project) {
@@ -127,6 +136,6 @@ final class ProjectStore: ObservableObject {
     }
 
     private func isoNow() -> String {
-        ISO8601DateFormatter().string(from: Date())
+        GSFormatters.isoFractional.string(from: Date()) // cached formatter
     }
 }
