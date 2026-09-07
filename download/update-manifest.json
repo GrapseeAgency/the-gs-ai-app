@@ -1,6 +1,6 @@
 {
-  "versionCode": 49,
-  "versionName": "0.49.0",
+  "versionCode": 50,
+  "versionName": "0.50.0",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "Assistants are fully real now: pin any assistant to float it to the top of My assistants, archive ones you don't need into their own tab, and favourites finally stick — the heart now survives relaunches on both the profile page and every list. Long-press any card for the full action sheet (favourite, pin, edit, archive, delete with confirmation). Same design, same features, same stable signature."
+  "notes": "Explore is rebuilt ChatGPT-store style: horizontal discovery rows — Top picks, Trending now with ranked cards, Popular prompts, Featured AI tools, and Made by you once you've created assistants. The catalogue now comes straight from the Assistants hub, so names and ratings never drift between surfaces, and category chips are built from what's actually in the store. Same design language, same stable signature."
 }

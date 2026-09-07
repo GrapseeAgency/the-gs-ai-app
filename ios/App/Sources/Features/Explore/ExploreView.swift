@@ -24,18 +24,18 @@ private struct StaggerIn<Content: View>: View {
 
 // MARK: - Explore — the discovery layer
 
-/// EXPLORE tab root. Category chips + live search filter the three sample
-/// sections together; every card pushes an `AeroRoute` through NavigationLink(value:).
+/// EXPLORE tab root, ChatGPT-store style: horizontal discovery rows —
+/// Top picks, Trending now, Popular prompts, Featured AI tools and — when
+/// the user has created assistants — Made by you. One catalogue feeds the
+/// assistant rows, shared with the Assistants hub (`AssistantSample.catalog`
+/// plus published user creations), so names, ratings and usage never drift
+/// between surfaces. Category chips are built from the live catalogue —
+/// every chip leads somewhere real. Search + chip filter the rows together;
+/// serif prompt cards carry the editorial voice. Every card pushes an
+/// `AeroRoute` through NavigationLink(value:).
 struct ExploreView: View {
 
-    // MARK: Sample data
-
-    private struct TrendingAssistant: Identifiable {
-        let id: String
-        let name: String
-        let byline: String
-        let category: String
-    }
+    // MARK: Row-local sample content
 
     private struct PromptCard: Identifiable {
         let id = UUID()
@@ -53,24 +53,9 @@ struct ExploreView: View {
         let starter: String
     }
 
+    @ObservedObject private var store = AssistantsStore.shared
     @State private var selectedCategory = "All"
     @State private var query = ""
-
-    private var term: String {
-        query.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private let categories = [
-        "All", "Coding", "Education", "Business", "Writing", "Productivity",
-        "Research", "Design", "Mathematics", "Language", "Science", "Entertainment"
-    ]
-
-    private let assistants: [TrendingAssistant] = [
-        .init(id: "asst-1", name: "Research Scout", byline: "by GS Studio · 12.4k uses · ★ 4.8", category: "Research"),
-        .init(id: "asst-2", name: "Copysmith", byline: "by Inkwell · 9.8k uses · ★ 4.7", category: "Writing"),
-        .init(id: "asst-3", name: "Code Muse", byline: "by Nova Labs · 8.1k uses · ★ 4.6", category: "Coding"),
-        .init(id: "asst-4", name: "Tutor Pro", byline: "by Bright Works · 7.5k uses · ★ 4.9", category: "Education")
-    ]
 
     private let prompts: [PromptCard] = [
         .init(text: "Write a launch announcement in our brand voice", caption: "Writing · 8.2k uses", category: "Writing"),
@@ -85,6 +70,19 @@ struct ExploreView: View {
               starter: "Turn these ideas into a clean diagram: ")
     ]
 
+    // MARK: Catalogue — one source, shared with the Assistants hub
+
+    /// Curated samples plus the user's published creations (archive
+    /// respects the owner's intent). Identical merge to the Marketplace tab.
+    private var catalogue: [AssistantSample] {
+        AssistantSample.catalog + store.userAssistants.filter { $0.published && !$0.archived }
+    }
+
+    /// Chips built from the live catalogue — every chip leads somewhere real.
+    private var categories: [String] {
+        ["All"] + Set(catalogue.map(\.category)).sorted()
+    }
+
     // MARK: Filtering
 
     private func matches(_ category: String) -> Bool {
@@ -96,14 +94,32 @@ struct ExploreView: View {
         term.isEmpty || fields.contains { $0.localizedCaseInsensitiveContains(term) }
     }
 
-    private var filteredAssistants: [TrendingAssistant] {
-        assistants.filter { matches($0.category) && containsTerm([$0.name, $0.byline]) }
+    private var term: String {
+        query.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var filtered: [AssistantSample] {
+        catalogue.filter { matches($0.category) && containsTerm([$0.name, $0.category, $0.desc]) }
+    }
+    private var topPicks: [AssistantSample] {
+        Array(filtered.prefix(4))
+    }
+    private var trending: [AssistantSample] {
+        filtered.sorted { $0.uses > $1.uses }
+    }
+    private var mine: [AssistantSample] {
+        store.userAssistants
+            .filter { !$0.archived && containsTerm([$0.name, $0.category]) }
     }
     private var filteredPrompts: [PromptCard] {
         prompts.filter { matches($0.category) && containsTerm([$0.text, $0.caption]) }
     }
     private var filteredTools: [ToolCard] {
         tools.filter { matches($0.category) && containsTerm([$0.name, $0.detail]) }
+    }
+
+    private var nothingToShow: Bool {
+        filtered.isEmpty && filteredPrompts.isEmpty && filteredTools.isEmpty
     }
 
     private var nothingMessage: String {
@@ -120,16 +136,18 @@ struct ExploreView: View {
                 StaggerIn(index: 0) { header }
                 StaggerIn(index: 1) { searchRow }
                 StaggerIn(index: 2) { categoryChips }
-                if filteredAssistants.isEmpty && filteredPrompts.isEmpty && filteredTools.isEmpty {
+                if nothingToShow {
                     EmptyStateView(
                         icon: "sparkles",
                         title: "Nothing here yet",
                         message: nothingMessage
                     )
                 } else {
-                    if !filteredAssistants.isEmpty { StaggerIn(index: 3) { trendingSection } }
-                    if !filteredPrompts.isEmpty { StaggerIn(index: 4) { promptsSection } }
-                    if !filteredTools.isEmpty { StaggerIn(index: 5) { toolsSection } }
+                    if !topPicks.isEmpty { StaggerIn(index: 3) { picksRow } }
+                    if !trending.isEmpty { StaggerIn(index: 4) { trendingRow } }
+                    if !filteredPrompts.isEmpty { StaggerIn(index: 5) { promptsRow } }
+                    if !filteredTools.isEmpty { StaggerIn(index: 6) { toolsRow } }
+                    if !mine.isEmpty { StaggerIn(index: 7) { mineRow } }
                 }
             }
             .padding(.horizontal, Aero.Spacing.m)
@@ -200,37 +218,51 @@ struct ExploreView: View {
         }
     }
 
-    // MARK: Trending assistants
+    // MARK: Rows — ChatGPT-store carousels
 
-    private var trendingSection: some View {
-        VStack(alignment: .leading, spacing: Aero.Spacing.m) {
-            SectionHeader(title: "Trending assistants")
-            VStack(spacing: Aero.Spacing.s) {
-                ForEach(filteredAssistants) { assistant in
+    /// Fixed-width horizontal carousel with edge-aligned padding that keeps
+    /// the first/last card aligned with the content column.
+    private func carousel<Card: View>(@ViewBuilder cards: () -> Card) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            LazyHStack(alignment: .top, spacing: Aero.Spacing.s) {
+                cards()
+            }
+            .padding(.horizontal, Aero.Spacing.xs)
+            .padding(.vertical, 2)
+        }
+    }
+
+    private var picksRow: some View {
+        VStack(alignment: .leading, spacing: Aero.Spacing.s) {
+            SectionHeader(title: "Top picks")
+            carousel {
+                ForEach(topPicks) { assistant in
                     NavigationLink(value: AeroRoute.assistant(assistant.id)) {
                         AeroCard {
-                            HStack(spacing: Aero.Spacing.s) {
+                            VStack(alignment: .leading, spacing: 0) {
                                 Image(systemName: "smarttoy")
                                     .font(.system(size: 15, weight: .medium))
                                     .foregroundStyle(Aero.text)
                                     .frame(width: 40, height: 40)
                                     .background(Circle().fill(Aero.container))
+                                Spacer(minLength: 0)
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(assistant.name)
                                         .font(Aero.title())
                                         .foregroundStyle(Aero.text)
                                         .lineLimit(1)
-                                    Text(assistant.byline)
+                                    Text("★ \(assistant.ratingText) · \(assistant.usesText) uses")
                                         .font(Aero.caption())
                                         .foregroundStyle(Aero.textMuted)
                                         .lineLimit(1)
+                                    Text(assistant.category)
+                                        .font(Aero.caption())
+                                        .foregroundStyle(Aero.accent)
+                                        .lineLimit(1)
                                 }
-                                Spacer(minLength: 0)
-                                Image(systemName: "star.fill")
-                                    .font(.system(size: 13))
-                                    .foregroundStyle(Aero.accent)
                             }
                         }
+                        .frame(width: 232, height: 148)
                     }
                     .buttonStyle(KineticPressStyle())
                 }
@@ -238,25 +270,58 @@ struct ExploreView: View {
         }
     }
 
-    // MARK: Popular prompts
+    private var trendingRow: some View {
+        VStack(alignment: .leading, spacing: Aero.Spacing.s) {
+            SectionHeader(title: "Trending now")
+            carousel {
+                ForEach(Array(trending.enumerated()), id: \.element.id) { index, assistant in
+                    NavigationLink(value: AeroRoute.assistant(assistant.id)) {
+                        AeroCard {
+                            VStack(alignment: .leading, spacing: 0) {
+                                Text("\(index + 1)")
+                                    .font(Aero.display())
+                                    .foregroundStyle(Aero.accent)
+                                Spacer(minLength: 0)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(assistant.name)
+                                        .font(Aero.title())
+                                        .foregroundStyle(Aero.text)
+                                        .lineLimit(2)
+                                    Text("\(assistant.usesText) uses")
+                                        .font(Aero.caption())
+                                        .foregroundStyle(Aero.textMuted)
+                                        .lineLimit(1)
+                                }
+                            }
+                        }
+                        .frame(width: 148, height: 140)
+                    }
+                    .buttonStyle(KineticPressStyle())
+                }
+            }
+        }
+    }
 
-    private var promptsSection: some View {
-        VStack(alignment: .leading, spacing: Aero.Spacing.m) {
+    private var promptsRow: some View {
+        VStack(alignment: .leading, spacing: Aero.Spacing.s) {
             SectionHeader(title: "Popular prompts")
-            VStack(spacing: Aero.Spacing.s) {
+            carousel {
                 ForEach(filteredPrompts) { prompt in
                     NavigationLink(value: AeroRoute.chatPrefill(prompt.text)) {
                         AeroCard {
-                            VStack(alignment: .leading, spacing: 6) {
+                            VStack(alignment: .leading, spacing: 0) {
                                 Text("“\(prompt.text)”")
                                     .font(Aero.headline())   // serif — editorial prompt voice
                                     .foregroundStyle(Aero.text)
                                     .fixedSize(horizontal: false, vertical: true)
+                                    .multilineTextAlignment(.leading)
+                                Spacer(minLength: 0)
                                 Text(prompt.caption)
                                     .font(Aero.caption())
                                     .foregroundStyle(Aero.textMuted)
                             }
                         }
+                        .frame(width: 248, height: 150)
                     }
                     .buttonStyle(KineticPressStyle())
                 }
@@ -264,21 +329,20 @@ struct ExploreView: View {
         }
     }
 
-    // MARK: Featured AI tools
-
-    private var toolsSection: some View {
-        VStack(alignment: .leading, spacing: Aero.Spacing.m) {
+    private var toolsRow: some View {
+        VStack(alignment: .leading, spacing: Aero.Spacing.s) {
             SectionHeader(title: "Featured AI tools")
-            VStack(spacing: Aero.Spacing.s) {
+            carousel {
                 ForEach(filteredTools) { tool in
                     NavigationLink(value: AeroRoute.chatPrefill(tool.starter)) {
                         AeroCard {
-                            HStack(spacing: Aero.Spacing.s) {
+                            VStack(alignment: .leading, spacing: 0) {
                                 Image(systemName: tool.icon)
                                     .font(.system(size: 15, weight: .medium))
                                     .foregroundStyle(Aero.text)
                                     .frame(width: 40, height: 40)
                                     .background(Circle().fill(Aero.container))
+                                Spacer(minLength: 0)
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(tool.name)
                                         .font(Aero.title())
@@ -287,18 +351,61 @@ struct ExploreView: View {
                                     Text(tool.detail)
                                         .font(Aero.caption())
                                         .foregroundStyle(Aero.textMuted)
-                                        .lineLimit(1)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                        .multilineTextAlignment(.leading)
+                                    Image(systemName: "chevron.right")
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundStyle(Aero.textMuted)
                                 }
-                                Spacer(minLength: 0)
-                                Image(systemName: "chevron.right")
-                                    .font(.system(size: 12, weight: .semibold))
-                                    .foregroundStyle(Aero.textMuted)
                             }
                         }
+                        .frame(width: 236, height: 172)
                     }
                     .buttonStyle(KineticPressStyle())
                 }
             }
         }
+    }
+
+    private var mineRow: some View {
+        VStack(alignment: .leading, spacing: Aero.Spacing.s) {
+            SectionHeader(title: "Made by you")
+            carousel {
+                ForEach(mine) { assistant in
+                    NavigationLink(value: AeroRoute.assistant(assistant.id)) {
+                        AeroCard {
+                            VStack(alignment: .leading, spacing: 0) {
+                                Image(systemName: "person.crop.circle")
+                                    .font(.system(size: 15, weight: .medium))
+                                    .foregroundStyle(Aero.text)
+                                    .frame(width: 40, height: 40)
+                                    .background(Circle().fill(Aero.container))
+                                Spacer(minLength: 0)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(assistant.name)
+                                        .font(Aero.title())
+                                        .foregroundStyle(Aero.text)
+                                        .lineLimit(1)
+                                    Text(byline(assistant))
+                                        .font(Aero.caption())
+                                        .foregroundStyle(Aero.textMuted)
+                                        .lineLimit(1)
+                                }
+                            }
+                        }
+                        .frame(width: 184, height: 140)
+                    }
+                    .buttonStyle(KineticPressStyle())
+                }
+            }
+        }
+    }
+
+    /// Ownership lens: "You", plus the workspace flags that matter here.
+    private func byline(_ assistant: AssistantSample) -> String {
+        var flags: [String] = []
+        if assistant.pinned { flags.append("Pinned") }
+        if assistant.published { flags.append("Published") }
+        return flags.isEmpty ? "You" : "You · \(flags.joined(separator: " · "))"
     }
 }
