@@ -936,3 +936,22 @@ Stage Summary:
 - Every turn now tells you when it happened: a quiet HH:MM clock rides beside Copy/Regenerate on both platforms — benchmark-grade thread context with zero new error surfaces
 - Twenty-two shipped cycles, all signature-stable, all install-over
 - Backlog remaining: assistants CRUD + pin/archive native wiring (deferred until live backend ask), further parity sweeps
+
+---
+Task ID: 36 (cron cycle — interaction parity: iOS copy confirmation, v0.23.0 shipped via LiveUpdate)
+Agent: Z.ai Code (main)
+Task: Build QA, advance backlog (copy had feedback on Android only — the "Copied" snack; iOS wrote the pasteboard in silence — wire the benchmark checkmark confirmation), publish v0.23.0.
+
+Work Log:
+- iOS: MessageBubble gains @State copied + copyAndConfirm(_:) — pasteboard write, accent checkmark morph (doc.on.doc → checkmark, 0.15s easeOut), 1.4s settle back; wired into all three bubble copy sites (user action row, assistant action row, context menu — the menu keeps its system Label, the row behind it flashes)
+- iOS: new CodeCopyButton struct for the code-block header with its own isolated confirmation state, so bubble and code copies never flash together
+- ANDROID: no changes — "Copied" snack already live since the copy loop was built
+- iOS STATIC GATES: 13 files CLEAN
+- VERSION: versionCode 23 / versionName 0.23.0; APK copied to download/GS-AI-App.apk (aapt verified versionCode 23); update-manifest.json bumped
+- PUBLISHED: commit 778988b pushed; GitHub Release v0.23.0 created (REL_ID 383801330, asset HTTP 201, 19,518,404 bytes); /releases/latest/download/ permalink verified serving versionCode 23; stable signature b1ffd75d… intact
+- NOTE: one batched shell call (commit+push+release) failed wholesale at the tool layer — split into single steps and re-ran cleanly; no partial state, no duplicate release
+
+Stage Summary:
+- Copy is now a conversation on both platforms: Android snacks "Copied", iOS answers with a brief accent checkmark — every surface (bubble, code block, long-press menu) confirms, zero new error surfaces
+- Twenty-three shipped cycles, all signature-stable, all install-over
+- Backlog remaining: assistants CRUD + pin/archive native wiring (deferred until live backend ask), further parity sweeps
