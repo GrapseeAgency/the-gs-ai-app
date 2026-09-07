@@ -80,11 +80,17 @@ private val popularPrompts = listOf(
     ExplorePrompt("Explain this codebase like I'm brand new", "Coding", "2.1k uses")
 )
 
-private data class ExploreTool(val name: String, val blurb: String, val icon: ImageVector, val category: String)
+private data class ExploreTool(val name: String, val blurb: String, val icon: ImageVector, val category: String, val starter: String)
 
 private val featuredTools = listOf(
-    ExploreTool("Deep Research", "Multi-source answers with citations", Icons.Outlined.TravelExplore, "Research"),
-    ExploreTool("Slide Studio", "Decks from a single prompt", Icons.Outlined.Slideshow, "Business")
+    ExploreTool(
+        "Deep Research", "Multi-source answers with citations", Icons.Outlined.TravelExplore, "Research",
+        starter = "Research this topic in depth and cite your sources: "
+    ),
+    ExploreTool(
+        "Slide Studio", "Decks from a single prompt", Icons.Outlined.Slideshow, "Business",
+        starter = "Draft a slide deck outline about: "
+    )
 )
 
 @Composable
@@ -195,7 +201,7 @@ private fun PromptsSection(prompts: List<ExplorePrompt>, onNavigate: (String) ->
     Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)) {
         GsSectionHeader(title = "Popular prompts")
         prompts.forEach { prompt ->
-            GsCard(onClick = { onNavigate(GsRoutes.chat(null)) }) {
+            GsCard(onClick = { onNavigate(GsRoutes.chat(null, prompt.text)) }) {
                 Text(
                     text = prompt.text,
                     style = MaterialTheme.typography.headlineSmall,
@@ -224,7 +230,7 @@ private fun ToolsSection(tools: List<ExploreTool>, onNavigate: (String) -> Unit)
     Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)) {
         GsSectionHeader(title = "Featured AI tools")
         tools.forEach { tool ->
-            GsCard(onClick = { onNavigate(GsRoutes.chat(null)) }) {
+            GsCard(onClick = { onNavigate(GsRoutes.chat(null, tool.starter)) }) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceM)
@@ -245,7 +251,7 @@ private fun ToolsSection(tools: List<ExploreTool>, onNavigate: (String) -> Unit)
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    GsChip(text = "Try it", selected = false) { onNavigate(GsRoutes.chat(null)) }
+                    GsChip(text = "Try it", selected = false) { onNavigate(GsRoutes.chat(null, tool.starter)) }
                 }
             }
         }

@@ -183,7 +183,8 @@ fun GsNavHost(modifier: Modifier = Modifier) {
         ) { entry ->
             AssistantDetailScreen(
                 assistantId = entry.arguments?.getString(GsRoutes.ARG_ASSISTANT).orEmpty(),
-                onBack = back
+                onBack = back,
+                onStartChat = { route -> navController.navigate(route) }
             )
         }
     }

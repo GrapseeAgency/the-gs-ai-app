@@ -167,7 +167,7 @@ fun AssistantDetailScreen(
                 }
             }
 
-            // Conversation starters — static list items (tap wiring lands with chat context passing)
+            // Conversation starters — tap one and the composer opens pre-filled
             Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)) {
                 Text(
                     text = "Conversation starters",
@@ -192,7 +192,8 @@ fun AssistantDetailScreen(
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(18.dp)
                             )
-                        }
+                        },
+                        onClick = { onStartChat?.invoke(GsRoutes.chat(null, starter)) }
                     )
                 }
             }
@@ -231,7 +232,7 @@ fun AssistantDetailScreen(
 
             // Primary CTA
             Button(
-                onClick = { onStartChat?.invoke(GsRoutes.chat(null)) },
+                onClick = { onStartChat?.invoke(GsRoutes.chat(null, assistant.starters.firstOrNull().orEmpty())) },
                 modifier = Modifier.fillMaxWidth().height(52.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primary,

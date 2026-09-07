@@ -1,6 +1,6 @@
 {
-  "versionCode": 28,
-  "versionName": "0.28.0",
+  "versionCode": 29,
+  "versionName": "0.29.0",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "Library to chat, one tap: Continue in chat on any saved message seeds a fresh composer with it — the loop from save to reuse is closed."
+  "notes": "Explore is a launchpad now: prompts, tools and assistant starters open a chat with the composer pre-filled — and Start chat finally starts one."
 }

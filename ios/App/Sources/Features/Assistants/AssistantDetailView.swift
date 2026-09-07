@@ -102,7 +102,7 @@ struct AssistantDetailView: View {
     }
 
     private func starterRow(_ text: String) -> some View {
-        NavigationLink(value: AeroRoute.chat(nil)) {
+        NavigationLink(value: AeroRoute.chatPrefill(text)) {
             AeroListRow(
                 title: text,
                 leading: {
@@ -151,7 +151,7 @@ struct AssistantDetailView: View {
     // MARK: Primary action
 
     private var startChatLink: some View {
-        NavigationLink(value: AeroRoute.chat(nil)) {
+        NavigationLink(value: AeroRoute.chatPrefill(starters.first ?? "")) {
             Text("Start chat")
                 .font(Aero.title())
                 .frame(maxWidth: .infinity)

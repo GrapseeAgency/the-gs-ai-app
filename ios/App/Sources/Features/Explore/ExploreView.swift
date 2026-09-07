@@ -50,6 +50,7 @@ struct ExploreView: View {
         let detail: String
         let icon: String
         let category: String
+        let starter: String
     }
 
     @State private var selectedCategory = "All"
@@ -78,8 +79,10 @@ struct ExploreView: View {
     ]
 
     private let tools: [ToolCard] = [
-        .init(name: "Web Researcher", detail: "Live sources, citations and clean reports.", icon: "magnifyingglass", category: "Research"),
-        .init(name: "Diagrammer", detail: "Turn messy ideas into clean diagrams.", icon: "rectangle.3.group", category: "Design")
+        .init(name: "Web Researcher", detail: "Live sources, citations and clean reports.", icon: "magnifyingglass", category: "Research",
+              starter: "Research this topic with live sources and citations: "),
+        .init(name: "Diagrammer", detail: "Turn messy ideas into clean diagrams.", icon: "rectangle.3.group", category: "Design",
+              starter: "Turn these ideas into a clean diagram: ")
     ]
 
     // MARK: Filtering
@@ -242,7 +245,7 @@ struct ExploreView: View {
             SectionHeader(title: "Popular prompts")
             VStack(spacing: Aero.Spacing.s) {
                 ForEach(filteredPrompts) { prompt in
-                    NavigationLink(value: AeroRoute.chat(nil)) {
+                    NavigationLink(value: AeroRoute.chatPrefill(prompt.text)) {
                         AeroCard {
                             VStack(alignment: .leading, spacing: 6) {
                                 Text("“\(prompt.text)”")
@@ -268,7 +271,7 @@ struct ExploreView: View {
             SectionHeader(title: "Featured AI tools")
             VStack(spacing: Aero.Spacing.s) {
                 ForEach(filteredTools) { tool in
-                    NavigationLink(value: AeroRoute.chat(nil)) {
+                    NavigationLink(value: AeroRoute.chatPrefill(tool.starter)) {
                         AeroCard {
                             HStack(spacing: Aero.Spacing.s) {
                                 Image(systemName: tool.icon)
