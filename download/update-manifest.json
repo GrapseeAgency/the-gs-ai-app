@@ -1,6 +1,6 @@
 {
-  "versionCode": 38,
-  "versionName": "0.38.0",
+  "versionCode": 39,
+  "versionName": "0.39.0",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "Final billing caption pass: plan captions now read the same on iPhone as on Android — Team and Free included. The account page tells one identical story everywhere."
+  "notes": "Settings gained an About section: your exact version and build number, read live from the installed app — easy to confirm GS LiveUpdate landed."
 }

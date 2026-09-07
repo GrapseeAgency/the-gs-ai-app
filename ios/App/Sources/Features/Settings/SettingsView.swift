@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Settings — 8 sections: Appearance, Chat, AI, Privacy, Security,
-/// Notifications, Language, Accessibility.
+/// Settings — 9 sections: Appearance, Chat, AI, Privacy, Security,
+/// Notifications, Language, Accessibility, About.
 struct SettingsView: View {
 
     private static let dangerRed = Color(red: 0.9, green: 0.28, blue: 0.28)
@@ -55,6 +55,7 @@ struct SettingsView: View {
                 notificationsSection
                 languageSection
                 accessibilitySection
+                aboutSection
             }
             .padding(.horizontal, Aero.Spacing.m)
             .padding(.top, Aero.Spacing.s)
@@ -310,6 +311,37 @@ struct SettingsView: View {
             toggleRow("High contrast", isOn: $highContrast)
             toggleRow("Reduce motion", isOn: $reduceMotion)
             toggleRow("Haptics", isOn: $haptics)
+        }
+    }
+
+    // MARK: About
+
+    private var aboutSection: some View {
+        section("About") {
+            valueRow("Version", value: appVersion)
+            valueRow("Build", value: buildNumber)
+            valueRow("Updates", value: "Automatic via GS LiveUpdate")
+        }
+    }
+
+    /// Read live from the bundle so the row always names the installed build.
+    private var appVersion: String {
+        (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "1.0"
+    }
+
+    private var buildNumber: String {
+        (Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String) ?? "1"
+    }
+
+    private func valueRow(_ title: String, value: String) -> some View {
+        HStack {
+            Text(title)
+                .font(Aero.body())
+                .foregroundStyle(Aero.text)
+            Spacer()
+            Text(value)
+                .font(Aero.caption())
+                .foregroundStyle(Aero.textMuted)
         }
     }
 

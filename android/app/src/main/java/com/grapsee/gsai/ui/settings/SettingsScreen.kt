@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Accessibility
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.DeleteOutline
@@ -51,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.grapsee.gsai.ui.components.GsCard
 import com.grapsee.gsai.ui.components.GsChip
+import com.grapsee.gsai.BuildConfig
 import com.grapsee.gsai.ui.components.GsScreenScaffold
 import com.grapsee.gsai.ui.theme.GsMotion
 
@@ -359,6 +361,18 @@ fun SettingsScreen(onBack: () -> Unit) {
                     checked = haptics,
                     onCheckedChange = { haptics = it }
                 )
+            }
+
+            ExpandCard(
+                id = "about",
+                icon = Icons.Outlined.Info,
+                title = "About",
+                expandedId = expandedId,
+                onToggle = { expandedId = if (expandedId == "about") null else "about" }
+            ) {
+                ValueRow(title = "Version", value = BuildConfig.VERSION_NAME)
+                ValueRow(title = "Build", value = BuildConfig.VERSION_CODE.toString())
+                ValueRow(title = "Updates", value = "Automatic via GS LiveUpdate")
             }
 
             Spacer(modifier = Modifier.height(GsMotion.spaceL))
