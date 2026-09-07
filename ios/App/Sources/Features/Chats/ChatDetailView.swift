@@ -154,6 +154,7 @@ struct ChatDetailView: View {
                     userIsReading = true
                 }
             )
+            .scrollDismissesKeyboard(.immediately)
             .onChange(of: vm.messages.last?.content) { _ in
                 guard !userIsReading else { return }
                 withAnimation(Aero.gentle) {

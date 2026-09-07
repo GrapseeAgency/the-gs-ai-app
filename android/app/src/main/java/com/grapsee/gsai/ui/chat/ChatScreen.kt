@@ -16,6 +16,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -97,6 +98,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.SpanStyle
@@ -287,6 +289,15 @@ fun ChatScreen(
     // restores it. Cleared the moment a send actually lands.
     DisposableEffect(activeConversationId) {
         onDispose { saveDraft(context, activeConversationId, draft) }
+    }
+
+    // Scrolling the transcript puts reading first — the keyboard steps aside.
+    // Real drags only: streaming follow-scrolls never steal focus.
+    val keyboard = LocalSoftwareKeyboardController.current
+    LaunchedEffect(listState) {
+        listState.interactionSource.interactions.collect { interaction ->
+            if (interaction is DragInteraction.Start) keyboard?.hide()
+        }
     }
 
     LaunchedEffect(conversationId) {

@@ -1,6 +1,6 @@
 {
-  "versionCode": 18,
-  "versionName": "0.18.0",
+  "versionCode": 19,
+  "versionName": "0.19.0",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "Unsent drafts now survive leaving a thread — come back and your words are still in the composer, just like the benchmark apps. Both platforms."
+  "notes": "Drag the transcript and the keyboard steps aside — reading comes first, exactly like the benchmark apps. Both platforms."
 }
