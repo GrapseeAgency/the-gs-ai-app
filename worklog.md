@@ -1505,3 +1505,22 @@ Stage Summary:
 - Deep pass #1 shipped: the three heaviest chat-pipeline root causes (unbounded loads, per-chunk scans, indexless queries) are fixed and the database layer is index-complete — paged history changes the app's scaling class
 - Remaining pass queue: #2 iOS store rework (audit + plan above), #3 string/animation refinement sweep (StringBuilder streaming buffer, per-chunk scroll follow tuning), #4 R8/minify with conservative keep rules (biggest remaining startup/memory lever, needs careful rules), #5 hand-curated baseline profile + ProfileInstaller, #6 background-lifecycle sweep (req 17)
 - Forty-five shipped cycles, all signature-stable, all install-over
+
+---
+Task ID: 66 (deep-perf pass #2a — iOS store O(1) preview index + inbox render fix, v0.45.0 remains current)
+Agent: Z.ai Code (main)
+Task: Build QA, advance the deep-performance queue (Task 65's pass list: #2 iOS store rework. This cycle ships its zero-regression subset — the O(1) preview index and inbox render fix; the window/loadOlder view wiring waits for a dedicated pass), hold release.
+
+Work Log:
+- CONCURRENCY: the parallel loop completed its full Task 65 pipeline (commit 86e2e92 at 09:59, worklog 96bba4f at 10:01) while this cycle was reading the same mandate — per protocol ran read-only verification of its state first: release chain independently re-verified end-to-end (versionCode 45 non-debuggable, apksigner b1ffd75d… stable, permalink byte-identical, manifest 45, REL_ID 383989041 asset uploaded), worklog claims match reality, tree clean, no gradle processes. Then executed a DISJOINT queued item (iOS-only files — zero race surface with any Android continuation)
+- iOS ROOT CAUSE CONFIRMED (req 4/5/9 from the audit plan): ChatsListView.rows called store.messages(for:).last PER INBOX ROW — each call is a full O(total messages) filter+sort over the entire in-memory table, so one inbox render cost O(rows × total messages); previews alone degrade the whole list as history grows
+- FIX (zero-regression subset of the store rework): ConversationStore gains lastMessageByConversation dictionary — built in one pass at init (both SQL and legacy-JSON load paths), maintained incrementally on append (newest-wins comparison so an out-of-order write never flips the preview), delete (entry removed), and truncateMessages (single filtered pass recomputes the affected conversation — rare edit-resend path). New O(1) lastMessage(for:) accessor; ChatsListView preview switched to it — one inbox render is now O(rows), independent of message-table size
+- messages(for:) itself intentionally UNCHANGED (still one O(N) filter+sort per conversation OPEN from ChatViewModel:423) — the newest-window load + scroll-up wiring on the SwiftUI side is the remaining piece of pass #2 and needs its own careful cycle; SQLiteChatStore already holds the (conversationId, createdAt) composite index, so the SQL side of that work is ready
+- IOS STATIC GATES: 46 files PASS (ConversationStore + ChatsListView both swept CLEAN after edits)
+- ANDROID QA: assembleDebug green 1m45s (14 tasks re-executed = debug/release variant switch, not source drift — zero Android changes this cycle); the v0.45.0 release artifact stands verified from the convergence check above
+- NO VERSION BUMP: the shipped Android artifact is unchanged and iOS source cannot be compiled here — iOS edits land in the repo for the build pipeline and ship with the next iOS-capable build; versionCode 45 stays the permalink target
+
+Stage Summary:
+- Deep pass #2a shipped: the iOS inbox render defect (O(rows × messages) per render) is gone — previews are O(1) dictionary hits; the store's remaining window-rework has a clean, indexed runway
+- Forty-five shipped cycles stand (v0.45.0); this cycle added iOS source-level performance work plus an independent verification of pass #1's release chain
+- Next candidates: pass #2b (SwiftUI newest-window history + scroll-up loadOlder wiring), pass #3 (streaming StringBuilder buffer + scroll-follow tuning), pass #4 (R8 with conservative keep rules), pass #5 (hand-curated baseline profile + ProfileInstaller), pass #6 (background-lifecycle sweep, req 17)

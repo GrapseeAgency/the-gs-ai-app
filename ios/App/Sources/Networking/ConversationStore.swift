@@ -36,6 +36,12 @@ final class ConversationStore: ObservableObject {
     @Published private(set) var conversations: [StoredConversation] = []
     @Published private(set) var messages: [StoredMessage] = []
 
+    /// O(1) last-message lookups for inbox previews — the list used to call
+    /// messages(for:).last PER ROW, which is O(rows × total messages) per render.
+    /// Kept in step with every mutation of `messages` (init, append, delete,
+    /// truncate); rebuilt wholesale only at load time.
+    private var lastMessageByConversation: [String: StoredMessage] = [:]
+
     /// Durable layer: SQLite + FTS5 (imports the legacy JSON document once).
     private let sql = SQLiteChatStore()
 
@@ -51,10 +57,23 @@ final class ConversationStore: ObservableObject {
     private init() {
         conversations = sql.loadConversations()
         messages = sql.loadMessages()
+        rebuildLastMessageIndex()
         if conversations.isEmpty && messages.isEmpty {
             // Storage hiccup or fresh install with a legacy document — keep the
             // old in-memory JSON path alive so nothing ever looks "lost".
             loadLegacyJSON()
+            rebuildLastMessageIndex()
+        }
+    }
+
+    /// One pass over the loaded table — O(total messages) once, then previews
+    /// are dictionary hits forever.
+    private func rebuildLastMessageIndex() {
+        lastMessageByConversation = [:]
+        for message in messages {
+            if let existing = lastMessageByConversation[message.conversationId],
+               existing.createdAt > message.createdAt { continue }
+            lastMessageByConversation[message.conversationId] = message
         }
     }
 
@@ -92,6 +111,12 @@ final class ConversationStore: ObservableObject {
         messages
             .filter { $0.conversationId == conversationID }
             .sorted { $0.createdAt < $1.createdAt }
+    }
+
+    /// O(1) inbox preview lookup — the newest message of a conversation from
+    /// the maintained index, no per-row filter+sort over the whole table.
+    func lastMessage(for conversationID: String) -> StoredMessage? {
+        lastMessageByConversation[conversationID]
     }
 
     // MARK: - Search (FTS5, mirrors Android's Room FTS contract)
@@ -165,6 +190,9 @@ final class ConversationStore: ObservableObject {
             touch(message.conversationId)
         }
         messages.append(message)
+        if let existing = lastMessageByConversation[message.conversationId],
+           existing.createdAt > message.createdAt { /* older-than-last write keeps the preview */ }
+        else { lastMessageByConversation[message.conversationId] = message }
         sql.upsertMessage(message)
     }
 
@@ -180,6 +208,7 @@ final class ConversationStore: ObservableObject {
     func delete(id: String) {
         conversations.removeAll { $0.id == id }
         messages.removeAll { $0.conversationId == id }
+        lastMessageByConversation[id] = nil
         sql.deleteConversation(id: id)
     }
 
@@ -190,6 +219,10 @@ final class ConversationStore: ObservableObject {
         guard let stamp = sql.latestUserStamp(content: content, conversationId: conversationID) else { return }
         sql.deleteMessages(fromInclusive: stamp, conversationId: conversationID)
         messages.removeAll { $0.conversationId == conversationID && $0.createdAt >= stamp }
+        // The removed tail may include the preview row — recompute for this one
+        // conversation (rare edit-resend path; a single filtered pass is fine).
+        lastMessageByConversation[conversationID] =
+            messages.last { $0.conversationId == conversationID }
     }
 
     func touch(id: String) { mutate(id) { $0.updatedAt = Self.now() } }

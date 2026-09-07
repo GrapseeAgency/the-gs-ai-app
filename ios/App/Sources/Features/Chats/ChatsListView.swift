@@ -199,7 +199,9 @@ struct ChatsListView: View {
         let active = store.activeConversations
         if active.isEmpty { return demoRows }
         return active.map { conversation in
-            let last = store.messages(for: conversation.id).last
+            // O(1) preview from the store's maintained last-message index —
+            // messages(for:) here meant a full filter+sort PER ROW every render.
+            let last = store.lastMessage(for: conversation.id)
             let speaker = last?.role == "user" ? "You" : "GS"
             let body = last?.content.replacingOccurrences(of: "\n", with: " ") ?? "Synced with GS"
             let preview = body.count > 42 ? String(body.prefix(42)) + "…" : body
