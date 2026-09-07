@@ -302,3 +302,30 @@ final class SQLiteChatStore {
         return "%\(escaped)%"
     }
 }
+
+    // MARK: - Edit flow (truncate a thread from a user turn onward)
+
+    /// Stamp of the most recent persisted user turn with exactly this content.
+    func latestUserStamp(content: String, conversationId: String) -> String? {
+        guard let stmt = prepare(
+            "SELECT createdAt FROM messages " +
+            "WHERE role = 'user' AND content = ? AND conversationId = ? " +
+            "ORDER BY createdAt DESC LIMIT 1") else { return nil }
+        defer { sqlite3_finalize(stmt) }
+        bind(stmt, 1, content)
+        bind(stmt, 2, conversationId)
+        guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
+        return text(stmt, 0)
+    }
+
+    /// Deletes the turn stamped `fromInclusive` and everything after it in the
+    /// thread (fixed-width UTC stamps make >= lexicographic-safe). FTS syncs
+    /// via the delete triggers.
+    func deleteMessages(fromInclusive stamp: String, conversationId: String) {
+        guard let stmt = prepare(
+            "DELETE FROM messages WHERE conversationId = ? AND createdAt >= ?") else { return }
+        defer { sqlite3_finalize(stmt) }
+        bind(stmt, 1, conversationId)
+        bind(stmt, 2, stamp)
+        sqlite3_step(stmt)
+    }

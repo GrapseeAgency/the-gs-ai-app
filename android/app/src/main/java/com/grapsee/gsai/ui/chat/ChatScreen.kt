@@ -46,6 +46,7 @@ import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Mic
@@ -67,10 +68,12 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -189,6 +192,8 @@ fun ChatScreen(
     var draft by remember { mutableStateOf("") }
     var streamingJob by remember { mutableStateOf<Job?>(null) }
     var conversationTitle by remember { mutableStateOf("New chat") }
+    var editingId by remember { mutableStateOf<String?>(null) }
+    var editingDraft by remember { mutableStateOf("") }
     val clipboard = LocalClipboardManager.current
     val snackbarHostState = remember { SnackbarHostState() }
     var attachSheetOpen by remember { mutableStateOf(false) }
@@ -316,6 +321,25 @@ fun ChatScreen(
         }
     }
 
+    /**
+     * Benchmark edit flow: replace a sent user turn — the persisted thread tail
+     * (the turn itself and everything after) is dropped, then the edited text
+     * streams a fresh reply through the normal dispatch path.
+     */
+    fun editAndResend(messageId: String, newText: String) {
+        val text = newText.trim()
+        if (text.isEmpty() || streamingJob?.isActive == true) return
+        val index = messages.indexOfFirst { it.id == messageId }
+        if (index < 0 || messages[index].role != "user") return
+        val conversation = activeConversationId
+        if (conversation != null) {
+            scope.launch { runCatching { ServiceLocator.chat.truncateFrom(conversation, messageId) } }
+        }
+        while (messages.size > index) messages.removeAt(messages.size - 1)
+        editingId = null
+        dispatch(text, echoUser = true)
+    }
+
     fun regenerate(assistantMessageId: String) {
         if (streamingJob?.isActive == true) return
         val index = messages.indexOfFirst { it.id == assistantMessageId }
@@ -378,7 +402,17 @@ fun ChatScreen(
                                 DaySeparator(stamp)
                             }
                             if (message.role == "user") {
-                                UserMessage(message, onCopy = copyText)
+                                UserMessage(
+                                    message = message,
+                                    isEditing = editingId == message.id,
+                                    editingDraft = editingDraft,
+                                    editEnabled = streamingJob?.isActive != true && editingId == null,
+                                    onEditingDraftChange = { editingDraft = it },
+                                    onEditStart = { editingDraft = message.content; editingId = message.id },
+                                    onEditCancel = { editingId = null },
+                                    onEditSubmit = { editAndResend(message.id, editingDraft) },
+                                    onCopy = copyText
+                                )
                             } else {
                                 AssistantMessage(
                                     message = message,
@@ -470,22 +504,66 @@ fun ChatScreen(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun UserMessage(message: ChatUiMessage, onCopy: (String) -> Unit = {}) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-        Surface(
-            modifier = Modifier.combinedClickable(
-                onClick = {},
-                onLongClick = { onCopy(message.content) }
-            ),
-            shape = RoundedCornerShape(18.dp),
-            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
-        ) {
-            Text(
-                text = message.content,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
-            )
+private fun UserMessage(
+    message: ChatUiMessage,
+    isEditing: Boolean = false,
+    editingDraft: String = "",
+    editEnabled: Boolean = true,
+    onEditingDraftChange: (String) -> Unit = {},
+    onEditStart: () -> Unit = {},
+    onEditCancel: () -> Unit = {},
+    onEditSubmit: () -> Unit = {},
+    onCopy: (String) -> Unit = {}
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        if (isEditing) {
+            Column {
+                OutlinedTextField(
+                    value = editingDraft,
+                    onValueChange = onEditingDraftChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2,
+                    maxLines = 6,
+                    label = { Text("Edit message") }
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onEditCancel) { Text("Cancel") }
+                    Button(
+                        onClick = onEditSubmit,
+                        enabled = editingDraft.isNotBlank()
+                    ) { Text("Save & resend") }
+                }
+            }
+        } else {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                Surface(
+                    modifier = Modifier.combinedClickable(
+                        onClick = {},
+                        onLongClick = { onCopy(message.content) }
+                    ),
+                    shape = RoundedCornerShape(18.dp),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                ) {
+                    Text(
+                        text = message.content,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+                    )
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                BubbleAction(Icons.Outlined.ContentCopy, "Copy") { onCopy(message.content) }
+                if (editEnabled) {
+                    BubbleAction(Icons.Outlined.Edit, "Edit", onEditStart)
+                }
+            }
         }
     }
 }

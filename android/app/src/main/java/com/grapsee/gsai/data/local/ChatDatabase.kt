@@ -106,6 +106,13 @@ interface MessageDao {
     @Query("SELECT * FROM messages WHERE conversationId = :conversationId ORDER BY createdAt DESC LIMIT 1")
     suspend fun lastForConversation(conversationId: String): MessageEntity?
 
+    @Query("SELECT * FROM messages WHERE id = :id LIMIT 1")
+    suspend fun byId(id: String): MessageEntity?
+
+    /** Fixed-width UTC stamps make >= lexicographic-safe for thread truncation. */
+    @Query("DELETE FROM messages WHERE conversationId = :conversationId AND createdAt >= :fromInclusive")
+    suspend fun deleteFrom(conversationId: String, fromInclusive: String)
+
     @Query("DELETE FROM messages WHERE conversationId = :conversationId")
     suspend fun deleteForConversation(conversationId: String)
 

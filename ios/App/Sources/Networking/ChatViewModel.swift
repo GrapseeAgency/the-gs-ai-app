@@ -73,6 +73,23 @@ final class ChatViewModel: ObservableObject {
         retry()
     }
 
+    /// Benchmark edit flow: replace a sent user turn — the thread tail is
+    /// dropped (in memory and in the store) and the edited text streams a
+    /// fresh reply through the normal pipeline.
+    func editAndResend(at index: Int, newText: String) {
+        let text = newText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, !isStreaming else { return }
+        guard messages.indices.contains(index), messages[index].role == "user" else { return }
+        let original = messages[index].content
+        let conversation = conversationID
+        messages.removeSubrange(index...)
+        if let conversation, !conversation.hasPrefix("demo-") {
+            ConversationStore.shared.truncateMessages(fromUserContent: original, in: conversation)
+        }
+        lastSentText = text
+        beginStreaming(text: text, appendUserMessage: true)
+    }
+
     /// Cancels the in-flight stream; the task throws CancellationError and
     /// the partial assistant text is kept on screen.
     func stop() {

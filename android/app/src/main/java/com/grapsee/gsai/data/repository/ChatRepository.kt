@@ -105,6 +105,12 @@ class ChatRepository(
         }
     }
 
+    /** Benchmark edit flow: the edited turn and everything after it leave the thread; the resend rebuilds from there. */
+    suspend fun truncateFrom(conversationId: String, messageId: String) {
+        val target = db.messageDao().byId(messageId) ?: return
+        db.messageDao().deleteFrom(conversationId, target.createdAt)
+    }
+
     /** Room first; when empty (cold cache) fetch from network and cache. */
     suspend fun history(conversationId: String): List<MessageEntity> {
         val local = db.messageDao().forConversation(conversationId)

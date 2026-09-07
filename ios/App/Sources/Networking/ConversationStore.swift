@@ -183,6 +183,15 @@ final class ConversationStore: ObservableObject {
         sql.deleteConversation(id: id)
     }
 
+    /// Benchmark edit flow: the matching user turn and everything after it
+    /// leave the store; the resend rebuilds the tail. Content-matched (most
+    /// recent occurrence) because in-memory rows do not carry persisted ids.
+    func truncateMessages(fromUserContent content: String, in conversationID: String) {
+        guard let stamp = sql.latestUserStamp(content: content, conversationId: conversationID) else { return }
+        sql.deleteMessages(fromInclusive: stamp, conversationId: conversationID)
+        messages.removeAll { $0.conversationId == conversationID && $0.createdAt >= stamp }
+    }
+
     func touch(id: String) { mutate(id) { $0.updatedAt = Self.now() } }
 
     private func mutate(_ id: String, _ change: (inout StoredConversation) -> Void) {

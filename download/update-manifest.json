@@ -1,6 +1,6 @@
 {
-  "versionCode": 15,
-  "versionName": "0.15.0",
+  "versionCode": 16,
+  "versionName": "0.16.0",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "Chat threads now group by day — Today / Yesterday pills, same rhythm as the benchmark apps, on both platforms"
+  "notes": "Edit your own messages — tap the pencil on any sent turn, tweak it, and the reply regenerates from that point, just like the benchmark apps"
 }

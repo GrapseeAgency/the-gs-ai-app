@@ -18,6 +18,8 @@ struct ChatDetailView: View {
     // Reading protection — true while the reader has scrolled away from the
     // live edge; streaming deltas never yank the transcript back down.
     @State private var userIsReading = false
+    @State private var editingIndex: Int?
+    @State private var editDraft = ""
 
     // Read-aloud — on-device speech, silent when the device has no voice.
     @StateObject private var speech = SpeechPlayer()
@@ -86,17 +88,26 @@ struct ChatDetailView: View {
                            index == 0 || dayKey(vm.messages[index - 1].createdAt) != dayKey(message.createdAt) {
                             DaySeparator(label: stamp)
                         }
-                        MessageBubble(
-                            message: message,
-                            isSpeaking: speech.speakingMessageID == message.id,
-                            onRegenerate: {
-                                userIsReading = false
-                                vm.regenerate()
-                            },
-                            onReadAloud: { speech.toggle(messageID: message.id, text: message.content) },
-                            onTranslate: { showToast("Translation arrives with the language pack build") },
-                            onSave: { showToast("Saved to Library") }
-                        )
+                        if editingIndex == index {
+                            editEditor
+                        } else {
+                            MessageBubble(
+                                message: message,
+                                isSpeaking: speech.speakingMessageID == message.id,
+                                editEnabled: !vm.isStreaming && editingIndex == nil,
+                                onRegenerate: {
+                                    userIsReading = false
+                                    vm.regenerate()
+                                },
+                                onReadAloud: { speech.toggle(messageID: message.id, text: message.content) },
+                                onTranslate: { showToast("Translation arrives with the language pack build") },
+                                onSave: { showToast("Saved to Library") },
+                                onEditStart: {
+                                    editDraft = message.content
+                                    editingIndex = index
+                                }
+                            )
+                        }
                         .id(message.id)
                     }
                 }
@@ -232,6 +243,41 @@ struct ChatDetailView: View {
     // MARK: Empty state
 
     private let starters = ["Draft a launch plan", "Explain quantum computing", "Plan a Kyoto itinerary"]
+
+    /// Inline edit surface for a sent user turn (benchmark pencil flow):
+    /// Cancel returns the bubble untouched; Save & resend truncates the tail
+    /// and streams a fresh reply.
+    private var editEditor: some View {
+        VStack(alignment: .trailing, spacing: 8) {
+            TextField("Edit message", text: $editDraft, axis: .vertical)
+                .font(Aero.body())
+                .foregroundStyle(Aero.text)
+                .padding(12)
+                .background(RoundedRectangle(cornerRadius: 14).fill(Aero.container))
+                .overlay(RoundedRectangle(cornerRadius: 14).stroke(Aero.outline, lineWidth: 1))
+            HStack(spacing: 12) {
+                Button("Cancel") {
+                    editingIndex = nil
+                    editDraft = ""
+                }
+                .foregroundStyle(Aero.textMuted)
+                Button("Save & resend") {
+                    let target = editingIndex
+                    let text = editDraft
+                    editingIndex = nil
+                    editDraft = ""
+                    if let target {
+                        userIsReading = false
+                        vm.editAndResend(at: target, newText: text)
+                    }
+                }
+                .disabled(editDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .foregroundStyle(Aero.accent)
+            }
+            .font(.system(size: 14, weight: .medium))
+            .buttonStyle(KineticPressStyle())
+        }
+    }
 
     private var emptyState: some View {
         VStack(spacing: Aero.Spacing.l) {
@@ -459,10 +505,12 @@ private struct MessageBubble: View {
 
     let message: ChatViewModel.ChatMessage
     var isSpeaking: Bool = false
+    var editEnabled: Bool = false
     var onRegenerate: () -> Void = {}
     var onReadAloud: () -> Void = {}
     var onTranslate: () -> Void = {}
     var onSave: () -> Void = {}
+    var onEditStart: () -> Void = {}
 
     var body: some View {
         if message.role == "user" {
@@ -473,15 +521,32 @@ private struct MessageBubble: View {
     }
 
     private var userBubble: some View {
-        HStack(alignment: .bottom, spacing: 0) {
-            Spacer(minLength: 56)
-            Text(message.content)
-                .font(Aero.body())
-                .foregroundStyle(Aero.text)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(RoundedRectangle(cornerRadius: 18).fill(Aero.accent.opacity(0.14)))
-                .frame(maxWidth: 280, alignment: .trailing)
+        VStack(alignment: .trailing, spacing: 4) {
+            HStack(alignment: .bottom, spacing: 0) {
+                Spacer(minLength: 56)
+                Text(message.content)
+                    .font(Aero.body())
+                    .foregroundStyle(Aero.text)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(RoundedRectangle(cornerRadius: 18).fill(Aero.accent.opacity(0.14)))
+                    .frame(maxWidth: 280, alignment: .trailing)
+            }
+            HStack(spacing: 10) {
+                Button {
+                    UIPasteboard.general.string = message.content
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                }
+                if editEnabled {
+                    Button(action: onEditStart) {
+                        Image(systemName: "pencil")
+                    }
+                }
+            }
+            .font(.system(size: 13))
+            .foregroundStyle(Aero.textMuted)
+            .buttonStyle(KineticPressStyle())
         }
     }
 
