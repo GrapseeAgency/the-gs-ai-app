@@ -1899,3 +1899,22 @@ Stage Summary:
 - v0.57.1 (versionCode 58) published: the LiveUpdate engine can no longer restart progress, cannot hand a corrupt/truncated APK to the installer, and now tells the truth when a download fails.
 - NOTE for the user: the installed v0.55.0 still contains the OLD buggy updater — sideload v0.57.1 from the browser permalink one last time; every update after that works via the in-app pill.
 - iOS untouched (no self-update mechanism exists there); no other code changed (5 files in the commit).
+
+---
+Task ID: 83
+Agent: Z.ai Code (main)
+Task: Final native-quality pass — interaction depth on both platforms (scroll physics, touch response, gestures, navigation transitions, keyboard behaviour, haptics, sheets, text, focus, lists, adaptive layout). Keep design and features intact.
+
+Work Log:
+- Surveyed both UI trees for "fake-native" tells. Findings: Android had edge-to-edge + spring motion + kineticPress but NO predictive-back flag, NO custom nav transitions (default cross-fade — the web-like tell), NO keyboard-drag dismissal in chat, haptics only in ChatScreen. iOS had KineticPressStyle + presentationDetents but ZERO haptics anywhere (the Settings "Haptics" toggle was decorative), `.scrollDismissesKeyboard(.immediately)` instead of interactive, and `.system(size:)` fonts with no Dynamic Type scaling.
+- Android: added `android:enableOnBackInvokedCallback="true"` (predictive back, Android 14+); NavHost now carries platform push/pop choreography (slide-in from trailing edge + parallax fade-back, 320 ms FastOutSlowIn — sought by the back gesture under Navigation 2.8); chat transcript LazyColumn gained `imeNestedScroll()` so the IME tracks the finger downward like platform chat apps; `VIRTUAL_KEY` haptic on committed sends (all paths funnel through dispatch); drawer long-press reveal haptic; voice hand-off/copy/try-again haptics. HapticFeedbackType.Confirm avoided deliberately (Compose 1.7 lacks it; 1.8-only).
+- iOS: new Components/GSHaptics.swift — process-wide UIImpactFeedback/UINotificationFeedback/UISelection generators reading SettingsStore.shared.haptics, with prepare() pre-arming on chat appear; wired: send→tap, copy→success, pin/archive→success, delete→warning, voice hold-threshold→press, quick-tap route→tap, send-to-chat hand-off→success, try-again→tap; `.scrollDismissesKeyboard(.interactively)` on the chat transcript (keyboard follows the finger); all seven DesignSystem fonts now use `relativeTo:` so every screen scales with Dynamic Type (base sizes unchanged at the default category).
+- iOS static gates: PASS (10 files clean). Android: assembleDebug compile PASS (after fixing a missing HapticFeedbackType import in VoiceScreen).
+- Sandbox wiped the toolchain again (second time) — reinstalled cmdline-tools/platform-35/build-tools-34/Gradle 8.9/JDK 17; also set core.fileMode false for the mode-noise diffs.
+- Release protocol: versionCode 59 / 0.58.0; assembleRelease gates green (no debuggable, 12,905,077 bytes, cert b1ffd75d… matches the update-over key); commit abf5475 pushed; Release v0.58.0 (REL_ID 384285521); asset upload HTTP 201, 12,905,077 bytes.
+- Readbacks all green: permalink 200 @ 12,905,077; artifact sha256 f1170802… matches the build; aapt versionCode 59 / 0.58.0; raw manifest serves 59 / 0.58.0; raw APK range read returns PK\x03\x04.
+
+Stage Summary:
+- v0.58.0 published. Android now navigates, backs and keyboards like Android; iOS scrolls, dismisses, deforms and haptics like iOS. Both keep the identical product language — the platform layer is what changed.
+- The user can update from the in-app LiveUpdate pill for the first time (v0.57.1+ ships the fixed updater); v0.57.0-or-older installs still need one browser sideload.
+- Deliberately untouched: features, visual design, component structure, ambient animation loops (aurora/skeleton tweens are correct as loops).
