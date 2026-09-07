@@ -866,3 +866,20 @@ Stage Summary:
 - The composer is now forgiving the way the benchmark apps are: back out of any thread mid-sentence, reopen it, and your unsent text is sitting there — identical semantics on Compose and SwiftUI, zero new error surfaces
 - Eighteen shipped cycles, all signature-stable, all install-over
 - Backlog remaining: assistants CRUD + pin/archive native wiring (deferred until live backend ask), further parity sweeps
+
+---
+Task ID: 32 (cron cycle — design parity: reading-first keyboard dismissal, v0.19.0 shipped via LiveUpdate)
+Agent: Z.ai Code (main)
+Task: Build QA, advance backlog (keyboard dismissal on user scroll — the benchmark reading behavior, both platforms), publish v0.19.0.
+
+Work Log:
+- ANDROID: ChatScreen collects the LazyListState interactionSource — DragInteraction.Start hides the keyboard via LocalSoftwareKeyboardController; keyed to real drags only, so streaming follow-scrolls and search/jump animations never dismiss the composer
+- iOS: ChatDetailView transcript gains .scrollDismissesKeyboard(.immediately) (iOS 16, not in the banned sweep) — SwiftUI-native dismissal on user scroll with the same semantics
+- iOS STATIC GATES: 13 files CLEAN
+- VERSION: versionCode 19 / versionName 0.19.0; APK copied to download/GS-AI-App.apk (aapt verified versionCode 19); update-manifest.json bumped
+- PUBLISHED: commit f0d16e6 pushed; GitHub Release v0.19.0 created (REL_ID 383784442, asset HTTP 201, 19,518,404 bytes); /releases/latest/download/ permalink verified serving versionCode 19; stable signature b1ffd75d… intact
+
+Stage Summary:
+- The transcript now reads like the benchmark apps end to end: day pills, search with stepping, edit-and-resend, parked drafts, and now the keyboard steps aside the moment you drag — identical semantics on Compose and SwiftUI, zero new error surfaces
+- Nineteen shipped cycles, all signature-stable, all install-over
+- Backlog remaining: assistants CRUD + pin/archive native wiring (deferred until live backend ask), further parity sweeps
