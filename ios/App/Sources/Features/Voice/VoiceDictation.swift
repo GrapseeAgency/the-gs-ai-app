@@ -28,6 +28,26 @@ final class VoiceDictation: ObservableObject {
     private var holdActive = false
     private var starting = false
     private var handedOff = false
+    /// Session interruption watch (phone call, Siri, alarm mid-hold) — any
+    /// interruption closes the capture the same way the background stop does.
+    private var interruptionObserver: NSObjectProtocol?
+
+    init() {
+        interruptionObserver = NotificationCenter.default.addObserver(
+            forName: AVAudioSession.interruptionNotification,
+            object: AVAudioSession.sharedInstance(),
+            queue: .main
+        ) { [weak self] _ in
+            // Both began and ended land here — the guard makes extras no-ops.
+            self?.suspendForBackground()
+        }
+    }
+
+    deinit {
+        if let token = interruptionObserver {
+            NotificationCenter.default.removeObserver(token)
+        }
+    }
 
     /// Finger went down past the hold threshold.
     func begin() {
@@ -49,6 +69,18 @@ final class VoiceDictation: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { [weak self] in
             self?.finishHandoff()
         }
+    }
+
+    /// The capture cannot outlive its context: scene backgrounded (no
+    /// background-audio entitlement suspends the process and kills the
+    /// engine) or the session interrupted mid-hold. Closes the mic session
+    /// and dissolves the halo quietly — nothing stale listens, nothing stale
+    /// hands off. Mirrors Android's ON_STOP dictation stop.
+    func suspendForBackground() {
+        guard holdActive || isListening else { return }
+        holdActive = false
+        handedOff = true // a later end()/final result must not hand off dead audio
+        teardownCapture()
     }
 
     // MARK: Internals

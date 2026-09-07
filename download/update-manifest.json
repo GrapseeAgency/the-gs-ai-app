@@ -1,6 +1,6 @@
 {
-  "versionCode": 46,
-  "versionName": "0.46.0",
+  "versionCode": 47,
+  "versionName": "0.47.0",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "Performance pass 3: streaming answers now grow in a single buffer (no more per-chunk full-string rebuilds), the live edge follows the stream with instant jumps instead of restarting an animation per chunk, and translation streams get the same treatment. Same design, same features, same stable signature."
+  "notes": "Stability pass: dictation now closes its microphone session the moment the app goes to the background or is interrupted, and recognizer cleanup no longer accumulates between sessions. Streaming replies, chat history paging and the update engine are unchanged. Same design, same features, same stable signature."
 }

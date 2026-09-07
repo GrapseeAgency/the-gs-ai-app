@@ -27,6 +27,10 @@ struct HomeView: View {
     @State private var holdTriggered = false
     @State private var haloPulse: CGFloat = 1.0
 
+    // Background lifecycle: a hold that outlives the scene closes its mic
+    // session instead of leaving a dead capture behind a suspended UI.
+    @Environment(\.scenePhase) private var scenePhase
+
     // Forced-obsidian canvas (fixed benchmark-dark in both appearances)
     private let canvas = Aero.dynamic(
         light: UIColor(red: 0.039, green: 0.051, blue: 0.071, alpha: 1),
@@ -80,6 +84,13 @@ struct HomeView: View {
             case .writing: WritingStudioView()
             case .code: CodeWorkspaceView()
             case .image: ImageStudioView()
+            }
+        }
+        .onChange(of: scenePhase) { phase in
+            // Scene went to the background mid-hold: the mic session closes
+            // and the halo dissolves — the same ON_STOP stop Android does.
+            if phase == .background {
+                dictation.suspendForBackground()
             }
         }
     }
