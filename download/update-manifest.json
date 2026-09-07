@@ -1,6 +1,6 @@
 {
-  "versionCode": 44,
-  "versionName": "0.44.0",
+  "versionCode": 45,
+  "versionName": "0.45.0",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "Stability fix: the offline-detection monitor was calling network-state APIs without the required ACCESS_NETWORK_STATE permission — now declared, so the Chats screen can no longer hit a SecurityException or a false offline banner. Also: first full lint sweep is clean (0 errors)."
+  "notes": "Deep performance pass: chat history now opens as a paged window (long conversations switch as fast as short ones), streaming writes hit the UI in O(1) instead of scanning every message per chunk, database reads run on new performance indices, and startup reports its first frame to the system. Same design, same features \u2014 engineered to feel weightless."
 }

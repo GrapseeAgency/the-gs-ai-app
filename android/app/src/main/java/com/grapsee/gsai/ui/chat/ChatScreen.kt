@@ -94,6 +94,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -196,6 +197,10 @@ private data class ChatUiMessage(
  */
 private const val DRAFTS_PREFS = "gs_chat_drafts"
 
+/** Scroll-up pagination page size — the newest window opened on every switch,
+ *  so conversation-open cost is O(page) no matter how long the thread grew. */
+private const val HISTORY_PAGE = 60
+
 private fun draftKey(conversationId: String) = "draft_$conversationId"
 
 private fun loadDraft(context: Context, conversationId: String?): String? =
@@ -257,6 +262,12 @@ fun ChatScreen(
     var translationText by remember { mutableStateOf("") }
     var translationBusy by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
+    var hasOlder by remember { mutableStateOf(false) }
+    var loadingOlder by remember { mutableStateOf(false) }
+    // Armed only by a real upward drag — pagination never engages on open.
+    var olderArmed by remember { mutableStateOf(false) }
+    // Direct O(1) slot for streaming delta writes (set at append, cleared at finalize).
+    var streamingIndex by remember { mutableStateOf(-1) }
     val isStreaming = streamingJob?.isActive == true
     val context = LocalContext.current
     val showSnack: (String) -> Unit = { message ->
@@ -314,23 +325,61 @@ fun ChatScreen(
     }
 
     // Scrolling the transcript puts reading first — the keyboard steps aside.
-    // Real drags only: streaming follow-scrolls never steal focus.
+    // Real drags only: streaming follow-scrolls never steal focus. A real drag
+    // also arms scroll-up pagination (user intent, never fired on open).
     val keyboard = LocalSoftwareKeyboardController.current
     LaunchedEffect(listState) {
         listState.interactionSource.interactions.collect { interaction ->
-            if (interaction is DragInteraction.Start) keyboard?.hide()
+            if (interaction is DragInteraction.Start) {
+                keyboard?.hide()
+                olderArmed = true
+            }
         }
     }
 
     LaunchedEffect(conversationId) {
         val id = conversationId ?: return@LaunchedEffect
-        val history = runCatching { ServiceLocator.chat.history(id) }.getOrElse { emptyList() }
+        olderArmed = false
+        val recent = runCatching { ServiceLocator.chat.historyRecent(id, HISTORY_PAGE) }.getOrElse { emptyList() }
         messages.clear()
-        messages.addAll(history.map { ChatUiMessage(it.id, it.role, it.content, createdAt = it.createdAt) })
+        messages.addAll(recent.map { ChatUiMessage(it.id, it.role, it.content, createdAt = it.createdAt) })
+        hasOlder = recent.size == HISTORY_PAGE
         val loadedTitle = runCatching { ServiceLocator.db.conversationDao().getById(id) }
             .getOrNull()?.title
         if (!loadedTitle.isNullOrBlank()) conversationTitle = loadedTitle
         if (draft.isBlank()) draft = loadDraft(context, id) ?: ""
+    }
+
+    // Scroll-up pagination: prepend one older page and restore the reader's
+    // position by index shift (keyed items keep identity, offsets stay put).
+    // Local-only read — paging up never waits on the network.
+    fun loadOlder() {
+        val id = activeConversationId ?: return
+        if (loadingOlder || !hasOlder || messages.isEmpty()) return
+        loadingOlder = true
+        scope.launch {
+            runCatching { ServiceLocator.chat.historyBefore(id, messages.first().createdAt, HISTORY_PAGE) }
+                .onSuccess { older ->
+                    if (older.isEmpty()) {
+                        hasOlder = false
+                    } else {
+                        val anchor = listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset
+                        messages.addAll(0, older.map { ChatUiMessage(it.id, it.role, it.content, createdAt = it.createdAt) })
+                        if (streamingIndex >= 0) streamingIndex += older.size
+                        listState.scrollToItem(anchor.first + older.size, anchor.second)
+                        hasOlder = older.size == HISTORY_PAGE
+                    }
+                }
+            loadingOlder = false
+        }
+    }
+
+    // Armed by an actual drag: approaching the top then pulls one older page.
+    LaunchedEffect(listState, olderArmed) {
+        snapshotFlow { listState.firstVisibleItemIndex }
+            .collect { index ->
+                if (olderArmed && index <= 1) loadOlder()
+            }
     }
 
     // Voice press-and-hold: seed the composer with the transcript once.
@@ -345,6 +394,7 @@ fun ChatScreen(
     }
 
     fun finalizeStreamingMessage() {
+        streamingIndex = -1
         val index = messages.indexOfLast { it.isStreaming }
         if (index >= 0) {
             val message = messages[index]
@@ -379,6 +429,7 @@ fun ChatScreen(
         if (activeConversationId == null) conversationTitle = prompt.take(40)
         val assistantId = UUID.randomUUID().toString()
         messages.add(ChatUiMessage(assistantId, "assistant", "", isStreaming = true, createdAt = ChatRepository.nowIso()))
+        streamingIndex = messages.lastIndex
         // Sending always returns the reader to the live edge (benchmark behaviour).
         scope.launch { listState.animateScrollToItem(messages.lastIndex) }
         streamingJob = scope.launch {
@@ -388,10 +439,19 @@ fun ChatScreen(
                     content = prompt,
                     modelId = ModelPrefs.defaultId(context),
                     onDelta = { delta ->
-                        val index = messages.indexOfFirst { it.id == assistantId }
-                        if (index >= 0) {
-                            val current = messages[index]
-                            messages[index] = current.copy(content = current.content + delta)
+                        // O(1) direct slot — captured at append; falls back to a
+                        // scan only if the window shifted underneath (page prepend).
+                        val i = streamingIndex
+                        if (i in messages.indices && messages[i].id == assistantId) {
+                            val current = messages[i]
+                            messages[i] = current.copy(content = current.content + delta)
+                        } else {
+                            val index = messages.indexOfFirst { it.id == assistantId }
+                            if (index >= 0) {
+                                streamingIndex = index
+                                val current = messages[index]
+                                messages[index] = current.copy(content = current.content + delta)
+                            }
                         }
                     }
                 )

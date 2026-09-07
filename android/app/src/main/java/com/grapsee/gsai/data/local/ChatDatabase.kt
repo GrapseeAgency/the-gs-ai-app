@@ -16,7 +16,13 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
-@Entity(tableName = "conversations")
+@Entity(
+    tableName = "conversations",
+    indices = [
+        Index(value = ["updatedAt"]),
+        Index(value = ["archived", "pinned", "updatedAt"])
+    ]
+)
 data class ConversationEntity(
     @PrimaryKey val id: String,
     val title: String,
@@ -29,7 +35,10 @@ data class ConversationEntity(
 
 @Entity(
     tableName = "messages",
-    indices = [Index(value = ["conversationId"])]
+    indices = [
+        Index(value = ["conversationId"]),
+        Index(value = ["conversationId", "createdAt"])
+    ]
 )
 data class MessageEntity(
     @PrimaryKey val id: String,
@@ -110,6 +119,14 @@ interface MessageDao {
     @Query("SELECT * FROM messages WHERE conversationId = :conversationId ORDER BY createdAt ASC")
     suspend fun forConversation(conversationId: String): List<MessageEntity>
 
+    /** Newest window first — long conversations open in O(page), never whole. */
+    @Query("SELECT * FROM messages WHERE conversationId = :conversationId ORDER BY createdAt DESC LIMIT :limit")
+    suspend fun recentForConversation(conversationId: String, limit: Int): List<MessageEntity>
+
+    /** One older window for scroll-up pagination — keyed strictly before the oldest loaded stamp. */
+    @Query("SELECT * FROM messages WHERE conversationId = :conversationId AND createdAt < :beforeInclusive ORDER BY createdAt DESC LIMIT :limit")
+    suspend fun beforeForConversation(conversationId: String, beforeInclusive: String, limit: Int): List<MessageEntity>
+
     @Query("SELECT * FROM messages WHERE conversationId = :conversationId ORDER BY createdAt ASC")
     fun observeForConversation(conversationId: String): Flow<List<MessageEntity>>
 
@@ -189,7 +206,7 @@ fun ftsMatchQuery(raw: String): String? {
         ConversationFtsEntity::class,
         MessageFtsEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -227,9 +244,29 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v3 → v4: performance indices — per-conversation ordering (paged reads of
+         *  the newest window), inbox filter+sort, recents sort. Additive only;
+         *  every earlier chat survives untouched. */
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_messages_conversationId_createdAt` " +
+                        "ON `messages` (`conversationId`, `createdAt`)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_conversations_updatedAt` " +
+                        "ON `conversations` (`updatedAt`)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_conversations_archived_pinned_updatedAt` " +
+                        "ON `conversations` (`archived`, `pinned`, `updatedAt`)"
+                )
+            }
+        }
+
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "gsai-chat.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .fallbackToDestructiveMigration()
                 .build()
     }

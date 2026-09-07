@@ -253,6 +253,34 @@ class ChatRepository(
     }
 
     /**
+     * Newest-window history: conversation switches cost O(page) regardless of
+     * thread length — a 2,000-message chat opens exactly as fast as a 20-message
+     * one. Remote fetch only seeds an empty local thread, then the newest page
+     * is what the UI receives.
+     */
+    suspend fun historyRecent(conversationId: String, limit: Int): List<MessageEntity> {
+        val local = db.messageDao().recentForConversation(conversationId, limit)
+        if (local.isNotEmpty()) return local.asReversed()
+        return try {
+            val remote = api.messages(conversationId).map { it.toEntity() }
+            if (remote.isNotEmpty()) db.messageDao().insertAll(remote)
+            remote.sortedBy { it.createdAt }.takeLast(limit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    /**
+     * One older window for scroll-up pagination, keyed strictly before the
+     * oldest loaded stamp (fixed-width UTC stamps keep the comparison exact).
+     * Local-only by design: scrolling up must never wait on the network.
+     */
+    suspend fun historyBefore(conversationId: String, beforeInclusive: String, limit: Int): List<MessageEntity> =
+        db.messageDao().beforeForConversation(conversationId, beforeInclusive, limit).asReversed()
+
+    /**
      * Stream one assistant turn. Returns the conversation id the turn belongs to.
      *
      * Offline contract (backend unreachable at any step):
