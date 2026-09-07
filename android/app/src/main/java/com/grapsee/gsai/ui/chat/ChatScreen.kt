@@ -1,6 +1,7 @@
 package com.grapsee.gsai.ui.chat
 
 import android.content.Context
+import android.content.Intent
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import androidx.compose.animation.AnimatedVisibility
@@ -99,7 +100,9 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.SpanStyle
@@ -247,6 +250,7 @@ fun ChatScreen(
     var attachSheetOpen by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     val isStreaming = streamingJob?.isActive == true
+    val context = LocalContext.current
     val showSnack: (String) -> Unit = { message ->
         scope.launch { snackbarHostState.showSnackbar(message) }
     }
@@ -254,6 +258,16 @@ fun ChatScreen(
     val copyText: (String) -> Unit = { text ->
         clipboard.setText(AnnotatedString(text))
         showSnack("Copied")
+    }
+    // The system share sheet — devices without a handler stay silent.
+    val shareText: (String) -> Unit = { text ->
+        runCatching {
+            val send = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, text)
+            }
+            context.startActivity(Intent.createChooser(send, null))
+        }.onFailure { showSnack("Sharing isn't set up on this device") }
     }
     // True while the newest turn is on screen — the reader is at the live edge.
     val isAtBottom by remember {
@@ -265,7 +279,6 @@ fun ChatScreen(
     }
 
     // Read-aloud: on-device TTS, silent fallback when the device has no engine.
-    val context = LocalContext.current
     var ttsReady by remember { mutableStateOf(false) }
     val tts = remember {
         TextToSpeech(context) { status -> ttsReady = status == TextToSpeech.SUCCESS }
@@ -571,6 +584,7 @@ fun ChatScreen(
                                     isSpeaking = speakingMessageId == message.id,
                                     highlight = index == activeMatchIndex,
                                     onCopy = copyText,
+                                    onShare = { shareText(message.content) },
                                     onRegenerate = { regenerate(message.id) },
                                     onReadAloud = { readAloud(message.id, message.content) },
                                     onContextAction = showSnack
@@ -669,6 +683,7 @@ private fun UserMessage(
     onEditSubmit: () -> Unit = {},
     onCopy: (String) -> Unit = {}
 ) {
+    val haptics = LocalHapticFeedback.current
     Column(modifier = Modifier.fillMaxWidth()) {
         if (isEditing) {
             Column {
@@ -696,7 +711,10 @@ private fun UserMessage(
                 Surface(
                     modifier = Modifier.combinedClickable(
                         onClick = {},
-                        onLongClick = { onCopy(message.content) }
+                        onLongClick = {
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onCopy(message.content)
+                        }
                     ),
                     shape = RoundedCornerShape(18.dp),
                     color = MaterialTheme.colorScheme.primary.copy(
@@ -752,11 +770,13 @@ private fun AssistantMessage(
     isSpeaking: Boolean,
     highlight: Boolean = false,
     onCopy: (String) -> Unit,
+    onShare: () -> Unit = {},
     onRegenerate: () -> Unit,
     onReadAloud: () -> Unit = {},
     onContextAction: (String) -> Unit = {}
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
+    val haptics = LocalHapticFeedback.current
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
         AssistantAvatar()
         Spacer(Modifier.width(8.dp))
@@ -764,7 +784,10 @@ private fun AssistantMessage(
             Surface(
                 modifier = Modifier.combinedClickable(
                     onClick = {},
-                    onLongClick = { menuExpanded = true }
+                    onLongClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        menuExpanded = true
+                    }
                 ),
                 shape = RoundedCornerShape(18.dp),
                 color = MaterialTheme.colorScheme.surface,
@@ -789,7 +812,7 @@ private fun AssistantMessage(
                                 if (isSpeaking) "Stop reading" else "Read aloud",
                                 onReadAloud
                             )
-                            BubbleAction(Icons.Outlined.Share, "Share") {}
+                            BubbleAction(Icons.Outlined.Share, "Share", onShare)
                         }
                     }
                 }

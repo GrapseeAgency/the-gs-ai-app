@@ -1,6 +1,6 @@
 {
-  "versionCode": 20,
-  "versionName": "0.20.0",
+  "versionCode": 21,
+  "versionName": "0.21.0",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "Every GS turn now wears a sparkles badge — the assistant reads as a presence in the thread, like the benchmark apps. Both platforms."
+  "notes": "The Share button actually shares now — the system share sheet, on any app you choose — and long-presses confirm with a haptic tick. Both platforms."
 }
