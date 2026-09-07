@@ -61,6 +61,7 @@ import com.grapsee.gsai.data.local.ConversationEntity
 import com.grapsee.gsai.di.ServiceLocator
 import com.grapsee.gsai.ui.components.ConversationActionsSheet
 import com.grapsee.gsai.ui.components.GsChip
+import com.grapsee.gsai.ui.components.gsConversationTitle
 import com.grapsee.gsai.ui.theme.Aeruo
 import com.grapsee.gsai.ui.theme.GsMotion
 import com.grapsee.gsai.ui.theme.kineticPress
@@ -258,7 +259,7 @@ fun GsDrawerContent(
 
     if (actionTarget != null) {
         ConversationActionsSheet(
-            title = actionTarget?.title.orEmpty(),
+            title = gsConversationTitle(actionTarget?.title),
             pinned = actionTarget?.pinned == true,
             onDismiss = { actionTarget = null },
             onTogglePin = { mutate { c -> ServiceLocator.chat.setPinned(c.id, !c.pinned) } },
@@ -294,7 +295,7 @@ private fun RecentRow(
         horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
     ) {
         Text(
-            conversation.title,
+            gsConversationTitle(conversation.title),
             style = MaterialTheme.typography.bodyMedium,
             color = Aeruo.TextDark,
             maxLines = 1,

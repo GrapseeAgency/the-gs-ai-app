@@ -38,6 +38,7 @@ import com.grapsee.gsai.ui.components.GsEmptyState
 import com.grapsee.gsai.ui.components.GsListItem
 import com.grapsee.gsai.ui.components.GsScreenScaffold
 import com.grapsee.gsai.ui.components.GsSectionHeader
+import com.grapsee.gsai.ui.components.gsConversationTitle
 import com.grapsee.gsai.ui.theme.GsMotion
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -82,7 +83,7 @@ fun ArchivedChatsScreen(onBack: () -> Unit) {
                 ) {
                     items(archived, key = { it.id }) { entity ->
                         GsListItem(
-                            title = entity.title,
+                            title = gsConversationTitle(entity.title),
                             subtitle = "Archived · ${ChatTime.relative(entity.updatedAt)}",
                             leading = {
                                 Surface(
@@ -141,7 +142,7 @@ fun ArchivedChatsScreen(onBack: () -> Unit) {
     val target = actionTarget
     if (target != null) {
         ConversationActionsSheet(
-            title = target.title,
+            title = gsConversationTitle(target.title),
             pinned = target.pinned,
             archiveLabel = "Unarchive",
             onDismiss = { actionTarget = null },

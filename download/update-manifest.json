@@ -1,6 +1,6 @@
 {
-  "versionCode": 13,
-  "versionName": "0.13.0",
+  "versionCode": 14,
+  "versionName": "0.14.0",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "Explore search is live — typing now filters assistants, prompts and tools instantly on both platforms"
+  "notes": "Edge states hardened — untitled chats now show a graceful fallback everywhere, honest per-filter empty states, cleaner rename flow on both platforms"
 }

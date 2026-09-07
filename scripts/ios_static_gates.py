@@ -13,6 +13,10 @@ FILES = [
     "/home/z/my-project/ios/App/Sources/Networking/ConversationStore.swift",
     "/home/z/my-project/ios/App/Sources/Features/Chats/ChatSearchView.swift",
     "/home/z/my-project/ios/App/Sources/Features/Explore/ExploreView.swift",
+    "/home/z/my-project/ios/App/Sources/Features/Chats/ChatsListView.swift",
+    "/home/z/my-project/ios/App/Sources/Features/Chats/ArchivedChatsView.swift",
+    "/home/z/my-project/ios/App/Sources/Components/AeroDrawer.swift",
+    "/home/z/my-project/ios/App/Sources/Components/AeroComponents.swift",
 ]
 
 BANNED = [

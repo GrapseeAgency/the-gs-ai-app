@@ -62,9 +62,10 @@ struct ChatsListView: View {
         )) {
             TextField("Chat name", text: $renameDraft)
             Button("Rename") {
-                if let target = renameTarget {
-                    store.rename(id: target.id, to: renameDraft)
-                    sync(target.id, title: renameDraft)
+                let trimmed = renameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+                if let target = renameTarget, !trimmed.isEmpty {
+                    store.rename(id: target.id, to: trimmed)
+                    sync(target.id, title: trimmed)
                 }
                 renameTarget = nil
             }
@@ -204,7 +205,7 @@ struct ChatsListView: View {
             let preview = body.count > 42 ? String(body.prefix(42)) + "…" : body
             return ConversationRow(
                 id: conversation.id,
-                title: conversation.title,
+                title: gsConversationTitle(conversation.title),
                 preview: "\(speaker): \(preview)",
                 time: Self.relativeTime(from: conversation.updatedAt),
                 pinned: conversation.pinned)
@@ -221,6 +222,23 @@ struct ChatsListView: View {
         }
     }
 
+    /// Per-filter empty copy mirrors the Android hub exactly.
+    private var emptyTitle: String {
+        switch filter {
+        case .all: return "No conversations yet"
+        case .pinned: return "Nothing pinned yet"
+        case .unread: return "All caught up"
+        }
+    }
+
+    private var emptyMessage: String {
+        switch filter {
+        case .all: return "Start a chat with the + button and it will show up here."
+        case .pinned: return "Pin a chat from its context menu and it will live here."
+        case .unread: return "Nothing unread — enjoy the quiet."
+        }
+    }
+
     private var conversationList: some View {
         VStack(alignment: .leading, spacing: Aero.Spacing.s) {
             SectionHeader(title: "Recent", actionTitle: isLoading ? "Syncing…" : nil)
@@ -233,8 +251,8 @@ struct ChatsListView: View {
             } else if filtered.isEmpty {
                 EmptyStateView(
                     icon: "tray",
-                    title: "Nothing here",
-                    message: "No conversations match this filter."
+                    title: emptyTitle,
+                    message: emptyMessage
                 )
             } else {
                 ForEach(filtered) { row in
@@ -269,7 +287,7 @@ struct ChatsListView: View {
                         }
                         Button {
                             renameTarget = store.conversation(withID: row.id)
-                            renameDraft = row.title
+                            renameDraft = store.conversation(withID: row.id)?.title ?? row.title
                         } label: {
                             Label("Rename…", systemImage: "pencil")
                         }

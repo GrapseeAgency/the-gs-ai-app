@@ -108,7 +108,7 @@ fun ConversationActionsSheet(
                 TextButton(
                     onClick = {
                         renameOpen = false
-                        onRename(renameDraft)
+                        onRename(renameDraft.trim())
                     },
                     enabled = renameDraft.isNotBlank()
                 ) { Text("Rename") }

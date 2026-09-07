@@ -374,3 +374,13 @@ fun GsScreenScaffold(
         )
     }
 }
+
+// --- edge states -------------------------------------------------------------
+
+/**
+ * Blank or whitespace-only titles (legacy rows, interrupted syncs, stray
+ * server data) can never render as an empty line: every conversation title
+ * surface funnels through this fallback.
+ */
+fun gsConversationTitle(raw: String?): String =
+    raw?.trim()?.takeIf { it.isNotEmpty() } ?: "Untitled chat"

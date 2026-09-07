@@ -30,7 +30,7 @@ struct ArchivedChatsView: View {
                     VStack(spacing: Aero.Spacing.s) {
                         ForEach(store.archivedConversations) { conversation in
                             AeroListRow(
-                                title: conversation.title,
+                                title: gsConversationTitle(conversation.title),
                                 subtitle: "Archived · \(Self.relativeTime(from: conversation.updatedAt))",
                                 leading: {
                                     Image(systemName: "archivebox")
@@ -96,9 +96,10 @@ struct ArchivedChatsView: View {
         )) {
             TextField("Chat name", text: $renameDraft)
             Button("Rename") {
-                if let target = renameTarget {
-                    store.rename(id: target.id, to: renameDraft)
-                    syncSet(target.id, title: renameDraft)
+                let trimmed = renameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+                if let target = renameTarget, !trimmed.isEmpty {
+                    store.rename(id: target.id, to: trimmed)
+                    syncSet(target.id, title: trimmed)
                 }
                 renameTarget = nil
             }

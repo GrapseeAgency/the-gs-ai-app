@@ -99,9 +99,10 @@ struct AeroDrawer: View {
         )) {
             TextField("Chat name", text: $renameDraft)
             Button("Rename") {
-                if let target = renameTarget {
-                    store.rename(id: target.id, to: renameDraft)
-                    sync(target.id, title: renameDraft)
+                let trimmed = renameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+                if let target = renameTarget, !trimmed.isEmpty {
+                    store.rename(id: target.id, to: trimmed)
+                    sync(target.id, title: trimmed)
                 }
                 renameTarget = nil
             }
@@ -119,7 +120,7 @@ struct AeroDrawer: View {
 
     /// One live recent: tap to open, long-press for the benchmark action set.
     private func recentRow(_ conversation: StoredConversation) -> some View {
-        row(title: conversation.title, icon: nil, isPinned: conversation.pinned) {
+        row(title: gsConversationTitle(conversation.title), icon: nil, isPinned: conversation.pinned) {
             onRoute(.chat(conversation.id))
         }
         .contextMenu {

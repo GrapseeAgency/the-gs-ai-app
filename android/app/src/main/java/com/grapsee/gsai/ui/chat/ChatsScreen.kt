@@ -55,6 +55,7 @@ import com.grapsee.gsai.ui.components.GsEmptyState
 import com.grapsee.gsai.ui.components.GsListItem
 import com.grapsee.gsai.ui.components.GsOfflineBanner
 import com.grapsee.gsai.ui.components.GsScreenScaffold
+import com.grapsee.gsai.ui.components.gsConversationTitle
 import com.grapsee.gsai.ui.components.GsSkeleton
 import com.grapsee.gsai.ui.navigation.GsRoutes
 import com.grapsee.gsai.ui.theme.GsMotion
@@ -133,11 +134,16 @@ fun ChatsScreen(onNavigate: (String) -> Unit) {
                 }
                 rows.isEmpty() -> GsEmptyState(
                     icon = Icons.Outlined.Inbox,
-                    title = if (filter == FILTER_UNREAD) "All caught up" else "No conversations yet",
-                    message = if (filter == FILTER_UNREAD)
-                        "Nothing unread — enjoy the quiet."
-                    else
-                        "Start a chat with the + button and it will show up here."
+                    title = when (filter) {
+                        FILTER_UNREAD -> "All caught up"
+                        FILTER_PINNED -> "Nothing pinned yet"
+                        else -> "No conversations yet"
+                    },
+                    message = when (filter) {
+                        FILTER_UNREAD -> "Nothing unread — enjoy the quiet."
+                        FILTER_PINNED -> "Pin a chat from its overflow menu and it will live here."
+                        else -> "Start a chat with the + button and it will show up here."
+                    }
                 )
                 else -> LazyColumn(
                     modifier = Modifier.fillMaxWidth().weight(1f),
@@ -145,7 +151,7 @@ fun ChatsScreen(onNavigate: (String) -> Unit) {
                 ) {
                     items(rows, key = { it.id }) { entity ->
                         GsListItem(
-                            title = entity.title,
+                            title = gsConversationTitle(entity.title),
                             subtitle = previewLine(entity),
                             leading = {
                                 Surface(
@@ -197,7 +203,7 @@ fun ChatsScreen(onNavigate: (String) -> Unit) {
     val target = actionTarget
     if (target != null) {
         ConversationActionsSheet(
-            title = target.title,
+            title = gsConversationTitle(target.title),
             pinned = target.pinned,
             onDismiss = { actionTarget = null },
             onTogglePin = {

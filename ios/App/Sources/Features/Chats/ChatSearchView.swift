@@ -101,7 +101,7 @@ struct ChatSearchView: View {
                         ForEach(results) { hit in
                             NavigationLink(value: AeroRoute.chat(hit.routeID)) {
                                 AeroListRow(
-                                    title: hit.title,
+                                    title: gsConversationTitle(hit.title),
                                     subtitle: "\(hit.snippet) · \(hit.when)",
                                     leading: {
                                         Image(systemName: "bubble.left")

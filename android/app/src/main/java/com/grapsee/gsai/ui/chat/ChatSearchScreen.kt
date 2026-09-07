@@ -36,6 +36,7 @@ import com.grapsee.gsai.ui.components.GsInputBar
 import com.grapsee.gsai.ui.components.GsListItem
 import com.grapsee.gsai.ui.components.GsScreenScaffold
 import com.grapsee.gsai.ui.components.GsSectionHeader
+import com.grapsee.gsai.ui.components.gsConversationTitle
 import com.grapsee.gsai.ui.theme.GsMotion
 import java.time.Duration
 import java.time.Instant
@@ -117,7 +118,7 @@ fun ChatSearchScreen(
                     GsSectionHeader("Results")
                     hits.forEach { hit ->
                         GsListItem(
-                            title = hit.title,
+                            title = gsConversationTitle(hit.title),
                             subtitle = "${hit.snippet} · ${hit.moment}",
                             leading = {
                                 Surface(

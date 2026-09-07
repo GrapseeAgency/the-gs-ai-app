@@ -314,3 +314,13 @@ struct AuroraIndicator: View {
         .onAppear { shift = true }
     }
 }
+
+// MARK: Edge states
+
+/// Blank or whitespace-only titles (legacy rows, interrupted syncs, stray
+/// server data) can never render as an empty line: every conversation title
+/// surface funnels through this fallback.
+func gsConversationTitle(_ raw: String?) -> String {
+    let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    return trimmed.isEmpty ? "Untitled chat" : trimmed
+}
