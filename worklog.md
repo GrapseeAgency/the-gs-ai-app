@@ -794,3 +794,22 @@ Stage Summary:
 - Degenerate data can no longer produce blank or dishonest UI: every title surface has a graceful fallback, every filter has honest empty copy, rename is whitespace-proof on both platforms
 - Fourteen shipped cycles, all signature-stable, all install-over
 - Backlog remaining: assistants CRUD + pin/archive native wiring (deferred until live backend ask), deeper design parity sweeps
+
+---
+Task ID: 28 (cron cycle — design parity: benchmark-style day separators in chat threads + v0.15.0 shipped via LiveUpdate)
+Agent: Z.ai Code (main)
+Task: Build QA, advance backlog (design parity sweep — audit showed copy/regenerate/stop/jump-to-latest already shipped; the missing benchmark staple was day grouping in the thread), publish v0.15.0.
+
+Work Log:
+- BUILD QA: :app:assembleDebug BUILD SUCCESSFUL (1m20s separators + 1m30s version bump); toolchain intact
+- PARITY AUDIT: both platforms already carry per-message copy, regenerate, stop-generating, jump-to-latest; date separators ("Today"/"Yesterday" pills) were absent on both — that was the gap
+- ANDROID (ChatScreen.kt): ChatUiMessage gains createdAt (UTC ISO-8601 via the repository's public nowIso(), same format Room orders by); history mapping, dispatch (user + streaming placeholder) and the failure bubble all stamp now; itemsIndexed renders a centered DaySeparator pill whenever the message's day differs from the previous one; dayLabel/dayKey helpers — unparsable stamps (legacy rows) simply show no header
+- iOS (ChatDetailView.swift): ForEach enumerated; identical stamp != prev-day logic; DaySeparator capsule (Aero.label/textMuted/containerHigh) mirrors the Android pill; ISO8601DateFormatter with fractional-seconds fallback parse, Calendar day comparison, "d MMM yyyy" for older dates
+- iOS STATIC GATES: 13 files CLEAN (ChatDetailView re-verified)
+- VERSION: versionCode 15 / versionName 0.15.0; APK copied to download/GS-AI-App.apk (aapt verified versionCode 15); update-manifest.json bumped
+- PUBLISHED: commit 1d4feae pushed; GitHub Release v0.15.0 created (REL_ID 383769666, asset HTTP 201, 19,485,632 bytes); /releases/latest/download/ permalink verified serving versionCode 15; stable signature b1ffd75d… intact
+
+Stage Summary:
+- Chat threads now read like the benchmark apps at a glance: day pills anchor the scroll, timestamps persist with every turn, and the same semantics landed verbatim on both platforms
+- Fifteen shipped cycles, all signature-stable, all install-over
+- Backlog remaining: assistants CRUD + pin/archive native wiring (deferred until live backend ask), further parity sweeps (e.g. search-in-conversation affordances, per-message edit)
