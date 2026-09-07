@@ -11,6 +11,8 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -68,11 +70,26 @@ fun Modifier.kineticPress(
     this.scale(scale)
 }
 
-/** Animated aurora brush for AI-active moments (streaming, generating, listening). */
+/**
+ * Aurora brush. STATIC by default — a sliding gradient behind every surface used to
+ * recompose each caller every frame (the #1 reported jank source). Pass animated = true
+ * only for a true AI-active moment, and prefer Modifier.auroraBackground which animates
+ * in the draw phase without recomposing anything.
+ */
 @Composable
 fun rememberAuroraBrush(
-    shape: Shape = RoundedCornerShape(GsMotion.radiusCard)
+    shape: Shape = RoundedCornerShape(GsMotion.radiusCard),
+    animated: Boolean = false
 ): Brush {
+    if (!animated) {
+        return remember {
+            Brush.linearGradient(
+                colors = Aeruo.Aurora,
+                start = Offset(-100f, 0f),
+                end = Offset(500f, 600f)
+            )
+        }
+    }
     val transition = rememberInfiniteTransition(label = "aurora")
     val shift by transition.animateFloat(
         initialValue = 0f,
@@ -87,6 +104,32 @@ fun rememberAuroraBrush(
     val start = Offset(shift * 400f - 100f, 0f)
     val end = Offset(start.x + 600f, 600f)
     return Brush.linearGradient(colors = colors, start = start, end = end)
+}
+
+/**
+ * Draw-phase aurora background — the gradient slides while the AI is alive, but the
+ * animated state is read inside drawBehind, so nothing ever recomposes; only this node
+ * re-renders. Use for the streaming/generating/listening life-signs.
+ */
+fun Modifier.auroraBackground(shape: Shape): Modifier = composed {
+    val transition = rememberInfiniteTransition(label = "aurora")
+    val shift by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2200, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "auroraShift"
+    )
+    val colors = Aeruo.Aurora
+    this
+        .clip(shape)
+        .drawBehind {
+            val start = Offset(shift * 400f - 100f, 0f)
+            val brush = Brush.linearGradient(colors, start = start, end = Offset(start.x + 600f, 600f))
+            drawRect(brush)
+        }
 }
 
 /** Staggered entrance delay for list items. */

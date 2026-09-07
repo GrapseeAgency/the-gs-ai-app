@@ -1,7 +1,6 @@
 package com.grapsee.gsai.ui.components
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -40,10 +39,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.grapsee.gsai.ui.theme.auroraBackground
 import com.grapsee.gsai.ui.theme.Aeruo
 import com.grapsee.gsai.ui.theme.GsMotion
 import com.grapsee.gsai.ui.theme.kineticPress
-import com.grapsee.gsai.ui.theme.rememberAuroraBrush
 import com.grapsee.gsai.ui.theme.skeletonSurface
 
 /**
@@ -251,7 +250,7 @@ fun GsLoadingState(label: String = "Thinking", modifier: Modifier = Modifier) {
             shape = RoundedCornerShape(GsMotion.radiusCard),
             modifier = Modifier.fillMaxWidth().height(10.dp)
         ) {
-            Box(Modifier.background(rememberAuroraBrush()))
+            Box(Modifier.auroraBackground(RoundedCornerShape(GsMotion.radiusCard)))
         }
         Text(label, style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant)

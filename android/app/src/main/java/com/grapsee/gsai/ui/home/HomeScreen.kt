@@ -70,7 +70,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
@@ -81,6 +80,7 @@ import androidx.core.content.ContextCompat
 import com.grapsee.gsai.data.liveupdate.LiveUpdateState
 import com.grapsee.gsai.data.liveupdate.LiveUpdater
 import com.grapsee.gsai.ui.navigation.GsRoutes
+import com.grapsee.gsai.ui.theme.auroraBackground
 import com.grapsee.gsai.ui.theme.Aeruo
 import com.grapsee.gsai.ui.theme.GsMotion
 import com.grapsee.gsai.ui.theme.kineticPress
@@ -251,11 +251,11 @@ private fun HeroBlock(onNavigate: (String) -> Unit) {
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Brand orb — the one sanctioned aurora mark on the canvas
+        // Brand orb — the one sanctioned aurora mark on the canvas (breathe reads in draw phase)
         Box(
             modifier = Modifier
                 .size(84.dp)
-                .scale(breathe)
+                .graphicsLayer { scaleX = breathe; scaleY = breathe }
                 .clip(CircleShape)
                 .background(rememberAuroraBrush(CircleShape)),
             contentAlignment = Alignment.Center
@@ -838,8 +838,7 @@ private fun VoicePulseHalo() {
     Box(
         modifier = Modifier
             .size(46.dp)
-            .scale(pulse)
-            .graphicsLayer { alpha = fade }
+            .graphicsLayer { scaleX = pulse; scaleY = pulse; alpha = fade }
             .clip(CircleShape)
             .background(rememberAuroraBrush(CircleShape))
     )

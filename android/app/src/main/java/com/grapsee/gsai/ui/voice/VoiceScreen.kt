@@ -7,6 +7,11 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -47,7 +52,6 @@ import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.ui.components.GsChip
 import com.grapsee.gsai.ui.theme.Aeruo
 import com.grapsee.gsai.ui.theme.GsMotion
-import com.grapsee.gsai.ui.theme.rememberAuroraBrush
 
 /** Call-end red — the single non-aurora accent allowed in voice mode. */
 private val EndCallRed = Color(0xFFE5484D)
@@ -197,7 +201,9 @@ fun VoiceScreen(onBack: () -> Unit) {
     }
 }
 
-/** One animated waveform bar — height oscillates 8–56dp with a per-index phase delay. */
+/** One animated waveform bar — height oscillates 8–56dp with a per-index phase delay.
+ *  Draw-phase: the phase state is read inside drawBehind, so the bar never recomposes
+ *  and never re-lays-out; only its 4×56dp node re-renders each frame. */
 @Composable
 private fun WaveformBar(index: Int) {
     val transition = rememberInfiniteTransition(label = "wave")
@@ -211,11 +217,22 @@ private fun WaveformBar(index: Int) {
         ),
         label = "wavePhase"
     )
+    val brush = remember {
+        Brush.verticalGradient(colors = Aeruo.Aurora)
+    }
     Box(
         modifier = Modifier
             .width(4.dp)
-            .height((8 + 48 * phase).dp)
-            .background(rememberAuroraBrush(), RoundedCornerShape(2.dp))
+            .height(56.dp)
+            .drawBehind {
+                val barHeight = 8.dp.toPx() + 48.dp.toPx() * phase
+                drawRoundRect(
+                    brush = brush,
+                    topLeft = Offset(0f, size.height - barHeight),
+                    size = Size(size.width, barHeight),
+                    cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx())
+                )
+            }
     )
 }
 

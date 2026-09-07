@@ -98,7 +98,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
@@ -127,7 +127,7 @@ import com.grapsee.gsai.ui.components.GsScreenScaffold
 import com.grapsee.gsai.ui.theme.GsMotion
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
-import com.grapsee.gsai.ui.theme.rememberAuroraBrush
+import com.grapsee.gsai.ui.theme.auroraBackground
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -1031,7 +1031,7 @@ private fun StreamingCaret() {
     Text(
         text = "▍",
         color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(start = 2.dp).alpha(alpha)
+        modifier = Modifier.padding(start = 2.dp).graphicsLayer { this.alpha = alpha }
     )
 }
 
@@ -1228,7 +1228,7 @@ private fun CodeBlock(segment: ContentSegment, onCopyCode: (String) -> Unit) {
     }
 }
 
-/** Aurora life-sign above the input while the model is generating. */
+/** Aurora life-sign above the input while the model is generating (draw-phase animated). */
 @Composable
 private fun AuroraIndicator() {
     val shape = RoundedCornerShape(999.dp)
@@ -1236,8 +1236,7 @@ private fun AuroraIndicator() {
         modifier = Modifier
             .fillMaxWidth()
             .height(4.dp)
-            .clip(shape)
-            .background(rememberAuroraBrush(shape))
+            .auroraBackground(shape)
     )
 }
 
