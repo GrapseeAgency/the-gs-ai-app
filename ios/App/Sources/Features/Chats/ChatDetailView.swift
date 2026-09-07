@@ -21,6 +21,11 @@ struct ChatDetailView: View {
     @State private var editingIndex: Int?
     @State private var editDraft = ""
 
+    // Find-in-chat — query, hit list, active hit (mirrors the Android bar).
+    @State private var searchActive = false
+    @State private var searchQuery = ""
+    @State private var searchIndex = 0
+
     // Read-aloud — on-device speech, silent when the device has no voice.
     @StateObject private var speech = SpeechPlayer()
 
@@ -52,6 +57,19 @@ struct ChatDetailView: View {
         }
         .background(Aero.background.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    searchActive.toggle()
+                    if !searchActive {
+                        searchQuery = ""
+                        searchIndex = 0
+                    }
+                } label: {
+                    Image(systemName: "magnifyingglass")
+                }
+            }
+        }
         .onDisappear {
             speech.stop()
         }
@@ -71,7 +89,12 @@ struct ChatDetailView: View {
 
     private var transcript: some View {
         ScrollViewReader { proxy in
-            ScrollView {
+            VStack(spacing: 0) {
+                if searchActive {
+                    searchBar(proxy)
+                        .transition(.opacity)
+                }
+                ScrollView {
                 LazyVStack(spacing: 12) {
                     if vm.isLoadingHistory {
                         LoadingView(label: "Catching up")
@@ -95,6 +118,7 @@ struct ChatDetailView: View {
                                 message: message,
                                 isSpeaking: speech.speakingMessageID == message.id,
                                 editEnabled: !vm.isStreaming && editingIndex == nil,
+                                highlight: message.id == activeMatchID,
                                 onRegenerate: {
                                     userIsReading = false
                                     vm.regenerate()
@@ -150,6 +174,7 @@ struct ChatDetailView: View {
                     .padding(.bottom, Aero.Spacing.m)
                     .transition(.opacity)
                 }
+            }
             }
         }
     }
@@ -238,6 +263,95 @@ struct ChatDetailView: View {
                 toast = nil
             }
         }
+    }
+
+    // MARK: Find in chat
+
+    /// Indices of turns whose text contains the query, case-insensitive.
+    private var searchMatches: [Int] {
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard searchActive, !query.isEmpty else { return [] }
+        return vm.messages.indices.filter {
+            vm.messages[$0].content.localizedCaseInsensitiveContains(query)
+        }
+    }
+
+    /// The message id under the active hit — bubbles tint when they match.
+    private var activeMatchID: String? {
+        let matches = searchMatches
+        guard !matches.isEmpty else { return nil }
+        let wrapped = ((searchIndex % matches.count) + matches.count) % matches.count
+        return vm.messages[matches[wrapped]].id
+    }
+
+    private var matchCountLabel: String {
+        let matches = searchMatches
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        if matches.isEmpty { return query.isEmpty ? "" : "No results" }
+        let wrapped = ((searchIndex % matches.count) + matches.count) % matches.count
+        return "\(wrapped + 1)/\(matches.count)"
+    }
+
+    private func stepSearch(_ direction: Int, proxy: ScrollViewProxy) {
+        let matches = searchMatches
+        guard !matches.isEmpty else { return }
+        searchIndex = ((searchIndex + direction) % matches.count + matches.count) % matches.count
+        withAnimation(Aero.gentle) {
+            proxy.scrollTo(vm.messages[matches[searchIndex]].id, anchor: .center)
+        }
+    }
+
+    private func searchBar(_ proxy: ScrollViewProxy) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 13))
+                .foregroundStyle(Aero.textMuted)
+            TextField("Search in chat", text: $searchQuery)
+                .font(Aero.body())
+                .foregroundStyle(Aero.text)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .submitLabel(.search)
+                .onSubmit { stepSearch(1, proxy: proxy) }
+                .onChange(of: searchQuery) { _ in
+                    let matches = searchMatches
+                    guard !matches.isEmpty else { return }
+                    searchIndex = 0
+                    withAnimation(Aero.gentle) {
+                        proxy.scrollTo(vm.messages[matches[0]].id, anchor: .center)
+                    }
+                }
+            if !matchCountLabel.isEmpty {
+                Text(matchCountLabel)
+                    .font(Aero.label())
+                    .foregroundStyle(Aero.textMuted)
+            }
+            Button {
+                stepSearch(-1, proxy: proxy)
+            } label: {
+                Image(systemName: "chevron.up")
+            }
+            .buttonStyle(KineticPressStyle())
+            .disabled(searchMatches.isEmpty)
+            Button {
+                stepSearch(1, proxy: proxy)
+            } label: {
+                Image(systemName: "chevron.down")
+            }
+            .buttonStyle(KineticPressStyle())
+            .disabled(searchMatches.isEmpty)
+            Button {
+                searchActive = false
+                searchQuery = ""
+                searchIndex = 0
+            } label: {
+                Image(systemName: "xmark")
+            }
+            .buttonStyle(KineticPressStyle())
+        }
+        .padding(.horizontal, Aero.Spacing.m)
+        .padding(.vertical, Aero.Spacing.s)
+        .background(Aero.surface)
     }
 
     // MARK: Empty state
@@ -506,6 +620,7 @@ private struct MessageBubble: View {
     let message: ChatViewModel.ChatMessage
     var isSpeaking: Bool = false
     var editEnabled: Bool = false
+    var highlight: Bool = false
     var onRegenerate: () -> Void = {}
     var onReadAloud: () -> Void = {}
     var onTranslate: () -> Void = {}
@@ -529,7 +644,7 @@ private struct MessageBubble: View {
                     .foregroundStyle(Aero.text)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
-                    .background(RoundedRectangle(cornerRadius: 18).fill(Aero.accent.opacity(0.14)))
+                    .background(RoundedRectangle(cornerRadius: 18).fill(Aero.accent.opacity(highlight ? 0.32 : 0.14)))
                     .frame(maxWidth: 280, alignment: .trailing)
             }
             HStack(spacing: 10) {
@@ -568,7 +683,7 @@ private struct MessageBubble: View {
             }
             .padding(14)
             .background(RoundedRectangle(cornerRadius: 18).fill(Aero.surface))
-            .overlay(RoundedRectangle(cornerRadius: 18).stroke(Aero.outline, lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: 18).stroke(highlight ? Aero.accent : Aero.outline, lineWidth: highlight ? 2 : 1))
             .frame(maxWidth: 320, alignment: .leading)
             .contextMenu { bubbleMenu }
             Spacer(minLength: 40)

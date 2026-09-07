@@ -34,6 +34,8 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
@@ -43,16 +45,20 @@ import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.CallSplit
 import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Save
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.StickyNote2
 import androidx.compose.material.icons.outlined.Tune
@@ -97,6 +103,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.data.repository.ChatRepository
@@ -194,6 +201,9 @@ fun ChatScreen(
     var conversationTitle by remember { mutableStateOf("New chat") }
     var editingId by remember { mutableStateOf<String?>(null) }
     var editingDraft by remember { mutableStateOf("") }
+    var searchOpen by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    var searchActiveIndex by remember { mutableStateOf(0) }
     val clipboard = LocalClipboardManager.current
     val snackbarHostState = remember { SnackbarHostState() }
     var attachSheetOpen by remember { mutableStateOf(false) }
@@ -364,10 +374,50 @@ fun ChatScreen(
         else showSnack("Read aloud isn't set up on this device yet")
     }
 
+    // Find-in-chat: case-insensitive matches over the rendered turns, one
+    // active hit at a time; prev/next steps the reader through every match.
+    val matchIndices by remember {
+        derivedStateOf {
+            val query = searchQuery.trim()
+            if (query.isEmpty()) emptyList()
+            else messages.withIndex()
+                .filter { it.value.content.contains(query, ignoreCase = true) }
+                .map { it.index }
+        }
+    }
+    val activeMatchIndex =
+        if (matchIndices.isEmpty()) -1
+        else matchIndices[searchActiveIndex.mod(matchIndices.size)]
+
+    fun stepSearch(step: Int) {
+        if (matchIndices.isEmpty()) return
+        searchActiveIndex = (searchActiveIndex + step).mod(matchIndices.size)
+        scope.launch { listState.animateScrollToItem(matchIndices[searchActiveIndex]) }
+    }
+
+    // Typing re-anchors on the first hit; closing the bar resets clean.
+    LaunchedEffect(searchOpen, searchQuery) {
+        if (!searchOpen || searchQuery.isBlank()) return@LaunchedEffect
+        if (matchIndices.isNotEmpty()) {
+            searchActiveIndex = 0
+            listState.animateScrollToItem(matchIndices.first())
+        }
+    }
+
     GsScreenScaffold(
         title = conversationTitle,
         onBack = onBack,
         actions = {
+            IconButton(onClick = {
+                searchOpen = !searchOpen
+                if (!searchOpen) {
+                    searchQuery = ""
+                    searchActiveIndex = 0
+                }
+            }) {
+                Icon(Icons.Outlined.Search, contentDescription = "Search in chat",
+                    tint = MaterialTheme.colorScheme.onBackground)
+            }
             GsChip(text = "Auto", selected = false, onClick = {})
             IconButton(onClick = {}) {
                 Icon(Icons.Outlined.Tune, contentDescription = "Model settings",
@@ -383,6 +433,52 @@ fun ChatScreen(
                 .imePadding(),
             verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
         ) {
+            AnimatedVisibility(visible = searchOpen, enter = fadeIn(), exit = fadeOut()) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        placeholder = { Text("Search in chat") },
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(onSearch = { stepSearch(1) })
+                    )
+                    Text(
+                        text = if (matchIndices.isEmpty()) "No results"
+                        else "${searchActiveIndex.mod(matchIndices.size) + 1}/${matchIndices.size}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 6.dp)
+                    )
+                    IconButton(onClick = { stepSearch(-1) }, enabled = matchIndices.isNotEmpty()) {
+                        Icon(
+                            Icons.Outlined.KeyboardArrowUp,
+                            contentDescription = "Previous match",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    IconButton(onClick = { stepSearch(1) }, enabled = matchIndices.isNotEmpty()) {
+                        Icon(
+                            Icons.Outlined.KeyboardArrowDown,
+                            contentDescription = "Next match",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    IconButton(onClick = {
+                        searchOpen = false
+                        searchQuery = ""
+                        searchActiveIndex = 0
+                    }) {
+                        Icon(
+                            Icons.Outlined.Close,
+                            contentDescription = "Close search",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
             if (isStreaming) AuroraIndicator()
 
             Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
@@ -405,6 +501,7 @@ fun ChatScreen(
                                 UserMessage(
                                     message = message,
                                     isEditing = editingId == message.id,
+                                    highlight = index == activeMatchIndex,
                                     editingDraft = editingDraft,
                                     editEnabled = streamingJob?.isActive != true && editingId == null,
                                     onEditingDraftChange = { editingDraft = it },
@@ -417,6 +514,7 @@ fun ChatScreen(
                                 AssistantMessage(
                                     message = message,
                                     isSpeaking = speakingMessageId == message.id,
+                                    highlight = index == activeMatchIndex,
                                     onCopy = copyText,
                                     onRegenerate = { regenerate(message.id) },
                                     onReadAloud = { readAloud(message.id, message.content) },
@@ -506,6 +604,7 @@ fun ChatScreen(
 @Composable
 private fun UserMessage(
     message: ChatUiMessage,
+    highlight: Boolean = false,
     isEditing: Boolean = false,
     editingDraft: String = "",
     editEnabled: Boolean = true,
@@ -545,7 +644,9 @@ private fun UserMessage(
                         onLongClick = { onCopy(message.content) }
                     ),
                     shape = RoundedCornerShape(18.dp),
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                    color = MaterialTheme.colorScheme.primary.copy(
+                        alpha = if (highlight) 0.34f else 0.14f
+                    )
                 ) {
                     Text(
                         text = message.content,
@@ -594,6 +695,7 @@ private fun JumpToLatestPill(onClick: () -> Unit) {
 private fun AssistantMessage(
     message: ChatUiMessage,
     isSpeaking: Boolean,
+    highlight: Boolean = false,
     onCopy: (String) -> Unit,
     onRegenerate: () -> Unit,
     onReadAloud: () -> Unit = {},
@@ -609,7 +711,10 @@ private fun AssistantMessage(
                 ),
                 shape = RoundedCornerShape(18.dp),
                 color = MaterialTheme.colorScheme.surface,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                border = BorderStroke(
+                    if (highlight) 2.dp else 1.dp,
+                    if (highlight) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                )
             ) {
                 Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
                     SegmentedContent(
