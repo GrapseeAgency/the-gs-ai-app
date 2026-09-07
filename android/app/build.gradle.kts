@@ -15,8 +15,8 @@ android {
         applicationId = "com.grapsee.gsai"
         minSdk = 26
         targetSdk = 35
-        versionCode = 30
-        versionName = "0.30.0"
+        versionCode = 31
+        versionName = "0.31.0"
 
         // Backend origin for the Android emulator (host loopback). Override per build type if needed.
         buildConfigField("String", "BASE_URL", "\"http://10.0.2.2:3000\"")

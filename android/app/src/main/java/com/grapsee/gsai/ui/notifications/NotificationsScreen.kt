@@ -39,13 +39,19 @@ import com.grapsee.gsai.ui.components.GsEmptyState
 import com.grapsee.gsai.ui.components.GsListItem
 import com.grapsee.gsai.ui.components.GsScreenScaffold
 import com.grapsee.gsai.ui.components.GsSectionHeader
+import com.grapsee.gsai.ui.navigation.GsRoutes
 import com.grapsee.gsai.ui.theme.GsMotion
 
 @Composable
-fun NotificationsScreen(onBack: () -> Unit) {
-    // Local read state: ids dismissed from "unread" via "Mark all read".
+fun NotificationsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit) {
+    // Local read state: ids dismissed from "unread" via "Mark all read" or a row tap.
     val readIds = remember { mutableStateListOf<String>() }
     val allRead = SampleData.notifications.all { !it.unread || it.id in readIds }
+
+    fun open(item: NotificationSample) {
+        if (item.unread && item.id !in readIds) readIds.add(item.id)
+        onNavigate(routeFor(item.type))
+    }
 
     GsScreenScaffold(
         title = "Notifications",
@@ -73,7 +79,7 @@ fun NotificationsScreen(onBack: () -> Unit) {
                 Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)) {
                     GsSectionHeader(title = "Today")
                     today.forEach { item ->
-                        NotificationRow(item = item, unread = true)
+                        NotificationRow(item = item, unread = true, onOpen = ::open)
                     }
                 }
             }
@@ -82,7 +88,7 @@ fun NotificationsScreen(onBack: () -> Unit) {
                 Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)) {
                     GsSectionHeader(title = "Earlier")
                     earlier.forEach { item ->
-                        NotificationRow(item = item, unread = false)
+                        NotificationRow(item = item, unread = false, onOpen = ::open)
                     }
                 }
             }
@@ -101,10 +107,11 @@ fun NotificationsScreen(onBack: () -> Unit) {
 }
 
 @Composable
-private fun NotificationRow(item: NotificationSample, unread: Boolean) {
+private fun NotificationRow(item: NotificationSample, unread: Boolean, onOpen: (NotificationSample) -> Unit) {
     GsListItem(
         title = item.title,
         subtitle = item.body,
+        onClick = { onOpen(item) },
         modifier = if (item.type == "security") {
             Modifier.border(1.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(14.dp))
         } else {
@@ -131,6 +138,14 @@ private fun NotificationRow(item: NotificationSample, unread: Boolean) {
             }
         }
     )
+}
+
+/** Type-based deep link: finished work opens a chat, activity opens its hub. */
+private fun routeFor(type: String): String = when (type) {
+    "assistant" -> GsRoutes.EXPLORE
+    "share", "project" -> GsRoutes.PROJECTS
+    "system", "security" -> GsRoutes.SETTINGS
+    else -> GsRoutes.chat(null) // task, file — continue the work in a chat
 }
 
 @Composable

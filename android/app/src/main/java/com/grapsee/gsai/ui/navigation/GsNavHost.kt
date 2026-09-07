@@ -97,7 +97,12 @@ fun GsNavHost(modifier: Modifier = Modifier) {
         composable(GsRoutes.PROFILE) { ProfileScreen(onNavigate = open) }
 
         composable(GsRoutes.SETTINGS) { SettingsScreen(onBack = back) }
-        composable(GsRoutes.NOTIFICATIONS) { NotificationsScreen(onBack = back) }
+        composable(GsRoutes.NOTIFICATIONS) {
+            NotificationsScreen(
+                onBack = back,
+                onNavigate = { navController.navigate(it) }
+            )
+        }
         composable(GsRoutes.VOICE) { VoiceScreen(onBack = back) }
         composable(GsRoutes.MODEL_COMPARE) { ModelCompareScreen(onBack = back) }
         composable(GsRoutes.ASSISTANT_CREATE) { AssistantCreateScreen(onBack = back) }

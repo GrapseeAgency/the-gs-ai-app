@@ -1,6 +1,6 @@
 {
-  "versionCode": 30,
-  "versionName": "0.30.0",
+  "versionCode": 31,
+  "versionName": "0.31.0",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "Suggestions open seeded composers now, and long saved turns or translations scroll instead of spilling past their sheet's actions."
+  "notes": "Notifications are alive: tapping one marks it read and opens the related surface — finished work in a fresh chat, activity in its hub."
 }

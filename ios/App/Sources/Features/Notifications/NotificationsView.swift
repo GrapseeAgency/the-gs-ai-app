@@ -25,6 +25,7 @@ struct NotificationSample: Identifiable {
 /// Notification centre — Today / Earlier groups, mark all read.
 struct NotificationsView: View {
 
+    @EnvironmentObject private var router: Router
     @State private var samples = NotificationSample.samples
 
     private var today: [NotificationSample] { Array(samples.prefix(4)) }
@@ -37,12 +38,16 @@ struct NotificationsView: View {
                 SectionHeader(title: "Today")
                     .padding(.top, Aero.Spacing.s)
                 ForEach(today) { sample in
-                    NotificationRow(sample: sample, highlighted: sample.type == "security")
+                    NotificationRow(sample: sample, highlighted: sample.type == "security") {
+                        open(sample)
+                    }
                 }
                 SectionHeader(title: "Earlier")
                     .padding(.top, Aero.Spacing.m)
                 ForEach(earlier) { sample in
-                    NotificationRow(sample: sample, highlighted: sample.type == "security")
+                    NotificationRow(sample: sample, highlighted: sample.type == "security") {
+                        open(sample)
+                    }
                 }
             }
             .padding(.horizontal, Aero.Spacing.m)
@@ -60,6 +65,25 @@ struct NotificationsView: View {
                 .foregroundStyle(Aero.accent)
             }
         }
+    }
+
+    // MARK: Open — mark read, then deep-link to the related surface
+
+    /// Type-based deep link: finished work opens a chat, activity opens its hub.
+    private func route(for type: String) -> AeroRoute {
+        switch type {
+        case "assistant": return .explore
+        case "share", "project": return .projects
+        case "system", "security": return .settings
+        default: return .chat(nil) // task, file — continue the work in a chat
+        }
+    }
+
+    private func open(_ sample: NotificationSample) {
+        if let index = samples.firstIndex(where: { $0.id == sample.id }) {
+            samples[index].unread = false
+        }
+        router.path.append(route(for: sample.type))
     }
 
     // MARK: Header
@@ -81,9 +105,11 @@ struct NotificationsView: View {
 private struct NotificationRow: View {
     let sample: NotificationSample
     var highlighted: Bool = false
+    var onTap: () -> Void = {}
 
     var body: some View {
-        AeroCard {
+        Button(action: onTap) {
+            AeroCard {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: Self.icon(for: sample.type))
                     .font(.system(size: 14))
@@ -117,6 +143,7 @@ private struct NotificationRow: View {
                     .stroke(Aero.accent, lineWidth: 1.5)
             }
         }
+        .buttonStyle(KineticPressStyle())
     }
 
     static func icon(for type: String) -> String {
