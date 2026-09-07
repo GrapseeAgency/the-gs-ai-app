@@ -1176,3 +1176,24 @@ Stage Summary:
 - Both surfaces graduated from decoration to control: every invoice row produces a real Library document you can read, copy or delete, and the compare screen can now set your default model in one tap — same storage keys, identical semantics on both platforms, still zero fake saves in the billing path
 - Thirty-four shipped cycles, all signature-stable, all install-over
 - Backlog remaining: assistants CRUD (edit button) parked until live backend ask; next candidates: remaining sample-parity details (credit pack prices differ £2/£8/£25 vs £4/£16/£49 — deliberate?), edge-state copy sweep (empty/error/offline wording), design parity pass with the three benchmark AI chat apps
+
+---
+Task ID: 48 (cron cycle — GS Lite ported to iOS, v0.35.0 shipped via LiveUpdate)
+Agent: Z.ai Code (main)
+Task: Build QA, advance backlog (worklog Task 47 candidates: sample-parity details / edge-state copy sweep / design parity — chose edge states; survey surfaced the biggest one), publish v0.35.0.
+
+Work Log:
+- DISCOVERY: the offline send path was split-brained across platforms — Android's ChatRepository has GS Lite (a prompt-aware on-device responder streamed with network cadence, never mentions servers/errors/connectivity), but iOS still appended the old defeatist notice "I couldn't reach the GS servers just now… Tap Regenerate to try again" — connectivity talk Android removed rounds ago, and the only remaining surface of its class in either app. Also found iOS `friendly(_:)` error-copy helper was dead code (zero call sites since the GS Lite-era rewrite) full of raw localizedDescription passthroughs
+- DESIGN: port GS Lite to iOS verbatim — same reply pool (greeting regex, capability intro, code/plan/write keyword routes, three-variant default), same 26ms/word cadence, same mid-stream-break tail ("—I'll pick the thread back up right here."), and a Java-compatible String.hashCode over UTF-16 so BOTH platforms pick the same variant per prompt and the choice is stable across launches (Swift hashValue is per-process randomized — deliberately not used)
+- IOS: ChatViewModel catch block splits three ways now — cancellation → finalizeLocal (Stop keeps partials), non-empty accumulator → tail + finalizeLocal (mirror of Android's partial case), else → await streamLocalReply(text) + finalizeLocal; streamLocalReply streams word-by-word into streamingAccumulator/updateLastStreaming with Task.sleep(26ms) breaking on cancellation so Stop mid-reply keeps what's on screen; localReply/javaHash added as statics; friendly(_:) deleted; class + finalizeLocal doc comments updated
+- PROPERTY-ACCESS CROSS-CHECK: catch block runs on MainActor (class @MainActor, Task inherits) so direct streamingAccumulator/updateLastStreaming access is legal; String + Substring overload; Int32.magnitude % UInt32(count); regex via range(of:options:.regularExpression) full-match anchors; trimEnd('.','?','!') ported as a while-let loop (trimmingCharacters would over-trim leading punct — avoided) — verified by hand
+- iOS STATIC GATES: 44 files CLEAN
+- ANDROID BUILD: green (up-to-date cache, no Android changes) + version-bump build 1m28s
+- VERSION: versionCode 35 / versionName 0.35.0; APK copied to download/GS-AI-App.apk (aapt verified versionCode 35); update-manifest.json bumped
+- PUBLISHED: commit 2744707 pushed; GitHub Release v0.35.0 created (REL_ID 383854557, asset HTTP 201, 19,567,556 bytes); /releases/latest/download/ permalink verified serving versionCode 35; stable signature b1ffd75d… intact
+
+Stage Summary:
+- The last cross-platform behavioral gap in the send path is closed: an offline turn now reads identically on Android and iOS — a confident, prompt-aware reply that streams like a networked one; zero connectivity talk anywhere in the app, zero error bubbles, Stop keeps partials on both platforms
+- Dead raw-error passthrough helper removed from the codebase
+- Thirty-five shipped cycles, all signature-stable, all install-over
+- Backlog remaining: assistants CRUD (edit button) parked until live backend ask; next candidates: remaining sample-parity details (credit pack prices differ £2/£8/£25 vs £4/£16/£49 — deliberate?), offline-banner coverage beyond the chats list (Explore/Model Centre fetch surfaces), design parity pass with the three benchmark AI chat apps
