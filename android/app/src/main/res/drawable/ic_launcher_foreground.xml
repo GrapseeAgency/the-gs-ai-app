@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Launcher foreground: the GS aurora orb — radial teal glow, specular
+     highlight, one faint ring. Content sits inside the adaptive safe zone
+     (center 66dp of the 108dp canvas). Mirrors the iOS AppIcon. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Orb body: aurora radial gradient -->
+    <path android:pathData="M54,54 m-26,0 a26,26 0 1,1 52,0 a26,26 0 1,1 -52,0">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:centerX="54"
+                android:centerY="54"
+                android:gradientRadius="26"
+                android:startColor="#2DD4A8"
+                android:endColor="#0FA37E" />
+        </aapt:attr>
+    </path>
+
+    <!-- Specular highlight, upper-left -->
+    <path
+        android:fillColor="#66FFFFFF"
+        android:pathData="M44.5,44.5 m-6.5,0 a6.5,6.5 0 1,1 13,0 a6.5,6.5 0 1,1 -13,0" />
+
+    <!-- Faint halo ring -->
+    <path
+        android:strokeColor="#402DD4A8"
+        android:strokeWidth="1.6"
+        android:fillColor="#00000000"
+        android:pathData="M54,54 m-33.5,0 a33.5,33.5 0 1,1 67,0 a33.5,33.5 0 1,1 -67,0" />
+</vector>

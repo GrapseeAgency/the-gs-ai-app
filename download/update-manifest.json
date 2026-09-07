@@ -1,6 +1,6 @@
 {
-  "versionCode": 40,
-  "versionName": "0.40.0",
+  "versionCode": 41,
+  "versionName": "0.41.0",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "Home-screen quick actions: long-press the GS AI icon for New chat, New image and Ask GS — they open the exact screen you want, even mid-conversation."
+  "notes": "GS AI finally wears its own face: a real aurora-orb app icon replaces the stock Android robot — on your home screen, in the recents tray, and on the quick-action menu."
 }
