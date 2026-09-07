@@ -354,7 +354,6 @@ final class SQLiteChatStore {
             .replacingOccurrences(of: "_", with: "\\_")
         return "%\(escaped)%"
     }
-}
 
     // MARK: - Edit flow (truncate a thread from a user turn onward)
 
@@ -382,3 +381,4 @@ final class SQLiteChatStore {
         bind(stmt, 2, stamp)
         sqlite3_step(stmt)
     }
+}

@@ -1663,3 +1663,24 @@ Stage Summary:
 - Explore is now a real AI app store, ChatGPT-style: five discovery rows, one catalogue shared with the Assistants hub, chips that always lead somewhere, and the user's own creations woven in — the drift between Explore and Assistants is structurally impossible now, not just fixed
 - Fifty shipped cycles, all signature-stable, all install-over
 - Feature queue next: Room/SwiftData polish, design parity with the three benchmark apps, edge states — plus device-gated holdovers (#4 R8/minify, req 14 device matrix, req 15 profiler) waiting on the user's device report
+
+---
+Task ID: 73
+Agent: Z.ai Code (main)
+Task: Build QA, advance the backlog (queue head: Room/SwiftData polish), ship.
+
+Work Log:
+- CONCURRENCY: opened one minute after the parallel loop's Task 72 push (516d694, v0.50.0). Independently verified its release chain before writing — manifest 50/0.50.0, tag v0.50.0 → 0abe6b9, /releases/latest/download/ permalink sha256-identical to download/ (b8a8ed0a…) — then took the next disjoint queue item (persistence-layer polish; zero overlap with the explore work)
+- COMPILE-LEVEL DEFECT FOUND (iOS, latent since v0.16.0): SQLiteChatStore.swift's class-closing brace sat at the END of likePattern (Task 25's original close), and Task 29 (e4208f0) appended the per-message edit-flow methods AFTER it — latestUserStamp and deleteMessages(fromInclusive:conversationId:) were file-scope functions referencing private instance members (prepare/bind/text). Brace TOTALS stayed balanced so every prior static gate passed, but the file could never compile; ConversationStore calls them as instance methods (sql.latestUserStamp), which is the intended shape. Root cause of the escape: the gate counts braces, it doesn't track nesting
+- FIX: the closing brace moved from mid-file to the true end of the class — methods are members again, signatures and bodies byte-identical, zero behaviour change, callers untouched
+- GATE HARDENED (the real deliverable): new scripts/swift_structure_gate.py — a Swift-aware tokenizer (line comments, NESTABLE block comments, multi-line """ strings, escaped strings; braces inside literals never count) tracks true nesting depth and flags member-style INDENTED declarations sitting at file scope. Validated both directions: on the real tree it flagged exactly the two orphaned methods and nothing else across all 46 files (zero false positives — column-0 free helpers like ChatDetailView's parseContentSegments stay legal); a reconstructed orphan (class closed early, member after) is caught. The check is imported into ios_static_gates.py so every future cron cycle runs it as standard — this defect class can never ship again
+- False start kept out of the repo: the first sweep draft (regex-based) produced 115 noise hits from string-literal stripping bugs; deleted, superseded by the tokenizer
+- iOS STATIC GATES: 46 files PASS — balance clean, banned-API sweep clean, ORPHANED-MEMBER check clean; ConversationStore call sites (240-241) re-read against the restored member signatures
+- GATES: assembleDebug green 1m41s; lintDebug 0 errors — Android sources untouched by this task, the known benign warning profile unchanged
+- VERSION: no bump — the Android artifact is byte-for-byte unchanged (fix is iOS-source + tooling only) and iOS edits ride the next iOS-capable build per the Task-68 precedent; v0.50.0 and its permalink (b8a8ed0a…) stand as the shipping release
+- PUBLISHED: commit pushed with worklog
+
+Stage Summary:
+- The persistence polish pass started with a find, not a feature: the iOS store has been uncompilable-since-v0.16.0 in a way every prior gate was structurally blind to — now fixed at the source AND at the gate, so the blind spot itself is dead
+- Fifty shipped cycles stand; signature-stable, install-over, permalink serving v0.50.0
+- Feature queue next: design parity with the three benchmark apps, edge states, Room/SwiftData polish (remaining: WAL checkpoint tuning is Android-side already default; saved-items search) — plus device-gated holdovers (#4 R8/minify, req 14 device matrix, req 15 profiler) waiting on the user's device report

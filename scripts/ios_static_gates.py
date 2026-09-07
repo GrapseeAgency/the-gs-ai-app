@@ -1,8 +1,19 @@
 #!/usr/bin/env python3
-"""iOS static verification: brace/paren balance + banned-API sweep (GS AI App)."""
+"""iOS static verification: brace/paren balance + banned-API sweep + structural
+orphaned-member detection (GS AI App).
+
+The structural section (swift_structure_gate, same directory) kills the
+Task-29 defect class: methods appended after a type's closing brace — brace
+totals stay balanced but the file cannot compile. Depth-aware, Swift-literal
+aware; member-style indented declarations at file scope are flagged.
+"""
 import glob
+import os
 import re
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from swift_structure_gate import structural_issues  # noqa: E402
 
 # Auto-cover every Swift source so new feature files can never escape the gate.
 FILES = sorted(glob.glob("/home/z/my-project/ios/App/Sources/**/*.swift", recursive=True))
@@ -34,6 +45,9 @@ for path in FILES:
             ok = False
             line = src[: m.start()].count("\n") + 1
             status.append(f"BANNED API '{m.group(0)[:40]}' @ line {line}")
+    for line_no, text in structural_issues(path):
+        ok = False
+        status.append(f"ORPHANED MEMBER @ line {line_no}: {text[:44]}")
     name = path.split("/")[-1]
     print(f"{name}: {'CLEAN' if not status else '; '.join(status)}")
 
