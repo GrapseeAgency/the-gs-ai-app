@@ -20,9 +20,19 @@ struct ChatDetailView: View {
     @State private var translationText = ""
     @State private var translating = false
 
-    // Reading protection — true while the reader has scrolled away from the
-    // live edge; streaming deltas never yank the transcript back down.
+    // Reading protection — the reader is away from the live edge; streaming
+    // deltas never yank the transcript back down. Position-truthful (design
+    // parity with Android's derivedStateOf isAtBottom): a 1pt sentinel after
+    // the last turn IS the position signal — it appears when the live edge
+    // re-enters the viewport (re-engaging follow and hiding the jump button,
+    // like ChatGPT/Claude/Kimi) and its absence, confirmed after a short
+    // grace window so streaming flicker can't false-trigger, latches the
+    // button on. drags schedule a fast check so a hairline pan at the live
+    // edge never summons the button.
     @State private var userIsReading = false
+    @State private var atBottom = true
+    @State private var disengageWork: DispatchWorkItem?
+    private let liveEdgeID = "gs-live-edge"
     @State private var editingIndex: Int?
     @State private var editDraft = ""
 
@@ -138,6 +148,20 @@ struct ChatDetailView: View {
 
     // MARK: Transcript
 
+    /// Latches "reader is away" only if the live edge is still gone when the
+    /// check fires — a hairline pan at the bottom (sentinel never left) or the
+    /// follow scroll re-materializing the sentinel cancels out before this
+    /// runs, so the jump button obeys position like Android's, not gestures.
+    private func scheduleDisengage(after seconds: Double) {
+        guard !userIsReading else { return }
+        disengageWork?.cancel()
+        let work = DispatchWorkItem {
+            if !atBottom { userIsReading = true }
+        }
+        disengageWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: work)
+    }
+
     private var transcript: some View {
         ScrollViewReader { proxy in
             VStack(spacing: 0) {
@@ -204,14 +228,32 @@ struct ChatDetailView: View {
                         }
                         .id(message.id)
                     }
+
+                    // Live-edge sentinel: 1pt after the newest turn. Materialized
+                    // ⇔ the reader is at the bottom — the iOS16-honest position
+                    // signal (no scroll-offset API). Pinned by the follow scroll
+                    // itself, so streaming never flickers it.
+                    Color.clear
+                        .frame(height: 1)
+                        .id(liveEdgeID)
+                        .onAppear {
+                            atBottom = true
+                            disengageWork?.cancel()
+                            disengageWork = nil
+                            userIsReading = false
+                        }
+                        .onDisappear {
+                            atBottom = false
+                            scheduleDisengage(after: 0.6)
+                        }
                 }
                 .padding(.horizontal, Aero.Spacing.m)
                 .padding(.vertical, Aero.Spacing.m)
             }
             .simultaneousGesture(
                 DragGesture(minimumDistance: 3).onChanged { _ in
-                    userIsReading = true
                     vm.armOlderPages()
+                    scheduleDisengage(after: 0.25)
                 }
             )
             .scrollDismissesKeyboard(.immediately)
@@ -228,19 +270,19 @@ struct ChatDetailView: View {
             .onChange(of: vm.messages.last?.content) { _ in
                 guard !userIsReading else { return }
                 withAnimation(Aero.gentle) {
-                    if let last = vm.messages.last {
-                        proxy.scrollTo(last.id, anchor: .bottom)
-                    }
+                    // Pin the sentinel, not the bubble: the 1pt row stays
+                    // materialized at the viewport bottom, so atBottom holds
+                    // steady and the jump button never flickers mid-stream.
+                    proxy.scrollTo(liveEdgeID, anchor: .bottom)
                 }
             }
+            .onDisappear { disengageWork?.cancel() }
             .overlay(alignment: .bottomTrailing) {
                 if userIsReading && !vm.messages.isEmpty {
                     Button {
                         userIsReading = false
                         withAnimation(Aero.gentle) {
-                            if let last = vm.messages.last {
-                                proxy.scrollTo(last.id, anchor: .bottom)
-                            }
+                            proxy.scrollTo(liveEdgeID, anchor: .bottom)
                         }
                     } label: {
                         Image(systemName: "arrow.down")

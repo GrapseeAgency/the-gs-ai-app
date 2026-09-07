@@ -1706,3 +1706,24 @@ Stage Summary:
 - Library search is live end-to-end on both platforms: one search contract (empty-passes, case-insensitive title+content), composed with the kind chips, honest no-matches state — the standing "Room/SwiftData polish" queue line is now fully closed
 - Fifty-one shipped cycles, all signature-stable, all install-over
 - Feature queue next: design parity with the three benchmark apps (the last standing backlog line), then device-gated holdovers (#4 R8/minify, req 14 device matrix, req 15 profiler) waiting on the user's device report
+
+---
+Task ID: 75
+Agent: Z.ai Code (main)
+Task: Build QA, advance the backlog (queue head: design parity with the three benchmark apps — chat surface audit), ship.
+
+Work Log:
+- CONCURRENCY: clean open — HEAD == origin/main (39f625b, my Task 74), no parallel commits, no gradle processes
+- PARITY AUDIT (chat surface, the core screen): walked the benchmark signatures (ChatGPT · Claude · Kimi) against both platforms. Streaming indicator (AuroraIndicator both), find-in-chat, day separators, edit/branch/regenerate, save-to-library — all present. One real gap found: the jump-to-latest affordance obeys DIFFERENT physics per platform — Android is position-truthful (derivedStateOf on listState layout: lastVisible >= total-1), iOS is gesture-latched (any ≥3pt drag sets userIsReading, nothing clears it when the reader returns). Visible consequences on iOS only: a hairline pan at the bottom summons the button; manually scrolling back to the live edge leaves the button stuck AND streaming follow dead until the reader taps the button or sends; and the iOS system status-bar scroll-to-top (no drag event) never latches at all, so a streaming delta yanks the reader back down — a pre-existing bug the audit surfaced
+- FIX (iOS, iOS16-honest — no scroll-position API): a 1pt live-edge sentinel after the newest turn IS the position signal. Materialized ⇔ at bottom. onAppear → atBottom=true, cancel pending checks, re-engage follow (the benchmark behavior: returning to the live edge resumes streaming and hides the button). Disengagement is dual-path and race-guarded: drags schedule a 0.25s check that only latches if the sentinel is STILL gone (a pan at the bottom cancels out — no button on hairline pans); non-drag scroll-aways (status-bar tap) get a 0.6s grace window so streaming flicker can't false-latch
+- FLICKER-PROOF BY CONSTRUCTION: the streaming follow scroll now pins the SENTINEL (proxy.scrollTo(liveEdgeID, anchor: .bottom)) instead of the last bubble — the 1pt row stays materialized at the viewport bottom, so atBottom holds steady and the jump button never blinks mid-stream; pinning the bubble instead would leave the sentinel 1pt below the fold and false-trigger the grace timer every delta. The button tap uses the same pin
+- UNCHANGED BY DESIGN: button condition (userIsReading && !messages.isEmpty — now position-derived instead of gesture-derived, matching Android's !isAtBottom && isNotEmpty), visuals (36pt circle, arrow.down, outline, shadow — already benchmark-shaped), Android side (nothing to fix — it was the reference), VM/older-page arming (the drag still arms older pages instantly; only the latch became position-derived)
+- iOS STATIC GATES: 46 files PASS — balance clean, banned-API sweep clean, structural orphaned-member check clean; DispatchWorkItem/asyncAfter pattern matches shipped precedent (LibraryItemSheet)
+- GATES: assembleDebug green 1m41s (protocol verification; Android sources untouched this cycle)
+- VERSION: no bump — iOS-source-only change, Android artifact byte-identical; rides the next iOS-capable build per the Task-68/73 precedent; v0.51.0 and its permalink (833c0a3f…) stand as the shipping release
+- PUBLISHED: commit pushed with worklog
+
+Stage Summary:
+- The chat surface's jump-to-latest now obeys the same position physics on both platforms — button appears only when the live edge is genuinely out of view, returning to the bottom hides it AND re-engages streaming follow automatically, and the status-bar scroll-to-top no longer gets yanked by deltas. The last gesture-vs-position divergence in the app's core screen is closed
+- Fifty-one shipped cycles stand; signature-stable, install-over, permalink serving v0.51.0
+- Design-parity audit continues next cycle (remaining surfaces: recents/drawer, model centre, voice) — plus device-gated holdovers (#4 R8/minify, req 14 device matrix, req 15 profiler) waiting on the user's device report
