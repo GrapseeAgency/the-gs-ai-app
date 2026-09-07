@@ -991,3 +991,23 @@ Stage Summary:
 - Save-to-Library is a real feature now: a long-press files the turn into persistent storage and the Library shows it under Messages on both platforms — Room (additive migration, zero data loss) on Android, JSON-backed store on iOS
 - Twenty-five shipped cycles, all signature-stable, all install-over
 - Backlog remaining: Translate is the last chat-surface stub; assistants CRUD + pin/archive native wiring stay deferred until the live-backend ask
+
+---
+Task ID: 39 (cron cycle — real Translate, the last chat-surface stub, v0.26.0 shipped via LiveUpdate)
+Agent: Z.ai Code (main)
+Task: Build QA, advance backlog (Translate was the last snack-only stub — make it real on both platforms), publish v0.26.0.
+
+Work Log:
+- DESIGN: translation runs through the existing chat pipeline as a self-cleaning one-shot — a throwaway scratch conversation ("Translation") carries the prompt, the answer streams back, and the scratch row is deleted best-effort afterwards. Nothing lands in Room or ConversationStore, recents stay clean, and the offline contract stays snack-quiet
+- ANDROID DATA: ChatRepository.translate(text, targetLanguage, onDelta) — createConversation → sendMessageStream → deleteConversation in finally (CancellationException rethrown, all other failures swallowed); returns the streamed text ("" when the backend is unreachable)
+- ANDROID UI: ChatScreen gains translationSource/Text/Busy state + translateMessage() targeting java.util.Locale.getDefault().displayLanguage; TranslationSheet (ModalBottomSheet) shows the source turn on top and the streaming translation beneath, with Copy translation (SelectionContainer + "Copied" snack) and a Close that unlocks when the stream settles; dropdown item "Translate" now calls the real handler via onTranslate callback (same pattern as onBranch/onSaveToLibrary)
+- iOS: ChatViewModel.translate(text:targetLanguage:onDelta:) — same scratch-conversation semantics via APIClient (deferred delete in a Task), deltas hop @MainActor; ChatDetailView gains TranslationCard (Identifiable, .sheet(item:)) + beginTranslation() (device language via Locale.current.localizedString(forLanguageCode:)), TranslationSheet with the benchmark copy checkmark (doc.on.doc → checkmark 0.15s easeOut → back 1.4s later); bubble translate icon wired to the real handler
+- DEFECT-PREVENTION REVIEW: avoided guard-return inside defer (Swift control-transfer hazard) by restructuring to if-wrapped Task; static gates cannot catch such compile breaks
+- iOS STATIC GATES: 13 files CLEAN
+- VERSION: versionCode 26 / versionName 0.26.0; APK copied to download/GS-AI-App.apk (aapt verified versionCode 26); update-manifest.json bumped
+- PUBLISHED: commit 9c96025 pushed; GitHub Release v0.26.0 created (REL_ID 383814949, asset HTTP 201); /releases/latest/download/ permalink verified serving versionCode 26; stable signature b1ffd75d… intact
+
+Stage Summary:
+- Translate is real: every reply can now be streamed into a translation sheet targeted at the device language, on both platforms, with the same self-cleaning scratch-conversation mechanics — zero stubs remain on the chat surface (Copy, Regenerate, Read aloud, Share, Save to Library, Branch new chat, Translate all live)
+- Twenty-six shipped cycles, all signature-stable, all install-over
+- Backlog remaining: assistants CRUD + pin/archive native wiring (deferred until live backend ask), further parity sweeps (explore rows, edge states), Room/SwiftData polish
