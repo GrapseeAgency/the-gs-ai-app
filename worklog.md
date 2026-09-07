@@ -1684,3 +1684,25 @@ Stage Summary:
 - The persistence polish pass started with a find, not a feature: the iOS store has been uncompilable-since-v0.16.0 in a way every prior gate was structurally blind to — now fixed at the source AND at the gate, so the blind spot itself is dead
 - Fifty shipped cycles stand; signature-stable, install-over, permalink serving v0.50.0
 - Feature queue next: design parity with the three benchmark apps, edge states, Room/SwiftData polish (remaining: WAL checkpoint tuning is Android-side already default; saved-items search) — plus device-gated holdovers (#4 R8/minify, req 14 device matrix, req 15 profiler) waiting on the user's device report
+
+---
+Task ID: 74
+Agent: Z.ai Code (main)
+Task: Build QA, advance the backlog (queue head: Library saved-items search — the last concrete Room/polish item), ship v0.51.0.
+
+Work Log:
+- CONCURRENCY: clean open — HEAD == origin/main (592579d, my Task 73), no parallel commits, no gradle processes; proceeded on the disjoint queue head
+- SCOPE: edge states were already audited as shipped (Task 53), so the concrete remaining item was Library search — the one surface whose index (saved messages, documents, images, prompts) had no way to find things, while Chats and Explore both search. This closes the last gap named in the standing "Room/SwiftData polish" line
+- SEARCH (both platforms, one contract): live search field above the chips — Android reuses GsInputBar with the ExploreScreen idiom ("Search your library…"), iOS reuses ExploreView's Capsule row (magnifyingglass, autocorrectionDisabled, clear button) as a private per-file helper, the codebase's established pattern. Gate: empty term passes everything; otherwise title OR content contains the term case-insensitively (Android String.contains(ignoreCase), iOS localizedCaseInsensitiveContains). Real saves match on title+content, sample rows on title+detail
+- COMPOSITION SEMANTICS: search composes WITH the kind chips (AND), never replaces them — a term inside "Images" only searches images. Lists stay consistent: both the Room-backed rows and the sample rows filter through the same gate, so a hit is a hit regardless of origin
+- HONEST EMPTY STATE: search-active misses get their own state — icon flips Folder→Search (tray→magnifyingglass), title "No matches for \"term\"", message suggests different words or saving something new; the no-search state keeps the original copy. Same split as Explore (term.isEmpty gate)
+- NO NEW SQL, deliberately: saved items are a bounded personal collection (dozens, not thousands) already fully observed via Room Flow / UserDefaults load — client-side filtering is architecturally right here, unlike chat history where volume forced index-backed window reads and FTS. iOS mirrors the same decision on its JSON store
+- iOS STATIC GATES: 46 files PASS including the Task-73 structural orphaned-member check (LibraryView CLEAN); no banned APIs (plain TextField, no .searchable)
+- GATES: assembleDebug green 1m20s (real recompile), lintDebug 0 errors; assembleRelease green 2m52s
+- VERSION: versionCode 51 / versionName 0.51.0; release APK copied to download/ (aapt: 51, INTERNET + ACCESS_NETWORK_STATE + REQUEST_INSTALL_PACKAGES + RECORD_AUDIO intact, no debuggable flag; apksigner b1ffd75d… stable); update-manifest.json bumped with the feature note
+- PUBLISHED: commit bfb2028 pushed; GitHub Release v0.51.0 created (REL_ID 384085628 — first POST 422'd on short-SHA target_commitish, retried with the full SHA bfb20283f62f1b3ef651f9b70d024875b175859f), asset HTTP 201, 12,855,885 bytes = local exactly; /releases/latest/download/ permalink re-verified serving versionCode 51 sha256-identical (833c0a3f…)
+
+Stage Summary:
+- Library search is live end-to-end on both platforms: one search contract (empty-passes, case-insensitive title+content), composed with the kind chips, honest no-matches state — the standing "Room/SwiftData polish" queue line is now fully closed
+- Fifty-one shipped cycles, all signature-stable, all install-over
+- Feature queue next: design parity with the three benchmark apps (the last standing backlog line), then device-gated holdovers (#4 R8/minify, req 14 device matrix, req 15 profiler) waiting on the user's device report
