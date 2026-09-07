@@ -955,3 +955,21 @@ Stage Summary:
 - Copy is now a conversation on both platforms: Android snacks "Copied", iOS answers with a brief accent checkmark — every surface (bubble, code block, long-press menu) confirms, zero new error surfaces
 - Twenty-three shipped cycles, all signature-stable, all install-over
 - Backlog remaining: assistants CRUD + pin/archive native wiring (deferred until live backend ask), further parity sweeps
+
+---
+Task ID: 37 (cron cycle — real branch-new-chat + iOS timestamp defect fix, v0.24.0 shipped via LiveUpdate)
+Agent: Z.ai Code (main)
+Task: Build QA, advance backlog (the "Branch new chat" menu item was a stub that snacked "Branched" and did nothing — make it real on both platforms), publish v0.24.0.
+
+Work Log:
+- DEFECT FOUND + FIXED (iOS): ChatViewModel.ChatMessage had no createdAt, but ChatDetailView's transcript reads message.createdAt for day pills — a latent iOS compile break that static gates cannot catch (property access, not tokens). ChatMessage gains `var createdAt: String = ""`; send/placeholder turns stamp ConversationStore.now(), store and network history paths map real stamps
+- ANDROID: ChatRepository.branch(title, turns) — local-first fresh conversation row (local-UUID id, "Branch: <title>" clipped to 40) + turns copied with fresh UUIDs preserving createdAt order; no server echo, identical on/offline. ChatScreen gains branchFrom(messageId): slices in-memory thread up to the tapped assistant turn, persists the branch, re-bases the surface onto it (activeConversationId/title/messages swapped in place), quiet "Branched to a new chat" snack; dropdown item now calls the real handler
+- iOS: ChatViewModel.branch(at:) — same semantics via ConversationStore (createLocalConversation + per-turn append, empty stamps fall back to now); MessageBubble gains onBranch, bubble menu gains "Branch new chat" (arrow.triangle.branch); ForEach site wires vm.branch(at: index)
+- iOS STATIC GATES: 13 files CLEAN
+- VERSION: versionCode 24 / versionName 0.24.0; APK copied to download/GS-AI-App.apk (aapt verified versionCode 24); update-manifest.json bumped
+- PUBLISHED: commit 5a9c886 pushed; GitHub Release v0.24.0 created (REL_ID 383805799, asset HTTP 201, 19,518,404 bytes); /releases/latest/download/ permalink verified serving versionCode 24; stable signature b1ffd75d… intact
+
+Stage Summary:
+- Branching is a first-class action now: long-press any GS reply, tap Branch new chat, and the thread splits exactly like the benchmark apps — original untouched, branch fully browsable and continuable, on both platforms, with the iOS day-pill compile break fixed along the way
+- Twenty-four shipped cycles, all signature-stable, all install-over
+- Backlog remaining: assistants CRUD + pin/archive native wiring (deferred until live backend ask), further parity sweeps (remaining stubs: Translate, Save-to-Library is snack-only on both platforms)
