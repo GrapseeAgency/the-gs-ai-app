@@ -1568,3 +1568,27 @@ Stage Summary:
 - Forty-six shipped cycles stand (v0.46.0); this cycle closed the iOS scaling defect without touching the shipped artifact
 - Remaining pass queue: #4 R8/minify with conservative keep rules (deliberately gated on a device report — a stripping bug would violate the zero-error mandate), #5 hand-curated baseline profile + ProfileInstaller, #6 background-lifecycle sweep (req 17)
 - Honest note unchanged: req 14 (device matrix) and req 15 (profiler measurements) need real hardware — static engineering covers what it can, the user's device report arbitrates the rest
+
+---
+Task ID: 69 (deep-perf pass #6 — background-lifecycle sweep (req 17), v0.47.0 shipped via LiveUpdate)
+Agent: Z.ai Code (main)
+Task: Build QA, advance the deep-performance queue (item #6: background-lifecycle sweep — the last mandate item executable without hardware), ship.
+
+Work Log:
+- CONCURRENCY: clean single-writer state — origin/main at 449bc7c (Task 68), tree clean, no parallel loop
+- FULL-LIFECYCLE AUDIT (req 17) — every surface mapped: streams, dictation, connectivity, LiveUpdate, nav restoration, both platforms
+- VERIFIED CORRECT (no change, deliberately): chat streams complete in the background (composition survives ON_STOP; a short-lived turn finishing is better UX than cancelling; force-stop restores cleanly — partial turns persist non-cancellable since pass #1, history reloads from Room/SQLite, Navigation Compose/SwiftUI stack auto-restores); connectivity callback register/unregister is symmetric (DisposableEffect, runCatching-guarded); LiveUpdate download continues in background with exists()-guarded resume, and a suppressed Android-10+ background installer degrades to a Ready pill (foreground tap fires it — no notification machinery needed)
+- DEFECT 1 FIXED (Android, leak): HomeScreen dictation created a SpeechRecognizer on every hold and NEVER destroyed it — no DisposableEffect, no destroy() anywhere; one leaked service connection + audio session per dictation hold, eventually starving the system speech-service binding. Fix: cancelDictation() (stopListening + destroy + null ref + quiet reset) wired BOTH to onDispose (recognizer never outlives the canvas) and to a LifecycleEventObserver
+- DEFECT 2 FIXED (Android, req 17 core): backgrounding mid-dictation left the mic session open behind a stopped UI. Fix: ON_STOP observer tears the recognizer down immediately (ON_PAUSE not used — the permission dialog only pauses, so the grant-resume flow at line 685 survives untouched)
+- DEFECT 3 FIXED (iOS, same class): VoiceDictation had no interruption/scenePhase handling — backgrounding mid-hold left isListening stuck true with a dead engine. Fix: suspendForBackground() (holdActive=false, handedOff=true so the pending end()-grace can never hand off stale audio, teardownCapture()) driven by HomeView's scenePhase == .background (Android ON_STOP parity) AND by an in-class AVAudioSession interruption observer (phone call / Siri / alarm mid-hold; guard makes repeats no-ops; token removed in deinit)
+- VERIFIED SAFE (iOS): SpeechPlayer's delegate resets state on didCancel/didFinish — suspension-resume lands correctly; ChatViewModel streams freeze with the process and the catch path keeps partials + tail on resume — same contract as Android
+- PLATFORM PARITY: the two dictation fixes are clause-for-clause mirrors (ON_STOP ↔ scenePhase.background); iOS verified statically only — gates 46/46 PASS + brace/bracket balance on both edited files; call sites cross-checked by hand (VoiceDictation used only by HomeView:25; no other recognizer owners)
+- GATES: assembleDebug green 1m34s (real recompile — lifecycle code); lintDebug 0 errors (38 warnings = the known benign dependency-churn profile); assembleRelease green 2m44s
+- VERSION: versionCode 47 / versionName 0.47.0; release APK copied to download/ (aapt: versionCode 47, zero debuggable flags, ACCESS_NETWORK_STATE + RECORD_AUDIO intact; apksigner b1ffd75d… stable); update-manifest.json bumped with the stability note
+- PUBLISHED: commit f93018d pushed; GitHub Release v0.47.0 created (REL_ID 384029373, asset HTTP 201, 12,839,501 bytes); /releases/latest/download/ permalink re-verified serving versionCode 47 byte-identical
+
+Stage Summary:
+- Deep pass #6 shipped: the app's background contract is now explicit and enforced — mics close, sessions never leak, streams finish-and-persist, state restores from durable storage; the two dictation defects (per-hold recognizer leak + open mic on background) were real resource bugs no static perf pass could see, exactly why req 17 got its own sweep
+- Forty-seven shipped cycles, all signature-stable, all install-over
+- Remaining pass queue: #5 hand-curated baseline profile + ProfileInstaller (last no-device item; ProfileInstaller dependency is the zero-risk half, hand-curated rules ship with a grammar-verified profile); #4 R8/minify stays gated on a device report (a stripping bug would violate the zero-error mandate)
+- Honest note unchanged: req 14 (device matrix) and req 15 (profiler) need real hardware — the user's device report arbitrates what static engineering cannot
