@@ -1011,3 +1011,23 @@ Stage Summary:
 - Translate is real: every reply can now be streamed into a translation sheet targeted at the device language, on both platforms, with the same self-cleaning scratch-conversation mechanics — zero stubs remain on the chat surface (Copy, Regenerate, Read aloud, Share, Save to Library, Branch new chat, Translate all live)
 - Twenty-six shipped cycles, all signature-stable, all install-over
 - Backlog remaining: assistants CRUD + pin/archive native wiring (deferred until live backend ask), further parity sweeps (explore rows, edge states), Room/SwiftData polish
+
+---
+Task ID: 40 (cron cycle — Library item management: reader sheet + real delete, v0.27.0 shipped via LiveUpdate)
+Agent: Z.ai Code (main)
+Task: Build QA, advance backlog (edge-state sweep: saved Library items could never be read in full or removed — make them first-class on both platforms), publish v0.27.0.
+
+Work Log:
+- SURVEY: pin/archive/rename/delete, drafts (both platforms), and Explore surfaces (categories + search + assistants/prompts/tools) verified already at parity; the real gap was Task 38's feature itself — a saved item was write-only: no reader, no delete, and Android rows navigated to a blank new chat on tap
+- ANDROID DATA: ChatRepository.deleteSavedItem(id) → savedItemDao().delete (the DAO DELETE existed since Task 38; now reachable)
+- ANDROID UI: LibraryScreen gains scope + SnackbarHostState + clipboard + viewingItem state; real saved rows now tap into SavedItemSheet (ModalBottomSheet) — title header, "Saved message" caption, full content in a SelectionContainer, Copy ("Copied" snack) and Delete (instant Room removal, "Removed from Library" snack, sheet closes first so the list animates the row away); one build fix (missing padding import), green in 1m30s
+- iOS: ConversationStore extension gains deleteLibraryItem(id:) (JSON store rewrite); LibraryView reworked — real rows render above samples with their own builder (AeroListRow action:) tapping into LibraryItemSheet (read full turn with textSelection, Copy with the benchmark checkmark morph, Delete → store rewrite → onDeleted refresh → dismiss); filteredItems now samples-only; sheet attached via .sheet(item:) on the root
+- PROPERTY-ACCESS CROSS-CHECK: AeroListRow(title/subtitle/leading/trailing/action) memberwise order, LibraryItem field names, Filter enum case comparisons — verified by hand (static gates cannot catch these)
+- iOS STATIC GATES: 13 files CLEAN
+- VERSION: versionCode 27 / versionName 0.27.0; APK copied to download/GS-AI-App.apk (aapt verified versionCode 27); update-manifest.json bumped
+- PUBLISHED: commit 67d181e pushed; GitHub Release v0.27.0 created (REL_ID 383818420, asset HTTP 201); /releases/latest/download/ permalink verified serving versionCode 27; stable signature b1ffd75d… intact
+
+Stage Summary:
+- Library is a real space now: save from any chat, read the full turn in a reader sheet, copy it, or delete it for good — identical semantics on both platforms, purely local, quiet confirmations, empty states intact
+- Twenty-seven shipped cycles, all signature-stable, all install-over
+- Backlog remaining: assistants CRUD (edit button still parked) deferred until live backend ask; next edge-state candidates: re-open Library deep-link from saved-item sheet back into the source chat, explore-row polish, Room/SwiftData polish
