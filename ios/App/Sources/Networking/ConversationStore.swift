@@ -119,6 +119,27 @@ final class ConversationStore: ObservableObject {
         lastMessageByConversation[conversationID]
     }
 
+    /// Newest-window read for conversation open (deep-perf pass #2b, Android's
+    /// `historyRecent` twin) — SQLite does the indexed scan and only the page
+    /// crosses into Swift, so opening a 2,000-turn thread no longer
+    /// materialises the whole transcript. If SQLite has nothing for this
+    /// thread but the in-memory table does (legacy-JSON hiccup path), the
+    /// memory suffix answers instead — nothing ever looks lost.
+    func recentMessages(for conversationID: String, limit: Int) -> [StoredMessage] {
+        let window = sql.loadRecentMessages(conversationId: conversationID, limit: limit)
+        if !window.isEmpty || messages.isEmpty { return window }
+        return Array(messages(for: conversationID).suffix(limit))
+    }
+
+    /// Scroll-up page (Android's `historyBefore` twin) — up to `limit` turns
+    /// strictly older than `before` (the oldest loaded stamp), oldest first.
+    /// Pure local, never waits on the network; same legacy fallback contract.
+    func olderMessages(for conversationID: String, before: String, limit: Int) -> [StoredMessage] {
+        let page = sql.loadMessagesBefore(conversationId: conversationID, before: before, limit: limit)
+        if !page.isEmpty || messages.isEmpty { return page }
+        return Array(messages(for: conversationID).filter { $0.createdAt < before }.suffix(limit))
+    }
+
     // MARK: - Search (FTS5, mirrors Android's Room FTS contract)
 
     struct MessageSearchHit {

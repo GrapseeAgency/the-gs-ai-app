@@ -26,6 +26,11 @@ struct ChatDetailView: View {
     @State private var editingIndex: Int?
     @State private var editDraft = ""
 
+    // Scroll-up pagination (deep-perf pass #2b) — the anchor row captured the
+    // instant the older-page sentinel appears; restored to the viewport top
+    // right after the prepend, instantly, like Android's index-shift restore.
+    @State private var olderAnchor: ChatViewModel.ChatMessage.ID?
+
     // Find-in-chat — query, hit list, active hit (mirrors the Android bar).
     @State private var searchActive = false
     @State private var searchQuery = ""
@@ -142,6 +147,21 @@ struct ChatDetailView: View {
                 }
                 ScrollView {
                 LazyVStack(spacing: 12) {
+                    // Scroll-up pagination sentinel: a 1pt row above the
+                    // loaded window. Materializing near the top pulls one
+                    // older page from the local store (armed by a real drag,
+                    // so the bottom-landing on open never fires it). It
+                    // re-arms by disappearing — each prepend pushes it a full
+                    // page above the viewport.
+                    if vm.hasOlder {
+                        Color.clear
+                            .frame(height: 1)
+                            .onAppear {
+                                olderAnchor = vm.messages.first?.id
+                                vm.loadOlder()
+                            }
+                    }
+
                     if vm.isLoadingHistory {
                         LoadingView(label: "Catching up")
                             .padding(.top, Aero.Spacing.l)
@@ -191,9 +211,20 @@ struct ChatDetailView: View {
             .simultaneousGesture(
                 DragGesture(minimumDistance: 3).onChanged { _ in
                     userIsReading = true
+                    vm.armOlderPages()
                 }
             )
             .scrollDismissesKeyboard(.immediately)
+            .onChange(of: vm.messages.count) { _ in
+                // Prepend restore: the captured anchor row (first visible when
+                // the page was pulled) returns to the viewport top — instant,
+                // because an animated glide would read as motion the user
+                // never made. Appends leave olderAnchor nil and no-op.
+                guard let anchor = olderAnchor,
+                      vm.messages.contains(where: { $0.id == anchor }) else { return }
+                olderAnchor = nil
+                proxy.scrollTo(anchor, anchor: .top)
+            }
             .onChange(of: vm.messages.last?.content) { _ in
                 guard !userIsReading else { return }
                 withAnimation(Aero.gentle) {

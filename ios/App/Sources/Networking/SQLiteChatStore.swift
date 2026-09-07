@@ -155,6 +155,59 @@ final class SQLiteChatStore {
         return rows
     }
 
+    // MARK: - Windowed reads (deep-perf pass #2b — Android's paged-history twin)
+
+    /**
+     * Newest `limit` turns of one conversation, oldest first — the index-backed
+     * window read behind conversation open. The (conversationId, createdAt)
+     * index serves the scan and only the page crosses into Swift, so a
+     * 2,000-turn thread opens as cheaply as a 20-turn one. Fixed-width ISO
+     * stamps keep the lexicographic DESC order chronological.
+     */
+    func loadRecentMessages(conversationId: String, limit: Int) -> [StoredMessage] {
+        guard let stmt = prepare(
+            "SELECT id, conversationId, role, content, createdAt FROM messages " +
+            "WHERE conversationId = ? ORDER BY createdAt DESC LIMIT ?") else { return [] }
+        defer { sqlite3_finalize(stmt) }
+        bind(stmt, 1, conversationId)
+        sqlite3_bind_int(stmt, 2, Int32(clamping: limit))
+        var rows: [StoredMessage] = []
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            rows.append(StoredMessage(
+                id: text(stmt, 0),
+                conversationId: text(stmt, 1),
+                role: text(stmt, 2),
+                content: text(stmt, 3),
+                createdAt: text(stmt, 4)))
+        }
+        return rows.reversed()
+    }
+
+    /**
+     * Up to `limit` turns strictly older than `before` (the oldest loaded
+     * stamp), oldest first — the scroll-up page load. Pure local SQLite: the
+     * reader never waits on the network to page back through history.
+     */
+    func loadMessagesBefore(conversationId: String, before: String, limit: Int) -> [StoredMessage] {
+        guard let stmt = prepare(
+            "SELECT id, conversationId, role, content, createdAt FROM messages " +
+            "WHERE conversationId = ? AND createdAt < ? ORDER BY createdAt DESC LIMIT ?") else { return [] }
+        defer { sqlite3_finalize(stmt) }
+        bind(stmt, 1, conversationId)
+        bind(stmt, 2, before)
+        sqlite3_bind_int(stmt, 3, Int32(clamping: limit))
+        var rows: [StoredMessage] = []
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            rows.append(StoredMessage(
+                id: text(stmt, 0),
+                conversationId: text(stmt, 1),
+                role: text(stmt, 2),
+                content: text(stmt, 3),
+                createdAt: text(stmt, 4)))
+        }
+        return rows.reversed()
+    }
+
     // MARK: - Full-text search (FTS5, mirrors Android's ftsMatchQuery contract)
 
     /// Symbol-heavy or non-ASCII queries (CJK) fall back to LIKE; plain word

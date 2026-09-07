@@ -31,12 +31,24 @@ final class ChatViewModel: ObservableObject {
     @Published var isLoadingHistory = false
     @Published var errorMessage: String?
     @Published var conversationID: String?
+    /// Deep-perf pass #2b: the transcript is a newest-window — true while the
+    /// store still holds turns above the loaded page. Scrolling up prepends
+    /// pages locally (never the network); the view restores the scroll anchor.
+    @Published private(set) var hasOlder = false
 
     // MARK: - Private state
 
     private var streamTask: Task<Void, Never>?
     private var lastSentText: String?
     private var streamingAccumulator = ""
+
+    /// Page size of the newest-window history load (Android's HISTORY_PAGE).
+    private let historyPageSize = 60
+    /// `createdAt` of the oldest loaded turn — the scroll-up page boundary.
+    private var oldestStamp: String?
+    /// Pagination arms only on a real user drag, so the programmatic
+    /// bottom-landing on open can never trigger a prepend (Android parity).
+    private var olderArmed = false
 
     // MARK: - Init
 
@@ -121,6 +133,10 @@ final class ChatViewModel: ObservableObject {
         }
         conversationID = conversation.id
         messages = turns
+        // The branch conversation's store holds exactly these turns — no older
+        // pages exist, so the window state resets with the re-base.
+        oldestStamp = turns.first?.createdAt
+        hasOlder = false
     }
 
     /// Real translation through the chat pipeline, self-cleaning: a throwaway
@@ -420,9 +436,11 @@ final class ChatViewModel: ObservableObject {
 
     private func loadHistory(conversationID: String) {
         // Store first — threads must survive relaunches even fully offline.
-        let stored = ConversationStore.shared.messages(for: conversationID)
+        // Deep-perf pass #2b: the open is a newest-window read, so a
+        // 2,000-turn thread opens with the same O(page) cost as a 20-turn one.
+        let stored = ConversationStore.shared.recentMessages(for: conversationID, limit: historyPageSize)
         if !stored.isEmpty {
-            messages = stored.map { ChatMessage(role: $0.role, content: $0.content, createdAt: $0.createdAt) }
+            applyWindow(stored)
             return
         }
         // Untouched static demo conversations (drawer seeds "demo-N" ids).
@@ -436,6 +454,9 @@ final class ChatViewModel: ObservableObject {
                 let history = try await APIClient.shared.messages(conversationID: conversationID)
                 guard let self else { return }
                 self.messages = history.map { ChatMessage(role: $0.role, content: $0.content, createdAt: $0.createdAt) }
+                // The remote seed carries the full thread — nothing older locally.
+                self.oldestStamp = self.messages.first?.createdAt
+                self.hasOlder = false
                 self.isLoadingHistory = false
             } catch {
                 guard let self else { return }
@@ -446,6 +467,41 @@ final class ChatViewModel: ObservableObject {
                 self.messages = []
             }
         }
+    }
+
+    private func applyWindow(_ page: [StoredMessage]) {
+        messages = page.map { ChatMessage(role: $0.role, content: $0.content, createdAt: $0.createdAt) }
+        oldestStamp = page.first?.createdAt
+        hasOlder = page.count == historyPageSize
+    }
+
+    // MARK: - Older pages (deep-perf pass #2b)
+
+    /// Real user scroll-ups arm pagination — called from the transcript's drag
+    /// gesture, the same site that flips the reading guard (Android parity).
+    func armOlderPages() {
+        olderArmed = true
+    }
+
+    /**
+     * Prepends the next local page of history above the loaded window.
+     * Synchronous by design: the (conversationId, createdAt) index makes a
+     * 60-row read sub-millisecond, and the caller restores the scroll anchor
+     * immediately after the insert. Existing row identity is untouched, so
+     * SwiftUI keeps every rendered bubble in place.
+     */
+    func loadOlder() {
+        guard olderArmed, hasOlder, let conversationID, let oldest = oldestStamp else { return }
+        let page = ConversationStore.shared.olderMessages(for: conversationID, before: oldest, limit: historyPageSize)
+        guard !page.isEmpty else {
+            hasOlder = false
+            return
+        }
+        messages.insert(contentsOf: page.map {
+            ChatMessage(role: $0.role, content: $0.content, createdAt: $0.createdAt)
+        }, at: 0)
+        oldestStamp = page.first?.createdAt
+        if page.count < historyPageSize { hasOlder = false }
     }
 
     // MARK: - Error helpers
