@@ -1090,3 +1090,23 @@ Stage Summary:
 - Every suggestion surface in the app now seeds the composer (Home, Explore prompts/tools, assistant starters, Start chat) — no discovery tap anywhere dead-ends into a blank composer anymore — and the two Android reader sheets survive arbitrarily long content
 - Thirty shipped cycles, all signature-stable, all install-over
 - Backlog remaining: assistants CRUD (edit button) parked until live backend ask; next candidates: Room/SwiftData polish, deep-link from notification surface, Create tab real flows, remaining sample-parity details
+
+---
+Task ID: 44 (cron cycle — notification deep-links + tap-to-read, v0.31.0 shipped via LiveUpdate)
+Agent: Z.ai Code (main)
+Task: Build QA, advance backlog (edge-state sweep round four: notification rows were tap-dead on both platforms — no mark-read, no destination), publish v0.31.0.
+
+Work Log:
+- DESIGN: a notification tap marks the row read (unread dot clears, Android rows move Today → Earlier via the existing readIds filter) and deep-links by type — task/file → fresh chat (continue the finished work), assistant → Explore, share/project → Projects, system/security → Settings; identical mapping on both platforms
+- ANDROID: NotificationsScreen gains onNavigate + local fun open(item) (adds to readIds when unread, then navigates routeFor(type)); GsListItem rows wired via onClick; GsNavHost passes onNavigate = navigate; one build fix — missing GsRoutes import, green after
+- IOS: NotificationsView gains @EnvironmentObject Router (env inheritance verified: RootView injects .environmentObject on the NavigationStack and NotificationsView renders via navigationDestination); open(_:) marks read through the @State samples index and router.path.append(route(for:)); NotificationRow now a Button with KineticPressStyle + trailing onTap (memberwise order sample/highlighted/onTap verified by hand)
+- PROPERTY-ACCESS CROSS-CHECK: AeroRoute .explore/.projects/.settings/.chat(nil) cases exist; NotificationSample.unread is var on iOS (mutable in place) vs Android readIds overlay — each platform internally consistent, same behavior class
+- iOS STATIC GATES: 13 files CLEAN
+- ANDROID BUILD: one import fix, green in 1m27s; version-bump build 1m28s
+- VERSION: versionCode 31 / versionName 0.31.0; APK copied to download/GS-AI-App.apk (aapt verified versionCode 31); update-manifest.json bumped
+- PUBLISHED: commit ab22093 pushed; GitHub Release v0.31.0 created (REL_ID 383835365, asset HTTP 201, 19,551,172 bytes); /releases/latest/download/ permalink verified serving versionCode 31; stable signature b1ffd75d… intact
+
+Stage Summary:
+- The notification centre is interactive now: every row acknowledges its tap (read state) and lands somewhere useful instead of dead-ending — same type→surface mapping on both platforms, purely local, zero new error surfaces
+- Thirty-one shipped cycles, all signature-stable, all install-over
+- Backlog remaining: assistants CRUD (edit button) parked until live backend ask; next candidates: Room/SwiftData polish, Create tab real flows, remaining sample-parity details (billing rows, model compare actions)
