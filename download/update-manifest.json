@@ -1,6 +1,6 @@
 {
-  "versionCode": 26,
-  "versionName": "0.26.0",
+  "versionCode": 27,
+  "versionName": "0.27.0",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "Translate is real: tap Translate on any reply and GS streams the translation in a sheet, targeted at your language — the last chat-surface stub is gone."
+  "notes": "Library items are manageable now: tap any saved message to read it in full, copy it, or delete it — on both platforms."
 }

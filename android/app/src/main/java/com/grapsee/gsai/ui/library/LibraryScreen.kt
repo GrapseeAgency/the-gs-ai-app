@@ -2,6 +2,7 @@ package com.grapsee.gsai.ui.library
 
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -20,28 +21,42 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.TipsAndUpdates
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.text.selection.SelectionContainer
+import com.grapsee.gsai.data.local.SavedItemEntity
 import com.grapsee.gsai.di.ServiceLocator
+import kotlinx.coroutines.launch
 import com.grapsee.gsai.ui.components.GsCard
 import com.grapsee.gsai.ui.components.GsChip
 import com.grapsee.gsai.ui.components.GsEmptyState
@@ -95,6 +110,15 @@ fun LibraryScreen(onNavigate: (String) -> Unit) {
         .collectAsState(initial = emptyList())
     val realVisible = savedItems.filter { selectedFilter == 0 || filter == "Messages" }
 
+    // Item management: tap a real save to read it in full, copy or remove it.
+    val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val clipboard = LocalClipboardManager.current
+    var viewingItem by remember { mutableStateOf<SavedItemEntity?>(null) }
+    val showSnack: (String) -> Unit = { message ->
+        scope.launch { snackbarHostState.showSnackbar(message) }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -142,7 +166,7 @@ fun LibraryScreen(onNavigate: (String) -> Unit) {
                                     modifier = Modifier.size(20.dp)
                                 )
                             },
-                            onClick = { onNavigate(GsRoutes.chat(null)) }
+                            onClick = { viewingItem = item }
                         )
                     }
                     visibleItems.forEach { item ->
@@ -164,6 +188,28 @@ fun LibraryScreen(onNavigate: (String) -> Unit) {
                 }
                 Spacer(Modifier.height(GsMotion.spaceL))
             }
+        }
+
+        SnackbarHost(hostState = snackbarHostState)
+
+        viewingItem?.let { item ->
+            SavedItemSheet(
+                item = item,
+                onDismiss = { viewingItem = null },
+                onCopy = { text ->
+                    clipboard.setText(AnnotatedString(text))
+                    showSnack("Copied")
+                },
+                onDelete = {
+                    val target = item
+                    viewingItem = null
+                    scope.launch {
+                        runCatching { ServiceLocator.chat.deleteSavedItem(target.id) }
+                            .onSuccess { showSnack("Removed from Library") }
+                            .onFailure { showSnack("Couldn't remove right now") }
+                    }
+                }
+            )
         }
     }
 }
@@ -226,6 +272,78 @@ private fun ItemBadge(icon: ImageVector) {
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(18.dp)
             )
+        }
+    }
+}
+
+/**
+ * Library item detail: the saved turn in full, selectable for partial copies,
+ * with Copy and Delete as the row's real actions. Delete is instant and
+ * local — Room is the source of truth, so the list updates itself.
+ */
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun SavedItemSheet(
+    item: SavedItemEntity,
+    onDismiss: () -> Unit,
+    onCopy: (String) -> Unit,
+    onDelete: () -> Unit
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = GsMotion.spaceM)
+                .padding(bottom = GsMotion.spaceL),
+            verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Outlined.BookmarkBorder,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text(
+                        text = item.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                }
+                TextButton(onClick = onDismiss) { Text("Close") }
+            }
+            Text(
+                text = "Saved message",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.outline
+            )
+            SelectionContainer {
+                Text(
+                    text = item.content,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)) {
+                TextButton(onClick = { onCopy(item.content) }) {
+                    Icon(Icons.Outlined.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Copy")
+                }
+                TextButton(onClick = onDelete) {
+                    Icon(Icons.Outlined.DeleteOutline, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            }
         }
     }
 }

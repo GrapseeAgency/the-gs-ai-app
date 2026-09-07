@@ -245,4 +245,13 @@ extension ConversationStore {
         guard let data = UserDefaults.standard.data(forKey: Self.savedLibraryKey) else { return [] }
         return (try? JSONDecoder().decode([LibraryItem].self, from: data)) ?? []
     }
+
+    /// Library housekeeping: a saved item leaves the JSON store for good.
+    func deleteLibraryItem(id: String) {
+        var current = savedLibraryItems()
+        current.removeAll { $0.id == id }
+        if let data = try? JSONEncoder().encode(current) {
+            UserDefaults.standard.set(data, forKey: Self.savedLibraryKey)
+        }
+    }
 }

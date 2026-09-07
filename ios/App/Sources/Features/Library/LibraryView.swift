@@ -74,6 +74,9 @@ struct LibraryView: View {
     // Real saves from the chat surface — loaded on appear, rendered above seeds.
     @State private var savedMessages: [LibraryItem] = []
 
+    // Item management: tap a real save to read it in full, copy or remove it.
+    @State private var viewingItem: LibraryItem?
+
     private let collections: [SavedCollection] = [
         .init(name: "Brand kit", count: "12 items"),
         .init(name: "Client work", count: "8 items"),
@@ -88,10 +91,7 @@ struct LibraryView: View {
     ]
 
     private var filteredItems: [SavedItem] {
-        let real = savedMessages.map { item in
-            SavedItem(title: item.title, detail: "Message · saved from your chats", kind: .message)
-        }
-        return (real + items).filter { filter.matches($0.kind) }
+        items.filter { filter.matches($0.kind) }
     }
 
     // MARK: Body
@@ -111,6 +111,11 @@ struct LibraryView: View {
         .background(Aero.background.ignoresSafeArea())
         .onAppear {
             savedMessages = ConversationStore.shared.savedLibraryItems()
+        }
+        .sheet(item: $viewingItem) { item in
+            LibraryItemSheet(item: item) {
+                savedMessages = ConversationStore.shared.savedLibraryItems()
+            }
         }
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -192,7 +197,8 @@ struct LibraryView: View {
     private var itemsSection: some View {
         VStack(alignment: .leading, spacing: Aero.Spacing.m) {
             SectionHeader(title: "Saved items")
-            if filteredItems.isEmpty {
+            let realRows = savedMessages.filter { filter == .all || filter == .messages }
+            if realRows.isEmpty && filteredItems.isEmpty {
                 EmptyStateView(
                     icon: "tray",
                     title: "Nothing here yet",
@@ -200,6 +206,9 @@ struct LibraryView: View {
                 )
             } else {
                 VStack(spacing: Aero.Spacing.s) {
+                    ForEach(realRows) { real in
+                        realRow(real)
+                    }
                     ForEach(filteredItems) { item in
                         itemRow(item)
                     }
@@ -237,5 +246,93 @@ struct LibraryView: View {
                     .foregroundStyle(Aero.textMuted)
             }
         )
+    }
+
+    /// A real save: taps into the reader sheet where the full turn can be
+    /// copied or removed — the sample rows above keep their plain look.
+    private func realRow(_ item: LibraryItem) -> some View {
+        AeroListRow(
+            title: item.title,
+            subtitle: "Message · saved from your chats",
+            leading: {
+                Image(systemName: "bookmark")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(Aero.text)
+                    .frame(width: 36, height: 36)
+                    .background(Circle().fill(Aero.containerHigh))
+            },
+            trailing: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Aero.textMuted)
+            },
+            action: { viewingItem = item }
+        )
+    }
+}
+
+// MARK: - Library item reader
+
+/// One saved turn in full, selectable for partial copies — Copy hands it to
+/// the clipboard with the benchmark checkmark, Delete removes it for good and
+/// the list refreshes itself (Room on Android, the JSON store here).
+private struct LibraryItemSheet: View {
+    let item: LibraryItem
+    let onDeleted: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var copied = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top) {
+                Label(item.title, systemImage: "bookmark")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Aero.text)
+                    .lineLimit(2)
+                Spacer()
+                Button("Close") { dismiss() }
+                    .font(.system(size: 15))
+                    .foregroundStyle(Aero.textMuted)
+            }
+            Text("Saved message")
+                .font(.system(size: 12))
+                .foregroundStyle(Aero.textMuted)
+            ScrollView {
+                Text(item.content)
+                    .font(.system(size: 15))
+                    .foregroundStyle(Aero.text)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
+            }
+            HStack(spacing: 20) {
+                Button {
+                    UIPasteboard.general.string = item.content
+                    withAnimation(.easeOut(duration: 0.15)) { copied = true }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
+                        withAnimation(.easeIn(duration: 0.2)) { copied = false }
+                    }
+                } label: {
+                    Label(
+                        copied ? "Copied" : "Copy",
+                        systemImage: copied ? "checkmark" : "doc.on.doc"
+                    )
+                    .font(.system(size: 14))
+                    .foregroundStyle(copied ? Aero.accent : Aero.textMuted)
+                }
+                Button {
+                    ConversationStore.shared.deleteLibraryItem(id: item.id)
+                    onDeleted()
+                    dismiss()
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                        .font(.system(size: 14))
+                        .foregroundStyle(.red)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(Aero.Spacing.l)
+        .presentationDetents([.medium, .large])
     }
 }

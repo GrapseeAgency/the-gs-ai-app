@@ -210,6 +210,11 @@ class ChatRepository(
         )
     }
 
+    /** Library housekeeping: a saved item leaves the Room table for good. */
+    suspend fun deleteSavedItem(id: String) {
+        db.savedItemDao().delete(id)
+    }
+
     /** Room first; when empty (cold cache) fetch from network and cache. */
     suspend fun history(conversationId: String): List<MessageEntity> {
         val local = db.messageDao().forConversation(conversationId)
