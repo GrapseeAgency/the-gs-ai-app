@@ -1110,3 +1110,25 @@ Stage Summary:
 - The notification centre is interactive now: every row acknowledges its tap (read state) and lands somewhere useful instead of dead-ending — same type→surface mapping on both platforms, purely local, zero new error surfaces
 - Thirty-one shipped cycles, all signature-stable, all install-over
 - Backlog remaining: assistants CRUD (edit button) parked until live backend ask; next candidates: Room/SwiftData polish, Create tab real flows, remaining sample-parity details (billing rows, model compare actions)
+
+---
+Task ID: 45 (cron cycle — model preference that sticks, v0.32.0 shipped via LiveUpdate)
+Agent: Z.ai Code (main)
+Task: Build QA, advance backlog (Room/persistence polish: the Model Centre's Set as default + reasoning mode were remember-only — they evaporated on leaving the screen and never touched chat), publish v0.32.0.
+
+Work Log:
+- DISCOVERY: ChatRepository.send already accepted modelId (passed straight to the DTO) but no caller supplied one, and the Model Centre state was ephemeral — a settings screen whose only real choice reset itself
+- DESIGN: persist the pick locally; the send path resolves it against the backend's /models registry and only travels when the registry advertises the id — unknown ids, offline moments, and registry-fetch failures all fall back silently to the server default (zero new error surfaces)
+- ANDROID: new data/ModelPrefs (SharedPreferences, SessionStore style) for defaultId + mode; ModelCentreScreen inits from prefs and writes on Set as default / mode chip (LocalContext); ChatScreen.dispatch passes ModelPrefs.defaultId(context); ChatRepository gains remoteModelIds cache + resolveRemoteModelId() (CancellationException rethrown, other failures → null) applied inside send()
+- IOS: APIClient.stream gains modelId param threaded into SendMessageRequest (was hardcoded nil); ChatViewModel gains resolvePreferredModelID() (UserDefaults pref ∩ cached APIClient.models() ids) awaited in beginStreaming; ModelCentreView persists both picks to UserDefaults ("gs.models.defaultId" / "gs.models.mode")
+- DEFECT-PREVENTION: one MultiEdit swallowed a newline (doc comment fused with the function signature) — caught and restored immediately; static gates confirm balance
+- PROPERTY-ACCESS CROSS-CHECK: ModelDto.id / ModelEntry.id field names, APIClient.shared.models() signature, ChatViewModel non-isolated baseline (same style as existing state paths, benign best-effort cache) — verified by hand
+- iOS STATIC GATES: 13 files CLEAN
+- ANDROID BUILD: green in 1m38s (QA) and 1m30s (version bump) — no fixes needed
+- VERSION: versionCode 32 / versionName 0.32.0; APK copied to download/GS-AI-App.apk (aapt verified versionCode 32); update-manifest.json bumped
+- PUBLISHED: commit 6058cc6 pushed; GitHub Release v0.32.0 created (REL_ID 383839972, asset HTTP 201, 19,551,172 bytes); /releases/latest/download/ permalink verified serving versionCode 32; stable signature b1ffd75d… intact
+
+Stage Summary:
+- The Model Centre is a real control now: your default model and reasoning mode survive relaunches, and every chat turn actually sends with the chosen model whenever the server offers it — gated, silent, identical semantics on both platforms
+- Thirty-two shipped cycles, all signature-stable, all install-over
+- Backlog remaining: assistants CRUD (edit button) parked until live backend ask; next candidates: Create tab real flows, billing rows + model compare actions, remaining sample-parity details
