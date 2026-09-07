@@ -25,27 +25,18 @@ private struct StaggerIn<Content: View>: View {
 // MARK: - Projects — bundled workspaces
 
 /// PROJECTS root (pushed or embedded — resolved by the frozen router).
-/// Creation is intentionally a placeholder this build: toolbar plus and the
-/// dashed "New project" card both surface a coming-soon alert. Cards push
-/// `.project(id)`.
+/// Every card answers from [ProjectStore]: user-created projects with real
+/// chat counts and a timestamp that moves when the reader touches the
+/// project. The toolbar plus and the dashed "New project" card both open
+/// the create alert — no dead controls, no seeded rows; a fresh install
+/// shows an honest empty state until the reader builds their first project.
 struct ProjectsView: View {
 
-    // MARK: Sample data
-
-    private struct ProjectSample: Identifiable {
-        let id: String
-        let name: String
-        let detail: String
-        let meta: String
-    }
-
-    @State private var showComingAlert = false
-
-    private let projects: [ProjectSample] = [
-        .init(id: "project-brand", name: "Brand Refresh 2025", detail: "Repositioning, voice guidelines and the new visual identity.", meta: "8 chats · 14 files · 3 members · 2h ago"),
-        .init(id: "project-launch", name: "Q3 Launch Plan", detail: "Go-to-market plan, comms calendar and the launch-day runbook.", meta: "5 chats · 9 files · 2 members · 1d ago"),
-        .init(id: "project-research", name: "Research: AI market", detail: "Market sizing, competitor scan and a living source library.", meta: "12 chats · 21 files · 4 members · 3d ago")
-    ]
+    @ObservedObject private var store = ProjectStore.shared
+    @State private var showCreate = false
+    @State private var newName = ""
+    @State private var newBlurb = ""
+    @State private var newInstructions = ""
 
     // MARK: Body
 
@@ -54,7 +45,16 @@ struct ProjectsView: View {
             VStack(alignment: .leading, spacing: Aero.Spacing.l) {
                 StaggerIn(index: 0) { header }
                 StaggerIn(index: 1) { newProjectCard }
-                StaggerIn(index: 2) { projectList }
+                if store.projects.isEmpty {
+                    StaggerIn(index: 2) {
+                        Text("No projects yet — create one to bundle chats, instructions and context.")
+                            .font(Aero.caption())
+                            .foregroundStyle(Aero.textMuted)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                } else {
+                    StaggerIn(index: 2) { projectList }
+                }
             }
             .padding(.horizontal, Aero.Spacing.m)
             .padding(.top, Aero.Spacing.s)
@@ -64,7 +64,8 @@ struct ProjectsView: View {
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button {
-                    showComingAlert = true
+                    resetFields()
+                    showCreate = true
                 } label: {
                     Image(systemName: "plus.circle")
                         .font(.system(size: 17, weight: .medium))
@@ -74,8 +75,19 @@ struct ProjectsView: View {
                 .accessibilityLabel("New project")
             }
         }
-        .alert("Projects come alive in the next build", isPresented: $showComingAlert) {
-            Button("OK", role: .cancel) {}
+        .alert("New project", isPresented: $showCreate) {
+            TextField("Name", text: $newName)
+            TextField("What is it for? (optional)", text: $newBlurb)
+            TextField("Custom instructions (optional)", text: $newInstructions)
+            Button("Create") {
+                ProjectStore.shared.create(
+                    name: newName,
+                    blurb: newBlurb,
+                    instructions: newInstructions
+                )
+                resetFields()
+            }
+            Button("Cancel", role: .cancel) { resetFields() }
         }
     }
 
@@ -92,11 +104,12 @@ struct ProjectsView: View {
         }
     }
 
-    // MARK: New project (dashed outline card)
+    // MARK: New project (dashed outline card — live creation)
 
     private var newProjectCard: some View {
         Button {
-            showComingAlert = true
+            resetFields()
+            showCreate = true
         } label: {
             HStack(spacing: Aero.Spacing.s) {
                 Image(systemName: "plus")
@@ -106,7 +119,7 @@ struct ProjectsView: View {
                     .font(Aero.title())
                     .foregroundStyle(Aero.text)
                 Spacer()
-                Text("Coming soon")
+                Text("Create")
                     .font(Aero.label())
                     .foregroundStyle(Aero.textMuted)
             }
@@ -120,39 +133,53 @@ struct ProjectsView: View {
         .buttonStyle(KineticPressStyle())
     }
 
-    // MARK: Project cards
+    // MARK: Project cards (real data)
 
     private var projectList: some View {
-        VStack(alignment: .leading, spacing: Aero.Spacing.m) {
-            SectionHeader(title: "Your projects")
-            VStack(spacing: Aero.Spacing.m) {
-                ForEach(projects) { project in
-                    NavigationLink(value: AeroRoute.project(project.id)) {
-                        AeroCard {
-                            VStack(alignment: .leading, spacing: 6) {
-                                HStack(spacing: Aero.Spacing.s) {
-                                    Text(project.name)
-                                        .font(Aero.title())
-                                        .foregroundStyle(Aero.text)
-                                        .lineLimit(1)
-                                    Spacer(minLength: 0)
-                                    Image(systemName: "chevron.right")
-                                        .font(.system(size: 12, weight: .semibold))
-                                        .foregroundStyle(Aero.textMuted)
-                                }
-                                Text(project.detail)
+        VStack(spacing: Aero.Spacing.s) {
+            ForEach(store.projects) { project in
+                NavigationLink(value: AeroRoute.project(project.id)) {
+                    AeroCard {
+                        VStack(alignment: .leading, spacing: Aero.Spacing.xs) {
+                            Text(project.name)
+                                .font(Aero.title())
+                                .foregroundStyle(Aero.text)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            if !project.blurb.isEmpty {
+                                Text(project.blurb)
                                     .font(Aero.caption())
                                     .foregroundStyle(Aero.textMuted)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                Text(project.meta)
-                                    .font(Aero.label())
-                                    .foregroundStyle(Aero.textMuted)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
                             }
+                            Text("\(project.chatIds.count) chats · updated \(relative(project.updatedAt))")
+                                .font(Aero.label())
+                                .foregroundStyle(Aero.accentDeep)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
-                    .buttonStyle(KineticPressStyle())
                 }
+                .buttonStyle(KineticPressStyle())
             }
+        }
+    }
+
+    // MARK: Helpers
+
+    private func resetFields() {
+        newName = ""
+        newBlurb = ""
+        newInstructions = ""
+    }
+
+    private func relative(_ iso: String) -> String {
+        guard let then = ISO8601DateFormatter().date(from: iso) else { return "earlier" }
+        let interval = Date().timeIntervalSince(then)
+        switch interval {
+        case ..<60: return "just now"
+        case ..<3600: return "\(Int(interval / 60))m ago"
+        case ..<86400: return "\(Int(interval / 3600))h ago"
+        case ..<(7 * 86400): return "\(Int(interval / 86400))d ago"
+        default: return "earlier"
         }
     }
 }

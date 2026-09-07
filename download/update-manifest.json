@@ -1,6 +1,6 @@
 {
-  "versionCode": 53,
-  "versionName": "0.53.0",
+  "versionCode": 54,
+  "versionName": "0.54.0",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "Settings tell the truth: every switch, chip and slider now remembers its value between launches, Clear local data really wipes chats, messages and library saves on-device, and Export data writes your full corpus (conversations, messages, library) as a JSON you can share anywhere. Enter-to-send is live in the chat composer. Android + iOS one contract, same stable signature."
+  "notes": "Projects are real: create your own workspaces with name, description and custom instructions, link the chats you already have, and watch the activity log record every action — chat counts and timestamps answer from your data, no seeded samples. Edit and delete live in project settings. Search now finds your projects. Android + iOS one contract, same stable signature."
 }

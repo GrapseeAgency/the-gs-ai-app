@@ -2,6 +2,7 @@ package com.grapsee.gsai
 
 import android.app.Application
 import com.grapsee.gsai.data.AssistantsStore
+import com.grapsee.gsai.data.ProjectStore
 import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.di.ServiceLocator
 import dagger.hilt.android.HiltAndroidApp
@@ -20,5 +21,7 @@ class GSApplication : Application() {
         AssistantsStore.init(this)
         // Remembered settings hydrate before any composable reads a switch.
         SettingsStore.init(this)
+        // User-created projects load before the dashboard, search or detail read them.
+        ProjectStore.init(this)
     }
 }

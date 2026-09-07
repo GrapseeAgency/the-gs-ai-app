@@ -22,15 +22,16 @@ private struct StaggerIn<Content: View>: View {
     }
 }
 
-// MARK: - Project detail
+// MARK: - Project detail — real state on every tab
 
-/// Pushed via `.project(id)` — resolves the sample project, shows a hero card
-/// with the shared instructions preview, then Chats / Files / Activity /
-/// Members tabs. Chats push `.chat(id)`; gearshape in the toolbar pushes
-/// `.settings`.
+/// The hero answers from the stored project: the name, blurb and custom
+/// instructions the reader actually wrote. Tabs answer from real state —
+/// Chats lists the conversations genuinely linked to the project (linked
+/// and unlinked right here, rows push `.chat(id)`), Activity replays the
+/// store's real event log, and Files/Members are honest gates for
+/// subsystems that don't exist on-device yet. The gearshape opens edit +
+/// delete — no dead controls, no sample rows.
 struct ProjectDetailView: View {
-
-    // MARK: Sample data
 
     private enum DetailTab: String, CaseIterable, Identifiable {
         case chats = "Chats"
@@ -41,100 +42,38 @@ struct ProjectDetailView: View {
         var id: String { rawValue }
     }
 
-    private struct Sample {
-        let name: String
-        let detail: String
-        let instructions: String
-    }
-
-    private struct FileRow: Identifiable {
-        let id = UUID()
-        let name: String
-        let detail: String
-        let icon: String
-    }
-
-    private struct ActivityRow: Identifiable {
-        let id = UUID()
-        let title: String
-        let time: String
-    }
-
-    private struct MemberRow: Identifiable {
-        let id = UUID()
-        let name: String
-        let initials: String
-        let role: String
-        let isOwner: Bool
-    }
-
     let projectID: String
 
+    @ObservedObject private var store = ProjectStore.shared
+    @ObservedObject private var conversations = ConversationStore.shared
     @State private var tab: DetailTab = .chats
+    @State private var showEdit = false
+    @State private var showDeleteConfirm = false
+    @State private var showLinker = false
+    @State private var editName = ""
+    @State private var editBlurb = ""
+    @State private var editInstructions = ""
+    @State private var selectedChatIDs: Set<String> = []
 
-    private var sample: Sample {
-        switch projectID {
-        case "project-brand":
-            return Sample(
-                name: "Brand Refresh 2025",
-                detail: "Repositioning, voice guidelines and the new visual identity.",
-                instructions: "You are the brand copilot. Keep answers concise and on-voice; cite the brand book before offering opinions."
-            )
-        case "project-launch":
-            return Sample(
-                name: "Q3 Launch Plan",
-                detail: "Go-to-market plan, comms calendar and the launch-day runbook.",
-                instructions: "Bias toward action — end every answer with the next concrete step for the launch team."
-            )
-        case "project-research":
-            return Sample(
-                name: "Research: AI market",
-                detail: "Market sizing, competitor scan and a living source library.",
-                instructions: "Always show sources. Prefer primary data and flag anything older than 2024."
-            )
-        default:
-            return Sample(
-                name: "Project",
-                detail: "A shared workspace for chats, files and instructions.",
-                instructions: "Help the team move fast with short, sourced answers."
-            )
-        }
+    private var project: ProjectStore.Project? {
+        store.byId(projectID)
     }
-
-    private let chats: [(title: String, subtitle: String, id: String)] = [
-        ("Landing page copy", "12 messages · 2h ago", "demo-1"),
-        ("Brand voice workshop", "9 messages · 5h ago", "demo-2"),
-        ("Palette exploration", "4 messages · yesterday", "demo-3")
-    ]
-
-    private let files: [FileRow] = [
-        .init(name: "brand-book.pdf", detail: "PDF · 4.2 MB", icon: "doc.text"),
-        .init(name: "logo-pack.zip", detail: "ZIP · 12 files", icon: "doc.zipper"),
-        .init(name: "hero-shot.png", detail: "PNG · 1.1 MB", icon: "photo"),
-        .init(name: "reach-chart.png", detail: "PNG · 820 KB", icon: "chart.bar")
-    ]
-
-    private let activity: [ActivityRow] = [
-        .init(title: "Maya added brief.pdf", time: "1h ago"),
-        .init(title: "Jonas started “Landing page copy”", time: "3h ago"),
-        .init(title: "Priya updated project instructions", time: "yesterday"),
-        .init(title: "You shared this project", time: "2d ago")
-    ]
-
-    private let members: [MemberRow] = [
-        .init(name: "Maya Kobayashi", initials: "MK", role: "Owner", isOwner: true),
-        .init(name: "Jonas Petersen", initials: "JP", role: "Editor", isOwner: false),
-        .init(name: "Priya Sharma", initials: "PS", role: "Viewer", isOwner: false)
-    ]
 
     // MARK: Body
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Aero.Spacing.l) {
-                StaggerIn(index: 0) { hero }
-                StaggerIn(index: 1) { tabBar }
-                StaggerIn(index: 2) { tabContent }
+                if let project {
+                    StaggerIn(index: 0) { hero(project) }
+                    StaggerIn(index: 1) { tabBar }
+                    StaggerIn(index: 2) { tabContent(project) }
+                } else {
+                    Text("This project no longer exists.")
+                        .font(Aero.caption())
+                        .foregroundStyle(Aero.textMuted)
+                        .padding(.top, Aero.Spacing.xl)
+                }
             }
             .padding(.horizontal, Aero.Spacing.m)
             .padding(.top, Aero.Spacing.s)
@@ -144,7 +83,14 @@ struct ProjectDetailView: View {
         .toolbar(.visible, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                NavigationLink(value: AeroRoute.settings) {
+                Button {
+                    if let project {
+                        editName = project.name
+                        editBlurb = project.blurb
+                        editInstructions = project.instructions
+                        showEdit = true
+                    }
+                } label: {
                     Image(systemName: "gearshape")
                         .font(.system(size: 16, weight: .medium))
                         .foregroundStyle(Aero.text)
@@ -153,32 +99,60 @@ struct ProjectDetailView: View {
                 .accessibilityLabel("Project settings")
             }
         }
+        .alert("Edit project", isPresented: $showEdit) {
+            TextField("Name", text: $editName)
+            TextField("What is it for? (optional)", text: $editBlurb)
+            TextField("Custom instructions (optional)", text: $editInstructions)
+            Button("Save") {
+                ProjectStore.shared.update(
+                    id: projectID,
+                    name: editName,
+                    blurb: editBlurb,
+                    instructions: editInstructions
+                )
+            }
+            Button("Delete project", role: .destructive) { showDeleteConfirm = true }
+            Button("Cancel", role: .cancel) {}
+        }
+        .alert("Delete this project?", isPresented: $showDeleteConfirm) {
+            Button("Delete", role: .destructive) {
+                ProjectStore.shared.delete(id: projectID)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The project, its instructions and its activity log are removed from this device. Chats stay in your library.")
+        }
+        .sheet(isPresented: $showLinker) { linkerSheet }
     }
 
     // MARK: Hero
 
-    private var hero: some View {
+    private func hero(_ project: ProjectStore.Project) -> some View {
         AeroCard {
             VStack(alignment: .leading, spacing: Aero.Spacing.s) {
-                Text(sample.name)
+                Text(project.name)
                     .font(Aero.headline())   // serif — hero voice
                     .foregroundStyle(Aero.text)
-                Text(sample.detail)
-                    .font(Aero.caption())
-                    .foregroundStyle(Aero.textMuted)
-                    .fixedSize(horizontal: false, vertical: true)
-                VStack(alignment: .leading, spacing: Aero.Spacing.xs) {
-                    Text("INSTRUCTIONS")
-                        .font(Aero.label())
-                        .foregroundStyle(Aero.textMuted)
-                    Text(sample.instructions)
+                if !project.blurb.isEmpty {
+                    Text(project.blurb)
                         .font(Aero.caption())
-                        .foregroundStyle(Aero.text)
+                        .foregroundStyle(Aero.textMuted)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding(Aero.Spacing.s)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: 12).fill(Aero.container))
+                if !project.instructions.isEmpty {
+                    VStack(alignment: .leading, spacing: Aero.Spacing.xs) {
+                        Text("INSTRUCTIONS")
+                            .font(Aero.label())
+                            .foregroundStyle(Aero.textMuted)
+                        Text(project.instructions)
+                            .font(Aero.caption())
+                            .foregroundStyle(Aero.text)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(Aero.Spacing.s)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: 12).fill(Aero.container))
+                }
             }
         }
     }
@@ -200,24 +174,37 @@ struct ProjectDetailView: View {
     }
 
     @ViewBuilder
-    private var tabContent: some View {
+    private func tabContent(_ project: ProjectStore.Project) -> some View {
         switch tab {
-        case .chats: chatsTab
+        case .chats: chatsTab(project)
         case .files: filesTab
-        case .activity: activityTab
+        case .activity: activityTab(project)
         case .members: membersTab
         }
     }
 
-    // MARK: Chats tab
+    // MARK: Chats tab — real links
 
-    private var chatsTab: some View {
-        VStack(spacing: Aero.Spacing.s) {
-            ForEach(chats, id: \.id) { chat in
+    private func chatsTab(_ project: ProjectStore.Project) -> some View {
+        let linked = project.chatIds.compactMap { id in
+            conversations.conversations.first { $0.id == id }
+        }
+        return VStack(spacing: Aero.Spacing.s) {
+            AeroChip(text: "Add chats", selected: false, action: {
+                selectedChatIDs = Set(project.chatIds)
+                showLinker = true
+            })
+            if linked.isEmpty {
+                Text("No chats linked yet — add conversations to bundle them with these instructions.")
+                    .font(Aero.caption())
+                    .foregroundStyle(Aero.textMuted)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            ForEach(linked, id: \.id) { chat in
                 NavigationLink(value: AeroRoute.chat(chat.id)) {
                     AeroListRow(
                         title: chat.title,
-                        subtitle: chat.subtitle,
+                        subtitle: "updated \(relative(chat.updatedAt))",
                         leading: {
                             Image(systemName: "bubble.left")
                                 .font(.system(size: 14, weight: .medium))
@@ -233,47 +220,95 @@ struct ProjectDetailView: View {
                     )
                 }
                 .buttonStyle(KineticPressStyle())
+                .contextMenu {
+                    Button(role: .destructive) {
+                        ProjectStore.shared.unlinkChat(id: project.id, chatId: chat.id)
+                    } label: {
+                        Label("Remove from project", systemImage: "minus.circle")
+                    }
+                }
             }
         }
     }
 
-    // MARK: Files tab
+    // MARK: Link chats sheet — picker over the real conversation book
+
+    private var linkerSheet: some View {
+        NavigationStack {
+            List(conversations.conversations.filter { !$0.archived }, id: \.id) { chat in
+                Button {
+                    if selectedChatIDs.contains(chat.id) {
+                        selectedChatIDs.remove(chat.id)
+                    } else {
+                        selectedChatIDs.insert(chat.id)
+                    }
+                } label: {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(chat.title)
+                                .font(Aero.body())
+                                .foregroundStyle(Aero.text)
+                            Text("updated \(relative(chat.updatedAt))")
+                                .font(Aero.label())
+                                .foregroundStyle(Aero.textMuted)
+                        }
+                        Spacer()
+                        Image(systemName: selectedChatIDs.contains(chat.id) ? "checkmark.circle.fill" : "circle")
+                            .foregroundStyle(selectedChatIDs.contains(chat.id) ? Aero.accent : Aero.textMuted)
+                    }
+                }
+            }
+            .navigationTitle("Link chats")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") { showLinker = false }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Save") {
+                        let titles = Dictionary(
+                            uniqueKeysWithValues: conversations.conversations.map { ($0.id, $0.title) }
+                        )
+                        ProjectStore.shared.linkChats(
+                            id: projectID,
+                            chatIds: Array(selectedChatIDs),
+                            chatTitles: titles
+                        )
+                        showLinker = false
+                    }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    // MARK: Files tab — honest gate
 
     private var filesTab: some View {
-        VStack(spacing: Aero.Spacing.s) {
-            ForEach(files) { file in
-                AeroListRow(
-                    title: file.name,
-                    subtitle: file.detail,
-                    leading: {
-                        Image(systemName: file.icon)
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(Aero.text)
-                            .frame(width: 36, height: 36)
-                            .background(Circle().fill(Aero.containerHigh))
-                    },
-                    trailing: {
-                        Image(systemName: "ellipsis")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(Aero.textMuted)
-                    }
-                )
-            }
-        }
+        Text("File attachments aren't supported yet — projects hold files once on-device storage lands.")
+            .font(Aero.caption())
+            .foregroundStyle(Aero.textMuted)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    // MARK: Activity tab
+    // MARK: Activity tab — the store's real event log
 
-    private var activityTab: some View {
+    private func activityTab(_ project: ProjectStore.Project) -> some View {
         VStack(spacing: Aero.Spacing.s) {
-            ForEach(activity) { event in
+            if project.events.isEmpty {
+                Text("Nothing yet — actions you take on this project show up here.")
+                    .font(Aero.caption())
+                    .foregroundStyle(Aero.textMuted)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            ForEach(Array(project.events.reversed().enumerated()), id: \.offset) { _, event in
                 AeroListRow(
-                    title: event.title,
-                    subtitle: event.time,
+                    title: event.text,
+                    subtitle: relative(event.at),
                     leading: {
-                        Image(systemName: "person.crop.circle")
-                            .font(.system(size: 20))
-                            .foregroundStyle(Aero.textMuted)
+                        Image(systemName: "clock.arrow.circlepath")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(Aero.text)
                             .frame(width: 36, height: 36)
                             .background(Circle().fill(Aero.containerHigh))
                     },
@@ -285,41 +320,47 @@ struct ProjectDetailView: View {
         }
     }
 
-    // MARK: Members tab
+    // MARK: Members tab — honest single-member gate
 
     private var membersTab: some View {
         VStack(spacing: Aero.Spacing.s) {
-            ForEach(members) { member in
-                AeroListRow(
-                    title: member.name,
-                    leading: {
-                        Text(member.initials)
-                            .font(Aero.label())
-                            .foregroundStyle(Aero.text)
-                            .frame(width: 36, height: 36)
-                            .background(Circle().fill(Aero.containerHigh))
-                    },
-                    trailing: {
-                        RoleChip(role: member.role, isOwner: member.isOwner)
-                    }
-                )
-            }
+            AeroListRow(
+                title: "You",
+                subtitle: "Owner",
+                leading: {
+                    Image(systemName: "person.crop.circle")
+                        .font(.system(size: 20))
+                        .foregroundStyle(Aero.textMuted)
+                        .frame(width: 36, height: 36)
+                        .background(Circle().fill(Aero.containerHigh))
+                },
+                trailing: {
+                    Text("Owner")
+                        .font(Aero.label())
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(Capsule().fill(Aero.container))
+                        .foregroundStyle(Aero.accentDeep)
+                }
+            )
+            Text("Team members arrive with accounts and sharing.")
+                .font(Aero.caption())
+                .foregroundStyle(Aero.textMuted)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
-}
 
-// MARK: - Role chip (non-interactive)
+    // MARK: Helpers
 
-private struct RoleChip: View {
-    let role: String
-    var isOwner: Bool = false
-
-    var body: some View {
-        Text(role)
-            .font(Aero.label())
-            .padding(.horizontal, 10)
-            .padding(.vertical, 4)
-            .background(Capsule().fill(Aero.container))
-            .foregroundStyle(isOwner ? Aero.accentDeep : Aero.textMuted)
+    private func relative(_ iso: String) -> String {
+        guard let then = ISO8601DateFormatter().date(from: iso) else { return "earlier" }
+        let interval = Date().timeIntervalSince(then)
+        switch interval {
+        case ..<60: return "just now"
+        case ..<3600: return "\(Int(interval / 60))m ago"
+        case ..<86400: return "\(Int(interval / 3600))h ago"
+        case ..<(7 * 86400): return "\(Int(interval / 86400))d ago"
+        default: return "earlier"
+        }
     }
 }

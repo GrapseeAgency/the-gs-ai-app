@@ -41,6 +41,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.data.AssistantsStore
+import com.grapsee.gsai.data.ProjectStore
 import com.grapsee.gsai.data.local.ftsMatchQuery
 import com.grapsee.gsai.data.model.SampleData
 import com.grapsee.gsai.di.ServiceLocator
@@ -84,14 +85,18 @@ private data class SearchHit(
     val route: String
 )
 
-/** The same catalogue the Projects screen shows — search mirrors the surface. */
-private data class ProjectEntry(val id: String, val name: String, val blurb: String, val meta: String)
-
-private val projectCatalogue = listOf(
-    ProjectEntry("project-brand", "Brand Refresh 2025", "Reposition the flagship line — voice, palette and packaging.", "8 chats · 14 files · 3 members"),
-    ProjectEntry("project-launch", "Q3 Launch Plan", "Go-to-market plan — channels, messaging and milestones.", "12 chats · 9 files · 2 members"),
-    ProjectEntry("project-research", "Research: AI market", "Market sizing and competitor scan for the AI platform space.", "5 chats · 21 files · 4 members")
-)
+/** Search mirrors the Projects surface: user-created projects only, real meta. */
+private fun projectHitsFor(term: String): List<SearchHit> {
+    if (term.length < 2) return emptyList()
+    return ProjectStore.projects
+        .filter { it.name.contains(term, ignoreCase = true) || it.blurb.contains(term, ignoreCase = true) }
+        .take(8)
+        .map { project ->
+            val meta = if (project.blurb.isNotBlank()) project.blurb
+            else "${project.chatIds.size} chats"
+            SearchHit(HitKind.PROJECTS, project.name, meta, GsRoutes.project(project.id))
+        }
+}
 
 /** Recent searches the reader acted on — local-first, hiccup-safe, newest first. */
 private object RecentSearches {
@@ -175,15 +180,7 @@ fun SearchScreen(onNavigate: (String) -> Unit) {
                 )
             }
     }
-    val projectHits = remember(term) {
-        if (term.length < 2) emptyList()
-        else projectCatalogue
-            .filter { it.name.contains(term, ignoreCase = true) || it.blurb.contains(term, ignoreCase = true) }
-            .take(8)
-            .map { project ->
-                SearchHit(HitKind.PROJECTS, project.name, project.meta, GsRoutes.project(project.id))
-            }
-    }
+    val projectHits = remember(term, ProjectStore.projects) { projectHitsFor(term) }
 
     val allHits = storeHits + libraryHits + assistantHits + projectHits
     val visibleKinds = HitKind.entries.filter { kindFilter == null || it == kindFilter }

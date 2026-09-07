@@ -61,20 +61,6 @@ struct SearchView: View {
         let route: AeroRoute
     }
 
-    /// The same catalogue the Projects screen shows — search mirrors the surface.
-    private struct ProjectEntry {
-        let id: String
-        let name: String
-        let detail: String
-        let meta: String
-    }
-
-    private static let projectCatalogue: [ProjectEntry] = [
-        .init(id: "project-brand", name: "Brand Refresh 2025", detail: "Repositioning, voice guidelines and the new visual identity.", meta: "8 chats · 14 files · 3 members"),
-        .init(id: "project-launch", name: "Q3 Launch Plan", detail: "Go-to-market plan, comms calendar and the launch-day runbook.", meta: "5 chats · 9 files · 2 members"),
-        .init(id: "project-research", name: "Research: AI market", detail: "Market sizing, competitor scan and a living source library.", meta: "12 chats · 21 files · 4 members")
-    ]
-
     /// Recent searches the reader acted on — local-first, hiccup-safe, newest first.
     private enum RecentSearches {
         private static let key = "gs_search_recent"
@@ -94,6 +80,7 @@ struct SearchView: View {
 
     @ObservedObject private var store = ConversationStore.shared
     @ObservedObject private var assistantsStore = AssistantsStore.shared
+    @ObservedObject private var projectStore = ProjectStore.shared
     @State private var query = ""
     @State private var activeKind: Kind?
     @State private var recents: [String] = RecentSearches.load()
@@ -152,17 +139,18 @@ struct SearchView: View {
                 detail: "\(assistant.category) · ★ \(assistant.ratingText)",
                 route: .assistant(assistant.id)))
         }
-        for project in Self.projectCatalogue
+        for project in projectStore.projects
             .filter({
                 $0.name.localizedCaseInsensitiveContains(term) ||
-                $0.detail.localizedCaseInsensitiveContains(term)
+                $0.blurb.localizedCaseInsensitiveContains(term)
             })
             .prefix(8) {
+            let detail = project.blurb.isEmpty ? "\(project.chatIds.count) chats" : project.blurb
             hits.append(SearchHit(
                 id: "proj-\(project.id)",
                 kind: .projects,
                 title: project.name,
-                detail: project.meta,
+                detail: detail,
                 route: .project(project.id)))
         }
         return hits

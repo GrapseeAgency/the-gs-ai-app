@@ -3,7 +3,6 @@ package com.grapsee.gsai.ui.projects
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,62 +15,55 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.grapsee.gsai.data.ProjectStore
 import com.grapsee.gsai.ui.components.GsCard
 import com.grapsee.gsai.ui.components.GsScreenScaffold
 import com.grapsee.gsai.ui.navigation.GsRoutes
 import com.grapsee.gsai.ui.theme.GsMotion
+import java.time.Duration
+import java.time.OffsetDateTime
 
 /**
  * AERUO KINETIC — PROJECTS dashboard.
- * One "New project" lead card (static) + three project cards that push the
- * detail screen with their sample ids.
+ * Every card answers from [ProjectStore]: user-created projects with real
+ * chat counts and a timestamp that moves when the reader touches the
+ * project. The lead card and the toolbar plus both open the create dialog —
+ * no dead buttons, no seeded rows; a fresh install shows an honest empty
+ * state until the reader builds their first project.
  */
 
-private data class ProjectSummary(
-    val id: String,
-    val name: String,
-    val blurb: String,
-    val meta: String,
-    val updated: String
-)
-
-private val projectSummaries = listOf(
-    ProjectSummary(
-        id = "project-brand",
-        name = "Brand Refresh 2025",
-        blurb = "Reposition the flagship line — voice, palette and packaging across every touchpoint.",
-        meta = "8 chats · 14 files · 3 members",
-        updated = "2h ago"
-    ),
-    ProjectSummary(
-        id = "project-launch",
-        name = "Q3 Launch Plan",
-        blurb = "Go-to-market plan for the Q3 release — channels, messaging and milestones.",
-        meta = "12 chats · 9 files · 2 members",
-        updated = "yesterday"
-    ),
-    ProjectSummary(
-        id = "project-research",
-        name = "Research: AI market",
-        blurb = "Market sizing and competitor scan for the AI platform space.",
-        meta = "5 chats · 21 files · 4 members",
-        updated = "3d ago"
-    )
-)
+internal fun relativeMoment(iso: String): String = runCatching {
+    val seconds = Duration.between(OffsetDateTime.parse(iso), OffsetDateTime.now()).seconds
+    when {
+        seconds < 60 -> "just now"
+        seconds < 3600 -> "${seconds / 60}m ago"
+        seconds < 86400 -> "${seconds / 3600}h ago"
+        seconds < 7 * 86400 -> "${seconds / 86400}d ago"
+        else -> "earlier"
+    }
+}.getOrDefault("earlier")
 
 @Composable
 fun ProjectsScreen(onNavigate: (String) -> Unit) {
+    var showCreate by remember { mutableStateOf(false) }
+    val projects = ProjectStore.projects
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -81,7 +73,7 @@ fun ProjectsScreen(onNavigate: (String) -> Unit) {
         GsScreenScaffold(
             title = "Projects",
             actions = {
-                IconButton(onClick = {}) {
+                IconButton(onClick = { showCreate = true }) {
                     Icon(
                         imageVector = Icons.Outlined.Add,
                         contentDescription = "New project",
@@ -97,21 +89,65 @@ fun ProjectsScreen(onNavigate: (String) -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(GsMotion.spaceL)
             ) {
                 Spacer(Modifier.height(GsMotion.spaceS))
-                NewProjectCard()
-                projectSummaries.forEach { project ->
-                    ProjectCard(project = project) {
-                        onNavigate(GsRoutes.project(project.id))
+                NewProjectCard(onClick = { showCreate = true })
+                if (projects.isEmpty()) {
+                    Text(
+                        text = "No projects yet — create one to bundle chats, instructions and context.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                projects.forEach { project ->
+                    GsCard(onClick = { onNavigate(GsRoutes.project(project.id)) }) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(GsMotion.spaceXS)
+                        ) {
+                            Text(
+                                text = project.name,
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            if (project.blurb.isNotBlank()) {
+                                Text(
+                                    text = project.blurb,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Text(
+                                text = "${project.chatIds.size} chats · updated ${relativeMoment(project.updatedAt)}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
                     }
                 }
                 Spacer(Modifier.height(GsMotion.spaceL))
             }
         }
     }
+
+    if (showCreate) {
+        ProjectFieldsDialog(
+            title = "New project",
+            confirmLabel = "Create",
+            initialName = "",
+            initialBlurb = "",
+            initialInstructions = "",
+            onDismiss = { showCreate = false },
+            onConfirm = { name, blurb, instructions ->
+                ProjectStore.create(name, blurb, instructions)
+                showCreate = false
+            }
+        )
+    }
 }
 
 @Composable
-private fun NewProjectCard() {
-    GsCard(onClick = {}) {
+private fun NewProjectCard(onClick: () -> Unit) {
+    GsCard(onClick = onClick) {
         Column(
             modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -138,43 +174,64 @@ private fun NewProjectCard() {
             )
             Text(
                 text = "Bundle chats, files and instructions",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
 }
 
+/** Shared create/edit fields — one dialog shape for both entry points. */
 @Composable
-private fun ProjectCard(project: ProjectSummary, onClick: () -> Unit) {
-    GsCard(onClick = onClick) {
-        Text(
-            text = project.name,
-            style = MaterialTheme.typography.headlineSmall,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        Text(
-            text = project.blurb,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(Modifier.height(GsMotion.spaceS))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = project.meta,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = "Updated ${project.updated}",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+internal fun ProjectFieldsDialog(
+    title: String,
+    confirmLabel: String,
+    initialName: String,
+    initialBlurb: String,
+    initialInstructions: String,
+    onDismiss: () -> Unit,
+    onConfirm: (name: String, blurb: String, instructions: String) -> Unit
+) {
+    var name by remember { mutableStateOf(initialName) }
+    var blurb by remember { mutableStateOf(initialBlurb) }
+    var instructions by remember { mutableStateOf(initialInstructions) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = blurb,
+                    onValueChange = { blurb = it },
+                    label = { Text("What is it for? (optional)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = instructions,
+                    onValueChange = { instructions = it },
+                    label = { Text("Custom instructions (optional)") },
+                    minLines = 2,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(name, blurb, instructions) },
+                enabled = name.isNotBlank()
+            ) { Text(confirmLabel) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
         }
-    }
+    )
 }
