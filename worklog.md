@@ -1297,3 +1297,24 @@ Stage Summary:
 - The app icon is now a launcher: long-press GS AI anywhere — even mid-conversation — and jump straight to a new chat, Image Studio, or voice mode; both platforms share one intent set, one naming, one target map
 - Forty shipped cycles, all signature-stable, all install-over
 - Next candidates: hold for the first user test report (none since v0.5.0), or further net-new polish — remaining ideas are thin (theme/dark-follow polish, notification deep-links already routed); quick actions closed the last launcher-grade surface
+
+---
+Task ID: 54 (cron cycle — branded launcher icon, v0.41.0 shipped via LiveUpdate)
+Agent: Z.ai Code (main)
+Task: Build QA, advance backlog (Task 53's candidates: hold for first test report or thin net-new polish — audited cron's "edge states" line first: dead on inspection; landed on the last first-impression gap: the launcher icon), publish v0.41.0.
+
+Work Log:
+- EDGE-STATES AUDIT (cron candidate, dead): every list surface already ships an empty state on both platforms — Chats per-filter copy ("Nothing pinned yet"/"Nothing unread — enjoy the quiet."), Archived ("Nothing archived yet"), ChatSearch + global Search ("No results" with the query echoed), Library ("Nothing here yet") via GsEmptyState / EmptyStateView; iOS ChatsListView emptyTitle comment even says "mirrors the Android hub exactly". Nothing to add
+- THE GAP: Android manifest still pointed at @android:drawable/sym_def_app_icon (the stock robot) and iOS had no icon asset at all — while v0.40.0 just made long-pressing that icon a headline interaction; every benchmark app is recognizable on the home screen
+- DESIGN: the GS aurora orb — obsidian #0A0D12 canvas, radial teal orb (#2DD4A8→#0FA37E, 52/108 of canvas = inside the adaptive safe zone), soft specular highlight upper-left, faint 25%-alpha halo ring at 33.5/108; identical geometry on both platforms
+- ANDROID (XML-only, zero PNGs — minSdk 26 means anydpi-v26 covers every device): values/colors.xml (ic_launcher_background), drawable/ic_launcher_foreground.xml (vector with inline <aapt:attr> radial gradient + arc circles), mipmap-anydpi-v26/ic_launcher.xml (adaptive-icon with <monochrome> for Android 13+ themed icons); manifest android:icon="@mipmap/ic_launcher"; aapt badging confirms ic_launcher.xml served for every density bucket
+- IOS: scripts/gen_ios_appicon.py (persisted) renders a 2048 canvas via concentric radial discs + blurred specular + ring, LANCZOS-downsampled to 1024; AppIcon.appiconset/Contents.json (single universal 1024) + root Assets.xcassets/Contents.json; project.yml gains the asset-catalog source path + ASSETCATALOG_COMPILER_APPICON_NAME=AppIcon; visual check of the PNG: clean, on-brand
+- iOS STATIC GATES: 45 files CLEAN (no Swift changes this cycle — assets only)
+- ANDROID BUILD: green 1m28s (QA — new resources compiled incl. aapt2 inline gradient) + 1m32s (version bump) — no fixes needed
+- VERSION: versionCode 41 / versionName 0.41.0; APK copied to download/GS-AI-App.apk (aapt verified versionCode 41); update-manifest.json bumped
+- PUBLISHED: commit d331c95 pushed; GitHub Release v0.41.0 created (REL_ID 383895143, asset HTTP 201, 19,574,991 bytes); /releases/latest/download/ permalink verified serving versionCode 41; stable signature b1ffd75d… intact
+
+Stage Summary:
+- The home screen finally reads "GS AI" at a glance: the stock Android robot is gone, replaced by the same aurora orb that anchors the in-app hero — launcher, recents tray, quick-action menu and (Android 13+) themed icons all wear it; iOS ships the identical mark
+- Forty-one shipped cycles, all signature-stable, all install-over
+- Next candidates: hold for the first user test report (none since v0.5.0). Remaining polish ideas are genuinely exhausted at this point — visible surface (icon, quick actions, About, empty states, billing, GS Lite) is at benchmark parity; further work should be driven by real device feedback
