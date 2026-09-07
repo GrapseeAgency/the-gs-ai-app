@@ -1,6 +1,6 @@
 {
-  "versionCode": 36,
-  "versionName": "0.36.0",
+  "versionCode": 37,
+  "versionName": "0.37.0",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "Billing parity pass: credit packs, plan features and prices now read the same on iPhone as on Android — same £2/£8/£25 packs, same Pro quota and Team inclusions."
+  "notes": "Sample dates went live: renewal dates and invoice months in Billing are now computed from today, so the account never looks frozen in the past."
 }

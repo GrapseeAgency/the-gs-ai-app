@@ -10,6 +10,29 @@ struct BillingView: View {
     private static let dangerRed = Color(red: 0.9, green: 0.28, blue: 0.28)
     private static let checkoutToast = "Checkout arrives with the App Store build"
 
+    /// Fresh sample dates: the renewal anchor is the 12th of next month and
+    /// the invoices are the three most recent completed billing months —
+    /// computed so the samples never go stale (they used to say Aug 2025).
+    private static var renewalDateText: String {
+        let cal = Calendar.current
+        let next = cal.date(byAdding: .month, value: 1, to: Date()) ?? Date()
+        var comps = cal.dateComponents([.year, .month], from: next)
+        comps.day = 12
+        let df = DateFormatter()
+        df.dateFormat = "d MMM yyyy"
+        df.locale = Locale(identifier: "en_GB")
+        return df.string(from: cal.date(from: comps) ?? next)
+    }
+
+    private static var recentInvoiceMonths: [String] {
+        let df = DateFormatter()
+        df.dateFormat = "MMM yyyy"
+        df.locale = Locale(identifier: "en_GB")
+        return (1...3).map { offset in
+            df.string(from: Calendar.current.date(byAdding: .month, value: -offset, to: Date()) ?? Date())
+        }
+    }
+
     // Plan state (local until the billing backend lands)
     @State private var currentPlan = "Pro"
     @State private var selectedPlan = "Pro"
@@ -51,7 +74,7 @@ struct BillingView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Shared workspaces and admin controls for everyone. Pro stays active until 12 Aug 2025.")
+            Text("Shared workspaces and admin controls for everyone. Pro stays active until \(Self.renewalDateText).")
         }
         .confirmationDialog(
             "Downgrade to Free?",
@@ -75,7 +98,7 @@ struct BillingView: View {
             }
             Button("Keep Pro", role: .cancel) {}
         } message: {
-            Text("Pro stays active until 12 Aug 2025, then moves to Free. Your chats and files are safe.")
+            Text("Pro stays active until \(Self.renewalDateText), then moves to Free. Your chats and files are safe.")
         }
         .task(id: toast) {
             guard toast != nil else { return }
@@ -132,9 +155,9 @@ struct BillingView: View {
 
     private var planCaption: String {
         switch currentPlan {
-        case "Team": return "£39 per user / month · renews 12 Aug 2025"
+        case "Team": return "£39 per user / month · renews \(Self.renewalDateText)"
         case "Free": return "Free · 40 messages a day · 1 model"
-        default: return "£16/month · renews 12 Aug 2025"
+        default: return "£16/month · renews \(Self.renewalDateText)"
         }
     }
 
@@ -366,9 +389,9 @@ struct BillingView: View {
         AeroCard {
             VStack(alignment: .leading, spacing: Aero.Spacing.s) {
                 SectionHeader(title: "Invoices")
-                invoiceRow("Jul 2025")
-                invoiceRow("Jun 2025")
-                invoiceRow("May 2025")
+                ForEach(Self.recentInvoiceMonths, id: \.self) { month in
+                    invoiceRow(month)
+                }
             }
         }
     }

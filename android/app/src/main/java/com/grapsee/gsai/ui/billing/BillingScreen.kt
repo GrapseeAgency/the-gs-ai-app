@@ -60,6 +60,22 @@ import com.grapsee.gsai.ui.components.GsSectionHeader
 import com.grapsee.gsai.ui.theme.GsMotion
 import com.grapsee.gsai.ui.theme.kineticPress
 import kotlinx.coroutines.launch
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
+
+/** Fresh sample dates: the renewal anchor is the 12th of next month and the
+ *  invoices are the three most recent completed billing months — computed so
+ *  the samples never go stale (they used to be frozen at Aug 2025). */
+private val renewalDateText: String =
+    LocalDate.now().plusMonths(1).withDayOfMonth(12)
+        .format(DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH))
+
+private val recentInvoiceMonths: List<String> =
+    (1..3).map { offset ->
+        LocalDate.now().minusMonths(offset.toLong())
+            .format(DateTimeFormatter.ofPattern("MMM yyyy", Locale.ENGLISH))
+    }
 
 @Composable
 fun BillingScreen(onBack: () -> Unit) {
@@ -218,7 +234,7 @@ fun BillingScreen(onBack: () -> Unit) {
             onDismissRequest = { showCancelDialog = false },
             title = { Text("Cancel subscription?") },
             text = {
-                Text("Pro stays active until 12 Aug 2025. After that your account moves to Free — your chats and files are kept.")
+                Text("Pro stays active until $renewalDateText. After that your account moves to Free — your chats and files are kept.")
             },
             confirmButton = {
                 TextButton(
@@ -226,7 +242,7 @@ fun BillingScreen(onBack: () -> Unit) {
                         showCancelDialog = false
                         currentPlan = "free"
                         selectedPlan = "free"
-                        showMessage("Subscription cancelled — Pro ends 12 Aug 2025")
+                        showMessage("Subscription cancelled — Pro ends $renewalDateText")
                     },
                     colors = ButtonDefaults.textButtonColors(
                         contentColor = MaterialTheme.colorScheme.error
@@ -248,9 +264,9 @@ private fun CurrentPlanCard(currentPlan: String) {
         else -> "Pro"
     }
     val planMeta = when (currentPlan) {
-        "team" -> "£39/user · renews 12 Aug 2025"
+        "team" -> "£39/user · renews $renewalDateText"
         "free" -> "£0 · no renewal date"
-        else -> "£16/month · renews 12 Aug 2025"
+        else -> "£16/month · renews $renewalDateText"
     }
     GsCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -469,11 +485,7 @@ private fun InvoicesCard(onDownload: (String, String) -> Unit) {
             color = MaterialTheme.colorScheme.onSurface
         )
         Spacer(Modifier.height(GsMotion.spaceS))
-        listOf(
-            "Jul 2025" to "£16.00 · Paid",
-            "Jun 2025" to "£16.00 · Paid",
-            "May 2025" to "£16.00 · Paid"
-        ).forEach { (month, meta) ->
+        recentInvoiceMonths.map { it to "£16.00 · Paid" }.forEach { (month, meta) ->
             GsListItem(
                 title = month,
                 subtitle = meta,
