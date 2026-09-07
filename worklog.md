@@ -1216,3 +1216,23 @@ Stage Summary:
 - Billing quotes are now word-for-word identical on both platforms: same packs, same prices, same feature lists — the "deliberate?" question is resolved in favor of Android's set; no platform tells a different price story anymore
 - Thirty-six shipped cycles, all signature-stable, all install-over
 - Backlog remaining: assistants CRUD (edit button) parked until live backend ask; next candidates: design parity pass with the three benchmark AI chat apps, notification deep-link for billing surfaces, sample-data freshness sweep (dates say 12 Aug 2025 / Jul 2025)
+
+---
+Task ID: 50 (cron cycle — sample-data freshness sweep, v0.37.0 shipped via LiveUpdate)
+Agent: Z.ai Code (main)
+Task: Build QA, advance backlog (worklog Task 49 candidates: benchmark design parity / notification deep-link for billing / sample-date freshness — chose freshness: dates said 12 Aug 2025 / Jul 2025 while today is Sep 2026, over a year stale), publish v0.37.0.
+
+Work Log:
+- DESIGN: billing sample dates now computed from the current date instead of frozen literals — renewal anchor = the 12th of NEXT month (preserves the monthly-on-the-12th semantics the copy always implied), invoices = the three most recent completed calendar months; formatted "d MMM yyyy" / "MMM yyyy" pinned to en_GB so both platforms render identically; identical semantics on both platforms, purely local, no new error surfaces
+- ANDROID (BillingScreen.kt): file-level private vals renewalDateText (LocalDate.now().plusMonths(1).withDayOfMonth(12)) + recentInvoiceMonths (minusMonths 1..3) with java.time imports; wired into 5 sites — cancel dialog text, cancel snackbar, planCaption team/pro, InvoicesCard rows (recentInvoiceMonths.map { it to "£16.00 · Paid" })
+- IOS (BillingView.swift): static computed renewalDateText (Calendar dateComponents, day=12, ?? Date() fallbacks, no force unwrap) + recentInvoiceMonths; wired into 6 sites — team-switch dialog, cancel dialog, planCaption Team/default, invoicesCard via ForEach(Self.recentInvoiceMonths, id: \.self) { invoiceRow($0) }; invoice download content/title flow through automatically since they take the month string
+- PARITY CHECK: both platforms compute the same strings from the same rules; Android "free" caption ("£0 · no renewal date") vs iOS ("Free · 40 messages a day · 1 model") still differ in wording — pre-existing, noted as a future micro-candidate, not numeric drift
+- iOS STATIC GATES: 44 files CLEAN (BillingView CLEAN)
+- ANDROID BUILD: green with real compile 1m20s (QA) and 1m34s (version bump) — no fixes needed
+- VERSION: versionCode 37 / versionName 0.37.0; APK copied to download/GS-AI-App.apk (aapt verified versionCode 37); update-manifest.json bumped
+- PUBLISHED: commit 8edd1f1 pushed; GitHub Release v0.37.0 created (REL_ID 383865261, asset HTTP 201, 19,567,556 bytes); /releases/latest/download/ permalink verified serving versionCode 37; stable signature b1ffd75d… intact
+
+Stage Summary:
+- The account page can no longer look abandoned: renewal dates and invoices always read as if billed last month, on both platforms, with the exact same strings — sample drift of the "frozen in Aug 2025" class is dead in billing (the only screen with date-literal samples)
+- Thirty-seven shipped cycles, all signature-stable, all install-over
+- Backlog remaining: assistants CRUD (edit button) parked until live backend ask; next candidates: design parity pass with the three benchmark AI chat apps, free-plan caption wording micro-parity, notification sample dates freshness check
