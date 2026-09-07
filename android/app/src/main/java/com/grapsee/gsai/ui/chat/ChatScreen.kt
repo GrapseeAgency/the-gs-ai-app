@@ -388,9 +388,11 @@ fun ChatScreen(
     }
 
     // Follow the stream only while the reader stays at the live edge —
-    // scrolling up to reread is never yanked back down mid-generation.
+    // scrolling up to reread is never yanked back down mid-generation. Instant
+    // jumps: an animated follow gets cancelled and relaunched on EVERY chunk,
+    // churning the animation pipeline for a scroll the user never sees finish.
     LaunchedEffect(messages.size, messages.lastOrNull()?.content?.length) {
-        if (messages.isNotEmpty() && isAtBottom) listState.animateScrollToItem(messages.size - 1)
+        if (messages.isNotEmpty() && isAtBottom) listState.scrollToItem(messages.size - 1)
     }
 
     fun finalizeStreamingMessage() {
@@ -433,24 +435,29 @@ fun ChatScreen(
         // Sending always returns the reader to the live edge (benchmark behaviour).
         scope.launch { listState.animateScrollToItem(messages.lastIndex) }
         streamingJob = scope.launch {
+            // One growing buffer for the whole streamed answer — per-chunk
+            // concatenation re-allocated the entire prefix on every delta
+            // (quadratic over a long stream); append is amortized O(1) and
+            // toString() is the only per-chunk allocation left.
+            val streamed = StringBuilder()
             try {
                 val returnedId = ServiceLocator.chat.send(
                     conversationId = activeConversationId,
                     content = prompt,
                     modelId = ModelPrefs.defaultId(context),
                     onDelta = { delta ->
+                        streamed.append(delta)
+                        val text = streamed.toString()
                         // O(1) direct slot — captured at append; falls back to a
                         // scan only if the window shifted underneath (page prepend).
                         val i = streamingIndex
                         if (i in messages.indices && messages[i].id == assistantId) {
-                            val current = messages[i]
-                            messages[i] = current.copy(content = current.content + delta)
+                            messages[i] = messages[i].copy(content = text)
                         } else {
                             val index = messages.indexOfFirst { it.id == assistantId }
                             if (index >= 0) {
                                 streamingIndex = index
-                                val current = messages[index]
-                                messages[index] = current.copy(content = current.content + delta)
+                                messages[index] = messages[index].copy(content = text)
                             }
                         }
                     }
@@ -549,9 +556,13 @@ fun ChatScreen(
         translationBusy = true
         val targetLanguage = java.util.Locale.getDefault().displayLanguage.ifBlank { "English" }
         scope.launch {
+            // Same discipline as the main stream: one growing buffer — per-chunk
+            // concatenation re-allocated the whole prefix on every delta.
+            val translated = StringBuilder()
             val result = runCatching {
                 ServiceLocator.chat.translate(content, targetLanguage) { delta ->
-                    translationText += delta
+                    translated.append(delta)
+                    translationText = translated.toString()
                 }
             }.getOrDefault("")
             translationBusy = false
