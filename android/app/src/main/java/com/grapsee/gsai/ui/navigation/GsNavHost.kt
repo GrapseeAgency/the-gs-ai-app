@@ -5,6 +5,9 @@ import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
@@ -15,6 +18,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.grapsee.gsai.ShortcutBus
 import com.grapsee.gsai.data.SessionStore
 import com.grapsee.gsai.ui.assistants.AssistantCreateScreen
 import com.grapsee.gsai.ui.assistants.AssistantDetailScreen
@@ -62,6 +66,16 @@ fun GsNavHost(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     // Session gate — first launch walks Auth → Onboarding; later launches go straight Home.
     val start = if (SessionStore.isSessionActive(context)) GsRoutes.HOME else GsRoutes.AUTH
+
+    // Home-screen quick actions (New chat / New image / Ask GS): consume exactly
+    // once and navigate with a route the drawer already uses. Dropped silently
+    // when the session gate is still at Auth — no signed-out navigation.
+    val shortcutRoute by ShortcutBus.route.collectAsState()
+    LaunchedEffect(shortcutRoute) {
+        val route = shortcutRoute ?: return@LaunchedEffect
+        ShortcutBus.consume()
+        if (start == GsRoutes.HOME) open(route)
+    }
 
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()

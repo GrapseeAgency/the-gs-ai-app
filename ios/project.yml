@@ -33,6 +33,19 @@ targets:
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
         NSSpeechRecognitionUsageDescription: GS turns your voice into text for your prompts when you hold the voice orb.
         NSMicrophoneUsageDescription: GS uses the microphone when you hold the voice orb to talk.
+        UIApplicationShortcutItems:
+          - UIApplicationShortcutItemType: com.grapsee.gsai.quick.newChat
+            UIApplicationShortcutItemTitle: New chat
+            UIApplicationShortcutItemSubtitle: Start a new chat
+            UIApplicationShortcutItemIconSymbolName: bubble.left
+          - UIApplicationShortcutItemType: com.grapsee.gsai.quick.newImage
+            UIApplicationShortcutItemTitle: New image
+            UIApplicationShortcutItemSubtitle: Open Image Studio
+            UIApplicationShortcutItemIconSymbolName: photo
+          - UIApplicationShortcutItemType: com.grapsee.gsai.quick.ask
+            UIApplicationShortcutItemTitle: Ask GS
+            UIApplicationShortcutItemSubtitle: Ask with your voice
+            UIApplicationShortcutItemIconSymbolName: mic
   AppTests:
     type: bundle.unit-test
     platform: iOS

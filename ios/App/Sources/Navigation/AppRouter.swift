@@ -19,6 +19,7 @@ enum AeroRoute: Hashable {
     case settings
     case notifications
     case voice
+    case imageStudio              // Image Studio — also the New image quick action
     case chatArchive
     case chatFolders
     case chatShared
@@ -69,6 +70,7 @@ final class Router: ObservableObject {
 /// Root shell — Home canvas + drawer overlay over one NavigationStack.
 struct RootView: View {
     @StateObject private var router = Router()
+    @ObservedObject private var quickActions = QuickActionBus.shared
     @State private var showDrawer = false
 
     var body: some View {
@@ -93,6 +95,12 @@ struct RootView: View {
                 .transition(.opacity)
             }
         }
+        .onReceive(quickActions.$pendingRoute) { route in
+            guard let route else { return }
+            quickActions.consume()
+            withAnimation(Aero.spring) { showDrawer = false }
+            router.path.append(route)
+        }
         .tint(Aero.accent)
     }
 }
@@ -116,6 +124,7 @@ struct AeroDestinations: ViewModifier {
             case .settings: SettingsView()
             case .notifications: NotificationsView()
             case .voice: VoiceView()
+            case .imageStudio: ImageStudioView()
             case .chatArchive: ArchivedChatsView()
             case .chatFolders: FoldersView()
             case .chatShared: SharedChatsView()

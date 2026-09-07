@@ -1,6 +1,6 @@
 {
-  "versionCode": 39,
-  "versionName": "0.39.0",
+  "versionCode": 40,
+  "versionName": "0.40.0",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "Settings gained an About section: your exact version and build number, read live from the installed app — easy to confirm GS LiveUpdate landed."
+  "notes": "Home-screen quick actions: long-press the GS AI icon for New chat, New image and Ask GS — they open the exact screen you want, even mid-conversation."
 }

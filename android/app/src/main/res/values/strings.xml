@@ -1,4 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">GS AI</string>
+
+    <!-- Home-screen quick actions -->
+    <string name="shortcut_new_chat">New chat</string>
+    <string name="shortcut_new_chat_long">Start a new chat</string>
+    <string name="shortcut_new_image">New image</string>
+    <string name="shortcut_new_image_long">Open Image Studio</string>
+    <string name="shortcut_ask_gs">Ask GS</string>
+    <string name="shortcut_ask_gs_long">Ask GS with your voice</string>
 </resources>

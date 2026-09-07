@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Home-screen quick actions (static shortcuts, API 25+).
+  Each intent lands in MainActivity with a gs.route extra; ShortcutBus
+  publishes it and GsNavHost navigates — the same routes the in-app
+  drawer and quick chips use, so nothing new can fail.
+-->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="new_chat"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_chat"
+        android:shortcutShortLabel="@string/shortcut_new_chat"
+        android:shortcutLongLabel="@string/shortcut_new_chat_long">
+        <intent
+            android:action="com.grapsee.gsai.action.QUICK"
+            android:targetPackage="com.grapsee.gsai"
+            android:targetClass="com.grapsee.gsai.MainActivity" />
+        <extra
+            android:name="gs.route"
+            android:value="chat/new" />
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="new_image"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_image"
+        android:shortcutShortLabel="@string/shortcut_new_image"
+        android:shortcutLongLabel="@string/shortcut_new_image_long">
+        <intent
+            android:action="com.grapsee.gsai.action.QUICK"
+            android:targetPackage="com.grapsee.gsai"
+            android:targetClass="com.grapsee.gsai.MainActivity" />
+        <extra
+            android:name="gs.route"
+            android:value="create/image" />
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="ask_gs"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_voice"
+        android:shortcutShortLabel="@string/shortcut_ask_gs"
+        android:shortcutLongLabel="@string/shortcut_ask_gs_long">
+        <intent
+            android:action="com.grapsee.gsai.action.QUICK"
+            android:targetPackage="com.grapsee.gsai"
+            android:targetClass="com.grapsee.gsai.MainActivity" />
+        <extra
+            android:name="gs.route"
+            android:value="voice" />
+    </shortcut>
+</shortcuts>

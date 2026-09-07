@@ -8,6 +8,9 @@ import SwiftUI
  */
 @main
 struct GSApp: App {
+    // Home-screen quick actions (New chat / New image / Ask GS) ride in
+    // through the scene delegate this adaptor advertises.
+    @UIApplicationDelegateAdaptor(QuickActionAppDelegate.self) private var appDelegate
     @AppStorage("gs.session.active") private var sessionActive = false
     @AppStorage("gs.onboarded") private var onboarded = false
 
