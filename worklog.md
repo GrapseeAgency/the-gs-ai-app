@@ -1411,3 +1411,21 @@ Stage Summary:
 - The Task 57 perf-candidate list is now closed end-to-end without a device: only device-instrumented measurement remains, waiting on the user's next report
 - Forty-three shipped cycles stand (v0.43.0 performance rebuild); this cycle added verification and a closed audit, not surface
 - Next candidates: user reaction to v0.43.0 (which screens still lag? which device tier?) — that report unlocks baseline profiles / startup traces; otherwise QA + hold continues
+
+---
+Task ID: 60 (cron cycle — image-path audit + QA + hold per Task 59 protocol, v0.43.0 remains current)
+Agent: Z.ai Code (main)
+Task: Build QA, advance backlog (Task 59 exhausted the listed perf candidates — this cycle audited the one hot-path angle never yet swept: image decoding/memory on the image-heavy surfaces), hold release.
+
+Work Log:
+- CONCURRENCY: clean single-writer state — origin/main at c49b844 (Task 59), tree clean, no parallel loop mid-work
+- IMAGE-PATH AUDIT (closed as clean): swept every Kotlin source for BitmapFactory/decodeFile/decodeStream/asImageBitmap + the full gradle catalog for Coil/Glide/Picasso — ZERO hits. The app ships no bitmap decoding anywhere: chat/assistants surfaces are text+vector only, Image Studio holds no decoded-bitmap hot path, Library stores text saves. No image memory pressure exists to fix; the "laggy" symptom therefore cannot originate from image I/O — consistent with Task 57's recomposition + debug-build diagnosis
+- ANDROID QA BUILD: green 19s (42 tasks up-to-date — Gradle cache confirms zero source drift since the v0.43.0 release build)
+- iOS STATIC GATES: PASS (46 files, full sweep)
+- RELEASE CHAIN: verified end-to-end 11 minutes prior (Task 59: permalink byte-identical, signature b1ffd75d…, zero debuggable flags, manifest 43); no commits or download/ writes since — state carried forward
+- NO VERSION BUMP: zero source changes → no release; v0.43.0 stays the permalink target
+
+Stage Summary:
+- Every hot-path angle reachable without a device is now audited and closed: recomposition (T57 fixes), filtered-list composition (T58 clean), startup init (T59 disciplined), image decoding (T60 nonexistent) — the perf surface is fully mapped; only device-instrumented measurement remains
+- Forty-three shipped cycles stand (v0.43.0 performance rebuild); this cycle added one more closed audit, not surface
+- Next candidates: user reaction to v0.43.0 (which screens still lag? which device tier?) unlocks baseline profiles / startup Macrobenchmark; otherwise QA + hold continues
