@@ -1,6 +1,6 @@
 {
-  "versionCode": 17,
-  "versionName": "0.17.0",
+  "versionCode": 18,
+  "versionName": "0.18.0",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "Search inside any chat — tap the magnifier in a thread, step through matches with up/down, the active turn lights up. Both platforms."
+  "notes": "Unsent drafts now survive leaving a thread — come back and your words are still in the composer, just like the benchmark apps. Both platforms."
 }

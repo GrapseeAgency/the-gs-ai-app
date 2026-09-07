@@ -1,5 +1,6 @@
 package com.grapsee.gsai.ui.chat
 
+import android.content.Context
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import androidx.compose.animation.AnimatedVisibility
@@ -179,6 +180,40 @@ private data class ChatUiMessage(
 )
 
 /**
+ * Per-conversation unsent drafts — leave a thread mid-thought, come back,
+ * and the composer still holds your words. SharedPreferences storage, silent
+ * on any hiccup: drafts are a courtesy, never a crash surface.
+ */
+private const val DRAFTS_PREFS = "gs_chat_drafts"
+
+private fun draftKey(conversationId: String) = "draft_$conversationId"
+
+private fun loadDraft(context: Context, conversationId: String?): String? =
+    conversationId?.let { id ->
+        runCatching {
+            context.getSharedPreferences(DRAFTS_PREFS, Context.MODE_PRIVATE)
+                .getString(draftKey(id), null)
+        }.getOrNull()
+    }
+
+private fun saveDraft(context: Context, conversationId: String?, draft: String) {
+    val id = conversationId ?: return
+    runCatching {
+        val prefs = context.getSharedPreferences(DRAFTS_PREFS, Context.MODE_PRIVATE)
+        if (draft.isBlank()) prefs.edit().remove(draftKey(id)).apply()
+        else prefs.edit().putString(draftKey(id), draft).apply()
+    }
+}
+
+private fun clearDraft(context: Context, conversationId: String?) {
+    val id = conversationId ?: return
+    runCatching {
+        context.getSharedPreferences(DRAFTS_PREFS, Context.MODE_PRIVATE)
+            .edit().remove(draftKey(id)).apply()
+    }
+}
+
+/**
  * Streaming chat surface. History loads from Room (via the repository), sends go
  * through [ServiceLocator.chat.send] which returns the owning conversation id —
  * so a brand-new chat adopts its server id after the first turn completes.
@@ -248,6 +283,12 @@ fun ChatScreen(
         }
     }
 
+    // Draft hand-off: leaving the thread parks the unsent text, re-entering
+    // restores it. Cleared the moment a send actually lands.
+    DisposableEffect(activeConversationId) {
+        onDispose { saveDraft(context, activeConversationId, draft) }
+    }
+
     LaunchedEffect(conversationId) {
         val id = conversationId ?: return@LaunchedEffect
         val history = runCatching { ServiceLocator.chat.history(id) }.getOrElse { emptyList() }
@@ -256,6 +297,7 @@ fun ChatScreen(
         val loadedTitle = runCatching { ServiceLocator.db.conversationDao().getById(id) }
             .getOrNull()?.title
         if (!loadedTitle.isNullOrBlank()) conversationTitle = loadedTitle
+        if (draft.isBlank()) draft = loadDraft(context, id) ?: ""
     }
 
     // Voice press-and-hold: seed the composer with the transcript once.
@@ -297,6 +339,7 @@ fun ChatScreen(
         val prompt = text.trim()
         if (prompt.isEmpty() || streamingJob?.isActive == true) return
         draft = ""
+        clearDraft(context, activeConversationId)
         if (echoUser) {
             messages.add(ChatUiMessage(UUID.randomUUID().toString(), "user", prompt, createdAt = ChatRepository.nowIso()))
         }

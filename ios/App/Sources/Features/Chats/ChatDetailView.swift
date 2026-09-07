@@ -72,10 +72,21 @@ struct ChatDetailView: View {
         }
         .onDisappear {
             speech.stop()
+            // Park the unsent draft with the conversation — it comes back
+            // when the thread reopens. Blank text just clears the slot.
+            if let id = vm.conversationID {
+                if vm.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    UserDefaults.standard.removeObject(forKey: "draft_\(id)")
+                } else {
+                    UserDefaults.standard.set(vm.draft, forKey: "draft_\(id)")
+                }
+            }
         }
         .onAppear {
             if let prefill, vm.draft.isEmpty, !vm.isStreaming {
                 vm.draft = prefill
+            } else if let id = vm.conversationID, vm.draft.isEmpty, !vm.isStreaming {
+                vm.draft = UserDefaults.standard.string(forKey: "draft_\(id)") ?? ""
             }
         }
         .sheet(isPresented: $showingAttachments) {
@@ -206,7 +217,7 @@ struct ChatDetailView: View {
     private var inputBar: some View {
         AeroInputBar(text: $vm.draft, action: {
             userIsReading = false
-            vm.send()
+            sendAndClearDraft()
         })
             .padding(.horizontal, Aero.Spacing.m)
             .padding(.vertical, Aero.Spacing.s)
@@ -262,6 +273,15 @@ struct ChatDetailView: View {
             if toast == message {
                 toast = nil
             }
+        }
+    }
+
+    /// Sends and, when the composer actually empties, drops the parked draft.
+    private func sendAndClearDraft() {
+        let pendingID = vm.conversationID
+        vm.send()
+        if vm.draft.isEmpty, let pendingID {
+            UserDefaults.standard.removeObject(forKey: "draft_\(pendingID)")
         }
     }
 
@@ -404,7 +424,7 @@ struct ChatDetailView: View {
                 ForEach(starters, id: \.self) { starter in
                     AeroChip(text: starter) {
                         vm.draft = starter
-                        vm.send()
+                        sendAndClearDraft()
                     }
                 }
             }
