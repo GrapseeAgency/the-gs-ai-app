@@ -1277,3 +1277,23 @@ Stage Summary:
 - The update loop now closes on itself: update pill installs → Settings › About names the exact version and build you are running — live-read, drift-proof, identical on both platforms
 - Thirty-nine shipped cycles, all signature-stable, all install-over
 - Next candidates: continue net-new polish (home quick actions: Android static shortcuts + iOS UIApplicationShortcutItems for New chat / New image / Ask GS), or hold for the first user test report
+
+---
+Task ID: 53 (cron cycle — home-screen quick actions, v0.40.0 shipped via LiveUpdate)
+Agent: Z.ai Code (main)
+Task: Build QA, advance backlog (Task 52's candidates: home quick actions or hold for first test report — no report landed, so shipped quick actions), publish v0.40.0.
+
+Work Log:
+- DESIGN: the benchmark-three gesture (long-press app icon) now opens the three highest-intent surfaces — New chat / New image / Ask GS — identical labels and targets on both platforms, routed through screens the drawer already uses (chat/new · create/image · voice); pure local wiring, zero new error surfaces
+- ANDROID: res/xml/shortcuts.xml (3 static shortcuts, API 25+, minSdk 26 fine) + three accent vector drawables (#2DD4A8 aurora) + 6 label strings; manifest activity gains launchMode=singleTop + android.app.shortcuts meta-data; new ShortcutBus (MutableStateFlow<String?>, publishes gs.route extra from onCreate AND onNewIntent, consume-once); GsNavHost collects via collectAsState + LaunchedEffect — navigates only when session gate is HOME, otherwise drops silently; MainActivity.onNewIntent override uses the non-null Intent signature (androidx.activity 1.9)
+- IOS: new Navigation/QuickActions.swift — QuickAction enum (rawValue = shortcut type), QuickActionBus (ObservableObject, enqueue gated on UserDefaults gs.session.active + gs.onboarded so a quick action never navigates signed-out — mirrors the Android drop), QuickActionAppDelegate (configurationForConnecting → delegateClass) + QuickActionSceneDelegate (windowScene:performActionFor → bus); GSApp gains @UIApplicationDelegateAdaptor; AppRouter gains AeroRoute.imageStudio (AeroDestinations switch updated exhaustively → ImageStudioView() pushes cleanly since it owns its chrome via \.dismiss) and RootView consumes the bus via onReceive ($pendingRoute replays to late subscribers, so cold launches can't be missed); project.yml info.properties gains 3 UIApplicationShortcutItems with SF Symbol icons (bubble.left / photo / mic)
+- PARITY CHECK: targets identical to Android's (New chat = .chat(nil) ≙ chat/new; New image = .imageStudio ≙ create/image; Ask GS = .voice ≙ voice); ImageStudioView was previously only reachable via CreateView fullScreenCover — the new route also gives iOS a direct path, a small structural win
+- iOS STATIC GATES: 45 files CLEAN (QuickActions.swift, AppRouter, GSApp all CLEAN)
+- ANDROID BUILD: green with real compile 1m39s (QA — new Kotlin file + resources compiled) and 1m33s (version bump) — no fixes needed
+- VERSION: versionCode 40 / versionName 0.40.0; APK copied to download/GS-AI-App.apk (aapt verified versionCode 40); update-manifest.json bumped
+- PUBLISHED: commit ca753f9 pushed; GitHub Release v0.40.0 created (REL_ID 383889618, asset HTTP 201, 19,572,990 bytes); /releases/latest/download/ permalink verified serving versionCode 40; stable signature b1ffd75d… intact
+
+Stage Summary:
+- The app icon is now a launcher: long-press GS AI anywhere — even mid-conversation — and jump straight to a new chat, Image Studio, or voice mode; both platforms share one intent set, one naming, one target map
+- Forty shipped cycles, all signature-stable, all install-over
+- Next candidates: hold for the first user test report (none since v0.5.0), or further net-new polish — remaining ideas are thin (theme/dark-follow polish, notification deep-links already routed); quick actions closed the last launcher-grade surface
