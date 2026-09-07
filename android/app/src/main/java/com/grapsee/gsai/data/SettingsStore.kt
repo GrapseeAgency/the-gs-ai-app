@@ -55,28 +55,43 @@ object SettingsStore {
     fun init(context: Context) {
         prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val p = prefs ?: return
-        themeMode = p.getString(K.themeMode, null) ?: themeMode
-        reduceAnimations = p.getBoolean(K.reduceAnimations, reduceAnimations)
-        enterToSend = p.getBoolean(K.enterToSend, enterToSend)
-        autoTitleChats = p.getBoolean(K.autoTitleChats, autoTitleChats)
-        sendDoubleTap = p.getBoolean(K.sendDoubleTap, sendDoubleTap)
-        memory = p.getBoolean(K.memory, memory)
-        personalisation = p.getBoolean(K.personalisation, personalisation)
-        reasoningEffort = p.getString(K.reasoningEffort, null) ?: reasoningEffort
-        trainingOptIn = p.getBoolean(K.trainingOptIn, trainingOptIn)
-        appPasscode = p.getBoolean(K.appPasscode, appPasscode)
-        biometricUnlock = p.getBoolean(K.biometricUnlock, biometricUnlock)
-        pushNotifications = p.getBoolean(K.pushNotifications, pushNotifications)
-        sounds = p.getBoolean(K.sounds, sounds)
-        taskAlerts = p.getBoolean(K.taskAlerts, taskAlerts)
-        emailDigest = p.getBoolean(K.emailDigest, emailDigest)
-        aiLanguage = p.getString(K.aiLanguage, null) ?: aiLanguage
-        fontScale = p.getFloat(K.fontScale, fontScale)
-        highContrast = p.getBoolean(K.highContrast, highContrast)
-        reduceMotion = p.getBoolean(K.reduceMotion, reduceMotion)
-        screenReaderHints = p.getBoolean(K.screenReaderHints, screenReaderHints)
-        haptics = p.getBoolean(K.haptics, haptics)
+        // Per-key guards: a preference written by an older build under a
+        // different type (or an OEM backup restore mangling one value) must
+        // cost that ONE key its default — never the whole launch. A bare
+        // getBoolean here throws ClassCastException inside Application
+        // onCreate, which reads on the device as "app opens, instantly
+        // closes, every single time".
+        themeMode = p.string(K.themeMode, themeMode)
+        reduceAnimations = p.bool(K.reduceAnimations, reduceAnimations)
+        enterToSend = p.bool(K.enterToSend, enterToSend)
+        autoTitleChats = p.bool(K.autoTitleChats, autoTitleChats)
+        sendDoubleTap = p.bool(K.sendDoubleTap, sendDoubleTap)
+        memory = p.bool(K.memory, memory)
+        personalisation = p.bool(K.personalisation, personalisation)
+        reasoningEffort = p.string(K.reasoningEffort, reasoningEffort)
+        trainingOptIn = p.bool(K.trainingOptIn, trainingOptIn)
+        appPasscode = p.bool(K.appPasscode, appPasscode)
+        biometricUnlock = p.bool(K.biometricUnlock, biometricUnlock)
+        pushNotifications = p.bool(K.pushNotifications, pushNotifications)
+        sounds = p.bool(K.sounds, sounds)
+        taskAlerts = p.bool(K.taskAlerts, taskAlerts)
+        emailDigest = p.bool(K.emailDigest, emailDigest)
+        aiLanguage = p.string(K.aiLanguage, aiLanguage)
+        fontScale = p.flt(K.fontScale, fontScale)
+        highContrast = p.bool(K.highContrast, highContrast)
+        reduceMotion = p.bool(K.reduceMotion, reduceMotion)
+        screenReaderHints = p.bool(K.screenReaderHints, screenReaderHints)
+        haptics = p.bool(K.haptics, haptics)
     }
+
+    private fun SharedPreferences.bool(key: String, fallback: Boolean): Boolean =
+        runCatching { getBoolean(key, fallback) }.getOrDefault(fallback)
+
+    private fun SharedPreferences.string(key: String, fallback: String): String =
+        runCatching { getString(key, null) ?: fallback }.getOrDefault(fallback)
+
+    private fun SharedPreferences.flt(key: String, fallback: Float): Float =
+        runCatching { getFloat(key, fallback) }.getOrDefault(fallback)
 
     private object K {
         const val themeMode = "settings.themeMode"

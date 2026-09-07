@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Accessibility
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Download
@@ -53,10 +54,12 @@ import androidx.compose.ui.unit.sp
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.rememberCoroutineScope
+import android.content.Intent
 import androidx.compose.ui.platform.LocalContext
 import com.grapsee.gsai.ui.components.GsCard
 import com.grapsee.gsai.ui.components.GsChip
 import com.grapsee.gsai.BuildConfig
+import com.grapsee.gsai.CrashReporter
 import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.di.ServiceLocator
 import com.grapsee.gsai.ui.components.GsScreenScaffold
@@ -209,6 +212,25 @@ fun SettingsScreen(onBack: () -> Unit) {
                     leading = Icons.Outlined.DeleteOutline,
                     onClick = { showClearData = true }
                 )
+                if (CrashReporter.lastReport(context) != null) {
+                    ActionRow(
+                        title = "Send crash report",
+                        subtitle = "The last launch captured an error — share its details",
+                        leading = Icons.Outlined.BugReport,
+                        onClick = {
+                            val report = CrashReporter.lastReport(context) ?: return@ActionRow
+                            runCatching {
+                                val send = Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_SUBJECT, "GS AI App crash report")
+                                    putExtra(Intent.EXTRA_TEXT, report.take(80_000))
+                                }
+                                context.startActivity(Intent.createChooser(send, "Send crash report"))
+                                CrashReporter.clear(context)
+                            }
+                        }
+                    )
+                }
                 TextButton(
                     onClick = { showDeleteAccount = true },
                     colors = ButtonDefaults.textButtonColors(

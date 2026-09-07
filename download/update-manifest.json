@@ -1,6 +1,6 @@
 {
-  "versionCode": 54,
-  "versionName": "0.54.0",
+  "versionCode": 55,
+  "versionName": "0.55.0",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "Projects are real: create your own workspaces with name, description and custom instructions, link the chats you already have, and watch the activity log record every action — chat counts and timestamps answer from your data, no seeded samples. Edit and delete live in project settings. Search now finds your projects. Android + iOS one contract, same stable signature."
+  "notes": "Launch survivability: no startup step can take the app down anymore — every store hydration is individually guarded, settings restore per-key so one bad preference from an older build can't kill the launch, and a crash catcher now saves the real stack trace on-device (Settings offers a Send crash report row only when something was captured). Signature stable, install-over any previous build."
 }
