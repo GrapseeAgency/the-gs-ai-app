@@ -900,3 +900,21 @@ Stage Summary:
 - The assistant is now a visible presence in every thread — each AI turn opens with the sparkles badge exactly like the benchmark apps, identical on Compose and SwiftUI, zero new error surfaces
 - Twenty shipped cycles, all signature-stable, all install-over
 - Backlog remaining: assistants CRUD + pin/archive native wiring (deferred until live backend ask), further parity sweeps
+
+---
+Task ID: 34 (cron cycle — interaction parity: real share sheet + haptic long-presses, v0.21.0 shipped via LiveUpdate)
+Agent: Z.ai Code (main)
+Task: Build QA, advance backlog (Android share button was a dead stub — wire the system share sheet; long-presses lacked haptic confirmation; iOS already covered), publish v0.21.0.
+
+Work Log:
+- BUILD QA: first attempt FAILED (Kotlin: shareText lambda referenced `context` declared later in the TTS block); moved `val context = LocalContext.current` above the snack/copy/share closures; rebuild BUILD SUCCESSFUL 1m38s — same declaration-order lesson as Task 29, caught by the compiler
+- ANDROID: shareText closure launches ACTION_SEND chooser (text/plain + EXTRA_TEXT) in runCatching, ActivityNotFound-class failures land a quiet "Sharing isn't set up on this device" snack — no error dumps; AssistantMessage gains onShare and the previously no-op Share BubbleAction now opens the sheet; UserMessage and AssistantMessage long-presses perform HapticFeedbackType.LongPress before copy/menu (iOS contextMenu auto-haptics — parity restored)
+- iOS: no changes needed — ShareLink already live in action row + context menu, system haptics native
+- iOS STATIC GATES: 13 files CLEAN (no iOS edits this cycle)
+- VERSION: versionCode 21 / versionName 0.21.0; APK copied to download/GS-AI-App.apk (aapt verified versionCode 21); update-manifest.json bumped
+- PUBLISHED: commit f37f704 pushed; GitHub Release v0.21.0 created (REL_ID 383793044, asset HTTP 201, 19,518,404 bytes); /releases/latest/download/ permalink verified serving versionCode 21; stable signature b1ffd75d… intact
+
+Stage Summary:
+- Every visible control in the thread now does something real: Share opens the system sheet on Android exactly as ShareLink does on iOS, and both bubbles answer long-presses with a haptic tick — benchmark-grade interaction parity, zero new error surfaces
+- Twenty-one shipped cycles, all signature-stable, all install-over
+- Backlog remaining: assistants CRUD + pin/archive native wiring (deferred until live backend ask), further parity sweeps
