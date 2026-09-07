@@ -1306,6 +1306,7 @@ private fun TranslationSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = GsMotion.spaceM)
                 .padding(bottom = GsMotion.spaceL),
             verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)

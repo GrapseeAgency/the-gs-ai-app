@@ -497,10 +497,10 @@ private fun SuggestionRows(onNavigate: (String) -> Unit) {
         verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
     ) {
         SuggestionRow(Icons.Outlined.Description, "Summarise a PDF into a brief") {
-            onNavigate(GsRoutes.chat(null))
+            onNavigate(GsRoutes.chat(null, "Summarise a PDF into a brief"))
         }
         SuggestionRow(Icons.Outlined.EditNote, "Draft a launch email") {
-            onNavigate(GsRoutes.chat(null))
+            onNavigate(GsRoutes.chat(null, "Draft a launch email"))
         }
     }
 }

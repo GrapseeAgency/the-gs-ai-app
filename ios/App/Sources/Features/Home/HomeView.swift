@@ -226,7 +226,7 @@ struct HomeView: View {
     }
 
     private func suggestion(_ symbol: String, _ label: String) -> some View {
-        NavigationLink(value: AeroRoute.chat(nil)) {
+        NavigationLink(value: AeroRoute.chatPrefill(label)) {
             HStack(spacing: Aero.Spacing.m) {
                 ZStack {
                     Circle().fill(raised).frame(width: 38, height: 38)
