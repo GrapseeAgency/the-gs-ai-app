@@ -24,8 +24,8 @@ private struct StaggerIn<Content: View>: View {
 
 // MARK: - Explore — the discovery layer
 
-/// EXPLORE tab root. Category chips filter the three sample sections live;
-/// every card pushes an `AeroRoute` through NavigationLink(value:).
+/// EXPLORE tab root. Category chips + live search filter the three sample
+/// sections together; every card pushes an `AeroRoute` through NavigationLink(value:).
 struct ExploreView: View {
 
     // MARK: Sample data
@@ -53,6 +53,11 @@ struct ExploreView: View {
     }
 
     @State private var selectedCategory = "All"
+    @State private var query = ""
+
+    private var term: String {
+        query.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
     private let categories = [
         "All", "Coding", "Education", "Business", "Writing", "Productivity",
@@ -83,9 +88,26 @@ struct ExploreView: View {
         selectedCategory == "All" || category == selectedCategory
     }
 
-    private var filteredAssistants: [TrendingAssistant] { assistants.filter { matches($0.category) } }
-    private var filteredPrompts: [PromptCard] { prompts.filter { matches($0.category) } }
-    private var filteredTools: [ToolCard] { tools.filter { matches($0.category) } }
+    /// Combined query gate — empty term passes everything, else any-field contains.
+    private func containsTerm(_ fields: [String]) -> Bool {
+        term.isEmpty || fields.contains { $0.localizedCaseInsensitiveContains(term) }
+    }
+
+    private var filteredAssistants: [TrendingAssistant] {
+        assistants.filter { matches($0.category) && containsTerm([$0.name, $0.byline]) }
+    }
+    private var filteredPrompts: [PromptCard] {
+        prompts.filter { matches($0.category) && containsTerm([$0.text, $0.caption]) }
+    }
+    private var filteredTools: [ToolCard] {
+        tools.filter { matches($0.category) && containsTerm([$0.name, $0.detail]) }
+    }
+
+    private var nothingMessage: String {
+        term.isEmpty
+            ? "No assistants, prompts or tools in this category — try another one."
+            : "Nothing matched “\(term)”. Try different words or another category."
+    }
 
     // MARK: Body
 
@@ -99,7 +121,7 @@ struct ExploreView: View {
                     EmptyStateView(
                         icon: "sparkles",
                         title: "Nothing here yet",
-                        message: "No assistants, prompts or tools in this category — try another one."
+                        message: nothingMessage
                     )
                 } else {
                     if !filteredAssistants.isEmpty { StaggerIn(index: 3) { trendingSection } }
@@ -128,17 +150,27 @@ struct ExploreView: View {
         }
     }
 
-    // MARK: Static search row
+    // MARK: Search row — live over the catalogue
 
     private var searchRow: some View {
         HStack(spacing: Aero.Spacing.s) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 15, weight: .medium))
                 .foregroundStyle(Aero.textMuted)
-            Text("Search assistants, prompts, tools…")
+            TextField("Search assistants, prompts, tools…", text: $query)
                 .font(Aero.body())
-                .foregroundStyle(Aero.textMuted)
-            Spacer()
+                .foregroundStyle(Aero.text)
+                .autocorrectionDisabled()
+            if !query.isEmpty {
+                Button {
+                    query = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 14))
+                        .foregroundStyle(Aero.textMuted)
+                }
+                .buttonStyle(KineticPressStyle())
+            }
         }
         .padding(.horizontal, Aero.Spacing.m)
         .padding(.vertical, 13)

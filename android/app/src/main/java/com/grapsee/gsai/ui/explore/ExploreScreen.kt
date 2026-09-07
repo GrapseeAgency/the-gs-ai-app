@@ -46,8 +46,9 @@ import com.grapsee.gsai.ui.theme.GsMotion
 
 /**
  * AERUO KINETIC — EXPLORE, the discovery layer / AI app store.
- * Category chips filter the static catalogue; serif prompt cards carry the
- * editorial voice. Search bar is decorative until the index lands.
+ * Category chips + live search filter the catalogue together; serif prompt
+ * cards carry the editorial voice. Search runs over the sample catalogue
+ * (name/author/byline/detail fields) — no network, no index needed.
  */
 
 private val exploreCategories = listOf(
@@ -91,13 +92,17 @@ fun ExploreScreen(onNavigate: (String) -> Unit) {
     var selectedCategory by remember { mutableIntStateOf(0) }
     var searchQuery by remember { mutableStateOf("") }
     val category = exploreCategories[selectedCategory]
+    val term = searchQuery.trim()
 
-    val assistants = if (selectedCategory == 0) trendingAssistants
-    else trendingAssistants.filter { it.category == category }
-    val prompts = if (selectedCategory == 0) popularPrompts
-    else popularPrompts.filter { it.category == category }
-    val tools = if (selectedCategory == 0) featuredTools
-    else featuredTools.filter { it.category == category }
+    val assistants = trendingAssistants.filter {
+        (selectedCategory == 0 || it.category == category) && matchesTerm(term, it.name, it.author)
+    }
+    val prompts = popularPrompts.filter {
+        (selectedCategory == 0 || it.category == category) && matchesTerm(term, it.text, it.category)
+    }
+    val tools = featuredTools.filter {
+        (selectedCategory == 0 || it.category == category) && matchesTerm(term, it.name, it.blurb)
+    }
     val nothingToShow = assistants.isEmpty() && prompts.isEmpty() && tools.isEmpty()
 
     Box(
@@ -125,8 +130,12 @@ fun ExploreScreen(onNavigate: (String) -> Unit) {
                 if (nothingToShow) {
                     GsEmptyState(
                         icon = Icons.Outlined.Search,
-                        title = "Nothing in $category yet",
-                        message = "Try another category — new assistants, prompts and tools land every week."
+                        title = if (term.isEmpty()) "Nothing in $category yet" else "No matches for \"$term\"",
+                        message = if (term.isEmpty()) {
+                            "Try another category — new assistants, prompts and tools land every week."
+                        } else {
+                            "Try different words or another category — the catalogue grows every week."
+                        }
                     )
                 } else {
                     if (assistants.isNotEmpty()) {
@@ -144,6 +153,10 @@ fun ExploreScreen(onNavigate: (String) -> Unit) {
         }
     }
 }
+
+/** Combined query gate — empty term passes everything, else any-field contains. */
+private fun matchesTerm(term: String, vararg fields: String): Boolean =
+    term.isEmpty() || fields.any { it.contains(term, ignoreCase = true) }
 
 @Composable
 private fun CategoryChips(selectedIndex: Int, onSelect: (Int) -> Unit) {

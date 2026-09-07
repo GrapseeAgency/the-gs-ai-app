@@ -12,6 +12,7 @@ FILES = [
     "/home/z/my-project/ios/App/Sources/Networking/SQLiteChatStore.swift",
     "/home/z/my-project/ios/App/Sources/Networking/ConversationStore.swift",
     "/home/z/my-project/ios/App/Sources/Features/Chats/ChatSearchView.swift",
+    "/home/z/my-project/ios/App/Sources/Features/Explore/ExploreView.swift",
 ]
 
 BANNED = [
