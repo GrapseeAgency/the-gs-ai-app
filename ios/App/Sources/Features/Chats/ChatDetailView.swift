@@ -648,6 +648,18 @@ private struct MessageBubble: View {
     var onSave: () -> Void = {}
     var onEditStart: () -> Void = {}
 
+    @State private var copied = false
+
+    /// Benchmark copy feedback: the icon answers with a brief checkmark —
+    /// the SwiftUI counterpart of Android's "Copied" snack.
+    private func copyAndConfirm(_ text: String) {
+        UIPasteboard.general.string = text
+        withAnimation(.easeOut(duration: 0.15)) { copied = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
+            withAnimation(.easeIn(duration: 0.2)) { copied = false }
+        }
+    }
+
     var body: some View {
         if message.role == "user" {
             userBubble
@@ -675,9 +687,10 @@ private struct MessageBubble: View {
                         .foregroundStyle(Aero.textMuted)
                 }
                 Button {
-                    UIPasteboard.general.string = message.content
+                    copyAndConfirm(message.content)
                 } label: {
-                    Image(systemName: "doc.on.doc")
+                    Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                        .foregroundStyle(copied ? Aero.accent : Aero.textMuted)
                 }
                 if editEnabled {
                     Button(action: onEditStart) {
@@ -771,12 +784,7 @@ private struct MessageBubble: View {
                     .font(Aero.label())
                     .foregroundStyle(Aero.textMuted)
                 Spacer()
-                Button {
-                    UIPasteboard.general.string = segment.text
-                } label: {
-                    Image(systemName: "doc.on.doc")
-                }
-                .buttonStyle(KineticPressStyle())
+                CodeCopyButton(text: segment.text)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
@@ -810,9 +818,10 @@ private struct MessageBubble: View {
                     .foregroundStyle(Aero.textMuted)
             }
             Button {
-                UIPasteboard.general.string = message.content
+                copyAndConfirm(message.content)
             } label: {
-                Image(systemName: "doc.on.doc")
+                Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                    .foregroundStyle(copied ? Aero.accent : Aero.textMuted)
             }
             Button(action: onRegenerate) {
                 Image(systemName: "arrow.clockwise")
@@ -839,7 +848,7 @@ private struct MessageBubble: View {
     private var bubbleMenu: some View {
         Group {
             Button {
-                UIPasteboard.general.string = message.content
+                copyAndConfirm(message.content)
             } label: {
                 Label("Copy", systemImage: "doc.on.doc")
             }
@@ -850,6 +859,26 @@ private struct MessageBubble: View {
                 Label("Share", systemImage: "square.and.arrow.up")
             }
         }
+    }
+}
+
+/// Code-header copy with its own checkmark confirmation.
+private struct CodeCopyButton: View {
+    let text: String
+    @State private var copied = false
+
+    var body: some View {
+        Button {
+            UIPasteboard.general.string = text
+            withAnimation(.easeOut(duration: 0.15)) { copied = true }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
+                withAnimation(.easeIn(duration: 0.2)) { copied = false }
+            }
+        } label: {
+            Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                .foregroundStyle(copied ? Aero.accent : Aero.textMuted)
+        }
+        .buttonStyle(KineticPressStyle())
     }
 }
 
