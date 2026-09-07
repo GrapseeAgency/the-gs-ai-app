@@ -1,6 +1,6 @@
 {
-  "versionCode": 41,
-  "versionName": "0.41.0",
+  "versionCode": 42,
+  "versionName": "0.42.0",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "GS AI finally wears its own face: a real aurora-orb app icon replaces the stock Android robot — on your home screen, in the recents tray, and on the quick-action menu."
+  "notes": "Assistants are real now: create one, find it in My assistants, refine it with the new Edit action, or delete it — all saved on your device, no account needed."
 }

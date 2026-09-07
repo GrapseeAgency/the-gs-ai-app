@@ -19,6 +19,8 @@ object GsRoutes {
     const val NOTIFICATIONS = "notifications"
     const val VOICE = "voice"
     const val ASSISTANT_CREATE = "assistants/create"
+    const val ASSISTANT_EDIT = "assistants/edit/{assistantId}"
+    fun assistantEdit(id: String) = "assistants/edit/$id"
     const val CHAT_ARCHIVE = "chats/archived"
     const val CHAT_FOLDERS = "chats/folders"
     const val CHAT_SHARED = "chats/shared"

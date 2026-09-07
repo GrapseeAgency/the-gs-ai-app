@@ -120,6 +120,15 @@ fun GsNavHost(modifier: Modifier = Modifier) {
         composable(GsRoutes.VOICE) { VoiceScreen(onBack = back) }
         composable(GsRoutes.MODEL_COMPARE) { ModelCompareScreen(onBack = back) }
         composable(GsRoutes.ASSISTANT_CREATE) { AssistantCreateScreen(onBack = back) }
+        composable(
+            route = GsRoutes.ASSISTANT_EDIT,
+            arguments = listOf(navArgument(GsRoutes.ARG_ASSISTANT) { type = NavType.StringType })
+        ) { entry ->
+            AssistantCreateScreen(
+                assistantId = entry.arguments?.getString(GsRoutes.ARG_ASSISTANT),
+                onBack = back
+            )
+        }
         composable(GsRoutes.CHAT_ARCHIVE) { ArchivedChatsScreen(onBack = back) }
         composable(GsRoutes.CHAT_FOLDERS) { ConversationFoldersScreen(onBack = back) }
         composable(GsRoutes.CHAT_SHARED) { SharedChatsScreen(onBack = back) }
@@ -203,7 +212,8 @@ fun GsNavHost(modifier: Modifier = Modifier) {
             AssistantDetailScreen(
                 assistantId = entry.arguments?.getString(GsRoutes.ARG_ASSISTANT).orEmpty(),
                 onBack = back,
-                onStartChat = { route -> navController.navigate(route) }
+                onStartChat = { route -> navController.navigate(route) },
+                onEdit = { id -> navController.navigate(GsRoutes.assistantEdit(id)) }
             )
         }
     }

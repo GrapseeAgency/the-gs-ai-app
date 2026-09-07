@@ -26,6 +26,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.grapsee.gsai.data.AssistantsStore
+import com.grapsee.gsai.data.model.AssistantSample
 import com.grapsee.gsai.ui.components.GsCard
 import com.grapsee.gsai.ui.components.GsChip
 import com.grapsee.gsai.ui.components.GsScreenScaffold
@@ -39,17 +41,30 @@ private val assistantCategories = listOf(
 private val capabilityOptions = listOf("Web search", "Code", "Vision", "Files", "Memory")
 
 @Composable
-fun AssistantCreateScreen(onBack: () -> Unit) {
-    var name by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf("") }
-    var instructions by remember { mutableStateOf("") }
-    val starters = remember { mutableStateListOf("", "", "") }
-    var category by remember { mutableStateOf(assistantCategories.first()) }
-    val selectedCapabilities = remember { mutableStateListOf("Web search") }
-    var published by remember { mutableStateOf(false) }
+fun AssistantCreateScreen(assistantId: String? = null, onBack: () -> Unit) {
+    // Edit mode prefills from the local store; Create mode starts blank.
+    val existing = remember(assistantId) { assistantId?.let { AssistantsStore.find(it) } }
+    var name by remember { mutableStateOf(existing?.name ?: "") }
+    var description by remember { mutableStateOf(existing?.description ?: "") }
+    var instructions by remember { mutableStateOf(existing?.instructions ?: "") }
+    val starters = remember {
+        mutableStateListOf(
+            existing?.starters?.getOrNull(0) ?: "",
+            existing?.starters?.getOrNull(1) ?: "",
+            existing?.starters?.getOrNull(2) ?: ""
+        )
+    }
+    var category by remember { mutableStateOf(existing?.category ?: assistantCategories.first()) }
+    val selectedCapabilities = remember {
+        mutableStateListOf<String>().apply {
+            val saved = existing?.capabilities.orEmpty()
+            addAll(if (saved.isEmpty()) listOf("Web search") else saved.filter { it in capabilityOptions })
+        }
+    }
+    var published by remember { mutableStateOf(existing?.published ?: false) }
     var showCreated by remember { mutableStateOf(false) }
 
-    GsScreenScaffold(title = "Create assistant", onBack = onBack) {
+    GsScreenScaffold(title = if (assistantId == null) "Create assistant" else "Edit assistant", onBack = onBack) {
         Column(
             modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(GsMotion.spaceM)
@@ -195,9 +210,25 @@ fun AssistantCreateScreen(onBack: () -> Unit) {
                 }
             }
 
-            // Primary CTA — enabled only with a name
+            // Primary CTA — enabled only with a name; persists to the local store
             Button(
-                onClick = { showCreated = true },
+                onClick = {
+                    AssistantsStore.upsert(
+                        AssistantSample(
+                            id = assistantId ?: "asst-u-${System.currentTimeMillis()}",
+                            name = name.trim(),
+                            category = category,
+                            description = description.trim(),
+                            instructions = instructions.trim(),
+                            starters = starters.map { it.trim() }.filter { it.isNotBlank() },
+                            uses = existing?.uses ?: "1",
+                            rating = existing?.rating ?: 5.0,
+                            published = published,
+                            capabilities = selectedCapabilities.filter { it.isNotBlank() }
+                        )
+                    )
+                    showCreated = true
+                },
                 enabled = name.isNotBlank(),
                 modifier = Modifier.fillMaxWidth().height(52.dp),
                 colors = ButtonDefaults.buttonColors(
@@ -206,7 +237,10 @@ fun AssistantCreateScreen(onBack: () -> Unit) {
                 ),
                 shape = RoundedCornerShape(GsMotion.radiusInput)
             ) {
-                Text("Create assistant", style = MaterialTheme.typography.labelLarge)
+                Text(
+                    if (assistantId == null) "Create assistant" else "Save changes",
+                    style = MaterialTheme.typography.labelLarge
+                )
             }
 
             Spacer(modifier = Modifier.height(GsMotion.spaceM))
@@ -216,9 +250,15 @@ fun AssistantCreateScreen(onBack: () -> Unit) {
     if (showCreated) {
         AlertDialog(
             onDismissRequest = { showCreated = false },
-            title = { Text("Assistant created") },
+            title = { Text(if (assistantId == null) "Assistant created" else "Assistant saved") },
             text = {
-                Text("“${name.trim()}” is ready. You can refine its behaviour, starters and capabilities any time.")
+                Text(
+                    if (assistantId == null) {
+                        "“${name.trim()}” is ready. You can refine its behaviour, starters and capabilities any time."
+                    } else {
+                        "“${name.trim()}” now lives in My assistants — refine it any time."
+                    }
+                )
             },
             confirmButton = {
                 TextButton(onClick = {

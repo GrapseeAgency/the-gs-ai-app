@@ -3,7 +3,7 @@ import SwiftUI
 // MARK: - Sample data (inline, replaced by the real store later)
 
 /// Inline sample assistant powering the marketplace + workspace tabs.
-struct AssistantSample: Identifiable, Hashable {
+struct AssistantSample: Identifiable, Hashable, Codable {
     let id: String
     let name: String
     let category: String
@@ -12,6 +12,10 @@ struct AssistantSample: Identifiable, Hashable {
     let rating: Double
     var isFav: Bool
     var published: Bool
+    // User-created assistants carry the builder's extras; samples omit them.
+    var instructions: String? = nil
+    var starters: [String] = []
+    var capabilities: [String] = []
 
     /// "12.4k" style usage label.
     var usesText: String {
@@ -35,6 +39,8 @@ struct AssistantSample: Identifiable, Hashable {
 // MARK: - Assistants hub
 
 struct AssistantsView: View {
+
+    @ObservedObject private var store = AssistantsStore.shared
 
     private enum Segment: String, CaseIterable, Identifiable {
         case marketplace = "Marketplace"
@@ -111,7 +117,7 @@ struct AssistantsView: View {
             marketplace
         case .mine:
             filteredList(
-                AssistantSample.catalog,
+                store.userAssistants,
                 emptyTitle: "No assistants yet",
                 emptyMessage: "Create your first assistant and it will live here."
             )
@@ -123,7 +129,7 @@ struct AssistantsView: View {
             )
         case .published:
             filteredList(
-                AssistantSample.catalog.filter(\.published),
+                AssistantSample.catalog.filter(\.published) + store.userAssistants.filter(\.published),
                 emptyTitle: "Nothing published yet",
                 emptyMessage: "Publish an assistant to share it on the marketplace."
             )
@@ -138,7 +144,7 @@ struct AssistantsView: View {
             VStack(alignment: .leading, spacing: Aero.Spacing.s) {
                 SectionHeader(title: "All assistants")
                 LazyVGrid(columns: gridColumns, spacing: 12) {
-                    ForEach(AssistantSample.catalog) { assistant in
+                    ForEach(AssistantSample.catalog + store.userAssistants.filter(\.published)) { assistant in
                         NavigationLink(value: AeroRoute.assistant(assistant.id)) {
                             AssistantGridCard(assistant: assistant)
                         }

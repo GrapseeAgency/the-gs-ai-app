@@ -17,10 +17,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.SmartToy
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -28,7 +30,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -37,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.grapsee.gsai.data.AssistantsStore
 import com.grapsee.gsai.data.model.AssistantSample
 import com.grapsee.gsai.data.model.SampleData
 import com.grapsee.gsai.ui.components.GsCard
@@ -55,31 +60,49 @@ import com.grapsee.gsai.ui.theme.GsMotion
 fun AssistantDetailScreen(
     assistantId: String,
     onBack: () -> Unit,
-    onStartChat: ((String) -> Unit)? = null
+    onStartChat: ((String) -> Unit)? = null,
+    onEdit: ((String) -> Unit)? = null
 ) {
-    val assistant = remember(assistantId) {
-        SampleData.assistants.firstOrNull { it.id == assistantId }
+    // Reactive on the local store: returning from the editor refreshes in place.
+    val userAssistants by AssistantsStore.assistants.collectAsState()
+    val assistant = remember(assistantId, userAssistants) {
+        AssistantsStore.find(assistantId)
+            ?: SampleData.assistants.firstOrNull { it.id == assistantId }
             ?: SampleData.assistants.first()
     }
+    val isUserAssistant = userAssistants.any { it.id == assistantId }
     var favourited by remember { mutableStateOf(false) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
 
     GsScreenScaffold(
         title = "Assistant",
         onBack = onBack,
         actions = {
-            IconButton(onClick = { /* edit arrives with the repository layer */ }) {
-                Icon(
-                    imageVector = Icons.Outlined.Edit,
-                    contentDescription = "Edit",
-                    tint = MaterialTheme.colorScheme.onBackground
-                )
+            if (isUserAssistant) {
+                IconButton(onClick = { onEdit?.invoke(assistantId) }) {
+                    Icon(
+                        imageVector = Icons.Outlined.Edit,
+                        contentDescription = "Edit",
+                        tint = MaterialTheme.colorScheme.onBackground
+                    )
+                }
+            } else {
+                IconButton(onClick = { /* share sheet lands with the sharing subsystem */ }) {
+                    Icon(
+                        imageVector = Icons.Outlined.Share,
+                        contentDescription = "Share",
+                        tint = MaterialTheme.colorScheme.onBackground
+                    )
+                }
             }
-            IconButton(onClick = { /* share sheet lands with the sharing subsystem */ }) {
-                Icon(
-                    imageVector = Icons.Outlined.Share,
-                    contentDescription = "Share",
-                    tint = MaterialTheme.colorScheme.onBackground
-                )
+            if (isUserAssistant) {
+                IconButton(onClick = { showDeleteConfirm = true }) {
+                    Icon(
+                        imageVector = Icons.Outlined.Delete,
+                        contentDescription = "Delete assistant",
+                        tint = MaterialTheme.colorScheme.onBackground
+                    )
+                }
             }
             IconButton(onClick = { favourited = !favourited }) {
                 if (favourited) {
@@ -245,6 +268,26 @@ fun AssistantDetailScreen(
 
             Spacer(modifier = Modifier.height(GsMotion.spaceM))
         }
+    }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Delete assistant") },
+            text = {
+                Text("“${assistant.name}” will be removed from My assistants. Chats you started with it stay in your history.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDeleteConfirm = false
+                    AssistantsStore.delete(assistantId)
+                    onBack()
+                }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) { Text("Keep") }
+            }
+        )
     }
 }
 

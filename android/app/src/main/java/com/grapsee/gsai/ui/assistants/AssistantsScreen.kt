@@ -26,6 +26,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -34,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.grapsee.gsai.data.AssistantsStore
 import com.grapsee.gsai.data.model.AssistantSample
 import com.grapsee.gsai.data.model.SampleData
 import com.grapsee.gsai.ui.components.GsCard
@@ -52,6 +54,8 @@ private val favouriteIds = listOf("asst-2", "asst-4")
 @Composable
 fun AssistantsScreen(onNavigate: (String) -> Unit) {
     var tab by remember { mutableIntStateOf(0) }
+    // User-created assistants join the curated set, local-first.
+    val userAssistants by AssistantsStore.assistants.collectAsState()
 
     GsScreenScaffold(
         title = "Assistants",
@@ -79,10 +83,10 @@ fun AssistantsScreen(onNavigate: (String) -> Unit) {
             }
 
             val visible = when (tab) {
-                1 -> SampleData.assistants.filter { it.id in myAssistantIds }
+                1 -> SampleData.assistants.filter { it.id in myAssistantIds } + userAssistants
                 2 -> SampleData.assistants.filter { it.id in favouriteIds }
-                3 -> SampleData.assistants.filter { it.published }
-                else -> SampleData.assistants
+                3 -> SampleData.assistants.filter { it.published } + userAssistants.filter { it.published }
+                else -> SampleData.assistants + userAssistants.filter { it.published }
             }
 
             if (tab == 0) {

@@ -12,6 +12,7 @@ enum AeroRoute: Hashable {
     case chatPrefill(String)           // voice press-and-hold hands its transcript here
     case assistant(String)
     case assistantCreate
+    case assistantEdit(String)
     case project(String)
     case models
     case modelCompare
@@ -117,6 +118,7 @@ struct AeroDestinations: ViewModifier {
             case .chatPrefill(let prompt): ChatDetailView(conversationID: nil, prefill: prompt)
             case .assistant(let id): AssistantDetailView(assistantID: id)
             case .assistantCreate: AssistantCreateView()
+            case .assistantEdit(let id): AssistantCreateView(editID: id)
             case .project(let id): ProjectDetailView(projectID: id)
             case .models: ModelCentreView()
             case .modelCompare: ModelCompareView()

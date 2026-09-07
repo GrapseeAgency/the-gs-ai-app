@@ -1,9 +1,13 @@
 import SwiftUI
 
 /// Assistant builder — identity, behaviour, starters, capabilities, visibility.
+/// Create mode starts blank; edit mode (editID) prefills from the local store.
 struct AssistantCreateView: View {
 
     @Environment(\.dismiss) private var dismiss
+
+    private let editID: String?
+    private let existing: AssistantSample?
 
     // Identity
     @State private var name = ""
@@ -22,6 +26,21 @@ struct AssistantCreateView: View {
 
     // Created confirmation
     @State private var showCreated = false
+
+    init(editID: String? = nil) {
+        self.editID = editID
+        let resolved = editID.flatMap { AssistantsStore.shared.find($0) }
+        self.existing = resolved
+        _name = State(initialValue: resolved?.name ?? "")
+        _desc = State(initialValue: resolved?.desc ?? "")
+        _instructions = State(initialValue: resolved?.instructions ?? "")
+        _category = State(initialValue: resolved?.category ?? "Writing")
+        _starters = State(initialValue: resolved?.starters.isEmpty == true
+            ? ["", "", ""]
+            : (resolved?.starters ?? ["", "", ""]))
+        _capabilities = State(initialValue: Set(resolved?.capabilities ?? []))
+        _visibility = State(initialValue: (resolved?.published ?? false) ? "Published" : "Private")
+    }
 
     private let categories = [
         "Writing", "Coding", "Research", "Business",
@@ -155,9 +174,25 @@ struct AssistantCreateView: View {
 
     private var createButton: some View {
         Button {
+            let clean = { (s: String) in s.trimmingCharacters(in: .whitespacesAndNewlines) }
+            let savedStarters = starters.map(clean).filter { !$0.isEmpty }
+            let saved = AssistantSample(
+                id: editID ?? "asst-u-\(Int(Date().timeIntervalSince1970 * 1000))",
+                name: clean(name),
+                category: category,
+                desc: clean(desc),
+                uses: existing?.uses ?? 1,
+                rating: existing?.rating ?? 5.0,
+                isFav: existing?.isFav ?? false,
+                published: visibility == "Published",
+                instructions: clean(instructions),
+                starters: savedStarters,
+                capabilities: capabilities.sorted()
+            )
+            AssistantsStore.shared.upsert(saved)
             showCreated = true
         } label: {
-            Text("Create assistant")
+            Text(editID == nil ? "Create assistant" : "Save changes")
                 .font(Aero.title())
                 .frame(maxWidth: .infinity)
                 .padding(14)
@@ -168,7 +203,9 @@ struct AssistantCreateView: View {
         .disabled(name.isEmpty)
         .opacity(name.isEmpty ? 0.4 : 1)
         .confirmationDialog(
-            "Assistant created — it now lives in My assistants.",
+            editID == nil
+                ? "Assistant created — it now lives in My assistants."
+                : "Assistant saved — it lives in My assistants.",
             isPresented: $showCreated,
             titleVisibility: .visible
         ) {

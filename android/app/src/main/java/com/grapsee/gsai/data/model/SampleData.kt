@@ -15,7 +15,10 @@ data class AssistantSample(
     val starters: List<String>,
     val uses: String,
     val rating: Double,
-    val published: Boolean = false
+    val published: Boolean = false,
+    // User-created assistants carry the Create form's capability picks;
+    // samples omit it (default empty).
+    val capabilities: List<String> = emptyList()
 )
 
 /** type is one of: task | file | assistant | share | project | system | security */

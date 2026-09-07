@@ -1,11 +1,15 @@
 import SwiftUI
 
 /// Assistant profile — hero, starters, capabilities, instructions, start chat.
+/// User-created assistants get Edit + Delete; samples stay curated.
 struct AssistantDetailView: View {
 
     let assistantID: String
 
+    @EnvironmentObject private var router: Router
+    @Environment(\.dismiss) private var dismiss
     @State private var isFav: Bool
+    @State private var showDelete = false
 
     private let starters = [
         "Help me tighten my opening paragraph",
@@ -14,7 +18,13 @@ struct AssistantDetailView: View {
     ]
 
     private var assistant: AssistantSample {
-        AssistantSample.catalog.first { $0.id == assistantID } ?? AssistantSample.catalog[0]
+        AssistantsStore.shared.find(assistantID)
+            ?? AssistantSample.catalog.first { $0.id == assistantID }
+            ?? AssistantSample.catalog[0]
+    }
+
+    private var isUserAssistant: Bool {
+        AssistantsStore.shared.find(assistantID) != nil
     }
 
     private var instructionText: String {
@@ -23,7 +33,9 @@ struct AssistantDetailView: View {
 
     init(assistantID: String) {
         self.assistantID = assistantID
-        let resolved = AssistantSample.catalog.first { $0.id == assistantID } ?? AssistantSample.catalog[0]
+        let resolved = AssistantsStore.shared.find(assistantID)
+            ?? AssistantSample.catalog.first { $0.id == assistantID }
+            ?? AssistantSample.catalog[0]
         _isFav = State(initialValue: resolved.isFav)
     }
 
@@ -43,17 +55,28 @@ struct AssistantDetailView: View {
         .background(Aero.background.ignoresSafeArea())
         .toolbar {
             ToolbarItemGroup(placement: .navigationBarTrailing) {
-                Button {
-                } label: {
-                    Image(systemName: "pencil")
-                        .font(.system(size: 15))
-                        .foregroundStyle(Aero.text)
-                }
-                Button {
-                } label: {
-                    Image(systemName: "square.and.arrow.up")
-                        .font(.system(size: 15))
-                        .foregroundStyle(Aero.text)
+                if isUserAssistant {
+                    Button {
+                        router.path.append(.assistantEdit(assistantID))
+                    } label: {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 15))
+                            .foregroundStyle(Aero.text)
+                    }
+                    Button {
+                        showDelete = true
+                    } label: {
+                        Image(systemName: "trash")
+                            .font(.system(size: 15))
+                            .foregroundStyle(Aero.text)
+                    }
+                } else {
+                    Button {
+                    } label: {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.system(size: 15))
+                            .foregroundStyle(Aero.text)
+                    }
                 }
                 Button {
                     isFav.toggle()
@@ -63,6 +86,17 @@ struct AssistantDetailView: View {
                         .foregroundStyle(isFav ? Aero.accent : Aero.text)
                 }
             }
+        }
+        .confirmationDialog(
+            "Delete “\(assistant.name)” from My assistants? Chats you started with it stay in your history.",
+            isPresented: $showDelete,
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                AssistantsStore.shared.remove(assistantID)
+                dismiss()
+            }
+            Button("Keep", role: .cancel) { }
         }
     }
 
