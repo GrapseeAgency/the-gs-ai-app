@@ -1592,3 +1592,24 @@ Stage Summary:
 - Forty-seven shipped cycles, all signature-stable, all install-over
 - Remaining pass queue: #5 hand-curated baseline profile + ProfileInstaller (last no-device item; ProfileInstaller dependency is the zero-risk half, hand-curated rules ship with a grammar-verified profile); #4 R8/minify stays gated on a device report (a stripping bug would violate the zero-error mandate)
 - Honest note unchanged: req 14 (device matrix) and req 15 (profiler) need real hardware — the user's device report arbitrates what static engineering cannot
+
+---
+Task ID: 70 (deep-perf pass #5 — ProfileInstaller + hand-curated baseline profile (req 16), v0.48.0 shipped via LiveUpdate)
+Agent: Z.ai Code (main)
+Task: Build QA, advance the deep-performance queue (item #5: baseline profile + ProfileInstaller — the LAST no-device item on the pass list; R8/#4 stays device-gated), ship.
+
+Work Log:
+- CONCURRENCY: clean single-writer state — origin/main at d696c7c (Task 69), tree clean, no parallel loop
+- PROFILE INSTALLER (zero-risk half): androidx.profileinstaller:profileinstaller:1.4.1 added via the version catalog — on API 26-28 (Android 8/9, minSdk is 26) the merged library profile installs at first run by this artifact; API 29+ installs it at package time. The Compose/Room/Lifecycle AARs already ship hot-path profiles, so the merged library coverage is real before any hand-curating
+- MERGED LIBRARY PROFILE CONFIRMED: first release build carried assets/dexopt/baseline.prof at 8,176 bytes + the profileinstaller META-INF marker — the AAR profile merge path is live in the build
+- HAND-CURATED APP PROFILE: app/src/main/baseline-prof.txt with 22 rules — startup path (GSApplication/MainActivity/ShortcutBus/ServiceLocator/theme/GsNavHost, inner classes included via $* forms), the chat hot path (ChatScreenKt/ChatsScreenKt/ChatRepository/ApiClient), and the Room engine + all three generated DAO implementations (AppDatabase_Impl, ConversationDao_Impl, MessageDao_Impl, SavedItemDao_Impl) — the exact classes the indexed windowed reads (pass #1) execute on. Names verified against the real sources first (the DB class is AppDatabase, not ChatDatabase)
+- GRAMMAR VERIFIED EMPIRICALLY (the sandbox substitute for device measurement): two-build size-delta loop — library-only profile 8,176 bytes → with hand-curated rules 8,363 bytes (+187), zero profgen parse warnings; every rule compiled in, including the wildcard method form (->**(**)**) and inner-class segments (ClassName$*). AGP/profgen accepted the whole file — no device needed to prove the profile is well-formed (runtime AOT gain still needs the user's device to FEEL, but a malformed profile was the real risk and it is closed)
+- LINT GATE: 0 errors with the new dependency (38 warnings = the known benign dependency-churn profile, 6 info) — profileinstaller added nothing
+- VERSION: versionCode 48 / versionName 0.48.0; assembleRelease green 2m47s; release APK copied to download/ (aapt: 48, zero debuggable flags; apksigner b1ffd75d… stable; baseline.prof 8,363 baked in); update-manifest.json bumped with the startup note
+- PUBLISHED: commit 10becbe pushed; GitHub Release v0.48.0 created (REL_ID 384041323, asset HTTP 201); /releases/latest/download/ permalink re-verified serving versionCode 48 byte-identical
+
+Stage Summary:
+- Deep pass #5 shipped — the no-device pass queue is now COMPLETE: #1 Android pipeline, #2a/#2b iOS store + view pipeline, #3 streaming buffers, #5 baseline profile, #6 background lifecycle. Every root cause reachable without hardware is fixed and gated
+- Forty-eight shipped cycles, all signature-stable, all install-over
+- Remaining, all deliberately device-gated: #4 R8/minify (a stripping bug would violate the zero-error mandate — needs a real device smoke test), req 14 device matrix, req 15 profiler measurements — the user's next device report unlocks all three at once
+- Feature backlog (assistants CRUD + pin/archive, explore rows, design parity, edge states) resumes next cycle with the performance bar as the entry gate
