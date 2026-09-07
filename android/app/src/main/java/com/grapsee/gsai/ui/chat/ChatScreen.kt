@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
@@ -39,6 +40,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
@@ -111,6 +113,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.data.repository.ChatRepository
@@ -248,6 +251,10 @@ fun ChatScreen(
     val clipboard = LocalClipboardManager.current
     val snackbarHostState = remember { SnackbarHostState() }
     var attachSheetOpen by remember { mutableStateOf(false) }
+    // Translate: the source turn rides in the sheet key; the answer streams in live.
+    var translationSource by remember { mutableStateOf<String?>(null) }
+    var translationText by remember { mutableStateOf("") }
+    var translationBusy by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     val isStreaming = streamingJob?.isActive == true
     val context = LocalContext.current
@@ -468,6 +475,31 @@ fun ChatScreen(
         }
     }
 
+    /**
+     * Real Translate: the tapped turn streams its translation into a bottom
+     * sheet, targeted at the device language. Offline the sheet closes quietly
+     * with a soft note — no error surfaces, the thread stays untouched.
+     */
+    fun translateMessage(content: String) {
+        if (translationBusy || content.isBlank()) return
+        translationSource = content
+        translationText = ""
+        translationBusy = true
+        val targetLanguage = java.util.Locale.getDefault().displayLanguage.ifBlank { "English" }
+        scope.launch {
+            val result = runCatching {
+                ServiceLocator.chat.translate(content, targetLanguage) { delta ->
+                    translationText += delta
+                }
+            }.getOrDefault("")
+            translationBusy = false
+            if (result.isBlank()) {
+                translationSource = null
+                showSnack("Translation needs a connection")
+            }
+        }
+    }
+
     fun readAloud(messageId: String, content: String) {
         // Second tap on the speaking bubble stops playback.
         if (speakingMessageId == messageId) {
@@ -630,6 +662,7 @@ fun ChatScreen(
                                     onReadAloud = { readAloud(message.id, message.content) },
                                     onBranch = { branchFrom(message.id) },
                                     onSaveToLibrary = { saveToLibrary(message.content) },
+                                    onTranslate = { translateMessage(message.content) },
                                     onContextAction = showSnack
                                 )
                             }
@@ -691,6 +724,18 @@ fun ChatScreen(
 
             SnackbarHost(hostState = snackbarHostState)
         }
+    }
+
+    translationSource?.let { source ->
+        TranslationSheet(
+            source = source,
+            translated = translationText,
+            busy = translationBusy,
+            onDismiss = {
+                if (!translationBusy) translationSource = null
+            },
+            onCopy = copyText
+        )
     }
 
     if (attachSheetOpen) {
@@ -828,6 +873,7 @@ private fun AssistantMessage(
     onReadAloud: () -> Unit = {},
     onBranch: () -> Unit = {},
     onSaveToLibrary: () -> Unit = {},
+    onTranslate: () -> Unit = {},
     onContextAction: (String) -> Unit = {}
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
@@ -889,13 +935,13 @@ private fun AssistantMessage(
                 onDismissRequest = { menuExpanded = false }
             ) {
                 DropdownMenuItem(
-                    text = { Text("Translate…") },
+                    text = { Text("Translate") },
                     leadingIcon = {
                         Icon(Icons.Outlined.Translate, contentDescription = null, modifier = Modifier.size(18.dp))
                     },
                     onClick = {
                         menuExpanded = false
-                        onContextAction("Translation arrives with the language pack build")
+                        onTranslate()
                     }
                 )
                 DropdownMenuItem(
@@ -1241,6 +1287,83 @@ private val attachOptions = listOf(
     AttachOption("Prompt template", Icons.Outlined.StickyNote2),
     AttachOption("Voice note", Icons.Outlined.Mic, isVoice = true)
 )
+
+/**
+ * Real Translate surface: the original turn stays on top for reference while
+ * the translation streams in beneath it — Copy hands the result to the
+ * clipboard, Close only works once the stream settles.
+ */
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun TranslationSheet(
+    source: String,
+    translated: String,
+    busy: Boolean,
+    onDismiss: () -> Unit,
+    onCopy: (String) -> Unit
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = GsMotion.spaceM)
+                .padding(bottom = GsMotion.spaceL),
+            verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Outlined.Translate,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text(
+                        text = "Translation",
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                }
+                TextButton(onClick = onDismiss, enabled = !busy) { Text("Close") }
+            }
+            Text(
+                text = source,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.outline,
+                maxLines = 4,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (translated.isNotEmpty()) {
+                SelectionContainer {
+                    Text(
+                        text = translated,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                }
+                TextButton(
+                    onClick = { onCopy(translated) },
+                    enabled = !busy,
+                    contentPadding = PaddingValues(horizontal = 8.dp)
+                ) {
+                    Icon(Icons.Outlined.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Copy translation")
+                }
+            } else {
+                Text(
+                    text = "Translating…",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.outline
+                )
+            }
+        }
+    }
+}
 
 /** 2-column grid of attach entry points; non-voice options wait for the device-permissions build. */
 @Composable

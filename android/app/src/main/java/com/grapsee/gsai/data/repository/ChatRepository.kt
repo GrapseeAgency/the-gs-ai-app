@@ -148,6 +148,49 @@ class ChatRepository(
         return branchId
     }
 
+    // --- Translate ----------------------------------------------------------------
+
+    /**
+     * Real translation through the chat pipeline, self-cleaning: a throwaway
+     * server conversation carries the prompt, the answer streams back through
+     * [onDelta], and the scratch conversation is deleted best-effort in
+     * [finally] — nothing ever lands in Room, recents stay clean. Returns the
+     * streamed text ("" when the backend is unreachable; the UI stays quiet).
+     */
+    suspend fun translate(text: String, targetLanguage: String, onDelta: (String) -> Unit): String {
+        val trimmed = text.trim()
+        if (trimmed.isEmpty()) return ""
+        val prompt = "Translate the following text into $targetLanguage. " +
+            "Reply with the translation only — no notes, no quotes.\n\n$trimmed"
+        var scratchId = ""
+        val accumulated = StringBuilder()
+        try {
+            scratchId = api.createConversation(title = "Translation").id
+            api.sendMessageStream(
+                conversationId = scratchId,
+                content = prompt,
+                onDelta = { delta ->
+                    accumulated.append(delta)
+                    onDelta(delta)
+                },
+                onDone = { }
+            )
+        } catch (ce: CancellationException) {
+            throw ce
+        } catch (e: Exception) {
+            _connectionState.value = true
+        } finally {
+            if (scratchId.isNotEmpty()) {
+                try {
+                    api.deleteConversation(scratchId)
+                } catch (e: Exception) {
+                    // Scratch row lingers server-side; never surfaces anywhere.
+                }
+            }
+        }
+        return accumulated.toString()
+    }
+
     // --- Library -----------------------------------------------------------------
 
     fun savedItems(): Flow<List<SavedItemEntity>> = db.savedItemDao().observeAll()

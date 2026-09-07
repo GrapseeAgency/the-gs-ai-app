@@ -15,6 +15,11 @@ struct ChatDetailView: View {
     @State private var showingAttachments = false
     @State private var toast: String?
 
+    // Translate — the tapped turn streams its translation in a bottom sheet.
+    @State private var translationCard: TranslationCard?
+    @State private var translationText = ""
+    @State private var translating = false
+
     // Reading protection — true while the reader has scrolled away from the
     // live edge; streaming deltas never yank the transcript back down.
     @State private var userIsReading = false
@@ -94,6 +99,36 @@ struct ChatDetailView: View {
                 showToast(attachmentMessage(for: option))
             }
         }
+        .sheet(item: $translationCard) { card in
+            TranslationSheet(
+                source: card.source,
+                translated: translationText,
+                busy: translating,
+                onCopy: { _ in showToast("Copied") }
+            )
+        }
+    }
+
+    /// Real Translate: streams the tapped turn into the sheet, targeted at the
+    /// device language. Offline the sheet closes quietly with a soft note —
+    /// no error surfaces, the thread stays untouched.
+    private func beginTranslation(_ text: String) {
+        guard !translating else { return }
+        translationCard = TranslationCard(source: text)
+        translationText = ""
+        translating = true
+        let language = Locale.current.localizedString(
+            forLanguageCode: Locale.current.languageCode ?? "en") ?? "English"
+        Task {
+            let result = await vm.translate(text: text, targetLanguage: language) { delta in
+                translationText += delta
+            }
+            translating = false
+            if result.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                translationCard = nil
+                showToast("Translation needs a connection")
+            }
+        }
     }
 
     // MARK: Transcript
@@ -135,7 +170,7 @@ struct ChatDetailView: View {
                                     vm.regenerate()
                                 },
                                 onReadAloud: { speech.toggle(messageID: message.id, text: message.content) },
-                                onTranslate: { showToast("Translation arrives with the language pack build") },
+                                onTranslate: { beginTranslation(message.content) },
                                 onSave: {
                                     ConversationStore.shared.saveToLibrary(content: message.content)
                                     showToast("Saved to Library")
@@ -635,6 +670,77 @@ private func proseFont(_ kind: ProseKind) -> Font {
     case .h2: return .system(size: 15, weight: .bold)
     case .h3: return .system(size: 14, weight: .bold)
     case .plain, .bullet, .numbered: return Aero.body()
+    }
+}
+
+// MARK: - Translate
+
+/// Sheet identity for `.sheet(item:)` — carries the tapped turn's source text.
+private struct TranslationCard: Identifiable {
+    let id = UUID()
+    let source: String
+}
+
+/// Real Translate surface: the original turn above for reference, the
+/// streaming translation below — Copy hands the result to the clipboard with
+/// the benchmark checkmark, Close waits for the stream to settle.
+private struct TranslationSheet: View {
+    let source: String
+    let translated: String
+    let busy: Bool
+    let onCopy: (String) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var copied = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Label("Translation", systemImage: "translate")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(Aero.text)
+                Spacer()
+                Button("Close") { dismiss() }
+                    .font(.system(size: 15))
+                    .foregroundStyle(Aero.textMuted)
+                    .disabled(busy)
+            }
+            Text(source)
+                .font(.system(size: 13))
+                .foregroundStyle(Aero.textMuted)
+                .lineLimit(4)
+            Divider().overlay(Aero.outline)
+            if busy && translated.isEmpty {
+                Text("Translating…")
+                    .font(.system(size: 15))
+                    .foregroundStyle(Aero.textMuted)
+            } else {
+                ScrollView {
+                    Text(translated)
+                        .font(.system(size: 15))
+                        .foregroundStyle(Aero.text)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                Button {
+                    UIPasteboard.general.string = translated
+                    onCopy(translated)
+                    withAnimation(.easeOut(duration: 0.15)) { copied = true }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
+                        withAnimation(.easeIn(duration: 0.2)) { copied = false }
+                    }
+                } label: {
+                    Label(
+                        copied ? "Copied" : "Copy translation",
+                        systemImage: copied ? "checkmark" : "doc.on.doc"
+                    )
+                    .font(.system(size: 14))
+                    .foregroundStyle(copied ? Aero.accent : Aero.textMuted)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(Aero.Spacing.l)
+        .presentationDetents([.medium, .large])
     }
 }
 

@@ -123,6 +123,45 @@ final class ChatViewModel: ObservableObject {
         messages = turns
     }
 
+    /// Real translation through the chat pipeline, self-cleaning: a throwaway
+    /// server conversation carries the prompt and is deleted best-effort after
+    /// the stream — nothing touches ConversationStore, recents stay clean.
+    /// Returns the streamed text ("" when the backend is unreachable; the UI
+    /// stays quiet, deltas still update the sheet live as they arrive).
+    func translate(text: String, targetLanguage: String, onDelta: @escaping (String) -> Void) async -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+        let prompt = "Translate the following text into \(targetLanguage). " +
+            "Reply with the translation only — no notes, no quotes.\n\n\(trimmed)"
+        var scratchID = ""
+        defer {
+            if !scratchID.isEmpty {
+                Task {
+                    try? await APIClient.shared.deleteConversation(id: scratchID)
+                }
+            }
+        }
+        var accumulated = ""
+        do {
+            let scratch = try await APIClient.shared.createConversation(title: "Translation")
+            scratchID = scratch.id
+            try await APIClient.shared.stream(
+                message: prompt,
+                conversationID: scratch.id,
+                onDelta: { delta in
+                    Task { @MainActor in
+                        accumulated += delta
+                        onDelta(delta)
+                    }
+                },
+                onDone: { _ in }
+            )
+            return accumulated
+        } catch {
+            return accumulated
+        }
+    }
+
     // MARK: - Streaming pipeline
 
     private func beginStreaming(text: String, appendUserMessage: Bool) {
