@@ -973,3 +973,21 @@ Stage Summary:
 - Branching is a first-class action now: long-press any GS reply, tap Branch new chat, and the thread splits exactly like the benchmark apps — original untouched, branch fully browsable and continuable, on both platforms, with the iOS day-pill compile break fixed along the way
 - Twenty-four shipped cycles, all signature-stable, all install-over
 - Backlog remaining: assistants CRUD + pin/archive native wiring (deferred until live backend ask), further parity sweeps (remaining stubs: Translate, Save-to-Library is snack-only on both platforms)
+
+---
+Task ID: 38 (cron cycle — real Save-to-Library, v0.25.0 shipped via LiveUpdate)
+Agent: Z.ai Code (main)
+Task: Build QA, advance backlog (Save-to-Library was snack-only on both platforms — make it persist and surface in the Library), publish v0.25.0.
+
+Work Log:
+- ANDROID DATA: ChatDatabase v3 — SavedItemEntity (saved_items: id/kind/title/content/createdAt) + SavedItemDao (upsert/observeAll/delete) + additive MIGRATION_2_3 (CREATE TABLE, chat history untouched); ChatRepository gains saveToLibrary(content) + savedItems() Flow
+- ANDROID UI: ChatScreen dropdown "Save to Library" now persists via ServiceLocator.chat (quiet "Saved to Library" snack); first build failed — the menu lives inside AssistantMessage, so the save is wired as an onSaveToLibrary callback (same pattern as onBranch), rebuild green in 1m38s. LibraryScreen collects the Room flow, renders real saves above the seeds (fake demo message rows removed), empty states intact
+- iOS: ConversationStore extension gains LibraryItem (Codable) + saveToLibrary + savedLibraryItems (JSON in UserDefaults, mirrors the Room row shape); ChatDetailView onSave persists before the toast; LibraryView loads real saves onAppear and lists them first under Messages/All — demo message rows removed there too
+- iOS STATIC GATES: 13 files CLEAN
+- VERSION: versionCode 25 / versionName 0.25.0; APK copied to download/GS-AI-App.apk (aapt verified versionCode 25); update-manifest.json bumped
+- PUBLISHED: commit c767d68 pushed; GitHub Release v0.25.0 created (REL_ID 383809808, asset HTTP 201, 19,534,788 bytes); /releases/latest/download/ permalink verified serving versionCode 25; stable signature b1ffd75d… intact
+
+Stage Summary:
+- Save-to-Library is a real feature now: a long-press files the turn into persistent storage and the Library shows it under Messages on both platforms — Room (additive migration, zero data loss) on Android, JSON-backed store on iOS
+- Twenty-five shipped cycles, all signature-stable, all install-over
+- Backlog remaining: Translate is the last chat-surface stub; assistants CRUD + pin/archive native wiring stay deferred until the live-backend ask
