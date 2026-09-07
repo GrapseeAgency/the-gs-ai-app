@@ -1236,3 +1236,23 @@ Stage Summary:
 - The account page can no longer look abandoned: renewal dates and invoices always read as if billed last month, on both platforms, with the exact same strings — sample drift of the "frozen in Aug 2025" class is dead in billing (the only screen with date-literal samples)
 - Thirty-seven shipped cycles, all signature-stable, all install-over
 - Backlog remaining: assistants CRUD (edit button) parked until live backend ask; next candidates: design parity pass with the three benchmark AI chat apps, free-plan caption wording micro-parity, notification sample dates freshness check
+
+---
+Task ID: 51 (cron cycle — final parity audit + caption micro-parity, v0.38.0 shipped via LiveUpdate)
+Agent: Z.ai Code (main)
+Task: Build QA, advance backlog (worklog Task 50 candidates: benchmark design parity / free-plan caption micro-parity / notification date freshness), publish v0.38.0.
+
+Work Log:
+- AUDIT (three candidates checked, two were already done): notification samples use relative times ("2m ago"/"Yesterday") — never stale, candidate dead; pin/archive native wiring confirmed FULLY wired on both platforms (Android overflow menu → setPinned/setArchived → Room + best-effort PATCH, pins float, archived hidden; iOS context menu → ConversationStore.setPinned/setArchived) — pre-done in an earlier cycle; rename also confirmed wired both platforms; Explore screens (Android + iOS) already have the ChatGPT-style three-section composition (category chips, trending assistant rows, editorial prompt cards, tool rows) — nothing to add without a live backend
+- FROZEN-DATE SWEEP: remaining 2025/2026 literals are CONTENT samples (project "Brand Refresh 2025", research citation years, vision doc label) — not UI promises, deliberately untouched
+- FIX (iOS only, Android canonical): planCaption Team "£39 per user / month · renews X" → "£39/user · renews X" and Free "Free · 40 messages a day · 1 model" → "£0 · no renewal date" — plan captions now word-for-word identical across platforms; verified action labels (Switch to Team / Downgrade to Free / Cancel subscription / Restore purchases) already match; restore toast wording differs harmlessly (platform-voice), left alone
+- iOS STATIC GATES: 44 files CLEAN (BillingView CLEAN)
+- ANDROID BUILD: green (up-to-date cache, no Android changes) + version-bump build 1m29s
+- VERSION: versionCode 38 / versionName 0.38.0; APK copied to download/GS-AI-App.apk (aapt verified versionCode 38); update-manifest.json bumped
+- PUBLISHED: commit 9f4762e pushed; GitHub Release v0.38.0 created (REL_ID 383870901, asset HTTP 201, 19,567,556 bytes); /releases/latest/download/ permalink verified serving versionCode 38; stable signature b1ffd75d… intact
+
+Stage Summary:
+- The sample-parity class is CLOSED in Billing: prices, packs, features, invoices, dates and now captions all read identically on both platforms — the account page tells one story everywhere
+- Standing backlog text is now fully consumed: assistants CRUD remains parked on the live-backend ask (pin/archive, rename, explore rows, Room/SwiftData persistence, model prefs — all shipped in Tasks 42–48); remaining ideas are backend-dependent (real checkout, real billing sync, real assistants CRUD) or net-new features
+- Thirty-eight shipped cycles, all signature-stable, all install-over
+- Next candidates: user-reported issues (awaiting first test report since v0.5.0), or net-new surface polish (home widget-grade quick actions, onboarding refresh) if no feedback lands
