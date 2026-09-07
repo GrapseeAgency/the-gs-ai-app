@@ -24,61 +24,148 @@ private struct StaggerIn<Content: View>: View {
 
 // MARK: - Search — one index over everything
 
-/// Pushed via `.search`. Empty query shows recent searches, filter chips and
-/// the empty state; a query filters the static samples by title and groups
-/// results by kind with per-group counts.
+/// Pushed via `.search`. One query over the real on-device corpus: SQLite
+/// conversations and message bodies (FTS5-backed via `ConversationStore`),
+/// Library saved items, the assistant catalogue (samples + the user's own)
+/// and projects. Results arrive grouped with honest per-group counts and
+/// every row routes to its real destination. Store hiccups resolve to "no
+/// results", never an error. Kind chips gate the groups; recent searches are
+/// the queries the reader actually acted on.
 struct SearchView: View {
 
-    // MARK: Sample data
+    // MARK: Result model
 
-    private struct SampleResult: Identifiable {
-        enum Kind: String, CaseIterable {
-            case conversations = "Conversations"
-            case messages = "Messages"
-            case files = "Files"
-            case assistants = "Assistants"
-            case projects = "Projects"
+    private enum Kind: String, CaseIterable {
+        case conversations = "Conversations"
+        case messages = "Messages"
+        case library = "Library"
+        case assistants = "Assistants"
+        case projects = "Projects"
 
-            var icon: String {
-                switch self {
-                case .conversations: return "bubble.left"
-                case .messages: return "text.quote"
-                case .files: return "doc.text"
-                case .assistants: return "smarttoy"
-                case .projects: return "folder"
-                }
+        var icon: String {
+            switch self {
+            case .conversations: return "bubble.left"
+            case .messages: return "text.quote"
+            case .library: return "tray.full"
+            case .assistants: return "smarttoy"
+            case .projects: return "folder"
             }
         }
+    }
 
-        let id = UUID()
+    private struct SearchHit: Identifiable {
+        let id: String
         let kind: Kind
         let title: String
         let detail: String
         let route: AeroRoute
     }
 
-    @State private var query = ""
-    @State private var activeFilters: Set<String> = []
+    /// The same catalogue the Projects screen shows — search mirrors the surface.
+    private struct ProjectEntry {
+        let id: String
+        let name: String
+        let detail: String
+        let meta: String
+    }
 
-    private let recentSearches = ["pricing", "kyoto", "swift concurrency", "q3 report"]
-    private let filterOptions = ["Date", "Model", "Type", "Project", "Assistant"]
-
-    private let samples: [SampleResult] = [
-        .init(kind: .conversations, title: "Q3 pricing strategy", detail: "12 messages · 2h ago", route: .chat("demo-1")),
-        .init(kind: .conversations, title: "Kyoto trip plan", detail: "8 messages · yesterday", route: .chat("demo-2")),
-        .init(kind: .messages, title: "Saved: pricing strategy idea", detail: "Saved message · Library", route: .chat("demo-1")),
-        .init(kind: .files, title: "Q3 report.pdf", detail: "PDF · 12 pages", route: .chat("demo-1")),
-        .init(kind: .assistants, title: "Research Scout", detail: "Assistant · by GS Studio", route: .assistant("asst-1")),
-        .init(kind: .projects, title: "Brand Refresh 2025", detail: "Project · 8 chats · 14 files", route: .project("project-brand"))
+    private static let projectCatalogue: [ProjectEntry] = [
+        .init(id: "project-brand", name: "Brand Refresh 2025", detail: "Repositioning, voice guidelines and the new visual identity.", meta: "8 chats · 14 files · 3 members"),
+        .init(id: "project-launch", name: "Q3 Launch Plan", detail: "Go-to-market plan, comms calendar and the launch-day runbook.", meta: "5 chats · 9 files · 2 members"),
+        .init(id: "project-research", name: "Research: AI market", detail: "Market sizing, competitor scan and a living source library.", meta: "12 chats · 21 files · 4 members")
     ]
 
-    private var trimmedQuery: String {
+    /// Recent searches the reader acted on — local-first, hiccup-safe, newest first.
+    private enum RecentSearches {
+        private static let key = "gs_search_recent"
+
+        static func load() -> [String] {
+            guard let raw = UserDefaults.standard.string(forKey: key) else { return [] }
+            return raw.split(separator: "\n").map(String.init).filter { !$0.isEmpty }
+        }
+
+        static func record(_ term: String) {
+            let next = ([term] + load()).removingDuplicates().prefix(5)
+            UserDefaults.standard.set(next.joined(separator: "\n"), forKey: key)
+        }
+    }
+
+    // MARK: State
+
+    @ObservedObject private var store = ConversationStore.shared
+    @ObservedObject private var assistantsStore = AssistantsStore.shared
+    @State private var query = ""
+    @State private var activeKind: Kind?
+    @State private var recents: [String] = RecentSearches.load()
+
+    private var term: String {
         query.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private var matches: [SampleResult] {
-        guard !trimmedQuery.isEmpty else { return [] }
-        return samples.filter { $0.title.localizedCaseInsensitiveContains(trimmedQuery) }
+    // MARK: Real search
+
+    private var matches: [SearchHit] {
+        guard term.count >= 2 else { return [] }
+
+        var hits: [SearchHit] = []
+
+        for convo in store.searchTitles(term).prefix(10) {
+            hits.append(SearchHit(
+                id: "convo-\(convo.id)",
+                kind: .conversations,
+                title: convo.title,
+                detail: "Chat title match · " + Self.relative(convo.updatedAt),
+                route: .chat(convo.id)))
+        }
+        for hit in store.searchMessages(term).prefix(12) {
+            hits.append(SearchHit(
+                id: "msg-\(hit.messageID)",
+                kind: .messages,
+                title: hit.conversation.title,
+                detail: Self.snippet(hit.content, term: term) + " · " + Self.relative(hit.createdAt),
+                route: .chat(hit.conversation.id)))
+        }
+        for item in ConversationStore.shared.savedLibraryItems()
+            .filter({ $0.title.localizedCaseInsensitiveContains(term) || $0.content.localizedCaseInsensitiveContains(term) })
+            .prefix(10) {
+            let contentMatched = !item.title.localizedCaseInsensitiveContains(term)
+            let detail = (contentMatched ? Self.snippet(item.content, term: term) : "Saved \(item.kind)")
+                + " · " + Self.relative(item.createdAt)
+            hits.append(SearchHit(
+                id: "lib-\(item.id)",
+                kind: .library,
+                title: item.title,
+                detail: detail,
+                route: .library))
+        }
+        for assistant in (AssistantSample.catalog + assistantsStore.userAssistants)
+            .filter({
+                $0.name.localizedCaseInsensitiveContains(term) ||
+                $0.desc.localizedCaseInsensitiveContains(term) ||
+                $0.category.localizedCaseInsensitiveContains(term)
+            })
+            .prefix(8) {
+            hits.append(SearchHit(
+                id: "asst-\(assistant.id)",
+                kind: .assistants,
+                title: assistant.name,
+                detail: "\(assistant.category) · ★ \(assistant.ratingText)",
+                route: .assistant(assistant.id)))
+        }
+        for project in Self.projectCatalogue
+            .filter({
+                $0.name.localizedCaseInsensitiveContains(term) ||
+                $0.detail.localizedCaseInsensitiveContains(term)
+            })
+            .prefix(8) {
+            hits.append(SearchHit(
+                id: "proj-\(project.id)",
+                kind: .projects,
+                title: project.name,
+                detail: project.meta,
+                route: .project(project.id)))
+        }
+        return hits
     }
 
     // MARK: Body
@@ -87,24 +174,34 @@ struct SearchView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Aero.Spacing.l) {
                 StaggerIn(index: 0) { inputBar }
-                if trimmedQuery.isEmpty {
+                if term.isEmpty {
                     StaggerIn(index: 1) { recentSection }
                     StaggerIn(index: 2) { filterSection }
                     StaggerIn(index: 3) {
                         EmptyStateView(
                             icon: "magnifyingglass",
                             title: "Search everything",
-                            message: "Conversations, messages, files, assistants, projects and prompts — one index."
+                            message: "Conversations, messages, library items, assistants and projects — one index over this device."
+                        )
+                    }
+                } else if term.count < 2 {
+                    StaggerIn(index: 1) {
+                        EmptyStateView(
+                            icon: "magnifyingglass",
+                            title: "Keep typing",
+                            message: "At least two characters to search everything on this device."
                         )
                     }
                 } else if matches.isEmpty {
-                    EmptyStateView(
-                        icon: "tray",
-                        title: "No results",
-                        message: "Nothing matches “\(trimmedQuery)” yet — try another term or clear filters."
-                    )
+                    StaggerIn(index: 1) {
+                        EmptyStateView(
+                            icon: "tray",
+                            title: "No results",
+                            message: "Nothing matches “\(term)” yet — try another term or clear a filter."
+                        )
+                    }
                 } else {
-                    resultsSection
+                    StaggerIn(index: 1) { resultsSection }
                 }
             }
             .padding(.horizontal, Aero.Spacing.m)
@@ -115,6 +212,7 @@ struct SearchView: View {
         .navigationTitle("Search everything")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
+        .onAppear { recents = RecentSearches.load() }
     }
 
     // MARK: Input
@@ -122,7 +220,7 @@ struct SearchView: View {
     private var inputBar: some View {
         AeroInputBar(
             text: $query,
-            placeholder: "Search conversations, files, assistants…",
+            placeholder: "Search conversations, library, assistants…",
             action: {}
         )
     }
@@ -132,42 +230,36 @@ struct SearchView: View {
     private var recentSection: some View {
         VStack(alignment: .leading, spacing: Aero.Spacing.m) {
             SectionHeader(title: "Recent searches")
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: Aero.Spacing.s) {
-                    ForEach(recentSearches, id: \.self) { term in
-                        AeroChip(text: term, action: { query = term })
+            if recents.isEmpty {
+                Text("Searches you act on land here.")
+                    .font(Aero.caption())
+                    .foregroundStyle(Aero.textMuted)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: Aero.Spacing.s) {
+                        ForEach(recents, id: \.self) { recent in
+                            AeroChip(text: recent, action: { query = recent })
+                        }
                     }
+                    .padding(.vertical, 2)
                 }
-                .padding(.vertical, 2)
             }
         }
     }
 
-    // MARK: Filter chips (toggle set)
+    // MARK: Kind chips (honest group gates)
 
     private var filterSection: some View {
-        VStack(alignment: .leading, spacing: Aero.Spacing.m) {
-            SectionHeader(title: "Filters")
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: Aero.Spacing.s) {
-                    ForEach(filterOptions, id: \.self) { option in
-                        AeroChip(
-                            text: option,
-                            selected: activeFilters.contains(option),
-                            action: {
-                                withAnimation(Aero.snappy) {
-                                    if activeFilters.contains(option) {
-                                        activeFilters.remove(option)
-                                    } else {
-                                        activeFilters.insert(option)
-                                    }
-                                }
-                            }
-                        )
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: Aero.Spacing.s) {
+                AeroChip(text: "All", selected: activeKind == nil) { activeKind = nil }
+                ForEach(Kind.allCases, id: \.self) { kind in
+                    AeroChip(text: kind.rawValue, selected: activeKind == kind) {
+                        activeKind = activeKind == kind ? nil : kind
                     }
                 }
-                .padding(.vertical, 2)
             }
+            .padding(.vertical, 2)
         }
     }
 
@@ -175,7 +267,7 @@ struct SearchView: View {
 
     private var resultsSection: some View {
         VStack(alignment: .leading, spacing: Aero.Spacing.l) {
-            ForEach(SampleResult.Kind.allCases, id: \.self) { kind in
+            ForEach(Kind.allCases, id: \.self) { kind in
                 let items = matches.filter { $0.kind == kind }
                 if !items.isEmpty {
                     VStack(alignment: .leading, spacing: Aero.Spacing.m) {
@@ -188,7 +280,7 @@ struct SearchView: View {
                             ForEach(items) { result in
                                 NavigationLink(value: result.route) {
                                     AeroListRow(
-                                        title: result.title,
+                                        title: result.kind == .conversations ? gsConversationTitle(result.title) : result.title,
                                         subtitle: result.detail,
                                         leading: {
                                             Image(systemName: kind.icon)
@@ -205,11 +297,49 @@ struct SearchView: View {
                                     )
                                 }
                                 .buttonStyle(KineticPressStyle())
+                                .simultaneousGesture(TapGesture().onEnded {
+                                    RecentSearches.record(term)
+                                })
                             }
                         }
                     }
                 }
             }
         }
+    }
+
+    // MARK: Helpers
+
+    private static func snippet(_ content: String, term: String) -> String {
+        let clean = content.replacingOccurrences(of: "\n", with: " ").trimmingCharacters(in: .whitespaces)
+        guard let range = clean.range(of: term, options: .caseInsensitive) else {
+            return String(clean.prefix(80))
+        }
+        let lowerStart = clean.distance(from: clean.startIndex, to: range.lowerBound)
+        let start = max(0, lowerStart - 24)
+        let end = min(clean.count, lowerStart + term.count + 48)
+        let prefix = start > 0 ? "…" : ""
+        let suffix = end < clean.count ? "…" : ""
+        let slice = clean[clean.index(clean.startIndex, offsetBy: start)..<clean.index(clean.startIndex, offsetBy: end)]
+        return prefix + slice.trimmingCharacters(in: .whitespaces) + suffix
+    }
+
+    private static func relative(_ iso: String) -> String {
+        guard let date = ISO8601DateFormatter().date(from: iso) else { return "earlier" }
+        let minutes = Int(Date().timeIntervalSince(date) / 60)
+        switch minutes {
+        case ..<1: return "just now"
+        case ..<60: return "\(minutes)m ago"
+        case ..<1440: return "\(minutes / 60)h ago"
+        case ..<10080: return "\(minutes / 1440)d ago"
+        default: return "earlier"
+        }
+    }
+}
+
+private extension Array where Element == String {
+    func removingDuplicates() -> [String] {
+        var seen = Set<String>()
+        return filter { seen.insert($0).inserted }
     }
 }

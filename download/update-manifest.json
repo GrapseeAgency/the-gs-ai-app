@@ -1,6 +1,6 @@
 {
-  "versionCode": 51,
-  "versionName": "0.51.0",
+  "versionCode": 52,
+  "versionName": "0.52.0",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "Library gains live search: the search field filters saved messages, documents, images and prompts by title and content across every chip, with an honest no-matches state. Same design language, same stable signature."
+  "notes": "Search everything, for real: the global search now answers from actual on-device data — conversations and message bodies (FTS full-text with LIKE fallback), Library saves, the assistant catalogue and projects — grouped with honest counts, kind filter chips and recent searches you acted on. Android + iOS one contract, same stable signature."
 }
