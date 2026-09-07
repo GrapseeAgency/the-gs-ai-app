@@ -1524,3 +1524,24 @@ Stage Summary:
 - Deep pass #2a shipped: the iOS inbox render defect (O(rows × messages) per render) is gone — previews are O(1) dictionary hits; the store's remaining window-rework has a clean, indexed runway
 - Forty-five shipped cycles stand (v0.45.0); this cycle added iOS source-level performance work plus an independent verification of pass #1's release chain
 - Next candidates: pass #2b (SwiftUI newest-window history + scroll-up loadOlder wiring), pass #3 (streaming StringBuilder buffer + scroll-follow tuning), pass #4 (R8 with conservative keep rules), pass #5 (hand-curated baseline profile + ProfileInstaller), pass #6 (background-lifecycle sweep, req 17)
+
+---
+Task ID: 67 (deep-perf pass #3 — streaming buffer + scroll-follow refinement, v0.46.0 shipped via LiveUpdate)
+Agent: Z.ai Code (main)
+Task: Build QA, advance the deep-performance queue (Task 65/66 pass list, item #3: string/animation refinement sweep — StringBuilder streaming buffers + per-chunk scroll-follow tuning), ship.
+
+Work Log:
+- CONCURRENCY: clean single-writer state — origin/main at a739896 (Task 66), tree clean, no parallel loop
+- AUDIT FINDING (confirmed clean, untouched): SegmentedContent already wraps parseContentSegments in remember(content) — fence/prose parsing runs once per content VERSION, not per recomposition; the disciplined structure needed no change
+- FIX 1 — quadratic stream concatenation (req 3): the chat onDelta handler built each new content via current.content + delta — re-allocating the ENTIRE prefix per chunk (O(n²) bytes over a long answer, pure Main-thread GC churn during exactly the moments the user watches text appear). Replaced with one StringBuilder per dispatch: append is amortized O(1), toString() is the only per-chunk allocation left; the O(1) direct-slot write and self-healing fallback from pass #1 carry over unchanged
+- FIX 2 — same defect in the translate path: translationText += delta had the identical quadratic pattern; now a StringBuilder buffer with the same discipline
+- FIX 3 — stream-follow churn (req 6): the live-edge follower ran animateScrollToItem with keys (messages.size, last.content.length) that change per chunk — every chunk CANCELLED the in-flight animation and relaunched a new one that itself got cancelled before settling; visible cost on every generating turn. Now scrollToItem (instant, nothing to cancel); the send scroll keeps its animated landing (single deliberate animation, benchmark behavior)
+- GATES: assembleDebug green 1m30s (real compile); lintDebug 0 errors (1m34s)
+- VERSION: versionCode 46 / versionName 0.46.0; assembleRelease green 2m55s; release APK copied to download/ (aapt verified 46, apksigner b1ffd75d… intact, zero debuggable flags); update-manifest.json bumped
+- PUBLISHED: commit 03982c9 pushed; GitHub Release v0.46.0 created (REL_ID 384008983, asset HTTP 201, 12,839,501 bytes); /releases/latest/download/ permalink verified serving versionCode 46 byte-identical (identical byte size to v0.45.0 is zip alignment absorbing the code delta — aapt content is the arbiter)
+
+Stage Summary:
+- Deep pass #3 shipped: streaming text now grows linearly (both chat and translate), and the live edge follows without animation-pipeline churn — the typing-visible surfaces allocate and scroll at minimum cost
+- Forty-six shipped cycles, all signature-stable, all install-over
+- Remaining pass queue: #4 R8/minify with conservative keep rules (biggest remaining startup/memory lever — deliberately gated on a device report because a stripping bug would violate the zero-error mandate), #5 hand-curated baseline profile + ProfileInstaller, #6 background-lifecycle sweep (req 17), #2b SwiftUI newest-window + scroll-up wiring
+- Honest note unchanged: req 14 (device matrix) and req 15 (profiler) need real hardware — static analysis covers what it can, the user's device report arbitrates the rest
