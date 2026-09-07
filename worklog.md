@@ -1356,3 +1356,22 @@ Stage Summary:
 - First QA + hold cycle under the Task 55 protocol: build green, iOS gates green, release chain (permalink bytes, signature, manifest) verified intact end-to-end
 - Forty-two shipped cycles stand; this cycle added verification, not surface
 - Next candidates: unchanged — the first user test report, or new direction; Task 56 will repeat the QA + hold pattern until either arrives
+
+---
+Task ID: 57 (device-feedback cycle — performance rebuild, v0.43.0 shipped via LiveUpdate)
+Agent: Z.ai Code (main)
+Task: FIRST USER TEST REPORT since v0.5.0 arrived: "Nothing feels native, not smooth/flexible, can't run properly, lagging, performance sucks" — full performance cycle: audit, fix, ship.
+
+Work Log:
+- ROOT CAUSE #1 (biggest): the shipped APK was assembleDebug — debuggable builds skip ART's full optimization and carry JDWP overhead, commonly 2-4x slower than release. Shipped artifact switched to assembleRelease (minify stays OFF = zero stripping risk; same gs-live.keystore → same b1ffd75d… signature → installs over every prior version). APK dropped 34%: 12,839,469 bytes vs 19,591,375 debug
+- ROOT CAUSE #2: rememberAuroraBrush ran a 2.2s infinite gradient at 20+ call sites — every one recomposed its whole calling composable EVERY frame (4 instances on Home alone + orb breathe + halo = constant full-screen churn; the #1 jank signature on mid/low-end hardware). Fix: static-by-default (remember-once Brush, zero call-site changes needed) + new Modifier.auroraBackground which animates via drawBehind — state read in the DRAW phase, so the gradient still slides on true AI-active life-signs (GsLoadingState, chat generating bar) without recomposing anything
+- DRAW-PHASE CONVERSIONS: StreamingCaret .alpha(x) → .graphicsLayer{alpha}; Hero orb breathe .scale(x) → .graphicsLayer{scaleX/Y}; VoicePulseHalo merged into one graphicsLayer; VoiceScreen WaveformBar rewritten — was height((8+48*phase).dp) = per-frame LAYOUT for every bar, now a fixed 56dp node whose phase is read in drawBehind (bottom-anchored rounded bars, zero re-layout)
+- BUILD FIXES: Outline.Rounded member access fought smart-cast (two rounds of unresolved references) → auroraBackground reimplemented as .clip(shape).drawBehind{drawRect} — identical visuals, no Outline API surface
+- SANITY: lists already had keys (chat/folders/archived/chats); no blur/shadow usage anywhere; no BuildConfig.DEBUG/FLAG_DEBUGGABLE dependencies → release switch safe; iOS audited and already disciplined (static LinearGradients, only small dot pulses) — no iOS changes needed, gates 46/46 PASS
+- VERSION: versionCode 43 / versionName 0.43.0; release APK copied to download/GS-AI-App.apk (aapt verified 43; apksigner b1ffd75d… intact); update-manifest.json bumped with performance notes
+- PUBLISHED: commit d9f5286 pushed; GitHub Release v0.43.0 created (REL_ID 383926870, asset HTTP 201, 12,839,469 bytes); /releases/latest/download/ permalink verified serving versionCode 43 byte-identical
+
+Stage Summary:
+- The app the user now installs is a different binary class: release-optimized, 34% smaller, with the frame-churn sources eliminated — scroll/stream/typing paths only redraw the pixels that changed
+- First feedback loop closed: report → audit → fix → ship inside one cycle; more reports get this same treatment
+- Next candidates: await reaction to v0.43.0 smoothness (does it still lag? which screen?); further perf candidates if needed: baseline profiles, derivedStateOf audit on filtered lists, Hilt/Room lazy init timings
