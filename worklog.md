@@ -1375,3 +1375,21 @@ Stage Summary:
 - The app the user now installs is a different binary class: release-optimized, 34% smaller, with the frame-churn sources eliminated — scroll/stream/typing paths only redraw the pixels that changed
 - First feedback loop closed: report → audit → fix → ship inside one cycle; more reports get this same treatment
 - Next candidates: await reaction to v0.43.0 smoothness (does it still lag? which screen?); further perf candidates if needed: baseline profiles, derivedStateOf audit on filtered lists, Hilt/Room lazy init timings
+
+---
+Task ID: 58 (cron cycle — recomposition audit + QA + hold per Task 57 protocol, v0.43.0 remains current)
+Agent: Z.ai Code (main)
+Task: Build QA, advance backlog (Task 57's next-steps listed "derivedStateOf audit on filtered lists" as the first no-feedback-needed perf candidate; no new device report yet), hold release pending reaction to v0.43.0.
+
+Work Log:
+- RECOMPOSITION AUDIT (Task 57 follow-up): swept every composition-time filter/sort/map in ui/ — 6 hits, all benign: ExploreScreen's three trending/prompt/tool filters run on static sample lists (state-gated, small); AuthScreen digit filter is per-keystroke on a phone string; LibraryScreen's filter is list-state-gated over a small saved-items list; PromptBuilder's is an option intersection on tap. Zero hot paths, zero changes needed — the Chat/Chats/Archived/Folders keyed lists confirmed in Task 57 stand
+- CONCURRENCY NOTE: during Task 57 a second cron loop worked the same cycle in parallel (same diagnosis, disjoint edits). This cycle observed clean single-writer behavior — tree clean at 8eaa3cf, no lock contention
+- ANDROID QA BUILD: green 1m30s (debug variant compile of the v0.43.0 sources — the release-shipping path is exercised by the permalink check below, keeping download/ as the release artifact)
+- iOS STATIC GATES: 46/46 PASS (no iOS changes; audit only)
+- RELEASE CHAIN RE-VERIFIED: download/GS-AI-App.apk still the release artifact (NOT debuggable), versionCode 43, permalink byte-identical, manifest 43 — v0.43.0 untouched and healthy
+- NO VERSION BUMP: no source changes → no release; v0.43.0 remains the latest permalink target
+
+Stage Summary:
+- The derivedStateOf candidate from Task 57's list is now audited and closed as "nothing to fix" — every listed perf candidate that can be acted on without a device or new feedback is exhausted
+- Forty-three shipped cycles stand (v0.43.0, the performance rebuild); this cycle added verification only
+- Next candidates: user reaction to v0.43.0 smoothness (which screens still lag? device tier?); remaining ideas are device-instrumented (baseline profiles, init timings) and need that report to target correctly
