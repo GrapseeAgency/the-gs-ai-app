@@ -1429,3 +1429,21 @@ Stage Summary:
 - Every hot-path angle reachable without a device is now audited and closed: recomposition (T57 fixes), filtered-list composition (T58 clean), startup init (T59 disciplined), image decoding (T60 nonexistent) — the perf surface is fully mapped; only device-instrumented measurement remains
 - Forty-three shipped cycles stand (v0.43.0 performance rebuild); this cycle added one more closed audit, not surface
 - Next candidates: user reaction to v0.43.0 (which screens still lag? which device tier?) unlocks baseline profiles / startup Macrobenchmark; otherwise QA + hold continues
+
+---
+Task ID: 61 (cron cycle — typing-path audit + QA + hold per Task 60 protocol, v0.43.0 remains current)
+Agent: Z.ai Code (main)
+Task: Build QA, advance backlog (Task 60 closed the image angle — the one user-perceived hot path never explicitly audited was TYPING: per-keystroke recomposition scope on the chat input), hold release.
+
+Work Log:
+- CONCURRENCY: clean single-writer state — origin/main at fb2f076 (Task 60), tree clean, no parallel loop
+- TYPING-PATH AUDIT (closed as clean): ChatScreen's `draft` is screen-level mutableStateOf, but every occurrence was mapped — reads in composition happen at exactly ONE site (line 700, the input OutlinedTextField's `value = draft`); all others are writes (onValueChange, send-clear, prefill LaunchedEffect) or the non-composition DisposableEffect draft-save. Per keystroke Compose invalidates only the nearest restartable scope containing the read — the input node itself. The message LazyColumn, app bar and streaming surfaces never see keystroke invalidation; `editingDraft` follows the same single-site pattern inside the edit dialog (non-hot). Send-button state doesn't read draft either. Typing latency risk: none structurally
+- HOT-PATH MAP NOW COMPLETE: scrolling (T57 keys) · streaming (T57 draw-phase caret/bar) · startup (T59 disciplined init) · images (T60 zero decoding) · typing (T61 single read site) — every user-perceived frame path is audited and either fixed or verified clean; the no-device perf backlog is exhausted at every layer
+- ANDROID QA BUILD: green 17s (42 tasks up-to-date — zero source drift since v0.43.0)
+- iOS STATIC GATES: PASS (46 files)
+- NO VERSION BUMP: zero source changes → no release; v0.43.0 stays the permalink target
+
+Stage Summary:
+- The typing path — the last unaudited hot path — is confirmed optimal; the app's frame pipeline is now fully mapped end-to-end without a device
+- Forty-three shipped cycles stand (v0.43.0 performance rebuild); this cycle added the final closed audit, not surface
+- Next candidates: user reaction to v0.43.0 (which screens still lag? which device tier?) unlocks baseline profiles / startup Macrobenchmark; otherwise QA + hold continues
