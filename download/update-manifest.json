@@ -1,6 +1,6 @@
 {
-  "versionCode": 57,
-  "versionName": "0.57.0",
+  "versionCode": 58,
+  "versionName": "0.57.1",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "Voice mode is real now. The obsidian voice screen runs the device's on-device speech engine: partial words stream into the transcript while you speak, the waveform only breathes while the microphone is genuinely open, and every status line tells the truth (paused, processing, didn't catch that, permission off). A finished transcript offers Send to chat — your spoken words land straight in a new conversation's composer — plus Copy and Try again. Speaker toggle reads the transcript back with on-device text-to-speech; the fake voice picker is gone, replaced by an honest on-device caption. iOS gets the identical contract over its own speech engine. Same design, zero decoration-only states."
+  "notes": "GS LiveUpdate is fixed. The in-app updater now resumes downloads from the exact byte a dropped connection broke at instead of restarting at 1%, only ever runs one download at a time, and verifies every package before the system installer sees it (ZIP magic, a real package-manager parse, our own signature identity, and the full advertised byte length) — so a truncated download can never again end in 'problem parsing the package'. When a download genuinely cannot finish, the pill says so and stays tappable to resume; nothing dissolves into nothing. Everything else in the app is untouched."
 }

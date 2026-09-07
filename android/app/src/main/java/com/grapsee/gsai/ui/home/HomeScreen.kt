@@ -377,7 +377,9 @@ private const val TAGLINE_FADE_MS = 700
  * GS LiveUpdate pill — benchmark-quiet surface (raised dark + aurora dot, same
  * language as the model pill). Only rendered when a newer build is published:
  * "v0.2.0 ready" → tap → "Downloading update · 42%" → "Update ready · tap to
- * install" → system installer. Every failure path dissolves back to invisible.
+ * install" → system installer. A dropped stream resumes from the exact byte it
+ * broke at, and if a download truly cannot finish the pill says so and stays
+ * tappable — it never dissolves into nothing.
  */
 @Composable
 private fun LiveUpdatePill() {
@@ -393,6 +395,10 @@ private fun LiveUpdatePill() {
         )
         LiveUpdateState.Ready -> UpdatePill(
             text = "Update ready · tap to install",
+            onClick = { LiveUpdater.beginInstallFlow() }
+        )
+        is LiveUpdateState.Failed -> UpdatePill(
+            text = "Update didn't finish · tap to retry",
             onClick = { LiveUpdater.beginInstallFlow() }
         )
         LiveUpdateState.Idle -> Unit
