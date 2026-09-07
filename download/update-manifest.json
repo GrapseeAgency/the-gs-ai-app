@@ -1,6 +1,6 @@
 {
-  "versionCode": 50,
-  "versionName": "0.50.0",
+  "versionCode": 51,
+  "versionName": "0.51.0",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "Explore is rebuilt ChatGPT-store style: horizontal discovery rows — Top picks, Trending now with ranked cards, Popular prompts, Featured AI tools, and Made by you once you've created assistants. The catalogue now comes straight from the Assistants hub, so names and ratings never drift between surfaces, and category chips are built from what's actually in the store. Same design language, same stable signature."
+  "notes": "Library gains live search: the search field filters saved messages, documents, images and prompts by title and content across every chip, with an honest no-matches state. Same design language, same stable signature."
 }

@@ -27,6 +27,7 @@ import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.TipsAndUpdates
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -60,6 +61,7 @@ import kotlinx.coroutines.launch
 import com.grapsee.gsai.ui.components.GsCard
 import com.grapsee.gsai.ui.components.GsChip
 import com.grapsee.gsai.ui.components.GsEmptyState
+import com.grapsee.gsai.ui.components.GsInputBar
 import com.grapsee.gsai.ui.components.GsListItem
 import com.grapsee.gsai.ui.components.GsScreenScaffold
 import com.grapsee.gsai.ui.components.GsSectionHeader
@@ -68,8 +70,9 @@ import com.grapsee.gsai.ui.theme.GsMotion
 
 /**
  * AERUO KINETIC — LIBRARY, the personal knowledge space.
- * Filter chips switch the saved-items index; collections sit above as
- * horizontal editorial cards. Files filter has no samples yet → empty state.
+ * Live search sits above the index; filter chips switch the saved-items
+ * index; collections sit above as horizontal editorial cards. Files filter
+ * has no samples yet → empty state.
  */
 
 private val libraryFilters = listOf(
@@ -111,14 +114,28 @@ private fun filterLabelFor(kind: String): String = when (kind) {
 fun LibraryScreen(onNavigate: (String) -> Unit) {
     var selectedFilter by remember { mutableIntStateOf(0) }
     val filter = libraryFilters[selectedFilter]
-    val visibleItems = if (selectedFilter == 0) libraryItems
-    else libraryItems.filter { it.kind == filter }
+
+    // Live search over the whole library — titles and contents of real saves,
+    // titles of the sample rows. Empty term passes everything, so the chips
+    // keep their meaning and the two gates simply compose.
+    var searchQuery by remember { mutableStateOf("") }
+    val term = searchQuery.trim()
+    val matchesTerm: (String) -> Boolean = { text ->
+        term.isEmpty() || text.contains(term, ignoreCase = true)
+    }
+
+    val visibleItems = libraryItems.filter {
+        (selectedFilter == 0 || it.kind == filter) && matchesTerm(it.title)
+    }
 
     // Real saves from the chat surface and the studios — persist in Room, render
     // under the chip that owns their kind (messages, images, documents…).
     val savedItems by remember { ServiceLocator.chat.savedItems() }
         .collectAsState(initial = emptyList())
-    val realVisible = savedItems.filter { selectedFilter == 0 || filterLabelFor(it.kind) == filter }
+    val realVisible = savedItems.filter {
+        (selectedFilter == 0 || filterLabelFor(it.kind) == filter) &&
+            (matchesTerm(it.title) || matchesTerm(it.content))
+    }
 
     // Item management: tap a real save to read it in full, copy or remove it.
     val scope = rememberCoroutineScope()
@@ -154,13 +171,24 @@ fun LibraryScreen(onNavigate: (String) -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(GsMotion.spaceL)
             ) {
                 Spacer(Modifier.height(GsMotion.spaceS))
+                GsInputBar(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    onSend = {},
+                    placeholder = "Search your library…"
+                )
                 FilterChips(selectedFilter, onSelect = { selectedFilter = it })
                 CollectionsSection()
                 if (realVisible.isEmpty() && visibleItems.isEmpty()) {
                     GsEmptyState(
-                        icon = Icons.Outlined.Folder,
-                        title = "No ${filter.lowercase()} yet",
-                        message = "Saved ${filter.lowercase()} will collect here as you work."
+                        icon = if (term.isEmpty()) Icons.Outlined.Folder else Icons.Outlined.Search,
+                        title = if (term.isEmpty()) "No ${filter.lowercase()} yet"
+                                else "No matches for \"$term\"",
+                        message = if (term.isEmpty()) {
+                            "Saved ${filter.lowercase()} will collect here as you work."
+                        } else {
+                            "Try different words — or save something new from a chat or studio."
+                        }
                     )
                 } else {
                     realVisible.forEach { item ->

@@ -24,8 +24,9 @@ private struct StaggerIn<Content: View>: View {
 
 // MARK: - Library — personal knowledge space
 
-/// LIBRARY tab root. Filter chips (All/Messages/Documents/Images/Files/Prompts)
-/// drive the saved-item list; collections scroll horizontally. Static samples.
+/// LIBRARY tab root. Live search sits above the index; filter chips
+/// (All/Messages/Documents/Images/Files/Prompts) drive the saved-item list;
+/// collections scroll horizontally. Static samples.
 struct LibraryView: View {
 
     // MARK: Sample data
@@ -70,6 +71,7 @@ struct LibraryView: View {
     }
 
     @State private var filter: Filter = .all
+    @State private var query = ""
 
     // Real saves from the chat surface — loaded on appear, rendered above seeds.
     @State private var savedMessages: [LibraryItem] = []
@@ -93,7 +95,18 @@ struct LibraryView: View {
     ]
 
     private var filteredItems: [SavedItem] {
-        items.filter { filter.matches($0.kind) }
+        items.filter { filter.matches($0.kind) && containsTerm([$0.title, $0.detail]) }
+    }
+
+    // MARK: Search gate — same contract as Explore
+
+    /// Empty term passes everything; otherwise any field contains it.
+    private func containsTerm(_ fields: [String]) -> Bool {
+        term.isEmpty || fields.contains { $0.localizedCaseInsensitiveContains(term) }
+    }
+
+    private var term: String {
+        query.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     // MARK: Body
@@ -102,9 +115,10 @@ struct LibraryView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Aero.Spacing.l) {
                 StaggerIn(index: 0) { header }
-                StaggerIn(index: 1) { filterChips }
-                StaggerIn(index: 2) { collectionsSection }
-                StaggerIn(index: 3) { itemsSection }
+                StaggerIn(index: 1) { searchRow }
+                StaggerIn(index: 2) { filterChips }
+                StaggerIn(index: 3) { collectionsSection }
+                StaggerIn(index: 4) { itemsSection }
             }
             .padding(.horizontal, Aero.Spacing.m)
             .padding(.top, Aero.Spacing.s)
@@ -147,6 +161,34 @@ struct LibraryView: View {
                 .font(Aero.caption())
                 .foregroundStyle(Aero.textMuted)
         }
+    }
+
+    // MARK: Search row — live over the whole library
+
+    private var searchRow: some View {
+        HStack(spacing: Aero.Spacing.s) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(Aero.textMuted)
+            TextField("Search your library…", text: $query)
+                .font(Aero.body())
+                .foregroundStyle(Aero.text)
+                .autocorrectionDisabled()
+            if !query.isEmpty {
+                Button {
+                    query = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 14))
+                        .foregroundStyle(Aero.textMuted)
+                }
+                .buttonStyle(KineticPressStyle())
+            }
+        }
+        .padding(.horizontal, Aero.Spacing.m)
+        .padding(.vertical, 13)
+        .background(Capsule().fill(Aero.container))
+        .overlay(Capsule().stroke(Aero.outline, lineWidth: 1))
     }
 
     // MARK: Filter chips
@@ -204,14 +246,23 @@ struct LibraryView: View {
         VStack(alignment: .leading, spacing: Aero.Spacing.m) {
             SectionHeader(title: "Saved items")
             let realRows = savedMessages.filter { item in
-                filter == .all || filter == filterForKind(item.kind)
+                (filter == .all || filter == filterForKind(item.kind)) &&
+                    containsTerm([item.title, item.content])
             }
             if realRows.isEmpty && filteredItems.isEmpty {
-                EmptyStateView(
-                    icon: "tray",
-                    title: "Nothing here yet",
-                    message: "Items you save will appear in this filter."
-                )
+                if term.isEmpty {
+                    EmptyStateView(
+                        icon: "tray",
+                        title: "Nothing here yet",
+                        message: "Items you save will appear in this filter."
+                    )
+                } else {
+                    EmptyStateView(
+                        icon: "magnifyingglass",
+                        title: "No matches for \"\(term)\"",
+                        message: "Try different words — or save something new from a chat or studio."
+                    )
+                }
             } else {
                 VStack(spacing: Aero.Spacing.s) {
                     ForEach(realRows) { real in
