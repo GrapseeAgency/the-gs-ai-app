@@ -918,3 +918,21 @@ Stage Summary:
 - Every visible control in the thread now does something real: Share opens the system sheet on Android exactly as ShareLink does on iOS, and both bubbles answer long-presses with a haptic tick — benchmark-grade interaction parity, zero new error surfaces
 - Twenty-one shipped cycles, all signature-stable, all install-over
 - Backlog remaining: assistants CRUD + pin/archive native wiring (deferred until live backend ask), further parity sweeps
+
+---
+Task ID: 35 (cron cycle — design parity: quiet per-turn timestamps, v0.22.0 shipped via LiveUpdate)
+Agent: Z.ai Code (main)
+Task: Build QA, advance backlog (per-turn timestamps — the benchmark quiet clock beside each turn's actions, both platforms), publish v0.22.0.
+
+Work Log:
+- ANDROID: ChatScreen gains timeLabel(iso) — OffsetDateTime parse to HH:mm, runCatching-silent (blank on legacy data); UserMessage and AssistantMessage action rows lead with the stamp (labelSmall, outline tint, 6dp/4dp lead-in), rows now CenterVertically aligned; streaming placeholder and unparsable stamps render nothing — no error surfaces
+- iOS: ChatDetailView gains timeLabel(_:) mirroring dayLabel's parseISODate pipeline (HH:mm); MessageBubble user action row and assistant actionRow both lead with the stamp (11pt, Aero.textMuted); nil-stamp legacy turns simply omit the label
+- iOS STATIC GATES: 13 files CLEAN
+- VERSION: versionCode 22 / versionName 0.22.0; APK copied to download/GS-AI-App.apk (aapt verified versionCode 22); update-manifest.json bumped
+- PUBLISHED: commit f3e370b pushed; GitHub Release v0.22.0 created (REL_ID 383796906, asset HTTP 201, 19,518,404 bytes); /releases/latest/download/ permalink verified serving versionCode 22; stable signature b1ffd75d… intact
+- NOTE: release-creation one-liner hiccuped parsing the (empty) assets array after 201 — release existed, resumed with a direct asset upload; no duplicate created
+
+Stage Summary:
+- Every turn now tells you when it happened: a quiet HH:MM clock rides beside Copy/Regenerate on both platforms — benchmark-grade thread context with zero new error surfaces
+- Twenty-two shipped cycles, all signature-stable, all install-over
+- Backlog remaining: assistants CRUD + pin/archive native wiring (deferred until live backend ask), further parity sweeps
