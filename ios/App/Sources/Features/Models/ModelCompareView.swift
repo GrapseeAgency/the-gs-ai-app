@@ -25,6 +25,11 @@ struct ModelCompareView: View {
 
     @State private var selectedIDs = ["gs-swift", "gs-balanced", "gs-deep"]
 
+    // The Default row is a real control: it writes the same UserDefaults key
+    // the chat send path reads, so a pick here changes what your next turn
+    // travels with (same key the Model Centre persists).
+    @State private var defaultID = UserDefaults.standard.string(forKey: "gs.models.defaultId") ?? "gs-balanced"
+
     private var selected: [ModelInfo] {
         selectedIDs.compactMap { id in ModelInfo.catalog.first { $0.id == id } }
     }
@@ -128,6 +133,19 @@ struct ModelCompareView: View {
             }
             compareRow("Voice") { model in
                 boolCell(model.supportsVoice)
+            }
+            Rectangle()
+                .fill(Aero.outline)
+                .frame(height: 1)
+            compareRow("Default") { model in
+                AeroChip(
+                    text: model.id == defaultID ? "In use" : "Set default",
+                    selected: model.id == defaultID
+                ) {
+                    guard model.id != defaultID else { return }
+                    defaultID = model.id
+                    UserDefaults.standard.set(model.id, forKey: "gs.models.defaultId")
+                }
             }
         }
     }

@@ -216,15 +216,16 @@ class ChatRepository(
     fun savedItems(): Flow<List<SavedItemEntity>> = db.savedItemDao().observeAll()
 
     /** Real Save-to-Library: chat turns land as "message"; the studios save
-     *  images and drafts under their own kind so Library filters catch them. */
-    suspend fun saveToLibrary(content: String, kind: String = "message") {
+     *  images and drafts under their own kind so Library filters catch them.
+     *  An explicit title (e.g. "Invoice Jul 2025") beats the content prefix. */
+    suspend fun saveToLibrary(content: String, kind: String = "message", title: String? = null) {
         val trimmed = content.trim()
         if (trimmed.isEmpty()) return
         db.savedItemDao().upsert(
             SavedItemEntity(
                 id = UUID.randomUUID().toString(),
                 kind = kind,
-                title = trimmed.take(48),
+                title = title?.trim()?.takeIf { it.isNotEmpty() }?.take(48) ?: trimmed.take(48),
                 content = trimmed,
                 createdAt = nowIso()
             )

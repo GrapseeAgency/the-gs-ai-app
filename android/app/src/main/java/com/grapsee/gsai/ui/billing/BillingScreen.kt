@@ -51,6 +51,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import com.grapsee.gsai.di.ServiceLocator
 import com.grapsee.gsai.ui.components.GsCard
 import com.grapsee.gsai.ui.components.GsChip
 import com.grapsee.gsai.ui.components.GsListItem
@@ -136,7 +137,21 @@ fun BillingScreen(onBack: () -> Unit) {
                 PaymentMethodsCard(
                     onAddPayment = { showMessage("Payments land in the Play Store build") }
                 )
-                InvoicesCard(onDownload = { showMessage("Invoice saved") })
+                InvoicesCard(onDownload = { month, meta ->
+                    // Real save: a readable invoice lands in the Library as a
+                    // document — no more save-in-name-only.
+                    scope.launch {
+                        runCatching {
+                            ServiceLocator.chat.saveToLibrary(
+                                content = invoiceContent(month, meta),
+                                kind = "document",
+                                title = "Invoice $month"
+                            )
+                        }
+                            .onSuccess { showMessage("Invoice saved to Library") }
+                            .onFailure { showMessage("Couldn't save right now") }
+                    }
+                })
                 ManageCard(
                     onRestore = { showMessage("Purchases restored") },
                     onCancel = { showCancelDialog = true }
@@ -446,7 +461,7 @@ private fun PaymentMethodsCard(onAddPayment: () -> Unit) {
 }
 
 @Composable
-private fun InvoicesCard(onDownload: () -> Unit) {
+private fun InvoicesCard(onDownload: (String, String) -> Unit) {
     GsCard {
         Text(
             text = "Invoices",
@@ -464,7 +479,7 @@ private fun InvoicesCard(onDownload: () -> Unit) {
                 subtitle = meta,
                 leading = { IconBadge(icon = Icons.Outlined.ReceiptLong) },
                 trailing = {
-                    IconButton(onClick = onDownload) {
+                    IconButton(onClick = { onDownload(month, meta) }) {
                         Icon(
                             imageVector = Icons.Outlined.Download,
                             contentDescription = "Download $month invoice",
@@ -511,6 +526,10 @@ private fun ManageCard(onRestore: () -> Unit, onCancel: () -> Unit) {
         }
     }
 }
+
+/** A real, readable invoice: the document that lands in the Library. */
+private fun invoiceContent(month: String, meta: String): String =
+    "GS AI — Invoice $month\n\nPlan: Pro · $meta\nBilled monthly. Chats, files and exports stay yours."
 
 @Composable
 private fun IconBadge(icon: ImageVector) {

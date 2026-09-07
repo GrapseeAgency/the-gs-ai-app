@@ -1,6 +1,6 @@
 {
-  "versionCode": 33,
-  "versionName": "0.33.0",
+  "versionCode": 34,
+  "versionName": "0.34.0",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "Create tab is real now: studio saves land in the Library under their own filter, Recent creations shows your actual work, and every tool tile seeds the composer."
+  "notes": "Invoices really save to your Library now, and the model compare table gained a Default row — pick a model right there and your next chat turn uses it."
 }

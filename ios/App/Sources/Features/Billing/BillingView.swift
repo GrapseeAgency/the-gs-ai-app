@@ -383,7 +383,16 @@ struct BillingView: View {
                     .font(.system(size: 16))
                     .foregroundStyle(Aero.accent)
             },
-            action: { showToast("Invoice saved") }
+            action: {
+                // Real save: a readable invoice lands in the Library as a
+                // document — no more save-in-name-only.
+                ConversationStore.shared.saveToLibrary(
+                    content: "GS AI — Invoice \(month)\n\nPlan: Pro · £16.00 · Paid\nBilled monthly. Chats, files and exports stay yours.",
+                    kind: "document",
+                    title: "Invoice \(month)"
+                )
+                showToast("Invoice saved to Library")
+            }
         )
     }
 
