@@ -171,9 +171,9 @@ struct BillingView: View {
                     .font(Aero.title())
                     .foregroundStyle(Aero.text)
                 HStack(spacing: Aero.Spacing.s) {
-                    AeroChip(text: "+100 · £4") { showToast(Self.checkoutToast) }
-                    AeroChip(text: "+500 · £16") { showToast(Self.checkoutToast) }
-                    AeroChip(text: "+2000 · £49") { showToast(Self.checkoutToast) }
+                    AeroChip(text: "+100 · £2") { showToast(Self.checkoutToast) }
+                    AeroChip(text: "+500 · £8") { showToast(Self.checkoutToast) }
+                    AeroChip(text: "+2,000 · £25") { showToast(Self.checkoutToast) }
                 }
             }
         }
@@ -186,15 +186,15 @@ struct BillingView: View {
             SectionHeader(title: "Plans")
             planCard(
                 id: "Free", name: "Free", price: "£0", per: "forever",
-                features: ["40 messages/day", "1 model", "Basic tools"]
+                features: ["40 messages a day", "1 model", "Basic tools"]
             )
             planCard(
                 id: "Pro", name: "Pro", price: "£16", per: "per month",
-                features: ["Unlimited chats", "All 8 models", "Vision + voice"]
+                features: ["Unlimited chats", "All 8 models", "Vision + voice", "2,000 message quota"]
             )
             planCard(
                 id: "Team", name: "Team", price: "£39", per: "per user / month",
-                features: ["Shared workspaces", "Admin controls"]
+                features: ["Everything in Pro", "Shared workspaces", "Admin controls"]
             )
             planActions
         }

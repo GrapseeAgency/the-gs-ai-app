@@ -1,6 +1,6 @@
 {
-  "versionCode": 35,
-  "versionName": "0.35.0",
+  "versionCode": 36,
+  "versionName": "0.36.0",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "When the GS servers are out of reach, replies no longer stall on a saved-offline notice — GS Lite now answers on the spot on iPhone too, same as Android. Chats simply keep flowing."
+  "notes": "Billing parity pass: credit packs, plan features and prices now read the same on iPhone as on Android — same £2/£8/£25 packs, same Pro quota and Team inclusions."
 }
