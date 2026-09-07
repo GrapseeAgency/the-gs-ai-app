@@ -1155,3 +1155,24 @@ Stage Summary:
 - Bonus: the static gate's blind spot is gone and a latent iOS compile-breaker (shipped v0.31.0) is fixed
 - Thirty-three shipped cycles, all signature-stable, all install-over
 - Backlog remaining: assistants CRUD (edit button) parked until live backend ask; next candidates: billing rows + model compare actions, remaining sample-parity details, edge states sweep (empty/error/offline copy)
+
+---
+Task ID: 47 (cron cycle — billing rows + model compare actions, v0.34.0 shipped via LiveUpdate)
+Agent: Z.ai Code (main)
+Task: Build QA, advance backlog (worklog Task 46 candidates: billing rows + model compare actions / sample-parity details / edge-state copy — chose billing + compare actions), publish v0.34.0.
+
+Work Log:
+- DISCOVERY: two defect classes — (1) invoice download rows were fake on BOTH platforms ("Invoice saved" toast/snackbar, nothing persisted), and (2) the model compare table was a wall of stats with no action: you could compare models but not USE one from there
+- DESIGN: saveToLibrary gains an optional explicit-title param (default nil → content-prefix as before, both old call sites source-compatible); invoice downloads persist a readable plaintext invoice as a Library document (kind "document", title "Invoice Jul 2025"); the compare table gains a Default action row writing the SAME prefs the chat send path reads (Android ModelPrefs / iOS "gs.models.defaultId") so a pick there changes what your next turn travels with
+- ANDROID: ChatRepository.saveToLibrary(content, kind, title); BillingScreen InvoicesCard now takes (month, meta), persists invoiceContent() via ServiceLocator.chat, "Invoice saved to Library" / "Couldn't save right now"; ModelCompareScreen gains LocalContext + defaultId state (inits from ModelPrefs) and a Default row of GsChips — "Set default" writes ModelPrefs and flips to "In use", current default chip pre-selected
+- IOS: ConversationStore.saveToLibrary(content:kind:title:); BillingView invoiceRow persists the same invoice text + title and toasts; ModelCompareView gains @State defaultID (inits from UserDefaults, same pattern/key as ModelCentreView) and a Default row of AeroChips with identical guard semantics + a divider above
+- PROPERTY-ACCESS CROSS-CHECK: GsChip(text, selected, onClick) / AeroChip(text:selected:action:) signatures match usage, ModelPrefs.defaultId/setDefaultId exist, UserDefaults key string identical to ModelCentre's — verified by hand
+- iOS STATIC GATES: 44 files CLEAN
+- ANDROID BUILD: green first try 1m31s (QA) and 1m30s (version bump) — no fixes needed
+- VERSION: versionCode 34 / versionName 0.34.0; APK copied to download/GS-AI-App.apk (aapt verified versionCode 34); update-manifest.json bumped
+- PUBLISHED: commit 29be11a pushed; GitHub Release v0.34.0 created (REL_ID 383849255, asset HTTP 201, 19,567,556 bytes); /releases/latest/download/ permalink verified serving versionCode 34; stable signature b1ffd75d… intact
+
+Stage Summary:
+- Both surfaces graduated from decoration to control: every invoice row produces a real Library document you can read, copy or delete, and the compare screen can now set your default model in one tap — same storage keys, identical semantics on both platforms, still zero fake saves in the billing path
+- Thirty-four shipped cycles, all signature-stable, all install-over
+- Backlog remaining: assistants CRUD (edit button) parked until live backend ask; next candidates: remaining sample-parity details (credit pack prices differ £2/£8/£25 vs £4/£16/£49 — deliberate?), edge-state copy sweep (empty/error/offline wording), design parity pass with the three benchmark AI chat apps
