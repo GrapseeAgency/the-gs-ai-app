@@ -16,6 +16,10 @@ struct AssistantSample: Identifiable, Hashable, Codable {
     var instructions: String? = nil
     var starters: [String] = []
     var capabilities: [String] = []
+    // Workspace organization — pin floats a card to the top of My assistants,
+    // archive parks it in the Archived segment. Defaults keep old JSON valid.
+    var pinned: Bool = false
+    var archived: Bool = false
 
     /// "12.4k" style usage label.
     var usesText: String {
@@ -23,6 +27,62 @@ struct AssistantSample: Identifiable, Hashable, Codable {
     }
 
     var ratingText: String { String(format: "%.1f", rating) }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, category, desc, uses, rating, isFav, published
+        case instructions, starters, capabilities, pinned, archived
+    }
+
+    /// Keeps the memberwise-style construction used by the catalog and the
+    /// builder form (a custom Decodable init suppresses the synthesized one).
+    init(
+        id: String,
+        name: String,
+        category: String,
+        desc: String,
+        uses: Int,
+        rating: Double,
+        isFav: Bool,
+        published: Bool,
+        instructions: String? = nil,
+        starters: [String] = [],
+        capabilities: [String] = [],
+        pinned: Bool = false,
+        archived: Bool = false
+    ) {
+        self.id = id
+        self.name = name
+        self.category = category
+        self.desc = desc
+        self.uses = uses
+        self.rating = rating
+        self.isFav = isFav
+        self.published = published
+        self.instructions = instructions
+        self.starters = starters
+        self.capabilities = capabilities
+        self.pinned = pinned
+        self.archived = archived
+    }
+
+    /// Decodes records persisted by older builds: pinned/archived default to
+    /// false when absent, so pre-upgrade JSON never fails.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        category = try container.decode(String.self, forKey: .category)
+        desc = try container.decode(String.self, forKey: .desc)
+        uses = try container.decode(Int.self, forKey: .uses)
+        rating = try container.decode(Double.self, forKey: .rating)
+        isFav = try container.decode(Bool.self, forKey: .isFav)
+        published = try container.decode(Bool.self, forKey: .published)
+        instructions = try container.decodeIfPresent(String.self, forKey: .instructions)
+        starters = try container.decodeIfPresent([String].self, forKey: .starters) ?? []
+        capabilities = try container.decodeIfPresent([String].self, forKey: .capabilities) ?? []
+        pinned = try container.decodeIfPresent(Bool.self, forKey: .pinned) ?? false
+        archived = try container.decodeIfPresent(Bool.self, forKey: .archived) ?? false
+    }
 
     static let catalog: [AssistantSample] = [
         AssistantSample(id: "asst-1", name: "Writing Coach", category: "Writing", desc: "Tightens drafts while keeping your voice, coaching structure line by line.", uses: 12400, rating: 4.8, isFav: true, published: true),
@@ -41,17 +101,20 @@ struct AssistantSample: Identifiable, Hashable, Codable {
 struct AssistantsView: View {
 
     @ObservedObject private var store = AssistantsStore.shared
+    @EnvironmentObject private var router: Router
 
     private enum Segment: String, CaseIterable, Identifiable {
         case marketplace = "Marketplace"
         case mine = "My assistants"
         case favourites = "Favourites"
         case published = "Published"
+        case archived = "Archived"
 
         var id: String { rawValue }
     }
 
     @State private var selection: Segment = .marketplace
+    @State private var pendingDelete: AssistantSample?
 
     private let gridColumns = [
         GridItem(.flexible(), spacing: 12),
@@ -80,6 +143,20 @@ struct AssistantsView: View {
                         .foregroundStyle(Aero.text)
                 }
             }
+        }
+        .confirmationDialog(
+            "Delete “\(pendingDelete?.name ?? "")” from My assistants? Chats you started with it stay in your history.",
+            isPresented: Binding(
+                get: { pendingDelete != nil },
+                set: { if !$0 { pendingDelete = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                if let id = pendingDelete?.id { AssistantsStore.shared.remove(id) }
+                pendingDelete = nil
+            }
+            Button("Keep", role: .cancel) { pendingDelete = nil }
         }
     }
 
@@ -117,21 +194,29 @@ struct AssistantsView: View {
             marketplace
         case .mine:
             filteredList(
-                store.userAssistants,
+                pinnedFirst(store.userAssistants.filter { !$0.archived }),
                 emptyTitle: "No assistants yet",
                 emptyMessage: "Create your first assistant and it will live here."
             )
         case .favourites:
             filteredList(
-                AssistantSample.catalog.filter(\.isFav),
+                (AssistantSample.catalog + store.userAssistants.filter { !$0.archived })
+                    .filter { store.favourites.contains($0.id) },
                 emptyTitle: "Nothing starred yet",
                 emptyMessage: "Tap the heart on any assistant to keep it close."
             )
         case .published:
             filteredList(
-                AssistantSample.catalog.filter(\.published) + store.userAssistants.filter(\.published),
+                AssistantSample.catalog.filter(\.published)
+                    + store.userAssistants.filter { $0.published && !$0.archived },
                 emptyTitle: "Nothing published yet",
                 emptyMessage: "Publish an assistant to share it on the marketplace."
+            )
+        case .archived:
+            filteredList(
+                store.userAssistants.filter(\.archived),
+                emptyTitle: "Nothing archived",
+                emptyMessage: "Archived assistants rest here — unarchive any time."
             )
         }
     }
@@ -144,11 +229,15 @@ struct AssistantsView: View {
             VStack(alignment: .leading, spacing: Aero.Spacing.s) {
                 SectionHeader(title: "All assistants")
                 LazyVGrid(columns: gridColumns, spacing: 12) {
-                    ForEach(AssistantSample.catalog + store.userAssistants.filter(\.published)) { assistant in
+                    ForEach(
+                        AssistantSample.catalog
+                            + store.userAssistants.filter { $0.published && !$0.archived }
+                    ) { assistant in
                         NavigationLink(value: AeroRoute.assistant(assistant.id)) {
                             AssistantGridCard(assistant: assistant)
                         }
                         .buttonStyle(KineticPressStyle())
+                        .contextMenu { assistantContextMenu(assistant) }
                     }
                 }
             }
@@ -209,8 +298,13 @@ struct AssistantsView: View {
                                 },
                                 trailing: {
                                     HStack(spacing: Aero.Spacing.xs) {
-                                        if assistant.isFav {
+                                        if store.favourites.contains(assistant.id) {
                                             Image(systemName: "heart.fill")
+                                                .font(.system(size: 12))
+                                                .foregroundStyle(Aero.accent)
+                                        }
+                                        if assistant.pinned {
+                                            Image(systemName: "pin.fill")
                                                 .font(.system(size: 12))
                                                 .foregroundStyle(Aero.accent)
                                         }
@@ -222,8 +316,58 @@ struct AssistantsView: View {
                             )
                         }
                         .buttonStyle(KineticPressStyle())
+                        .contextMenu { assistantContextMenu(assistant) }
                     }
                 }
+            }
+        }
+    }
+
+    // MARK: Organization helpers
+
+    /// Stable pinned-first ordering: pinned rows float, the rest keep store order.
+    private func pinnedFirst(_ assistants: [AssistantSample]) -> [AssistantSample] {
+        assistants.enumerated().sorted { lhs, rhs in
+            if lhs.element.pinned != rhs.element.pinned { return lhs.element.pinned }
+            return lhs.offset < rhs.offset
+        }.map(\.element)
+    }
+
+    /// Long-press actions — favourite for everything; pin/archive/edit/delete
+    /// for user-owned assistants (samples stay curated).
+    @ViewBuilder
+    private func assistantContextMenu(_ assistant: AssistantSample) -> some View {
+        let fav = store.favourites.contains(assistant.id)
+        let isUser = store.userAssistants.contains { $0.id == assistant.id }
+        Button {
+            store.toggleFavourite(assistant.id)
+        } label: {
+            Label(
+                fav ? "Remove from favourites" : "Favourite",
+                systemImage: fav ? "heart.slash" : "heart"
+            )
+        }
+        if isUser {
+            Button {
+                store.togglePin(assistant.id)
+            } label: {
+                Label(assistant.pinned ? "Unpin" : "Pin to top", systemImage: "pin")
+            }
+            Button {
+                router.path.append(.assistantEdit(assistant.id))
+            } label: {
+                Label("Edit", systemImage: "pencil")
+            }
+            Button {
+                store.setArchived(assistant.id, !assistant.archived)
+            } label: {
+                Label(assistant.archived ? "Unarchive" : "Archive", systemImage: "archivebox")
+            }
+            Divider()
+            Button(role: .destructive) {
+                pendingDelete = assistant
+            } label: {
+                Label("Delete…", systemImage: "trash")
             }
         }
     }

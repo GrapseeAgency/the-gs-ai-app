@@ -8,7 +8,7 @@ struct AssistantDetailView: View {
 
     @EnvironmentObject private var router: Router
     @Environment(\.dismiss) private var dismiss
-    @State private var isFav: Bool
+    @ObservedObject private var store = AssistantsStore.shared
     @State private var showDelete = false
 
     private let starters = [
@@ -27,16 +27,17 @@ struct AssistantDetailView: View {
         AssistantsStore.shared.find(assistantID) != nil
     }
 
+    /// Store-backed favourite — survives relaunches, syncs with list badges.
+    private var isFav: Bool {
+        store.favourites.contains(assistantID)
+    }
+
     private var instructionText: String {
         "Act as a seasoned \(assistant.category.lowercased()) partner. Keep replies concise, ask one clarifying question before long tasks, and always propose the next step."
     }
 
     init(assistantID: String) {
         self.assistantID = assistantID
-        let resolved = AssistantsStore.shared.find(assistantID)
-            ?? AssistantSample.catalog.first { $0.id == assistantID }
-            ?? AssistantSample.catalog[0]
-        _isFav = State(initialValue: resolved.isFav)
     }
 
     var body: some View {
@@ -79,7 +80,7 @@ struct AssistantDetailView: View {
                     }
                 }
                 Button {
-                    isFav.toggle()
+                    store.toggleFavourite(assistantID)
                 } label: {
                     Image(systemName: isFav ? "heart.fill" : "heart")
                         .font(.system(size: 15))

@@ -71,7 +71,9 @@ fun AssistantDetailScreen(
             ?: SampleData.assistants.first()
     }
     val isUserAssistant = userAssistants.any { it.id == assistantId }
-    var favourited by remember { mutableStateOf(false) }
+    // Favourite state is store-backed — it survives relaunches and syncs with the list badges.
+    val favourites by AssistantsStore.favourites.collectAsState()
+    val favourited = assistantId in favourites
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
     GsScreenScaffold(
@@ -104,7 +106,7 @@ fun AssistantDetailScreen(
                     )
                 }
             }
-            IconButton(onClick = { favourited = !favourited }) {
+            IconButton(onClick = { AssistantsStore.toggleFavourite(assistantId) }) {
                 if (favourited) {
                     Icon(
                         imageVector = Icons.Filled.Favorite,

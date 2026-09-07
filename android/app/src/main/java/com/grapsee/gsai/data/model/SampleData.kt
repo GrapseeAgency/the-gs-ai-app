@@ -18,7 +18,11 @@ data class AssistantSample(
     val published: Boolean = false,
     // User-created assistants carry the Create form's capability picks;
     // samples omit it (default empty).
-    val capabilities: List<String> = emptyList()
+    val capabilities: List<String> = emptyList(),
+    // Workspace organization — pin floats a card to the top of My assistants,
+    // archive parks it in the Archived tab. Samples default both false.
+    val pinned: Boolean = false,
+    val archived: Boolean = false
 )
 
 /** type is one of: task | file | assistant | share | project | system | security */

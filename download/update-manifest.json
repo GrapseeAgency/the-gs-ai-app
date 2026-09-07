@@ -1,6 +1,6 @@
 {
-  "versionCode": 48,
-  "versionName": "0.48.0",
+  "versionCode": 49,
+  "versionName": "0.49.0",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "Startup pass: the app now ships a baseline profile \u2014 the system pre-compiles the hot startup and chat paths before the app ever runs, so cold starts feel snappier, especially on older Android 8/9 devices. Includes all previous performance and stability passes. Same design, same features, same stable signature."
+  "notes": "Assistants are fully real now: pin any assistant to float it to the top of My assistants, archive ones you don't need into their own tab, and favourites finally stick — the heart now survives relaunches on both the profile page and every list. Long-press any card for the full action sheet (favourite, pin, edit, archive, delete with confirmation). Same design, same features, same stable signature."
 }

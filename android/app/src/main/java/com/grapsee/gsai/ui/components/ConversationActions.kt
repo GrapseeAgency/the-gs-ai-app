@@ -121,7 +121,7 @@ fun ConversationActionsSheet(
 }
 
 @Composable
-private fun SheetAction(
+fun SheetAction(
     icon: ImageVector,
     label: String,
     tone: Color = MaterialTheme.colorScheme.onSurface,
