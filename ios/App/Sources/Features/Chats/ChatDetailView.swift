@@ -687,7 +687,8 @@ private struct MessageBubble: View {
     }
 
     private var assistantBubble: some View {
-        HStack(alignment: .top, spacing: 0) {
+        HStack(alignment: .top, spacing: 8) {
+            assistantAvatar
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(parsedSegments) { segment in
                     if segment.isCode {
@@ -709,6 +710,16 @@ private struct MessageBubble: View {
             .contextMenu { bubbleMenu }
             Spacer(minLength: 40)
         }
+    }
+
+    /// Small assistant badge — mirrors the Android thread mark.
+    private var assistantAvatar: some View {
+        Image(systemName: "sparkles")
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(Aero.accent)
+            .frame(width: 26, height: 26)
+            .background(Circle().fill(Aero.accent.opacity(0.12)))
+            .overlay(Circle().stroke(Aero.outline, lineWidth: 1))
     }
 
     private var parsedSegments: [ContentSegment] {

@@ -42,6 +42,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.ArrowDownward
 import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.CallSplit
@@ -757,6 +758,8 @@ private fun AssistantMessage(
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
+        AssistantAvatar()
+        Spacer(Modifier.width(8.dp))
         Box {
             Surface(
                 modifier = Modifier.combinedClickable(
@@ -840,6 +843,25 @@ private fun AssistantMessage(
                 )
             }
         }
+    }
+}
+
+/** Small assistant badge — the benchmark apps mark every AI turn with one. */
+@Composable
+private fun AssistantAvatar() {
+    Box(
+        modifier = Modifier
+            .size(26.dp)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            Icons.Outlined.AutoAwesome,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(15.dp)
+        )
     }
 }
 
