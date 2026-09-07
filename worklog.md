@@ -1040,7 +1040,7 @@ Task: Build QA, advance backlog (edge-state sweep round two: close the Library�
 Work Log:
 - ANDROID: SavedItemSheet gains onContinueInChat — sheet closes, onNavigate(GsRoutes.chat(null, content)) pushes the prefill route (?prompt= Uri.encode) and ChatScreen's LaunchedEffect(prefillPrompt) seeds the composer; zero new plumbing needed, the voice handoff route was already two-way
 - iOS: AppRouter gains Router (classic ObservableObject with @Published path — the modern observation macro is banned by the static gates) — RootView now binds NavigationStack(path: $router.path) and injects .environmentObject(router); LibraryView pulls it via @EnvironmentObject and the reader sheet's Continue button dismisses, then pushes .chatPrefill(text) after a 0.35s settle so the push lands once the sheet is gone
-- GATE HICAPUGHT: the static gate flagged my own code COMMENT mentioning the banned macro token — reworded the comment, gates green; token-scan includes comments by design
+- GATE HICCUP: the static gate flagged my own code COMMENT mentioning the banned macro token — reworded the comment, gates green; token-scan includes comments by design
 - iOS STATIC GATES: 13 files CLEAN; property-access cross-check: LibraryItemSheet trailing-closure binding (onDeleted) + labeled onContinue, Router env inheritance through navigationDestination pushes, single LibraryView instantiation — verified by hand
 - ANDROID BUILD: green in 1m30s (one cycle, no fix needed)
 - VERSION: versionCode 28 / versionName 0.28.0; APK copied to download/GS-AI-App.apk (aapt verified versionCode 28); update-manifest.json bumped
