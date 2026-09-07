@@ -1638,3 +1638,28 @@ Stage Summary:
 - The upgrade path is gentle by construction: pre-upgrade JSON decodes with defaults, shipped favourites seed the tab unchanged until the user's first toggle, nothing looks lost
 - Forty-nine shipped cycles, all signature-stable, all install-over
 - Feature queue next: ChatGPT-style explore rows, Room/SwiftData polish, design parity with the three benchmark apps, edge states — plus device-gated holdovers (#4 R8/minify, req 14 device matrix, req 15 profiler) waiting on the user's device report
+
+---
+Task ID: 72
+Agent: Z.ai Code (main)
+Task: Build QA, advance the feature backlog (queue head: ChatGPT-style explore rows), ship.
+
+Work Log:
+- CONCURRENCY: opened one minute after the parallel loop's Task 71 push (7e69ae8, v0.49.0). Independently verified its release chain before writing — manifest 49/0.49.0, /releases/latest/download/ permalink sha256-identical to download/ (0ea8e7cd…), aapt 49 — then took the next disjoint queue item (Explore surface; zero file overlap with the assistants work)
+- DRIFT BUG FOUND AND FIXED: Explore carried its own hardcoded assistant mini-catalogue that had already diverged from the Assistants hub on BOTH platforms — Android asst-1 was "WriteWell" in Explore but "Writing Coach" in SampleData; iOS asst-1 was "Research Scout" in Explore but "Writing Coach" in AssistantSample.catalog. Same store id, two names, visible on two tabs. This is the same defect class Task 71 killed on the assistants surface (ephemeral hearts vs static lists)
+- ONE CATALOGUE (both platforms): Explore now reads the exact merge the Assistants hub's Marketplace uses — Android `SampleData.assistants + AssistantsStore.assistants.filter { published && !archived }`, iOS `AssistantSample.catalog + store.userAssistants.filter { $0.published && !$0.archived }` — so names, ratings and usage can never drift again; user creations appear the moment they're published
+- CHATGPT-STORE ROWS (both platforms, clause-for-clause parity): the vertical stacked list became five horizontal flingable carousels — "Top picks" (curated first four, editorial cards with rating + uses + category), "Trending now" (uses-descending with big serif rank numerals 1…n), "Popular prompts" (serif cards → new chat prefill, existing behaviour), "Featured AI tools" (existing tools → chat prefill), and "Made by you" — which only renders when the user has unarchived assistants, showing Pinned/Published flags (zero dead UI: the row does not exist when empty)
+- DYNAMIC CATEGORY CHIPS: the static 12-chip list (with "Design", "Mathematics", "Science", "Entertainment" matching nothing in the real catalogue) is replaced by chips built from the live catalogue categories, sorted — every chip leads somewhere real on both platforms; search + chip still filter all rows together with the same combined empty state
+- STATE HARDENING (Android): category selection moved from index to NAME — the old `categories[selectedCategory]` could index out of bounds when the store changes shrink the chip list mid-session; a name-based filter degrades to an honest empty state instead of a crash
+- INTERACTION FIX (iOS): the tool card's "Try it" affordance is a chevron, not a chip — a Button nested inside NavigationLink(value:) would intercept taps and feel dead; Android keeps its chip (shipped precedent: the chip's action is the card's route, so both zones navigate)
+- COMPOSE DETAIL: rows are LazyRow with stable keys (assistant id / prompt text / tool name); trending rank flows through a private LazyListScope extension whose lambda is named `card` — the naive name `item` would shadow LazyListScope.item() and break resolution; GsCard's internal fillMaxWidth() after width(232.dp) still resolves to exactly 232dp (width node precedes fill in the chain), verified before relying on it
+- iOS CARDS: fixed-size cards feed AeroCard from inside (content VStack expands into the proposal) with the frame applied outside — AeroCard hugs content vertically, so an inside-only frame would leave the surface floating mid-air; iOS16-safe carousels (ScrollView + LazyHStack, no scrollTargetBehavior), enumerated-ForEach keyed by \.element.id for the rank
+- iOS STATIC GATES: 46 files PASS; brace/paren/bracket balance 0/0/0 on both edited screens; banned-API sweep clean (no fontDesign/SwiftData/@Observable/scrollTargetBehavior/scrollPosition)
+- GATES: assembleDebug green 1m45s (real recompile — ExploreScreen rewritten); lintDebug 0 errors (38 warnings + 6 info = the exact known benign profile, nothing added); assembleRelease green 2m52s
+- VERSION: versionCode 50 / versionName 0.50.0; release APK copied to download/ (aapt: 50, INTERNET + ACCESS_NETWORK_STATE + REQUEST_INSTALL_PACKAGES + RECORD_AUDIO intact, no debuggable flag; apksigner b1ffd75d… stable)
+- PUBLISHED: commit 0abe6b9 pushed; GitHub Release v0.50.0 created (REL_ID 384068463, asset HTTP 201, 12,872,269 bytes = local exactly); /releases/latest/download/ permalink re-verified serving versionCode 50 sha256-identical (b8a8ed0a…)
+
+Stage Summary:
+- Explore is now a real AI app store, ChatGPT-style: five discovery rows, one catalogue shared with the Assistants hub, chips that always lead somewhere, and the user's own creations woven in — the drift between Explore and Assistants is structurally impossible now, not just fixed
+- Fifty shipped cycles, all signature-stable, all install-over
+- Feature queue next: Room/SwiftData polish, design parity with the three benchmark apps, edge states — plus device-gated holdovers (#4 R8/minify, req 14 device matrix, req 15 profiler) waiting on the user's device report
