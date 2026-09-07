@@ -813,3 +813,21 @@ Stage Summary:
 - Chat threads now read like the benchmark apps at a glance: day pills anchor the scroll, timestamps persist with every turn, and the same semantics landed verbatim on both platforms
 - Fifteen shipped cycles, all signature-stable, all install-over
 - Backlog remaining: assistants CRUD + pin/archive native wiring (deferred until live backend ask), further parity sweeps (e.g. search-in-conversation affordances, per-message edit)
+
+---
+Task ID: 29 (cron cycle — design parity: per-message edit with truncate-and-regenerate + v0.16.0 shipped via LiveUpdate)
+Agent: Z.ai Code (main)
+Task: Build QA, advance backlog (per-message edit — the benchmark pencil flow on your own bubbles, both platforms), publish v0.16.0.
+
+Work Log:
+- BUILD QA: :app:assembleDebug BUILD SUCCESSFUL (1m36s after fixing a Kotlin local-function ordering error — editAndResend referenced dispatch before its declaration; moved after). Version-bump build 1m29s; toolchain intact
+- ANDROID: MessageDao gains byId + deleteFrom (DELETE ... WHERE createdAt >= :fromInclusive — fixed-width UTC stamps make >= lexicographic-safe); ChatRepository.truncateFrom(conversationId, messageId); ChatScreen gains editingId/editingDraft state, editAndResend (guard streaming/blank, drop the local tail, silent repo truncate, then the normal dispatch path), UserMessage upgraded with an always-visible Copy/Edit action row and an inline editor (OutlinedTextField + Cancel / Save & resend, blank-gated) that replaces the bubble while editing; Edit hidden while streaming or another edit is open
+- iOS: SQLiteChatStore gains latestUserStamp + deleteMessages (single prepared statements; FTS syncs via the existing delete triggers); ConversationStore.truncateMessages(fromUserContent:in:) — content-matched (most recent occurrence) because in-memory rows don't carry persisted ids; ChatViewModel.editAndResend(at:) mirrors Android (demo conversations skip the store); MessageBubble user branch gains Copy/Edit action row (same styling as the assistant row) and ChatDetailView renders an inline editor with Cancel / Save & resend
+- iOS STATIC GATES: 13 files CLEAN
+- VERSION: versionCode 16 / versionName 0.16.0; APK copied to download/GS-AI-App.apk (aapt verified versionCode 16); update-manifest.json bumped
+- PUBLISHED: commit e4208f0 pushed; GitHub Release v0.16.0 created (REL_ID 383774321, asset HTTP 201, 19,502,020 bytes); /releases/latest/download/ permalink verified serving versionCode 16; stable signature b1ffd75d… intact
+
+Stage Summary:
+- Users can now rewrite any sent turn and get a fresh reply from that point — the last big thread-interaction gap versus the benchmark apps, closed with identical semantics on both platforms and zero new error surfaces
+- Sixteen shipped cycles, all signature-stable, all install-over
+- Backlog remaining: assistants CRUD + pin/archive native wiring (deferred until live backend ask), further parity sweeps
