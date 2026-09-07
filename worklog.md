@@ -831,3 +831,21 @@ Stage Summary:
 - Users can now rewrite any sent turn and get a fresh reply from that point — the last big thread-interaction gap versus the benchmark apps, closed with identical semantics on both platforms and zero new error surfaces
 - Sixteen shipped cycles, all signature-stable, all install-over
 - Backlog remaining: assistants CRUD + pin/archive native wiring (deferred until live backend ask), further parity sweeps
+
+---
+Task ID: 30 (cron cycle — design parity: find-in-chat with match stepping + highlight, v0.17.0 shipped via LiveUpdate)
+Agent: Z.ai Code (main)
+Task: Build QA, advance backlog (search-in-conversation affordances — the benchmark magnifier inside a thread, both platforms), publish v0.17.0.
+
+Work Log:
+- STATE CHECK: Task 29 (per-message edit, v0.16.0) confirmed shipped before this cycle began — commit e4208f0 pushed, permalink serving versionCode 16; this cycle therefore advanced the next backlog item
+- ANDROID: ChatScreen gains searchOpen/searchQuery/searchActiveIndex; matchIndices as derivedStateOf (case-insensitive contains over rendered turns, reactive to streaming deltas); stepSearch wraps with Int.mod and animateScrollToItem; typing auto-jumps to the first hit (LaunchedEffect); search bar = OutlinedTextField (IME Search action) + n/m counter or "No results" + up/down/close IconButtons, revealed from a top-bar magnifier and AnimatedVisibility; UserMessage/AssistantMessage take a highlight param — user bubble deepens its tint (0.14→0.34 alpha), assistant bubble switches to a 2dp primary border on the active hit
+- iOS: ChatDetailView gains searchActive/searchQuery/searchIndex + a .toolbar magnifier; transcript restructured to VStack(spacing:0) inside the ScrollViewReader so the search bar sits above the scroll with proxy access; searchMatches via localizedCaseInsensitiveContains, activeMatchID + matchCountLabel with the same double-mod wrap; stepSearch scrollTo(anchor: .center); typing onChange (single-param form) re-anchors on hit 0; MessageBubble takes highlight — user fill 0.14→0.32 opacity, assistant stroke accent/2dp on the active hit
+- iOS STATIC GATES: 13 files CLEAN (ChatDetailView re-verified)
+- VERSION: versionCode 17 / versionName 0.17.0; APK copied to download/GS-AI-App.apk (aapt verified versionCode 17); update-manifest.json bumped
+- PUBLISHED: commit f4ac428 pushed; GitHub Release v0.17.0 created (REL_ID 383777527, asset HTTP 201, 19,518,404 bytes); /releases/latest/download/ permalink verified serving versionCode 17; stable signature b1ffd75d… intact
+
+Stage Summary:
+- Threads are now searchable the way the benchmark apps are: magnifier in the thread, live match count, up/down stepping that scrolls each hit to center, and the active turn visibly lit — identical semantics on Compose and SwiftUI, zero new error surfaces
+- Seventeen shipped cycles, all signature-stable, all install-over
+- Backlog remaining: assistants CRUD + pin/archive native wiring (deferred until live backend ask), further parity sweeps
