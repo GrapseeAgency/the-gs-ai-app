@@ -45,10 +45,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -57,6 +59,8 @@ import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.ui.theme.auroraBackground
 import com.grapsee.gsai.ui.theme.Aeruo
 import com.grapsee.gsai.ui.theme.GsMotion
+import com.grapsee.gsai.ui.theme.LocalHighContrast
+import com.grapsee.gsai.ui.theme.LocalScreenReaderHints
 import com.grapsee.gsai.ui.theme.kineticPress
 import com.grapsee.gsai.ui.theme.skeletonSurface
 import androidx.compose.foundation.text.KeyboardActions
@@ -65,7 +69,27 @@ import androidx.compose.ui.text.input.ImeAction
 
 /**
  * AERUO KINETIC shared components — FROZEN API. All screens compose these.
+ *
+ * Accessibility wiring (Task 86-d), resolved here so NO call site changes:
+ *  - LocalScreenReaderHints: when the Settings toggle is on, actionable
+ *    components label their click action for TalkBack — Compose 1.7 has NO
+ *    `hint` semantics property (verified against the resolved ui-android
+ *    artifact), so the real, no-visual channel for activation context is the
+ *    labeled OnClick action: TalkBack announces "double-tap to <label>". The
+ *    label is set on a non-mergeable DESCENDANT of the clickable node, where
+ *    the built-in action-key merge policy (parent action ?: child action,
+ *    parent label ?: child label) keeps the real click and takes our label.
+ *    Only set where a click affordance exists — a hint must never lie.
+ *  - LocalHighContrast: when on, hairline borders resolve to the strongest
+ *    ink token and muted/secondary text resolves to full-alpha onSurface.
+ *    Off = byte-identical to the previous colors.
  */
+
+/** High-contrast resolver: [strong] when the Settings toggle is on, [base]
+ *  otherwise (off = today's colors exactly). Component-layer helper only. */
+@Composable
+private fun hcColor(base: Color, strong: Color): Color =
+    if (LocalHighContrast.current) strong else base
 
 @Composable
 fun GsSectionHeader(
@@ -102,6 +126,15 @@ fun GsCard(
     // One interaction source shared by the click and the press-scale —
     // touching the card visibly responds (the platform touch-feedback contract).
     val interaction = remember { MutableInteractionSource() }
+    // Screen reader hints: only on an actually-actionable card (a click label
+    // on a non-clickable card would lie about an affordance).
+    val hintModifier: Modifier = if (LocalScreenReaderHints.current) {
+        onClick?.let { click ->
+            Modifier.semantics { onClick("activate") { click(); true } }
+        } ?: Modifier
+    } else {
+        Modifier
+    }
     val base = modifier
         .fillMaxWidth()
         .let { if (onClick != null) it.kineticPress(interaction) else it }
@@ -109,12 +142,14 @@ fun GsCard(
         modifier = base,
         shape = RoundedCornerShape(GsMotion.radiusCard),
         color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        border = BorderStroke(1.dp, hcColor(MaterialTheme.colorScheme.outline, MaterialTheme.colorScheme.onSurface)),
         onClick = onClick ?: {},
         enabled = onClick != null,
         interactionSource = interaction
     ) {
-        Column(modifier = Modifier.padding(GsMotion.spaceM), content = content)
+        // The label rides the content node (a non-mergeable descendant) so the
+        // action-key merge policy applies it over the Surface's unlabeled click.
+        Column(modifier = Modifier.padding(GsMotion.spaceM).then(hintModifier), content = content)
     }
 }
 
@@ -126,6 +161,15 @@ fun GsChip(
     onClick: () -> Unit = {}
 ) {
     val interaction = remember { MutableInteractionSource() }
+    // Chips carry selected-state semantics, so the announced click stays the
+    // factual "activate" — some chips toggle selection, some just act ("Try
+    // again"), and a hint must never claim the wrong affordance.
+    val chipClick = onClick
+    val chipHintModifier: Modifier = if (LocalScreenReaderHints.current) {
+        Modifier.semantics { onClick("activate") { chipClick(); true } }
+    } else {
+        Modifier
+    }
     Surface(
         modifier = modifier.kineticPress(interaction),
         shape = RoundedCornerShape(GsMotion.radiusChip),
@@ -143,6 +187,7 @@ fun GsChip(
             // (declared here so it merges into the clickable Surface node).
             modifier = Modifier
                 .padding(horizontal = 14.dp, vertical = 8.dp)
+                .then(chipHintModifier)
                 .semantics {
                     this.selected = selected
                     role = Role.Button
@@ -161,6 +206,16 @@ fun GsListItem(
     onClick: (() -> Unit)? = null
 ) {
     val interaction = remember { MutableInteractionSource() }
+    // Screen reader hints: rows with a click open their detail surface —
+    // factual for every actionable GsListItem in this app (rows navigate;
+    // toggles use dedicated switch rows instead).
+    val hintModifier: Modifier = if (LocalScreenReaderHints.current) {
+        onClick?.let { click ->
+            Modifier.semantics { onClick("open details") { click(); true } }
+        } ?: Modifier
+    } else {
+        Modifier
+    }
     Surface(
         modifier = modifier
             .fillMaxWidth()
@@ -172,7 +227,9 @@ fun GsListItem(
         interactionSource = interaction
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            modifier = Modifier
+                .padding(horizontal = 14.dp, vertical = 12.dp)
+                .then(hintModifier),
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (leading != null) {
@@ -191,7 +248,7 @@ fun GsListItem(
                     Text(
                         subtitle,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = hcColor(MaterialTheme.colorScheme.onSurfaceVariant, MaterialTheme.colorScheme.onSurface),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -223,11 +280,11 @@ fun GsInputBar(
         } else {
             KeyboardActions.Default
         },
-        placeholder = { Text(placeholder, color = MaterialTheme.colorScheme.onSurfaceVariant) },
+        placeholder = { Text(placeholder, color = hcColor(MaterialTheme.colorScheme.onSurfaceVariant, MaterialTheme.colorScheme.onSurface)) },
         shape = RoundedCornerShape(GsMotion.radiusInput),
         colors = OutlinedTextFieldDefaults.colors(
             focusedBorderColor = MaterialTheme.colorScheme.primary,
-            unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+            unfocusedBorderColor = hcColor(MaterialTheme.colorScheme.outline, MaterialTheme.colorScheme.onSurface),
             focusedContainerColor = MaterialTheme.colorScheme.surface,
             unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow
         ),
@@ -240,7 +297,7 @@ fun GsInputBar(
                     imageVector = Icons.Outlined.Send,
                     contentDescription = "Send",
                     tint = if (value.isNotBlank()) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurfaceVariant
+                    else hcColor(MaterialTheme.colorScheme.onSurfaceVariant, MaterialTheme.colorScheme.onSurface)
                 )
             }
         },
@@ -274,7 +331,7 @@ fun GsEmptyState(
         Text(title, style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onBackground)
         Text(message, style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = hcColor(MaterialTheme.colorScheme.onSurfaceVariant, MaterialTheme.colorScheme.onSurface),
             modifier = Modifier.padding(horizontal = GsMotion.spaceL))
     }
 }
@@ -294,7 +351,7 @@ fun GsLoadingState(label: String = "Thinking", modifier: Modifier = Modifier) {
             Box(Modifier.auroraBackground(RoundedCornerShape(GsMotion.radiusCard)))
         }
         Text(label, style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
+            color = hcColor(MaterialTheme.colorScheme.onSurfaceVariant, MaterialTheme.colorScheme.onSurface))
     }
 }
 
@@ -306,7 +363,7 @@ fun GsErrorState(message: String, onRetry: () -> Unit, modifier: Modifier = Modi
         verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
     ) {
         Text(message, style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
+            color = hcColor(MaterialTheme.colorScheme.onSurfaceVariant, MaterialTheme.colorScheme.onSurface))
         GsChip(text = "Try again", selected = false, onClick = onRetry)
     }
 }
@@ -329,7 +386,7 @@ fun GsOfflineBanner(visible: Boolean, modifier: Modifier = Modifier) {
                 modifier = Modifier.size(16.dp))
             Text("You're offline — changes will sync when you reconnect.",
                 style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                color = hcColor(MaterialTheme.colorScheme.onSurfaceVariant, MaterialTheme.colorScheme.onSurface))
         }
     }
 }
@@ -342,6 +399,11 @@ fun GsQuickActionTile(
     modifier: Modifier = Modifier
 ) {
     val interaction = remember { MutableInteractionSource() }
+    val hintModifier: Modifier = if (LocalScreenReaderHints.current) {
+        Modifier.semantics { onClick("activate $label") { onClick(); true } }
+    } else {
+        Modifier
+    }
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -354,14 +416,17 @@ fun GsQuickActionTile(
             onClick = onClick,
             interactionSource = interaction
         ) {
-            Box(contentAlignment = Alignment.Center) {
+            // The label rides this inner node (a non-mergeable descendant of
+            // the clickable Surface) so the action-key merge policy applies it
+            // over the Surface's unlabeled click.
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.then(hintModifier)) {
                 Icon(icon, contentDescription = label,
                     tint = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.size(24.dp))
             }
         }
         Text(label, style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = hcColor(MaterialTheme.colorScheme.onSurfaceVariant, MaterialTheme.colorScheme.onSurface),
             maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }

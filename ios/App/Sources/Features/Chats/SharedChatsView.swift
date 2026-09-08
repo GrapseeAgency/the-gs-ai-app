@@ -1,8 +1,9 @@
 import SwiftUI
 import UIKit
 
-/// Publicly shared conversations — copy link, revoke link (local-only this
-/// pass; sharing endpoints land with the backend sharing task).
+/// Publicly shared conversations — copy link, revoke link (native swipe
+/// action per Task 86-e; local-only this pass; sharing endpoints land with
+/// the backend sharing task).
 struct SharedChatsView: View {
 
     private struct SharedItem: Identifiable {
@@ -19,35 +20,46 @@ struct SharedChatsView: View {
     @State private var pendingRevoke: SharedItem?
     @State private var copiedID: UUID?
 
-    var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: Aero.Spacing.l) {
-                Text("Shared")
-                    .font(Aero.displayTitle())
-                    .foregroundStyle(Aero.text)
-                    .accessibilityAddTraits(.isHeader)
-                Text("Anyone with the link can view these conversations.")
-                    .font(Aero.caption())
-                    .foregroundStyle(Aero.textMuted)
+    /// Card-row insets (Task 86-e) — same shape as ChatsListView's.
+    private var rowInsets: EdgeInsets {
+        EdgeInsets(top: 4, leading: Aero.Spacing.m, bottom: 4, trailing: Aero.Spacing.m)
+    }
 
-                if items.isEmpty {
-                    EmptyStateView(
-                        icon: "link",
-                        title: "No shared links",
-                        message: "Share a conversation to create a public, view-only link."
-                    )
-                } else {
-                    VStack(spacing: Aero.Spacing.s) {
-                        ForEach(items) { item in
-                            row(item)
-                        }
-                    }
+    var body: some View {
+        List {
+            Text("Shared")
+                .font(Aero.displayTitle())
+                .foregroundStyle(Aero.text)
+                .accessibilityAddTraits(.isHeader)
+                .gsListRowChrome(EdgeInsets(
+                    top: Aero.Spacing.s, leading: Aero.Spacing.m, bottom: 0, trailing: Aero.Spacing.m))
+            Text("Anyone with the link can view these conversations.")
+                .font(Aero.caption())
+                .foregroundStyle(Aero.textMuted)
+                .gsListRowChrome(EdgeInsets(
+                    top: Aero.Spacing.l, leading: Aero.Spacing.m, bottom: Aero.Spacing.l - 4, trailing: Aero.Spacing.m))
+
+            if items.isEmpty {
+                EmptyStateView(
+                    icon: "link",
+                    title: "No shared links",
+                    message: "Share a conversation to create a public, view-only link."
+                )
+                .gsListRowChrome(rowInsets)
+            } else {
+                ForEach(items) { item in
+                    row(item)
                 }
             }
-            .padding(.horizontal, Aero.Spacing.m)
-            .padding(.top, Aero.Spacing.s)
-            .padding(.bottom, Aero.Spacing.xl)
+
+            // Tail spacer reproduces the old LazyVStack bottom padding.
+            Color.clear
+                .frame(height: Aero.Spacing.xl - 4)
+                .gsListRowChrome(EdgeInsets())
         }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .environment(\.defaultMinListRowHeight, 1)
         .background(Aero.background.ignoresSafeArea())
         .confirmationDialog(
             "Revoke link?",
@@ -99,7 +111,7 @@ struct SharedChatsView: View {
                     .accessibilityLabel(copiedID == item.id ? "Link copied" : "Copy link")
 
                     Button {
-                        pendingRevoke = item
+                        requestRevoke(item)
                     } label: {
                         Image(systemName: "trash")
                             .font(.system(size: 15))
@@ -110,6 +122,20 @@ struct SharedChatsView: View {
                 }
             }
         )
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button(role: .destructive) {
+                requestRevoke(item)
+            } label: {
+                Label("Revoke", systemImage: "trash")
+            }
+        }
+        .gsListRowChrome(rowInsets)
+    }
+
+    /// Shared by the inline trash button and the trailing swipe — both raise
+    /// the same confirming dialog; nothing is revoked without it.
+    private func requestRevoke(_ item: SharedItem) {
+        pendingRevoke = item
     }
 
     private func copyLink(for item: SharedItem) {

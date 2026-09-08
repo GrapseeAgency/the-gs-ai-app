@@ -111,19 +111,72 @@ struct LibraryView: View {
 
     // MARK: Body
 
+    /// Card-row insets (Task 86-e) — same shape as ChatsListView's.
+    private var rowInsets: EdgeInsets {
+        EdgeInsets(top: 4, leading: Aero.Spacing.m, bottom: 4, trailing: Aero.Spacing.m)
+    }
+
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: Aero.Spacing.l) {
-                StaggerIn(index: 0) { header }
-                StaggerIn(index: 1) { searchRow }
-                StaggerIn(index: 2) { filterChips }
-                StaggerIn(index: 3) { collectionsSection }
-                StaggerIn(index: 4) { itemsSection }
+        List {
+            StaggerIn(index: 0) { header }
+                .gsListRowChrome(EdgeInsets(
+                    top: Aero.Spacing.s, leading: Aero.Spacing.m, bottom: 0, trailing: Aero.Spacing.m))
+            StaggerIn(index: 1) { searchRow }
+                .gsListRowChrome(EdgeInsets(
+                    top: Aero.Spacing.l, leading: Aero.Spacing.m, bottom: 0, trailing: Aero.Spacing.m))
+            StaggerIn(index: 2) { filterChips }
+                .gsListRowChrome(EdgeInsets(
+                    top: Aero.Spacing.l, leading: Aero.Spacing.m, bottom: 0, trailing: Aero.Spacing.m))
+            StaggerIn(index: 3) { collectionsSection }
+                .gsListRowChrome(EdgeInsets(
+                    top: Aero.Spacing.l, leading: Aero.Spacing.m, bottom: 0, trailing: Aero.Spacing.m))
+
+            // Saved items (filtered) — the section lead stays a row above the
+            // item rows so the rows themselves can swipe (Task 86-e). It keeps
+            // its original stagger slot (was block 4 of the LazyVStack).
+            StaggerIn(index: 4) {
+                SectionHeader(title: "Saved items")
             }
-            .padding(.horizontal, Aero.Spacing.m)
-            .padding(.top, Aero.Spacing.s)
-            .padding(.bottom, Aero.Spacing.xl)
+            .gsListRowChrome(EdgeInsets(
+                top: Aero.Spacing.l, leading: Aero.Spacing.m, bottom: Aero.Spacing.m - 4, trailing: Aero.Spacing.m))
+
+            let realRows = savedMessages.filter { item in
+                (filter == .all || filter == filterForKind(item.kind)) &&
+                    containsTerm([item.title, item.content])
+            }
+            if realRows.isEmpty && filteredItems.isEmpty {
+                if term.isEmpty {
+                    EmptyStateView(
+                        icon: "tray",
+                        title: "Nothing here yet",
+                        message: "Items you save will appear in this filter."
+                    )
+                    .gsListRowChrome(rowInsets)
+                } else {
+                    EmptyStateView(
+                        icon: "magnifyingglass",
+                        title: "No matches for \"\(term)\"",
+                        message: "Try different words — or save something new from a chat or studio."
+                    )
+                    .gsListRowChrome(rowInsets)
+                }
+            } else {
+                ForEach(realRows) { real in
+                    realRow(real)
+                }
+                ForEach(filteredItems) { item in
+                    itemRow(item)
+                }
+            }
+
+            // Tail spacer reproduces the old LazyVStack bottom padding.
+            Color.clear
+                .frame(height: Aero.Spacing.xl - 4)
+                .gsListRowChrome(EdgeInsets())
         }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .environment(\.defaultMinListRowHeight, 1)
         .background(Aero.background.ignoresSafeArea())
         .onAppear {
             savedMessages = ConversationStore.shared.savedLibraryItems()
@@ -243,42 +296,6 @@ struct LibraryView: View {
         }
     }
 
-    // MARK: Saved items (filtered)
-
-    private var itemsSection: some View {
-        VStack(alignment: .leading, spacing: Aero.Spacing.m) {
-            SectionHeader(title: "Saved items")
-            let realRows = savedMessages.filter { item in
-                (filter == .all || filter == filterForKind(item.kind)) &&
-                    containsTerm([item.title, item.content])
-            }
-            if realRows.isEmpty && filteredItems.isEmpty {
-                if term.isEmpty {
-                    EmptyStateView(
-                        icon: "tray",
-                        title: "Nothing here yet",
-                        message: "Items you save will appear in this filter."
-                    )
-                } else {
-                    EmptyStateView(
-                        icon: "magnifyingglass",
-                        title: "No matches for \"\(term)\"",
-                        message: "Try different words — or save something new from a chat or studio."
-                    )
-                }
-            } else {
-                VStack(spacing: Aero.Spacing.s) {
-                    ForEach(realRows) { real in
-                        realRow(real)
-                    }
-                    ForEach(filteredItems) { item in
-                        itemRow(item)
-                    }
-                }
-            }
-        }
-    }
-
     // MARK: Row builders
 
     private func kindIcon(_ kind: Kind) -> String {
@@ -319,31 +336,70 @@ struct LibraryView: View {
                     .foregroundStyle(Aero.textMuted)
             }
         )
+        .gsListRowChrome(rowInsets)
     }
 
     /// A real save: taps into the reader sheet where the full item can be
-    /// copied or removed — the sample rows above keep their plain look.
+    /// copied or removed. List row (Task 86-e): the default row style gives
+    /// the native tap highlight (the KineticPressStyle scale is gone on this
+    /// surface only) and the swipes carry copy / delete through the same
+    /// mutations the sheet uses.
     private func realRow(_ item: LibraryItem) -> some View {
-        AeroListRow(
-            title: item.title,
-            subtitle: item.kind == "image" ? "Image · saved from the studio"
-                : item.kind == "document" ? "Document · saved from the studio"
-                : "Message · saved from your chats",
-            leading: {
-                Image(systemName: item.kind == "image" ? "photo"
-                    : item.kind == "document" ? "doc.text" : "bookmark")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(Aero.text)
-                    .frame(width: 36, height: 36)
-                    .background(Circle().fill(Aero.containerHigh))
-            },
-            trailing: {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Aero.textMuted)
-            },
-            action: { viewingItem = item }
-        )
+        Button {
+            viewingItem = item
+        } label: {
+            AeroListRow(
+                title: item.title,
+                subtitle: item.kind == "image" ? "Image · saved from the studio"
+                    : item.kind == "document" ? "Document · saved from the studio"
+                    : "Message · saved from your chats",
+                leading: {
+                    Image(systemName: item.kind == "image" ? "photo"
+                        : item.kind == "document" ? "doc.text" : "bookmark")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(Aero.text)
+                        .frame(width: 36, height: 36)
+                        .background(Circle().fill(Aero.containerHigh))
+                },
+                trailing: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Aero.textMuted)
+                }
+            )
+        }
+        .swipeActions(edge: .leading, allowsFullSwipe: true) {
+            Button {
+                copySave(item)
+            } label: {
+                Label("Copy", systemImage: "doc.on.doc")
+            }
+            .tint(Aero.accent)
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button(role: .destructive) {
+                deleteSave(item)
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+        .gsListRowChrome(rowInsets)
+    }
+
+    /// The reader sheet's copy mutation — pasteboard + the shared success
+    /// tick (the sheet keeps its in-place Copied checkmark animation).
+    private func copySave(_ item: LibraryItem) {
+        UIPasteboard.general.string = item.content
+        GSHaptics.success()
+    }
+
+    /// The reader sheet's delete mutation (deleteLibraryItem + success tick +
+    /// list refresh) without the dismiss — the sheet keeps its confirming
+    /// dialog; the swipe is the native instant path.
+    private func deleteSave(_ item: LibraryItem) {
+        ConversationStore.shared.deleteLibraryItem(id: item.id)
+        GSHaptics.success()
+        savedMessages = ConversationStore.shared.savedLibraryItems()
     }
 }
 

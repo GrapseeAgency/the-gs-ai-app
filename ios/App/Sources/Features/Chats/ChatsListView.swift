@@ -1,10 +1,11 @@
 import SwiftUI
 
 /// Chats hub — `ConversationStore` is the source of truth (JSON-persisted,
-/// offline-first); a pull-to-refresh best-effort syncs server rows on top.
-/// Falls back to the sample seed on a fresh install. Rows carry the benchmark
-/// action set (pin / archive / delete) via context menu, mirroring the
-/// Android drawer.
+/// offline-first); a native pull-to-refresh best-effort syncs server rows on
+/// top. Falls back to the sample seed on a fresh install. Rows are a real
+/// `List` (Task 86-e) carrying the benchmark action set (pin / archive /
+/// delete) as native swipe actions + context menu, mirroring the Android
+/// drawer.
 struct ChatsListView: View {
 
     private enum Filter: String, CaseIterable, Identifiable {
@@ -24,6 +25,10 @@ struct ChatsListView: View {
     }
 
     @ObservedObject private var store = ConversationStore.shared
+    /// Programmatic navigation — inside the List, rows are plain Buttons
+    /// appending to the shared `Router` path (a NavigationLink in a List row
+    /// would render the system chevron and change the row look).
+    @EnvironmentObject private var router: Router
 
     @State private var filter: Filter = .all
     @State private var isLoading = false
@@ -39,19 +44,65 @@ struct ChatsListView: View {
         ConversationRow(id: "demo-4", title: "Brand voice workshop", preview: "GS: three tone pillars emerged…", time: "3d")
     ]
 
+    /// Card-row insets (Task 86-e): horizontal margins reproduce the
+    /// LazyVStack's `.padding(.horizontal, Aero.Spacing.m)`; the 4pt top/bottom
+    /// pairs give consecutive cards their original `Aero.Spacing.s` (8pt) gap.
+    private var rowInsets: EdgeInsets {
+        EdgeInsets(top: 4, leading: Aero.Spacing.m, bottom: 4, trailing: Aero.Spacing.m)
+    }
+
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: Aero.Spacing.l) {
+        List {
+            // Lead block — header + offline banner share one row so a hidden
+            // banner leaves no phantom gap (matches the LazyVStack layout).
+            VStack(alignment: .leading, spacing: Aero.Spacing.l) {
                 header
                 OfflineBanner(isVisible: isOffline)
-                quickAccess
-                filterChips
-                conversationList
             }
-            .padding(.horizontal, Aero.Spacing.m)
-            .padding(.top, Aero.Spacing.s)
-            .padding(.bottom, Aero.Spacing.xl)
+            .gsListRowChrome(EdgeInsets(
+                top: Aero.Spacing.s, leading: Aero.Spacing.m, bottom: 0, trailing: Aero.Spacing.m))
+
+            quickAccess
+                .gsListRowChrome(EdgeInsets(
+                    top: Aero.Spacing.l, leading: Aero.Spacing.m, bottom: 0, trailing: Aero.Spacing.m))
+
+            filterChips
+                .gsListRowChrome(EdgeInsets(
+                    top: Aero.Spacing.l, leading: Aero.Spacing.m, bottom: 0, trailing: Aero.Spacing.m))
+
+            SectionHeader(title: "Recent", actionTitle: isLoading ? "Syncing…" : nil)
+                .gsListRowChrome(EdgeInsets(
+                    top: Aero.Spacing.l, leading: Aero.Spacing.m, bottom: 4, trailing: Aero.Spacing.m))
+
+            if isLoading && rows.isEmpty {
+                VStack(spacing: Aero.Spacing.s) {
+                    SkeletonBlock(height: 64)
+                    SkeletonBlock(height: 64)
+                    SkeletonBlock(height: 64)
+                }
+                .gsListRowChrome(rowInsets)
+            } else if filtered.isEmpty {
+                EmptyStateView(
+                    icon: "tray",
+                    title: emptyTitle,
+                    message: emptyMessage
+                )
+                .gsListRowChrome(rowInsets)
+            } else {
+                ForEach(filtered) { row in
+                    conversationRow(row)
+                }
+            }
+
+            // Tail spacer reproduces the old LazyVStack bottom padding (the
+            // last row already carries a 4pt bottom inset).
+            Color.clear
+                .frame(height: Aero.Spacing.xl - 4)
+                .gsListRowChrome(EdgeInsets())
         }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .environment(\.defaultMinListRowHeight, 1)
         .background(Aero.background.ignoresSafeArea())
         .task(id: reloadToken) { await load() }
         .refreshable { await load() }
@@ -132,7 +183,12 @@ struct ChatsListView: View {
                 .foregroundStyle(Aero.text)
                 .accessibilityAddTraits(.isHeader)
             Spacer()
-            NavigationLink(value: AeroRoute.chatSearch) {
+            // Buttons appending to the shared Router path — identical
+            // navigation to NavigationLink(value:) without the chevron a
+            // List row adds to links (Task 86-e).
+            Button {
+                router.path.append(.chatSearch)
+            } label: {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 18, weight: .medium))
                     .foregroundStyle(Aero.text)
@@ -140,7 +196,9 @@ struct ChatsListView: View {
             .buttonStyle(KineticPressStyle())
             .accessibilityLabel("Search chats")
             .padding(.trailing, 6)
-            NavigationLink(value: AeroRoute.chat(nil)) {
+            Button {
+                router.path.append(.chat(nil))
+            } label: {
                 Image(systemName: "plus.circle.fill")
                     .font(.system(size: 24))
                     .foregroundStyle(Aero.accent)
@@ -165,7 +223,11 @@ struct ChatsListView: View {
 
     private func quickCard(_ title: String, icon: String, route: AeroRoute) -> some View {
         AeroCard {
-            NavigationLink(value: route) {
+            // Router-path append, not NavigationLink — a List row renders the
+            // system chevron on links (Task 86-e).
+            Button {
+                router.path.append(route)
+            } label: {
                 VStack(alignment: .leading, spacing: 6) {
                     Image(systemName: icon)
                         .font(.system(size: 16, weight: .medium))
@@ -245,77 +307,105 @@ struct ChatsListView: View {
         }
     }
 
-    private var conversationList: some View {
-        VStack(alignment: .leading, spacing: Aero.Spacing.s) {
-            SectionHeader(title: "Recent", actionTitle: isLoading ? "Syncing…" : nil)
-            if isLoading && rows.isEmpty {
-                VStack(spacing: Aero.Spacing.s) {
-                    SkeletonBlock(height: 64)
-                    SkeletonBlock(height: 64)
-                    SkeletonBlock(height: 64)
-                }
-            } else if filtered.isEmpty {
-                EmptyStateView(
-                    icon: "tray",
-                    title: emptyTitle,
-                    message: emptyMessage
-                )
-            } else {
-                ForEach(filtered) { row in
-                    NavigationLink(value: AeroRoute.chat(row.id)) {
-                        AeroListRow(
-                            title: row.title,
-                            subtitle: "\(row.preview) · \(row.time)",
-                            leading: {
-                                Image(systemName: "bubble.left")
-                                    .font(.system(size: 14))
-                                    .foregroundStyle(Aero.text)
-                                    .frame(width: 36, height: 36)
-                                    .background(Circle().fill(Aero.containerHigh))
-                            },
-                            trailing: {
-                                if row.pinned {
-                                    Image(systemName: "star.fill")
-                                        .font(.system(size: 13))
-                                        .foregroundStyle(Aero.accent)
-                                }
-                            }
-                        )
-                    }
-                    .buttonStyle(KineticPressStyle())
-                    .contextMenu {
-                        Button {
-                            let target = !row.pinned
-                            store.setPinned(id: row.id, target)
-                            GSHaptics.success()
-                            sync(row.id, pinned: target)
-                        } label: {
-                            Label(row.pinned ? "Unpin" : "Pin to top", systemImage: "pin")
-                        }
-                        Button {
-                            renameTarget = store.conversation(withID: row.id)
-                            renameDraft = store.conversation(withID: row.id)?.title ?? row.title
-                        } label: {
-                            Label("Rename…", systemImage: "pencil")
-                        }
-                        Button {
-                            store.setArchived(id: row.id, true)
-                            GSHaptics.success()
-                            sync(row.id, archived: true)
-                        } label: {
-                            Label("Archive", systemImage: "archivebox")
-                        }
-                        Button(role: .destructive) {
-                            store.delete(id: row.id)
-                            GSHaptics.warning()
-                            syncDelete(row.id)
-                        } label: {
-                            Label("Delete", systemImage: "trash")
-                        }
+    /// One conversation card as a native List row (Task 86-e): the default row
+    /// button style gives iOS's own tap highlight (the KineticPressStyle scale
+    /// is gone on this surface only), and the benchmark action set (pin /
+    /// archive / delete) rides the leading/trailing swipes — the same store
+    /// mutations + haptics as the context menu, through the shared action
+    /// funcs below.
+    private func conversationRow(_ row: ConversationRow) -> some View {
+        Button {
+            router.path.append(.chat(row.id))
+        } label: {
+            AeroListRow(
+                title: row.title,
+                subtitle: "\(row.preview) · \(row.time)",
+                leading: {
+                    Image(systemName: "bubble.left")
+                        .font(.system(size: 14))
+                        .foregroundStyle(Aero.text)
+                        .frame(width: 36, height: 36)
+                        .background(Circle().fill(Aero.containerHigh))
+                },
+                trailing: {
+                    if row.pinned {
+                        Image(systemName: "star.fill")
+                            .font(.system(size: 13))
+                            .foregroundStyle(Aero.accent)
                     }
                 }
+            )
+        }
+        .swipeActions(edge: .leading, allowsFullSwipe: true) {
+            Button {
+                togglePin(row)
+            } label: {
+                Label(row.pinned ? "Unpin" : "Pin", systemImage: "pin")
+            }
+            .tint(Aero.accent)
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button(role: .destructive) {
+                deleteRow(row)
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+            Button {
+                archiveRow(row)
+            } label: {
+                Label("Archive", systemImage: "archivebox")
+            }
+            .tint(Aero.accent)
+        }
+        .contextMenu {
+            Button {
+                togglePin(row)
+            } label: {
+                Label(row.pinned ? "Unpin" : "Pin to top", systemImage: "pin")
+            }
+            Button {
+                startRename(row)
+            } label: {
+                Label("Rename…", systemImage: "pencil")
+            }
+            Button {
+                archiveRow(row)
+            } label: {
+                Label("Archive", systemImage: "archivebox")
+            }
+            Button(role: .destructive) {
+                deleteRow(row)
+            } label: {
+                Label("Delete", systemImage: "trash")
             }
         }
+        .gsListRowChrome(rowInsets)
+    }
+
+    // MARK: Row actions (context menu + swipe share these exact paths)
+
+    private func togglePin(_ row: ConversationRow) {
+        let target = !row.pinned
+        store.setPinned(id: row.id, target)
+        GSHaptics.success()
+        sync(row.id, pinned: target)
+    }
+
+    private func startRename(_ row: ConversationRow) {
+        renameTarget = store.conversation(withID: row.id)
+        renameDraft = store.conversation(withID: row.id)?.title ?? row.title
+    }
+
+    private func archiveRow(_ row: ConversationRow) {
+        store.setArchived(id: row.id, true)
+        GSHaptics.success()
+        sync(row.id, archived: true)
+    }
+
+    private func deleteRow(_ row: ConversationRow) {
+        store.delete(id: row.id)
+        GSHaptics.warning()
+        syncDelete(row.id)
     }
 
     private func syncDelete(_ id: String) {

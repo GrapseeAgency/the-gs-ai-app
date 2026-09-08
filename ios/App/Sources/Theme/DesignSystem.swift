@@ -25,12 +25,37 @@ enum Aero {
     static let text = dynamic(
         light: UIColor(red: 0.078, green: 0.086, blue: 0.102, alpha: 1),   // 14161A
         dark: UIColor(red: 0.929, green: 0.937, blue: 0.949, alpha: 1))    // EDEFF2
-    static let textMuted = dynamic(
+    /// Base (High contrast OFF) muted ink — the frozen palette value the
+    /// `textMuted` token resolves to by default.
+    private static let textMutedBase = dynamic(
         light: UIColor(red: 0.420, green: 0.443, blue: 0.478, alpha: 1),   // 6B7280
         dark: UIColor(red: 0.545, green: 0.576, blue: 0.631, alpha: 1))    // 8B93A1
-    static let outline = dynamic(
+
+    /// Task 86-e — muted/secondary ink. Settings → Accessibility → High
+    /// contrast (default OFF) resolves it to the strongest ink token
+    /// (full-opacity text) instead of the low-alpha palette value. Computed
+    /// from the stored setting so every call site re-resolves on body
+    /// evaluation; OFF is bit-identical to the frozen palette. Live
+    /// propagation is carried by the shared components observing
+    /// `SettingsStore` (AeroComponents.swift `hc` handles).
+    static var textMuted: Color {
+        SettingsStore.shared.highContrast ? text : textMutedBase
+    }
+
+    /// Base (High contrast OFF) border/divider ink — the frozen palette value
+    /// the `outline` token resolves to by default.
+    private static let outlineBase = dynamic(
         light: UIColor(red: 0.898, green: 0.898, blue: 0.882, alpha: 1),   // E5E5E1
         dark: UIColor(red: 0.137, green: 0.169, blue: 0.216, alpha: 1))    // 232B37
+
+    /// Task 86-e — border/divider ink. High contrast resolves it to the
+    /// strongest ink token instead of the low-alpha outline variant (every
+    /// `.stroke(Aero.outline, …)` and `Divider().overlay(Aero.outline)` site
+    /// re-resolves with no call-site change). OFF is bit-identical.
+    static var outline: Color {
+        SettingsStore.shared.highContrast ? text : outlineBase
+    }
+
     static let container = dynamic(
         light: UIColor(red: 0.941, green: 0.941, blue: 0.929, alpha: 1),   // F0F0ED
         dark: UIColor(red: 0.078, green: 0.098, blue: 0.137, alpha: 1))    // 141923
@@ -183,6 +208,20 @@ extension View {
                 }
             }
         }
+    }
+}
+
+// MARK: - List row chrome (Task 86-e)
+
+extension View {
+    /// Chrome for rows on the List-converted surfaces (Task 86-e): the List
+    /// container must disappear so rows render exactly like the LazyVStack
+    /// cards they replace — no separators, no tinted row background, and the
+    /// old card margins carried by the row insets.
+    func gsListRowChrome(_ insets: EdgeInsets) -> some View {
+        listRowInsets(insets)
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
     }
 }
 

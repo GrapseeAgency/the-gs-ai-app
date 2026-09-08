@@ -306,14 +306,19 @@ final class ChatViewModel: ObservableObject {
     /// A nil conversationID means "first message of a brand-new chat":
     /// create it server-side; offline, fabricate a local row so the thread,
     /// recents and pins keep working until the backend is reachable again.
+    /// Task 86-e: the first-message auto-title honours Settings → "Auto-title
+    /// chats" — when it is off, the thread keeps the default "New chat" title
+    /// (the same default the store materialises for non-user turns) until it
+    /// is renamed.
     private func ensureConversation(for text: String) async throws -> String {
         if let conversationID { return conversationID }
+        let title = SettingsStore.shared.autoTitle ? String(text.prefix(40)) : "New chat"
         do {
-            let conversation = try await APIClient.shared.createConversation(title: String(text.prefix(40)))
+            let conversation = try await APIClient.shared.createConversation(title: title)
             conversationID = conversation.id
             return conversation.id
         } catch {
-            let local = ConversationStore.shared.createLocalConversation(title: String(text.prefix(40)))
+            let local = ConversationStore.shared.createLocalConversation(title: title)
             conversationID = local.id
             return local.id
         }

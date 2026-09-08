@@ -9,4 +9,24 @@
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">true</item>
     </style>
+
+    <!-- Forced-theme launch variants (Task 86-d): MainActivity resolves the
+         SettingsStore themeMode BEFORE super.onCreate and setTheme()s one of
+         these, so a forced Light/Dark palette paints the pre-first-frame window
+         too (the plain Theme.TheGsAiApp above keeps following the SYSTEM via
+         values-night). Both variants declare their colors EXPLICITLY — they
+         must never be re-resolved through the values-night qualifier. -->
+    <style name="Theme.TheGsAiApp.Light" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/gs_launch_background</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+
+    <style name="Theme.TheGsAiApp.Dark" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/gs_launch_background_night</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
 </resources>

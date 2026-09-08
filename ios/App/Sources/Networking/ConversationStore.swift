@@ -258,9 +258,17 @@ final class ConversationStore: ObservableObject {
 
     /// Appends a turn and auto-materialises the owning conversation row so the
     /// drawer/Chats list light up on the very first message (demo ids included).
+    /// Task 86-e: the first-message snippet title honours Settings →
+    /// "Auto-title chats" — off, unknown threads materialise under the
+    /// default "New chat" title instead of the message prefix.
     func append(_ message: StoredMessage) {
         if conversation(withID: message.conversationId) == nil {
-            let snippet = message.role == "user" ? String(message.content.prefix(40)) : "New chat"
+            let snippet: String
+            if message.role == "user", SettingsStore.shared.autoTitle {
+                snippet = String(message.content.prefix(40))
+            } else {
+                snippet = "New chat"
+            }
             let now = Self.now()
             upsert(StoredConversation(
                 id: message.conversationId,

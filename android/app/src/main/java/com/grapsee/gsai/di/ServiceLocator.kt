@@ -1,6 +1,7 @@
 package com.grapsee.gsai.di
 
 import android.content.Context
+import com.grapsee.gsai.data.chat.ChatStreamController
 import com.grapsee.gsai.data.local.AppDatabase
 import com.grapsee.gsai.data.remote.ApiClient
 import com.grapsee.gsai.data.remote.GsApiJson
@@ -22,6 +23,13 @@ object ServiceLocator {
     lateinit var db: AppDatabase
     lateinit var api: ApiClient
     lateinit var chat: ChatRepository
+
+    /**
+     * App-scoped chat-stream owner (Task 86-d): the streaming Job lives here,
+     * NOT in ChatScreen's composition — rotation mid-stream keeps the answer
+     * growing; navigation away cancels + finalizes through the same instance.
+     */
+    lateinit var chatStream: ChatStreamController
 
     /**
      * One HttpClient for the whole app. CIO engine keeps the stack pure-Kotlin
@@ -51,5 +59,6 @@ object ServiceLocator {
         db = AppDatabase.build(context)
         api = ApiClient(http)
         chat = ChatRepository(api, db)
+        chatStream = ChatStreamController(chat)
     }
 }

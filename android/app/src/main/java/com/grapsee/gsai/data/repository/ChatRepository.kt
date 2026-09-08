@@ -293,11 +293,17 @@ class ChatRepository(
         conversationId: String?,
         content: String,
         modelId: String? = null,
+        onConversationResolved: (String) -> Unit = {},
         onDelta: (String) -> Unit
     ): String {
         activeJob = currentCoroutineContext()[Job]
 
         val activeId = resolveConversation(conversationId, content)
+        // Published the moment the owning conversation is known (the server id for
+        // a brand-new chat, the passed id otherwise) — a mid-stream rotation needs
+        // it to re-attach the live view; waiting for the final return would
+        // orphan the stream for the whole answer.
+        onConversationResolved(activeId)
 
         val userMessage = MessageEntity(
             id = UUID.randomUUID().toString(),

@@ -1,6 +1,8 @@
 package com.grapsee.gsai.ui.chat
 
+import android.app.Activity
 import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
 import android.speech.tts.TextToSpeech
 import android.view.HapticFeedbackConstants
@@ -90,11 +92,11 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import android.os.SystemClock
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -133,6 +135,7 @@ import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.data.ModelPrefs
+import com.grapsee.gsai.data.chat.ChatStreamController
 import com.grapsee.gsai.data.repository.ChatRepository
 import com.grapsee.gsai.di.ServiceLocator
 import com.grapsee.gsai.ui.components.GsCard
@@ -151,8 +154,6 @@ import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 import com.grapsee.gsai.ui.theme.auroraBackground
 import java.util.UUID
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 /** Words tinted in code blocks — a deliberately small cross-language set. */
@@ -222,12 +223,6 @@ private const val DRAFTS_PREFS = "gs_chat_drafts"
  *  so conversation-open cost is O(page) no matter how long the thread grew. */
 private const val HISTORY_PAGE = 60
 
-/** Streaming repaint coalescing: network deltas arrive far faster than the eye
- *  (often dozens per second); repainting markdown at delta cadence re-parses
- *  and re-lays-out the growing bubble for zero visible benefit. ~30 Hz is
- *  visually identical to per-delta and caps the streaming cost per second. */
-private const val STREAM_PAINT_MS = 33L
-
 private fun draftKey(conversationId: String) = "draft_$conversationId"
 
 private fun loadDraft(context: Context, conversationId: String?): String? =
@@ -255,11 +250,26 @@ private fun clearDraft(context: Context, conversationId: String?) {
     }
 }
 
+/** The hosting Activity (ContextWrapper-unwrapped) — [Activity.isChangingConfigurations]
+ *  is the rotation-vs-navigation discriminator for the stream disposal contract. */
+private fun Context.findActivity(): Activity? {
+    var current: Context = this
+    while (current is ContextWrapper) {
+        if (current is Activity) return current
+        current = current.baseContext
+    }
+    return null
+}
+
 /**
- * Streaming chat surface. History loads from Room (via the repository), sends go
- * through [ServiceLocator.chat.send] which returns the owning conversation id —
- * so a brand-new chat adopts its server id after the first turn completes.
- * Stop-generation cancels the streaming Job; partial output stays on screen and disk.
+ * Streaming chat surface. History loads from Room (via the repository); sends
+ * dispatch through [ChatStreamController] (ServiceLocator.chatStream) — an
+ * app-scoped owner that keeps the stream alive across rotation (the recomposed
+ * screen re-attaches from the controller state) and cancels + finalizes when
+ * the user navigates away. The screen observes the controller state via
+ * collectAsState for the live text and the terminal commit; a brand-new chat
+ * adopts its server id mid-stream through the controller.
+ * Stop-generation cancels through the controller; partial output stays on screen and disk.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -280,7 +290,6 @@ fun ChatScreen(
     var activeConversationId by rememberSaveable { mutableStateOf(conversationId) }
     val messages = remember { mutableStateListOf<ChatUiMessage>() }
     var draft by remember { mutableStateOf("") }
-    var streamingJob by remember { mutableStateOf<Job?>(null) }
     var conversationTitle by rememberSaveable { mutableStateOf("New chat") }
     var editingId by rememberSaveable { mutableStateOf<String?>(null) }
     var editingDraft by remember { mutableStateOf("") }
@@ -299,13 +308,27 @@ fun ChatScreen(
     var loadingOlder by remember { mutableStateOf(false) }
     // Armed only by a real upward drag — pagination never engages on open.
     var olderArmed by remember { mutableStateOf(false) }
-    // Live streaming text lives OUTSIDE the message list. Deltas coalesce into
-    // this state at ~30 Hz and ONLY the streaming bubble reads it — the rest of
-    // the transcript, the scaffold and the composer never recompose mid-stream.
-    // The list itself is touched exactly twice per turn: bubble added, then the
-    // final text committed once at finalize.
-    val streamText = remember { mutableStateOf("") }
-    val isStreaming = streamingJob?.isActive == true
+    // App-scoped stream (ChatStreamController owned by ServiceLocator — NOT this
+    // composition): rotation kills nothing, navigation away cancels + finalizes.
+    // The raw State is read ONLY inside the streaming bubble and the streaming
+    // effects; everything screen-wide derives from the phase (coarse — it flips
+    // twice per stream), so ~30 Hz text flushes still recompose exactly one bubble.
+    val chatStream = ServiceLocator.chatStream
+    val streamStateRaw = chatStream.state.collectAsState()
+    val isStreaming by remember {
+        derivedStateOf { streamStateRaw.value?.phase == ChatStreamController.Phase.Streaming }
+    }
+    // This screen's live-stream token (saveable): a rotation re-attach only
+    // adopts a stream dispatched by this screen's own lineage — a fresh nav
+    // entry restores null and never mistakes another surface's stream for its own.
+    var myStreamMessageId by rememberSaveable { mutableStateOf<String?>(null) }
+    // Set when THIS composition dispatched: the dispatching screen manages its
+    // own optimistic bubbles, so it must never reload the transcript mid-stream.
+    var dispatchedHere by remember { mutableStateOf(false) }
+    // Bumped to force a transcript rebuild (re-attach / adopted-id reconciliation).
+    var transcriptLoadTick by remember { mutableStateOf(0) }
+    // Which conversation id the transcript currently reflects (re-attach bookkeeping).
+    var transcriptLoadedForId by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     // System-grade touch confirmation: the same Taptic-lite tick the platform
     // uses for key presses, applied when a send actually commits.
@@ -381,6 +404,18 @@ fun ChatScreen(
         onDispose { saveDraft(context, activeConversationId, draft) }
     }
 
+    // Stream disposal contract (rotation vs navigation-away): the stream lives
+    // in the app-scoped controller, so a configuration change must leave it
+    // running — the recomposed screen re-attaches from the controller state.
+    // Navigating away preserves the old product behaviour exactly: cancel, and
+    // the repository's NonCancellable path persists the partial to disk.
+    val activity = remember(context) { context.findActivity() }
+    DisposableEffect(activity) {
+        onDispose {
+            if (activity?.isChangingConfigurations != true) chatStream.cancelAndFinalize()
+        }
+    }
+
     // Scrolling the transcript puts reading first — the keyboard steps aside.
     // Real drags only: streaming follow-scrolls never steal focus. A real drag
     // also arms scroll-up pagination (user intent, never fired on open).
@@ -401,6 +436,27 @@ fun ChatScreen(
         messages.clear()
         messages.addAll(recent.map { ChatUiMessage(it.id, it.role, it.content, createdAt = it.createdAt) })
         hasOlder = recent.size == HISTORY_PAGE
+        transcriptLoadedForId = id
+        // Rotation re-attach (Task 86-d): an EXISTING-chat rotation re-runs this
+        // load while the app-scoped stream is still growing — Room cannot contain
+        // the unpersisted answer, so the live streaming bubble is re-attached
+        // from the controller state here. (Brand-new chats take the adopted-id
+        // path through the stream-observer rebuild instead; whichever load
+        // finishes last, exactly one live bubble ends up in the list.)
+        chatStream.state.value?.let { live ->
+            if (live.phase == ChatStreamController.Phase.Streaming &&
+                live.assistantMessageId == myStreamMessageId &&
+                live.conversationId == id &&
+                messages.none { it.id == live.assistantMessageId && it.isStreaming }
+            ) {
+                messages.add(
+                    ChatUiMessage(
+                        live.assistantMessageId, "assistant", "",
+                        isStreaming = true, createdAt = ChatRepository.nowIso()
+                    )
+                )
+            }
+        }
         // A restored editingId must match a real turn — a dangling id (turn gone
         // after a process death) would silently block every Edit affordance.
         if (editingId != null && messages.none { it.id == editingId }) editingId = null
@@ -408,6 +464,40 @@ fun ChatScreen(
             .getOrNull()?.title
         if (!loadedTitle.isNullOrBlank()) conversationTitle = loadedTitle
         if (draft.isBlank()) draft = loadDraft(context, id) ?: ""
+    }
+
+    // Transcript rebuild (re-attach / adopted-id reconciliation): triggered by
+    // the stream observer below when this composition's transcript does not yet
+    // reflect the live stream. Rebuilt OFF-list and swapped once — no empty frame
+    // between clear and refill — then the live streaming bubble re-attaches if
+    // this screen's lineage owns the app-scoped stream (rotation mid-stream).
+    LaunchedEffect(transcriptLoadTick) {
+        if (transcriptLoadTick == 0) return@LaunchedEffect
+        val id = activeConversationId
+        olderArmed = false
+        val recent = if (id == null) emptyList()
+        else runCatching { ServiceLocator.chat.historyRecent(id, HISTORY_PAGE) }.getOrElse { emptyList() }
+        val rebuilt = recent.map { ChatUiMessage(it.id, it.role, it.content, createdAt = it.createdAt) }.toMutableList()
+        val live = chatStream.state.value
+        if (live?.phase == ChatStreamController.Phase.Streaming &&
+            live.assistantMessageId == myStreamMessageId &&
+            rebuilt.none { it.id == live.assistantMessageId }
+        ) {
+            rebuilt += ChatUiMessage(
+                live.assistantMessageId, "assistant", "",
+                isStreaming = true, createdAt = ChatRepository.nowIso()
+            )
+        }
+        messages.clear()
+        messages.addAll(rebuilt)
+        hasOlder = recent.size == HISTORY_PAGE
+        transcriptLoadedForId = id
+        if (editingId != null && messages.none { it.id == editingId }) editingId = null
+        if (id != null) {
+            val loadedTitle = runCatching { ServiceLocator.db.conversationDao().getById(id) }
+                .getOrNull()?.title
+            if (!loadedTitle.isNullOrBlank()) conversationTitle = loadedTitle
+        }
     }
 
     // Scroll-up pagination: prepend one older page and restore the reader's
@@ -448,40 +538,47 @@ fun ChatScreen(
 
     // Follow the stream only while the reader stays at the live edge —
     // scrolling up to reread is never yanked back down mid-generation. One
-    // long-lived snapshotFlow (state reads inside it subscribe nothing in
-    // composition) replaces the old per-chunk-keyed effect that relaunched a
-    // coroutine on every delta; scrollToItem is instantaneous by design — an
-    // animated follow gets cancelled and relaunched on every chunk anyway.
+    // long-lived snapshotFlow (reading the controller-backed live text length
+    // and the transcript size) replaces per-chunk-keyed effects; scrollToItem
+    // is instantaneous by design — an animated follow gets cancelled and
+    // relaunched on every chunk anyway.
     LaunchedEffect(Unit) {
-        snapshotFlow { streamText.value.length to messages.size }
-            .collect { (_, count) ->
-                if (streamingJob?.isActive == true && isAtBottom && count > 0) {
-                    listState.scrollToItem(count - 1)
-                }
-            }
-    }
-
-    /** Commits the streamed answer into the transcript exactly once. Runs on
-     *  the streaming coroutine (success, cancel, failure) so the growing text
-     *  it holds in its local buffer is always the source of truth. Fires ONE
-     *  "Reply complete" announcement per stream for TalkBack — deliberately a
-     *  commit-time announcement, never a liveRegion on the 30 Hz updating text. */
-    fun finalizeStreamingMessage(assistantId: String, finalText: String) {
-        streamText.value = ""
-        val index = messages.indexOfFirst { it.id == assistantId }
-        if (index >= 0) {
-            if (finalText.isBlank()) messages.removeAt(index)
-            else {
-                messages[index] = messages[index].copy(content = finalText, isStreaming = false)
-                view.announceForAccessibility("Reply complete")
+        snapshotFlow {
+            Triple(
+                streamStateRaw.value?.phase,
+                streamStateRaw.value?.streamText?.length ?: 0,
+                messages.size
+            )
+        }.collect { (phase, _, count) ->
+            if (phase == ChatStreamController.Phase.Streaming && isAtBottom && count > 0) {
+                listState.scrollToItem(count - 1)
             }
         }
     }
 
-    fun reportFailure(error: Throwable, assistantId: String, partial: String) {
-        // Safety net only — the repository lands offline turns itself before
-        // this can fire. Quiet by design: no raw errors, no connectivity talk.
-        finalizeStreamingMessage(assistantId, partial)
+    /** Commits the streamed answer into the transcript exactly once. Driven by
+     *  the controller's terminal phase (Done / Cancelled) — idempotent: only a
+     *  still-streaming bubble carrying the controller's message id commits, so
+     *  the Finalizing→Done conflation or a re-observed terminal state never
+     *  double-commits. Fires ONE "Reply complete" announcement per stream for
+     *  TalkBack — deliberately a commit-time announcement, never a liveRegion
+     *  on the 30 Hz updating text. [86-d: declared BEFORE the collector below —
+     *  Kotlin resolves local declarations in order, so a lambda that runs later
+     *  still cannot reference a local fun declared after it.] */
+    fun commitStreamResult(state: ChatStreamController.StreamState) {
+        val index = messages.indexOfFirst { it.id == state.assistantMessageId && it.isStreaming }
+        if (index < 0) return
+        if (state.streamText.isBlank()) messages.removeAt(index)
+        else {
+            messages[index] = messages[index].copy(content = state.streamText, isStreaming = false)
+            view.announceForAccessibility("Reply complete")
+        }
+    }
+
+    /** Safety net only — the repository lands offline turns itself before this
+     *  can fire. Quiet by design: no raw errors, no connectivity talk. */
+    fun reportStreamFailure(state: ChatStreamController.StreamState) {
+        commitStreamResult(state)
         messages.add(
             ChatUiMessage(
                 id = UUID.randomUUID().toString(),
@@ -493,9 +590,48 @@ fun ChatScreen(
         )
     }
 
+    // App-scoped stream observation — the screen's single reaction point to the
+    // controller: adopts the controller's conversation id (pending→adopted; the
+    // controller's id wins when a restored saveable still holds the nav arg),
+    // rebuilds the transcript for re-attach, and commits exactly once at the
+    // terminal phase. All snapshot writes happen inside the collector on Main —
+    // never during composition.
+    LaunchedEffect(Unit) {
+        chatStream.state.collect { state ->
+            when {
+                state == null -> Unit
+                state.phase == ChatStreamController.Phase.Streaming &&
+                        state.assistantMessageId == myStreamMessageId -> {
+                    if (state.conversationId != activeConversationId) {
+                        activeConversationId = state.conversationId
+                    }
+                    // The dispatching screen keeps its optimistic bubbles; a
+                    // re-attached composition reloads when its transcript does
+                    // not yet reflect the live stream — a conversation the
+                    // transcript never loaded (fresh nav entry / adopted id) OR
+                    // a missing live bubble (existing-chat rotation: the Room
+                    // page the nav-arg effect loads cannot contain the answer
+                    // while it is still unpersisted). The rebuild re-attaches
+                    // the live bubble from the controller state in both cases.
+                    if (!dispatchedHere &&
+                        (state.conversationId != transcriptLoadedForId ||
+                            messages.none { it.id == state.assistantMessageId && it.isStreaming })
+                    ) {
+                        transcriptLoadTick++
+                    }
+                }
+                state.phase == ChatStreamController.Phase.Done && state.error != null ->
+                    reportStreamFailure(state)
+                state.phase == ChatStreamController.Phase.Done ||
+                        state.phase == ChatStreamController.Phase.Cancelled ->
+                    commitStreamResult(state)
+            }
+        }
+    }
+
     fun dispatch(text: String, echoUser: Boolean) {
         val prompt = text.trim()
-        if (prompt.isEmpty() || streamingJob?.isActive == true) return
+        if (prompt.isEmpty() || chatStream.isStreaming) return
         // A committed send gets the platform's virtual-key tick — the touch
         // confirmation native keyboards and dial pads use, gated by Settings.
         view.gsHaptic(HapticFeedbackConstants.VIRTUAL_KEY)
@@ -509,41 +645,20 @@ fun ChatScreen(
         messages.add(ChatUiMessage(assistantId, "assistant", "", isStreaming = true, createdAt = ChatRepository.nowIso()))
         // Sending always returns the reader to the live edge (benchmark behaviour).
         scope.launch { listState.animateScrollToItem(messages.lastIndex) }
-        streamingJob = scope.launch {
-            // One growing buffer for the whole streamed answer — per-chunk
-            // concatenation re-allocated the entire prefix on every delta
-            // (quadratic over a long stream); append is amortized O(1). Deltas
-            // only coalesce into the paint state at ~30 Hz; the transcript list
-            // is written once, at finalize, with the complete answer.
-            val streamed = StringBuilder()
-            var lastPaint = 0L
-            try {
-                val returnedId = ServiceLocator.chat.send(
-                    conversationId = activeConversationId,
-                    content = prompt,
-                    modelId = ModelPrefs.defaultId(context),
-                    onDelta = { delta ->
-                        streamed.append(delta)
-                        val now = SystemClock.uptimeMillis()
-                        if (now - lastPaint >= STREAM_PAINT_MS) {
-                            lastPaint = now
-                            streamText.value = streamed.toString()
-                        }
-                    }
-                )
-                activeConversationId = returnedId
-                finalizeStreamingMessage(assistantId, streamed.toString())
-            } catch (ce: CancellationException) {
-                // Stop-generation lands here too: partial output stays on
-                // screen and disk, exactly as before.
-                finalizeStreamingMessage(assistantId, streamed.toString())
-                throw ce
-            } catch (e: Exception) {
-                reportFailure(e, assistantId, streamed.toString())
-            } finally {
-                streamingJob = null
-            }
-        }
+        dispatchedHere = true
+        myStreamMessageId = assistantId
+        // The stream lives in the app-scoped controller: this composition only
+        // dispatches and observes. The user turn is persisted inside the
+        // repository BEFORE the network stream opens, the resolved conversation
+        // id is published the moment it is known, and the terminal phase drives
+        // the commit through the observer above — rotation mid-stream keeps the
+        // answer growing and the recomposed screen re-attaches to it.
+        chatStream.start(
+            conversationId = activeConversationId,
+            prompt = prompt,
+            modelId = ModelPrefs.defaultId(context),
+            assistantMessageId = assistantId
+        )
     }
 
     /**
@@ -553,7 +668,7 @@ fun ChatScreen(
      */
     fun editAndResend(messageId: String, newText: String) {
         val text = newText.trim()
-        if (text.isEmpty() || streamingJob?.isActive == true) return
+        if (text.isEmpty() || chatStream.isStreaming) return
         val index = messages.indexOfFirst { it.id == messageId }
         if (index < 0 || messages[index].role != "user") return
         val conversation = activeConversationId
@@ -566,7 +681,7 @@ fun ChatScreen(
     }
 
     fun regenerate(assistantMessageId: String) {
-        if (streamingJob?.isActive == true) return
+        if (chatStream.isStreaming) return
         val index = messages.indexOfFirst { it.id == assistantMessageId }
         if (index < 0) return
         val userText = messages.subList(0, index).lastOrNull { it.role == "user" }?.content ?: return
@@ -580,7 +695,7 @@ fun ChatScreen(
      * surface re-bases onto the branch. The original thread stays untouched.
      */
     fun branchFrom(messageId: String) {
-        if (streamingJob?.isActive == true) return
+        if (chatStream.isStreaming) return
         val index = messages.indexOfFirst { it.id == messageId }
         if (index < 0) return
         val turns = messages.subList(0, index + 1)
@@ -811,7 +926,7 @@ fun ChatScreen(
                                     // while editing re-renders only the bubble being
                                     // edited, never every visible row.
                                     editingDraft = { editingDraft },
-                                    editEnabled = streamingJob?.isActive != true && editingId == null,
+                                    editEnabled = !isStreaming && editingId == null,
                                     onEditingDraftChange = { editingDraft = it },
                                     onEditStart = { editingDraft = message.content; editingId = message.id },
                                     onEditCancel = { editingId = null },
@@ -824,9 +939,10 @@ fun ChatScreen(
                                     isSpeaking = speakingMessageId == message.id,
                                     highlight = index == activeMatchIndex,
                                     // The growing answer is read inside the bubble
-                                    // (State), so mid-stream flushes touch exactly
-                                    // one item instead of the whole screen.
-                                    live = if (message.isStreaming) streamText else null,
+                                    // (controller State), so mid-stream flushes
+                                    // touch exactly one item instead of the whole
+                                    // screen.
+                                    live = if (message.isStreaming) streamStateRaw else null,
                                     onCopy = copyText,
                                     onShare = { shareText(message.content) },
                                     onRegenerate = { regenerate(message.id) },
@@ -869,11 +985,11 @@ fun ChatScreen(
             } else {
                 Button(
                     onClick = {
-                        // The cancelled coroutine finalizes with its own buffer,
-                        // so partial output is committed with the full text it
-                        // already holds — no second, textless finalize here.
-                        streamingJob?.cancel()
-                        streamingJob = null
+                        // Cancelling finalizes in the controller: the cancelled
+                        // repository job persists the partial (NonCancellable)
+                        // and the Cancelled phase commits the full buffered text
+                        // through the observer — same contract as before.
+                        chatStream.cancelAndFinalize()
                     },
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(
@@ -1077,9 +1193,11 @@ private fun AssistantMessage(
     message: ChatUiMessage,
     isSpeaking: Boolean,
     highlight: Boolean = false,
-    // Mid-stream the visible answer comes from this state (read below, so only
-    // this bubble recomposes on flush); once finalized the committed content wins.
-    live: State<String>? = null,
+    // Mid-stream the visible answer comes from the app-scoped controller state
+    // (read below, so only this bubble recomposes on flush); once finalized the
+    // committed content wins. The State carries a NULLABLE snapshot —
+    // collectAsState on StateFlow<StreamState?> yields State<StreamState?>.
+    live: State<ChatStreamController.StreamState?>? = null,
     onCopy: (String) -> Unit,
     onShare: () -> Unit = {},
     onRegenerate: () -> Unit,
@@ -1112,7 +1230,7 @@ private fun AssistantMessage(
             ) {
                 Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
                     SegmentedContent(
-                        content = live?.value ?: message.content,
+                        content = live?.value?.streamText ?: message.content,
                         isStreaming = message.isStreaming,
                         onCopyCode = onCopy
                     )

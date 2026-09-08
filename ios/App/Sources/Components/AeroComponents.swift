@@ -2,6 +2,12 @@ import SwiftUI
 
 /**
  * AERUO KINETIC shared components — FROZEN API. All screens compose these.
+ *
+ * Task 86-e — High contrast: the components below that resolve `Aero.textMuted`
+ * or `Aero.outline` carry an `hc` observation handle on `SettingsStore` and
+ * touch `hc.highContrast` at the top of `body`, so a settings flip
+ * re-evaluates the component and the computed tokens (DesignSystem.swift)
+ * resolve afresh. Call-site shape is untouched.
  */
 
 // MARK: - Section header
@@ -32,7 +38,11 @@ struct AeroCard<Content: View>: View {
     var action: (() -> Void)? = nil
     @ViewBuilder let content: () -> Content
 
+    /// High-contrast re-resolve handle (Task 86-e).
+    @ObservedObject var hc = SettingsStore.shared
+
     var body: some View {
+        let _ = hc.highContrast
         Group {
             if let action {
                 Button(action: action) {
@@ -87,7 +97,11 @@ struct AeroListRow<Leading: View, Trailing: View>: View {
     @ViewBuilder var trailing: () -> Trailing
     var action: (() -> Void)? = nil
 
+    /// High-contrast re-resolve handle (Task 86-e).
+    @ObservedObject var hc = SettingsStore.shared
+
     var body: some View {
+        let _ = hc.highContrast
         Group {
             if let action {
                 Button(action: action) { row }.buttonStyle(KineticPressStyle())
@@ -126,7 +140,11 @@ extension AeroListRow where Leading == DefaultLeading, Trailing == EmptyView {
 }
 
 struct DefaultLeading: View {
+    /// High-contrast re-resolve handle (Task 86-e).
+    @ObservedObject var hc = SettingsStore.shared
+
     var body: some View {
+        let _ = hc.highContrast
         Image(systemName: "circle.fill")
             .foregroundStyle(Aero.outline)
             .font(.system(size: 8))
@@ -148,9 +166,14 @@ struct AeroInputBar: View {
     /// default applies — Return inserts a newline and nothing sends.
     private var enterToSend: Bool { SettingsStore.shared.enterToSend }
 
+    /// High-contrast re-resolve handle (Task 86-e) — the input bar strokes
+    /// `Aero.outline` around its capsule.
+    @ObservedObject var hc = SettingsStore.shared
+
     @State private var lastSubmitAt = Date.distantPast
 
     var body: some View {
+        let _ = hc.highContrast
         HStack(spacing: Aero.Spacing.s) {
             Image(systemName: "sparkles").foregroundStyle(Aero.accent)
             TextField(placeholder, text: $text, axis: .vertical)
@@ -226,7 +249,11 @@ struct EmptyStateView: View {
     let title: String
     var message: String = ""
 
+    /// High-contrast re-resolve handle (Task 86-e).
+    @ObservedObject var hc = SettingsStore.shared
+
     var body: some View {
+        let _ = hc.highContrast
         VStack(spacing: Aero.Spacing.s) {
             Image(systemName: icon)
                 .font(.system(size: 30))
@@ -252,7 +279,11 @@ struct LoadingView: View {
     var label: String = "Thinking"
     @State private var phase: CGFloat = 0
 
+    /// High-contrast re-resolve handle (Task 86-e).
+    @ObservedObject var hc = SettingsStore.shared
+
     var body: some View {
+        let _ = hc.highContrast
         VStack(spacing: Aero.Spacing.m) {
             LinearGradient(colors: Aero.aurora, startPoint: .leading, endPoint: .trailing)
                 .frame(height: 8)
@@ -279,7 +310,11 @@ struct ErrorStateView: View {
 
     @State private var announced = false
 
+    /// High-contrast re-resolve handle (Task 86-e).
+    @ObservedObject var hc = SettingsStore.shared
+
     var body: some View {
+        let _ = hc.highContrast
         VStack(spacing: Aero.Spacing.s) {
             Text(message).font(Aero.body()).foregroundStyle(Aero.textMuted)
             Button("Try again", action: retry)
@@ -304,7 +339,12 @@ struct ErrorStateView: View {
 
 struct OfflineBanner: View {
     var isVisible: Bool
+
+    /// High-contrast re-resolve handle (Task 86-e).
+    @ObservedObject var hc = SettingsStore.shared
+
     var body: some View {
+        let _ = hc.highContrast
         if isVisible {
             HStack(spacing: Aero.Spacing.s) {
                 Image(systemName: "wifi.slash").font(.system(size: 12))
@@ -346,7 +386,11 @@ struct QuickActionTile: View {
     let icon: String
     var action: () -> Void = {}
 
+    /// High-contrast re-resolve handle (Task 86-e).
+    @ObservedObject var hc = SettingsStore.shared
+
     var body: some View {
+        let _ = hc.highContrast
         Button(action: action) {
             VStack(spacing: Aero.Spacing.s) {
                 Image(systemName: icon)

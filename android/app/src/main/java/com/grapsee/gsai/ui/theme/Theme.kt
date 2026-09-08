@@ -8,12 +8,30 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.Density
 import androidx.core.view.WindowCompat
 import com.grapsee.gsai.data.SettingsStore
+
+/**
+ * Accessibility wiring composition locals — provided at the theme root from
+ * [SettingsStore] (snapshot state, so a Settings flip recomposes this root and
+ * re-provides live; the same reactive pattern as the other wired settings).
+ * Consumed inside the shared component layer only — no call sites change.
+ */
+
+/** Settings → "Screen reader hints": adds factual TalkBack hints on actionable
+ *  shared components (GsCard / GsChip / GsListItem / GsQuickActionTile). No
+ *  visuals — TalkBack reads the hints; sighted UI is byte-identical. */
+val LocalScreenReaderHints = staticCompositionLocalOf { false }
+
+/** Settings → "High contrast": border/divider colors resolve to the strongest
+ *  surface token and muted/secondary text resolves to full-alpha onSurface.
+ *  Off = exactly the previous colors. */
+val LocalHighContrast = staticCompositionLocalOf { false }
 
 private val LightScheme = lightColorScheme(
     primary = Aeruo.Accent,
@@ -66,8 +84,10 @@ private val DarkScheme = darkColorScheme(
  *  - fontScale: multiplies the system font scale for the whole tree via
  *    LocalDensity, so every sp-sized text in the app truly rescales;
  *  - haptics: publishes the global gate consumed by GsHaptics;
- *  - reduceAnimations + reduceMotion: publishes GsMotion.reduced.
- * All four read snapshot state, so a Settings change recomposes this root.
+ *  - reduceAnimations + reduceMotion: publishes GsMotion.reduced;
+ *  - screenReaderHints + highContrast: provided as composition locals
+ *    (LocalScreenReaderHints / LocalHighContrast) for the component layer.
+ * All of these read snapshot state, so a Settings change recomposes this root.
  */
 @Composable
 fun TheGsAiTheme(
@@ -94,7 +114,11 @@ fun TheGsAiTheme(
         colorScheme = if (resolvedDark) DarkScheme else LightScheme,
         typography = GsTypography,
         content = {
-            CompositionLocalProvider(LocalDensity provides scaledDensity) {
+            CompositionLocalProvider(
+                LocalDensity provides scaledDensity,
+                LocalScreenReaderHints provides SettingsStore.screenReaderHints,
+                LocalHighContrast provides SettingsStore.highContrast
+            ) {
                 SystemBarIconAppearance(resolvedDark)
                 content()
             }
