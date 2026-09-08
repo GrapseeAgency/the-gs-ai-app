@@ -1918,3 +1918,28 @@ Stage Summary:
 - v0.58.0 published. Android now navigates, backs and keyboards like Android; iOS scrolls, dismisses, deforms and haptics like iOS. Both keep the identical product language — the platform layer is what changed.
 - The user can update from the in-app LiveUpdate pill for the first time (v0.57.1+ ships the fixed updater); v0.57.0-or-older installs still need one browser sideload.
 - Deliberately untouched: features, visual design, component structure, ambient animation loops (aurora/skeleton tweens are correct as loops).
+
+---
+Task ID: 84
+Agent: Z.ai Code (main)
+Task: Final native-quality pass per the user's 20-page "Verified Native iOS + Android AI Chat App Engineering Report" — implement its chat-path architecture rules directly (incremental streaming, no whole-transcript rebuilds, real touch response, virtualised lists, platform-divergent behaviour), keep design/features intact, ship as a release.
+
+Work Log:
+- Synced remote first (concurrent-agent race): local had 2 auto-upload junk commits; reset --hard to origin/main f558b9a (v0.58.0 by the parallel Task 83 agent — its shallow interaction pass covered predictive back, push/pop transitions, IME-tracking scroll, Taptic vocabulary, Dynamic Type).
+- Full audit vs the report checklist across the Android chat path (ChatScreen 1648 lines), repository, DI, theme/motion, nav, home, lists; and the iOS chat path (ChatViewModel, ChatDetailView 1165 lines) + list surfaces.
+- FOUND & FIXED (Android):
+  1) Whole-answer markdown re-parse on every ~30 Hz stream flush (`remember(content) parseContentSegments`) + per-line regex inline styling re-run per flush — the report's "Inefficient Text Streaming" defect. Implemented incremental stream parsing: ContentSegment gained `sourceEnd`; new parseStreamingSegments reuses frozen segment instances (identity-stable → Compose skips completed blocks entirely) and re-parses only the live tail; StreamParseCache per bubble; MarkdownLine memoizes the inline span pass per line text; timestamps (dayLabel/timeLabel/dayKey) now parse once per message via remember.
+  2) Dead press-scale feedback everywhere: kineticPress listened to a private InteractionSource no clickable ever emitted to — cards, chips, list items, drawer rows, home pills, attach/mic buttons never visually answered touches. Added kineticPress(interaction) overload and wired one shared source into both the scale animation and each clickable/Surface (ripple preserved) across GsCard/GsChip/GsListItem/GsQuickActionTile, HomeScreen (9 sites incl. CircleButton), GsDrawer (3), ConversationActions, Billing PlanCard.
+  3) Voice orb hold now deforms under the finger: orbHeld state driven by detectTapGestures onPress/tryAwaitRelease with a spring-animated 0.93 press scale (the hold gesture previously fed nothing).
+  4) LibraryScreen was the one genuinely unbounded non-virtualised list (verticalScroll Column + forEach over Room saves) → LazyColumn with stable keys ("save-{id}", "sample-{title}") and header/footer items. SearchScreen/ChatSearchScreen measured bounded (take(10..24) caps) — deliberately left as-is per the report's "measure, don't assume".
+- FOUND & FIXED (iOS): six data surfaces still `ScrollView { VStack { ForEach } }` — ChatsListView, LibraryView, ArchivedChatsView, SharedChatsView, ChatSearchView hits, SearchView → LazyVStack (Apple's own performant-scrollable-stacks guidance). ChatDetailView transcript and NotificationsView were already lazy.
+- Verified already-compliant (no churn): stable keys + contentType in the chat LazyColumn, streaming text outside the list, isAtBottom derivedStateOf follow, composer isolation, imeNestedScroll, app-scoped ServiceLocator singletons, Room suspend DAOs, StreamAccumulator lock-guarded 30 Hz flush on iOS, MessageBubble Equatable skip + NSCache segment cache, edge-to-edge, M3 48 dp touch targets, sp/Dynamic Type text.
+- Sandbox toolchain wiped again (3rd time): rebuilt /home/z/android-sdk (cmdline-tools, platform-35, build-tools-34), Gradle 8.9 → /home/z/tools/gradle-8.9, Adoptium JDK 17 → /home/z/jdk17 (system Java 21 is a JRE without jlink — same trap as last session).
+- Release protocol: versionCode 60 / 0.59.0; assembleRelease green (12,921,465 bytes, cert b1ffd75d… = same key, over-install safe); commit 577f612 pushed; Release v0.59.0 (REL_ID 384693008, target full SHA); asset uploaded, state=uploaded, 12,921,465 bytes.
+- Readbacks all green: permalink 200 @ 12,921,465 B; raw APK 200 @ 12,921,465 B; both sha256 16e08fcd… identical to the build; aapt on the downloaded permalink confirms versionCode 60 / 0.59.0; apksigner confirms cert b1ffd75d…; raw manifest serves 60 / 0.59.0.
+
+Stage Summary:
+- v0.59.0 published — the report's core chat-path contract is now enforced in code: streamed answers paint O(live-tail) per flush with frozen blocks skipping recomposition; every tappable surface physically answers the finger; unbounded lists are virtualised on both platforms.
+- Platform divergence preserved: no behaviour was copied between Android/iOS; each keeps its own scroll physics, back/dismiss, haptics (v0.58.0), keyboard handling and now its own native press feedback idiom.
+- Known deliberate non-changes: notifications/search/projects left non-lazy (measured bounded); screen-level back nav still finalizes the stream with partial text persisted (product decision, graceful); GsChip "Auto"/Tune placeholders untouched (feature scope frozen).
+- User-facing: v0.58.0+ installs get this via the in-app LiveUpdate pill; ≤v0.57.0 installs still need one browser sideload of v0.57.1+ first.
