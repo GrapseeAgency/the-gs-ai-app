@@ -1,6 +1,8 @@
 package com.grapsee.gsai.ui.library
 
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Box
@@ -164,34 +166,39 @@ fun LibraryScreen(onNavigate: (String) -> Unit) {
                 }
             }
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
+            // Virtualised index: the library grows without bound, so the item
+            // list is lazy — only what's on screen composes or lays out, and
+            // a thousand saves scroll exactly as smoothly as ten.
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(GsMotion.spaceL)
             ) {
-                Spacer(Modifier.height(GsMotion.spaceS))
-                GsInputBar(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    onSend = {},
-                    placeholder = "Search your library…"
-                )
-                FilterChips(selectedFilter, onSelect = { selectedFilter = it })
-                CollectionsSection()
-                if (realVisible.isEmpty() && visibleItems.isEmpty()) {
-                    GsEmptyState(
-                        icon = if (term.isEmpty()) Icons.Outlined.Folder else Icons.Outlined.Search,
-                        title = if (term.isEmpty()) "No ${filter.lowercase()} yet"
-                                else "No matches for \"$term\"",
-                        message = if (term.isEmpty()) {
-                            "Saved ${filter.lowercase()} will collect here as you work."
-                        } else {
-                            "Try different words — or save something new from a chat or studio."
-                        }
+                item(key = "lead") { Spacer(Modifier.height(GsMotion.spaceS)) }
+                item(key = "search") {
+                    GsInputBar(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        onSend = {},
+                        placeholder = "Search your library…"
                     )
+                }
+                item(key = "filters") { FilterChips(selectedFilter, onSelect = { selectedFilter = it }) }
+                item(key = "collections") { CollectionsSection() }
+                if (realVisible.isEmpty() && visibleItems.isEmpty()) {
+                    item(key = "empty") {
+                        GsEmptyState(
+                            icon = if (term.isEmpty()) Icons.Outlined.Folder else Icons.Outlined.Search,
+                            title = if (term.isEmpty()) "No ${filter.lowercase()} yet"
+                                    else "No matches for \"$term\"",
+                            message = if (term.isEmpty()) {
+                                "Saved ${filter.lowercase()} will collect here as you work."
+                            } else {
+                                "Try different words — or save something new from a chat or studio."
+                            }
+                        )
+                    }
                 } else {
-                    realVisible.forEach { item ->
+                    items(realVisible, key = { "save-${it.id}" }) { item ->
                         val (badge, label) = when (item.kind) {
                             "image" -> Icons.Outlined.Image to "Saved image"
                             "document" -> Icons.Outlined.Description to "Saved document"
@@ -212,7 +219,7 @@ fun LibraryScreen(onNavigate: (String) -> Unit) {
                             onClick = { viewingItem = item }
                         )
                     }
-                    visibleItems.forEach { item ->
+                    items(visibleItems, key = { "sample-${it.title}" }) { item ->
                         GsListItem(
                             title = item.title,
                             subtitle = item.subtitle,
@@ -229,7 +236,7 @@ fun LibraryScreen(onNavigate: (String) -> Unit) {
                         )
                     }
                 }
-                Spacer(Modifier.height(GsMotion.spaceL))
+                item(key = "tail") { Spacer(Modifier.height(GsMotion.spaceL)) }
             }
         }
 

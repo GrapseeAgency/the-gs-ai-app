@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -366,13 +367,15 @@ private fun PlanCard(
     tag: String?,
     onClick: () -> Unit
 ) {
+    val planInteraction = remember { MutableInteractionSource() }
     Surface(
         onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
-            .kineticPress(),
+            .kineticPress(planInteraction),
         shape = RoundedCornerShape(GsMotion.radiusCard),
         color = MaterialTheme.colorScheme.surface,
+        interactionSource = planInteraction,
         border = BorderStroke(
             width = if (selected) 2.dp else 1.dp,
             color = if (selected) {

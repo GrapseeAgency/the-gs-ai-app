@@ -12,7 +12,7 @@ struct ArchivedChatsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: Aero.Spacing.l) {
+            LazyVStack(alignment: .leading, spacing: Aero.Spacing.l) {
                 Text("Archived")
                     .font(Aero.displayTitle())
                     .foregroundStyle(Aero.text)

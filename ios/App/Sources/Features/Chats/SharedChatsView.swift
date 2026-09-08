@@ -21,7 +21,7 @@ struct SharedChatsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: Aero.Spacing.l) {
+            LazyVStack(alignment: .leading, spacing: Aero.Spacing.l) {
                 Text("Shared")
                     .font(Aero.displayTitle())
                     .foregroundStyle(Aero.text)

@@ -19,9 +19,11 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -70,6 +72,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -174,16 +177,22 @@ private fun TopBar(
         Spacer(Modifier.weight(1f))
 
         // Model pill — "Instant High" pattern
+        val modelPillInteraction = remember { MutableInteractionSource() }
         Surface(
             shape = RoundedCornerShape(GsMotion.radiusChip),
             color = Aeruo.RaisedDark,
-            modifier = Modifier.kineticPress()
+            modifier = Modifier.kineticPress(modelPillInteraction)
         ) {
             Row(
-                modifier = Modifier.clickable { onNavigate(GsRoutes.MODELS) }.padding(
-                    horizontal = GsMotion.spaceM,
-                    vertical = 10.dp
-                ),
+                modifier = Modifier
+                    .clickable(
+                        interactionSource = modelPillInteraction,
+                        indication = LocalIndication.current
+                    ) { onNavigate(GsRoutes.MODELS) }
+                    .padding(
+                        horizontal = GsMotion.spaceM,
+                        vertical = 10.dp
+                    ),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
@@ -217,15 +226,20 @@ private fun CircleButton(
     contentDescription: String,
     onClick: () -> Unit
 ) {
+    val interaction = remember { MutableInteractionSource() }
     Surface(
         shape = CircleShape,
         color = Aeruo.RaisedDark,
         modifier = Modifier
             .size(44.dp)
-            .kineticPress()
+            .kineticPress(interaction)
     ) {
         Box(
-            modifier = Modifier.clickable(onClick = onClick),
+            modifier = Modifier.clickable(
+                interactionSource = interaction,
+                indication = LocalIndication.current,
+                onClick = onClick
+            ),
             contentAlignment = Alignment.Center
         ) {
             Icon(
@@ -294,16 +308,22 @@ private fun HeroBlock(onNavigate: (String) -> Unit) {
         Spacer(Modifier.height(GsMotion.spaceM))
 
         // Upgrade pill — subtle, under the greeting (Kimi pattern)
+        val upgradeInteraction = remember { MutableInteractionSource() }
         Surface(
             shape = RoundedCornerShape(GsMotion.radiusChip),
             color = Aeruo.RaisedDark,
-            modifier = Modifier.kineticPress()
+            modifier = Modifier.kineticPress(upgradeInteraction)
         ) {
             Row(
-                modifier = Modifier.clickable { onNavigate(GsRoutes.BILLING) }.padding(
-                    horizontal = GsMotion.spaceM,
-                    vertical = 10.dp
-                ),
+                modifier = Modifier
+                    .clickable(
+                        interactionSource = upgradeInteraction,
+                        indication = LocalIndication.current
+                    ) { onNavigate(GsRoutes.BILLING) }
+                    .padding(
+                        horizontal = GsMotion.spaceM,
+                        vertical = 10.dp
+                    ),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
@@ -407,14 +427,19 @@ private fun LiveUpdatePill() {
 
 @Composable
 private fun UpdatePill(text: String, onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
     Surface(
         shape = RoundedCornerShape(GsMotion.radiusChip),
         color = Aeruo.RaisedDark,
-        modifier = Modifier.kineticPress()
+        modifier = Modifier.kineticPress(interaction)
     ) {
         Row(
             modifier = Modifier
-                .clickable(onClick = onClick)
+                .clickable(
+                    interactionSource = interaction,
+                    indication = LocalIndication.current,
+                    onClick = onClick
+                )
                 .padding(horizontal = GsMotion.spaceM, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -460,16 +485,20 @@ private fun TrendingRow(onNavigate: (String) -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
     ) {
         cards.forEach { card ->
+            val cardInteraction = remember { MutableInteractionSource() }
             Surface(
                 shape = RoundedCornerShape(16.dp),
                 color = Aeruo.RaisedDark,
                 modifier = Modifier
                     .width(176.dp)
-                    .kineticPress()
+                    .kineticPress(cardInteraction)
             ) {
                 Column(
                     modifier = Modifier
-                        .clickable { onNavigate(card.route) }
+                        .clickable(
+                            interactionSource = cardInteraction,
+                            indication = LocalIndication.current
+                        ) { onNavigate(card.route) }
                         .padding(horizontal = 14.dp, vertical = 12.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -521,12 +550,17 @@ private fun SuggestionRow(
     label: String,
     onClick: () -> Unit
 ) {
+    val rowInteraction = remember { MutableInteractionSource() }
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .kineticPress()
-            .clickable(onClick = onClick)
+            .kineticPress(rowInteraction)
+            .clickable(
+                interactionSource = rowInteraction,
+                indication = LocalIndication.current,
+                onClick = onClick
+            )
             .padding(horizontal = 6.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceM)
@@ -578,14 +612,18 @@ private fun QuickChips(onNavigate: (String) -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
     ) {
         chips.forEach { chip ->
+            val chipInteraction = remember { MutableInteractionSource() }
             Surface(
                 shape = RoundedCornerShape(GsMotion.radiusChip),
                 color = Aeruo.RaisedDark,
-                modifier = Modifier.kineticPress()
+                modifier = Modifier.kineticPress(chipInteraction)
             ) {
                 Row(
                     modifier = Modifier
-                        .clickable { onNavigate(chip.route) }
+                        .clickable(
+                            interactionSource = chipInteraction,
+                            indication = LocalIndication.current
+                        ) { onNavigate(chip.route) }
                         .padding(horizontal = GsMotion.spaceM, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -738,15 +776,19 @@ private fun HeroInput(onNavigate: (String) -> Unit) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Attach — opens a new chat with the attach sheet
+            val attachInteraction = remember { MutableInteractionSource() }
             Surface(
                 shape = CircleShape,
                 color = Aeruo.AccentSoftDark,
                 modifier = Modifier
                     .size(42.dp)
-                    .kineticPress()
+                    .kineticPress(attachInteraction)
             ) {
                 Box(
-                    modifier = Modifier.clickable { onNavigate(GsRoutes.chat(null)) },
+                    modifier = Modifier.clickable(
+                        interactionSource = attachInteraction,
+                        indication = LocalIndication.current
+                    ) { onNavigate(GsRoutes.chat(null)) },
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -778,15 +820,19 @@ private fun HeroInput(onNavigate: (String) -> Unit) {
             )
 
             // Mic — full voice mode
+            val micInteraction = remember { MutableInteractionSource() }
             Surface(
                 shape = CircleShape,
                 color = androidx.compose.ui.graphics.Color.Transparent,
                 modifier = Modifier
                     .size(42.dp)
-                    .kineticPress()
+                    .kineticPress(micInteraction)
             ) {
                 Box(
-                    modifier = Modifier.clickable { onNavigate(GsRoutes.VOICE) },
+                    modifier = Modifier.clickable(
+                        interactionSource = micInteraction,
+                        indication = LocalIndication.current
+                    ) { onNavigate(GsRoutes.VOICE) },
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -799,12 +845,20 @@ private fun HeroInput(onNavigate: (String) -> Unit) {
             }
 
             // Aurora orb — press-and-hold to dictate (the hero affordance)
+            var orbHeld by remember { mutableStateOf(false) }
+            val orbScale by androidx.compose.animation.core.animateFloatAsState(
+                targetValue = if (orbHeld) 0.93f else 1f,
+                animationSpec = com.grapsee.gsai.ui.theme.GsMotion.standard(),
+                label = "orbHold"
+            )
             Box(
                 modifier = Modifier
                     .size(62.dp)
+                    .scale(orbScale)
                     .pointerInput(Unit) {
                         detectTapGestures(
                             onPress = {
+                                orbHeld = true
                                 var isHold = false
                                 val timer = holdScope.launch {
                                     delay(VOICE_HOLD_TRIGGER_MS)
@@ -812,6 +866,7 @@ private fun HeroInput(onNavigate: (String) -> Unit) {
                                     beginVoiceHold()
                                 }
                                 val released = tryAwaitRelease()
+                                orbHeld = false
                                 timer.cancel()
                                 when {
                                     isHold -> recognizerRef.value?.stopListening()
@@ -827,9 +882,7 @@ private fun HeroInput(onNavigate: (String) -> Unit) {
                 Surface(
                     shape = CircleShape,
                     color = Aeruo.AccentSoftDark,
-                    modifier = Modifier
-                        .size(44.dp)
-                        .kineticPress()
+                    modifier = Modifier.size(44.dp)
                 ) {
                     Box(
                         modifier = Modifier

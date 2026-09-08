@@ -165,7 +165,7 @@ struct SearchView: View {
         // JSON decodes of the library).
         let hits = matches
         return ScrollView {
-            VStack(alignment: .leading, spacing: Aero.Spacing.l) {
+            LazyVStack(alignment: .leading, spacing: Aero.Spacing.l) {
                 StaggerIn(index: 0) { inputBar }
                 if term.isEmpty {
                     StaggerIn(index: 1) { recentSection }

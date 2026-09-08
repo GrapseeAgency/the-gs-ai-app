@@ -41,7 +41,7 @@ struct ChatsListView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: Aero.Spacing.l) {
+            LazyVStack(alignment: .leading, spacing: Aero.Spacing.l) {
                 header
                 OfflineBanner(isVisible: isOffline)
                 quickAccess

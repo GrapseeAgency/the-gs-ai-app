@@ -2,6 +2,7 @@ package com.grapsee.gsai.ui.components
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -83,16 +84,20 @@ fun GsCard(
     onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    // One interaction source shared by the click and the press-scale —
+    // touching the card visibly responds (the platform touch-feedback contract).
+    val interaction = remember { MutableInteractionSource() }
     val base = modifier
         .fillMaxWidth()
-        .let { if (onClick != null) it.kineticPress() else it }
+        .let { if (onClick != null) it.kineticPress(interaction) else it }
     Surface(
         modifier = base,
         shape = RoundedCornerShape(GsMotion.radiusCard),
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
         onClick = onClick ?: {},
-        enabled = onClick != null
+        enabled = onClick != null,
+        interactionSource = interaction
     ) {
         Column(modifier = Modifier.padding(GsMotion.spaceM), content = content)
     }
@@ -105,12 +110,14 @@ fun GsChip(
     modifier: Modifier = Modifier,
     onClick: () -> Unit = {}
 ) {
+    val interaction = remember { MutableInteractionSource() }
     Surface(
-        modifier = modifier.kineticPress(),
+        modifier = modifier.kineticPress(interaction),
         shape = RoundedCornerShape(GsMotion.radiusChip),
         color = if (selected) MaterialTheme.colorScheme.primary
         else MaterialTheme.colorScheme.surfaceContainer,
-        onClick = onClick
+        onClick = onClick,
+        interactionSource = interaction
     ) {
         Text(
             text = text,
@@ -131,14 +138,16 @@ fun GsListItem(
     trailing: (@Composable RowScope.() -> Unit)? = null,
     onClick: (() -> Unit)? = null
 ) {
+    val interaction = remember { MutableInteractionSource() }
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .let { if (onClick != null) it.kineticPress() else it },
+            .let { if (onClick != null) it.kineticPress(interaction) else it },
         shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         onClick = onClick ?: {},
-        enabled = onClick != null
+        enabled = onClick != null,
+        interactionSource = interaction
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
@@ -310,16 +319,18 @@ fun GsQuickActionTile(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val interaction = remember { MutableInteractionSource() }
     Column(
-        modifier = modifier.kineticPress(),
+        modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
     ) {
         Surface(
             shape = RoundedCornerShape(18.dp),
             color = MaterialTheme.colorScheme.surfaceContainer,
-            modifier = Modifier.size(56.dp),
-            onClick = onClick
+            modifier = Modifier.size(56.dp).kineticPress(interaction),
+            onClick = onClick,
+            interactionSource = interaction
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(icon, contentDescription = label,

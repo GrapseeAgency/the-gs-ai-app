@@ -56,11 +56,33 @@ object GsMotion {
     val spaceXL = 32.dp
 }
 
-/** Kinetic press: spring scale-down on press. Use on every tappable surface. */
+/**
+ * Kinetic press: spring scale-down on press. Use on every tappable surface
+ * whose click handler lives elsewhere.
+ */
 fun Modifier.kineticPress(
     pressedScale: Float = GsMotion.PRESS_SCALE
 ): Modifier = composed {
     val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) pressedScale else 1f,
+        animationSpec = GsMotion.standard(),
+        label = "kineticPress"
+    )
+    this.scale(scale)
+}
+
+/**
+ * Kinetic press driven by the component's OWN interaction source. Pass the
+ * same [interaction] into the clickable Surface/onClick — the press scale then
+ * tracks real touches instead of listening to a source no one emits to.
+ * Without this wiring the animation never fires and taps feel dead.
+ */
+fun Modifier.kineticPress(
+    interaction: MutableInteractionSource,
+    pressedScale: Float = GsMotion.PRESS_SCALE
+): Modifier = composed {
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(
         targetValue = if (pressed) pressedScale else 1f,

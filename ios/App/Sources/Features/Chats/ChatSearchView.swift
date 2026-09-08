@@ -100,7 +100,7 @@ struct ChatSearchView: View {
                     )
                     .padding(.top, Aero.Spacing.xl)
                 } else {
-                    VStack(spacing: Aero.Spacing.s) {
+                    LazyVStack(spacing: Aero.Spacing.s) {
                         ForEach(hits) { hit in
                             NavigationLink(value: AeroRoute.chat(hit.routeID)) {
                                 AeroListRow(

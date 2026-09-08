@@ -744,12 +744,17 @@ fun ChatScreen(
                             // the right slot when items scroll through the viewport.
                             contentType = { _, message -> message.role }
                         ) { index, message ->
-                            val stamp = dayLabel(message.createdAt)
-                            if (stamp != null &&
-                                (index == 0 || dayKey(messages[index - 1].createdAt) != dayKey(message.createdAt))
-                            ) {
-                                DaySeparator(stamp)
+                            // ISO stamps parse once per message and stay cached —
+                            // row recompositions (search highlights, edit states,
+                            // pagination prepends) never re-parse dates.
+                            val prevCreatedAt = if (index > 0) messages[index - 1].createdAt else ""
+                            val dayHeader = remember(message.createdAt, prevCreatedAt, index) {
+                                val stamp = dayLabel(message.createdAt)
+                                if (stamp != null &&
+                                    (index == 0 || dayKey(prevCreatedAt) != dayKey(message.createdAt))
+                                ) stamp else null
                             }
+                            if (dayHeader != null) DaySeparator(dayHeader!!)
                             if (message.role == "user") {
                                 UserMessage(
                                     message = message,
@@ -931,7 +936,7 @@ private fun UserMessage(
                     )
                 }
             }
-            val stamp = timeLabel(message.createdAt)
+            val stamp = remember(message.createdAt) { timeLabel(message.createdAt) }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
@@ -1055,7 +1060,7 @@ private fun AssistantMessage(
                             horizontalArrangement = Arrangement.spacedBy(2.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            val stamp = timeLabel(message.createdAt)
+                            val stamp = remember(message.createdAt) { timeLabel(message.createdAt) }
                             if (stamp.isNotEmpty()) {
                                 Text(
                                     text = stamp,
@@ -1181,8 +1186,17 @@ private fun StreamingCaret() {
 
 // --- reply content segmentation (text + fenced code blocks) --------------------
 
-/** One renderable chunk of an assistant reply: plain text or a fenced code block. */
-private data class ContentSegment(val text: String, val isCode: Boolean = false, val language: String? = null)
+/**
+ * One renderable chunk of an assistant reply: plain text or a fenced code block.
+ * [sourceEnd] marks where this segment's source region ends, so a growing stream
+ * can keep every frozen segment instance and re-parse only the live tail.
+ */
+private data class ContentSegment(
+    val text: String,
+    val isCode: Boolean = false,
+    val language: String? = null,
+    val sourceEnd: Int = 0
+)
 
 private val fenceRegex = Regex("```(\\w*)\\n?([\\s\\S]*?)```")
 
@@ -1193,12 +1207,13 @@ private fun parseContentSegments(content: String): List<ContentSegment> {
     var last = 0
     for (match in fenceRegex.findAll(content)) {
         if (match.range.first > last) {
-            segments += ContentSegment(content.substring(last, match.range.first))
+            segments += ContentSegment(content.substring(last, match.range.first), sourceEnd = match.range.first)
         }
         segments += ContentSegment(
             text = match.groupValues[2].trimEnd('\n'),
             isCode = true,
-            language = match.groupValues[1].takeIf { it.isNotBlank() }
+            language = match.groupValues[1].takeIf { it.isNotBlank() },
+            sourceEnd = match.range.last + 1
         )
         last = match.range.last + 1
     }
@@ -1207,23 +1222,78 @@ private fun parseContentSegments(content: String): List<ContentSegment> {
         val open = tail.indexOf("```")
         if (open >= 0) {
             // Streaming hasn't closed this fence yet — render what we have as code.
-            if (open > 0) segments += ContentSegment(tail.substring(0, open))
+            if (open > 0) segments += ContentSegment(tail.substring(0, open), sourceEnd = last + open)
             val rest = tail.substring(open + 3)
             val newline = rest.indexOf('\n')
             val language = if (newline >= 0) rest.substring(0, newline).trim().takeIf { it.isNotEmpty() } else null
             val body = if (newline >= 0) rest.substring(newline + 1).trimEnd('\n') else ""
-            segments += ContentSegment(body, true, language)
+            segments += ContentSegment(body, true, language, sourceEnd = content.length)
         } else {
-            segments += ContentSegment(tail)
+            segments += ContentSegment(tail, sourceEnd = content.length)
         }
     }
     return segments
 }
 
-/** Assistant reply body: markdown-lite prose + code blocks styled like the benchmark apps. */
+/**
+ * Incremental stream parse. Appending a delta can only extend or open the LAST
+ * segment — every earlier segment is frozen forever. Reusing the frozen
+ * instances (identity-stable data classes) lets Compose skip every completed
+ * block on each ~30 Hz flush, so a long mixed answer costs O(live tail) per
+ * paint instead of re-parsing and re-laying-out the whole transcript per delta
+ * — the platform contract for streamed AI text.
+ */
+private fun parseStreamingSegments(
+    previous: String,
+    previousSegments: List<ContentSegment>,
+    content: String
+): List<ContentSegment> {
+    if (previousSegments.isEmpty() || !content.startsWith(previous)) {
+        return parseContentSegments(content)
+    }
+    val frozenEnd = if (previousSegments.size == 1) 0
+    else previousSegments[previousSegments.size - 2].sourceEnd
+    if (frozenEnd >= content.length) return previousSegments
+    val tail = content.substring(frozenEnd)
+    val tailParsed = parseContentSegments(tail)
+    // The boundary artifact — an empty leading text chunk — is dropped so the
+    // frozen list and the tail join seamlessly.
+    val trimmedTail = if (
+        tailParsed.size > 1 && !tailParsed.first().isCode && tailParsed.first().text.isEmpty()
+    ) tailParsed.drop(1) else tailParsed
+    return previousSegments.dropLast(1) + trimmedTail
+}
+
+/**
+ * Per-bubble parse cache: remembers (content → segments) across flushes so
+ * consecutive stream paints extend the previous parse instead of restarting it.
+ */
+private class StreamParseCache {
+    var content: String = ""
+    var segments: List<ContentSegment> = emptyList()
+
+    fun update(newContent: String, streaming: Boolean): List<ContentSegment> {
+        val next = if (streaming) {
+            parseStreamingSegments(content, segments, newContent)
+        } else {
+            parseContentSegments(newContent)
+        }
+        content = newContent
+        segments = next
+        return next
+    }
+}
+
+/**
+ * Assistant reply body: markdown-lite prose + code blocks styled like the
+ * benchmark apps. Mid-stream the segment list comes from [StreamParseCache] —
+ * frozen blocks keep their instances across flushes, so their composables skip
+ * recomposition entirely and only the live tail repaints.
+ */
 @Composable
 private fun SegmentedContent(content: String, isStreaming: Boolean, onCopyCode: (String) -> Unit) {
-    val segments = remember(content) { parseContentSegments(content) }
+    val cache = remember { StreamParseCache() }
+    val segments = remember(content, isStreaming) { cache.update(content, isStreaming) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         segments.forEachIndexed { index, segment ->
             if (segment.isCode) {
@@ -1288,6 +1358,37 @@ private fun renderInline(text: String, codeBackground: androidx.compose.ui.graph
     }
 }
 
+/**
+ * One rendered prose line. The inline markdown → span pass is remembered per
+ * line text, so on each stream flush only the genuinely-new line pays the
+ * regex cost — completed lines render from cache, exactly like the platform
+ * text engines memoize styled paragraphs.
+ */
+@Composable
+private fun MarkdownLine(line: ProseLine, codeBg: androidx.compose.ui.graphics.Color) {
+    val styled = remember(line.text, codeBg) { renderInline(line.text, codeBg) }
+    Row(verticalAlignment = Alignment.Bottom) {
+        if (line.marker.isNotEmpty()) {
+            Text(
+                text = line.marker,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(Modifier.width(6.dp))
+        }
+        Text(
+            text = styled,
+            style = when (line.kind) {
+                ProseKind.H1 -> MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                ProseKind.H2 -> MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
+                ProseKind.H3 -> MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold)
+                else -> MaterialTheme.typography.bodyMedium
+            },
+            color = MaterialTheme.colorScheme.onSurface
+        )
+    }
+}
+
 /** One prose segment: headings, bullets, numbered lists, inline styling — caret rides the last line. */
 @Composable
 private fun ProseBlock(segment: ContentSegment, showCaret: Boolean) {
@@ -1300,24 +1401,7 @@ private fun ProseBlock(segment: ContentSegment, showCaret: Boolean) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         lines.forEachIndexed { li, line ->
             Row(verticalAlignment = Alignment.Bottom) {
-                if (line.marker.isNotEmpty()) {
-                    Text(
-                        text = line.marker,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(Modifier.width(6.dp))
-                }
-                Text(
-                    text = renderInline(line.text, codeBg),
-                    style = when (line.kind) {
-                        ProseKind.H1 -> MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                        ProseKind.H2 -> MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
-                        ProseKind.H3 -> MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold)
-                        else -> MaterialTheme.typography.bodyMedium
-                    },
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+                MarkdownLine(line = line, codeBg = codeBg)
                 if (showCaret && li == lines.lastIndex) StreamingCaret()
             }
         }

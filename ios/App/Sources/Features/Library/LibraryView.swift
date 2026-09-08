@@ -113,7 +113,7 @@ struct LibraryView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: Aero.Spacing.l) {
+            LazyVStack(alignment: .leading, spacing: Aero.Spacing.l) {
                 StaggerIn(index: 0) { header }
                 StaggerIn(index: 1) { searchRow }
                 StaggerIn(index: 2) { filterChips }

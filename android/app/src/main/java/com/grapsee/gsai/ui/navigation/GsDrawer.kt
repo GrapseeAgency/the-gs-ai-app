@@ -4,6 +4,8 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -147,13 +149,17 @@ fun GsDrawerContent(
         Spacer(Modifier.height(GsMotion.spaceL))
 
         // New chat — the one loud action
+        val newChatInteraction = remember { MutableInteractionSource() }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(GsMotion.radiusCard))
                 .background(Aeruo.RaisedDark)
-                .kineticPress()
-                .clickable {
+                .kineticPress(newChatInteraction)
+                .clickable(
+                    interactionSource = newChatInteraction,
+                    indication = LocalIndication.current
+                ) {
                     onClose()
                     onNavigate(GsRoutes.chat(null))
                 }
@@ -291,12 +297,18 @@ private fun RecentRow(
     onOpen: () -> Unit,
     onActions: () -> Unit
 ) {
+    val folderInteraction = remember { MutableInteractionSource() }
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .kineticPress()
-            .combinedClickable(onClick = onOpen, onLongClick = onActions)
+            .kineticPress(folderInteraction)
+            .combinedClickable(
+                interactionSource = folderInteraction,
+                indication = LocalIndication.current,
+                onClick = onOpen,
+                onLongClick = onActions
+            )
             .padding(horizontal = GsMotion.spaceM, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
@@ -338,12 +350,17 @@ private fun DrawerRow(
     icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
     onClick: () -> Unit
 ) {
+    val navRowInteraction = remember { MutableInteractionSource() }
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .kineticPress()
-            .clickable(onClick = onClick)
+            .kineticPress(navRowInteraction)
+            .clickable(
+                interactionSource = navRowInteraction,
+                indication = LocalIndication.current,
+                onClick = onClick
+            )
             .padding(horizontal = GsMotion.spaceM, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)

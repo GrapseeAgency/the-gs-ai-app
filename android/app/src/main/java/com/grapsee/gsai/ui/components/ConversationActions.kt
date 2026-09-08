@@ -1,7 +1,9 @@
 package com.grapsee.gsai.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -127,13 +129,18 @@ fun SheetAction(
     tone: Color = MaterialTheme.colorScheme.onSurface,
     onClick: () -> Unit
 ) {
+    val actionInteraction = remember { MutableInteractionSource() }
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .background(androidx.compose.ui.graphics.Color.Transparent)
-            .kineticPress()
-            .clickable(onClick = onClick)
+            .kineticPress(actionInteraction)
+            .clickable(
+                interactionSource = actionInteraction,
+                indication = LocalIndication.current,
+                onClick = onClick
+            )
             .padding(horizontal = GsMotion.spaceM, vertical = 13.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceM)
