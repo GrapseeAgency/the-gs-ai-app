@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import android.view.HapticFeedbackConstants
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.Delete
@@ -37,6 +39,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.ui.theme.GsMotion
+import com.grapsee.gsai.ui.theme.gsHaptic
 import com.grapsee.gsai.ui.theme.kineticPress
 
 /**
@@ -85,11 +88,17 @@ fun ConversationActionsSheet(
                 onClick = { renameDraft = title; renameOpen = true }
             )
             SheetAction(icon = Icons.Outlined.Archive, label = archiveLabel, onClick = onArchive)
+            // The delete moment gets the heavy long-press haptic the system
+            // lists play on destructive rows — gated by the Haptics setting.
+            val view = LocalView.current
             SheetAction(
                 icon = Icons.Outlined.Delete,
                 label = "Delete",
                 tone = MaterialTheme.colorScheme.error,
-                onClick = onDelete
+                onClick = {
+                    view.gsHaptic(HapticFeedbackConstants.LONG_PRESS)
+                    onDelete()
+                }
             )
         }
     }

@@ -17,6 +17,9 @@ struct ChatSearchView: View {
     @ObservedObject private var store = ConversationStore.shared
     @State private var query = ""
     @State private var activeFilters: Set<String> = []
+    // Debounced, off-main results (Task 85-e I15) — the FTS/LIKE pair no
+    // longer runs synchronously in the body on every keystroke.
+    @State private var results: [SearchHit] = []
 
     private static let filterChips = ["This week", "Has files", "Model: GS Balanced"]
 
@@ -24,13 +27,18 @@ struct ChatSearchView: View {
         query.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private var results: [SearchHit] {
-        guard term.count >= 2 else { return [] }
+    /// Same content, ordering and caps as the old synchronous pass — the
+    /// SQLite reads just moved off the main actor
+    /// (ConversationStore.searchAsync). @MainActor so the observed store is
+    /// only ever touched from the main actor.
+    @MainActor
+    private func computeResults(_ term: String) async -> [SearchHit] {
         let withinWeek = activeFilters.contains("This week")
 
         var hits: [SearchHit] = []
         var seen = Set<String>()
-        for convo in store.searchTitles(term) where !convo.archived {
+        let page = await store.searchAsync(term)
+        for convo in page.titles where !convo.archived {
             seen.insert(convo.id)
             hits.append(SearchHit(
                 id: convo.id,
@@ -39,7 +47,7 @@ struct ChatSearchView: View {
                 snippet: "Chat title match",
                 when: Self.relative(convo.updatedAt)))
         }
-        for messageHit in store.searchMessages(term) {
+        for messageHit in page.messages {
             let convo = messageHit.conversation
             guard !convo.archived, !seen.contains(convo.id) else { continue }
             seen.insert(convo.id)
@@ -60,10 +68,10 @@ struct ChatSearchView: View {
     }
 
     var body: some View {
-        // Deep-perf pass 80-b: ONE results evaluation per body pass — the
-        // empty-gate and the ForEach each re-ran the FTS/LIKE pair before.
-        let hits = results
-        return VStack(alignment: .leading, spacing: Aero.Spacing.l) {
+        // Deep-perf pass 80-b: ONE results evaluation per body pass. Task 85-e
+        // I15: the evaluation is now debounced + off-main via .task(id:) —
+        // the body only renders the last landed page.
+        VStack(alignment: .leading, spacing: Aero.Spacing.l) {
             Text("Search chats")
                 .font(Aero.displayTitle())
                 .foregroundStyle(Aero.text)
@@ -92,7 +100,7 @@ struct ChatSearchView: View {
                         message: "Start typing to find any conversation or message on this device."
                     )
                     .padding(.top, Aero.Spacing.xl)
-                } else if hits.isEmpty {
+                } else if results.isEmpty {
                     EmptyStateView(
                         icon: "magnifyingglass",
                         title: "No results",
@@ -101,7 +109,7 @@ struct ChatSearchView: View {
                     .padding(.top, Aero.Spacing.xl)
                 } else {
                     LazyVStack(spacing: Aero.Spacing.s) {
-                        ForEach(hits) { hit in
+                        ForEach(results) { hit in
                             NavigationLink(value: AeroRoute.chat(hit.routeID)) {
                                 AeroListRow(
                                     title: gsConversationTitle(hit.title),
@@ -133,6 +141,22 @@ struct ChatSearchView: View {
         .padding(.top, Aero.Spacing.s)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Aero.background.ignoresSafeArea())
+        .task(id: "\(term)|\(activeFilters.sorted().joined(separator: ","))") {
+            // Empty/short queries clear immediately; real ones settle for
+            // 250 ms, then read off-main. The id also folds the active
+            // filters in, so a chip flip re-runs the same debounced read.
+            guard term.count >= 2 else {
+                results = []
+                return
+            }
+            do {
+                try await Task.sleep(nanoseconds: 250_000_000)
+            } catch { return }
+            guard !Task.isCancelled else { return }
+            let computed = await computeResults(term)
+            guard !Task.isCancelled else { return }
+            results = computed
+        }
     }
 
     // MARK: Helpers

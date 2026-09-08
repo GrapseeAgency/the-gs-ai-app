@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /**
  * AERUO KINETIC — single source of design truth for iOS.
@@ -57,6 +58,23 @@ enum Aero {
     static func body() -> Font { .system(size: 15, weight: .regular, design: .default, relativeTo: .body) }
     static func caption() -> Font { .system(size: 13, weight: .regular, design: .default, relativeTo: .caption) }
     static func label() -> Font { .system(size: 12, weight: .medium, design: .default, relativeTo: .caption2) }
+
+    /// Dynamic-Type-responsive system font at a custom point size — identical
+    /// appearance at the default type category, scaling with the reader's
+    /// Dynamic Type setting (and the Settings font-scale override) exactly
+    /// like the seven token fonts above. The audit's ~60 raw `.system(size:)`
+    /// TEXT runs convert to this; icon-sized runs stay deliberately fixed.
+    /// Map the point size to the closest semantic style (11→.caption2,
+    /// 12→.caption, 13→.footnote, 14/15→.subheadline, 16→.callout,
+    /// 17→.body, 22→.title2) so scaling behaviour matches the role.
+    static func responsive(
+        _ size: CGFloat,
+        _ weight: Font.Weight = .regular,
+        relativeTo style: Font.TextStyle = .body,
+        design: Font.Design = .default
+    ) -> Font {
+        .system(size: size, weight: weight, design: design, relativeTo: style)
+    }
 
     // MARK: Motion — springs over eases, stagger entrances, press scales
     static let spring = Animation.spring(response: 0.35, dampingFraction: 0.8)
@@ -139,9 +157,32 @@ enum GSFormatters {
 
 struct KineticPressStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? Aero.pressScale : 1)
-            .animation(Aero.spring, value: configuration.isPressed)
+        let reduced = SettingsStore.shared.animationReduced
+        let pressedScale: CGFloat = reduced ? 1.0 : Aero.pressScale
+        return configuration.label
+            .scaleEffect(configuration.isPressed ? pressedScale : 1)
+            .animation(reduced ? nil : Aero.spring, value: configuration.isPressed)
+    }
+}
+
+// MARK: - Keyboard dismiss bar (keyboard toolbar with Done)
+
+extension View {
+    /// Keyboard accessory: a trailing Done button that resigns the first
+    /// responder. Attached to the text surfaces that hold the keyboard with
+    /// no other way to put it away (fixed-height TextEditors, find-in-chat,
+    /// the invisible auth code field) — shared so every site stays identical.
+    func gsKeyboardDoneBar() -> some View {
+        toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") {
+                    UIApplication.shared.sendAction(
+                        #selector(UIResponder.resignFirstResponder),
+                        to: nil, from: nil, for: nil)
+                }
+            }
+        }
     }
 }
 

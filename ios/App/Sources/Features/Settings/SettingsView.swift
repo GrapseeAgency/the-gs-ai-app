@@ -378,6 +378,8 @@ struct SettingsView: View {
             .font(Aero.body())
             .foregroundStyle(Aero.text)
             .tint(Aero.accent)
+            // Inline state flip — the selection tick (Task 85-e I10).
+            .onChange(of: isOn.wrappedValue) { _ in GSHaptics.select() }
     }
 
     private func leadingIcon(_ name: String) -> some View {

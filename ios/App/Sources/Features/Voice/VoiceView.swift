@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Full-screen voice session — kinetic aurora waveform, live transcript,
 /// call controls. Now real: the on-device SpeechRecognizer (via VoiceDictation)
@@ -109,6 +110,24 @@ struct VoiceView: View {
                 .font(Aero.display())
                 .foregroundStyle(statusIsTrouble ? Aero.textMuted : Aero.text)
                 .multilineTextAlignment(.center)
+            if dictation.sessionState == .denied {
+                // Permission recovery: a labelled button that actually opens
+                // the app's Settings page (Task 85-e I12).
+                Button {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                } label: {
+                    Text("Open Settings")
+                        .font(Aero.label())
+                        .foregroundStyle(Aero.text)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(Capsule().fill(Aero.container))
+                        .overlay(Capsule().stroke(Aero.outline, lineWidth: 1))
+                }
+                .buttonStyle(KineticPressStyle())
+            }
         }
     }
 
@@ -121,14 +140,17 @@ struct VoiceView: View {
                     .fill(LinearGradient(colors: Aero.aurora, startPoint: .top, endPoint: .bottom))
                     .frame(width: 4, height: dictation.isListening ? heights[index] : 8)
                     .animation(
-                        .easeInOut(duration: 0.5)
-                            .repeatForever(autoreverses: true)
-                            .delay(Double(index) * 0.04),
+                        SettingsStore.shared.animationReduced
+                            ? nil
+                            : .easeInOut(duration: 0.5)
+                                .repeatForever(autoreverses: true)
+                                .delay(Double(index) * 0.04),
                         value: dictation.isListening
                     )
             }
         }
         .frame(height: 56)
+        .accessibilityHidden(true)
     }
 
     // MARK: Transcript
@@ -176,7 +198,8 @@ struct VoiceView: View {
         HStack(spacing: 24) {
             controlButton(
                 dictation.isListening ? "mic" : "mic.slash",
-                dimmed: !dictation.isListening
+                dimmed: !dictation.isListening,
+                accessibilityLabel: dictation.isListening ? "Stop listening" : "Start listening"
             ) {
                 if dictation.isListening {
                     dictation.stopSession()
@@ -187,13 +210,15 @@ struct VoiceView: View {
             controlButton(
                 "phone.down.fill",
                 tint: Color.white,
-                background: Self.endCallRed
+                background: Self.endCallRed,
+                accessibilityLabel: "Close voice mode"
             ) {
                 dismiss()
             }
             controlButton(
                 "speaker.wave.2.fill",
-                dimmed: speech.speakingMessageID != "voice-result"
+                dimmed: speech.speakingMessageID != "voice-result",
+                accessibilityLabel: speech.speakingMessageID == "voice-result" ? "Stop reading aloud" : "Read result aloud"
             ) {
                 guard dictation.sessionState == .result, !dictation.lastResult.isEmpty else { return }
                 speech.toggle(messageID: "voice-result", text: dictation.lastResult)
@@ -206,6 +231,7 @@ struct VoiceView: View {
         tint: Color = Aero.text,
         background: Color = Aero.raised,
         dimmed: Bool = false,
+        accessibilityLabel: String,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
@@ -218,6 +244,7 @@ struct VoiceView: View {
                 .overlay(Circle().stroke(Aero.outline, lineWidth: 1))
         }
         .buttonStyle(KineticPressStyle())
+        .accessibilityLabel(accessibilityLabel)
     }
 
     // MARK: Engine caption (the honest replacement for the fake voice picker)

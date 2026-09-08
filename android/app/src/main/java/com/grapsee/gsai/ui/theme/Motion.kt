@@ -42,6 +42,17 @@ object GsMotion {
     const val PRESS_SCALE = 0.97f
     const val CARET_PULSE_MS = 800
 
+    /** Reduce-motion / reduce-animations gate — synced from the Settings store at
+     *  the theme root (TheGsAiTheme). When true: kineticPress holds the resting
+     *  scale (no press deformation) and GsMotion-driven navigation tweens run at
+     *  [REDUCED_TWEEN_MS] instead of their design duration. Decorative aurora
+     *  loops are AI-active life-signs and are deliberately NOT gated. */
+    @Volatile
+    var reduced: Boolean = false
+
+    const val NAV_TWEEN_MS = 320
+    const val REDUCED_TWEEN_MS = 150
+
     // Radii
     val radiusCard = 16.dp
     val radiusChip = 999.dp
@@ -58,15 +69,16 @@ object GsMotion {
 
 /**
  * Kinetic press: spring scale-down on press. Use on every tappable surface
- * whose click handler lives elsewhere.
+ * whose click handler lives elsewhere. Honors [GsMotion.reduced].
  */
 fun Modifier.kineticPress(
     pressedScale: Float = GsMotion.PRESS_SCALE
 ): Modifier = composed {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
+    val target = if (GsMotion.reduced) 1f else if (pressed) pressedScale else 1f
     val scale by animateFloatAsState(
-        targetValue = if (pressed) pressedScale else 1f,
+        targetValue = target,
         animationSpec = GsMotion.standard(),
         label = "kineticPress"
     )
@@ -84,8 +96,9 @@ fun Modifier.kineticPress(
     pressedScale: Float = GsMotion.PRESS_SCALE
 ): Modifier = composed {
     val pressed by interaction.collectIsPressedAsState()
+    val target = if (GsMotion.reduced) 1f else if (pressed) pressedScale else 1f
     val scale by animateFloatAsState(
-        targetValue = if (pressed) pressedScale else 1f,
+        targetValue = target,
         animationSpec = GsMotion.standard(),
         label = "kineticPress"
     )

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -55,7 +56,10 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.rememberCoroutineScope
 import android.content.Intent
+import android.view.HapticFeedbackConstants
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.Role
 import com.grapsee.gsai.ui.components.GsCard
 import com.grapsee.gsai.ui.components.GsChip
 import com.grapsee.gsai.BuildConfig
@@ -64,9 +68,12 @@ import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.di.ServiceLocator
 import com.grapsee.gsai.ui.components.GsScreenScaffold
 import com.grapsee.gsai.ui.theme.GsMotion
+import com.grapsee.gsai.ui.theme.gsHaptic
 import java.time.OffsetDateTime
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -394,6 +401,7 @@ fun SettingsScreen(onBack: () -> Unit) {
     }
 
     if (showClearData) {
+        val view = LocalView.current
         AlertDialog(
             onDismissRequest = { showClearData = false },
             title = { Text("Clear local data?") },
@@ -403,6 +411,9 @@ fun SettingsScreen(onBack: () -> Unit) {
             confirmButton = {
                 TextButton(
                     onClick = {
+                        // Destructive confirmations get the heavy long-press
+                        // haptic the system uses for delete moments.
+                        view.gsHaptic(HapticFeedbackConstants.LONG_PRESS)
                         showClearData = false
                         scope.launch {
                             runCatching {
@@ -425,6 +436,7 @@ fun SettingsScreen(onBack: () -> Unit) {
     }
 
     if (showDeleteAccount) {
+        val view = LocalView.current
         AlertDialog(
             onDismissRequest = { showDeleteAccount = false },
             title = { Text("Delete account?") },
@@ -433,7 +445,10 @@ fun SettingsScreen(onBack: () -> Unit) {
             },
             confirmButton = {
                 TextButton(
-                    onClick = { showDeleteAccount = false },
+                    onClick = {
+                        view.gsHaptic(HapticFeedbackConstants.LONG_PRESS)
+                        showDeleteAccount = false
+                    },
                     colors = ButtonDefaults.textButtonColors(
                         contentColor = MaterialTheme.colorScheme.error
                     )
@@ -512,8 +527,21 @@ private fun SwitchRow(
     onCheckedChange: (Boolean) -> Unit,
     subtitle: String? = null
 ) {
+    val view = LocalView.current
+    // The WHOLE row is the switch (toggleable role exposes the state to
+    // TalkBack and gives the row the system switch touch treatment); the inner
+    // Switch is passive — pure visual. Toggling gets the light virtual-key tick.
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .toggleable(
+                value = checked,
+                role = Role.Switch,
+                onValueChange = {
+                    view.gsHaptic(HapticFeedbackConstants.VIRTUAL_KEY)
+                    onCheckedChange(it)
+                }
+            ),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
@@ -531,7 +559,7 @@ private fun SwitchRow(
             }
         }
         Spacer(modifier = Modifier.width(GsMotion.spaceM))
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        Switch(checked = checked, onCheckedChange = null)
     }
 }
 
@@ -618,11 +646,14 @@ private fun ChipRow(
 
 /** Privacy pass: the whole on-device corpus — conversations, messages, library
  *  saves — as one JSON document the user names and places via the system
- *  picker. Store hiccups leave the destination file unwritten, never partial. */
+ *  picker. Store hiccups leave the destination file unwritten, never partial.
+ *  The build + write runs on Dispatchers.IO — the corpus-sized JSON assembly
+ *  and the stream write never block the main thread. */
 private suspend fun exportAllData(context: android.content.Context, uri: android.net.Uri) {
-    runCatching {
-        val db = ServiceLocator.db
-        val payload = JSONObject().apply {
+    withContext(Dispatchers.IO) {
+        runCatching {
+            val db = ServiceLocator.db
+            val payload = JSONObject().apply {
             put("exportedAt", OffsetDateTime.now().toString())
             put("appVersion", BuildConfig.VERSION_NAME)
             put("conversations", JSONArray().apply {
@@ -663,6 +694,7 @@ private suspend fun exportAllData(context: android.content.Context, uri: android
         }
         context.contentResolver.openOutputStream(uri)?.use { out ->
             out.write(payload.toString(2).toByteArray(Charsets.UTF_8))
+        }
         }
     }
 }

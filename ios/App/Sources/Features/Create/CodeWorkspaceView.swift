@@ -252,11 +252,11 @@ struct CodeWorkspaceView: View {
                 ForEach(Array(currentFile.lines.enumerated()), id: \.offset) { index, line in
                     HStack(alignment: .firstTextBaseline, spacing: 12) {
                         Text("\(index + 1)")
-                            .font(.system(size: 12, design: .monospaced))
+                            .font(Aero.responsive(12, relativeTo: .caption, design: .monospaced))
                             .foregroundStyle(inkMuted)
                             .frame(width: 22, alignment: .trailing)
                         coloredLine(line)
-                            .font(.system(size: 13, design: .monospaced))
+                            .font(Aero.responsive(13, relativeTo: .footnote, design: .monospaced))
                     }
                 }
             }
@@ -332,22 +332,22 @@ struct CodeWorkspaceView: View {
                 HStack(spacing: Aero.Spacing.s) {
                     AuroraIndicator()
                     Text("Building Main.kt…")
-                        .font(.system(size: 13, design: .monospaced))
+                        .font(Aero.responsive(13, relativeTo: .footnote, design: .monospaced))
                         .foregroundColor(inkMuted)
                 }
             } else if buildDone {
                 Text("> Compiling Main.kt")
-                    .font(.system(size: 13, design: .monospaced))
+                    .font(Aero.responsive(13, relativeTo: .footnote, design: .monospaced))
                     .foregroundColor(inkMuted)
                 Text("✓ Build succeeded in 1.2s")
-                    .font(.system(size: 13, design: .monospaced))
+                    .font(Aero.responsive(13, relativeTo: .footnote, design: .monospaced))
                     .foregroundColor(Aero.accent)
                 Text("Hello, Aeruo!")
-                    .font(.system(size: 13, design: .monospaced))
+                    .font(Aero.responsive(13, relativeTo: .footnote, design: .monospaced))
                     .foregroundColor(inkText)
             } else {
                 Text("> Press Run to compile Main.kt")
-                    .font(.system(size: 13, design: .monospaced))
+                    .font(Aero.responsive(13, relativeTo: .footnote, design: .monospaced))
                     .foregroundColor(inkMuted)
             }
         }
@@ -374,7 +374,7 @@ struct CodeWorkspaceView: View {
             VStack(alignment: .leading, spacing: 5) {
                 ForEach(diffLines, id: \.self) { line in
                     Text(line)
-                        .font(.system(size: 13, design: .monospaced))
+                        .font(Aero.responsive(13, relativeTo: .footnote, design: .monospaced))
                         .foregroundColor(diffColor(for: line))
                 }
             }

@@ -56,6 +56,13 @@ enum GSHaptics {
         notifyGenerator.notificationOccurred(.warning)
     }
 
+    /// Error notification — a failed state genuinely surfaced on screen
+    /// (ErrorStateView appearing). Fired once per presentation.
+    static func error() {
+        guard enabled else { return }
+        notifyGenerator.notificationOccurred(.error)
+    }
+
     /// Selection change — inline state flips inside a persistent control set.
     static func select() {
         guard enabled else { return }

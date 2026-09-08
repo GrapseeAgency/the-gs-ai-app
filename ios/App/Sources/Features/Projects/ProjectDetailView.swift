@@ -166,6 +166,7 @@ struct ProjectDetailView: View {
                     text: t.rawValue,
                     selected: tab == t,
                     action: {
+                        GSHaptics.select()
                         withAnimation(Aero.snappy) { tab = t }
                     }
                 )

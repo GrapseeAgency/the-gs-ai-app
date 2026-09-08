@@ -157,6 +157,7 @@ struct LibraryView: View {
             Text("Library")
                 .font(Aero.displayTitle())
                 .foregroundStyle(Aero.text)
+                .accessibilityAddTraits(.isHeader)
             Text("Everything you save — messages, docs, files and prompts.")
                 .font(Aero.caption())
                 .foregroundStyle(Aero.textMuted)
@@ -183,6 +184,7 @@ struct LibraryView: View {
                         .foregroundStyle(Aero.textMuted)
                 }
                 .buttonStyle(KineticPressStyle())
+                .accessibilityLabel("Clear search")
             }
         }
         .padding(.horizontal, Aero.Spacing.m)
@@ -201,6 +203,7 @@ struct LibraryView: View {
                         text: f.rawValue,
                         selected: filter == f,
                         action: {
+                            GSHaptics.select()
                             withAnimation(Aero.gentle) { filter = f }
                         }
                     )
@@ -357,25 +360,26 @@ private struct LibraryItemSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var copied = false
+    @State private var showDeleteConfirm = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top) {
                 Label(item.title, systemImage: "bookmark")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(Aero.responsive(16, .semibold, relativeTo: .callout))
                     .foregroundStyle(Aero.text)
                     .lineLimit(2)
                 Spacer()
                 Button("Close") { dismiss() }
-                    .font(.system(size: 15))
+                    .font(Aero.responsive(15, relativeTo: .subheadline))
                     .foregroundStyle(Aero.textMuted)
             }
             Text("Saved message")
-                .font(.system(size: 12))
+                .font(Aero.responsive(12, relativeTo: .caption))
                 .foregroundStyle(Aero.textMuted)
             ScrollView {
                 Text(item.content)
-                    .font(.system(size: 15))
+                    .font(Aero.responsive(15, relativeTo: .subheadline))
                     .foregroundStyle(Aero.text)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
@@ -389,11 +393,13 @@ private struct LibraryItemSheet: View {
                     }
                 } label: {
                     Label("Continue in chat", systemImage: "plus.bubble")
-                        .font(.system(size: 14))
+                        .font(Aero.responsive(14, relativeTo: .subheadline))
                         .foregroundStyle(Aero.textMuted)
                 }
                 Button {
                     UIPasteboard.general.string = item.content
+                    // Copy completed — the shared success tick (Task 85-e I8).
+                    GSHaptics.success()
                     withAnimation(.easeOut(duration: 0.15)) { copied = true }
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
                         withAnimation(.easeIn(duration: 0.2)) { copied = false }
@@ -403,16 +409,17 @@ private struct LibraryItemSheet: View {
                         copied ? "Copied" : "Copy",
                         systemImage: copied ? "checkmark" : "doc.on.doc"
                     )
-                    .font(.system(size: 14))
+                    .font(Aero.responsive(14, relativeTo: .subheadline))
                     .foregroundStyle(copied ? Aero.accent : Aero.textMuted)
                 }
                 Button {
-                    ConversationStore.shared.deleteLibraryItem(id: item.id)
-                    onDeleted()
-                    dismiss()
+                    // Destructive — confirms through the dialog like the
+                    // Shared-chats revoke (Task 85-e I8); the instant delete
+                    // never asked.
+                    showDeleteConfirm = true
                 } label: {
                     Label("Delete", systemImage: "trash")
-                        .font(.system(size: 14))
+                        .font(Aero.responsive(14, relativeTo: .subheadline))
                         .foregroundStyle(.red)
                 }
             }
@@ -420,5 +427,20 @@ private struct LibraryItemSheet: View {
         }
         .padding(Aero.Spacing.l)
         .presentationDetents([.medium, .large])
+        .confirmationDialog(
+            "Delete this saved item?",
+            isPresented: $showDeleteConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                ConversationStore.shared.deleteLibraryItem(id: item.id)
+                GSHaptics.success()
+                onDeleted()
+                dismiss()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("“\(item.title)” leaves your library for good. Chats are untouched.")
+        }
     }
 }

@@ -25,6 +25,7 @@ struct SharedChatsView: View {
                 Text("Shared")
                     .font(Aero.displayTitle())
                     .foregroundStyle(Aero.text)
+                    .accessibilityAddTraits(.isHeader)
                 Text("Anyone with the link can view these conversations.")
                     .font(Aero.caption())
                     .foregroundStyle(Aero.textMuted)
@@ -95,6 +96,7 @@ struct SharedChatsView: View {
                             .foregroundStyle(copiedID == item.id ? Aero.accent : Aero.textMuted)
                     }
                     .buttonStyle(KineticPressStyle())
+                    .accessibilityLabel(copiedID == item.id ? "Link copied" : "Copy link")
 
                     Button {
                         pendingRevoke = item
@@ -104,6 +106,7 @@ struct SharedChatsView: View {
                             .foregroundStyle(Color(red: 0.9, green: 0.28, blue: 0.28))
                     }
                     .buttonStyle(KineticPressStyle())
+                    .accessibilityLabel("Revoke link")
                 }
             }
         )
@@ -111,6 +114,8 @@ struct SharedChatsView: View {
 
     private func copyLink(for item: SharedItem) {
         UIPasteboard.general.string = "https://gs.ai/s/\(item.id.uuidString.prefix(8).lowercased())"
+        // Copy completed — the success tick matches the chat-surface copy idiom.
+        GSHaptics.success()
         copiedID = item.id
         Task {
             try? await Task.sleep(nanoseconds: 1_200_000_000)

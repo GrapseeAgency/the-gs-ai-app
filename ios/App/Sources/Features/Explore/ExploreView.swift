@@ -155,16 +155,17 @@ struct ExploreView: View {
             .padding(.bottom, Aero.Spacing.xl)
         }
         .background(Aero.background.ignoresSafeArea())
-        .toolbar(.hidden, for: .navigationBar)
+        .navigationTitle("Explore")
+        .navigationBarTitleDisplayMode(.inline)
     }
 
     // MARK: Header
 
     private var header: some View {
         VStack(alignment: .leading, spacing: Aero.Spacing.xs) {
-            Text("Explore")
-                .font(Aero.displayTitle())
-                .foregroundStyle(Aero.text)
+            // The screen title lives in the inline nav bar now (Task 85-e I7)
+            // — the duplicate in-content header text was dropped so the name
+            // doesn't render twice. The tagline stays.
             Text("The AI app store — assistants, prompts and tools.")
                 .font(Aero.caption())
                 .foregroundStyle(Aero.textMuted)

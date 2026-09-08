@@ -32,13 +32,14 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imeNestedScroll
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -99,11 +100,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -112,15 +116,20 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.data.ModelPrefs
@@ -129,10 +138,15 @@ import com.grapsee.gsai.di.ServiceLocator
 import com.grapsee.gsai.ui.components.GsCard
 import com.grapsee.gsai.ui.components.GsChip
 import com.grapsee.gsai.ui.components.GsEmptyState
+import com.grapsee.gsai.ui.components.GsOfflineBanner
 import com.grapsee.gsai.data.SettingsStore
+import com.grapsee.gsai.data.tts.TtsFocus
 import com.grapsee.gsai.ui.components.GsInputBar
 import com.grapsee.gsai.ui.components.GsScreenScaffold
+import com.grapsee.gsai.ui.components.rememberDeviceOffline
 import com.grapsee.gsai.ui.theme.GsMotion
+import com.grapsee.gsai.ui.theme.GsHaptics
+import com.grapsee.gsai.ui.theme.gsHaptic
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 import com.grapsee.gsai.ui.theme.auroraBackground
@@ -258,19 +272,24 @@ fun ChatScreen(
     onNavigateVoice: (() -> Unit)? = null
 ) {
     val scope = rememberCoroutineScope()
-    var activeConversationId by remember { mutableStateOf(conversationId) }
+    // Critical surface state survives rotation/process death (Bundle saveable):
+    // most importantly the ADOPTED conversation id — after a rotation it used to
+    // reset to the nav arg (null for "new"), making the onDispose draft save a
+    // silent no-op and orphaning the thread. rememberSaveable's autosaver handles
+    // nullable String (null is simply not stored and restores the nav arg).
+    var activeConversationId by rememberSaveable { mutableStateOf(conversationId) }
     val messages = remember { mutableStateListOf<ChatUiMessage>() }
     var draft by remember { mutableStateOf("") }
     var streamingJob by remember { mutableStateOf<Job?>(null) }
-    var conversationTitle by remember { mutableStateOf("New chat") }
-    var editingId by remember { mutableStateOf<String?>(null) }
+    var conversationTitle by rememberSaveable { mutableStateOf("New chat") }
+    var editingId by rememberSaveable { mutableStateOf<String?>(null) }
     var editingDraft by remember { mutableStateOf("") }
-    var searchOpen by remember { mutableStateOf(false) }
+    var searchOpen by rememberSaveable { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var searchActiveIndex by remember { mutableStateOf(0) }
     val clipboard = LocalClipboardManager.current
     val snackbarHostState = remember { SnackbarHostState() }
-    var attachSheetOpen by remember { mutableStateOf(false) }
+    var attachSheetOpen by rememberSaveable { mutableStateOf(false) }
     // Translate: the source turn rides in the sheet key; the answer streams in live.
     var translationSource by remember { mutableStateOf<String?>(null) }
     var translationText by remember { mutableStateOf("") }
@@ -294,9 +313,11 @@ fun ChatScreen(
     val showSnack: (String) -> Unit = { message ->
         scope.launch { snackbarHostState.showSnackbar(message) }
     }
-    // Every copy path funnels here so the action always confirms quietly.
+    // Every copy path funnels here so the action always confirms quietly —
+    // with the platform's virtual-key tick, gated by the Haptics setting.
     val copyText: (String) -> Unit = { text ->
         clipboard.setText(AnnotatedString(text))
+        view.gsHaptic(HapticFeedbackConstants.VIRTUAL_KEY)
         showSnack("Copied")
     }
     // The system share sheet — devices without a handler stay silent.
@@ -317,25 +338,40 @@ fun ChatScreen(
             lastVisible >= info.totalItemsCount - 1
         }
     }
+    // The banner tracks the phone's actual connectivity (see GsComponents).
+    val offline by rememberDeviceOffline()
 
-    // Read-aloud: on-device TTS, silent fallback when the device has no engine.
+    // Read-aloud: on-device TTS wrapped in the shared audio-focus discipline —
+    // focus is requested (USAGE_MEDIA + CONTENT_TYPE_SPEECH, AUDIOFOCUS_GAIN)
+    // before every speak, abandoned on stop/shutdown/utterance-done, and any
+    // focus loss (call, navigation prompt, another player) stops playback and
+    // resets the speaking state. Silent fallback when the device has no engine.
+    // speakingMessageId is declared FIRST: the focus-loss callback below
+    // captures it (a lambda cannot reference a local declared later).
+    var speakingMessageId by remember { mutableStateOf<String?>(null) }
     var ttsReady by remember { mutableStateOf(false) }
     val tts = remember {
-        TextToSpeech(context) { status -> ttsReady = status == TextToSpeech.SUCCESS }
+        TtsFocus(
+            context,
+            onReady = { ttsReady = it },
+            onStoppedByFocusLoss = { speakingMessageId = null }
+        )
     }
-    var speakingMessageId by remember { mutableStateOf<String?>(null) }
     DisposableEffect(tts) {
-        tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+        tts.engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(utteranceId: String?) {}
-            override fun onDone(utteranceId: String?) { speakingMessageId = null }
+            override fun onDone(utteranceId: String?) {
+                tts.abandonFocus()
+                speakingMessageId = null
+            }
             @Deprecated("Deprecated in Java")
-            override fun onError(utteranceId: String?) { speakingMessageId = null }
+            override fun onError(utteranceId: String?) {
+                tts.abandonFocus()
+                speakingMessageId = null
+            }
         })
         onDispose {
-            runCatching {
-                tts.stop()
-                tts.shutdown()
-            }
+            tts.shutdown()
         }
     }
 
@@ -365,6 +401,9 @@ fun ChatScreen(
         messages.clear()
         messages.addAll(recent.map { ChatUiMessage(it.id, it.role, it.content, createdAt = it.createdAt) })
         hasOlder = recent.size == HISTORY_PAGE
+        // A restored editingId must match a real turn — a dangling id (turn gone
+        // after a process death) would silently block every Edit affordance.
+        if (editingId != null && messages.none { it.id == editingId }) editingId = null
         val loadedTitle = runCatching { ServiceLocator.db.conversationDao().getById(id) }
             .getOrNull()?.title
         if (!loadedTitle.isNullOrBlank()) conversationTitle = loadedTitle
@@ -424,13 +463,18 @@ fun ChatScreen(
 
     /** Commits the streamed answer into the transcript exactly once. Runs on
      *  the streaming coroutine (success, cancel, failure) so the growing text
-     *  it holds in its local buffer is always the source of truth. */
+     *  it holds in its local buffer is always the source of truth. Fires ONE
+     *  "Reply complete" announcement per stream for TalkBack — deliberately a
+     *  commit-time announcement, never a liveRegion on the 30 Hz updating text. */
     fun finalizeStreamingMessage(assistantId: String, finalText: String) {
         streamText.value = ""
         val index = messages.indexOfFirst { it.id == assistantId }
         if (index >= 0) {
             if (finalText.isBlank()) messages.removeAt(index)
-            else messages[index] = messages[index].copy(content = finalText, isStreaming = false)
+            else {
+                messages[index] = messages[index].copy(content = finalText, isStreaming = false)
+                view.announceForAccessibility("Reply complete")
+            }
         }
     }
 
@@ -453,8 +497,8 @@ fun ChatScreen(
         val prompt = text.trim()
         if (prompt.isEmpty() || streamingJob?.isActive == true) return
         // A committed send gets the platform's virtual-key tick — the touch
-        // confirmation native keyboards and dial pads use.
-        view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+        // confirmation native keyboards and dial pads use, gated by Settings.
+        view.gsHaptic(HapticFeedbackConstants.VIRTUAL_KEY)
         draft = ""
         clearDraft(context, activeConversationId)
         if (echoUser) {
@@ -603,13 +647,13 @@ fun ChatScreen(
     fun readAloud(messageId: String, content: String) {
         // Second tap on the speaking bubble stops playback.
         if (speakingMessageId == messageId) {
-            runCatching { tts.stop() }
+            tts.stop()
             speakingMessageId = null
             return
         }
-        runCatching { tts.stop() }
+        tts.stop()
         val result = if (ttsReady) {
-            tts.speak(content, TextToSpeech.QUEUE_FLUSH, null, messageId)
+            tts.speak(content, messageId)
         } else TextToSpeech.ERROR
         if (result == TextToSpeech.SUCCESS) speakingMessageId = messageId
         else showSnack("Read aloud isn't set up on this device yet")
@@ -670,10 +714,13 @@ fun ChatScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .navigationBarsPadding()
                 .imePadding(),
             verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
         ) {
+            // Honest connectivity in the primary surface — same banner as the
+            // Chats hub (navigation-bar inset now comes from the scaffold).
+            GsOfflineBanner(visible = offline)
+
             AnimatedVisibility(visible = searchOpen, enter = fadeIn(), exit = fadeOut()) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(
@@ -893,11 +940,26 @@ private fun UserMessage(
     val haptics = LocalHapticFeedback.current
     Column(modifier = Modifier.fillMaxWidth()) {
         if (isEditing) {
+            // Tapping Edit must land the reader in the field: the requester
+            // focuses the TextField after composition (which also opens the
+            // keyboard) and the explicit bring-into-view scrolls the edited
+            // row clear of the keyboard inside the transcript LazyColumn.
+            val editFocus = remember { FocusRequester() }
+            val editInView = remember { BringIntoViewRequester() }
+            LaunchedEffect(isEditing) {
+                if (isEditing) {
+                    runCatching { editInView.bringIntoView() }
+                    editFocus.requestFocus()
+                }
+            }
             Column {
                 OutlinedTextField(
                     value = editingDraft(),
                     onValueChange = onEditingDraftChange,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .bringIntoViewRequester(editInView)
+                        .focusRequester(editFocus),
                     minLines = 2,
                     maxLines = 6,
                     label = { Text("Edit message") }
@@ -919,7 +981,7 @@ private fun UserMessage(
                     modifier = Modifier.combinedClickable(
                         onClick = {},
                         onLongClick = {
-                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            if (GsHaptics.enabled()) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                             onCopy(message.content)
                         }
                     ),
@@ -1037,7 +1099,7 @@ private fun AssistantMessage(
                 modifier = Modifier.combinedClickable(
                     onClick = {},
                     onLongClick = {
-                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        if (GsHaptics.enabled()) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                         menuExpanded = true
                     }
                 ),
@@ -1301,7 +1363,11 @@ private fun SegmentedContent(content: String, isStreaming: Boolean, onCopyCode: 
             } else {
                 ProseBlock(
                     segment = segment,
-                    showCaret = isStreaming && index == segments.lastIndex
+                    showCaret = isStreaming && index == segments.lastIndex,
+                    // Finished answers are long-press selectable for partial
+                    // copies; the streaming bubble is NOT (selection would
+                    // fight the context menu and the 30 Hz repaints).
+                    selectable = !isStreaming
                 )
             }
         }
@@ -1334,11 +1400,25 @@ private fun classifyProseLine(raw: String): ProseLine? {
     return ProseLine(ProseKind.PLAIN, "", line)
 }
 
-// Inline pass: `code` | **bold** | *italic* — order matters, unclosed markers stay literal mid-stream.
-private val inlineMdRegex = Regex("`([^`\\n]+)`|\\*\\*([^*\\n]+?)\\*\\*|(?<!\\*)\\*([^*\\n]+?)\\*(?!\\*)")
+// Inline pass: `code` | **bold** | *italic* | bare URL — order matters, unclosed
+// markers stay literal mid-stream. The URL arm requires two+ chars after the
+// scheme and stops before trailing punctuation, so sentences ending in a link
+// don't link the full stop.
+private val inlineMdRegex = Regex(
+    "`([^`\\n]+)`|\\*\\*([^*\\n]+?)\\*\\*|(?<!\\*)\\*([^*\\n]+?)\\*(?!\\*)|(https?://[^\\s<>\\[\\]{}\"']+[^\\s<>\\[\\]{}\"'.,;:!?])"
+)
 
-/** Inline markdown → styled spans; unmatched markers render literally, so streaming never flickers. */
-private fun renderInline(text: String, codeBackground: androidx.compose.ui.graphics.Color): AnnotatedString = buildAnnotatedString {
+/**
+ * Inline markdown → styled spans; unmatched markers render literally, so
+ * streaming never flickers. Bare URLs become real LinkAnnotation.Url spans —
+ * Compose 1.7's native link API: the Text composable resolves the tap through
+ * LocalUriHandler and TalkBack announces them as links.
+ */
+private fun renderInline(
+    text: String,
+    codeBackground: androidx.compose.ui.graphics.Color,
+    linkColor: androidx.compose.ui.graphics.Color
+): AnnotatedString = buildAnnotatedString {
     var i = 0
     while (i < text.length) {
         val m = inlineMdRegex.find(text, startIndex = i)
@@ -1352,7 +1432,13 @@ private fun renderInline(text: String, codeBackground: androidx.compose.ui.graph
                 SpanStyle(fontFamily = FontFamily.Monospace, background = codeBackground)
             ) { append(m.groupValues[1]) }
             m.groupValues[2].isNotEmpty() -> withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(m.groupValues[2]) }
-            else -> withStyle(SpanStyle(fontStyle = FontStyle.Italic)) { append(m.groupValues[3]) }
+            m.groupValues[3].isNotEmpty() -> withStyle(SpanStyle(fontStyle = FontStyle.Italic)) { append(m.groupValues[3]) }
+            else -> {
+                val url = m.groupValues[4]
+                withLink(
+                    LinkAnnotation.Url(url, TextLinkStyles(style = SpanStyle(color = linkColor)))
+                ) { append(url) }
+            }
         }
         i = m.range.last + 1
     }
@@ -1366,7 +1452,8 @@ private fun renderInline(text: String, codeBackground: androidx.compose.ui.graph
  */
 @Composable
 private fun MarkdownLine(line: ProseLine, codeBg: androidx.compose.ui.graphics.Color) {
-    val styled = remember(line.text, codeBg) { renderInline(line.text, codeBg) }
+    val linkColor = MaterialTheme.colorScheme.primary
+    val styled = remember(line.text, codeBg, linkColor) { renderInline(line.text, codeBg, linkColor) }
     Row(verticalAlignment = Alignment.Bottom) {
         if (line.marker.isNotEmpty()) {
             Text(
@@ -1389,23 +1476,28 @@ private fun MarkdownLine(line: ProseLine, codeBg: androidx.compose.ui.graphics.C
     }
 }
 
-/** One prose segment: headings, bullets, numbered lists, inline styling — caret rides the last line. */
+/** One prose segment: headings, bullets, numbered lists, inline styling — caret rides the last line.
+ *  [selectable] wraps the settled text in a SelectionContainer so long-press
+ *  selects streamed prose; while streaming the container is withheld. */
 @Composable
-private fun ProseBlock(segment: ContentSegment, showCaret: Boolean) {
+private fun ProseBlock(segment: ContentSegment, showCaret: Boolean, selectable: Boolean = true) {
     val codeBg = MaterialTheme.colorScheme.surfaceContainerHighest
     val lines = remember(segment.text) { segment.text.split('\n').mapNotNull(::classifyProseLine) }
     if (lines.isEmpty()) {
         if (showCaret) Row(verticalAlignment = Alignment.Bottom) { StreamingCaret() }
         return
     }
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        lines.forEachIndexed { li, line ->
-            Row(verticalAlignment = Alignment.Bottom) {
-                MarkdownLine(line = line, codeBg = codeBg)
-                if (showCaret && li == lines.lastIndex) StreamingCaret()
+    val body: @Composable () -> Unit = {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            lines.forEachIndexed { li, line ->
+                Row(verticalAlignment = Alignment.Bottom) {
+                    MarkdownLine(line = line, codeBg = codeBg)
+                    if (showCaret && li == lines.lastIndex) StreamingCaret()
+                }
             }
         }
     }
+    if (selectable) SelectionContainer { body() } else body()
 }
 
 @Composable
@@ -1697,10 +1789,12 @@ private fun DaySeparator(label: String) {
             label,
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            // TalkBack: day separators navigate as headings, like section titles.
             modifier = Modifier
                 .clip(RoundedCornerShape(50))
                 .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                 .padding(horizontal = 12.dp, vertical = 4.dp)
+                .semantics { heading() }
         )
     }
 }

@@ -348,6 +348,9 @@ struct WritingStudioView: View {
                 .frame(height: height)
                 .scrollContentBackground(.hidden)
                 .background(Color.clear)
+                // Fixed-height editor has no scroll-to-dismiss — the shared
+                // Done bar puts the keyboard away (Task 85-e I6).
+                .gsKeyboardDoneBar()
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 4)

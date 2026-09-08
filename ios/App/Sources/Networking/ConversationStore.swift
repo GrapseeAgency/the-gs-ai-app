@@ -200,6 +200,35 @@ final class ConversationStore: ObservableObject {
         }
     }
 
+    /// Both search reads in one off-main page (Task 85-e I15). The FTS/LIKE
+    /// pair runs on the SQLite serial queue via a detached task — never on the
+    /// main actor — while the id→row join hops back to the main actor where
+    /// `conversations` lives. Content/ordering/caps are exactly the
+    /// synchronous pair's; callers add their own UI caps.
+    struct SearchPage {
+        let titles: [StoredConversation]
+        let messages: [MessageSearchHit]
+    }
+
+    func searchAsync(_ term: String) async -> SearchPage {
+        let sql = self.sql
+        let raw = await Task.detached(priority: .userInitiated) { () -> ([String], [SQLiteChatStore.MessageHit]) in
+            (sql.searchTitleIDs(term), sql.searchMessageHits(term))
+        }.value
+        return SearchPage(
+            titles: raw.0.compactMap { id in
+                conversations.first { $0.id == id }
+            },
+            messages: raw.1.compactMap { hit in
+                guard let conversation = conversations.first(where: { $0.id == hit.conversationID }) else { return nil }
+                return MessageSearchHit(
+                    conversation: conversation,
+                    messageID: hit.messageID,
+                    content: hit.content,
+                    createdAt: hit.createdAt)
+            })
+    }
+
     // MARK: - Mutations (local-first, persisted on every change)
 
     func upsert(_ conversation: StoredConversation) {

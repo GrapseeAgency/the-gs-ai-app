@@ -18,6 +18,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import android.view.HapticFeedbackConstants
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -57,6 +59,8 @@ import com.grapsee.gsai.ui.search.SearchScreen
 import com.grapsee.gsai.ui.vision.VisionScreen
 import com.grapsee.gsai.ui.settings.SettingsScreen
 import com.grapsee.gsai.ui.voice.VoiceScreen
+import com.grapsee.gsai.ui.theme.GsMotion
+import com.grapsee.gsai.ui.theme.gsHaptic
 import kotlinx.coroutines.launch
 
 /**
@@ -70,6 +74,7 @@ fun GsNavHost(modifier: Modifier = Modifier) {
     val open: (String) -> Unit = { route -> navController.navigate(route) }
     val back: () -> Unit = { navController.popBackStack() }
     val context = LocalContext.current
+    val view = LocalView.current
     // Session gate — first launch walks Auth → Onboarding; later launches go straight Home.
     val start = if (SessionStore.isSessionActive(context)) GsRoutes.HOME else GsRoutes.AUTH
 
@@ -87,14 +92,40 @@ fun GsNavHost(modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
     val closeDrawer: () -> Unit = { scope.launch { drawerState.close() } }
 
+    // Drawer rows carry two kinds of routes and each gets the platform-idiomatic
+    // navigation options:
+    //  - SECTION switches (chats/explore/create/library/settings/…) use the
+    //    canonical bottom-nav pattern: launchSingleTop + popUpTo(home) with
+    //    saveState, restoreState — the back stack never accumulates duplicate
+    //    section destinations, and back from a section lands on Home instead of
+    //    unwinding every screen the reader passed through.
+    //  - DETAIL pushes (chat / assistant / project) stay plain navigate so every
+    //    tap opens a fresh instance — crucially "New chat" (chat(null)) must
+    //    create a new conversation each tap, never dedupe onto the current one.
+    val drawerSectionRoutes = setOf(
+        GsRoutes.HOME, GsRoutes.CHATS, GsRoutes.CHAT_ARCHIVE, GsRoutes.EXPLORE,
+        GsRoutes.CREATE, GsRoutes.LIBRARY, GsRoutes.PROJECTS, GsRoutes.ASSISTANTS,
+        GsRoutes.MODELS, GsRoutes.SEARCH, GsRoutes.BILLING, GsRoutes.NOTIFICATIONS,
+        GsRoutes.PROFILE, GsRoutes.SETTINGS
+    )
+    val openFromDrawer: (String) -> Unit = { route ->
+        closeDrawer()
+        if (route in drawerSectionRoutes) {
+            navController.navigate(route) {
+                launchSingleTop = true
+                popUpTo(GsRoutes.HOME) { saveState = true }
+                restoreState = true
+            }
+        } else {
+            navController.navigate(route)
+        }
+    }
+
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
             GsDrawerContent(
-                onNavigate = { route ->
-                    closeDrawer()
-                    open(route)
-                },
+                onNavigate = openFromDrawer,
                 onClose = closeDrawer
             )
         }
@@ -109,26 +140,30 @@ fun GsNavHost(modifier: Modifier = Modifier) {
         // seeks these pop transitions under the Android 14+ predictive-back
         // gesture, so the back swipe scrubs the animation, not skip it.
         enterTransition = {
-            slideInHorizontally(tween(320, easing = FastOutSlowInEasing)) { it } +
+            slideInHorizontally(tween(if (GsMotion.reduced) GsMotion.REDUCED_TWEEN_MS else GsMotion.NAV_TWEEN_MS, easing = FastOutSlowInEasing)) { it } +
                 fadeIn(tween(200, easing = FastOutSlowInEasing))
         },
         exitTransition = {
-            slideOutHorizontally(tween(320, easing = FastOutSlowInEasing)) { -it / 4 } +
+            slideOutHorizontally(tween(if (GsMotion.reduced) GsMotion.REDUCED_TWEEN_MS else GsMotion.NAV_TWEEN_MS, easing = FastOutSlowInEasing)) { -it / 4 } +
                 fadeOut(tween(200, easing = FastOutSlowInEasing))
         },
         popEnterTransition = {
-            slideInHorizontally(tween(320, easing = FastOutSlowInEasing)) { -it / 4 } +
+            slideInHorizontally(tween(if (GsMotion.reduced) GsMotion.REDUCED_TWEEN_MS else GsMotion.NAV_TWEEN_MS, easing = FastOutSlowInEasing)) { -it / 4 } +
                 fadeIn(tween(200, easing = FastOutSlowInEasing))
         },
         popExitTransition = {
-            slideOutHorizontally(tween(320, easing = FastOutSlowInEasing)) { it } +
+            slideOutHorizontally(tween(if (GsMotion.reduced) GsMotion.REDUCED_TWEEN_MS else GsMotion.NAV_TWEEN_MS, easing = FastOutSlowInEasing)) { it } +
                 fadeOut(tween(200, easing = FastOutSlowInEasing))
         }
     ) {
         composable(GsRoutes.HOME) {
             HomeScreen(
                 onNavigate = open,
-                onOpenDrawer = { scope.launch { drawerState.open() } }
+                onOpenDrawer = {
+                    // The menu reveal gets the platform's light list tick.
+                    view.gsHaptic(HapticFeedbackConstants.CLOCK_TICK)
+                    scope.launch { drawerState.open() }
+                }
             )
         }
         composable(GsRoutes.CHATS) { ChatsScreen(onNavigate = open) }

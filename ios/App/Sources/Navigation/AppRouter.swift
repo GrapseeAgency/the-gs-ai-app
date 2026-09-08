@@ -74,11 +74,27 @@ struct RootView: View {
     @ObservedObject private var quickActions = QuickActionBus.shared
     @State private var showDrawer = false
 
+    // Task 85-e I9 — finger-tracked opening. `drawerEntryOffset` is the
+    // panel's live offset while a leading-edge swipe pulls the drawer out
+    // (negative = still mostly off-screen); a plain open resets it to 0 so
+    // the standard .move transition runs. `edgeDragActive` keeps tracking
+    // after the mount flips `showDrawer` true mid-gesture.
+    @State private var drawerEntryOffset: CGFloat = 0
+    @State private var edgeDragActive = false
+
+    /// Finger travel (pt) that maps to a fully revealed drawer; over-pull
+    /// rubber-bands. Same panel width/palette as ever — only the gesture
+    /// machinery is new.
+    private static let revealSpan: CGFloat = 280
+
     var body: some View {
         ZStack {
             NavigationStack(path: $router.path) {
                 HomeView(
-                    onOpenDrawer: { withAnimation(Aero.spring) { showDrawer = true } },
+                    onOpenDrawer: {
+                        drawerEntryOffset = 0
+                        withAnimation(Aero.spring) { showDrawer = true }
+                    },
                     onRoute: { router.path.append($0) }
                 )
                 .aeroDestinations()
@@ -87,6 +103,7 @@ struct RootView: View {
 
             if showDrawer {
                 AeroDrawer(
+                    entryOffset: $drawerEntryOffset,
                     onRoute: { route in
                         withAnimation(Aero.spring) { showDrawer = false }
                         router.path.append(route)
@@ -96,6 +113,7 @@ struct RootView: View {
                 .transition(.opacity)
             }
         }
+        .simultaneousGesture(edgeOpenGesture)
         .onReceive(quickActions.$pendingRoute) { route in
             guard let route else { return }
             quickActions.consume()
@@ -103,6 +121,44 @@ struct RootView: View {
             router.path.append(route)
         }
         .tint(Aero.accent)
+    }
+
+    // MARK: Edge-swipe-to-open (Task 85-e I9)
+
+    /// Panel rides the finger: fully off-screen until the swipe begins,
+    /// at rest after `revealSpan` of travel, rubber-banded past that.
+    private static func revealOffset(for raw: CGFloat) -> CGFloat {
+        let travelled = raw - revealSpan
+        return travelled < 0 ? travelled : travelled * 0.12
+    }
+
+    /// A rightward drag starting in the leading ~24pt strip opens the drawer
+    /// with live tracking; a short or slow release springs it back shut.
+    /// simultaneousGesture keeps the underlying controls fully interactive —
+    /// the start-location gate is what confines it to the edge zone.
+    private var edgeOpenGesture: some Gesture {
+        DragGesture(minimumDistance: 20)
+            .onChanged { value in
+                guard value.startLocation.x < 24, value.translation.width > 0 else { return }
+                if !edgeDragActive {
+                    // A settled open drawer is the close-drag's job — never re-open.
+                    guard !showDrawer else { return }
+                    edgeDragActive = true
+                    showDrawer = true   // mounts un-animated, straight at the finger
+                }
+                drawerEntryOffset = Self.revealOffset(for: value.translation.width)
+            }
+            .onEnded { value in
+                guard edgeDragActive else { return }
+                edgeDragActive = false
+                let raw = value.translation.width
+                let projected = value.predictedEndTranslation.width
+                if raw > Self.revealSpan * 0.5 || projected > Self.revealSpan * 0.9 {
+                    withAnimation(Aero.spring) { drawerEntryOffset = 0 }
+                } else {
+                    withAnimation(Aero.spring) { showDrawer = false }
+                }
+            }
     }
 }
 

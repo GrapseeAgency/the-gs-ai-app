@@ -130,6 +130,7 @@ struct ChatsListView: View {
             Text("Chats")
                 .font(Aero.displayTitle())
                 .foregroundStyle(Aero.text)
+                .accessibilityAddTraits(.isHeader)
             Spacer()
             NavigationLink(value: AeroRoute.chatSearch) {
                 Image(systemName: "magnifyingglass")
@@ -137,6 +138,7 @@ struct ChatsListView: View {
                     .foregroundStyle(Aero.text)
             }
             .buttonStyle(KineticPressStyle())
+            .accessibilityLabel("Search chats")
             .padding(.trailing, 6)
             NavigationLink(value: AeroRoute.chat(nil)) {
                 Image(systemName: "plus.circle.fill")
@@ -144,6 +146,7 @@ struct ChatsListView: View {
                     .foregroundStyle(Aero.accent)
             }
             .buttonStyle(KineticPressStyle())
+            .accessibilityLabel("New chat")
         }
     }
 
@@ -183,6 +186,9 @@ struct ChatsListView: View {
         HStack(spacing: Aero.Spacing.s) {
             ForEach(Filter.allCases) { candidate in
                 AeroChip(text: candidate.rawValue, selected: filter == candidate) {
+                    // Inline state flip inside a persistent chip set — the
+                    // selection tick, not a full impact (Task 85-e I10).
+                    GSHaptics.select()
                     withAnimation(Aero.snappy) { filter = candidate }
                 }
             }

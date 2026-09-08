@@ -16,6 +16,7 @@ struct ArchivedChatsView: View {
                 Text("Archived")
                     .font(Aero.displayTitle())
                     .foregroundStyle(Aero.text)
+                    .accessibilityAddTraits(.isHeader)
                 Text("Archived chats stay searchable but leave your main list.")
                     .font(Aero.caption())
                     .foregroundStyle(Aero.textMuted)
@@ -49,6 +50,7 @@ struct ArchivedChatsView: View {
                                                 .foregroundStyle(Aero.accent)
                                         }
                                         .buttonStyle(KineticPressStyle())
+                                        .accessibilityLabel("Unarchive chat")
                                         Button {
                                             store.delete(id: conversation.id)
                                             syncDelete(conversation.id)
@@ -58,6 +60,7 @@ struct ArchivedChatsView: View {
                                                 .foregroundStyle(Aero.textMuted)
                                         }
                                         .buttonStyle(KineticPressStyle())
+                                        .accessibilityLabel("Delete chat")
                                     }
                                 }
                             )

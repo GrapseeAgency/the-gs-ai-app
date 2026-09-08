@@ -84,19 +84,27 @@ struct SearchView: View {
     @State private var query = ""
     @State private var activeKind: Kind?
     @State private var recents: [String] = RecentSearches.load()
+    // Debounced, off-main results (Task 85-e I15) — the query no longer runs
+    // synchronously in the body on every keystroke.
+    @State private var results: [SearchHit] = []
 
     private var term: String {
         query.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    // MARK: Real search
+    // MARK: Real search (debounced + off-main, Task 85-e I15)
 
-    private var matches: [SearchHit] {
-        guard term.count >= 2 else { return [] }
-
+    /// Same content, ordering and caps as the old synchronous pass — only the
+    /// store's SQLite reads moved off the main actor
+    /// (ConversationStore.searchAsync). Library/assistants/projects are
+    /// in-memory + UserDefaults reads and stay inline. @MainActor so the
+    /// observed stores are only ever touched from the main actor.
+    @MainActor
+    private func computeResults(_ term: String) async -> [SearchHit] {
         var hits: [SearchHit] = []
 
-        for convo in store.searchTitles(term).prefix(10) {
+        let page = await store.searchAsync(term)
+        for convo in page.titles.prefix(10) {
             hits.append(SearchHit(
                 id: "convo-\(convo.id)",
                 kind: .conversations,
@@ -104,7 +112,7 @@ struct SearchView: View {
                 detail: "Chat title match · " + Self.relative(convo.updatedAt),
                 route: .chat(convo.id)))
         }
-        for hit in store.searchMessages(term).prefix(12) {
+        for hit in page.messages.prefix(12) {
             hits.append(SearchHit(
                 id: "msg-\(hit.messageID)",
                 kind: .messages,
@@ -159,12 +167,12 @@ struct SearchView: View {
     // MARK: Body
 
     var body: some View {
-        // Deep-perf pass 80-b: ONE search execution per body pass. resultsSection
-        // re-filtered `matches` per kind (plus the isEmpty gate) — every
-        // keystroke ran the full query 6× (12 SQL round trips + 6 UserDefaults
-        // JSON decodes of the library).
-        let hits = matches
-        return ScrollView {
+        // Deep-perf pass 80-b: ONE search execution per body pass. Task 85-e
+        // I15 goes further: the query no longer runs IN the body at all —
+        // results are @State produced by the debounced off-main .task below,
+        // so every keystroke paints instantly and the SQLite pair never
+        // blocks the main thread.
+        ScrollView {
             LazyVStack(alignment: .leading, spacing: Aero.Spacing.l) {
                 StaggerIn(index: 0) { inputBar }
                 if term.isEmpty {
@@ -185,7 +193,7 @@ struct SearchView: View {
                             message: "At least two characters to search everything on this device."
                         )
                     }
-                } else if hits.isEmpty {
+                } else if results.isEmpty {
                     StaggerIn(index: 1) {
                         EmptyStateView(
                             icon: "tray",
@@ -194,7 +202,7 @@ struct SearchView: View {
                         )
                     }
                 } else {
-                    StaggerIn(index: 1) { resultsSection(hits) }
+                    StaggerIn(index: 1) { resultsSection(results) }
                 }
             }
             .padding(.horizontal, Aero.Spacing.m)
@@ -206,6 +214,22 @@ struct SearchView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
         .onAppear { recents = RecentSearches.load() }
+        .task(id: term) {
+            // Empty/short queries clear immediately; real ones settle for
+            // 250 ms (keystroke batching), then read off-main. .task(id:)
+            // cancels a superseded keystroke's task before it can land.
+            guard term.count >= 2 else {
+                results = []
+                return
+            }
+            do {
+                try await Task.sleep(nanoseconds: 250_000_000)
+            } catch { return }
+            guard !Task.isCancelled else { return }
+            let computed = await computeResults(term)
+            guard !Task.isCancelled else { return }
+            results = computed
+        }
     }
 
     // MARK: Input
@@ -245,9 +269,13 @@ struct SearchView: View {
     private var filterSection: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: Aero.Spacing.s) {
-                AeroChip(text: "All", selected: activeKind == nil) { activeKind = nil }
+                AeroChip(text: "All", selected: activeKind == nil) {
+                    GSHaptics.select()
+                    activeKind = nil
+                }
                 ForEach(Kind.allCases, id: \.self) { kind in
                     AeroChip(text: kind.rawValue, selected: activeKind == kind) {
+                        GSHaptics.select()
                         activeKind = activeKind == kind ? nil : kind
                     }
                 }

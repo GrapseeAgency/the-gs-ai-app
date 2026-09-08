@@ -537,6 +537,9 @@ struct AuthFlowView: View {
             TextField("", text: code)
                 .keyboardType(.numberPad)
                 .focused(focus)
+                // The number pad has no return key — the shared Done bar is
+                // the only way to put the keyboard away (Task 85-e I6).
+                .gsKeyboardDoneBar()
                 .font(.system(size: 1))
                 .opacity(0.02)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -558,7 +561,7 @@ struct AuthFlowView: View {
         let digit = index < chars.count ? String(chars[index]) : ""
         let isActive = index == chars.count && chars.count < codeLength
         return Text(digit)
-            .font(.system(size: 22, weight: .semibold, design: .monospaced))
+            .font(Aero.responsive(22, .semibold, relativeTo: .title2, design: .monospaced))
             .foregroundStyle(Aero.text)
             .frame(width: 44, height: 52)
             .background(RoundedRectangle(cornerRadius: 12).fill(Aero.container))

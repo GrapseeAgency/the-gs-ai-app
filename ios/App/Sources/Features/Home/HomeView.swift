@@ -60,6 +60,9 @@ struct HomeView: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .onAppear {
+            // Reduce animations / Reduce motion: the orb holds its resting
+            // frame — the breathe loop is skipped entirely.
+            guard !SettingsStore.shared.animationReduced else { return }
             withAnimation(.easeInOut(duration: 2.4).repeatForever(autoreverses: true)) {
                 breathe = 1.06
             }
@@ -447,6 +450,21 @@ struct HomeView: View {
         .frame(width: 62, height: 62)
         .contentShape(Circle())
         .gesture(voiceHoldGesture)
+        // VoiceOver parity (Task 85-e I4): the hold gesture is invisible to
+        // assistive tech without an explicit element — one button with a
+        // named action that drives the same dictation state the finger does.
+        .accessibilityElement()
+        .accessibilityLabel("Voice input")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityHint("Activates voice dictation")
+        .accessibilityAction(named: dictation.isListening ? "Stop listening" : "Start listening") {
+            if dictation.isListening {
+                dictation.end()
+            } else {
+                GSHaptics.press()
+                dictation.begin()
+            }
+        }
     }
 
     private var voiceHoldGesture: some Gesture {
@@ -461,8 +479,10 @@ struct HomeView: View {
                         holdTriggered = true
                         // Hold threshold crossed — the mic is genuinely opening.
                         GSHaptics.press()
-                        withAnimation(.easeInOut(duration: 0.85).repeatForever(autoreverses: true)) {
-                            haloPulse = 1.42
+                        if !SettingsStore.shared.animationReduced {
+                            withAnimation(.easeInOut(duration: 0.85).repeatForever(autoreverses: true)) {
+                                haloPulse = 1.42
+                            }
                         }
                         dictation.begin()
                     }

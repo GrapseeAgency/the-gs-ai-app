@@ -49,6 +49,12 @@ struct ChatDetailView: View {
     // Read-aloud — on-device speech, silent when the device has no voice.
     @StateObject private var speech = SpeechPlayer()
 
+    // Task 85-e: platform wiring.
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @FocusState private var composerFocused: Bool
+    @ObservedObject private var conversations = ConversationStore.shared
+
     init(conversationID: String?, prefill: String? = nil) {
         _vm = StateObject(wrappedValue: ChatViewModel(conversationID: conversationID))
         self.prefill = prefill
@@ -77,6 +83,7 @@ struct ChatDetailView: View {
         }
         .background(Aero.background.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
+        .navigationTitle(conversationTitle)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button {
@@ -88,19 +95,26 @@ struct ChatDetailView: View {
                 } label: {
                     Image(systemName: "magnifyingglass")
                 }
+                .accessibilityLabel("Search in chat")
             }
         }
         .onDisappear {
             speech.stop()
-            // Park the unsent draft with the conversation — it comes back
-            // when the thread reopens. Blank text just clears the slot.
-            if let id = vm.conversationID {
-                if vm.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    UserDefaults.standard.removeObject(forKey: "draft_\(id)")
-                } else {
-                    UserDefaults.standard.set(vm.draft, forKey: "draft_\(id)")
-                }
+            persistDraft()
+        }
+        .onChange(of: scenePhase) { phase in
+            // Process death while composing loses the onDisappear save — the
+            // same draft path also flushes when the scene leaves the foreground.
+            if phase == .background {
+                persistDraft()
             }
+        }
+        .onChange(of: vm.isStreaming) { streaming in
+            // Falling edge only — one announcement per stream (Task 85-e).
+            guard !streaming else { return }
+            UIAccessibility.post(
+                notification: .announcement,
+                argument: vm.errorMessage == nil ? "Reply ready" : "Reply failed")
         }
         .onAppear {
             GSHaptics.prepare()
@@ -254,6 +268,7 @@ struct ChatDetailView: View {
                 }
                 .padding(.horizontal, Aero.Spacing.m)
                 .padding(.vertical, Aero.Spacing.m)
+                .frame(maxWidth: columnMaxWidth)
             }
             .simultaneousGesture(
                 DragGesture(minimumDistance: 3).onChanged { _ in
@@ -336,9 +351,10 @@ struct ChatDetailView: View {
         AeroInputBar(text: $vm.draft, action: {
             userIsReading = false
             sendAndClearDraft()
-        })
+        }, focus: $composerFocused)
             .padding(.horizontal, Aero.Spacing.m)
             .padding(.vertical, Aero.Spacing.s)
+            .frame(maxWidth: columnMaxWidth)
             .background(Aero.surface.ignoresSafeArea(edges: .bottom))
     }
 
@@ -357,6 +373,7 @@ struct ChatDetailView: View {
                     .overlay(Circle().stroke(Aero.outline, lineWidth: 1))
             }
             .buttonStyle(KineticPressStyle())
+            .accessibilityLabel("Add attachment")
             if let message = toast {
                 Image(systemName: "checkmark.circle")
                     .font(.system(size: 12))
@@ -370,6 +387,7 @@ struct ChatDetailView: View {
         }
         .padding(.horizontal, Aero.Spacing.m)
         .padding(.top, Aero.Spacing.s)
+        .frame(maxWidth: columnMaxWidth)
     }
 
     private func attachmentMessage(for option: String) -> String {
@@ -392,6 +410,31 @@ struct ChatDetailView: View {
                 toast = nil
             }
         }
+    }
+
+    /// Park the unsent draft with the conversation — it comes back when the
+    /// thread reopens. Blank text just clears the slot. Shared by onDisappear
+    /// and the scenePhase background flush so both write identically.
+    private func persistDraft() {
+        if let id = vm.conversationID {
+            if vm.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                UserDefaults.standard.removeObject(forKey: "draft_\(id)")
+            } else {
+                UserDefaults.standard.set(vm.draft, forKey: "draft_\(id)")
+            }
+        }
+    }
+
+    /// Live nav-bar title — follows the store row as it appears/renames
+    /// (auto-titled threads update while the reply streams).
+    private var conversationTitle: String {
+        gsConversationTitle(vm.conversationID.flatMap { conversations.conversation(withID: $0)?.title })
+    }
+
+    /// iPad / regular width: the transcript column and the composer row cap
+    /// at one readable measure, centred. Compact (iPhone) is untouched.
+    private var columnMaxWidth: CGFloat? {
+        horizontalSizeClass == .regular ? 640 : nil
     }
 
     /// Sends and, when the composer actually empties, drops the parked draft.
@@ -452,6 +495,7 @@ struct ChatDetailView: View {
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
                 .submitLabel(.search)
+                .gsKeyboardDoneBar()
                 .onSubmit { stepSearch(1, proxy: proxy) }
                 .onChange(of: searchQuery) { _ in
                     let matches = searchMatches
@@ -473,6 +517,7 @@ struct ChatDetailView: View {
             }
             .buttonStyle(KineticPressStyle())
             .disabled(searchMatches.isEmpty)
+            .accessibilityLabel("Previous match")
             Button {
                 stepSearch(1, proxy: proxy)
             } label: {
@@ -480,6 +525,7 @@ struct ChatDetailView: View {
             }
             .buttonStyle(KineticPressStyle())
             .disabled(searchMatches.isEmpty)
+            .accessibilityLabel("Next match")
             Button {
                 searchActive = false
                 searchQuery = ""
@@ -488,6 +534,7 @@ struct ChatDetailView: View {
                 Image(systemName: "xmark")
             }
             .buttonStyle(KineticPressStyle())
+            .accessibilityLabel("Close search")
         }
         .padding(.horizontal, Aero.Spacing.m)
         .padding(.vertical, Aero.Spacing.s)
@@ -528,7 +575,7 @@ struct ChatDetailView: View {
                 .disabled(editDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 .foregroundStyle(Aero.accent)
             }
-            .font(.system(size: 14, weight: .medium))
+            .font(Aero.responsive(14, .medium, relativeTo: .subheadline))
             .buttonStyle(KineticPressStyle())
         }
     }
@@ -543,8 +590,10 @@ struct ChatDetailView: View {
             VStack(spacing: Aero.Spacing.s) {
                 ForEach(starters, id: \.self) { starter in
                     AeroChip(text: starter) {
+                        // Seed the composer and raise the keyboard — the reader
+                        // edits, then sends through the gated send path.
                         vm.draft = starter
-                        sendAndClearDraft()
+                        composerFocused = true
                     }
                 }
             }
@@ -687,9 +736,16 @@ private struct ProseLine {
 
 private let numberedLineRegex = try! NSRegularExpression(pattern: "^(\\d{1,2})[.)]\\s+(.+)$")
 
-/// Inline pass: `code` | **bold** | *italic* — unclosed markers stay literal mid-stream.
+/// Inline pass: `code` | **bold** | *italic* | https:// links — unclosed
+/// markers stay literal mid-stream, and plain gaps gain tappable URLs
+/// (AttributedString `.link` is auto-tappable inside SwiftUI Text, iOS 15+).
 private let inlineMdRegex = try! NSRegularExpression(
     pattern: "`([^`\\n]+)`|\\*\\*([^*\\n]+?)\\*\\*|(?<!\\*)\\*([^*\\n]+?)\\*(?!\\*)")
+
+/// Bare http(s) URLs in prose — conservative host/body characters; trailing
+/// sentence punctuation is trimmed by the renderer so links don't 404.
+private let inlineURLRegex = try! NSRegularExpression(
+    pattern: "https?://[^\\s<>()\"']+")
 
 /// Classify one markdown-lite line; blank lines drop (spacing handles rhythm).
 private func classifyProseLine(_ raw: String) -> ProseLine? {
@@ -718,8 +774,9 @@ private func renderInline(_ text: String, monoBackground: Color) -> AttributedSt
     var cursor = 0
     for match in inlineMdRegex.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
         if match.range.location > cursor {
-            result.append(AttributedString(
-                ns.substring(with: NSRange(location: cursor, length: match.range.location - cursor))))
+            appendPlainWithLinks(
+                ns.substring(with: NSRange(location: cursor, length: match.range.location - cursor)),
+                into: &result)
         }
         if match.range(at: 1).length > 0 {
             var run = AttributedString(ns.substring(with: match.range(at: 1)))
@@ -738,17 +795,54 @@ private func renderInline(_ text: String, monoBackground: Color) -> AttributedSt
         cursor = match.range.location + match.range.length
     }
     if cursor < ns.length {
-        result.append(AttributedString(ns.substring(from: cursor)))
+        appendPlainWithLinks(ns.substring(from: cursor), into: &result)
     }
     return result
 }
 
+/// One plain-text gap of the inline pass, with bare URLs turned into tappable
+/// links (accent + underline + `.link` — SwiftUI Text opens them in Safari).
+private func appendPlainWithLinks(_ raw: String, into result: inout AttributedString) {
+    let ns = raw as NSString
+    var cursor = 0
+    for match in inlineURLRegex.matches(in: raw, range: NSRange(location: 0, length: ns.length)) {
+        if match.range.location > cursor {
+            result.append(AttributedString(
+                ns.substring(with: NSRange(location: cursor, length: match.range.location - cursor))))
+        }
+        let token = ns.substring(with: match.range)
+        var urlText = token
+        while let last = urlText.last, ".;:,!?".contains(last) {
+            urlText.removeLast()
+        }
+        if let url = URL(string: urlText) {
+            var run = AttributedString(urlText)
+            run.link = url
+            run.underlineStyle = .single
+            run.foregroundColor = Aero.accentDeep
+            result.append(run)
+            let tail = String(token.dropFirst(urlText.count))
+            if !tail.isEmpty {
+                result.append(AttributedString(tail))
+            }
+        } else {
+            result.append(AttributedString(token))
+        }
+        cursor = match.range.location + match.range.length
+    }
+    if cursor < ns.length {
+        result.append(AttributedString(ns.substring(from: cursor)))
+    }
+}
+
 /// Heading hierarchy inside bubbles; everything else rides the body voice.
+/// Dynamic Type (Task 85-e): headings scale with their semantic role —
+/// h1→.title2, h2→.title3, h3→.headline — at the same point size by default.
 private func proseFont(_ kind: ProseKind) -> Font {
     switch kind {
-    case .h1: return .system(size: 16, weight: .bold)
-    case .h2: return .system(size: 15, weight: .bold)
-    case .h3: return .system(size: 14, weight: .bold)
+    case .h1: return Aero.responsive(16, .bold, relativeTo: .title2)
+    case .h2: return Aero.responsive(15, .bold, relativeTo: .title3)
+    case .h3: return Aero.responsive(14, .bold, relativeTo: .headline)
     case .plain, .bullet, .numbered: return Aero.body()
     }
 }
@@ -777,29 +871,30 @@ private struct TranslationSheet: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
                 Label("Translation", systemImage: "translate")
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(Aero.responsive(17, .semibold, relativeTo: .body))
                     .foregroundStyle(Aero.text)
                 Spacer()
                 Button("Close") { dismiss() }
-                    .font(.system(size: 15))
+                    .font(Aero.responsive(15, relativeTo: .subheadline))
                     .foregroundStyle(Aero.textMuted)
                     .disabled(busy)
             }
             Text(source)
-                .font(.system(size: 13))
+                .font(Aero.responsive(13, relativeTo: .footnote))
                 .foregroundStyle(Aero.textMuted)
                 .lineLimit(4)
             Divider().overlay(Aero.outline)
             if busy && translated.isEmpty {
                 Text("Translating…")
-                    .font(.system(size: 15))
+                    .font(Aero.responsive(15, relativeTo: .subheadline))
                     .foregroundStyle(Aero.textMuted)
             } else {
                 ScrollView {
                     Text(translated)
-                        .font(.system(size: 15))
+                        .font(Aero.responsive(15, relativeTo: .subheadline))
                         .foregroundStyle(Aero.text)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
                 }
                 Button {
                     UIPasteboard.general.string = translated
@@ -813,7 +908,7 @@ private struct TranslationSheet: View {
                         copied ? "Copied" : "Copy translation",
                         systemImage: copied ? "checkmark" : "doc.on.doc"
                     )
-                    .font(.system(size: 14))
+                    .font(Aero.responsive(14, relativeTo: .subheadline))
                     .foregroundStyle(copied ? Aero.accent : Aero.textMuted)
                 }
             }
@@ -886,11 +981,12 @@ private struct MessageBubble: View, Equatable {
                     .padding(.vertical, 12)
                     .background(RoundedRectangle(cornerRadius: 18).fill(Aero.accent.opacity(highlight ? 0.32 : 0.14)))
                     .frame(maxWidth: 280, alignment: .trailing)
+                    .textSelection(.enabled)
             }
             HStack(spacing: 10) {
                 if let stamp = timeLabel(message.createdAt) {
                     Text(stamp)
-                        .font(.system(size: 11))
+                        .font(Aero.responsive(11, relativeTo: .caption2))
                         .foregroundStyle(Aero.textMuted)
                 }
                 Button {
@@ -899,15 +995,30 @@ private struct MessageBubble: View, Equatable {
                     Image(systemName: copied ? "checkmark" : "doc.on.doc")
                         .foregroundStyle(copied ? Aero.accent : Aero.textMuted)
                 }
+                .accessibilityLabel(copied ? "Copied" : "Copy message")
                 if editEnabled {
                     Button(action: onEditStart) {
                         Image(systemName: "pencil")
                     }
+                    .accessibilityLabel("Edit message")
                 }
             }
-            .font(.system(size: 13))
+            .font(Aero.responsive(13, relativeTo: .footnote))
             .foregroundStyle(Aero.textMuted)
             .buttonStyle(KineticPressStyle())
+        }
+        .contextMenu {
+            // Same idiom as the assistant bubble's long-press menu.
+            Button {
+                copyAndConfirm(message.content)
+            } label: {
+                Label("Copy", systemImage: "doc.on.doc")
+            }
+            if editEnabled {
+                Button(action: onEditStart) {
+                    Label("Edit", systemImage: "pencil")
+                }
+            }
         }
     }
 
@@ -920,11 +1031,12 @@ private struct MessageBubble: View, Equatable {
                     // the aurora indicator. Growing text re-renders at the
                     // ~30Hz flush cadence — no fence/markdown/syntax regex
                     // over the whole message per flush. The styled render
-                    // below happens once on finalize.
+                    // below happens once on finalize. Selection/links land
+                    // with it: text selection over a 30 Hz-growing Text
+                    // fights the reader's drag (Task 85-e I5 contract).
                     Text(message.content.isEmpty ? "…" : message.content)
                         .font(Aero.body())
                         .foregroundStyle(Aero.text)
-                        .textSelection(.enabled)
                     AuroraIndicator()
                 } else {
                     ForEach(parsedSegments) { segment in
@@ -1035,11 +1147,13 @@ private struct MessageBubble: View, Equatable {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 12)
                     .padding(.bottom, 10)
+                    .textSelection(.enabled)
             } else {
                 highlightedCode(segment.text, language: segment.language)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 12)
                     .padding(.bottom, 10)
+                    .textSelection(.enabled)
             }
         }
         .background(RoundedRectangle(cornerRadius: 12).fill(Aero.container))
@@ -1050,7 +1164,7 @@ private struct MessageBubble: View, Equatable {
         HStack(spacing: 18) {
             if let stamp = timeLabel(message.createdAt) {
                 Text(stamp)
-                    .font(.system(size: 11))
+                    .font(Aero.responsive(11, relativeTo: .caption2))
                     .foregroundStyle(Aero.textMuted)
             }
             Button {
@@ -1059,24 +1173,30 @@ private struct MessageBubble: View, Equatable {
                 Image(systemName: copied ? "checkmark" : "doc.on.doc")
                     .foregroundStyle(copied ? Aero.accent : Aero.textMuted)
             }
+            .accessibilityLabel(copied ? "Copied" : "Copy reply")
             Button(action: onRegenerate) {
                 Image(systemName: "arrow.clockwise")
             }
+            .accessibilityLabel("Regenerate reply")
             ShareLink(item: message.content) {
                 Image(systemName: "square.and.arrow.up")
             }
+            .accessibilityLabel("Share reply")
             Button(action: onReadAloud) {
                 Image(systemName: isSpeaking ? "stop.fill" : "speaker.wave.2")
                     .foregroundStyle(isSpeaking ? Aero.accent : Aero.textMuted)
             }
+            .accessibilityLabel(isSpeaking ? "Stop reading aloud" : "Read reply aloud")
             Button(action: onTranslate) {
                 Image(systemName: "translate")
             }
+            .accessibilityLabel("Translate reply")
             Button(action: onSave) {
                 Image(systemName: "bookmark")
             }
+            .accessibilityLabel("Save reply")
         }
-        .font(.system(size: 13))
+        .font(Aero.responsive(13, relativeTo: .footnote))
         .foregroundStyle(Aero.textMuted)
         .buttonStyle(KineticPressStyle())
     }
@@ -1119,6 +1239,7 @@ private struct CodeCopyButton: View {
                 .foregroundStyle(copied ? Aero.accent : Aero.textMuted)
         }
         .buttonStyle(KineticPressStyle())
+        .accessibilityLabel(copied ? "Copied" : "Copy code")
     }
 }
 
@@ -1132,6 +1253,7 @@ private struct DaySeparator: View {
         Text(label)
             .font(Aero.label())
             .foregroundStyle(Aero.textMuted)
+            .accessibilityAddTraits(.isHeader)
             .padding(.horizontal, 12)
             .padding(.vertical, 4)
             .background(Capsule().fill(Aero.containerHigh))

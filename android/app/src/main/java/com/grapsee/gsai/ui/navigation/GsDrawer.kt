@@ -67,6 +67,7 @@ import com.grapsee.gsai.ui.components.ConversationActionsSheet
 import com.grapsee.gsai.ui.components.GsChip
 import com.grapsee.gsai.ui.components.gsConversationTitle
 import com.grapsee.gsai.ui.theme.Aeruo
+import com.grapsee.gsai.ui.theme.GsHaptics
 import com.grapsee.gsai.ui.theme.GsMotion
 import com.grapsee.gsai.ui.theme.kineticPress
 import kotlinx.coroutines.flow.Flow
@@ -203,7 +204,7 @@ fun GsDrawerContent(
                     },
                     onActions = {
                         // The reveal haptic the system lists play on long-press.
-                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        if (GsHaptics.enabled()) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                         actionTarget = conversation
                     }
                 )
@@ -379,7 +380,8 @@ private fun DrawerRow(
             title,
             style = MaterialTheme.typography.bodyMedium,
             color = Aeruo.TextDark,
-            maxLines = 1
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }

@@ -102,7 +102,10 @@ struct CreateView: View {
         .onAppear {
             creations = ConversationStore.shared.savedLibraryItems()
         }
-        .toolbar(.hidden, for: .navigationBar)
+        // Nav bar owns the title + back affordance now (Task 85-e I7) —
+        // this pushed screen previously hid it and had no way back.
+        .navigationTitle("Create")
+        .navigationBarTitleDisplayMode(.inline)
         .fullScreenCover(item: $activeTool) { tool in
             switch tool {
             case .image: ImageStudioView()

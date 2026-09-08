@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import Combine
 
 /// The settings contract — every switch, chip and slider on the Settings
@@ -65,6 +66,17 @@ final class SettingsStore: ObservableObject {
         highContrast = defaults.object(forKey: K.highContrast) as? Bool ?? false
         reduceMotion = defaults.object(forKey: K.reduceMotion) as? Bool ?? false
         haptics = defaults.object(forKey: K.haptics) as? Bool ?? true
+    }
+
+    /// Shared motion gate (Task 85-e): the in-app Reduce animations / Reduce
+    /// motion toggles OR the system Reduce Motion accessibility setting.
+    /// KineticPressStyle and the aurora/skeleton loops read this and hold
+    /// still (scale 1.0, no spring, static frames) when any of them is set.
+    /// UIAccessibility.isReduceMotionEnabled is documented safe to read from
+    /// any thread; the store itself is @MainActor and every reader here is
+    /// main-thread UI code.
+    var animationReduced: Bool {
+        reduceAnimations || reduceMotion || UIAccessibility.isReduceMotionEnabled
     }
 
     private enum K {

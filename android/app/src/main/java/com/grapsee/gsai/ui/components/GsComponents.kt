@@ -1,5 +1,9 @@
 package com.grapsee.gsai.ui.components
 
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -12,8 +16,10 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -31,6 +37,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -38,6 +46,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.ui.theme.auroraBackground
@@ -68,7 +82,8 @@ fun GsSectionHeader(
             text = title,
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.weight(1f)
+            // TalkBack: section headers navigate as headings.
+            modifier = Modifier.weight(1f).semantics { heading() }
         )
         if (actionLabel != null && onAction != null) {
             TextButton(onClick = onAction) {
@@ -124,7 +139,14 @@ fun GsChip(
             style = MaterialTheme.typography.labelLarge,
             color = if (selected) MaterialTheme.colorScheme.onPrimary
             else MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+            // Chips are toggles/filters: expose the selected state to TalkBack
+            // (declared here so it merges into the clickable Surface node).
+            modifier = Modifier
+                .padding(horizontal = 14.dp, vertical = 8.dp)
+                .semantics {
+                    this.selected = selected
+                    role = Role.Button
+                }
         )
     }
 }
@@ -355,7 +377,14 @@ fun GsSkeleton(height: Int, modifier: Modifier = Modifier) {
     )
 }
 
-/** Standard screen scaffold: top bar with optional back + actions. */
+/** Standard screen scaffold: top bar with optional back + actions.
+ *
+ * The scaffold owns the system-bar insets: statusBarsPadding keeps the title
+ * clear of the status bar and navigationBarsPadding keeps content clear of the
+ * gesture bar on every screen that composes it (callers must NOT add their
+ * own — the padding would double). IME insets stay a per-screen concern:
+ * screens with text input layer imePadding() on their scroll/content region,
+ * which composes cleanly on top of the consumed navigation-bar inset. */
 @Composable
 fun GsScreenScaffold(
     title: String,
@@ -366,6 +395,8 @@ fun GsScreenScaffold(
     Column(
         Modifier
             .fillMaxWidth()
+            .statusBarsPadding()
+            .navigationBarsPadding()
             .padding(top = GsMotion.spaceM)
     ) {
         Row(
@@ -404,3 +435,41 @@ fun GsScreenScaffold(
  */
 fun gsConversationTitle(raw: String?): String =
     raw?.trim()?.takeIf { it.isNotEmpty() } ?: "Untitled chat"
+
+// --- connectivity --------------------------------------------------------------
+
+/**
+ * The offline banner tracks the PHONE's connectivity only. A quiet backend is
+ * handled invisibly (GS Lite local replies + Room persistence), so an unreachable
+ * server never presents itself as an error state to the user. Shared by the
+ * Chats hub and the chat surface — anywhere a dead connection must be honest.
+ */
+@Composable
+fun rememberDeviceOffline(): State<Boolean> {
+    val context = LocalContext.current
+    val offline = remember { mutableStateOf(false) }
+    DisposableEffect(context) {
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        fun refresh() {
+            val caps = cm.activeNetwork?.let { cm.getNetworkCapabilities(it) }
+            offline.value = caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) != true
+        }
+        refresh()
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                offline.value = false
+            }
+
+            override fun onLost(network: Network) {
+                refresh()
+            }
+
+            override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
+                offline.value = !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            }
+        }
+        runCatching { cm.registerDefaultNetworkCallback(callback) }
+        onDispose { runCatching { cm.unregisterNetworkCallback(callback) } }
+    }
+    return offline
+}

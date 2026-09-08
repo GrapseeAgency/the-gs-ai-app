@@ -30,11 +30,13 @@ struct ProfileView: View {
                         .font(.system(size: 16))
                         .foregroundStyle(Aero.text)
                 }
+                .accessibilityLabel("Settings")
                 NavigationLink(value: AeroRoute.notifications) {
                     Image(systemName: "bell")
                         .font(.system(size: 16))
                         .foregroundStyle(Aero.text)
                 }
+                .accessibilityLabel("Notifications")
             }
         }
     }

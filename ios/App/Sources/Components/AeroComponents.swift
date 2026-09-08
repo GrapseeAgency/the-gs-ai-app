@@ -14,6 +14,7 @@ struct SectionHeader: View {
     var body: some View {
         HStack {
             Text(title).font(Aero.title()).foregroundStyle(Aero.text)
+                .accessibilityAddTraits(.isHeader)
             Spacer()
             if let actionTitle, let action {
                 Button(actionTitle, action: action)
@@ -138,13 +139,37 @@ struct AeroInputBar: View {
     @Binding var text: String
     var placeholder: String = "Ask anything…"
     var action: (() -> Void)? = nil
+    /// Exposed so parents can raise (or drop) the keyboard programmatically —
+    /// ChatDetailView focuses the composer when a starter chip seeds the draft.
+    var focus: FocusState<Bool>.Binding? = nil
+
+    /// Returns are read at submit time: Enter-to-send fires the send closure
+    /// only when the setting is on; when it is off the vertical-axis field's
+    /// default applies — Return inserts a newline and nothing sends.
+    private var enterToSend: Bool { SettingsStore.shared.enterToSend }
+
+    @State private var lastSubmitAt = Date.distantPast
 
     var body: some View {
         HStack(spacing: Aero.Spacing.s) {
             Image(systemName: "sparkles").foregroundStyle(Aero.accent)
-            TextField(placeholder, text: $text)
+            TextField(placeholder, text: $text, axis: .vertical)
                 .font(Aero.body())
                 .foregroundStyle(Aero.text)
+                .lineLimit(1...8)
+                .submitLabel(.send)
+                .onSubmit(submitFromKeyboard)
+                .gsFocus(focus)
+                .onChange(of: text) { newValue in
+                    // Multi-line fields land Return as a trailing newline
+                    // instead of calling onSubmit on some iOS builds — the
+                    // newline is the submit signal when Enter-to-send is on.
+                    // The 150 ms window makes an onSubmit+newline double fire
+                    // (both paths for one keypress) a single send.
+                    guard enterToSend, newValue.hasSuffix("\n") else { return }
+                    text = String(newValue.dropLast())
+                    submitFromKeyboard()
+                }
             if let action {
                 Button(action: action) {
                     Image(systemName: "arrow.up.circle.fill")
@@ -153,12 +178,44 @@ struct AeroInputBar: View {
                 }
                 .buttonStyle(KineticPressStyle())
                 .disabled(text.isEmpty)
+                .accessibilityLabel("Send")
             }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .background(Capsule().fill(Aero.container))
         .overlay(Capsule().stroke(Aero.outline, lineWidth: 1))
+    }
+
+    /// The send gate is the send button's gate, verbatim: non-empty text,
+    /// Enter-to-send on, and one send per keypress (in-flight guarding stays
+    /// with the caller's send closure, exactly as before).
+    private func submitFromKeyboard() {
+        guard enterToSend, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let now = Date()
+        guard now.timeIntervalSince(lastSubmitAt) > 0.15 else { return }
+        lastSubmitAt = now
+        action?()
+    }
+}
+
+/// Optional focus wiring — `.focused(_:)` needs a non-optional binding, so
+/// the nil case (search bars without programmatic focus) passes through.
+private struct GSFocusModifier: ViewModifier {
+    let focus: FocusState<Bool>.Binding?
+
+    func body(content: Content) -> some View {
+        if let focus {
+            content.focused(focus)
+        } else {
+            content
+        }
+    }
+}
+
+private extension View {
+    func gsFocus(_ focus: FocusState<Bool>.Binding?) -> some View {
+        modifier(GSFocusModifier(focus: focus))
     }
 }
 
@@ -201,11 +258,14 @@ struct LoadingView: View {
                 .frame(height: 8)
                 .clipShape(RoundedRectangle(cornerRadius: Aero.Radius.card))
                 .opacity(phase > 0.5 ? 1 : 0.45)
+                .accessibilityHidden(true)
             Text(label).font(Aero.label()).foregroundStyle(Aero.textMuted)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, Aero.Spacing.l)
         .onAppear {
+            // Reduce animations / Reduce motion: the pulse holds a static frame.
+            guard !SettingsStore.shared.animationReduced else { return }
             withAnimation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true)) {
                 phase = 1
             }
@@ -216,6 +276,8 @@ struct LoadingView: View {
 struct ErrorStateView: View {
     let message: String
     var retry: () -> Void = {}
+
+    @State private var announced = false
 
     var body: some View {
         VStack(spacing: Aero.Spacing.s) {
@@ -230,6 +292,13 @@ struct ErrorStateView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, Aero.Spacing.l)
+        .onAppear {
+            // One error tick per presentation — a fresh instance mounts for
+            // every new failure, so retry → fail ticks again.
+            guard !announced else { return }
+            announced = true
+            GSHaptics.error()
+        }
     }
 }
 
@@ -259,7 +328,10 @@ struct SkeletonBlock: View {
         RoundedRectangle(cornerRadius: 12)
             .fill(Aero.container.opacity(on ? 0.9 : 0.45))
             .frame(height: height)
+            .accessibilityHidden(true)
             .onAppear {
+                // Reduce animations / Reduce motion: the shimmer holds a static frame.
+                guard !SettingsStore.shared.animationReduced else { return }
                 withAnimation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true)) {
                     on = true
                 }
@@ -305,13 +377,20 @@ struct AuroraIndicator: View {
                     .frame(width: 8, height: 8)
                     .opacity(shift ? 1 : 0.35)
                     .animation(
-                        .easeInOut(duration: 0.6).repeatForever(autoreverses: true)
-                            .delay(Double(i) * 0.18),
+                        SettingsStore.shared.animationReduced
+                            ? nil
+                            : .easeInOut(duration: 0.6).repeatForever(autoreverses: true)
+                                .delay(Double(i) * 0.18),
                         value: shift
                     )
             }
         }
-        .onAppear { shift = true }
+        .accessibilityHidden(true)
+        .onAppear {
+            // Reduce animations / Reduce motion: the dots hold a static frame.
+            guard !SettingsStore.shared.animationReduced else { return }
+            shift = true
+        }
     }
 }
 

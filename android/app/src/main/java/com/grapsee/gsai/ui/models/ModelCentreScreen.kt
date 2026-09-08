@@ -28,6 +28,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import android.view.HapticFeedbackConstants
 import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.data.ModelPrefs
 import com.grapsee.gsai.data.model.ModelCatalog
@@ -38,6 +40,7 @@ import com.grapsee.gsai.ui.components.GsScreenScaffold
 import com.grapsee.gsai.ui.components.GsSectionHeader
 import com.grapsee.gsai.ui.navigation.GsRoutes
 import com.grapsee.gsai.ui.theme.GsMotion
+import com.grapsee.gsai.ui.theme.gsHaptic
 import com.grapsee.gsai.ui.theme.rememberAuroraBrush
 
 private val reasoningModes = listOf(
@@ -48,6 +51,7 @@ private val reasoningModes = listOf(
 @Composable
 fun ModelCentreScreen(onNavigate: (String) -> Unit) {
     val context = LocalContext.current
+    val view = LocalView.current
     // Preference-backed: the pick survives relaunches and the chat send path
     // reads the same id (ChatRepository gates it against the remote registry).
     var defaultId by remember { mutableStateOf(ModelPrefs.defaultId(context)) }
@@ -111,6 +115,7 @@ fun ModelCentreScreen(onNavigate: (String) -> Unit) {
                             text = mode,
                             selected = mode == selectedMode,
                             onClick = {
+                                view.gsHaptic(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
                                 selectedMode = mode
                                 ModelPrefs.setMode(context, mode)
                             }

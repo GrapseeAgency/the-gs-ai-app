@@ -1,5 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Launch theme only; real theming is done by TheGsAiTheme in Compose. -->
-    <style name="Theme.TheGsAiApp" parent="android:Theme.Material.NoActionBar" />
+    <!-- Launch theme only; real theming is done by TheGsAiTheme in Compose.
+         Day palette: the app's paper launch surface, dark icons on transparent
+         system bars (matches the LightScheme world this build can boot into). -->
+    <style name="Theme.TheGsAiApp" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/gs_launch_background</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
 </resources>

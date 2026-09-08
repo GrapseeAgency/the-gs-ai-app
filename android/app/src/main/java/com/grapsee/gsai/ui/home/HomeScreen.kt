@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
@@ -38,6 +39,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -128,18 +130,26 @@ fun HomeScreen(
                 onNavigate = onNavigate
             )
 
-            Spacer(Modifier.weight(1.1f))
-            HeroBlock(onNavigate = onNavigate)
-            Spacer(Modifier.weight(1f))
+            // Everything between the pinned top bar and the pinned composer
+            // scrolls: at large system font scales the fixed canvas used to
+            // clip the hero/quick-action stack. The composer and disclaimer
+            // stay pinned; the hero scrolls away only when it must.
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(GsMotion.spaceM)
+            ) {
+                Spacer(Modifier.height(GsMotion.spaceL))
+                HeroBlock(onNavigate = onNavigate)
+                SuggestionRows(onNavigate = onNavigate)
+                TrendingRow(onNavigate = onNavigate)
+                QuickChips(onNavigate = onNavigate)
+                // GS LiveUpdate — appears only when a newer build exists on GitHub.
+                LiveUpdatePill()
+            }
 
-            SuggestionRows(onNavigate = onNavigate)
-            Spacer(Modifier.height(GsMotion.spaceM))
-            TrendingRow(onNavigate = onNavigate)
-            Spacer(Modifier.height(GsMotion.spaceM))
-            QuickChips(onNavigate = onNavigate)
-            Spacer(Modifier.height(GsMotion.spaceM))
-            // GS LiveUpdate — appears only when a newer build exists on GitHub.
-            LiveUpdatePill()
             Spacer(Modifier.height(GsMotion.spaceS))
             HeroInput(onNavigate = onNavigate)
             Spacer(Modifier.height(GsMotion.spaceS))
@@ -733,7 +743,19 @@ private fun HeroInput(onNavigate: (String) -> Unit) {
     val micPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted) startRecognizer() else quietReset()
+        if (granted) {
+            startRecognizer()
+        } else {
+            // Denial is spoken, not silent: the platform toast says where the
+            // fix lives (the system can also keep asking — the launcher still
+            // re-fires on the next hold). Then the orb quietly resets.
+            Toast.makeText(
+                context,
+                "Microphone is off — allow it in Settings to talk",
+                Toast.LENGTH_SHORT
+            ).show()
+            quietReset()
+        }
     }
     val holdScope = rememberCoroutineScope()
 

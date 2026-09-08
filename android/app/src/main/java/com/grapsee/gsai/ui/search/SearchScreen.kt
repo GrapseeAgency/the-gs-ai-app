@@ -10,9 +10,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -185,16 +184,17 @@ fun SearchScreen(onNavigate: (String) -> Unit) {
     val allHits = storeHits + libraryHits + assistantHits + projectHits
     val visibleKinds = HitKind.entries.filter { kindFilter == null || it == kindFilter }
 
+    // Insets come from GsScreenScaffold; imePadding keeps the keyboard from
+    // covering the results while typing (same contract as the chat surface).
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .statusBarsPadding()
-            .navigationBarsPadding()
     ) {
         GsScreenScaffold(title = "Search") {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .imePadding()
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(GsMotion.spaceL)
             ) {

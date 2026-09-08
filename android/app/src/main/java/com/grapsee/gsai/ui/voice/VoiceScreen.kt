@@ -3,11 +3,12 @@ package com.grapsee.gsai.ui.voice
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
+import android.provider.Settings
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
-import android.speech.tts.TextToSpeech
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -33,6 +34,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -68,9 +70,13 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.core.app.ActivityCompat
+import com.grapsee.gsai.data.tts.TtsFocus
 import com.grapsee.gsai.ui.components.GsChip
 import com.grapsee.gsai.ui.theme.Aeruo
+import com.grapsee.gsai.ui.theme.GsHaptics
 import com.grapsee.gsai.ui.theme.GsMotion
+import com.grapsee.gsai.ui.theme.gsHaptic
 
 /** Call-end red — the single non-aurora accent allowed in voice mode. */
 private val EndCallRed = Color(0xFFE5484D)
@@ -125,14 +131,20 @@ fun VoiceScreen(
     }
     var sessionTick by remember { mutableStateOf(0) } // restart handle for a fresh listen
 
-    // Read-aloud engine for the speaker toggle — same discipline as chat: silent
-    // when the device has no engine, shut down when the screen leaves.
+    // Read-aloud engine for the speaker toggle — same discipline as chat: the
+    // engine is wrapped in the shared audio-focus helper (focus before speak,
+    // abandon on stop/shutdown, stop on focus loss), silent when the device
+    // has no engine, shut down when the screen leaves.
     var ttsReady by remember { mutableStateOf(false) }
     val tts = remember {
-        TextToSpeech(context) { status -> ttsReady = status == TextToSpeech.SUCCESS }
+        TtsFocus(
+            context,
+            onReady = { ttsReady = it },
+            onStoppedByFocusLoss = { speakerOn = false }
+        )
     }
     DisposableEffect(Unit) {
-        onDispose { runCatching { tts.stop(); tts.shutdown() } }
+        onDispose { tts.shutdown() }
     }
 
     // The recognizer lives exactly as long as the screen does. Recreated on
@@ -179,7 +191,7 @@ fun VoiceScreen(
                     transcript = text
                     phase = VoicePhase.Result
                     if (speakerOn && ttsReady) {
-                        runCatching { tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "voice-result") }
+                        runCatching { tts.speak(text, "voice-result") }
                     }
                 }
             }
@@ -241,9 +253,9 @@ fun VoiceScreen(
     fun toggleSpeaker() {
         speakerOn = !speakerOn
         if (speakerOn && phase == VoicePhase.Result && ttsReady) {
-            runCatching { tts.speak(finalTranscript, TextToSpeech.QUEUE_FLUSH, null, "voice-result") }
+            runCatching { tts.speak(finalTranscript, "voice-result") }
         } else if (!speakerOn) {
-            runCatching { tts.stop() }
+            tts.stop()
         }
     }
 
@@ -263,6 +275,10 @@ fun VoiceScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Aeruo.Obsidian)
+            // Voice mode is a full-bleed custom canvas (no GsScreenScaffold),
+            // so it carries its own system-bar insets: safeDrawing covers the
+            // status bar, gesture bar and display cutout around the 24dp rhythm.
+            .safeDrawingPadding()
     ) {
         Column(
             modifier = Modifier
@@ -291,6 +307,45 @@ fun VoiceScreen(
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth()
             )
+
+            // Permission recovery: after "Don't ask again" the runtime launcher
+            // is a silent no-op forever. When the system can still ask (rationale
+            // available) we re-launch it; once it can't, the honest path is the
+            // app's own Settings page where the toggle actually lives.
+            if (phase == VoicePhase.Denied) {
+                Spacer(modifier = Modifier.height(GsMotion.spaceS))
+                val activity = context as? android.app.Activity
+                val canAskAgain = activity != null && runCatching {
+                    ActivityCompat.shouldShowRequestPermissionRationale(
+                        activity,
+                        Manifest.permission.RECORD_AUDIO
+                    )
+                }.getOrDefault(false)
+                val openAppSettings: () -> Unit = {
+                    runCatching {
+                        context.startActivity(
+                            Intent(
+                                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                Uri.fromParts("package", context.packageName, null)
+                            )
+                        )
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    if (canAskAgain) {
+                        GsChip(
+                            text = "Allow microphone",
+                            selected = false,
+                            onClick = { permissionLauncher.launch(Manifest.permission.RECORD_AUDIO) }
+                        )
+                    } else {
+                        GsChip(text = "Open Settings", selected = false, onClick = openAppSettings)
+                    }
+                }
+            }
 
             Spacer(modifier = Modifier.height(GsMotion.spaceL))
 
@@ -336,7 +391,7 @@ fun VoiceScreen(
                                 onClick = {
                                     // The recognizer is done with the mic before
                                     // the hand-off — close the session cleanly.
-                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    if (GsHaptics.enabled()) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                                     recognizer.value?.runCatching { destroy() }
                                     recognizer.value = null
                                     onSendToChat(finalTranscript)
@@ -347,7 +402,7 @@ fun VoiceScreen(
                                 selected = false,
                                 onClick = {
                                     clipboard.setText(AnnotatedString(finalTranscript))
-                                    view.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
+                                    view.gsHaptic(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
                                     Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
                                 }
                             )
@@ -355,7 +410,7 @@ fun VoiceScreen(
                                 text = "Try again",
                                 selected = false,
                                 onClick = {
-                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    if (GsHaptics.enabled()) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                                     sessionTick++
                                 }
                             )

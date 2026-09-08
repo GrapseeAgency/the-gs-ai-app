@@ -8,6 +8,9 @@ import SwiftUI
  */
 struct AeroDrawer: View {
 
+    /// Opening-drag offset owned by the host (edge-swipe rides the finger);
+    /// the drawer adds its own close-drag tracking on top of it.
+    @Binding var entryOffset: CGFloat
     var onRoute: (AeroRoute) -> Void
     var onClose: () -> Void
 
@@ -15,6 +18,11 @@ struct AeroDrawer: View {
 
     @State private var renameTarget: StoredConversation?
     @State private var renameDraft = ""
+
+    /// Close-drag tracking (Task 85-e I9): while the finger is down the panel
+    /// follows it 1:1 leftward; the state flip only happens on release, and
+    /// only when the drag (or its projected fling) earns the dismissal.
+    @State private var closeOffset: CGFloat = 0
 
     // Forced-obsidian palette (fixed benchmark-dark in both appearances)
     private let panel = Aero.dynamic(
@@ -35,9 +43,6 @@ struct AeroDrawer: View {
             Color.black.opacity(0.5)
                 .ignoresSafeArea()
                 .onTapGesture { onClose() }
-                .gesture(DragGesture(minimumDistance: 25).onEnded { value in
-                    if value.translation.width < -50 { onClose() }
-                })
                 .transition(.opacity)
 
             VStack(alignment: .leading, spacing: 0) {
@@ -87,11 +92,13 @@ struct AeroDrawer: View {
             .padding(.top, Aero.Spacing.xl)
             .frame(maxHeight: .infinity, alignment: .top)
             .background(panel)
-            .gesture(DragGesture(minimumDistance: 25).onEnded { value in
-                // Horizontal left-swipe anywhere on the panel dismisses.
-                if value.translation.width < -60 { onClose() }
-            })
+            .offset(x: entryOffset + closeOffset)
+            .gesture(closeDragGesture)
             .transition(.move(edge: .leading).combined(with: .opacity))
+            .onAppear {
+                // A stale tracked offset must never survive a fresh presentation.
+                closeOffset = 0
+            }
         }
         .alert("Rename chat", isPresented: Binding(
             get: { renameTarget != nil },
@@ -112,6 +119,37 @@ struct AeroDrawer: View {
         }
     }
 
+    // MARK: Finger-tracked dismissal (Task 85-e I9)
+
+    /// Leftward tracking is clamped at one screen; a rightward pull against
+    /// the resting edge rubber-bands (damped to 12%).
+    private static func trackedOffset(_ raw: CGFloat) -> CGFloat {
+        if raw < 0 {
+            return max(raw, -UIScreen.main.bounds.width)
+        }
+        return raw * 0.12
+    }
+
+    /// Drag → panel offset → release decision, like a UIKit drawer:
+    /// committed drags and leftward flings dismiss, everything else springs
+    /// back. `predictedEndTranslation` is SwiftUI's built-in velocity signal
+    /// (DragGesture.Value exposes no raw velocity).
+    private var closeDragGesture: some Gesture {
+        DragGesture(minimumDistance: 20)
+            .onChanged { value in
+                closeOffset = Self.trackedOffset(value.translation.width)
+            }
+            .onEnded { value in
+                let raw = value.translation.width
+                let projected = value.predictedEndTranslation.width
+                if raw < -110 || projected < -240 {
+                    onClose()
+                } else {
+                    withAnimation(Aero.spring) { closeOffset = 0 }
+                }
+            }
+    }
+
     // MARK: Live recents
 
     private var recentRows: [StoredConversation] {
@@ -127,6 +165,7 @@ struct AeroDrawer: View {
             Button {
                 let target = !conversation.pinned
                 store.setPinned(id: conversation.id, target)
+                GSHaptics.success()
                 sync(conversation.id, pinned: target)
             } label: {
                 Label(conversation.pinned ? "Unpin" : "Pin to top", systemImage: "pin")
@@ -139,12 +178,14 @@ struct AeroDrawer: View {
             }
             Button {
                 store.setArchived(id: conversation.id, true)
+                GSHaptics.success()
                 sync(conversation.id, archived: true)
             } label: {
                 Label("Archive", systemImage: "archivebox")
             }
             Button(role: .destructive) {
                 store.delete(id: conversation.id)
+                GSHaptics.warning()
                 syncDelete(conversation.id)
             } label: {
                 Label("Delete", systemImage: "trash")
