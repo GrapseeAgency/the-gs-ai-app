@@ -684,12 +684,13 @@ private let codeKeywords: Set<String> = [
 
 /// Lightweight syntax colouring — comments, strings, numbers, keywords.
 /// Purely cosmetic: an unknown token stays plain, nothing can break the layout.
+/// Tokens are dynamic UIColors (light + dark + high-contrast); they resolve
+/// per trait collection at render, so no manual dark-mode branch is needed.
 private func highlightedCode(_ code: String, language: String?) -> Text {
-    let dark = UITraitCollection.current.userInterfaceStyle == .dark
-    let kw = dark ? UIColor(red: 0.78, green: 0.57, blue: 0.92, alpha: 1) : UIColor(red: 0.42, green: 0.25, blue: 0.88, alpha: 1)
-    let st = dark ? UIColor(red: 0.76, green: 0.91, blue: 0.55, alpha: 1) : UIColor(red: 0.18, green: 0.49, blue: 0.20, alpha: 1)
-    let cm = dark ? UIColor(red: 0.49, green: 0.55, blue: 0.60, alpha: 1) : UIColor(red: 0.42, green: 0.49, blue: 0.55, alpha: 1)
-    let nm = dark ? UIColor(red: 0.97, green: 0.55, blue: 0.42, alpha: 1) : UIColor(red: 0.85, green: 0.26, blue: 0.08, alpha: 1)
+    let kw = UIColor(Aero.codeKeyword)
+    let st = UIColor(Aero.codeString)
+    let cm = UIColor(Aero.codeComment)
+    let nm = UIColor(Aero.codeNumber)
     let hashComments = hashCommentLanguages.contains((language ?? "").lowercased())
 
     let result = NSMutableAttributedString(string: "")

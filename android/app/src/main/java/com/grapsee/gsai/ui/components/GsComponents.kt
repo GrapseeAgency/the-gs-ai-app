@@ -69,6 +69,7 @@ import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.ui.theme.auroraBackground
 import com.grapsee.gsai.ui.theme.Aeruo
 import com.grapsee.gsai.ui.theme.GsMotion
+import com.grapsee.gsai.ui.theme.GsRadius
 import com.grapsee.gsai.ui.theme.LocalHighContrast
 import com.grapsee.gsai.ui.theme.LocalScreenReaderHints
 import com.grapsee.gsai.ui.theme.kineticPress
@@ -291,7 +292,7 @@ fun GsListItem(
         modifier = modifier
             .fillMaxWidth()
             .let { if (onClick != null) it.kineticPress(interaction) else it },
-        shape = RoundedCornerShape(14.dp),
+        shape = GsRadius.mdShape(),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         onClick = onClick ?: {},
         enabled = onClick != null,
@@ -466,7 +467,7 @@ fun GsOfflineBanner(visible: Boolean, modifier: Modifier = Modifier) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            shape = RoundedCornerShape(10.dp)
+            shape = GsRadius.smShape()
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),

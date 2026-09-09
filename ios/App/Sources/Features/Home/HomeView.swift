@@ -2,7 +2,7 @@ import SwiftUI
 
 /**
  * AERUO KINETIC home canvas — benchmark pattern (ChatGPT · Claude · Kimi):
- * obsidian full-bleed, top bar (menu · model pill · new chat), centred brand
+ * full-bleed Aero.background (theme-following), top bar (menu · model pill · new chat), centred brand
  * orb + time-aware serif greeting + upgrade pill, quick chips and one hero
  * input bar pinned to the bottom. Navigation lives in the drawer.
  */
@@ -32,23 +32,9 @@ struct HomeView: View {
     // session instead of leaving a dead capture behind a suspended UI.
     @Environment(\.scenePhase) private var scenePhase
 
-    // Forced-obsidian canvas (fixed benchmark-dark in both appearances)
-    private let canvas = Aero.dynamic(
-        light: UIColor(red: 0.039, green: 0.051, blue: 0.071, alpha: 1),
-        dark: UIColor(red: 0.039, green: 0.051, blue: 0.071, alpha: 1))
-    private let raised = Aero.dynamic(
-        light: UIColor(red: 0.094, green: 0.118, blue: 0.157, alpha: 1),
-        dark: UIColor(red: 0.094, green: 0.118, blue: 0.157, alpha: 1))
-    private let ink = Aero.dynamic(
-        light: UIColor(red: 0.929, green: 0.937, blue: 0.949, alpha: 1),
-        dark: UIColor(red: 0.929, green: 0.937, blue: 0.949, alpha: 1))
-    private let muted = Aero.dynamic(
-        light: UIColor(red: 0.545, green: 0.576, blue: 0.631, alpha: 1),
-        dark: UIColor(red: 0.545, green: 0.576, blue: 0.631, alpha: 1))
-
     var body: some View {
         ZStack {
-            canvas.ignoresSafeArea()
+            Aero.background.ignoresSafeArea()
 
             VStack(spacing: 0) {
                 topBar
@@ -128,11 +114,11 @@ struct HomeView: View {
                         .frame(width: 8, height: 8)
                     Text("GS Balanced · High")
                         .font(Aero.label())
-                        .foregroundColor(ink)
+                        .foregroundColor(Aero.text)
                 }
                 .padding(.horizontal, Aero.Spacing.m)
                 .padding(.vertical, 10)
-                .background(Capsule().fill(raised))
+                .background(Capsule().fill(Aero.raisedSurface))
             }
             .buttonStyle(KineticPressStyle())
 
@@ -149,10 +135,10 @@ struct HomeView: View {
 
     private func circleIcon(_ symbol: String) -> some View {
         ZStack {
-            Circle().fill(raised).frame(width: 44, height: 44)
+            Circle().fill(Aero.raisedSurface).frame(width: 44, height: 44)
             Image(systemName: symbol)
                 .font(.system(size: 16, weight: .medium))
-                .foregroundColor(ink)
+                .foregroundColor(Aero.text)
         }
     }
 
@@ -168,22 +154,22 @@ struct HomeView: View {
                     .frame(width: 84, height: 84)
                     .scaleEffect(breathe)
                 Circle()
-                    .fill(canvas.opacity(0.35))
+                    .fill(Aero.background.opacity(0.35))
                     .frame(width: 66, height: 66)
                 Image(systemName: "sparkles")
                     .font(.system(size: 20))
-                    .foregroundColor(ink)
+                    .foregroundColor(Aero.text)
             }
             .padding(.bottom, Aero.Spacing.m)
 
             Text(greeting)
                 .font(Aero.displayTitle())
-                .foregroundColor(ink)
+                .foregroundColor(Aero.text)
                 .multilineTextAlignment(.center)
 
             Text(taglines[taglineIndex % taglines.count])
                 .font(Aero.body())
-                .foregroundColor(muted)
+                .foregroundColor(Aero.textSecondary)
                 .id(taglineIndex)
                 .transition(.opacity)
                 .padding(.bottom, Aero.Spacing.s)
@@ -195,11 +181,11 @@ struct HomeView: View {
                         .foregroundColor(Aero.accent)
                     Text("Upgrade plan")
                         .font(Aero.label())
-                        .foregroundColor(ink)
+                        .foregroundColor(Aero.text)
                 }
                 .padding(.horizontal, Aero.Spacing.m)
                 .padding(.vertical, 10)
-                .background(Capsule().fill(raised))
+                .background(Capsule().fill(Aero.raisedSurface))
             }
             .buttonStyle(KineticPressStyle())
         }
@@ -240,7 +226,7 @@ struct HomeView: View {
 
             Text("GS can make mistakes — double-check important info.")
                 .font(Aero.caption())
-                .foregroundColor(muted)
+                .foregroundColor(Aero.textSecondary)
                 .frame(maxWidth: .infinity)
                 .padding(.bottom, Aero.Spacing.s)
         }
@@ -250,14 +236,14 @@ struct HomeView: View {
         NavigationLink(value: AeroRoute.chatPrefill(label)) {
             HStack(spacing: Aero.Spacing.m) {
                 ZStack {
-                    Circle().fill(raised).frame(width: 38, height: 38)
+                    Circle().fill(Aero.raisedSurface).frame(width: 38, height: 38)
                     Image(systemName: symbol)
                         .font(.system(size: 14))
-                        .foregroundColor(ink)
+                        .foregroundColor(Aero.text)
                 }
                 Text(label)
                     .font(Aero.body())
-                    .foregroundColor(ink)
+                    .foregroundColor(Aero.text)
                 Spacer()
             }
             .padding(.horizontal, 6)
@@ -310,17 +296,17 @@ struct HomeView: View {
                     .foregroundColor(Aero.accent)
                 Text(category)
                     .font(Aero.caption())
-                    .foregroundColor(muted)
+                    .foregroundColor(Aero.textSecondary)
             }
             Text(title)
                 .font(Aero.body())
-                .foregroundColor(ink)
+                .foregroundColor(Aero.text)
                 .lineLimit(1)
         }
         .frame(width: 176, alignment: .leading)
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
-        .background(RoundedRectangle(cornerRadius: 16).fill(raised))
+        .background(RoundedRectangle(cornerRadius: 16).fill(Aero.raisedSurface))
     }
 
     private var chips: some View {
@@ -368,14 +354,14 @@ struct HomeView: View {
         HStack(spacing: 6) {
             Image(systemName: symbol)
                 .font(.system(size: 11))
-                .foregroundColor(muted)
+                .foregroundColor(Aero.textSecondary)
             Text(label)
                 .font(Aero.label())
-                .foregroundColor(ink)
+                .foregroundColor(Aero.text)
         }
         .padding(.horizontal, Aero.Spacing.m)
         .padding(.vertical, 10)
-        .background(Capsule().fill(raised))
+        .background(Capsule().fill(Aero.raisedSurface))
     }
 
     private var heroInput: some View {
@@ -396,7 +382,7 @@ struct HomeView: View {
                     ? (dictation.transcript.isEmpty ? "Listening…" : dictation.transcript)
                     : "Ask anything")
                     .font(Aero.body())
-                    .foregroundColor(dictation.isListening ? ink : muted)
+                    .foregroundColor(dictation.isListening ? Aero.text : Aero.textSecondary)
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, Aero.Spacing.s)
@@ -408,7 +394,7 @@ struct HomeView: View {
             NavigationLink(value: AeroRoute.voice) {
                 Image(systemName: "mic")
                     .font(.system(size: 16))
-                    .foregroundColor(muted)
+                    .foregroundColor(Aero.textSecondary)
                     .frame(width: 42, height: 42)
                     .contentShape(Rectangle())
             }
@@ -418,7 +404,7 @@ struct HomeView: View {
             voiceHoldOrb
         }
         .padding(Aero.Spacing.s)
-        .background(RoundedRectangle(cornerRadius: 28).fill(raised))
+        .background(RoundedRectangle(cornerRadius: 28).fill(Aero.raisedSurface))
     }
 
     // MARK: Voice press-and-hold — the hero affordance
@@ -445,7 +431,7 @@ struct HomeView: View {
                     .frame(width: 44, height: 44)
                 Image(systemName: "waveform")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(ink)
+                    .foregroundColor(Aero.text)
             }
             .scaleEffect(orbTouched ? 0.94 : 1)
             .animation(Aero.motion(Aero.snappy), value: orbTouched)

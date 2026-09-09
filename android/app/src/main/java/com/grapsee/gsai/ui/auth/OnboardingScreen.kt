@@ -63,8 +63,8 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.ui.components.GsCard
 import com.grapsee.gsai.ui.components.GsChip
-import com.grapsee.gsai.ui.theme.Aeruo
 import com.grapsee.gsai.ui.theme.GsMotion
+import com.grapsee.gsai.ui.theme.GsTheme
 import com.grapsee.gsai.ui.theme.rememberAuroraBrush
 
 /** Six-step onboarding wizard — all selections are screen-local state. */
@@ -75,8 +75,7 @@ private val interestOptions = listOf(
     "Science", "Language", "Productivity", "Entertainment", "Marketing", "Data"
 )
 
-// Accent choices are token colors from Color.kt (Aurora accent family).
-private val accentColors = listOf(Aeruo.Accent, Aeruo.Aurora[1], Aeruo.Aurora[2])
+// Accent choices come from the semantic layer's aurora family (GsTheme.colors.aurora)
 private val accentNames = listOf("Aurora", "Sky", "Violet")
 
 /** Kinetic horizontal slide shared by all step changes. */
@@ -519,6 +518,7 @@ private fun PersonalisationStep(
             )
             Spacer(Modifier.height(GsMotion.spaceS))
             Row(horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceL)) {
+                val accentColors = GsTheme.colors.aurora
                 accentColors.forEachIndexed { index, color ->
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Surface(

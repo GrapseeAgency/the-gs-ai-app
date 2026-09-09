@@ -354,9 +354,9 @@ struct OnboardingView: View {
                     VStack(alignment: .leading, spacing: Aero.Spacing.s + 4) {
                         SectionHeader(title: "Accent")
                         HStack(spacing: Aero.Spacing.m) {
-                            accentCircle(index: 0, color: Aero.accent, checkColor: .white)
+                            accentCircle(index: 0, color: Aero.accent, checkColor: Aero.onAccent)
                             accentCircle(index: 1, color: Aero.text, checkColor: Aero.background)
-                            accentCircle(index: 2, color: Aero.accentDeep, checkColor: .white)
+                            accentCircle(index: 2, color: Aero.accentDeep, checkColor: Aero.onAccent)
                             Spacer()
                         }
                     }
@@ -421,7 +421,7 @@ struct OnboardingView: View {
                         .frame(maxWidth: .infinity)
                         .padding(14)
                         .background(RoundedRectangle(cornerRadius: Aero.Radius.card).fill(Aero.accent))
-                        .foregroundStyle(Color.white)
+                        .foregroundStyle(Aero.onAccent)
                 }
                 .buttonStyle(KineticPressStyle())
             }
@@ -465,7 +465,7 @@ struct OnboardingView: View {
                 .frame(maxWidth: .infinity)
                 .padding(14)
                 .background(RoundedRectangle(cornerRadius: Aero.Radius.card).fill(Aero.accent))
-                .foregroundStyle(Color.white)
+                .foregroundStyle(Aero.onAccent)
         }
         .buttonStyle(KineticPressStyle())
         .disabled(continueDisabled)

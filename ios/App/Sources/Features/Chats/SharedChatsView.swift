@@ -115,7 +115,7 @@ struct SharedChatsView: View {
                     } label: {
                         Image(systemName: "trash")
                             .font(.system(size: 15))
-                            .foregroundStyle(Color(red: 0.9, green: 0.28, blue: 0.28))
+                            .foregroundStyle(Aero.danger)
                     }
                     .buttonStyle(KineticPressStyle())
                     .accessibilityLabel("Revoke link")

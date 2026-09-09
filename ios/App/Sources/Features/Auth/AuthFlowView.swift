@@ -127,7 +127,7 @@ struct AuthFlowView: View {
                             .frame(maxWidth: .infinity)
                             .padding(14)
                             .background(RoundedRectangle(cornerRadius: Aero.Radius.card).fill(Aero.accent))
-                            .foregroundStyle(Color.white)
+                            .foregroundStyle(Aero.onAccent)
                     }
                     .buttonStyle(KineticPressStyle())
 
@@ -217,7 +217,7 @@ struct AuthFlowView: View {
                             .frame(maxWidth: .infinity)
                             .padding(14)
                             .background(RoundedRectangle(cornerRadius: Aero.Radius.card).fill(Aero.accent))
-                            .foregroundStyle(Color.white)
+                            .foregroundStyle(Aero.onAccent)
                     }
                     .buttonStyle(KineticPressStyle())
                     .disabled(email.isEmpty || password.isEmpty)
@@ -290,7 +290,7 @@ struct AuthFlowView: View {
                         .frame(maxWidth: .infinity)
                         .padding(14)
                         .background(RoundedRectangle(cornerRadius: Aero.Radius.card).fill(Aero.accent))
-                        .foregroundStyle(Color.white)
+                        .foregroundStyle(Aero.onAccent)
                 }
                 .buttonStyle(KineticPressStyle())
                 .disabled(!signUpReady)
@@ -432,7 +432,7 @@ struct AuthFlowView: View {
                         .frame(maxWidth: .infinity)
                         .padding(14)
                         .background(RoundedRectangle(cornerRadius: Aero.Radius.card).fill(Aero.accent))
-                        .foregroundStyle(Color.white)
+                        .foregroundStyle(Aero.onAccent)
                 }
                 .buttonStyle(KineticPressStyle())
                 .disabled(resetEmail.isEmpty)
@@ -578,7 +578,7 @@ struct AuthFlowView: View {
                         .frame(maxWidth: .infinity)
                         .padding(14)
                         .background(RoundedRectangle(cornerRadius: Aero.Radius.card).fill(Aero.accent))
-                        .foregroundStyle(Color.white)
+                        .foregroundStyle(Aero.onAccent)
                 }
                 .buttonStyle(KineticPressStyle())
                 .disabled(code.wrappedValue.count != codeLength)

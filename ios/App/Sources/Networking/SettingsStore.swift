@@ -20,7 +20,7 @@ final class SettingsStore: ObservableObject {
 
     // Appearance
     @Published var theme: String { didSet { defaults.set(theme, forKey: K.theme) } }
-    @Published var reduceAnimations: Bool { didSet { defaults.set(reduceAnimations, forKey: K.reduceAnimations) } }
+    @Published var reduceAnimations: Bool { didSet { defaults.set(reduceAnimations, forKey: K.reduceAnimations); propagateFlags() } }
     // Chat
     @Published var enterToSend: Bool { didSet { defaults.set(enterToSend, forKey: K.enterToSend) } }
     @Published var autoTitle: Bool { didSet { defaults.set(autoTitle, forKey: K.autoTitle) } }
@@ -41,10 +41,23 @@ final class SettingsStore: ObservableObject {
     // Language
     @Published var aiLanguage: String { didSet { defaults.set(aiLanguage, forKey: K.aiLanguage) } }
     // Accessibility
-    @Published var fontScale: Double { didSet { defaults.set(fontScale, forKey: K.fontScale) } }
-    @Published var highContrast: Bool { didSet { defaults.set(highContrast, forKey: K.highContrast) } }
-    @Published var reduceMotion: Bool { didSet { defaults.set(reduceMotion, forKey: K.reduceMotion) } }
+    @Published var fontScale: Double { didSet { defaults.set(fontScale, forKey: K.fontScale); propagateFlags() } }
+    @Published var highContrast: Bool { didSet { defaults.set(highContrast, forKey: K.highContrast); propagateFlags() } }
+    @Published var reduceMotion: Bool { didSet { defaults.set(reduceMotion, forKey: K.reduceMotion); propagateFlags() } }
+    @Published var screenReaderHints: Bool { didSet { defaults.set(screenReaderHints, forKey: K.screenReaderHints); propagateFlags() } }
     @Published var haptics: Bool { didSet { defaults.set(haptics, forKey: K.haptics) } }
+
+    /// Pushes the accessibility values into the plain flag store that
+    /// dynamic colour providers and Aero fonts/motion read (they cannot
+    /// observe ObservableObjects from non-isolated closures).
+    private func propagateFlags() {
+        let flags = GSAccessibilityFlags.shared
+        flags.highContrast = highContrast
+        flags.reduceMotion = reduceMotion
+        flags.reduceAnimations = reduceAnimations
+        flags.screenReaderHints = screenReaderHints
+        flags.fontScale = CGFloat(fontScale)
+    }
 
     private init() {
         theme = defaults.string(forKey: K.theme) ?? "System"
@@ -65,7 +78,9 @@ final class SettingsStore: ObservableObject {
         fontScale = defaults.object(forKey: K.fontScale) as? Double ?? 1.0
         highContrast = defaults.object(forKey: K.highContrast) as? Bool ?? false
         reduceMotion = defaults.object(forKey: K.reduceMotion) as? Bool ?? false
+        screenReaderHints = defaults.object(forKey: K.screenReaderHints) as? Bool ?? false
         haptics = defaults.object(forKey: K.haptics) as? Bool ?? true
+        propagateFlags()
     }
 
     /// Shared motion gate (Task 85-e): the in-app Reduce animations / Reduce
@@ -98,6 +113,7 @@ final class SettingsStore: ObservableObject {
         static let fontScale = "settings.fontScale"
         static let highContrast = "settings.highContrast"
         static let reduceMotion = "settings.reduceMotion"
+        static let screenReaderHints = "settings.screenReaderHints"
         static let haptics = "settings.haptics"
     }
 }

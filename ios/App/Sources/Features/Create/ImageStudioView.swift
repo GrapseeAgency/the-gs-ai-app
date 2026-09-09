@@ -178,7 +178,7 @@ struct ImageStudioView: View {
                 .frame(maxWidth: .infinity)
                 .padding(14)
                 .background(RoundedRectangle(cornerRadius: Aero.Radius.card).fill(Aero.accent))
-                .foregroundStyle(Color.white)
+                .foregroundStyle(Aero.onAccent)
         }
         .buttonStyle(KineticPressStyle())
         .disabled(trimmedPrompt.isEmpty || isGenerating)

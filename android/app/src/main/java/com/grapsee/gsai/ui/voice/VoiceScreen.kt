@@ -61,7 +61,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -73,13 +72,10 @@ import androidx.core.content.ContextCompat
 import androidx.core.app.ActivityCompat
 import com.grapsee.gsai.data.tts.TtsFocus
 import com.grapsee.gsai.ui.components.GsChip
-import com.grapsee.gsai.ui.theme.Aeruo
 import com.grapsee.gsai.ui.theme.GsHaptics
 import com.grapsee.gsai.ui.theme.GsMotion
+import com.grapsee.gsai.ui.theme.GsTheme
 import com.grapsee.gsai.ui.theme.gsHaptic
-
-/** Call-end red — the single non-aurora accent allowed in voice mode. */
-private val EndCallRed = Color(0xFFE5484D)
 
 /**
  * Honest engine states. Every status line the user can ever see maps to what
@@ -274,7 +270,7 @@ fun VoiceScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Aeruo.Obsidian)
+            .background(GsTheme.colors.appBackground)
             // Voice mode is a full-bleed custom canvas (no GsScreenScaffold),
             // so it carries its own system-bar insets: safeDrawing covers the
             // status bar, gesture bar and display cutout around the 24dp rhythm.
@@ -291,7 +287,7 @@ fun VoiceScreen(
                     Icon(
                         imageVector = Icons.Outlined.Close,
                         contentDescription = "Close voice mode",
-                        tint = Aeruo.TextDark
+                        tint = GsTheme.colors.textPrimary
                     )
                 }
             }
@@ -303,7 +299,7 @@ fun VoiceScreen(
                 style = MaterialTheme.typography.displaySmall,
                 color = if (phase == VoicePhase.Denied || phase == VoicePhase.Unavailable ||
                     phase == VoicePhase.NoSpeech || phase == VoicePhase.Error)
-                    Aeruo.TextMutedDark else Aeruo.TextDark,
+                    GsTheme.colors.textSecondary else GsTheme.colors.textPrimary,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -364,7 +360,7 @@ fun VoiceScreen(
 
             // Transcript — the real words (partial while speaking, final after).
             Surface(
-                color = Aeruo.RaisedDark,
+                color = GsTheme.colors.raisedSurface,
                 shape = RoundedCornerShape(GsMotion.radiusCard),
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -376,7 +372,7 @@ fun VoiceScreen(
                         text = if (transcript.isBlank()) "Your words will appear here."
                         else transcript,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = if (transcript.isBlank()) Aeruo.TextMutedDark else Aeruo.TextDark
+                        color = if (transcript.isBlank()) GsTheme.colors.textSecondary else GsTheme.colors.textPrimary
                     )
                     if (phase == VoicePhase.Result) {
                         Row(
@@ -391,7 +387,7 @@ fun VoiceScreen(
                                 onClick = {
                                     // The recognizer is done with the mic before
                                     // the hand-off — close the session cleanly.
-                                    if (GsHaptics.enabled()) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    GsHaptics.longPress(haptics)
                                     recognizer.value?.runCatching { destroy() }
                                     recognizer.value = null
                                     onSendToChat(finalTranscript)
@@ -402,7 +398,7 @@ fun VoiceScreen(
                                 selected = false,
                                 onClick = {
                                     clipboard.setText(AnnotatedString(finalTranscript))
-                                    view.gsHaptic(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
+                                    GsHaptics.press(view)
                                     Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
                                 }
                             )
@@ -410,7 +406,7 @@ fun VoiceScreen(
                                 text = "Try again",
                                 selected = false,
                                 onClick = {
-                                    if (GsHaptics.enabled()) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    GsHaptics.longPress(haptics)
                                     sessionTick++
                                 }
                             )
@@ -430,25 +426,24 @@ fun VoiceScreen(
                 VoiceCircle(
                     icon = if (phase == VoicePhase.Listening || phase == VoicePhase.Processing)
                         Icons.Outlined.Mic else Icons.Outlined.MicOff,
-                    container = if (phase == VoicePhase.Listening) Aeruo.ContainerHighDark
-                    else Aeruo.ContainerDark,
-                    tint = if (phase == VoicePhase.Listening) Aeruo.TextDark else Aeruo.TextMutedDark,
+                    container = GsTheme.colors.elevatedSurface,
+                    tint = if (phase == VoicePhase.Listening) GsTheme.colors.textPrimary else GsTheme.colors.textSecondary,
                     contentDescription = if (phase == VoicePhase.Listening) "Pause" else "Start listening"
                 ) {
                     toggleMute()
                 }
                 VoiceCircle(
                     icon = Icons.Outlined.CallEnd,
-                    container = EndCallRed.copy(alpha = 0.18f),
-                    tint = EndCallRed,
+                    container = GsTheme.colors.error.copy(alpha = 0.18f),
+                    tint = GsTheme.colors.error,
                     contentDescription = "End voice session"
                 ) {
                     onBack()
                 }
                 VoiceCircle(
                     icon = if (speakerOn) Icons.Outlined.VolumeUp else Icons.Outlined.VolumeOff,
-                    container = Aeruo.ContainerDark,
-                    tint = if (speakerOn) Aeruo.TextDark else Aeruo.TextMutedDark,
+                    container = GsTheme.colors.elevatedSurface,
+                    tint = if (speakerOn) GsTheme.colors.textPrimary else GsTheme.colors.textSecondary,
                     contentDescription = if (speakerOn) "Read-back on" else "Read-back off"
                 ) {
                     toggleSpeaker()
@@ -460,7 +455,7 @@ fun VoiceScreen(
             Text(
                 text = "Speech stays on this device · ${java.util.Locale.getDefault().displayLanguage}",
                 style = MaterialTheme.typography.labelMedium,
-                color = Aeruo.TextMutedDark,
+                color = GsTheme.colors.textSecondary,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -477,7 +472,8 @@ fun VoiceScreen(
 @Composable
 private fun WaveformBar(index: Int, active: Boolean) {
     if (!active) {
-        val brush = remember { Brush.verticalGradient(colors = Aeruo.Aurora) }
+        val aurora = GsTheme.colors.aurora
+        val brush = remember(aurora) { Brush.verticalGradient(colors = aurora) }
         Box(
             modifier = Modifier
                 .width(4.dp)
@@ -505,8 +501,9 @@ private fun WaveformBar(index: Int, active: Boolean) {
         ),
         label = "wavePhase"
     )
-    val brush = remember {
-        Brush.verticalGradient(colors = Aeruo.Aurora)
+    val aurora = GsTheme.colors.aurora
+    val brush = remember(aurora) {
+        Brush.verticalGradient(colors = aurora)
     }
     Box(
         modifier = Modifier

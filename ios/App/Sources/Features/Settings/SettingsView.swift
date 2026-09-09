@@ -4,8 +4,6 @@ import SwiftUI
 /// Notifications, Language, Accessibility, About.
 struct SettingsView: View {
 
-    private static let dangerRed = Color(red: 0.9, green: 0.28, blue: 0.28)
-
     /// Every switch, chip and slider reads and writes the remembered store.
     @ObservedObject private var settings = SettingsStore.shared
 
@@ -223,7 +221,7 @@ struct SettingsView: View {
             } label: {
                 Text("Delete account")
                     .font(Aero.body())
-                    .foregroundStyle(Self.dangerRed)
+                    .foregroundStyle(Aero.danger)
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(KineticPressStyle())
@@ -331,6 +329,7 @@ struct SettingsView: View {
             }
             toggleRow("High contrast", isOn: $settings.highContrast)
             toggleRow("Reduce motion", isOn: $settings.reduceMotion)
+            toggleRow("Screen reader hints", isOn: $settings.screenReaderHints)
             toggleRow("Haptics", isOn: $settings.haptics)
         }
     }

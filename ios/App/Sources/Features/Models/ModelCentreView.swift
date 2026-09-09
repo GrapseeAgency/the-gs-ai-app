@@ -205,7 +205,7 @@ struct ModelCentreView: View {
                     RoundedRectangle(cornerRadius: 12)
                         .fill(isCurrent ? AnyShapeStyle(Aero.container) : AnyShapeStyle(Aero.accent))
                 )
-                .foregroundStyle(isCurrent ? Aero.text : Color.white)
+                .foregroundStyle(isCurrent ? Aero.text : Aero.onAccent)
         }
         .buttonStyle(KineticPressStyle())
         .disabled(isCurrent)

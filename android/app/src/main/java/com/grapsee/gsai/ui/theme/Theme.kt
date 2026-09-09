@@ -1,104 +1,77 @@
 package com.grapsee.gsai.ui.theme
 
 import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import android.view.Window
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import com.grapsee.gsai.data.SettingsStore
 
 /**
  * Accessibility wiring composition locals — provided at the theme root from
  * [SettingsStore] (snapshot state, so a Settings flip recomposes this root and
- * re-provides live; the same reactive pattern as the other wired settings).
- * Consumed inside the shared component layer only — no call sites change.
+ * re-provides live). Consumed inside the shared component layer only — no
+ * call sites change.
  */
 
 /** Settings → "Screen reader hints": adds factual TalkBack hints on actionable
- *  shared components (GsCard / GsChip / GsListItem / GsQuickActionTile). No
- *  visuals — TalkBack reads the hints; sighted UI is byte-identical. */
+ *  shared components. No visuals — TalkBack reads the hints; sighted UI is
+ *  byte-identical. (Component-layer alias: LocalGsScreenReaderHints.) */
 val LocalScreenReaderHints = staticCompositionLocalOf { false }
 
-/** Settings → "High contrast": border/divider colors resolve to the strongest
- *  surface token and muted/secondary text resolves to full-alpha onSurface.
- *  Off = exactly the previous colors. */
+/** Settings → "High contrast": the semantic GsColors constructors take the
+ *  flag directly (stronger text/border raw values); this local additionally
+ *  lets component-layer code react (e.g. heavier dividers). */
 val LocalHighContrast = staticCompositionLocalOf { false }
 
-private val LightScheme = lightColorScheme(
-    primary = Aeruo.Accent,
-    onPrimary = Color.White,
-    primaryContainer = Aeruo.ContainerLight,
-    onPrimaryContainer = Aeruo.Ink,
-    secondary = Aeruo.AccentDeep,
-    onSecondary = Color.White,
-    background = Aeruo.Paper,
-    onBackground = Aeruo.Ink,
-    surface = Aeruo.SurfaceLight,
-    onSurface = Aeruo.Ink,
-    surfaceVariant = Aeruo.ContainerLowLight,
-    onSurfaceVariant = Aeruo.InkMuted,
-    surfaceContainerLowest = Aeruo.SurfaceLight,
-    surfaceContainerLow = Aeruo.ContainerLowLight,
-    surfaceContainer = Aeruo.ContainerLight,
-    surfaceContainerHigh = Aeruo.ContainerHighLight,
-    surfaceContainerHighest = Aeruo.ContainerHighLight,
-    outline = Aeruo.OutlineLight,
-    outlineVariant = Aeruo.OutlineLight
-)
-
-private val DarkScheme = darkColorScheme(
-    primary = Aeruo.Accent,
-    onPrimary = Color(0xFF06231C),
-    primaryContainer = Aeruo.ContainerDark,
-    onPrimaryContainer = Aeruo.TextDark,
-    secondary = Aeruo.Accent,
-    onSecondary = Color(0xFF06231C),
-    background = Aeruo.Obsidian,
-    onBackground = Aeruo.TextDark,
-    surface = Aeruo.SurfaceDark,
-    onSurface = Aeruo.TextDark,
-    surfaceVariant = Aeruo.RaisedDark,
-    onSurfaceVariant = Aeruo.TextMutedDark,
-    surfaceContainerLowest = Aeruo.Obsidian,
-    surfaceContainerLow = Aeruo.ContainerLowDark,
-    surfaceContainer = Aeruo.ContainerDark,
-    surfaceContainerHigh = Aeruo.ContainerHighDark,
-    surfaceContainerHighest = Aeruo.ContainerHighDark,
-    outline = Aeruo.OutlineDark,
-    outlineVariant = Aeruo.OutlineDark
-)
-
 /**
- * Theme root. Beyond the color scheme this is where the (previously dead)
- * appearance Settings are actually wired into the app:
- *  - themeMode: Light / Dark / System overrides the system dark flag;
+ * AERUO KINETIC theme root.
+ *
+ * Beyond the color scheme this is where the appearance + accessibility
+ * Settings are actually wired into the app:
+ *  - themeMode: Light / Dark / System resolves the app appearance (live);
+ *  - highContrast: semantic GsColors built with high-contrast raw values;
  *  - fontScale: multiplies the system font scale for the whole tree via
- *    LocalDensity, so every sp-sized text in the app truly rescales;
- *  - haptics: publishes the global gate consumed by GsHaptics;
+ *    LocalDensity, so every sp-sized text in the app truly rescales (the
+ *    semantic GsTextSet code/metadata/button roles are pre-scaled here too);
+ *  - haptics: publishes the global GsHaptics gate;
  *  - reduceAnimations + reduceMotion: publishes GsMotion.reduced;
- *  - screenReaderHints + highContrast: provided as composition locals
- *    (LocalScreenReaderHints / LocalHighContrast) for the component layer.
- * All of these read snapshot state, so a Settings change recomposes this root.
+ *  - screenReaderHints + highContrast: provided as composition locals;
+ *  - system bars' icon appearance follows the APP theme, not the OS theme.
+ * All inputs read snapshot state, so a Settings change recomposes this root.
  */
 @Composable
 fun TheGsAiTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
-    val resolvedDark = when (SettingsStore.themeMode) {
+    val dark = when (SettingsStore.themeMode) {
         "Light" -> false
         "Dark" -> true
         else -> darkTheme
     }
+    val highContrast = SettingsStore.highContrast
+    val fontScale = SettingsStore.fontScale
+
+    val gsColors = if (dark) darkGsColors(highContrast) else lightGsColors(highContrast)
+    // LocalDensity scales the WHOLE tree (every sp value). The semantic text
+    // roles (code/metadata/button) are not sp-resolved through Density in every
+    // custom drawing context, so they are pre-scaled here as well.
+    val textSet = remember(fontScale) { gsTextSet(fontScale) }
 
     // Settings → platform gates (see GsHaptics.kt / Motion.kt).
     SyncHapticsGate()
@@ -110,38 +83,71 @@ fun TheGsAiTheme(
         fontScale = baseDensity.fontScale * SettingsStore.fontScale
     )
 
-    MaterialTheme(
-        colorScheme = if (resolvedDark) DarkScheme else LightScheme,
-        typography = GsTypography,
-        content = {
-            CompositionLocalProvider(
-                LocalDensity provides scaledDensity,
-                LocalScreenReaderHints provides SettingsStore.screenReaderHints,
-                LocalHighContrast provides SettingsStore.highContrast
-            ) {
-                SystemBarIconAppearance(resolvedDark)
-                content()
-            }
-        }
-    )
-}
-
-/**
- * System-bar icon contrast follows the app's RESOLVED theme, not just the
- * system setting — otherwise a forced Dark theme under a light system puts
- * dark icons on the obsidian canvas. enableEdgeToEdge() (MainActivity) keeps
- * owning the transparent bars and edge-to-edge flags; this only flips icon
- * appearance, the same way the Compose template does.
- */
-@Composable
-private fun SystemBarIconAppearance(dark: Boolean) {
+    // System bars follow the APP theme, not the OS theme — otherwise a
+    // forced-light app on a dark system renders unreadable status icons.
     val view = LocalView.current
-    if (!view.isInEditMode) {
-        SideEffect {
-            val window = (view.context as? Activity)?.window ?: return@SideEffect
-            val controller = WindowCompat.getInsetsController(window, view)
-            controller.isAppearanceLightStatusBars = !dark
-            controller.isAppearanceLightNavigationBars = !dark
+    SideEffect {
+        val window = view.context.findWindow()
+        if (window != null) {
+            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !dark
+            WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = !dark
         }
     }
+
+    CompositionLocalProvider(
+        LocalDensity provides scaledDensity,
+        LocalGsColors provides gsColors,
+        LocalGsTextSet provides textSet,
+        LocalScreenReaderHints provides SettingsStore.screenReaderHints,
+        LocalHighContrast provides highContrast,
+        com.grapsee.gsai.ui.components.LocalGsScreenReaderHints provides SettingsStore.screenReaderHints,
+    ) {
+        MaterialTheme(
+            colorScheme = gsColors.toMaterialScheme(dark),
+            typography = GsTypography, // font scale flows through LocalDensity
+            content = content,
+        )
+    }
+}
+
+private fun Context.findWindow(): Window? = when (this) {
+    is Activity -> window
+    is ContextWrapper -> baseContext.findWindow()
+    else -> null
+}
+
+/** Non-Material text roles (code / metadata / button), scaled by fontScale. */
+fun gsTextSet(fontScale: Float): GsTextSet {
+    val code = TextStyle(
+        fontFamily = FontFamily.Monospace,
+        fontWeight = FontWeight.Normal,
+        fontSize = 13.sp,
+        lineHeight = 20.sp,
+    )
+    val codeBlock = TextStyle(
+        fontFamily = FontFamily.Monospace,
+        fontWeight = FontWeight.Normal,
+        fontSize = 14.sp,
+        lineHeight = 22.sp,
+    )
+    val metadata = TextStyle(
+        fontFamily = FontFamily.SansSerif,
+        fontWeight = FontWeight.Medium,
+        fontSize = 11.sp,
+        lineHeight = 14.sp,
+        letterSpacing = 0.3.sp,
+    )
+    val button = TextStyle(
+        fontFamily = FontFamily.SansSerif,
+        fontWeight = FontWeight.Medium,
+        fontSize = 14.sp,
+        lineHeight = 19.sp,
+        letterSpacing = 0.2.sp,
+    )
+    if (fontScale == 1.0f) return GsTextSet(code, codeBlock, metadata, button)
+    fun TextStyle.scaled(): TextStyle = copy(
+        fontSize = (fontSize.value * fontScale).sp,
+        lineHeight = (lineHeight.value * fontScale).sp,
+    )
+    return GsTextSet(code.scaled(), codeBlock.scaled(), metadata.scaled(), button.scaled())
 }

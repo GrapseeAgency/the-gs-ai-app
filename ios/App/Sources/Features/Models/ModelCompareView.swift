@@ -21,8 +21,6 @@ extension ModelInfo {
 /// Side-by-side model comparison — any three models.
 struct ModelCompareView: View {
 
-    private static let dangerRed = Color(red: 0.9, green: 0.28, blue: 0.28)
-
     @State private var selectedIDs = ["gs-swift", "gs-balanced", "gs-deep"]
 
     // The Default row is a real control: it writes the same UserDefaults key
@@ -177,7 +175,7 @@ struct ModelCompareView: View {
     private func boolCell(_ on: Bool) -> some View {
         Image(systemName: on ? "checkmark" : "xmark")
             .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(on ? AnyShapeStyle(Aero.accent) : AnyShapeStyle(Self.dangerRed))
+            .foregroundStyle(on ? AnyShapeStyle(Aero.accent) : AnyShapeStyle(Aero.danger))
     }
 
     private func dots(_ filled: Int) -> some View {

@@ -14,8 +14,6 @@ struct VoiceView: View {
     @StateObject private var dictation = VoiceDictation()
     @StateObject private var speech = SpeechPlayer()
 
-    private static let endCallRed = Color(red: 0.9, green: 0.28, blue: 0.28)
-
     private let barCount = 24
 
     /// Deterministic waveform targets (24…56pt) — stable between runs.
@@ -209,8 +207,8 @@ struct VoiceView: View {
             }
             controlButton(
                 "phone.down.fill",
-                tint: Color.white,
-                background: Self.endCallRed,
+                tint: Aero.onError,
+                background: Aero.danger,
                 accessibilityLabel: "Close voice mode"
             ) {
                 dismiss()

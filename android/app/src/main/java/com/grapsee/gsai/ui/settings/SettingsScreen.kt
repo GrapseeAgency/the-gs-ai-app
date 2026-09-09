@@ -397,21 +397,25 @@ fun SettingsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {}) {
                 }
                 SwitchRow(
                     title = "High contrast",
+                    subtitle = "Stronger text and border contrast",
                     checked = SettingsStore.highContrast,
                     onCheckedChange = { SettingsStore.updateHighContrast(it) }
                 )
                 SwitchRow(
                     title = "Reduce motion",
+                    subtitle = "Press scale, aurora and pulsing become static",
                     checked = SettingsStore.reduceMotion,
                     onCheckedChange = { SettingsStore.updateReduceMotion(it) }
                 )
                 SwitchRow(
                     title = "Screen reader hints",
+                    subtitle = "Extra spoken labels on core controls",
                     checked = SettingsStore.screenReaderHints,
                     onCheckedChange = { SettingsStore.updateScreenReaderHints(it) }
                 )
                 SwitchRow(
                     title = "Haptics",
+                    subtitle = "Vibration feedback for taps and alerts",
                     checked = SettingsStore.haptics,
                     onCheckedChange = { SettingsStore.updateHaptics(it) }
                 )

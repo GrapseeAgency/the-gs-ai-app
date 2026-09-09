@@ -40,16 +40,17 @@ import com.grapsee.gsai.ui.components.GsChip
 import com.grapsee.gsai.ui.components.GsScreenScaffold
 import com.grapsee.gsai.ui.components.GsSectionHeader
 import com.grapsee.gsai.ui.navigation.GsRoutes
-import com.grapsee.gsai.ui.theme.Aeruo
 import com.grapsee.gsai.ui.theme.GsMotion
+import com.grapsee.gsai.ui.theme.GsTheme
 import kotlinx.coroutines.launch
 
 /**
  * AERUO KINETIC — PROMPT BUILDER.
- * Four labelled fields assemble into one monospace system prompt on a dark
- * RaisedDark card (empty parts omitted); multi-select refinements append as
- * numbered suffix lines. Copy to clipboard or hand the prompt straight to a
- * fresh chat via onNavigate("chat/new") — wired by the main agent.
+ * Four labelled fields assemble into one monospace system prompt on an
+ * input-surface card (GsTheme.colors.inputSurface; empty parts omitted);
+ * multi-select refinements append as numbered suffix lines. Copy to clipboard
+ * or hand the prompt straight to a fresh chat via onNavigate("chat/new") —
+ * wired by the main agent.
  */
 
 private val refinementOptions = listOf(
@@ -140,7 +141,7 @@ fun PromptBuilderScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)) {
                     GsSectionHeader(title = "Assembled preview")
                     Surface(
-                        color = Aeruo.RaisedDark,
+                        color = GsTheme.colors.inputSurface,
                         shape = RoundedCornerShape(GsMotion.radiusCard),
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -151,7 +152,7 @@ fun PromptBuilderScreen(
                             Text(
                                 text = "System prompt",
                                 style = MaterialTheme.typography.labelMedium,
-                                color = Aeruo.TextMutedDark
+                                color = GsTheme.colors.textPlaceholder
                             )
                             Text(
                                 text = promptText.ifBlank { "Fill any field to assemble the prompt." },
@@ -160,7 +161,7 @@ fun PromptBuilderScreen(
                                     fontSize = 13.sp,
                                     lineHeight = 19.sp
                                 ),
-                                color = if (promptText.isBlank()) Aeruo.TextMutedDark else Aeruo.TextDark
+                                color = if (promptText.isBlank()) GsTheme.colors.textPlaceholder else GsTheme.colors.textPrimary
                             )
                         }
                     }

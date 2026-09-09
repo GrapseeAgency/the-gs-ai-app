@@ -39,6 +39,8 @@ import com.grapsee.gsai.data.SettingsStore
 /**
  * AERUO KINETIC — motion tokens. Everything moves with intent.
  * Springs over eases; press scales; stagger entrances; aurora only when AI is alive.
+ * Radii/spacing delegate to GsRadius/GsSpacing (Tokens.kt). Reduce-motion gates
+ * press scale, stagger and skeletons; aurora stays (it is the AI life-sign).
  */
 object GsMotion {
     // Springs (mirror iOS .spring(response:0.35, dampingFraction:0.8))
@@ -61,18 +63,18 @@ object GsMotion {
     const val NAV_TWEEN_MS = 320
     const val REDUCED_TWEEN_MS = 150
 
-    // Radii
-    val radiusCard = 16.dp
-    val radiusChip = 999.dp
-    val radiusSheet = 24.dp
-    val radiusInput = 26.dp
+    // Radii/spacing — frozen aliases; canonical tokens live in GsRadius/GsSpacing
+    // (Tokens.kt). One source of truth for the whole foundation.
+    val radiusCard get() = GsRadius.card
+    val radiusChip get() = 999.dp
+    val radiusSheet get() = GsRadius.sheet
+    val radiusInput get() = GsRadius.input
 
-    // Spacing
-    val spaceXS = 4.dp
-    val spaceS = 8.dp
-    val spaceM = 16.dp
-    val spaceL = 24.dp
-    val spaceXL = 32.dp
+    val spaceXS get() = GsSpacing.xs
+    val spaceS get() = GsSpacing.s
+    val spaceM get() = GsSpacing.m
+    val spaceL get() = GsSpacing.l
+    val spaceXL get() = GsSpacing.xl
 }
 
 /**
@@ -203,7 +205,7 @@ fun Modifier.auroraBackground(shape: Shape): Modifier = composed {
 }
 
 /** Staggered entrance delay for list items. */
-fun staggerDelay(index: Int): Int = index * GsMotion.STAGGER_MS
+fun staggerDelay(index: Int): Int = if (GsMotion.reduced) 0 else index * GsMotion.STAGGER_MS
 
 /** Placeholder pulser for skeletons. Reduce motion holds the mid-alpha frame —
  *  a loading placeholder is decoration, not an AI life-sign, so it flattens

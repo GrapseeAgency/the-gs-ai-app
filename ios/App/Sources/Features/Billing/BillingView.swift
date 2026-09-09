@@ -7,7 +7,6 @@ struct BillingView: View {
 
     @Environment(\.dismiss) private var dismiss
 
-    private static let dangerRed = Color(red: 0.9, green: 0.28, blue: 0.28)
     private static let checkoutToast = "Checkout arrives with the App Store build"
 
     /// Fresh sample dates: the renewal anchor is the 12th of next month and
@@ -256,7 +255,7 @@ struct BillingView: View {
                         // Button inside this card's tappable surface.
                         Text("Current")
                             .font(Aero.label())
-                            .foregroundStyle(Color.white)
+                            .foregroundStyle(Aero.onAccent)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
                             .background(Capsule().fill(Aero.accent))
@@ -337,7 +336,7 @@ struct BillingView: View {
             .frame(maxWidth: .infinity)
             .padding(14)
             .background(RoundedRectangle(cornerRadius: Aero.Radius.card).fill(Aero.accent))
-            .foregroundStyle(Color.white)
+            .foregroundStyle(Aero.onAccent)
     }
 
     private func tonalLabel(_ title: String) -> some View {
@@ -453,7 +452,7 @@ struct BillingView: View {
             } label: {
                 Text("Cancel subscription")
                     .font(Aero.body())
-                    .foregroundStyle(Self.dangerRed)
+                    .foregroundStyle(Aero.danger)
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(KineticPressStyle())

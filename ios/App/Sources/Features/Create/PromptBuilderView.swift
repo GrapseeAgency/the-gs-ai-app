@@ -35,17 +35,6 @@ struct PromptBuilderView: View {
 
     var onOpenChat: (() -> Void)? = nil
 
-    /// Obsidian preview canvas — built through the frozen Aero.dynamic helper
-    /// using Aero.surface's exact dark value (11151C), constant in both
-    /// appearances like a terminal.
-    private let inkSurface = Aero.dynamic(
-        light: UIColor(red: 0.067, green: 0.082, blue: 0.110, alpha: 1),
-        dark: UIColor(red: 0.067, green: 0.082, blue: 0.110, alpha: 1))
-    private let inkText = Color.white.opacity(0.92)
-    private let inkMuted = Color.white.opacity(0.45)
-
-    // MARK: Sample data
-
     private let refinements = ["Be concise", "Add examples", "Cite sources", "Ask clarifying questions"]
 
     private let refinementColumns = [
@@ -168,16 +157,16 @@ struct PromptBuilderView: View {
                 if assembledPrompt.isEmpty {
                     Text("Fill any field and the prompt assembles here.")
                         .font(.system(size: 13, design: .monospaced))
-                        .foregroundColor(inkMuted)
+                        .foregroundColor(Aero.textPlaceholder)
                 } else {
                     Text(assembledPrompt)
                         .font(.system(size: 13, design: .monospaced))
-                        .foregroundColor(inkText)
+                        .foregroundColor(Aero.text)
                 }
             }
             .padding(Aero.Spacing.m)
             .frame(maxWidth: .infinity, minHeight: 120, alignment: .topLeading)
-            .background(RoundedRectangle(cornerRadius: 16).fill(inkSurface))
+            .background(RoundedRectangle(cornerRadius: 16).fill(Aero.inputSurface))
         }
     }
 
@@ -228,7 +217,7 @@ struct PromptBuilderView: View {
                         .padding(.horizontal, 14)
                         .padding(.vertical, 8)
                         .background(Capsule().fill(Aero.accent))
-                        .foregroundStyle(Color.white)
+                        .foregroundStyle(Aero.onAccent)
                 }
                 .buttonStyle(KineticPressStyle())
             }

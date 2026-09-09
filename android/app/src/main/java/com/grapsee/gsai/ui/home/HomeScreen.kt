@@ -96,8 +96,8 @@ import com.grapsee.gsai.data.liveupdate.LiveUpdateState
 import com.grapsee.gsai.data.liveupdate.LiveUpdater
 import com.grapsee.gsai.ui.navigation.GsRoutes
 import com.grapsee.gsai.ui.theme.auroraBackground
-import com.grapsee.gsai.ui.theme.Aeruo
 import com.grapsee.gsai.ui.theme.GsMotion
+import com.grapsee.gsai.ui.theme.GsTheme
 import com.grapsee.gsai.ui.theme.kineticPress
 import com.grapsee.gsai.ui.theme.rememberAuroraBrush
 import kotlinx.coroutines.delay
@@ -131,7 +131,7 @@ fun HomeScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Aeruo.Obsidian)
+            .background(GsTheme.colors.appBackground)
             .statusBarsPadding()
             .navigationBarsPadding()
     ) {
@@ -171,7 +171,7 @@ fun HomeScreen(
             Text(
                 "GS can make mistakes — double-check important info.",
                 style = MaterialTheme.typography.labelMedium,
-                color = Aeruo.TextMutedDark,
+                color = GsTheme.colors.textSecondary,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = GsMotion.spaceS),
@@ -210,7 +210,7 @@ private fun TopBar(
         val modelPillInteraction = remember { MutableInteractionSource() }
         Surface(
             shape = RoundedCornerShape(GsMotion.radiusChip),
-            color = Aeruo.RaisedDark,
+            color = GsTheme.colors.raisedSurface,
             modifier = Modifier.kineticPress(modelPillInteraction)
         ) {
             Row(
@@ -235,7 +235,7 @@ private fun TopBar(
                 Text(
                     "GS Balanced · High",
                     style = MaterialTheme.typography.labelLarge,
-                    color = Aeruo.TextDark
+                    color = GsTheme.colors.textPrimary
                 )
             }
         }
@@ -259,7 +259,7 @@ private fun CircleButton(
     val interaction = remember { MutableInteractionSource() }
     Surface(
         shape = CircleShape,
-        color = Aeruo.RaisedDark,
+        color = GsTheme.colors.raisedSurface,
         modifier = Modifier
             .size(44.dp)
             .kineticPress(interaction)
@@ -275,7 +275,7 @@ private fun CircleButton(
             Icon(
                 icon,
                 contentDescription = contentDescription,
-                tint = Aeruo.TextDark,
+                tint = GsTheme.colors.textPrimary,
                 modifier = Modifier.size(20.dp)
             )
         }
@@ -312,12 +312,12 @@ private fun HeroBlock(onNavigate: (String) -> Unit) {
                 modifier = Modifier
                     .size(66.dp)
                     .clip(CircleShape)
-                    .background(Aeruo.Obsidian.copy(alpha = 0.35f))
+                    .background(GsTheme.colors.appBackground.copy(alpha = 0.35f))
             )
             Icon(
                 Icons.Outlined.AutoAwesome,
                 contentDescription = "GS",
-                tint = Aeruo.TextDark,
+                tint = GsTheme.colors.textPrimary,
                 modifier = Modifier.size(22.dp)
             )
         }
@@ -327,7 +327,7 @@ private fun HeroBlock(onNavigate: (String) -> Unit) {
         Text(
             greeting(),
             style = MaterialTheme.typography.displayLarge,
-            color = Aeruo.TextDark,
+            color = GsTheme.colors.textPrimary,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center
         )
         Spacer(Modifier.height(GsMotion.spaceS))
@@ -341,7 +341,7 @@ private fun HeroBlock(onNavigate: (String) -> Unit) {
         val upgradeInteraction = remember { MutableInteractionSource() }
         Surface(
             shape = RoundedCornerShape(GsMotion.radiusChip),
-            color = Aeruo.RaisedDark,
+            color = GsTheme.colors.raisedSurface,
             modifier = Modifier.kineticPress(upgradeInteraction)
         ) {
             Row(
@@ -360,13 +360,13 @@ private fun HeroBlock(onNavigate: (String) -> Unit) {
                 Icon(
                     Icons.Outlined.AutoAwesome,
                     contentDescription = null,
-                    tint = Aeruo.Accent,
+                    tint = GsTheme.colors.accent,
                     modifier = Modifier.size(14.dp)
                 )
                 Text(
                     "Upgrade plan",
                     style = MaterialTheme.typography.labelLarge,
-                    color = Aeruo.TextDark
+                    color = GsTheme.colors.textPrimary
                 )
             }
         }
@@ -415,7 +415,7 @@ private fun RotatingTagline(modifier: Modifier = Modifier) {
         Text(
             lines[current],
             style = MaterialTheme.typography.bodyMedium,
-            color = Aeruo.TextMutedDark
+            color = GsTheme.colors.textSecondary
         )
     }
 }
@@ -460,7 +460,7 @@ private fun UpdatePill(text: String, onClick: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
     Surface(
         shape = RoundedCornerShape(GsMotion.radiusChip),
-        color = Aeruo.RaisedDark,
+        color = GsTheme.colors.raisedSurface,
         modifier = Modifier.kineticPress(interaction)
     ) {
         Row(
@@ -483,7 +483,7 @@ private fun UpdatePill(text: String, onClick: () -> Unit) {
             Text(
                 text,
                 style = MaterialTheme.typography.labelLarge,
-                color = Aeruo.TextDark
+                color = GsTheme.colors.textPrimary
             )
         }
     }
@@ -518,7 +518,7 @@ private fun TrendingRow(onNavigate: (String) -> Unit) {
             val cardInteraction = remember { MutableInteractionSource() }
             Surface(
                 shape = RoundedCornerShape(16.dp),
-                color = Aeruo.RaisedDark,
+                color = GsTheme.colors.raisedSurface,
                 modifier = Modifier
                     .width(176.dp)
                     .kineticPress(cardInteraction)
@@ -535,21 +535,21 @@ private fun TrendingRow(onNavigate: (String) -> Unit) {
                         Icon(
                             card.icon,
                             contentDescription = null,
-                            tint = Aeruo.Accent,
+                            tint = GsTheme.colors.accent,
                             modifier = Modifier.size(13.dp)
                         )
                         Spacer(Modifier.width(6.dp))
                         Text(
                             card.category,
                             style = MaterialTheme.typography.labelSmall,
-                            color = Aeruo.TextMutedDark
+                            color = GsTheme.colors.textSecondary
                         )
                     }
                     Spacer(Modifier.height(6.dp))
                     Text(
                         card.title,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Aeruo.TextDark,
+                        color = GsTheme.colors.textPrimary,
                         maxLines = 1,
                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                     )
@@ -597,14 +597,14 @@ private fun SuggestionRow(
     ) {
         Surface(
             shape = CircleShape,
-            color = Aeruo.RaisedDark,
+            color = GsTheme.colors.raisedSurface,
             modifier = Modifier.size(38.dp)
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(
                     icon,
                     contentDescription = null,
-                    tint = Aeruo.TextDark,
+                    tint = GsTheme.colors.textPrimary,
                     modifier = Modifier.size(18.dp)
                 )
             }
@@ -612,7 +612,7 @@ private fun SuggestionRow(
         Text(
             label,
             style = MaterialTheme.typography.bodyMedium,
-            color = Aeruo.TextDark
+            color = GsTheme.colors.textPrimary
         )
     }
 }
@@ -645,7 +645,7 @@ private fun QuickChips(onNavigate: (String) -> Unit) {
             val chipInteraction = remember { MutableInteractionSource() }
             Surface(
                 shape = RoundedCornerShape(GsMotion.radiusChip),
-                color = Aeruo.RaisedDark,
+                color = GsTheme.colors.raisedSurface,
                 modifier = Modifier.kineticPress(chipInteraction)
             ) {
                 Row(
@@ -661,13 +661,13 @@ private fun QuickChips(onNavigate: (String) -> Unit) {
                     Icon(
                         chip.icon,
                         contentDescription = null,
-                        tint = Aeruo.TextMutedDark,
+                        tint = GsTheme.colors.textSecondary,
                         modifier = Modifier.size(15.dp)
                     )
                     Text(
                         chip.label,
                         style = MaterialTheme.typography.labelLarge,
-                        color = Aeruo.TextDark
+                        color = GsTheme.colors.textPrimary
                     )
                 }
             }
@@ -825,7 +825,7 @@ private fun HeroInput(
 
     Surface(
         shape = RoundedCornerShape(28.dp),
-        color = Aeruo.RaisedDark,
+        color = GsTheme.colors.raisedSurface,
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
@@ -839,7 +839,7 @@ private fun HeroInput(
             val attachInteraction = remember { MutableInteractionSource() }
             Surface(
                 shape = CircleShape,
-                color = Aeruo.AccentSoftDark,
+                color = GsTheme.colors.accentSoft,
                 modifier = Modifier
                     .size(42.dp)
                     .kineticPress(attachInteraction)
@@ -854,7 +854,7 @@ private fun HeroInput(
                     Icon(
                         Icons.Outlined.Add,
                         contentDescription = "Attach and new chat",
-                        tint = Aeruo.Accent,
+                        tint = GsTheme.colors.accent,
                         modifier = Modifier.size(20.dp)
                     )
                 }
@@ -869,7 +869,7 @@ private fun HeroInput(
                     else -> "Ask anything"
                 },
                 style = MaterialTheme.typography.bodyMedium,
-                color = if (listening) Aeruo.TextDark else Aeruo.TextMutedDark,
+                color = if (listening) GsTheme.colors.textPrimary else GsTheme.colors.textSecondary,
                 maxLines = 1,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                 modifier = Modifier
@@ -898,7 +898,7 @@ private fun HeroInput(
                     Icon(
                         Icons.Outlined.Mic,
                         contentDescription = "Voice input",
-                        tint = Aeruo.TextMutedDark,
+                        tint = GsTheme.colors.textSecondary,
                         modifier = Modifier.size(20.dp)
                     )
                 }
@@ -955,8 +955,10 @@ private fun HeroInput(
                 if (listening) VoicePulseHalo()
                 Surface(
                     shape = CircleShape,
-                    color = Aeruo.AccentSoftDark,
-                    modifier = Modifier.size(44.dp)
+                    color = GsTheme.colors.accentSoft,
+                    modifier = Modifier
+                        .size(44.dp)
+                        .kineticPress()
                 ) {
                     Box(
                         modifier = Modifier
@@ -966,7 +968,7 @@ private fun HeroInput(
                         Icon(
                             Icons.Outlined.GraphicEq,
                             contentDescription = "Hold to talk",
-                            tint = Aeruo.TextDark,
+                            tint = GsTheme.colors.textPrimary,
                             modifier = Modifier.size(20.dp)
                         )
                     }

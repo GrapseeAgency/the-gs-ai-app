@@ -484,7 +484,7 @@ private struct LibraryItemSheet: View {
                 } label: {
                     Label("Delete", systemImage: "trash")
                         .font(Aero.responsive(14, relativeTo: .subheadline))
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Aero.danger)
                 }
             }
             Spacer(minLength: 0)

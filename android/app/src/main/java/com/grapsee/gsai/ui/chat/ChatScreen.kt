@@ -21,7 +21,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.DragInteraction
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -150,8 +149,10 @@ import com.grapsee.gsai.data.tts.TtsFocus
 import com.grapsee.gsai.ui.components.GsInputBar
 import com.grapsee.gsai.ui.components.GsScreenScaffold
 import com.grapsee.gsai.ui.components.rememberDeviceOffline
+import com.grapsee.gsai.ui.theme.GsColors
 import com.grapsee.gsai.ui.theme.GsMotion
 import com.grapsee.gsai.ui.theme.GsHaptics
+import com.grapsee.gsai.ui.theme.GsTheme
 import com.grapsee.gsai.ui.theme.gsHaptic
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
@@ -180,12 +181,15 @@ private val codeTokenRegex = Regex(
 /**
  * Lightweight syntax colouring — comments, strings, numbers, keywords.
  * Purely cosmetic: an unknown token stays plain, nothing can break the layout.
+ * Colours are the theme-resolved code tokens (GsTheme.colors.code*), read at
+ * the composable call site and passed in, so this function stays pure and the
+ * remember-cache at the call site re-colours when the theme changes.
  */
-private fun highlightCode(code: String, language: String?, dark: Boolean): AnnotatedString {
-    val kw = if (dark) androidx.compose.ui.graphics.Color(0xFFC792EA) else androidx.compose.ui.graphics.Color(0xFF6C3FE0)
-    val str = if (dark) androidx.compose.ui.graphics.Color(0xFFC3E88D) else androidx.compose.ui.graphics.Color(0xFF2E7D32)
-    val com = if (dark) androidx.compose.ui.graphics.Color(0xFF7E8C99) else androidx.compose.ui.graphics.Color(0xFF6B7C8C)
-    val num = if (dark) androidx.compose.ui.graphics.Color(0xFFF78C6C) else androidx.compose.ui.graphics.Color(0xFFD84315)
+private fun highlightCode(code: String, language: String?, colors: GsColors): AnnotatedString {
+    val kw = colors.codeKeyword
+    val str = colors.codeString
+    val com = colors.codeComment
+    val num = colors.codeNumber
     val hashComments = hashCommentLanguages.contains(language?.lowercase() ?: "")
     return buildAnnotatedString {
         var index = 0
@@ -1716,9 +1720,9 @@ private fun CodeBlock(segment: ContentSegment, onCopyCode: (String) -> Unit, liv
                     // highlight pass when the answer lands (ChatGPT-style).
                     live -> AnnotatedString(segment.text)
                     else -> {
-                        val dark = isSystemInDarkTheme()
-                        remember(segment.text, segment.language, dark) {
-                            highlightCode(segment.text, segment.language, dark)
+                        val colors = GsTheme.colors
+                        remember(segment.text, segment.language, colors) {
+                            highlightCode(segment.text, segment.language, colors)
                         }
                     }
                 },

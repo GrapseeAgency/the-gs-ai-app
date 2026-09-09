@@ -45,18 +45,19 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.grapsee.gsai.ui.components.GsChip
 import com.grapsee.gsai.ui.components.GsScreenScaffold
-import com.grapsee.gsai.ui.theme.Aeruo
 import com.grapsee.gsai.ui.theme.GsMotion
+import com.grapsee.gsai.ui.theme.GsTheme
 import com.grapsee.gsai.ui.theme.rememberAuroraBrush
 import kotlinx.coroutines.delay
 
 /**
  * AERUO KINETIC — CODE WORKSPACE.
  * File chips switch samples, Editor/Output/Diff tabs switch views. The editor
- * is a dark RaisedDark card with simple span-rule syntax colouring (keywords
- * accent, strings secondary, comments muted) and a muted line-number gutter.
- * Run compiles fake-fast (800ms) with a pulsing aurora dot — the sanctioned
- * aurora moment — then reveals the console. Sample data only.
+ * is a code-surface card (GsTheme.colors.codeSurface) with simple span-rule
+ * syntax colouring (keywords accent, strings secondary, comments muted) and a
+ * muted line-number gutter. Run compiles fake-fast (800ms) with a pulsing
+ * aurora dot — the sanctioned aurora moment — then reveals the console.
+ * Sample data only.
  */
 
 private val codeFiles = listOf("Main.kt", "Engine.kt", "Types.kt", "build.gradle.kts")
@@ -197,7 +198,7 @@ private fun EditorCard(fileName: String) {
     val stringColor = MaterialTheme.colorScheme.secondary
     val lines = codeSamples[fileName] ?: emptyList()
     Surface(
-        color = Aeruo.RaisedDark,
+        color = GsTheme.colors.codeSurface,
         shape = RoundedCornerShape(GsMotion.radiusCard),
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -207,7 +208,7 @@ private fun EditorCard(fileName: String) {
                     Text(
                         text = "${index + 1}",
                         style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
-                        color = Aeruo.TextMutedDark,
+                        color = GsTheme.colors.codeComment,
                         textAlign = TextAlign.End,
                         modifier = Modifier.width(18.dp)
                     )
@@ -221,15 +222,15 @@ private fun EditorCard(fileName: String) {
                             line = line,
                             accent = accent,
                             stringColor = stringColor,
-                            commentColor = Aeruo.TextMutedDark,
-                            plainColor = Aeruo.TextDark
+                            commentColor = GsTheme.colors.codeComment,
+                            plainColor = GsTheme.colors.codeText
                         ),
                         style = TextStyle(
                             fontFamily = FontFamily.Monospace,
                             fontSize = 13.sp,
                             lineHeight = 19.sp
                         ),
-                        color = Aeruo.TextDark
+                        color = GsTheme.colors.codeText
                     )
                 }
             }
@@ -241,7 +242,7 @@ private fun EditorCard(fileName: String) {
 private fun OutputCard(runPhase: Int) {
     val mono = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp, lineHeight = 18.sp)
     Surface(
-        color = Aeruo.RaisedDark,
+        color = GsTheme.colors.codeSurface,
         shape = RoundedCornerShape(GsMotion.radiusCard),
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -260,11 +261,11 @@ private fun OutputCard(runPhase: Int) {
                                 .size(10.dp)
                                 .background(rememberAuroraBrush(), CircleShape)
                         )
-                        Text(text = "Compiling…", style = mono, color = Aeruo.TextMutedDark)
+                        Text(text = "Compiling…", style = mono, color = GsTheme.colors.codeComment)
                     }
                 }
                 2 -> {
-                    Text(text = "> Compiling Main.kt", style = mono, color = Aeruo.TextDark)
+                    Text(text = "> Compiling Main.kt", style = mono, color = GsTheme.colors.codeText)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -272,18 +273,18 @@ private fun OutputCard(runPhase: Int) {
                         Icon(
                             imageVector = Icons.Outlined.CheckCircle,
                             contentDescription = null,
-                            tint = Aeruo.Accent,
+                            tint = GsTheme.colors.success,
                             modifier = Modifier.size(14.dp)
                         )
-                        Text(text = "✓ Build succeeded in 1.2s", style = mono, color = Aeruo.TextDark)
+                        Text(text = "✓ Build succeeded in 1.2s", style = mono, color = GsTheme.colors.codeText)
                     }
-                    Text(text = "Hello, Aeruo!", style = mono, color = Aeruo.TextDark)
+                    Text(text = "Hello, Aeruo!", style = mono, color = GsTheme.colors.codeText)
                 }
                 else -> {
                     Text(
                         text = "Press Run to compile and execute Main.kt.",
                         style = mono,
-                        color = Aeruo.TextMutedDark
+                        color = GsTheme.colors.codeComment
                     )
                 }
             }
@@ -301,7 +302,7 @@ private fun DiffCard() {
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Surface(
-            color = Aeruo.RaisedDark,
+            color = GsTheme.colors.codeSurface,
             shape = RoundedCornerShape(GsMotion.radiusCard),
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -314,9 +315,9 @@ private fun DiffCard() {
                         text = line.marker + " " + line.text,
                         style = mono,
                         color = when (line.marker) {
-                            "+" -> Color(0xFF2DD4A8) // aurora accent start — sanctioned
-                            "-" -> Color(0xFFE5484D) // destructive red — deletion only
-                            else -> Aeruo.TextMutedDark
+                            "+" -> GsTheme.colors.success // semantic success token — additions only
+                            "-" -> GsTheme.colors.error   // semantic error token — deletions only
+                            else -> GsTheme.colors.codeComment
                         }
                     )
                 }

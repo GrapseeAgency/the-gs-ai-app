@@ -23,7 +23,7 @@ private struct StaggerIn<Content: View>: View {
     }
 }
 
-// MARK: - Code — editor, console and diff on an obsidian canvas
+// MARK: - Code — editor, console and diff on the code canvas
 
 /// Full-screen code workspace (presented via .fullScreenCover). Owns its
 /// chrome: close control, serif title, language chip. Files, build output and
@@ -31,18 +31,6 @@ private struct StaggerIn<Content: View>: View {
 struct CodeWorkspaceView: View {
 
     @Environment(\.dismiss) private var dismiss
-
-    /// Obsidian code canvas — built through the frozen Aero.dynamic helper
-    /// using Aero.surface's exact dark value (11151C). The frozen palette has
-    /// no guaranteed-dark token, so this canvas stays dark in both
-    /// appearances, like a terminal.
-    private let inkSurface = Aero.dynamic(
-        light: UIColor(red: 0.067, green: 0.082, blue: 0.110, alpha: 1),
-        dark: UIColor(red: 0.067, green: 0.082, blue: 0.110, alpha: 1))
-    private let inkText = Color.white.opacity(0.92)
-    private let inkMuted = Color.white.opacity(0.45)
-    /// Soft sky for string literals — an Aurora family token used flat.
-    private let inkString = Aero.aurora[1]
 
     private let keywords: Set<String> = [
         "fun", "val", "var", "return", "if", "else", "class", "data",
@@ -248,18 +236,18 @@ struct CodeWorkspaceView: View {
             HStack {
                 Text(currentFile.name)
                     .font(Aero.label())
-                    .foregroundStyle(inkMuted)
+                    .foregroundStyle(Aero.textSecondary)
                 Spacer()
                 Text("Kotlin")
                     .font(Aero.label())
-                    .foregroundStyle(inkMuted)
+                    .foregroundStyle(Aero.textSecondary)
             }
             VStack(alignment: .leading, spacing: 5) {
                 ForEach(Array(currentFile.lines.enumerated()), id: \.offset) { index, line in
                     HStack(alignment: .firstTextBaseline, spacing: 12) {
                         Text("\(index + 1)")
                             .font(Aero.responsive(12, relativeTo: .caption, design: .monospaced))
-                            .foregroundStyle(inkMuted)
+                            .foregroundStyle(Aero.textSecondary)
                             .frame(width: 22, alignment: .trailing)
                         coloredLine(line)
                             .font(Aero.responsive(13, relativeTo: .footnote, design: .monospaced))
@@ -269,15 +257,15 @@ struct CodeWorkspaceView: View {
         }
         .padding(Aero.Spacing.m)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 16).fill(inkSurface))
+        .background(RoundedRectangle(cornerRadius: 16).fill(Aero.codeSurface))
     }
 
-    /// Simple syntax colouring: keywords accent, strings soft sky, comments
-    /// muted, everything else ink.
+    /// Simple syntax colouring: keywords accent, strings codeString, comments
+    /// muted, everything else codeText — on the Aero.codeSurface canvas.
     private func coloredLine(_ line: String) -> Text {
         guard !line.isEmpty else { return Text(" ") }
         if line.trimmingCharacters(in: .whitespaces).hasPrefix("//") {
-            return Text(line).foregroundColor(inkMuted)
+            return Text(line).foregroundColor(Aero.textSecondary)
         }
         var output = Text("")
         var word = ""
@@ -285,7 +273,7 @@ struct CodeWorkspaceView: View {
 
         func flushWord() {
             guard !word.isEmpty else { return }
-            let color: Color = keywords.contains(word) ? Aero.accent : inkText
+            let color: Color = keywords.contains(word) ? Aero.accent : Aero.codeText
             output = output + Text(word).foregroundColor(color)
             word = ""
         }
@@ -294,14 +282,14 @@ struct CodeWorkspaceView: View {
             if character == "\"" {
                 flushWord()
                 inString.toggle()
-                output = output + Text(String(character)).foregroundColor(inkString)
+                output = output + Text(String(character)).foregroundColor(Aero.codeString)
             } else if inString {
-                output = output + Text(String(character)).foregroundColor(inkString)
+                output = output + Text(String(character)).foregroundColor(Aero.codeString)
             } else if character.isLetter || character.isNumber || character == "_" {
                 word.append(character)
             } else {
                 flushWord()
-                output = output + Text(String(character)).foregroundColor(inkText)
+                output = output + Text(String(character)).foregroundColor(Aero.codeText)
             }
         }
         flushWord()
@@ -323,7 +311,7 @@ struct CodeWorkspaceView: View {
                 .frame(maxWidth: .infinity)
                 .padding(14)
                 .background(RoundedRectangle(cornerRadius: Aero.Radius.card).fill(Aero.accent))
-                .foregroundStyle(Color.white)
+                .foregroundStyle(Aero.onAccent)
             }
             .buttonStyle(KineticPressStyle())
             .disabled(isBuilding)
@@ -339,27 +327,27 @@ struct CodeWorkspaceView: View {
                     AuroraIndicator()
                     Text("Building Main.kt…")
                         .font(Aero.responsive(13, relativeTo: .footnote, design: .monospaced))
-                        .foregroundColor(inkMuted)
+                        .foregroundColor(Aero.textSecondary)
                 }
             } else if buildDone {
                 Text("> Compiling Main.kt")
                     .font(Aero.responsive(13, relativeTo: .footnote, design: .monospaced))
-                    .foregroundColor(inkMuted)
+                    .foregroundColor(Aero.textSecondary)
                 Text("✓ Build succeeded in 1.2s")
                     .font(Aero.responsive(13, relativeTo: .footnote, design: .monospaced))
                     .foregroundColor(Aero.accent)
                 Text("Hello, Aeruo!")
                     .font(Aero.responsive(13, relativeTo: .footnote, design: .monospaced))
-                    .foregroundColor(inkText)
+                    .foregroundColor(Aero.codeText)
             } else {
                 Text("> Press Run to compile Main.kt")
                     .font(Aero.responsive(13, relativeTo: .footnote, design: .monospaced))
-                    .foregroundColor(inkMuted)
+                    .foregroundColor(Aero.textSecondary)
             }
         }
         .padding(Aero.Spacing.m)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 16).fill(inkSurface))
+        .background(RoundedRectangle(cornerRadius: 16).fill(Aero.codeSurface))
     }
 
     private func build() {
@@ -387,7 +375,7 @@ struct CodeWorkspaceView: View {
             }
             .padding(Aero.Spacing.m)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 16).fill(inkSurface))
+            .background(RoundedRectangle(cornerRadius: 16).fill(Aero.codeSurface))
             Text("engine.patch · 2 additions · 2 removals")
                 .font(Aero.caption())
                 .foregroundStyle(Aero.textMuted)
@@ -396,7 +384,7 @@ struct CodeWorkspaceView: View {
 
     private func diffColor(for line: String) -> Color {
         if line.hasPrefix("+") { return Aero.accent }
-        if line.hasPrefix("-") { return Color(red: 0.9, green: 0.28, blue: 0.28) }
-        return inkMuted
+        if line.hasPrefix("-") { return Aero.danger }
+        return Aero.textSecondary
     }
 }

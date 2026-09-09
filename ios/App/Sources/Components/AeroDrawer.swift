@@ -24,23 +24,16 @@ struct AeroDrawer: View {
     /// only when the drag (or its projected fling) earns the dismissal.
     @State private var closeOffset: CGFloat = 0
 
-    // Forced-obsidian palette (fixed benchmark-dark in both appearances)
-    private let panel = Aero.dynamic(
-        light: UIColor(red: 0.039, green: 0.051, blue: 0.071, alpha: 1),
-        dark: UIColor(red: 0.039, green: 0.051, blue: 0.071, alpha: 1))
-    private let raised = Aero.dynamic(
-        light: UIColor(red: 0.094, green: 0.118, blue: 0.157, alpha: 1),
-        dark: UIColor(red: 0.094, green: 0.118, blue: 0.157, alpha: 1))
-    private let ink = Aero.dynamic(
-        light: UIColor(red: 0.929, green: 0.937, blue: 0.949, alpha: 1),
-        dark: UIColor(red: 0.929, green: 0.937, blue: 0.949, alpha: 1))
-    private let muted = Aero.dynamic(
-        light: UIColor(red: 0.545, green: 0.576, blue: 0.631, alpha: 1),
-        dark: UIColor(red: 0.545, green: 0.576, blue: 0.631, alpha: 1))
+    // Theme-following navigation palette (foundation Step 1: the drawer belongs
+    // to the active appearance — no more forced-obsidian panel in light mode).
+    private let panel = Aero.navSurface
+    private let raised = Aero.raisedSurface
+    private let ink = Aero.text
+    private let muted = Aero.textSecondary
 
     var body: some View {
         ZStack(alignment: .leading) {
-            Color.black.opacity(0.5)
+            Aero.scrim
                 .ignoresSafeArea()
                 .onTapGesture { onClose() }
                 .transition(.opacity)
@@ -233,10 +226,10 @@ struct AeroDrawer: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Grapsee Admin")
                     .font(Aero.body())
-                    .foregroundColor(ink)
+                    .foregroundColor(Aero.text)
                 Text("graphesee@gmail.com")
                     .font(Aero.caption())
-                    .foregroundColor(muted)
+                    .foregroundColor(Aero.textSecondary)
             }
             Spacer()
             AeroChip(text: "Pro", selected: true) { onRoute(.billing) }
@@ -254,12 +247,12 @@ struct AeroDrawer: View {
                     .foregroundColor(Aero.accent)
                 Text("New chat")
                     .font(Aero.body())
-                    .foregroundColor(ink)
+                    .foregroundColor(Aero.text)
                 Spacer()
             }
             .padding(.horizontal, Aero.Spacing.m)
             .padding(.vertical, 13)
-            .background(RoundedRectangle(cornerRadius: 14).fill(raised))
+            .background(RoundedRectangle(cornerRadius: 14).fill(Aero.raisedSurface))
         }
         .buttonStyle(KineticPressStyle())
         .padding(.bottom, Aero.Spacing.m)
@@ -275,7 +268,7 @@ struct AeroDrawer: View {
     private func sectionLabel(_ text: String) -> some View {
         Text(text.uppercased())
             .font(Aero.label())
-            .foregroundColor(muted)
+            .foregroundColor(Aero.textSecondary)
             .padding(.horizontal, 4)
             .padding(.bottom, Aero.Spacing.s)
     }
@@ -289,12 +282,12 @@ struct AeroDrawer: View {
                 if let icon {
                     Image(systemName: icon)
                         .font(.system(size: 13))
-                        .foregroundColor(muted)
+                        .foregroundColor(Aero.textSecondary)
                         .frame(width: 18)
                 }
                 Text(title)
                     .font(Aero.body())
-                    .foregroundColor(ink)
+                    .foregroundColor(Aero.text)
                     .lineLimit(1)
                 Spacer()
                 if isPinned {

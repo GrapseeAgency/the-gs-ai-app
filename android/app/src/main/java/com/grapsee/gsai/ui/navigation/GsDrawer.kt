@@ -56,7 +56,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -66,9 +65,9 @@ import com.grapsee.gsai.di.ServiceLocator
 import com.grapsee.gsai.ui.components.ConversationActionsSheet
 import com.grapsee.gsai.ui.components.GsChip
 import com.grapsee.gsai.ui.components.gsConversationTitle
-import com.grapsee.gsai.ui.theme.Aeruo
 import com.grapsee.gsai.ui.theme.GsHaptics
 import com.grapsee.gsai.ui.theme.GsMotion
+import com.grapsee.gsai.ui.theme.GsTheme
 import com.grapsee.gsai.ui.theme.kineticPress
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -107,7 +106,7 @@ fun GsDrawerContent(
             .fillMaxHeight()
             .width(304.dp)
             .clip(RoundedCornerShape(topEnd = 24.dp, bottomEnd = 24.dp))
-            .background(Aeruo.Obsidian)
+            .background(GsTheme.colors.navSurface)
             .statusBarsPadding()
             .navigationBarsPadding()
             .verticalScroll(rememberScrollState())
@@ -121,14 +120,14 @@ fun GsDrawerContent(
                 modifier = Modifier
                     .size(44.dp)
                     .clip(CircleShape)
-                    .background(Aeruo.AccentSoftDark),
+                    .background(GsTheme.colors.accentSoft),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     "GA",
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.SemiBold,
-                    color = Aeruo.Accent
+                    color = GsTheme.colors.accent
                 )
             }
             Spacer(Modifier.width(GsMotion.spaceS))
@@ -136,12 +135,12 @@ fun GsDrawerContent(
                 Text(
                     "Grapsee Admin",
                     style = MaterialTheme.typography.titleMedium,
-                    color = Aeruo.TextDark
+                    color = GsTheme.colors.textPrimary
                 )
                 Text(
                     "graphesee@gmail.com",
                     style = MaterialTheme.typography.labelMedium,
-                    color = Aeruo.TextMutedDark
+                    color = GsTheme.colors.textSecondary
                 )
             }
             GsChip(text = "Pro", selected = true, onClick = { onNavigate(GsRoutes.BILLING) })
@@ -155,7 +154,7 @@ fun GsDrawerContent(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(GsMotion.radiusCard))
-                .background(Aeruo.RaisedDark)
+                .background(GsTheme.colors.raisedSurface)
                 .kineticPress(newChatInteraction)
                 .clickable(
                     interactionSource = newChatInteraction,
@@ -170,14 +169,14 @@ fun GsDrawerContent(
             Icon(
                 Icons.Outlined.Edit,
                 contentDescription = null,
-                tint = Aeruo.Accent,
+                tint = GsTheme.colors.accent,
                 modifier = Modifier.size(18.dp)
             )
             Spacer(Modifier.width(GsMotion.spaceS))
             Text(
                 "New chat",
                 style = MaterialTheme.typography.titleMedium,
-                color = Aeruo.TextDark
+                color = GsTheme.colors.textPrimary
             )
         }
 
@@ -204,7 +203,7 @@ fun GsDrawerContent(
                     },
                     onActions = {
                         // The reveal haptic the system lists play on long-press.
-                        if (GsHaptics.enabled()) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        GsHaptics.longPress(haptics)
                         actionTarget = conversation
                     }
                 )
@@ -219,7 +218,7 @@ fun GsDrawerContent(
         }
 
         Spacer(Modifier.height(GsMotion.spaceL))
-        HorizontalDivider(color = Aeruo.OutlineDark, thickness = 1.dp)
+        HorizontalDivider(color = GsTheme.colors.divider, thickness = 1.dp)
         Spacer(Modifier.height(GsMotion.spaceL))
 
         DrawerLabel("Explore")
@@ -250,7 +249,7 @@ fun GsDrawerContent(
         }
 
         Spacer(Modifier.height(GsMotion.spaceL))
-        HorizontalDivider(color = Aeruo.OutlineDark, thickness = 1.dp)
+        HorizontalDivider(color = GsTheme.colors.divider, thickness = 1.dp)
         Spacer(Modifier.height(GsMotion.spaceL))
 
         DrawerLabel("Account")
@@ -317,7 +316,7 @@ private fun RecentRow(
         Text(
             gsConversationTitle(conversation.title),
             style = MaterialTheme.typography.bodyMedium,
-            color = Aeruo.TextDark,
+            color = GsTheme.colors.textPrimary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f)
@@ -326,7 +325,7 @@ private fun RecentRow(
             Icon(
                 Icons.Filled.Star,
                 contentDescription = "Pinned",
-                tint = Aeruo.Accent,
+                tint = GsTheme.colors.accent,
                 modifier = Modifier.size(14.dp)
             )
         }
@@ -340,7 +339,7 @@ private fun DrawerLabel(text: String) {
     Text(
         text.uppercase(),
         style = MaterialTheme.typography.labelMedium,
-        color = Aeruo.TextMutedDark,
+        color = GsTheme.colors.textSecondary,
         modifier = Modifier.padding(horizontal = 4.dp)
     )
 }
@@ -370,7 +369,7 @@ private fun DrawerRow(
             Icon(
                 icon,
                 contentDescription = null,
-                tint = Aeruo.TextMutedDark,
+                tint = GsTheme.colors.textSecondary,
                 modifier = Modifier.size(18.dp)
             )
         } else {
@@ -379,7 +378,7 @@ private fun DrawerRow(
         Text(
             title,
             style = MaterialTheme.typography.bodyMedium,
-            color = Aeruo.TextDark,
+            color = GsTheme.colors.textPrimary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
