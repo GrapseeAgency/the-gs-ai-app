@@ -146,7 +146,7 @@ struct AeroDrawer: View {
                 if raw < -110 || projected < -240 {
                     onClose()
                 } else {
-                    withAnimation(Aero.spring) { closeOffset = 0 }
+                    withAnimation(Aero.motion(Aero.spring)) { closeOffset = 0 }
                 }
             }
     }

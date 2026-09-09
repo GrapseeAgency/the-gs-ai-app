@@ -3,11 +3,12 @@ package com.grapsee.gsai.ui.home
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
+import android.provider.Settings as AndroidSettings
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
-import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
@@ -60,6 +61,10 @@ import androidx.compose.material.icons.outlined.TravelExplore
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -71,6 +76,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -95,6 +101,11 @@ import com.grapsee.gsai.ui.theme.GsMotion
 import com.grapsee.gsai.ui.theme.kineticPress
 import com.grapsee.gsai.ui.theme.rememberAuroraBrush
 import kotlinx.coroutines.delay
+import com.grapsee.gsai.ui.theme.gsHaptic
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import kotlinx.coroutines.launch
 import java.util.Calendar
 
@@ -112,6 +123,10 @@ fun HomeScreen(
     val context = LocalContext.current
     // GS LiveUpdate: quiet GitHub manifest check on every Home appearance (10-min throttle).
     LaunchedEffect(Unit) { LiveUpdater.syncFrom(context) }
+    // Platform feedback surface — permission denials etc. answer with a
+    // snackbar (with a recovery action), never a system Toast: the snackbar
+    // lives inside the app's own layout, respects the theme and can act.
+    val snackbarHostState = remember { SnackbarHostState() }
 
     Box(
         modifier = Modifier
@@ -151,7 +166,7 @@ fun HomeScreen(
             }
 
             Spacer(Modifier.height(GsMotion.spaceS))
-            HeroInput(onNavigate = onNavigate)
+            HeroInput(onNavigate = onNavigate, snackbarHostState = snackbarHostState)
             Spacer(Modifier.height(GsMotion.spaceS))
             Text(
                 "GS can make mistakes — double-check important info.",
@@ -163,6 +178,11 @@ fun HomeScreen(
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
             )
         }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter)
+        )
     }
 }
 
@@ -656,8 +676,12 @@ private fun QuickChips(onNavigate: (String) -> Unit) {
 }
 
 @Composable
-private fun HeroInput(onNavigate: (String) -> Unit) {
+private fun HeroInput(
+    onNavigate: (String) -> Unit,
+    snackbarHostState: SnackbarHostState
+) {
     val context = LocalContext.current
+    val view = LocalView.current
 
     // --- Voice press-and-hold -------------------------------------------------
     // Hold the aurora orb to dictate: live partials fill the hero line, release
@@ -740,24 +764,38 @@ private fun HeroInput(onNavigate: (String) -> Unit) {
         }
     }
 
+    val holdScope = rememberCoroutineScope()
+
     val micPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) {
             startRecognizer()
         } else {
-            // Denial is spoken, not silent: the platform toast says where the
-            // fix lives (the system can also keep asking — the launcher still
-            // re-fires on the next hold). Then the orb quietly resets.
-            Toast.makeText(
-                context,
-                "Microphone is off — allow it in Settings to talk",
-                Toast.LENGTH_SHORT
-            ).show()
+            // Denial is spoken, not silent: a snackbar says where the fix lives
+            // and hands the user straight to the app settings (the system can
+            // also keep asking — the launcher still re-fires on the next hold).
+            // Then the orb quietly resets.
+            view.gsHaptic(android.view.HapticFeedbackConstants.CLOCK_TICK)
+            holdScope.launch {
+                val result = snackbarHostState.showSnackbar(
+                    message = "Microphone is off — allow it in Settings to talk",
+                    actionLabel = "Open Settings",
+                    duration = SnackbarDuration.Long
+                )
+                if (result == SnackbarResult.ActionPerformed) {
+                    runCatching {
+                        context.startActivity(
+                            Intent(AndroidSettings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                                .setData(Uri.fromParts("package", context.packageName, null))
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        )
+                    }
+                }
+            }
             quietReset()
         }
     }
-    val holdScope = rememberCoroutineScope()
 
     // Background lifecycle (req 17): the dictation mic is a foreground-only
     // session. ON_STOP (home, recents, screen off) tears the recognizer down
@@ -877,6 +915,16 @@ private fun HeroInput(onNavigate: (String) -> Unit) {
                 modifier = Modifier
                     .size(62.dp)
                     .scale(orbScale)
+                    // TalkBack parity: the orb is a button — its double-tap
+                    // opens voice mode exactly like a sighted tap; the hold
+                    // behaviour stays a gesture the finger performs.
+                    .semantics {
+                        role = Role.Button
+                        onClick(label = "Open voice mode") {
+                            onNavigate(GsRoutes.VOICE)
+                            true
+                        }
+                    }
                     .pointerInput(Unit) {
                         detectTapGestures(
                             onPress = {
@@ -885,6 +933,10 @@ private fun HeroInput(onNavigate: (String) -> Unit) {
                                 val timer = holdScope.launch {
                                     delay(VOICE_HOLD_TRIGGER_MS)
                                     isHold = true
+                                    // Hold threshold crossed — the system's
+                                    // quiet tick announces "dictation armed"
+                                    // before the mic actually opens.
+                                    view.gsHaptic(android.view.HapticFeedbackConstants.CLOCK_TICK)
                                     beginVoiceHold()
                                 }
                                 val released = tryAwaitRelease()

@@ -1,7 +1,6 @@
 package com.grapsee.gsai.ui.assistants
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -258,12 +257,15 @@ private fun AssistantCard(
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
-    Box(
-        modifier = modifier.pointerInput(assistant.id) {
-            detectTapGestures(onLongPress = { onLongClick() })
-        }
-    ) {
-        GsCard(modifier = Modifier.fillMaxWidth(), onClick = onClick) {
+    Box(modifier = modifier) {
+        GsCard(
+            modifier = Modifier.fillMaxWidth(),
+            onClick = onClick,
+            // Long-press opens the assistant's action sheet through GsCard's
+            // combinedClickable — one gesture pipeline, and TalkBack gets the
+            // hold as a labelled action instead of a silent pointer rule.
+            onLongClick = onLongClick
+        ) {
             Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),

@@ -498,7 +498,7 @@ private struct LibraryItemSheet: View {
         ) {
             Button("Delete", role: .destructive) {
                 ConversationStore.shared.deleteLibraryItem(id: item.id)
-                GSHaptics.success()
+                GSHaptics.warning()
                 onDeleted()
                 dismiss()
             }

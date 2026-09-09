@@ -93,7 +93,7 @@ struct RootView: View {
                 HomeView(
                     onOpenDrawer: {
                         drawerEntryOffset = 0
-                        withAnimation(Aero.spring) { showDrawer = true }
+                        withAnimation(Aero.motion(Aero.spring)) { showDrawer = true }
                     },
                     onRoute: { router.path.append($0) }
                 )
@@ -105,10 +105,10 @@ struct RootView: View {
                 AeroDrawer(
                     entryOffset: $drawerEntryOffset,
                     onRoute: { route in
-                        withAnimation(Aero.spring) { showDrawer = false }
+                        withAnimation(Aero.motion(Aero.spring)) { showDrawer = false }
                         router.path.append(route)
                     },
-                    onClose: { withAnimation(Aero.spring) { showDrawer = false } }
+                    onClose: { withAnimation(Aero.motion(Aero.spring)) { showDrawer = false } }
                 )
                 .transition(.opacity)
             }
@@ -117,7 +117,7 @@ struct RootView: View {
         .onReceive(quickActions.$pendingRoute) { route in
             guard let route else { return }
             quickActions.consume()
-            withAnimation(Aero.spring) { showDrawer = false }
+            withAnimation(Aero.motion(Aero.spring)) { showDrawer = false }
             router.path.append(route)
         }
         .tint(Aero.accent)
@@ -135,14 +135,18 @@ struct RootView: View {
     /// A rightward drag starting in the leading ~24pt strip opens the drawer
     /// with live tracking; a short or slow release springs it back shut.
     /// simultaneousGesture keeps the underlying controls fully interactive —
-    /// the start-location gate is what confines it to the edge zone.
+    /// the start-location gate is what confines it to the edge zone, and the
+    /// Home-root gate keeps the edge single-purpose: once a screen is pushed,
+    /// the leading edge belongs to the system's interactive-pop back swipe,
+    /// never to both at once.
     private var edgeOpenGesture: some Gesture {
         DragGesture(minimumDistance: 20)
             .onChanged { value in
                 guard value.startLocation.x < 24, value.translation.width > 0 else { return }
                 if !edgeDragActive {
-                    // A settled open drawer is the close-drag's job — never re-open.
-                    guard !showDrawer else { return }
+                    // Leading-edge drawer reveal only from the Home root —
+                    // pushed screens hand the edge to interactive pop.
+                    guard router.path.isEmpty, !showDrawer else { return }
                     edgeDragActive = true
                     showDrawer = true   // mounts un-animated, straight at the finger
                 }
@@ -154,9 +158,9 @@ struct RootView: View {
                 let raw = value.translation.width
                 let projected = value.predictedEndTranslation.width
                 if raw > Self.revealSpan * 0.5 || projected > Self.revealSpan * 0.9 {
-                    withAnimation(Aero.spring) { drawerEntryOffset = 0 }
+                    withAnimation(Aero.motion(Aero.spring)) { drawerEntryOffset = 0 }
                 } else {
-                    withAnimation(Aero.spring) { showDrawer = false }
+                    withAnimation(Aero.motion(Aero.spring)) { showDrawer = false }
                 }
             }
     }

@@ -1,6 +1,9 @@
 package com.grapsee.gsai.ui.navigation
 
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.FastOutSlowInEasing
+import com.grapsee.gsai.data.SettingsStore
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -140,19 +143,25 @@ fun GsNavHost(modifier: Modifier = Modifier) {
         // seeks these pop transitions under the Android 14+ predictive-back
         // gesture, so the back swipe scrubs the animation, not skip it.
         enterTransition = {
-            slideInHorizontally(tween(if (GsMotion.reduced) GsMotion.REDUCED_TWEEN_MS else GsMotion.NAV_TWEEN_MS, easing = FastOutSlowInEasing)) { it } +
+            // Reduce-motion is honoured as the platform defines it: NO
+            // transition, not a faster one — a 150 ms slide is still motion.
+            if (SettingsStore.reduceAnimations || SettingsStore.reduceMotion) EnterTransition.None
+            else slideInHorizontally(tween(GsMotion.NAV_TWEEN_MS, easing = FastOutSlowInEasing)) { it } +
                 fadeIn(tween(200, easing = FastOutSlowInEasing))
         },
         exitTransition = {
-            slideOutHorizontally(tween(if (GsMotion.reduced) GsMotion.REDUCED_TWEEN_MS else GsMotion.NAV_TWEEN_MS, easing = FastOutSlowInEasing)) { -it / 4 } +
+            if (SettingsStore.reduceAnimations || SettingsStore.reduceMotion) ExitTransition.None
+            else slideOutHorizontally(tween(GsMotion.NAV_TWEEN_MS, easing = FastOutSlowInEasing)) { -it / 4 } +
                 fadeOut(tween(200, easing = FastOutSlowInEasing))
         },
         popEnterTransition = {
-            slideInHorizontally(tween(if (GsMotion.reduced) GsMotion.REDUCED_TWEEN_MS else GsMotion.NAV_TWEEN_MS, easing = FastOutSlowInEasing)) { -it / 4 } +
+            if (SettingsStore.reduceAnimations || SettingsStore.reduceMotion) EnterTransition.None
+            else slideInHorizontally(tween(GsMotion.NAV_TWEEN_MS, easing = FastOutSlowInEasing)) { -it / 4 } +
                 fadeIn(tween(200, easing = FastOutSlowInEasing))
         },
         popExitTransition = {
-            slideOutHorizontally(tween(if (GsMotion.reduced) GsMotion.REDUCED_TWEEN_MS else GsMotion.NAV_TWEEN_MS, easing = FastOutSlowInEasing)) { it } +
+            if (SettingsStore.reduceAnimations || SettingsStore.reduceMotion) ExitTransition.None
+            else slideOutHorizontally(tween(GsMotion.NAV_TWEEN_MS, easing = FastOutSlowInEasing)) { it } +
                 fadeOut(tween(200, easing = FastOutSlowInEasing))
         }
     ) {

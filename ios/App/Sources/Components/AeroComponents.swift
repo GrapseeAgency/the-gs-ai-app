@@ -85,6 +85,9 @@ struct AeroChip: View {
                 .foregroundStyle(selected ? Color.white : Aero.text)
         }
         .buttonStyle(KineticPressStyle())
+        // Filter/toggle chips are buttons that carry selection state —
+        // VoiceOver announces "selected" instead of silently dropping it.
+        .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
     }
 }
 

@@ -4,8 +4,17 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -128,10 +137,12 @@ fun GsSectionHeader(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun GsCard(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
+    onLongClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
     // One interaction source shared by the click and the press-scale —
@@ -148,19 +159,42 @@ fun GsCard(
     }
     val base = modifier
         .fillMaxWidth()
-        .let { if (onClick != null) it.kineticPress(interaction) else it }
-    Surface(
-        modifier = base,
-        shape = RoundedCornerShape(GsMotion.radiusCard),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, hcColor(MaterialTheme.colorScheme.outline, MaterialTheme.colorScheme.onSurface)),
-        onClick = onClick ?: {},
-        enabled = onClick != null,
-        interactionSource = interaction
-    ) {
-        // The label rides the content node (a non-mergeable descendant) so the
-        // action-key merge policy applies it over the Surface's unlabeled click.
-        Column(modifier = Modifier.padding(GsMotion.spaceM).then(hintModifier), content = content)
+        .let { if (onClick != null || onLongClick != null) it.kineticPress(interaction) else it }
+    if (onLongClick != null) {
+        // Long-pressable card: one gesture pipeline handles tap AND hold
+        // (no parallel pointerInput racing the click), and the hold is
+        // exposed to assistive tech through onLongClickLabel — a gesture
+        // invisible to TalkBack is a feature that does not exist.
+        Surface(
+            modifier = base.combinedClickable(
+                interactionSource = interaction,
+                indication = LocalIndication.current,
+                onClick = onClick ?: {},
+                onLongClickLabel = "More options",
+                onLongClick = onLongClick
+            ),
+            shape = RoundedCornerShape(GsMotion.radiusCard),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, hcColor(MaterialTheme.colorScheme.outline, MaterialTheme.colorScheme.onSurface))
+        ) {
+            // The label rides the content node (a non-mergeable descendant) so the
+            // action-key merge policy applies it over the Surface's unlabeled click.
+            Column(modifier = Modifier.padding(GsMotion.spaceM).then(hintModifier), content = content)
+        }
+    } else {
+        Surface(
+            modifier = base,
+            shape = RoundedCornerShape(GsMotion.radiusCard),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, hcColor(MaterialTheme.colorScheme.outline, MaterialTheme.colorScheme.onSurface)),
+            onClick = onClick ?: {},
+            enabled = onClick != null,
+            interactionSource = interaction
+        ) {
+            // The label rides the content node (a non-mergeable descendant) so the
+            // action-key merge policy applies it over the Surface's unlabeled click.
+            Column(modifier = Modifier.padding(GsMotion.spaceM).then(hintModifier), content = content)
+        }
     }
 }
 
@@ -419,23 +453,33 @@ fun GsErrorState(message: String, onRetry: () -> Unit, modifier: Modifier = Modi
 
 @Composable
 fun GsOfflineBanner(visible: Boolean, modifier: Modifier = Modifier) {
-    if (!visible) return
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = RoundedCornerShape(10.dp)
+    // Presence animates in from the layout — the network state change reads as
+    // the system reacting, not a card teleporting in mid-content.
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(animationSpec = tween(180)) +
+            expandVertically(animationSpec = tween(180)),
+        exit = fadeOut(animationSpec = tween(150)) +
+            shrinkVertically(animationSpec = tween(150)),
+        modifier = modifier
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            shape = RoundedCornerShape(10.dp)
         ) {
-            Icon(Icons.Outlined.CloudOff, contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(16.dp))
-            Text("You're offline — changes will sync when you reconnect.",
-                style = MaterialTheme.typography.labelMedium,
-                color = hcColor(MaterialTheme.colorScheme.onSurfaceVariant, MaterialTheme.colorScheme.onSurface))
+            Row(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(Icons.Outlined.CloudOff, contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(16.dp))
+                Text("You're offline — changes will sync when you reconnect.",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = hcColor(MaterialTheme.colorScheme.onSurfaceVariant, MaterialTheme.colorScheme.onSurface))
+            }
         }
     }
 }

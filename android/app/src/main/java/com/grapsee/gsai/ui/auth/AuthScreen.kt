@@ -77,14 +77,22 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.ui.theme.GsMotion
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import kotlinx.coroutines.launch
 
 /** Internal auth flow state machine — self-contained, no nav dependency. */
 private enum class AuthStep { Welcome, SignIn, SignUp, VerifyEmail, TwoFactor, ResetPassword, ResetSent }
 
-/** Kinetic horizontal slide used for every step change (forward = enter from the right). */
+/** Kinetic horizontal slide used for every step change (forward = enter from
+ *  the right). Under reduce-motion / reduce-animations the step snaps with no
+ *  transition at all — a 220 ms slide is still motion. */
 private fun stepTransition(forward: Boolean): ContentTransform {
+    if (SettingsStore.reduceAnimations || SettingsStore.reduceMotion) {
+        return EnterTransition.None togetherWith ExitTransition.None
+    }
     val slideSpec = tween<IntOffset>(durationMillis = 220)
     return (
         slideInHorizontally(animationSpec = slideSpec) { full ->

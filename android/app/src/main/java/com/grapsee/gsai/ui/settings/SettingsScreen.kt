@@ -506,7 +506,15 @@ private fun ExpandCard(
 ) {
     val expanded = expandedId == id
     GsCard(onClick = onToggle) {
-        Column(modifier = Modifier.animateContentSize()) {
+        Column(
+            modifier = Modifier
+                // Size change animates — unless the user asked the system to
+                // stand still, in which case expansion snaps like a disclose.
+                .let {
+                    if (SettingsStore.reduceAnimations || SettingsStore.reduceMotion) it
+                    else it.animateContentSize()
+                }
+        ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
