@@ -2,9 +2,15 @@ import SwiftUI
 
 /**
  * AERUO KINETIC drawer — the primary navigation, benchmark pattern
- * (ChatGPT / Claude / Kimi): obsidian panel sliding over the canvas,
+ * (ChatGPT / Claude / Kimi): a bounded panel sliding over the canvas,
  * account header, one-tap new chat, LIVE recents from `ConversationStore`
  * (pin / archive / delete on long-press), and the section map.
+ *
+ * Task 90-b rebuild: the panel is width-bounded and leading-anchored so the
+ * scrim stays tappable beyond it, carries a single sanctioned soft shadow,
+ * and follows the canonical hierarchy — account header, dominant primary
+ * "New chat" action, RECENT, primary navigation, Tools, Account — with live
+ * selected-state routing and VoiceOver containment/escape.
  */
 struct AeroDrawer: View {
 
@@ -13,6 +19,17 @@ struct AeroDrawer: View {
     @Binding var entryOffset: CGFloat
     var onRoute: (AeroRoute) -> Void
     var onClose: () -> Void
+
+    /// Live selected-state inputs (Task 90-b): the route currently on screen
+    /// and whether the shell sits at the Home root. Defaults keep call sites
+    /// compiling; RootView passes the real values.
+    var activeRoute: AeroRoute? = nil
+    var atHomeRoot: Bool = true
+
+    /// Dedicated Home action (Task 90-b). Home is a shell state, not an
+    /// AeroRoute — the host closes the drawer and empties the stack itself,
+    /// so no unregistered route can ever be appended.
+    var onHome: (() -> Void)? = nil
 
     @ObservedObject private var store = ConversationStore.shared
 
@@ -24,18 +41,24 @@ struct AeroDrawer: View {
     /// only when the drag (or its projected fling) earns the dismissal.
     @State private var closeOffset: CGFloat = 0
 
+    /// Panel geometry (Task 90-b): bounded width, leading-anchored — the
+    /// panel must never span the full screen; the scrim beyond it stays
+    /// tappable and VoiceOver-reachable.
+    private var panelWidth: CGFloat {
+        min(340, UIScreen.main.bounds.width * 0.85)
+    }
+
     // Theme-following navigation palette (foundation Step 1: the drawer belongs
     // to the active appearance — no more forced-obsidian panel in light mode).
     private let panel = Aero.navSurface
-    private let raised = Aero.raisedSurface
-    private let ink = Aero.text
-    private let muted = Aero.textSecondary
 
     var body: some View {
         ZStack(alignment: .leading) {
             Aero.scrim
                 .ignoresSafeArea()
                 .onTapGesture { onClose() }
+                .accessibilityLabel("Close menu")
+                .accessibilityAddTraits(.isButton)
                 .transition(.opacity)
 
             VStack(alignment: .leading, spacing: 0) {
@@ -59,23 +82,27 @@ struct AeroDrawer: View {
                         }
                         divider
                         Group {
-                            sectionLabel("Explore")
-                            row(title: "Chats", icon: "bubble.left") { onRoute(.chats) }
-                            row(title: "Explore", icon: "safari") { onRoute(.explore) }
-                            row(title: "Create", icon: "sparkles") { onRoute(.createTab) }
-                            row(title: "Library", icon: "books.vertical") { onRoute(.library) }
-                            row(title: "Projects", icon: "folder") { onRoute(.projects) }
-                            row(title: "Assistants", icon: "smarttoy") { onRoute(.assistants) }
-                            row(title: "Models", icon: "speed") { onRoute(.models) }
-                            row(title: "Search", icon: "magnifyingglass") { onRoute(.search) }
+                            row(title: "Home", icon: "house", isSelected: atHomeRoot) { onHome?() }
+                            row(title: "Chats", icon: "bubble.left", isSelected: activeRoute == .chats) { onRoute(.chats) }
+                            row(title: "Explore", icon: "safari", isSelected: activeRoute == .explore) { onRoute(.explore) }
+                            row(title: "Create", icon: "sparkles", isSelected: activeRoute == .createTab) { onRoute(.createTab) }
+                            row(title: "Library", icon: "books.vertical", isSelected: activeRoute == .library) { onRoute(.library) }
+                        }
+                        divider
+                        Group {
+                            sectionLabel("Tools")
+                            row(title: "Projects", icon: "folder", isSelected: activeRoute == .projects) { onRoute(.projects) }
+                            row(title: "Assistants", icon: "cpu", isSelected: activeRoute == .assistants) { onRoute(.assistants) }
+                            row(title: "Models", icon: "speedometer", isSelected: activeRoute == .models) { onRoute(.models) }
+                            row(title: "Search", icon: "magnifyingglass", isSelected: activeRoute == .search) { onRoute(.search) }
                         }
                         divider
                         Group {
                             sectionLabel("Account")
-                            row(title: "Upgrade plan", icon: "sparkles") { onRoute(.billing) }
-                            row(title: "Notifications", icon: "bell") { onRoute(.notifications) }
-                            row(title: "Profile", icon: "person") { onRoute(.profile) }
-                            row(title: "Settings", icon: "gearshape") { onRoute(.settings) }
+                            row(title: "Profile", icon: "person", isSelected: activeRoute == .profile) { onRoute(.profile) }
+                            row(title: "Notifications", icon: "bell", isSelected: activeRoute == .notifications) { onRoute(.notifications) }
+                            row(title: "Billing", icon: "creditcard", isSelected: activeRoute == .billing) { onRoute(.billing) }
+                            row(title: "Settings", icon: "gearshape", isSelected: activeRoute == .settings) { onRoute(.settings) }
                         }
                     }
                     .padding(.horizontal, Aero.Spacing.m)
@@ -83,8 +110,9 @@ struct AeroDrawer: View {
                 }
             }
             .padding(.top, Aero.Spacing.xl)
-            .frame(maxHeight: .infinity, alignment: .top)
+            .frame(width: panelWidth, maxHeight: .infinity, alignment: .top)
             .background(panel)
+            .shadow(color: Color.black.opacity(0.18), radius: 24, x: 8)
             .offset(x: entryOffset + closeOffset)
             .gesture(closeDragGesture)
             .transition(.move(edge: .leading).combined(with: .opacity))
@@ -93,6 +121,9 @@ struct AeroDrawer: View {
                 closeOffset = 0
             }
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Navigation menu")
+        .accessibilityAction(.escape) { onClose() }
         .alert("Rename chat", isPresented: Binding(
             get: { renameTarget != nil },
             set: { if !$0 { renameTarget = nil } }
@@ -215,6 +246,9 @@ struct AeroDrawer: View {
 
     // MARK: Header
 
+    /// Account header — tappable as a whole (account action); the Pro chip
+    /// stays an independent button so it still wins taps over the row gesture
+    /// and keeps its own billing route.
     private var header: some View {
         HStack(spacing: Aero.Spacing.s) {
             ZStack {
@@ -234,9 +268,15 @@ struct AeroDrawer: View {
             Spacer()
             AeroChip(text: "Pro", selected: true) { onRoute(.billing) }
         }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            GSHaptics.tap()   // committed open — the drawer routes
+            onRoute(.profile)
+        }
         .padding(.bottom, Aero.Spacing.m)
     }
 
+    /// Dominant primary action (Task 90-b): full-width accent-filled button.
     private var newChat: some View {
         Button {
             onRoute(.chat(nil))
@@ -244,17 +284,18 @@ struct AeroDrawer: View {
             HStack(spacing: Aero.Spacing.s) {
                 Image(systemName: "square.and.pencil")
                     .font(.system(size: 14))
-                    .foregroundColor(Aero.accent)
+                    .foregroundColor(Aero.onAccent)
                 Text("New chat")
                     .font(Aero.body())
-                    .foregroundColor(Aero.text)
+                    .foregroundColor(Aero.onAccent)
                 Spacer()
             }
             .padding(.horizontal, Aero.Spacing.m)
             .padding(.vertical, 13)
-            .background(RoundedRectangle(cornerRadius: 14).fill(Aero.raisedSurface))
+            .background(RoundedRectangle(cornerRadius: Aero.Radius.md).fill(Aero.accent))
         }
         .buttonStyle(KineticPressStyle())
+        .accessibilityLabel("New chat")
         .padding(.bottom, Aero.Spacing.m)
     }
 
@@ -273,7 +314,7 @@ struct AeroDrawer: View {
             .padding(.bottom, Aero.Spacing.s)
     }
 
-    private func row(title: String, icon: String?, isPinned: Bool = false, action: @escaping () -> Void) -> some View {
+    private func row(title: String, icon: String?, isPinned: Bool = false, isSelected: Bool = false, action: @escaping () -> Void) -> some View {
         Button {
             GSHaptics.tap()   // committed open — the drawer routes
             action()
@@ -282,12 +323,12 @@ struct AeroDrawer: View {
                 if let icon {
                     Image(systemName: icon)
                         .font(.system(size: 13))
-                        .foregroundColor(Aero.textSecondary)
+                        .foregroundColor(isSelected ? Aero.accent : Aero.textSecondary)
                         .frame(width: 18)
                 }
                 Text(title)
                     .font(Aero.body())
-                    .foregroundColor(Aero.text)
+                    .foregroundColor(isSelected ? Aero.accent : Aero.text)
                     .lineLimit(1)
                 Spacer()
                 if isPinned {
@@ -298,8 +339,14 @@ struct AeroDrawer: View {
             }
             .padding(.horizontal, Aero.Spacing.m)
             .padding(.vertical, 11)
+            .background {
+                if isSelected {
+                    RoundedRectangle(cornerRadius: Aero.Radius.md).fill(Aero.accentSoft)
+                }
+            }
             .contentShape(Rectangle())
         }
         .buttonStyle(KineticPressStyle())
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
 }

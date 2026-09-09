@@ -30,6 +30,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -54,6 +56,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -68,6 +71,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.ui.theme.auroraBackground
 import com.grapsee.gsai.ui.theme.Aeruo
+import com.grapsee.gsai.ui.theme.GsLayout
 import com.grapsee.gsai.ui.theme.GsMotion
 import com.grapsee.gsai.ui.theme.GsRadius
 import com.grapsee.gsai.ui.theme.LocalHighContrast
@@ -538,15 +542,31 @@ fun GsSkeleton(height: Int, modifier: Modifier = Modifier) {
 
 /** Standard screen scaffold: top bar with optional back + actions.
  *
+ * STEP 2 header system — the shell's screen-bar grammar in one place:
+ *  · [title] is the screen's navigation title (compact tier — one row with
+ *    back and trailing actions; detail/secondary pages).
+ *  · [subtitle] (optional) carries the page's supporting line under the
+ *    title, so screens stop hand-rolling their own title stacks.
+ *  · [actions] are the trailing contextual actions; a search affordance is
+ *    just another trailing action (icon or field), not a separate grammar.
+ *  · Root-level pages that want a more spacious large-title presentation
+ *    opt in with [largeTitle] — same content contract, stronger hierarchy.
+ *
  * The scaffold owns the system-bar insets: statusBarsPadding keeps the title
  * clear of the status bar and navigationBarsPadding keeps content clear of the
  * gesture bar on every screen that composes it (callers must NOT add their
  * own — the padding would double). IME insets stay a per-screen concern:
  * screens with text input layer imePadding() on their scroll/content region,
- * which composes cleanly on top of the consumed navigation-bar inset. */
+ * which composes cleanly on top of the consumed navigation-bar inset.
+ *
+ * The whole column (header + content) is clamped to the readable maximum
+ * width ([GsLayout.contentMaxWidth]) and centered — phones are unaffected,
+ * tablets/landscape get the reading column for free. */
 @Composable
 fun GsScreenScaffold(
     title: String,
+    subtitle: String? = null,
+    largeTitle: Boolean = false,
     onBack: (() -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
     content: @Composable ColumnScope.() -> Unit
@@ -554,6 +574,7 @@ fun GsScreenScaffold(
     Column(
         Modifier
             .fillMaxWidth()
+            .gsContentWidth()
             .statusBarsPadding()
             .navigationBarsPadding()
             .padding(top = GsMotion.spaceM)
@@ -571,11 +592,25 @@ fun GsScreenScaffold(
             }
             Text(
                 title,
-                style = MaterialTheme.typography.headlineSmall,
+                style = if (largeTitle) {
+                    MaterialTheme.typography.headlineMedium
+                } else {
+                    MaterialTheme.typography.headlineSmall
+                },
                 color = MaterialTheme.colorScheme.onBackground,
                 modifier = Modifier.weight(1f)
             )
             actions()
+        }
+        if (subtitle != null) {
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = GsMotion.spaceM, vertical = GsMotion.spaceXS)
+            )
         }
         Spacer(Modifier.height(GsMotion.spaceS))
         Column(
@@ -583,6 +618,23 @@ fun GsScreenScaffold(
             content = content
         )
     }
+}
+
+/**
+ * STEP 2 responsive foundation — clamps content to the readable maximum
+ * width ([GsLayout.contentMaxWidth]) and centers it in the available space.
+ * On phones (narrower than the cap) this is a no-op; on tablets, landscape
+ * and foldables the shell keeps one predictable reading column instead of
+ * stretching content edge to edge.
+ *
+ * Recipe: fillMaxWidth (own the full track) → wrapContentWidth (let the
+ * measured content be smaller and center it) → widthIn (cap the content).
+ */
+fun Modifier.gsContentWidth(): Modifier = composed {
+    this
+        .fillMaxWidth()
+        .wrapContentWidth(Alignment.CenterHorizontally)
+        .widthIn(max = GsLayout.contentMaxWidth)
 }
 
 // --- edge states -------------------------------------------------------------

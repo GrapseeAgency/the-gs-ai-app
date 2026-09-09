@@ -108,7 +108,16 @@ struct RootView: View {
                         withAnimation(Aero.motion(Aero.spring)) { showDrawer = false }
                         router.path.append(route)
                     },
-                    onClose: { withAnimation(Aero.motion(Aero.spring)) { showDrawer = false } }
+                    onClose: { withAnimation(Aero.motion(Aero.spring)) { showDrawer = false } },
+                    activeRoute: router.path.last,
+                    atHomeRoot: router.path.isEmpty,
+                    // Home is a shell state, not an AeroRoute: close the drawer
+                    // and empty the stack (native pop motion) — mirrors the
+                    // onRoute pattern, and no unregistered route is appended.
+                    onHome: {
+                        withAnimation(Aero.motion(Aero.spring)) { showDrawer = false }
+                        router.path = []
+                    }
                 )
                 .transition(.opacity)
             }

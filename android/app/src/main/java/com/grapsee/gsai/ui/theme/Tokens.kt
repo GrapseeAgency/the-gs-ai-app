@@ -294,6 +294,22 @@ object GsElevation {
 }
 
 // ---------------------------------------------------------------------------
+// Layout — the responsive foundation (STEP 2). One global content-width
+// contract the whole shell builds on; screens adopt it through
+// Modifier.gsContentWidth() / GsScreenScaffold as each is revisited.
+// ---------------------------------------------------------------------------
+
+object GsLayout {
+    /**
+     * Readable maximum content width. Phones (narrower than this) are
+     * untouched; tablets, landscape and foldables center-clamp the shell's
+     * content column instead of stretching text and controls edge to edge —
+     * the same reading-column discipline as the benchmark AI apps.
+     */
+    val contentMaxWidth: Dp = 640.dp
+}
+
+// ---------------------------------------------------------------------------
 // Text roles beyond the Material slots (code, metadata, button).
 // ---------------------------------------------------------------------------
 

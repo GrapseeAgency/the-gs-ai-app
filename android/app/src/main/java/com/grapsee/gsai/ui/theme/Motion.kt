@@ -63,6 +63,15 @@ object GsMotion {
     const val NAV_TWEEN_MS = 320
     const val REDUCED_TWEEN_MS = 150
 
+    /**
+     * Root-level section switches (drawer → Home/Chats/Explore/Create/Library…)
+     * get their own, deliberately faster and subtler motion tier than detail
+     * pushes ([NAV_TWEEN_MS] directional slide): a short fade with a slight
+     * vertical settle — switching product areas must feel instant, not like
+     * opening another page. See the motion hierarchy in GsNavHost.
+     */
+    const val SECTION_TWEEN_MS = 220
+
     // Radii/spacing — frozen aliases; canonical tokens live in GsRadius/GsSpacing
     // (Tokens.kt). One source of truth for the whole foundation.
     val radiusCard get() = GsRadius.card
