@@ -176,7 +176,7 @@ fun GsNavHost(modifier: Modifier = Modifier) {
         composable(GsRoutes.MODELS) { ModelCentreScreen(onNavigate = open) }
         composable(GsRoutes.PROFILE) { ProfileScreen(onNavigate = open) }
 
-        composable(GsRoutes.SETTINGS) { SettingsScreen(onBack = back) }
+        composable(GsRoutes.SETTINGS) { SettingsScreen(onBack = back, onNavigate = open) }
         composable(GsRoutes.NOTIFICATIONS) {
             NotificationsScreen(
                 onBack = back,
@@ -264,7 +264,8 @@ fun GsNavHost(modifier: Modifier = Modifier) {
                 conversationId = if (id == "new") null else id,
                 prefillPrompt = prompt.takeIf { it.isNotBlank() },
                 onBack = back,
-                onNavigateVoice = { navController.navigate(GsRoutes.VOICE) }
+                onNavigateVoice = { navController.navigate(GsRoutes.VOICE) },
+                onNavigateModels = { navController.navigate(GsRoutes.MODELS) }
             )
         }
 

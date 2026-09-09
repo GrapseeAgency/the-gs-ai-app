@@ -52,7 +52,9 @@ struct CodeWorkspaceView: View {
     // MARK: Sample files
 
     private struct CodeFile: Identifiable {
-        let id = UUID()
+        /// Identity from the file name — a per-instance UUID would re-identify
+        /// every chip and the whole editor on every state change.
+        var id: String { name }
         let name: String
         let lines: [String]
     }
@@ -166,6 +168,7 @@ struct CodeWorkspaceView: View {
             }
         }
         .toolbar(.hidden, for: .navigationBar)
+        .onAppear { GSHaptics.prepare() }
     }
 
     // MARK: Header (own chrome — no router)
@@ -193,6 +196,7 @@ struct CodeWorkspaceView: View {
                 .overlay(Circle().stroke(Aero.outline, lineWidth: 1))
         }
         .buttonStyle(KineticPressStyle())
+        .accessibilityLabel("Close")
     }
 
     // MARK: File chips
@@ -204,6 +208,7 @@ struct CodeWorkspaceView: View {
                 HStack(spacing: Aero.Spacing.s) {
                     ForEach(files) { file in
                         AeroChip(text: file.name, selected: selectedFile == file.name) {
+                            GSHaptics.select()
                             withAnimation(Aero.snappy) { selectedFile = file.name }
                         }
                     }
@@ -219,7 +224,8 @@ struct CodeWorkspaceView: View {
         HStack(spacing: Aero.Spacing.s) {
             ForEach(["Editor", "Output", "Diff"], id: \.self) { tab in
                 AeroChip(text: tab, selected: selectedTab == tab) {
-                    selectedTab = tab
+                    GSHaptics.select()
+                    withAnimation(Aero.snappy) { selectedTab = tab }
                 }
             }
             Spacer()
@@ -358,6 +364,7 @@ struct CodeWorkspaceView: View {
 
     private func build() {
         guard !isBuilding else { return }
+        GSHaptics.tap()   // committed — the run moment begins
         isBuilding = true
         buildDone = false
         Task {

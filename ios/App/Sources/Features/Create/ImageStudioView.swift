@@ -91,6 +91,7 @@ struct ImageStudioView: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .overlay(alignment: .bottom) { toastView }
+        .onAppear { GSHaptics.prepare() }
     }
 
     // MARK: Header (own chrome — no router)
@@ -117,6 +118,7 @@ struct ImageStudioView: View {
                 .overlay(Circle().stroke(Aero.outline, lineWidth: 1))
         }
         .buttonStyle(KineticPressStyle())
+        .accessibilityLabel("Close")
     }
 
     // MARK: Prompt
@@ -142,7 +144,8 @@ struct ImageStudioView: View {
             LazyVGrid(columns: styleColumns, alignment: .leading, spacing: Aero.Spacing.xs) {
                 ForEach(styles, id: \.self) { option in
                     AeroChip(text: option, selected: style == option) {
-                        style = option
+                        GSHaptics.select()
+                        withAnimation(Aero.snappy) { style = option }
                     }
                 }
             }
@@ -155,7 +158,8 @@ struct ImageStudioView: View {
             HStack(spacing: Aero.Spacing.s) {
                 ForEach(aspects, id: \.self) { option in
                     AeroChip(text: option, selected: aspect == option) {
-                        aspect = option
+                        GSHaptics.select()
+                        withAnimation(Aero.snappy) { aspect = option }
                     }
                 }
                 Spacer()
@@ -200,6 +204,7 @@ struct ImageStudioView: View {
 
     private func startGeneration() {
         guard !trimmedPrompt.isEmpty, !isGenerating else { return }
+        GSHaptics.tap()   // committed — the generation moment begins
         isGenerating = true
         hasResults = false
         progress = 0
@@ -242,6 +247,7 @@ struct ImageStudioView: View {
                     // Real save: the variation's prompt lands in the Library
                     // under the Images kind — filters catch it.
                     ConversationStore.shared.saveToLibrary(content: trimmedPrompt, kind: "image")
+                    GSHaptics.success()
                     showToast("Saved to Library")
                 } label: {
                     Image(systemName: "arrow.down.circle")
@@ -252,6 +258,7 @@ struct ImageStudioView: View {
                         .overlay(Circle().stroke(Aero.outline, lineWidth: 1))
                 }
                 .buttonStyle(KineticPressStyle())
+                .accessibilityLabel("Save to Library")
                 .padding(8)
             }
             .aspectRatio(1, contentMode: .fit)
@@ -318,11 +325,11 @@ struct ImageStudioView: View {
     }
 
     private func showToast(_ message: String) {
-        withAnimation(Aero.snappy) { toast = message }
+        withAnimation(Aero.motion(Aero.snappy)) { toast = message }
         Task {
             try? await Task.sleep(nanoseconds: 1_800_000_000)
             if toast == message {
-                withAnimation(Aero.snappy) { toast = nil }
+                withAnimation(Aero.motion(Aero.snappy)) { toast = nil }
             }
         }
     }

@@ -210,6 +210,7 @@ struct SearchView: View {
             .padding(.bottom, Aero.Spacing.xl)
         }
         .background(Aero.background.ignoresSafeArea())
+        .scrollDismissesKeyboard(.interactively)
         .navigationTitle("Search everything")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
@@ -238,7 +239,8 @@ struct SearchView: View {
         AeroInputBar(
             text: $query,
             placeholder: "Search conversations, library, assistants…",
-            action: {}
+            action: {},
+            searchField: true
         )
     }
 
@@ -276,7 +278,9 @@ struct SearchView: View {
                 ForEach(Kind.allCases, id: \.self) { kind in
                     AeroChip(text: kind.rawValue, selected: activeKind == kind) {
                         GSHaptics.select()
-                        activeKind = activeKind == kind ? nil : kind
+                        withAnimation(Aero.motion(Aero.snappy)) {
+                            activeKind = activeKind == kind ? nil : kind
+                        }
                     }
                 }
             }

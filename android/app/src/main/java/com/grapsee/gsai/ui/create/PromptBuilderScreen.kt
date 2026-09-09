@@ -205,7 +205,8 @@ fun PromptBuilderScreen(
                         Text("Copy")
                     }
                     Button(
-                        onClick = { onNavigate(GsRoutes.chat(null)) },
+                        onClick = { onNavigate(GsRoutes.chat(null, promptText)) },
+                        enabled = promptText.isNotBlank(),
                         modifier = Modifier.weight(1f)
                     ) {
                         Text("Open in chat")

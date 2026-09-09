@@ -99,7 +99,7 @@ fun ModelCentreScreen(onNavigate: (String) -> Unit) {
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    GsChip(text = "Default", selected = true, onClick = {})
+                    GsChip(text = "Default", selected = true)
                 }
             }
 
@@ -166,7 +166,7 @@ fun ModelCentreScreen(onNavigate: (String) -> Unit) {
                                         horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
                                     ) {
                                         model.capabilities.forEach { capability ->
-                                            GsChip(text = capability, selected = false, onClick = {})
+                                            GsChip(text = capability, selected = false)
                                         }
                                     }
                                     Text(
@@ -179,7 +179,7 @@ fun ModelCentreScreen(onNavigate: (String) -> Unit) {
                                         horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
                                     ) {
                                         model.modes.forEach { mode ->
-                                            GsChip(text = mode, selected = false, onClick = {})
+                                            GsChip(text = mode, selected = false)
                                         }
                                     }
                                     TextButton(onClick = {

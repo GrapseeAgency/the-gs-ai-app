@@ -101,6 +101,7 @@ struct OnboardingView: View {
                             .background(Circle().fill(Aero.container))
                     }
                     .buttonStyle(KineticPressStyle())
+                    .accessibilityLabel("Previous step")
                 }
                 Spacer()
             }
@@ -146,10 +147,13 @@ struct OnboardingView: View {
                 LazyVGrid(columns: chipColumns, alignment: .leading, spacing: Aero.Spacing.xs) {
                     ForEach(interests, id: \.self) { interest in
                         AeroChip(text: interest, selected: selectedInterests.contains(interest)) {
-                            if selectedInterests.contains(interest) {
-                                selectedInterests.remove(interest)
-                            } else {
-                                selectedInterests.insert(interest)
+                            GSHaptics.select()
+                            withAnimation(Aero.snappy) {
+                                if selectedInterests.contains(interest) {
+                                    selectedInterests.remove(interest)
+                                } else {
+                                    selectedInterests.insert(interest)
+                                }
                             }
                         }
                     }
@@ -203,7 +207,8 @@ struct OnboardingView: View {
         HStack(spacing: Aero.Spacing.s) {
             ForEach(options, id: \.self) { option in
                 AeroChip(text: option, selected: selection.wrappedValue == option) {
-                    selection.wrappedValue = option
+                    GSHaptics.select()
+                    withAnimation(Aero.snappy) { selection.wrappedValue = option }
                 }
             }
             Spacer()
@@ -333,6 +338,8 @@ struct OnboardingView: View {
                         SectionHeader(title: "Your name")
                         TextField("What should GS call you?", text: $displayName)
                             .autocorrectionDisabled()
+                            .textInputAutocapitalization(.words)
+                            .textContentType(.name)
                             .font(Aero.body())
                             .foregroundStyle(Aero.text)
                             .padding(.horizontal, 16)
@@ -360,6 +367,7 @@ struct OnboardingView: View {
 
     private func accentCircle(index: Int, color: Color, checkColor: Color) -> some View {
         Button {
+            GSHaptics.select()
             withAnimation(Aero.snappy) { accentChoice = index }
         } label: {
             ZStack {
@@ -445,6 +453,7 @@ struct OnboardingView: View {
 
     private var continueBar: some View {
         Button {
+            GSHaptics.tap()   // committed — the wizard advances
             guard let next = OnboardingStep(rawValue: step.rawValue + 1) else {
                 onComplete()
                 return

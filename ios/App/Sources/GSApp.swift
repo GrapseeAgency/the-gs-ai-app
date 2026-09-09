@@ -13,7 +13,6 @@ struct GSApp: App {
     @UIApplicationDelegateAdaptor(QuickActionAppDelegate.self) private var appDelegate
     @AppStorage("gs.session.active") private var sessionActive = false
     @AppStorage("gs.onboarded") private var onboarded = false
-
     // Appearance + accessibility contract (Task 85-e): the Settings theme
     // choice tints the system chrome (sheets, alerts, keyboard) and the
     // font-scale slider drives real Dynamic Type app-wide.

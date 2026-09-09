@@ -110,6 +110,7 @@ struct ProjectDetailView: View {
                     blurb: editBlurb,
                     instructions: editInstructions
                 )
+                GSHaptics.success()
             }
             Button("Delete project", role: .destructive) { showDeleteConfirm = true }
             Button("Cancel", role: .cancel) {}
@@ -117,6 +118,7 @@ struct ProjectDetailView: View {
         .alert("Delete this project?", isPresented: $showDeleteConfirm) {
             Button("Delete", role: .destructive) {
                 ProjectStore.shared.delete(id: projectID)
+                GSHaptics.warning()
             }
             Button("Cancel", role: .cancel) {}
         } message: {
@@ -192,6 +194,7 @@ struct ProjectDetailView: View {
         }
         return VStack(spacing: Aero.Spacing.s) {
             AeroChip(text: "Add chats", selected: false, action: {
+                GSHaptics.tap()   // committed open — the picker sheet takes over
                 selectedChatIDs = Set(project.chatIds)
                 showLinker = true
             })
@@ -238,6 +241,7 @@ struct ProjectDetailView: View {
         NavigationStack {
             List(conversations.conversations.filter { !$0.archived }, id: \.id) { chat in
                 Button {
+                    GSHaptics.select()
                     if selectedChatIDs.contains(chat.id) {
                         selectedChatIDs.remove(chat.id)
                     } else {
@@ -275,6 +279,7 @@ struct ProjectDetailView: View {
                             chatIds: Array(selectedChatIDs),
                             chatTitles: titles
                         )
+                        GSHaptics.success()
                         showLinker = false
                     }
                 }
@@ -302,6 +307,9 @@ struct ProjectDetailView: View {
                     .foregroundStyle(Aero.textMuted)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
+            // Append-only, capped log rendered without row transitions —
+            // positional identity is stable here (a new event lands on top
+            // and the slots re-fill; nothing animates mid-slot).
             ForEach(Array(project.events.reversed().enumerated()), id: \.offset) { _, event in
                 AeroListRow(
                     title: event.text,

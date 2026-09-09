@@ -39,7 +39,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
+import android.content.Intent
 import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.data.AssistantsStore
 import com.grapsee.gsai.data.model.AssistantSample
@@ -75,6 +77,21 @@ fun AssistantDetailScreen(
     val favourites by AssistantsStore.favourites.collectAsState()
     val favourited = assistantId in favourites
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    // The system share sheet — the same honest hand-off the writing studio uses.
+    val shareAssistant: () -> Unit = {
+        runCatching {
+            val send = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(
+                    Intent.EXTRA_TEXT,
+                    "${assistant.name} — ${assistant.description}\n" +
+                        "An assistant in the GS AI app."
+                )
+            }
+            context.startActivity(Intent.createChooser(send, null))
+        }
+    }
 
     GsScreenScaffold(
         title = "Assistant",
@@ -89,7 +106,7 @@ fun AssistantDetailScreen(
                     )
                 }
             } else {
-                IconButton(onClick = { /* share sheet lands with the sharing subsystem */ }) {
+                IconButton(onClick = shareAssistant) {
                     Icon(
                         imageVector = Icons.Outlined.Share,
                         contentDescription = "Share",
@@ -153,7 +170,7 @@ fun AssistantDetailScreen(
                     color = MaterialTheme.colorScheme.onBackground,
                     textAlign = TextAlign.Center
                 )
-                GsChip(text = assistant.category, selected = false, onClick = {})
+                GsChip(text = assistant.category, selected = false)
                 Text(
                     text = assistant.description,
                     style = MaterialTheme.typography.bodyMedium,
@@ -235,7 +252,7 @@ fun AssistantDetailScreen(
                     horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
                 ) {
                     capabilitiesFor(assistant).forEach { capability ->
-                        GsChip(text = capability, selected = false, onClick = {})
+                        GsChip(text = capability, selected = false)
                     }
                 }
             }

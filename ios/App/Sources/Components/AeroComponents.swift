@@ -161,6 +161,13 @@ struct AeroInputBar: View {
     /// ChatDetailView focuses the composer when a starter chip seeds the draft.
     var focus: FocusState<Bool>.Binding? = nil
 
+    /// Search-field conventions: `.search` return key, no autocapitalisation,
+    /// no autocorrect — visuals unchanged. Chat composers stay as they were.
+    var searchField: Bool = false
+    /// Return-key commit for search fields — defaults to retiring the
+    /// keyboard, the behaviour a reader expects when they hit "search".
+    var onCommit: (() -> Void)? = nil
+
     /// Returns are read at submit time: Enter-to-send fires the send closure
     /// only when the setting is on; when it is off the vertical-axis field's
     /// default applies — Return inserts a newline and nothing sends.
@@ -171,28 +178,13 @@ struct AeroInputBar: View {
     @ObservedObject var hc = SettingsStore.shared
 
     @State private var lastSubmitAt = Date.distantPast
+    @FocusState private var searchFieldFocused: Bool
 
     var body: some View {
         let _ = hc.highContrast
         HStack(spacing: Aero.Spacing.s) {
             Image(systemName: "sparkles").foregroundStyle(Aero.accent)
-            TextField(placeholder, text: $text, axis: .vertical)
-                .font(Aero.body())
-                .foregroundStyle(Aero.text)
-                .lineLimit(1...8)
-                .submitLabel(.send)
-                .onSubmit(submitFromKeyboard)
-                .gsFocus(focus)
-                .onChange(of: text) { newValue in
-                    // Multi-line fields land Return as a trailing newline
-                    // instead of calling onSubmit on some iOS builds — the
-                    // newline is the submit signal when Enter-to-send is on.
-                    // The 150 ms window makes an onSubmit+newline double fire
-                    // (both paths for one keypress) a single send.
-                    guard enterToSend, newValue.hasSuffix("\n") else { return }
-                    text = String(newValue.dropLast())
-                    submitFromKeyboard()
-                }
+            field
             if let action {
                 Button(action: action) {
                     Image(systemName: "arrow.up.circle.fill")
@@ -201,7 +193,7 @@ struct AeroInputBar: View {
                 }
                 .buttonStyle(KineticPressStyle())
                 .disabled(text.isEmpty)
-                .accessibilityLabel("Send")
+                .accessibilityLabel(searchField ? "Search" : "Send")
             }
         }
         .padding(.horizontal, 16)
@@ -219,6 +211,41 @@ struct AeroInputBar: View {
         guard now.timeIntervalSince(lastSubmitAt) > 0.15 else { return }
         lastSubmitAt = now
         action?()
+    }
+
+    @ViewBuilder
+    private var field: some View {
+        if searchField {
+            TextField(placeholder, text: $text)
+                .font(Aero.body())
+                .foregroundStyle(Aero.text)
+                .focused($searchFieldFocused)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .submitLabel(.search)
+                .onSubmit {
+                    if let onCommit { onCommit() }
+                    searchFieldFocused = false
+                }
+        } else {
+            TextField(placeholder, text: $text, axis: .vertical)
+                .font(Aero.body())
+                .foregroundStyle(Aero.text)
+                .lineLimit(1...8)
+                .submitLabel(.send)
+                .onSubmit(submitFromKeyboard)
+                .gsFocus(focus)
+                .onChange(of: text) { newValue in
+                    // Multi-line fields land Return as a trailing newline
+                    // instead of calling onSubmit on some iOS builds — the
+                    // newline is the submit signal when Enter-to-send is on.
+                    // The 150 ms window makes an onSubmit+newline double fire
+                    // (both paths for one keypress) a single send.
+                    guard enterToSend, newValue.hasSuffix("\n") else { return }
+                    text = String(newValue.dropLast())
+                    submitFromKeyboard()
+                }
+        }
     }
 }
 

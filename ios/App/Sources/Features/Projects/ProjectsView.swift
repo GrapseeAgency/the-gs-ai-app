@@ -85,6 +85,7 @@ struct ProjectsView: View {
                     blurb: newBlurb,
                     instructions: newInstructions
                 )
+                GSHaptics.success()
                 resetFields()
             }
             Button("Cancel", role: .cancel) { resetFields() }

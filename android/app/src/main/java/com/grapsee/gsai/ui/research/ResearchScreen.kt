@@ -39,6 +39,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.ui.components.GsCard
@@ -114,7 +115,7 @@ fun ResearchScreen(onBack: () -> Unit) {
         GsScreenScaffold(
             title = "Research",
             onBack = onBack,
-            actions = { GsChip(text = "Research mode", selected = true, onClick = {}) }
+            actions = { GsChip(text = "Research mode", selected = true) }
         ) {
             Column(
                 modifier = Modifier
@@ -127,6 +128,7 @@ fun ResearchScreen(onBack: () -> Unit) {
                     value = query,
                     onValueChange = { query = it },
                     onSend = { searched = true },
+                    imeAction = ImeAction.Search,
                     placeholder = "Ask a research question…"
                 )
 
@@ -274,7 +276,7 @@ private fun SourcesSection(
     onToggleBookmark: (Int) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)) {
-        GsSectionHeader(title = "Sources", actionLabel = "5", onAction = {})
+        GsSectionHeader(title = "Sources", actionLabel = "5")
         researchSources.forEachIndexed { index, source ->
             SourceRow(
                 source = source,
@@ -329,7 +331,7 @@ private fun SourceRow(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    GsChip(text = "${source.relevance}% match", selected = false, onClick = {})
+                    GsChip(text = "${source.relevance}% match", selected = false)
                 }
             }
             IconButton(onClick = onToggleBookmark) {

@@ -42,6 +42,7 @@ struct SettingsView: View {
         ) {
             Button("Clear local data", role: .destructive) {
                 ConversationStore.shared.wipeAllContent()
+                GSHaptics.warning()
             }
             Button("Cancel", role: .cancel) {}
         } message: {
@@ -52,7 +53,9 @@ struct SettingsView: View {
             isPresented: $showDeleteAccount,
             titleVisibility: .visible
         ) {
-            Button("Delete account", role: .destructive) {}
+            Button("Delete account", role: .destructive) {
+                GSHaptics.warning()
+            }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This permanently removes your account and all synced data. This cannot be undone.")
@@ -93,6 +96,7 @@ struct SettingsView: View {
             }.value
             guard let url else { return }
             exportURL = url
+            GSHaptics.success()
             showExport = true
         }
     }
@@ -117,6 +121,7 @@ struct SettingsView: View {
             HStack(spacing: Aero.Spacing.s) {
                 ForEach(["Light", "Dark", "System"], id: \.self) { option in
                     AeroChip(text: option, selected: settings.theme == option) {
+                        GSHaptics.select()
                         settings.theme = option
                     }
                 }
@@ -172,6 +177,7 @@ struct SettingsView: View {
             HStack(spacing: Aero.Spacing.s) {
                 ForEach(["Low", "Medium", "High"], id: \.self) { level in
                     AeroChip(text: level, selected: settings.reasoning == level) {
+                        GSHaptics.select()
                         settings.reasoning = level
                     }
                 }
@@ -280,6 +286,7 @@ struct SettingsView: View {
                 HStack(spacing: Aero.Spacing.s) {
                     ForEach(["EN", "中文", "हिन्दी", "العربية"], id: \.self) { option in
                         AeroChip(text: option, selected: settings.aiLanguage == option) {
+                            GSHaptics.select()
                             settings.aiLanguage = option
                         }
                     }

@@ -15,6 +15,7 @@ import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.ManageSearch
 import androidx.compose.material.icons.outlined.SearchOff
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -27,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.data.local.ftsMatchQuery
 import com.grapsee.gsai.di.ServiceLocator
@@ -42,6 +44,8 @@ import java.time.Duration
 import java.time.Instant
 import java.time.OffsetDateTime
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
 
 private data class ChatHit(
     val conversationId: String,
@@ -67,6 +71,7 @@ fun ChatSearchScreen(
     var activeFilter by remember { mutableStateOf<String?>(null) }
     var hits by remember { mutableStateOf<List<ChatHit>>(emptyList()) }
     var searched by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     val term = query.trim()
     LaunchedEffect(term, activeFilter) {
@@ -80,6 +85,15 @@ fun ChatSearchScreen(
         searched = true
     }
 
+    /** IME Search commits: skip the debounce tail and hit the store now. */
+    fun commitSearch() {
+        if (term.length < 2) return
+        scope.launch {
+            hits = searchChats(term, activeFilter)
+            searched = true
+        }
+    }
+
     GsScreenScaffold(title = "Search chats", onBack = onBack) {
         Column(
             modifier = Modifier
@@ -90,7 +104,18 @@ fun ChatSearchScreen(
             GsInputBar(
                 value = query,
                 onValueChange = { query = it },
-                onSend = {},
+                onSend = { commitSearch() },
+                imeAction = ImeAction.Search,
+                trailingIcon = {
+                    IconButton(onClick = { commitSearch() }, enabled = term.length >= 2) {
+                        Icon(
+                            Icons.Outlined.ManageSearch,
+                            contentDescription = "Search",
+                            tint = if (term.length >= 2) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
                 placeholder = "Search messages and chats…"
             )
             Row(horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)) {

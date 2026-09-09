@@ -76,16 +76,23 @@ struct ChatSearchView: View {
                 .font(Aero.displayTitle())
                 .foregroundStyle(Aero.text)
 
-            AeroInputBar(text: $query, placeholder: "Search messages and chats")
+            AeroInputBar(
+                text: $query,
+                placeholder: "Search messages and chats",
+                searchField: true
+            )
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: Aero.Spacing.s) {
                     ForEach(Self.filterChips, id: \.self) { chip in
                         AeroChip(text: chip, selected: activeFilters.contains(chip)) {
-                            if activeFilters.contains(chip) {
-                                activeFilters.remove(chip)
-                            } else {
-                                activeFilters.insert(chip)
+                            GSHaptics.select()
+                            withAnimation(Aero.snappy) {
+                                if activeFilters.contains(chip) {
+                                    activeFilters.remove(chip)
+                                } else {
+                                    activeFilters.insert(chip)
+                                }
                             }
                         }
                     }
@@ -136,6 +143,7 @@ struct ChatSearchView: View {
                     }
                 }
             }
+            .scrollDismissesKeyboard(.interactively)
         }
         .padding(.horizontal, Aero.Spacing.m)
         .padding(.top, Aero.Spacing.s)

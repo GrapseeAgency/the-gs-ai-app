@@ -37,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.data.AssistantsStore
 import com.grapsee.gsai.data.model.AssistantSample
@@ -139,7 +140,10 @@ fun ExploreScreen(onNavigate: (String) -> Unit) {
                 GsInputBar(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
+                    // Results filter live as you type; Search on the IME commits
+                    // by dismissing the keyboard so the reader sees them.
                     onSend = {},
+                    imeAction = ImeAction.Search,
                     placeholder = "Search assistants, prompts, tools…"
                 )
                 CategoryChips(categories, selectedCategory, onSelect = { selectedCategory = it })

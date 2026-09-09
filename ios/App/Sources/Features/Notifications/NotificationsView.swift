@@ -57,8 +57,11 @@ struct NotificationsView: View {
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button("Mark all read") {
-                    for index in samples.indices {
-                        samples[index].unread = false
+                    GSHaptics.success()
+                    withAnimation(Aero.snappy) {
+                        for index in samples.indices {
+                            samples[index].unread = false
+                        }
                     }
                 }
                 .font(Aero.label())
@@ -80,6 +83,7 @@ struct NotificationsView: View {
     }
 
     private func open(_ sample: NotificationSample) {
+        GSHaptics.tap()   // committed — open the related surface
         if let index = samples.firstIndex(where: { $0.id == sample.id }) {
             samples[index].unread = false
         }

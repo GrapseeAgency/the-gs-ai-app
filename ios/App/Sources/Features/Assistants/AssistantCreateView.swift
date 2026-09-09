@@ -68,6 +68,8 @@ struct AssistantCreateView: View {
             .padding(.bottom, Aero.Spacing.xl)
         }
         .background(Aero.background.ignoresSafeArea())
+        .scrollDismissesKeyboard(.interactively)
+        .onAppear { GSHaptics.prepare() }
     }
 
     // MARK: Identity
@@ -78,6 +80,9 @@ struct AssistantCreateView: View {
                 SectionHeader(title: "Identity")
                 TextField("Name", text: $name)
                     .font(Aero.body())
+                    .textInputAutocapitalization(.words)
+                    .autocorrectionDisabled()
+                    .textContentType(.name)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
                     .background(Capsule().fill(Aero.container))
@@ -105,7 +110,8 @@ struct AssistantCreateView: View {
                 LazyVGrid(columns: chipColumns, alignment: .leading, spacing: Aero.Spacing.xs) {
                     ForEach(categories, id: \.self) { option in
                         AeroChip(text: option, selected: category == option) {
-                            category = option
+                            GSHaptics.select()
+                            withAnimation(Aero.snappy) { category = option }
                         }
                     }
                 }
@@ -140,10 +146,13 @@ struct AssistantCreateView: View {
                 LazyVGrid(columns: chipColumns, alignment: .leading, spacing: Aero.Spacing.xs) {
                     ForEach(capabilityOptions, id: \.self) { option in
                         AeroChip(text: option, selected: capabilities.contains(option)) {
-                            if capabilities.contains(option) {
-                                capabilities.remove(option)
-                            } else {
-                                capabilities.insert(option)
+                            GSHaptics.select()
+                            withAnimation(Aero.snappy) {
+                                if capabilities.contains(option) {
+                                    capabilities.remove(option)
+                                } else {
+                                    capabilities.insert(option)
+                                }
                             }
                         }
                     }
@@ -161,7 +170,8 @@ struct AssistantCreateView: View {
                 HStack(spacing: Aero.Spacing.s) {
                     ForEach(["Private", "Published"], id: \.self) { option in
                         AeroChip(text: option, selected: visibility == option) {
-                            visibility = option
+                            GSHaptics.select()
+                            withAnimation(Aero.snappy) { visibility = option }
                         }
                     }
                     Spacer()
@@ -190,6 +200,7 @@ struct AssistantCreateView: View {
                 capabilities: capabilities.sorted()
             )
             AssistantsStore.shared.upsert(saved)
+            GSHaptics.success()
             showCreated = true
         } label: {
             Text(editID == nil ? "Create assistant" : "Save changes")

@@ -48,6 +48,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.onClick
@@ -109,9 +110,19 @@ fun GsSectionHeader(
             // TalkBack: section headers navigate as headings.
             modifier = Modifier.weight(1f).semantics { heading() }
         )
-        if (actionLabel != null && onAction != null) {
-            TextButton(onClick = onAction) {
-                Text(actionLabel, color = MaterialTheme.colorScheme.primary)
+        if (actionLabel != null) {
+            if (onAction != null) {
+                TextButton(onClick = onAction) {
+                    Text(actionLabel, color = MaterialTheme.colorScheme.primary)
+                }
+            } else {
+                // A count/metadata label, not a button: rendered as plain text
+                // (same type ramp and tint) so it never fakes pressability.
+                Text(
+                    text = actionLabel,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary
+                )
             }
         }
     }
@@ -158,42 +169,68 @@ fun GsChip(
     text: String,
     selected: Boolean,
     modifier: Modifier = Modifier,
-    onClick: () -> Unit = {}
+    // null = a pure status/label chip: no click semantics, no ripple, no press
+    // machinery — only real controls carry state layers.
+    onClick: (() -> Unit)? = null
 ) {
-    val interaction = remember { MutableInteractionSource() }
-    // Chips carry selected-state semantics, so the announced click stays the
-    // factual "activate" — some chips toggle selection, some just act ("Try
-    // again"), and a hint must never claim the wrong affordance.
     val chipClick = onClick
-    val chipHintModifier: Modifier = if (LocalScreenReaderHints.current) {
-        Modifier.semantics { onClick("activate") { chipClick(); true } }
+    if (chipClick != null) {
+        val interaction = remember { MutableInteractionSource() }
+        // Chips carry selected-state semantics, so the announced click stays the
+        // factual "activate" — some chips toggle selection, some just act ("Try
+        // again"), and a hint must never claim the wrong affordance.
+        val chipHintModifier: Modifier = if (LocalScreenReaderHints.current) {
+            Modifier.semantics { onClick("activate") { chipClick(); true } }
+        } else {
+            Modifier
+        }
+        Surface(
+            modifier = modifier
+                .kineticPress(interaction)
+                .then(chipHintModifier),
+            shape = RoundedCornerShape(GsMotion.radiusChip),
+            color = if (selected) MaterialTheme.colorScheme.primary
+            else MaterialTheme.colorScheme.surfaceContainer,
+            onClick = chipClick,
+            interactionSource = interaction
+        ) {
+            ChipLabel(text, selected, chipHintModifier)
+        }
     } else {
-        Modifier
+        // null = a pure status/label chip: no click semantics, no ripple, no
+        // press machinery — only real controls carry state layers.
+        Surface(
+            modifier = modifier,
+            shape = RoundedCornerShape(GsMotion.radiusChip),
+            color = if (selected) MaterialTheme.colorScheme.primary
+            else MaterialTheme.colorScheme.surfaceContainer
+        ) {
+            ChipLabel(text, selected)
+        }
     }
-    Surface(
-        modifier = modifier.kineticPress(interaction),
-        shape = RoundedCornerShape(GsMotion.radiusChip),
-        color = if (selected) MaterialTheme.colorScheme.primary
-        else MaterialTheme.colorScheme.surfaceContainer,
-        onClick = onClick,
-        interactionSource = interaction
-    ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.labelLarge,
-            color = if (selected) MaterialTheme.colorScheme.onPrimary
-            else MaterialTheme.colorScheme.onSurface,
-            // Chips are toggles/filters: expose the selected state to TalkBack
-            // (declared here so it merges into the clickable Surface node).
-            modifier = Modifier
-                .padding(horizontal = 14.dp, vertical = 8.dp)
-                .then(chipHintModifier)
-                .semantics {
-                    this.selected = selected
-                    role = Role.Button
-                }
-        )
-    }
+}
+
+@Composable
+private fun ChipLabel(
+    text: String,
+    selected: Boolean,
+    hintModifier: Modifier = Modifier
+) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelLarge,
+        color = if (selected) MaterialTheme.colorScheme.onPrimary
+        else MaterialTheme.colorScheme.onSurface,
+        // Chips are toggles/filters: expose the selected state to TalkBack
+        // (declared here so it merges into the clickable Surface node).
+        modifier = Modifier
+            .padding(horizontal = 14.dp, vertical = 8.dp)
+            .then(hintModifier)
+            .semantics {
+                this.selected = selected
+                role = Role.Button
+            }
+    )
 }
 
 @Composable
@@ -267,18 +304,30 @@ fun GsInputBar(
     modifier: Modifier = Modifier,
     placeholder: String = "Ask anything…",
     enabled: Boolean = true,
-    imeAction: ImeAction = ImeAction.Default
+    imeAction: ImeAction = ImeAction.Default,
+    // Swap the paper-plane for a field-appropriate affordance (a Search icon
+    // on query fields) without changing the shared bar's look anywhere else.
+    trailingIcon: (@Composable () -> Unit)? = null
 ) {
+    val keyboard = LocalSoftwareKeyboardController.current
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         modifier = modifier.fillMaxWidth(),
         enabled = enabled,
         keyboardOptions = KeyboardOptions(imeAction = imeAction),
-        keyboardActions = if (imeAction == ImeAction.Send) {
-            KeyboardActions(onSend = { if (value.isNotBlank()) onSend(value.trim()) })
-        } else {
-            KeyboardActions.Default
+        keyboardActions = when (imeAction) {
+            ImeAction.Send -> KeyboardActions(onSend = {
+                if (value.isNotBlank()) onSend(value.trim())
+            })
+            // IME parity: a Search action commits the query — results are
+            // already live, so commit means fire onSend and dismiss the
+            // keyboard exactly like the platform search fields.
+            ImeAction.Search -> KeyboardActions(onSearch = {
+                keyboard?.hide()
+                if (value.isNotBlank()) onSend(value.trim())
+            })
+            else -> KeyboardActions.Default
         },
         placeholder = { Text(placeholder, color = hcColor(MaterialTheme.colorScheme.onSurfaceVariant, MaterialTheme.colorScheme.onSurface)) },
         shape = RoundedCornerShape(GsMotion.radiusInput),
@@ -288,7 +337,7 @@ fun GsInputBar(
             focusedContainerColor = MaterialTheme.colorScheme.surface,
             unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow
         ),
-        trailingIcon = {
+        trailingIcon = trailingIcon ?: {
             IconButton(
                 onClick = { if (value.isNotBlank()) onSend(value.trim()) },
                 enabled = enabled && value.isNotBlank()

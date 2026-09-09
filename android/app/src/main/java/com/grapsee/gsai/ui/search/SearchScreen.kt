@@ -24,6 +24,7 @@ import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.SearchOff
 import androidx.compose.material.icons.outlined.SmartToy
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -39,6 +40,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.runtime.rememberCoroutineScope
 import com.grapsee.gsai.data.AssistantsStore
 import com.grapsee.gsai.data.ProjectStore
 import com.grapsee.gsai.data.local.ftsMatchQuery
@@ -57,6 +60,7 @@ import java.time.Duration
 import java.time.Instant
 import java.time.OffsetDateTime
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * AERUO KINETIC — SEARCH, the one-index entry point.
@@ -125,6 +129,7 @@ fun SearchScreen(onNavigate: (String) -> Unit) {
     var kindFilter by remember { mutableStateOf<HitKind?>(null) }
     var storeHits by remember { mutableStateOf<List<SearchHit>>(emptyList()) }
     var recents by remember { mutableStateOf(RecentSearches.load(context)) }
+    val scope = rememberCoroutineScope()
 
     val savedItems by ServiceLocator.chat.savedItems().collectAsState(initial = emptyList())
     val userAssistants by AssistantsStore.assistants.collectAsState()
@@ -202,7 +207,29 @@ fun SearchScreen(onNavigate: (String) -> Unit) {
                 GsInputBar(
                     value = query,
                     onValueChange = { query = it },
-                    onSend = {},
+                    // Search action commits: fires the store query immediately
+                    // (skipping the debounce tail) and dismisses the keyboard.
+                    onSend = { term ->
+                        scope.launch { storeHits = searchConversationsAndMessages(term) }
+                    },
+                    imeAction = ImeAction.Search,
+                    trailingIcon = {
+                        IconButton(
+                            onClick = {
+                                if (term.isNotBlank()) {
+                                    scope.launch { storeHits = searchConversationsAndMessages(term) }
+                                }
+                            },
+                            enabled = term.isNotBlank()
+                        ) {
+                            Icon(
+                                Icons.Outlined.Search,
+                                contentDescription = "Search",
+                                tint = if (term.isNotBlank()) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    },
                     placeholder = "Search everything…"
                 )
 
@@ -266,8 +293,7 @@ fun SearchScreen(onNavigate: (String) -> Unit) {
                             Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)) {
                                 GsSectionHeader(
                                     title = kind.label,
-                                    actionLabel = "${hits.size} found",
-                                    onAction = {}
+                                    actionLabel = "${hits.size} found"
                                 )
                                 hits.forEach { hit ->
                                     GsListItem(

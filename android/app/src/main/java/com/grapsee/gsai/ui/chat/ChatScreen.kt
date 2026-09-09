@@ -57,6 +57,7 @@ import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.CallSplit
 import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.ContentCopy
@@ -136,8 +137,10 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.data.ModelPrefs
 import com.grapsee.gsai.data.chat.ChatStreamController
+import com.grapsee.gsai.data.model.ModelCatalog
 import com.grapsee.gsai.data.repository.ChatRepository
 import com.grapsee.gsai.di.ServiceLocator
+import androidx.activity.compose.BackHandler
 import com.grapsee.gsai.ui.components.GsCard
 import com.grapsee.gsai.ui.components.GsChip
 import com.grapsee.gsai.ui.components.GsEmptyState
@@ -279,7 +282,10 @@ fun ChatScreen(
     // Voice press-and-hold hands its transcript to the composer through this.
     prefillPrompt: String? = null,
     // Optional voice entry point — the main agent wires this to GsRoutes.VOICE in GsNavHost.
-    onNavigateVoice: (() -> Unit)? = null
+    onNavigateVoice: (() -> Unit)? = null,
+    // The model centre exists — the header's model controls route there / to
+    // the live default-model state this screen already sends with.
+    onNavigateModels: (() -> Unit)? = null
 ) {
     val scope = rememberCoroutineScope()
     // Critical surface state survives rotation/process death (Bundle saveable):
@@ -774,6 +780,17 @@ fun ChatScreen(
         else showSnack("Read aloud isn't set up on this device yet")
     }
 
+    // Overlay discipline: BACK closes in-screen overlays first — search, then
+    // message editing — and only pops the screen once neither is open. The
+    // platform convention everywhere; predictive back still governs the pop
+    // that remains.
+    BackHandler(enabled = searchOpen) {
+        searchOpen = false
+        searchQuery = ""
+        searchActiveIndex = 0
+    }
+    BackHandler(enabled = editingId != null) { editingId = null }
+
     // Find-in-chat: case-insensitive matches over the rendered turns, one
     // active hit at a time; prev/next steps the reader through every match.
     val matchIndices by remember {
@@ -818,10 +835,45 @@ fun ChatScreen(
                 Icon(Icons.Outlined.Search, contentDescription = "Search in chat",
                     tint = MaterialTheme.colorScheme.onBackground)
             }
-            GsChip(text = "Auto", selected = false, onClick = {})
-            IconButton(onClick = {}) {
+            // Real model state: the chip carries the default the send path
+            // actually uses (ModelPrefs), and opens the Model Centre for the
+            // full picker. Never a fake "Auto" label.
+            GsChip(
+                text = ModelCatalog.byId(ModelPrefs.defaultId(context))?.displayName ?: "Auto",
+                selected = false,
+                onClick = onNavigateModels
+            )
+            // Tune: quick model switcher over the same live preference the
+            // Model Centre writes — the chat send path reads it immediately.
+            var modelMenuOpen by remember { mutableStateOf(false) }
+            IconButton(onClick = { modelMenuOpen = true }) {
                 Icon(Icons.Outlined.Tune, contentDescription = "Model settings",
                     tint = MaterialTheme.colorScheme.onBackground)
+                DropdownMenu(
+                    expanded = modelMenuOpen,
+                    onDismissRequest = { modelMenuOpen = false }
+                ) {
+                    val activeModelId = ModelPrefs.defaultId(context)
+                    ModelCatalog.all.forEach { model ->
+                        DropdownMenuItem(
+                            text = { Text(model.displayName) },
+                            leadingIcon = {
+                                if (model.id == activeModelId) {
+                                    Icon(
+                                        Icons.Outlined.Check,
+                                        contentDescription = "Default model",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            },
+                            onClick = {
+                                ModelPrefs.setDefaultId(context, model.id)
+                                modelMenuOpen = false
+                            }
+                        )
+                    }
+                }
             }
         }
     ) {
@@ -1344,9 +1396,18 @@ private fun BubbleAction(icon: ImageVector, label: String, onClick: () -> Unit) 
     }
 }
 
-/** Kinetic caret that pulses while the assistant is writing. */
+/** Kinetic caret that pulses while the assistant is writing. Flattens to a
+ *  steady caret when the reader asked for reduced motion. */
 @Composable
 private fun StreamingCaret() {
+    if (SettingsStore.reduceMotion) {
+        Text(
+            text = "▍",
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(start = 2.dp)
+        )
+        return
+    }
     val transition = rememberInfiniteTransition(label = "caret")
     val alpha by transition.animateFloat(
         initialValue = 0.15f,

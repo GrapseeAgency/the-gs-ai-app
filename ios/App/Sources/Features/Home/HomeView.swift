@@ -26,6 +26,7 @@ struct HomeView: View {
     @State private var holdTimer: Task<Void, Never>?
     @State private var holdTriggered = false
     @State private var haloPulse: CGFloat = 1.0
+    @State private var orbTouched = false
 
     // Background lifecycle: a hold that outlives the scene closes its mic
     // session instead of leaving a dead capture behind a suspended UI.
@@ -446,6 +447,8 @@ struct HomeView: View {
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundColor(ink)
             }
+            .scaleEffect(orbTouched ? 0.94 : 1)
+            .animation(Aero.motion(Aero.snappy), value: orbTouched)
         }
         .frame(width: 62, height: 62)
         .contentShape(Circle())
@@ -454,7 +457,7 @@ struct HomeView: View {
         // assistive tech without an explicit element — one button with a
         // named action that drives the same dictation state the finger does.
         .accessibilityElement()
-        .accessibilityLabel("Voice input")
+        .accessibilityLabel("Voice input — hold to dictate, tap for voice mode")
         .accessibilityAddTraits(.isButton)
         .accessibilityHint("Activates voice dictation")
         .accessibilityAction(named: dictation.isListening ? "Stop listening" : "Start listening") {
@@ -470,6 +473,9 @@ struct HomeView: View {
     private var voiceHoldGesture: some Gesture {
         DragGesture(minimumDistance: 0, coordinateSpace: .local)
             .onChanged { _ in
+                if !orbTouched {
+                    orbTouched = true   // pressed state lands with the finger
+                }
                 guard holdTimer == nil else { return }
                 holdTriggered = false
                 holdTimer = Task {
@@ -491,6 +497,7 @@ struct HomeView: View {
             .onEnded { _ in
                 holdTimer?.cancel()
                 holdTimer = nil
+                orbTouched = false
                 if holdTriggered {
                     dictation.end()
                 } else {

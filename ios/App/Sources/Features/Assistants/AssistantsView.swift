@@ -142,6 +142,7 @@ struct AssistantsView: View {
                         .font(.system(size: 18))
                         .foregroundStyle(Aero.text)
                 }
+                .accessibilityLabel("New assistant")
             }
         }
         .confirmationDialog(
@@ -154,6 +155,7 @@ struct AssistantsView: View {
         ) {
             Button("Delete", role: .destructive) {
                 if let id = pendingDelete?.id { AssistantsStore.shared.remove(id) }
+                GSHaptics.warning()
                 pendingDelete = nil
             }
             Button("Keep", role: .cancel) { pendingDelete = nil }
@@ -178,7 +180,8 @@ struct AssistantsView: View {
             HStack(spacing: Aero.Spacing.s) {
                 ForEach(Segment.allCases) { segment in
                     AeroChip(text: segment.rawValue, selected: selection == segment) {
-                        selection = segment
+                        GSHaptics.select()
+                        withAnimation(Aero.snappy) { selection = segment }
                     }
                 }
             }
@@ -340,6 +343,7 @@ struct AssistantsView: View {
         let fav = store.favourites.contains(assistant.id)
         let isUser = store.userAssistants.contains { $0.id == assistant.id }
         Button {
+            GSHaptics.select()
             store.toggleFavourite(assistant.id)
         } label: {
             Label(
@@ -349,6 +353,7 @@ struct AssistantsView: View {
         }
         if isUser {
             Button {
+                GSHaptics.success()
                 store.togglePin(assistant.id)
             } label: {
                 Label(assistant.pinned ? "Unpin" : "Pin to top", systemImage: "pin")
@@ -359,6 +364,7 @@ struct AssistantsView: View {
                 Label("Edit", systemImage: "pencil")
             }
             Button {
+                GSHaptics.success()
                 store.setArchived(assistant.id, !assistant.archived)
             } label: {
                 Label(assistant.archived ? "Unarchive" : "Archive", systemImage: "archivebox")

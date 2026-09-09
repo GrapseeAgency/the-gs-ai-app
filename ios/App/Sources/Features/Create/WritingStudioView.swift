@@ -127,6 +127,8 @@ struct WritingStudioView: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .overlay(alignment: .bottom) { toastView }
+        .scrollDismissesKeyboard(.interactively)
+        .onAppear { GSHaptics.prepare() }
     }
 
     // MARK: Header (own chrome — no router)
@@ -153,6 +155,7 @@ struct WritingStudioView: View {
                 .overlay(Circle().stroke(Aero.outline, lineWidth: 1))
         }
         .buttonStyle(KineticPressStyle())
+        .accessibilityLabel("Close")
     }
 
     // MARK: Type + tone
@@ -163,7 +166,8 @@ struct WritingStudioView: View {
             HStack(spacing: Aero.Spacing.s) {
                 ForEach(types, id: \.self) { option in
                     AeroChip(text: option, selected: type == option) {
-                        type = option
+                        GSHaptics.select()
+                        withAnimation(Aero.snappy) { type = option }
                     }
                 }
                 Spacer()
@@ -177,7 +181,8 @@ struct WritingStudioView: View {
             HStack(spacing: Aero.Spacing.s) {
                 ForEach(tones, id: \.self) { option in
                     AeroChip(text: option, selected: tone == option) {
-                        tone = option
+                        GSHaptics.select()
+                        withAnimation(Aero.snappy) { tone = option }
                     }
                 }
                 Spacer()
@@ -229,6 +234,7 @@ struct WritingStudioView: View {
 
     private func startDraft() {
         guard !isThinking else { return }
+        GSHaptics.tap()   // committed — the draft moment begins
         isThinking = true
         Task {
             try? await Task.sleep(nanoseconds: 700_000_000)
@@ -286,6 +292,7 @@ struct WritingStudioView: View {
         HStack(spacing: Aero.Spacing.s) {
             Button {
                 UIPasteboard.general.string = draftText
+                GSHaptics.success()
                 showToast("Copied")
             } label: {
                 Label("Copy", systemImage: "doc.on.doc")
@@ -311,6 +318,7 @@ struct WritingStudioView: View {
                 // Real save: the finished draft lands in the Library under
                 // the Documents kind — filters catch it.
                 ConversationStore.shared.saveToLibrary(content: draftText, kind: "document")
+                GSHaptics.success()
                 showToast("Saved to Library")
             } label: {
                 Label("Save", systemImage: "bookmark")
@@ -378,11 +386,11 @@ struct WritingStudioView: View {
     }
 
     private func showToast(_ message: String) {
-        withAnimation(Aero.snappy) { toast = message }
+        withAnimation(Aero.motion(Aero.snappy)) { toast = message }
         Task {
             try? await Task.sleep(nanoseconds: 1_800_000_000)
             if toast == message {
-                withAnimation(Aero.snappy) { toast = nil }
+                withAnimation(Aero.motion(Aero.snappy)) { toast = nil }
             }
         }
     }

@@ -153,6 +153,9 @@ object SettingsStore {
     // Language
     fun updateAiLanguage(v: String) { aiLanguage = v; put(K.aiLanguage, v) }
     // Accessibility
+    /** Live stage during a slider drag: memory only, no disk write per frame.
+     *  The commit lands once in [updateFontScale] on release. */
+    fun stageFontScale(v: Float) { fontScale = v }
     fun updateFontScale(v: Float) { fontScale = v; put(K.fontScale, v) }
     fun updateHighContrast(v: Boolean) { highContrast = v; put(K.highContrast, v) }
     fun updateReduceMotion(v: Boolean) { reduceMotion = v; put(K.reduceMotion, v) }

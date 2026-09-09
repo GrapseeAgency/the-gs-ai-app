@@ -72,6 +72,8 @@ struct LibraryView: View {
 
     @State private var filter: Filter = .all
     @State private var query = ""
+    @FocusState private var searchFocused: Bool
+    @State private var pendingDelete: LibraryItem?
 
     // Real saves from the chat surface — loaded on appear, rendered above seeds.
     @State private var savedMessages: [LibraryItem] = []
@@ -178,6 +180,7 @@ struct LibraryView: View {
         .scrollContentBackground(.hidden)
         .environment(\.defaultMinListRowHeight, 1)
         .background(Aero.background.ignoresSafeArea())
+        .scrollDismissesKeyboard(.interactively)
         .onAppear {
             savedMessages = ConversationStore.shared.savedLibraryItems()
         }
@@ -227,7 +230,11 @@ struct LibraryView: View {
             TextField("Search your library…", text: $query)
                 .font(Aero.body())
                 .foregroundStyle(Aero.text)
+                .focused($searchFocused)
+                .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
+                .submitLabel(.search)
+                .onSubmit { searchFocused = false }
             if !query.isEmpty {
                 Button {
                     query = ""
@@ -443,6 +450,7 @@ private struct LibraryItemSheet: View {
             HStack(spacing: 20) {
                 Button {
                     let text = item.content
+                    GSHaptics.tap()   // committed — a fresh chat opens seeded
                     dismiss()
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
                         onContinue?(text)
@@ -456,9 +464,9 @@ private struct LibraryItemSheet: View {
                     UIPasteboard.general.string = item.content
                     // Copy completed — the shared success tick (Task 85-e I8).
                     GSHaptics.success()
-                    withAnimation(.easeOut(duration: 0.15)) { copied = true }
+                    withAnimation(Aero.motion(Aero.snappy)) { copied = true }
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
-                        withAnimation(.easeIn(duration: 0.2)) { copied = false }
+                        withAnimation(Aero.motion(Aero.snappy)) { copied = false }
                     }
                 } label: {
                     Label(

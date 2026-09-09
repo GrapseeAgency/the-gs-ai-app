@@ -11,22 +11,30 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.ui.draw.scale
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.grapsee.gsai.data.SettingsStore
 
 /**
  * AERUO KINETIC — motion tokens. Everything moves with intent.
@@ -68,21 +76,46 @@ object GsMotion {
 }
 
 /**
- * Kinetic press: spring scale-down on press. Use on every tappable surface
- * whose click handler lives elsewhere. Honors [GsMotion.reduced].
+ * Kinetic press: spring scale-down on press. Use on every tappable surface.
+ *
+ * The press is detected directly from the pointer stream instead of a shared
+ * InteractionSource, so it works under EVERY tap machinery — clickable(),
+ * combinedClickable(), Surface(onClick) — without each call site having to
+ * thread a source through. It never consumes events, so scrolling still wins:
+ * the moment the gesture is consumed (a scroll steals the pointer) the press
+ * releases, exactly like a platform state layer.
+ *
+ * The animated scale is read inside the graphicsLayer block, so a press
+ * re-renders only this node's layer — never the composable it decorates.
+ * Honors the reduce-motion / reduce-animations settings (reactive — the press
+ * spring flattens to no-op the moment either setting is on).
  */
 fun Modifier.kineticPress(
     pressedScale: Float = GsMotion.PRESS_SCALE
 ): Modifier = composed {
-    val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val target = if (GsMotion.reduced) 1f else if (pressed) pressedScale else 1f
-    val scale by animateFloatAsState(
-        targetValue = target,
-        animationSpec = GsMotion.standard(),
-        label = "kineticPress"
-    )
-    this.scale(scale)
+    if (SettingsStore.reduceAnimations || SettingsStore.reduceMotion) {
+        this
+    } else {
+        var pressed by remember { mutableStateOf(false) }
+        val scale by animateFloatAsState(
+            targetValue = if (pressed) pressedScale else 1f,
+            animationSpec = GsMotion.standard(),
+            label = "kineticPress"
+        )
+        this
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false)
+                    pressed = true
+                    waitForUpOrCancellation()
+                    pressed = false
+                }
+            }
+    }
 }
 
 /**
@@ -90,13 +123,15 @@ fun Modifier.kineticPress(
  * same [interaction] into the clickable Surface/onClick — the press scale then
  * tracks real touches instead of listening to a source no one emits to.
  * Without this wiring the animation never fires and taps feel dead.
+ * Also honors the reduce-motion / reduce-animations settings (reactive).
  */
 fun Modifier.kineticPress(
     interaction: MutableInteractionSource,
     pressedScale: Float = GsMotion.PRESS_SCALE
 ): Modifier = composed {
     val pressed by interaction.collectIsPressedAsState()
-    val target = if (GsMotion.reduced) 1f else if (pressed) pressedScale else 1f
+    val reduced = SettingsStore.reduceAnimations || SettingsStore.reduceMotion
+    val target = if (reduced) 1f else if (pressed) pressedScale else 1f
     val scale by animateFloatAsState(
         targetValue = target,
         animationSpec = GsMotion.standard(),
@@ -170,9 +205,12 @@ fun Modifier.auroraBackground(shape: Shape): Modifier = composed {
 /** Staggered entrance delay for list items. */
 fun staggerDelay(index: Int): Int = index * GsMotion.STAGGER_MS
 
-/** Placeholder pulser for skeletons. */
+/** Placeholder pulser for skeletons. Reduce motion holds the mid-alpha frame —
+ *  a loading placeholder is decoration, not an AI life-sign, so it flattens
+ *  like every other gated loop. */
 @Composable
 fun skeletonAlpha(): Float {
+    if (SettingsStore.reduceMotion) return 0.65f
     val transition = rememberInfiniteTransition(label = "skeleton")
     val alpha by transition.animateFloat(
         initialValue = 0.45f,

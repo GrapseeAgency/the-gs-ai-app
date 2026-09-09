@@ -47,7 +47,9 @@ struct CreateView: View {
     // MARK: Sample data
 
     private struct CreateTool: Identifiable {
-        let id = UUID()
+        /// Identity from the label — a per-instance UUID would re-identify the
+        /// whole grid whenever creations load or the cover state changes.
+        var id: String { label }
         let label: String
         let icon: String
         let detail: String
@@ -100,6 +102,7 @@ struct CreateView: View {
         }
         .background(Aero.background.ignoresSafeArea())
         .onAppear {
+            GSHaptics.prepare()
             creations = ConversationStore.shared.savedLibraryItems()
         }
         // Nav bar owns the title + back affordance now (Task 85-e I7) —
@@ -142,6 +145,7 @@ struct CreateView: View {
             ForEach(tools) { tool in
                 if let workspace = tool.workspace {
                     Button {
+                        GSHaptics.tap()   // committed open — the studio takes the canvas
                         activeTool = workspace
                     } label: {
                         toolCard(tool)

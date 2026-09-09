@@ -64,6 +64,8 @@ struct AssistantDetailView: View {
                             .font(.system(size: 15))
                             .foregroundStyle(Aero.text)
                     }
+                    .accessibilityLabel("Edit assistant")
+
                     Button {
                         showDelete = true
                     } label: {
@@ -71,21 +73,24 @@ struct AssistantDetailView: View {
                             .font(.system(size: 15))
                             .foregroundStyle(Aero.text)
                     }
+                    .accessibilityLabel("Delete assistant")
                 } else {
-                    Button {
-                    } label: {
+                    ShareLink(item: "\(assistant.name) — \(assistant.desc)") {
                         Image(systemName: "square.and.arrow.up")
                             .font(.system(size: 15))
                             .foregroundStyle(Aero.text)
                     }
+                    .accessibilityLabel("Share assistant")
                 }
                 Button {
+                    GSHaptics.select()
                     store.toggleFavourite(assistantID)
                 } label: {
                     Image(systemName: isFav ? "heart.fill" : "heart")
                         .font(.system(size: 15))
                         .foregroundStyle(isFav ? Aero.accent : Aero.text)
                 }
+                .accessibilityLabel(isFav ? "Remove from favourites" : "Add to favourites")
             }
         }
         .confirmationDialog(
@@ -95,6 +100,7 @@ struct AssistantDetailView: View {
         ) {
             Button("Delete", role: .destructive) {
                 AssistantsStore.shared.remove(assistantID)
+                GSHaptics.warning()
                 dismiss()
             }
             Button("Keep", role: .cancel) { }

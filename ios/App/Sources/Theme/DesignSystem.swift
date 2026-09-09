@@ -110,6 +110,20 @@ enum Aero {
 
     static func stagger(_ index: Int) -> Double { Double(index) * staggerStep }
 
+    /// Reduce-motion flattening for one-shot transitions. Returns the given
+    /// animation, or nil when the reader asked for less motion — either via
+    /// the system Reduce Motion switch or the in-app Accessibility toggles —
+    /// so `withAnimation(Aero.motion(Aero.snappy)) { … }` commits instantly
+    /// instead of moving layout. Ambient loops (aurora pulses, skeletons) are
+    /// deliberately not routed through this: they are the product's energy.
+    @MainActor
+    static func motion(_ animation: Animation) -> Animation? {
+        let settings = SettingsStore.shared
+        if settings.reduceMotion || settings.reduceAnimations { return nil }
+        if UIAccessibility.isReduceMotionEnabled { return nil }
+        return animation
+    }
+
     // MARK: Metrics
     enum Spacing {
         static let xs: CGFloat = 4
@@ -181,8 +195,10 @@ enum GSFormatters {
 // MARK: - Press feedback (kinetic scale)
 
 struct KineticPressStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     func makeBody(configuration: Configuration) -> some View {
-        let reduced = SettingsStore.shared.animationReduced
+        let reduced = reduceMotion || SettingsStore.shared.animationReduced
         let pressedScale: CGFloat = reduced ? 1.0 : Aero.pressScale
         return configuration.label
             .scaleEffect(configuration.isPressed ? pressedScale : 1)

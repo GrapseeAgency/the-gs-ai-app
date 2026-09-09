@@ -135,6 +135,7 @@ struct BillingView: View {
                     .background(Circle().fill(Aero.container))
             }
             .buttonStyle(KineticPressStyle())
+            .accessibilityLabel("Close")
         }
         .padding(.top, Aero.Spacing.m)
     }
@@ -241,6 +242,7 @@ struct BillingView: View {
         features: [String]
     ) -> some View {
         AeroCard(action: {
+            GSHaptics.select()
             withAnimation(Aero.snappy) { selectedPlan = id }
         }) {
             VStack(alignment: .leading, spacing: Aero.Spacing.s) {
@@ -322,6 +324,7 @@ struct BillingView: View {
     }
 
     private func changePlan(to plan: String) {
+        GSHaptics.success()   // committed — the plan actually changed
         withAnimation(Aero.snappy) {
             currentPlan = plan
             selectedPlan = plan
@@ -424,6 +427,7 @@ struct BillingView: View {
                     kind: "document",
                     title: "Invoice \(month)"
                 )
+                GSHaptics.success()
                 showToast("Invoice saved to Library")
             }
         )

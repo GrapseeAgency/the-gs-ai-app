@@ -38,14 +38,16 @@ struct ExploreView: View {
     // MARK: Row-local sample content
 
     private struct PromptCard: Identifiable {
-        let id = UUID()
+        /// Identity from content — a UUID minted per struct recreation would
+        /// re-identify every card on each keystroke and kill row continuity.
+        var id: String { text }
         let text: String
         let caption: String
         let category: String
     }
 
     private struct ToolCard: Identifiable {
-        let id = UUID()
+        var id: String { name }
         let name: String
         let detail: String
         let icon: String
@@ -56,6 +58,8 @@ struct ExploreView: View {
     @ObservedObject private var store = AssistantsStore.shared
     @State private var selectedCategory = "All"
     @State private var query = ""
+    @FocusState private var searchFocused: Bool
+    @State private var pendingDelete: AssistantSample?
 
     private let prompts: [PromptCard] = [
         .init(text: "Write a launch announcement in our brand voice", caption: "Writing · 8.2k uses", category: "Writing"),
@@ -157,6 +161,26 @@ struct ExploreView: View {
         .background(Aero.background.ignoresSafeArea())
         .navigationTitle("Explore")
         .navigationBarTitleDisplayMode(.inline)
+        .scrollDismissesKeyboard(.interactively)
+        .confirmationDialog(
+            "Delete “\(pendingDelete?.name ?? "")” from My assistants? Chats you started with it stay in your history.",
+            isPresented: Binding(
+                get: { pendingDelete != nil },
+                set: { if !$0 { pendingDelete = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                if let id = pendingDelete?.id {
+                    AssistantsStore.shared.remove(id)
+                    GSHaptics.warning()
+                }
+                pendingDelete = nil
+            }
+            Button("Keep", role: .cancel) { pendingDelete = nil }
+        }
+        .onAppear { GSHaptics.prepare() }
+>>>>>>> 4418691 (c5dbb0b6-b487-4fa4-9552-e757cb13f3a7)
     }
 
     // MARK: Header
@@ -182,7 +206,11 @@ struct ExploreView: View {
             TextField("Search assistants, prompts, tools…", text: $query)
                 .font(Aero.body())
                 .foregroundStyle(Aero.text)
+                .focused($searchFocused)
+                .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
+                .submitLabel(.search)
+                .onSubmit { searchFocused = false }
             if !query.isEmpty {
                 Button {
                     query = ""
@@ -192,6 +220,7 @@ struct ExploreView: View {
                         .foregroundStyle(Aero.textMuted)
                 }
                 .buttonStyle(KineticPressStyle())
+                .accessibilityLabel("Clear search")
             }
         }
         .padding(.horizontal, Aero.Spacing.m)
@@ -210,6 +239,7 @@ struct ExploreView: View {
                         text: category,
                         selected: selectedCategory == category,
                         action: {
+                            GSHaptics.select()
                             withAnimation(Aero.snappy) { selectedCategory = category }
                         }
                     )
@@ -397,7 +427,43 @@ struct ExploreView: View {
                         .frame(width: 184, height: 140)
                     }
                     .buttonStyle(KineticPressStyle())
+                    .contextMenu { mineContextMenu(assistant) }
                 }
+            }
+        }
+    }
+
+    /// Long-press actions on the reader's own creations — the same set the
+    /// Assistants hub offers, so the two surfaces never drift.
+    private func mineContextMenu(_ assistant: AssistantSample) -> some View {
+        let fav = store.favourites.contains(assistant.id)
+        return Group {
+            Button {
+                GSHaptics.select()
+                store.toggleFavourite(assistant.id)
+            } label: {
+                Label(
+                    fav ? "Remove from favourites" : "Favourite",
+                    systemImage: fav ? "heart.slash" : "heart"
+                )
+            }
+            Button {
+                GSHaptics.success()
+                store.togglePin(assistant.id)
+            } label: {
+                Label(assistant.pinned ? "Unpin" : "Pin to top", systemImage: "pin")
+            }
+            Button {
+                GSHaptics.success()
+                store.setArchived(assistant.id, true)
+            } label: {
+                Label("Archive", systemImage: "archivebox")
+            }
+            Divider()
+            Button(role: .destructive) {
+                pendingDelete = assistant
+            } label: {
+                Label("Delete…", systemImage: "trash")
             }
         }
     }

@@ -29,6 +29,12 @@ struct AuthFlowView: View {
     @FocusState private var emailCodeFocus: Bool
     @FocusState private var twoFactorFocus: Bool
 
+    // Field focus chain (Return advances to the next field like a native form)
+    @FocusState private var nameFocus: Bool
+    @FocusState private var emailFocus: Bool
+    @FocusState private var passwordFocus: Bool
+    @FocusState private var resetFocus: Bool
+
     // Password reset
     @State private var resetEmail = ""
 
@@ -65,6 +71,7 @@ struct AuthFlowView: View {
         } message: {
             Text("Backup codes are created in Settings → Security. Enter one here any time your authenticator is out of reach.")
         }
+        .onAppear { GSHaptics.prepare() }
     }
 
     // MARK: Step transition (asymmetric slide per spec)
@@ -112,6 +119,7 @@ struct AuthFlowView: View {
             StaggerIn(index: 2) {
                 VStack(spacing: Aero.Spacing.s) {
                     Button {
+                        GSHaptics.tap()
                         go(.signUp)
                     } label: {
                         Text("Create account")
@@ -124,6 +132,7 @@ struct AuthFlowView: View {
                     .buttonStyle(KineticPressStyle())
 
                     Button {
+                        GSHaptics.tap()
                         go(.signIn)
                     } label: {
                         Text("Sign in")
@@ -172,8 +181,16 @@ struct AuthFlowView: View {
             StaggerIn(index: 1) {
                 AeroCard {
                     VStack(alignment: .leading, spacing: Aero.Spacing.s) {
-                        capsuleField("Email", text: $email, keyboard: .emailAddress)
-                        passwordField
+                        capsuleField(
+                            "Email", text: $email,
+                            keyboard: .emailAddress,
+                            contentType: .emailAddress,
+                            focus: $emailFocus
+                        ) {
+                            emailFocus = false
+                            passwordFocus = true
+                        }
+                        passwordField(focus: $passwordFocus) { commitSignIn() }
                         HStack(spacing: Aero.Spacing.s) {
                             Button("Forgot password?") {
                                 resetEmail = email
@@ -193,7 +210,7 @@ struct AuthFlowView: View {
             StaggerIn(index: 2) {
                 VStack(spacing: Aero.Spacing.m) {
                     Button {
-                        go(.verifyEmail)
+                        commitSignIn()
                     } label: {
                         Text("Sign in")
                             .font(Aero.title())
@@ -225,9 +242,24 @@ struct AuthFlowView: View {
             StaggerIn(index: 1) {
                 AeroCard {
                     VStack(alignment: .leading, spacing: Aero.Spacing.s) {
-                        capsuleField("Full name", text: $fullName)
-                        capsuleField("Email", text: $email, keyboard: .emailAddress)
-                        passwordField
+                        capsuleField(
+                            "Full name", text: $fullName,
+                            contentType: .name,
+                            focus: $nameFocus
+                        ) {
+                            nameFocus = false
+                            emailFocus = true
+                        }
+                        capsuleField(
+                            "Email", text: $email,
+                            keyboard: .emailAddress,
+                            contentType: .emailAddress,
+                            focus: $emailFocus
+                        ) {
+                            emailFocus = false
+                            passwordFocus = true
+                        }
+                        passwordField(new: true, focus: $passwordFocus) { commitSignUp() }
                         VStack(alignment: .leading, spacing: 6) {
                             HStack(spacing: Aero.Spacing.xs) {
                                 ForEach(0..<3, id: \.self) { segment in
@@ -251,7 +283,7 @@ struct AuthFlowView: View {
             }
             StaggerIn(index: 2) {
                 Button {
-                    go(.verifyEmail)
+                    commitSignUp()
                 } label: {
                     Text("Create account")
                         .font(Aero.title())
@@ -272,6 +304,20 @@ struct AuthFlowView: View {
             && !email.isEmpty
             && password.count >= 6
             && agreedToTerms
+    }
+
+    private func commitSignIn() {
+        guard !email.isEmpty, !password.isEmpty else { return }
+        GSHaptics.tap()   // committed — the sign-in attempt goes out
+        passwordFocus = false
+        go(.verifyEmail)
+    }
+
+    private func commitSignUp() {
+        guard signUpReady else { return }
+        GSHaptics.tap()
+        passwordFocus = false
+        go(.verifyEmail)
     }
 
     private var passwordStrength: Int {
@@ -302,12 +348,16 @@ struct AuthFlowView: View {
             focus: $emailCodeFocus,
             buttonTitle: "Verify",
             footer: { resendFooter },
-            onVerify: { go(.twoFactor) }
+            onVerify: {
+                GSHaptics.tap()
+                go(.twoFactor)
+            }
         )
     }
 
     private var resendFooter: some View {
         Button {
+            GSHaptics.tap()
             emailCode = ""
             emailCodeFocus = true
         } label: {
@@ -330,7 +380,10 @@ struct AuthFlowView: View {
             focus: $twoFactorFocus,
             buttonTitle: "Verify",
             footer: { backupFooter },
-            onVerify: { onComplete() }
+            onVerify: {
+                GSHaptics.tap()
+                onComplete()
+            }
         )
     }
 
@@ -352,12 +405,26 @@ struct AuthFlowView: View {
             StaggerIn(index: 1) {
                 AeroCard {
                     VStack(alignment: .leading, spacing: Aero.Spacing.s) {
-                        capsuleField("Email", text: $resetEmail, keyboard: .emailAddress)
+                        capsuleField(
+                            "Email", text: $resetEmail,
+                            keyboard: .emailAddress,
+                            contentType: .emailAddress,
+                            submit: .done,
+                            focus: $resetFocus
+                        ) {
+                            guard !resetEmail.isEmpty else { return }
+                            GSHaptics.tap()
+                            resetFocus = false
+                            go(.resetSent)
+                        }
                     }
                 }
             }
             StaggerIn(index: 2) {
                 Button {
+                    guard !resetEmail.isEmpty else { return }
+                    GSHaptics.tap()
+                    resetFocus = false
                     go(.resetSent)
                 } label: {
                     Text("Send reset link")
@@ -403,6 +470,7 @@ struct AuthFlowView: View {
                 }
 
                 Button {
+                    GSHaptics.tap()
                     go(.signIn)
                 } label: {
                     Text("Back to sign in")
@@ -536,6 +604,7 @@ struct AuthFlowView: View {
             }
             TextField("", text: code)
                 .keyboardType(.numberPad)
+                .textContentType(.oneTimeCode)
                 .focused(focus)
                 // The number pad has no return key — the shared Done bar is
                 // the only way to put the keyboard away (Task 85-e I6).
@@ -544,6 +613,7 @@ struct AuthFlowView: View {
                 .opacity(0.02)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .contentShape(Rectangle())
+                .accessibilityLabel("6-digit verification code")
         }
         .frame(maxWidth: .infinity)
         .contentShape(Rectangle())
@@ -571,17 +641,43 @@ struct AuthFlowView: View {
             )
     }
 
-    // MARK: Field helpers (capsule style per AssistantCreateView)
+    // MARK: - Optional focus binding (the Return-key focus chain)
+
+/// Applies a FocusState binding when one is provided; a no-op otherwise, so
+/// field helpers stay call-site flexible without overload explosion.
+private struct OptionalFocus: ViewModifier {
+    var binding: FocusState<Bool>.Binding?
+
+    func body(content: Content) -> some View {
+        if let binding {
+            content.focused(binding)
+        } else {
+            content
+        }
+    }
+}
+
+// MARK: Field helpers (capsule style per AssistantCreateView)
 
     private func capsuleField(
         _ placeholder: String,
         text: Binding<String>,
-        keyboard: UIKeyboardType = .default
+        keyboard: UIKeyboardType = .default,
+        contentType: UITextContentType? = nil,
+        submit: SubmitLabel = .next,
+        focus: FocusState<Bool>.Binding? = nil,
+        onSubmit: @escaping () -> Void = {}
     ) -> some View {
         TextField(placeholder, text: text)
             .keyboardType(keyboard)
             .textInputAutocapitalization(keyboard == .emailAddress ? .never : nil)
             .autocorrectionDisabled()
+            .textContentType(contentType)
+            .submitLabel(submit)
+            .onSubmit(onSubmit)
+            // The Return-key chain only works when the state the onSubmit
+            // handlers drive is actually bound to the field.
+            .modifier(OptionalFocus(focus))
             .font(Aero.body())
             .foregroundStyle(Aero.text)
             .padding(.horizontal, 16)
@@ -590,7 +686,11 @@ struct AuthFlowView: View {
             .overlay(Capsule().stroke(Aero.outline, lineWidth: 1))
     }
 
-    private var passwordField: some View {
+    private func passwordField(
+        new: Bool = false,
+        focus: FocusState<Bool>.Binding? = nil,
+        onSubmit: @escaping () -> Void = {}
+    ) -> some View {
         HStack(spacing: Aero.Spacing.s) {
             Group {
                 if showPassword {
@@ -601,6 +701,10 @@ struct AuthFlowView: View {
             }
             .font(Aero.body())
             .foregroundStyle(Aero.text)
+            .textContentType(new ? .newPassword : .password)
+            .submitLabel(.done)
+            .onSubmit(onSubmit)
+            .modifier(OptionalFocus(focus))
 
             Button {
                 showPassword.toggle()
@@ -610,6 +714,7 @@ struct AuthFlowView: View {
                     .foregroundStyle(Aero.textMuted)
             }
             .buttonStyle(KineticPressStyle())
+            .accessibilityLabel(showPassword ? "Hide password" : "Show password")
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -629,6 +734,7 @@ struct AuthFlowView: View {
 
     private func socialButton(_ title: String, icon: String) -> some View {
         Button {
+            GSHaptics.tap()
             onComplete()
         } label: {
             HStack(spacing: Aero.Spacing.s) {
@@ -659,6 +765,7 @@ struct AuthFlowView: View {
                 .background(Circle().fill(Aero.container))
         }
         .buttonStyle(KineticPressStyle())
+        .accessibilityLabel("Back")
     }
 }
 

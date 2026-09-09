@@ -110,6 +110,7 @@ struct AeroDrawer: View {
                 if let target = renameTarget, !trimmed.isEmpty {
                     store.rename(id: target.id, to: trimmed)
                     sync(target.id, title: trimmed)
+                    GSHaptics.success()
                 }
                 renameTarget = nil
             }
@@ -163,6 +164,7 @@ struct AeroDrawer: View {
         }
         .contextMenu {
             Button {
+                GSHaptics.success()
                 let target = !conversation.pinned
                 store.setPinned(id: conversation.id, target)
                 GSHaptics.success()
@@ -177,6 +179,7 @@ struct AeroDrawer: View {
                 Label("Rename…", systemImage: "pencil")
             }
             Button {
+                GSHaptics.success()
                 store.setArchived(id: conversation.id, true)
                 GSHaptics.success()
                 sync(conversation.id, archived: true)
@@ -184,6 +187,7 @@ struct AeroDrawer: View {
                 Label("Archive", systemImage: "archivebox")
             }
             Button(role: .destructive) {
+                GSHaptics.warning()
                 store.delete(id: conversation.id)
                 GSHaptics.warning()
                 syncDelete(conversation.id)
@@ -277,7 +281,10 @@ struct AeroDrawer: View {
     }
 
     private func row(title: String, icon: String?, isPinned: Bool = false, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+        Button {
+            GSHaptics.tap()   // committed open — the drawer routes
+            action()
+        } label: {
             HStack(spacing: Aero.Spacing.s) {
                 if let icon {
                     Image(systemName: icon)

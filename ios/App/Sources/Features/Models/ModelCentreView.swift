@@ -114,8 +114,11 @@ struct ModelCentreView: View {
                 HStack(spacing: Aero.Spacing.s) {
                     ForEach(modes, id: \.self) { mode in
                         AeroChip(text: mode, selected: selectedMode == mode) {
-                            selectedMode = mode
-                            UserDefaults.standard.set(mode, forKey: "gs.models.mode")
+                            GSHaptics.select()
+                            withAnimation(Aero.snappy) {
+                                selectedMode = mode
+                                UserDefaults.standard.set(mode, forKey: "gs.models.mode")
+                            }
                         }
                     }
                 }
@@ -188,6 +191,7 @@ struct ModelCentreView: View {
     private func setDefaultButton(_ model: ModelInfo) -> some View {
         let isCurrent = model.id == defaultID
         return Button {
+            GSHaptics.tap()   // committed — the next turn travels with this model
             withAnimation(Aero.snappy) {
                 defaultID = model.id
                 UserDefaults.standard.set(model.id, forKey: "gs.models.defaultId")

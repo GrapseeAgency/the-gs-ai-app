@@ -64,11 +64,15 @@ import com.grapsee.gsai.ui.components.GsCard
 import com.grapsee.gsai.ui.components.GsChip
 import com.grapsee.gsai.BuildConfig
 import com.grapsee.gsai.CrashReporter
+import com.grapsee.gsai.data.ModelPrefs
 import com.grapsee.gsai.data.SettingsStore
+import com.grapsee.gsai.data.model.ModelCatalog
 import com.grapsee.gsai.di.ServiceLocator
 import com.grapsee.gsai.ui.components.GsScreenScaffold
+import com.grapsee.gsai.ui.navigation.GsRoutes
 import com.grapsee.gsai.ui.theme.GsMotion
 import com.grapsee.gsai.ui.theme.gsHaptic
+import androidx.activity.compose.BackHandler
 import java.time.OffsetDateTime
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -82,11 +86,15 @@ private val effortOptions = listOf("Low", "Medium", "High")
 private val aiLanguageOptions = listOf("EN", "中文", "हिन्दी", "العربية")
 
 @Composable
-fun SettingsScreen(onBack: () -> Unit) {
+fun SettingsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {}) {
     var expandedId by remember { mutableStateOf<String?>(null) }
     // Privacy flows (UI-local)
     var showClearData by remember { mutableStateOf(false) }
     var showDeleteAccount by remember { mutableStateOf(false) }
+
+    // An expanded section is an in-screen overlay state: BACK folds it first
+    // and only pops the screen once every section is closed.
+    BackHandler(enabled = expandedId != null) { expandedId = null }
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -166,6 +174,28 @@ fun SettingsScreen(onBack: () -> Unit) {
                     checked = SettingsStore.sendDoubleTap,
                     onCheckedChange = { SettingsStore.updateSendDoubleTap(it) }
                 )
+                // Real model state: shows the default the chat send path reads,
+                // and hands the reader to the Model Centre to change it.
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = { onNavigate(GsRoutes.MODELS) })
+                        .padding(vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Default model",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        text = ModelCatalog.byId(ModelPrefs.defaultId(context))?.displayName
+                            ?: ModelCatalog.default.displayName,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
 
             ExpandCard(
@@ -275,7 +305,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                         color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.weight(1f)
                     )
-                    GsChip(text = "On", selected = true, onClick = {})
+                    GsChip(text = "On", selected = true)
                 }
                 ValueRow(title = "Trusted devices", value = "2")
             }
@@ -352,7 +382,10 @@ fun SettingsScreen(onBack: () -> Unit) {
                     }
                     Slider(
                         value = SettingsStore.fontScale,
-                        onValueChange = { SettingsStore.updateFontScale(it) },
+                        onValueChange = { SettingsStore.stageFontScale(it) },
+                        onValueChangeFinished = {
+                            SettingsStore.updateFontScale(SettingsStore.fontScale)
+                        },
                         valueRange = 0.8f..1.4f,
                         steps = 5
                     )

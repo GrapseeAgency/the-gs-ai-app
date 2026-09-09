@@ -134,8 +134,8 @@ fun CodeWorkspaceScreen(onBack: () -> Unit) {
             title = "Code",
             onBack = onBack,
             actions = {
-                GsChip(text = "0 problems", selected = true, onClick = {})
-                GsChip(text = "Kotlin", selected = false, onClick = {})
+                GsChip(text = "0 problems", selected = true)
+                GsChip(text = "Kotlin", selected = false)
             }
         ) {
             Column(

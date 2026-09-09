@@ -78,15 +78,18 @@ struct ModelCompareView: View {
     }
 
     private func toggleSelection(_ id: String) {
-        if let index = selectedIDs.firstIndex(of: id) {
-            guard selectedIDs.count > 1 else { return }
-            selectedIDs.remove(at: index)
-        } else {
-            if selectedIDs.count < 3 {
-                selectedIDs.append(id)
+        GSHaptics.select()
+        withAnimation(Aero.snappy) {
+            if let index = selectedIDs.firstIndex(of: id) {
+                guard selectedIDs.count > 1 else { return }
+                selectedIDs.remove(at: index)
             } else {
-                selectedIDs.removeFirst()
-                selectedIDs.append(id)
+                if selectedIDs.count < 3 {
+                    selectedIDs.append(id)
+                } else {
+                    selectedIDs.removeFirst()
+                    selectedIDs.append(id)
+                }
             }
         }
     }
@@ -143,8 +146,11 @@ struct ModelCompareView: View {
                     selected: model.id == defaultID
                 ) {
                     guard model.id != defaultID else { return }
-                    defaultID = model.id
-                    UserDefaults.standard.set(model.id, forKey: "gs.models.defaultId")
+                    GSHaptics.tap()   // committed — the next turn travels with this model
+                    withAnimation(Aero.snappy) {
+                        defaultID = model.id
+                        UserDefaults.standard.set(model.id, forKey: "gs.models.defaultId")
+                    }
                 }
             }
         }

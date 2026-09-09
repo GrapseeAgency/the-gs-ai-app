@@ -30,6 +30,7 @@ import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.TipsAndUpdates
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -143,6 +144,9 @@ fun LibraryScreen(onNavigate: (String) -> Unit) {
     val snackbarHostState = remember { SnackbarHostState() }
     val clipboard = LocalClipboardManager.current
     var viewingItem by remember { mutableStateOf<SavedItemEntity?>(null) }
+    // Destructive actions confirm first — the delete lands only after the
+    // platform AlertDialog says so.
+    var deleteTarget by remember { mutableStateOf<SavedItemEntity?>(null) }
     val showSnack: (String) -> Unit = { message ->
         scope.launch { snackbarHostState.showSnackbar(message) }
     }
@@ -257,11 +261,30 @@ fun LibraryScreen(onNavigate: (String) -> Unit) {
                 onDelete = {
                     val target = item
                     viewingItem = null
-                    scope.launch {
-                        runCatching { ServiceLocator.chat.deleteSavedItem(target.id) }
-                            .onSuccess { showSnack("Removed from Library") }
-                            .onFailure { showSnack("Couldn't remove right now") }
-                    }
+                    deleteTarget = target
+                }
+            )
+        }
+
+        // Destructive confirm — the platform dialog owns the decision; the
+        // delete itself lands only after it says so.
+        deleteTarget?.let { target ->
+            AlertDialog(
+                onDismissRequest = { deleteTarget = null },
+                title = { Text("Remove from Library?") },
+                text = { Text("“${target.title}” will be deleted. This can't be undone.") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        deleteTarget = null
+                        scope.launch {
+                            runCatching { ServiceLocator.chat.deleteSavedItem(target.id) }
+                                .onSuccess { showSnack("Removed from Library") }
+                                .onFailure { showSnack("Couldn't remove right now") }
+                        }
+                    }) { Text("Remove") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { deleteTarget = null }) { Text("Cancel") }
                 }
             )
         }

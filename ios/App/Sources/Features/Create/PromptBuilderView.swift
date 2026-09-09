@@ -97,6 +97,8 @@ struct PromptBuilderView: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .overlay(alignment: .bottom) { toastView }
+        .scrollDismissesKeyboard(.interactively)
+        .onAppear { GSHaptics.prepare() }
     }
 
     // MARK: Header (own chrome — no router)
@@ -123,6 +125,7 @@ struct PromptBuilderView: View {
                 .overlay(Circle().stroke(Aero.outline, lineWidth: 1))
         }
         .buttonStyle(KineticPressStyle())
+        .accessibilityLabel("Close")
     }
 
     // MARK: Fields
@@ -186,10 +189,13 @@ struct PromptBuilderView: View {
             LazyVGrid(columns: refinementColumns, alignment: .leading, spacing: Aero.Spacing.xs) {
                 ForEach(refinements, id: \.self) { option in
                     AeroChip(text: option, selected: activeRefinements.contains(option)) {
-                        if activeRefinements.contains(option) {
-                            activeRefinements.remove(option)
-                        } else {
-                            activeRefinements.insert(option)
+                        GSHaptics.select()
+                        withAnimation(Aero.snappy) {
+                            if activeRefinements.contains(option) {
+                                activeRefinements.remove(option)
+                            } else {
+                                activeRefinements.insert(option)
+                            }
                         }
                     }
                 }
@@ -236,6 +242,7 @@ struct PromptBuilderView: View {
             return
         }
         UIPasteboard.general.string = assembledPrompt
+        GSHaptics.success()
         showToast("Prompt copied")
     }
 
@@ -258,11 +265,11 @@ struct PromptBuilderView: View {
     }
 
     private func showToast(_ message: String) {
-        withAnimation(Aero.snappy) { toast = message }
+        withAnimation(Aero.motion(Aero.snappy)) { toast = message }
         Task {
             try? await Task.sleep(nanoseconds: 1_800_000_000)
             if toast == message {
-                withAnimation(Aero.snappy) { toast = nil }
+                withAnimation(Aero.motion(Aero.snappy)) { toast = nil }
             }
         }
     }
