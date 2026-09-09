@@ -2156,3 +2156,19 @@ Stage Summary:
 - The implementation is whole again: v0.60.0 lineage + every Task 87/88 mechanism, gates green on both platforms.
 - Remaining items are exactly the documented set: design-frozen (iOS in-content headers on ~15 screens, chip hit targets <44pt, two-pane layouts, shimmer vs redacted), backend-blocked (deep links, push notifications), framework-blocked (M3 1.3.0 drawer predictive-back scrub — material3 1.4+). Nothing else is resolvable without a design change; nothing was faked to PASS.
 - Next: the user runs device-validation/CHECKLIST.md on hardware; every reported failure gets a code-path-level root-cause fix on this same unreleased tree. No release, no bump, no "fully native" declaration until the device results support it.
+
+Task ID: 88
+Agent: Z.ai Code (main) + 12 Explore subagents (88-a..88-l)
+Task: Full exhaustive UI inventory & audit of the entire app (Android Compose + iOS SwiftUI) — every screen, sub-screen, state, overlay, component, theme token, gesture, and navigation path; 26-section factual report for the next design pass.
+
+Work Log:
+- Launched 12 parallel read-only extraction agents covering every UI file: Android core nav/theme/components (88-a), Android chat cluster (88-b), Android home+create (88-c), Android discover cluster (88-d), Android assistants/models/notifications (88-e), Android auth/account/voice/vision (88-f), iOS core design system (88-g), iOS chat cluster (88-h), iOS home+create (88-i), iOS discover cluster (88-j), iOS account/auth/voice/vision (88-k), cross-cutting platform config/greps (88-l).
+- Every agent read its assigned files top-to-bottom (~28.5k LOC total across both platforms) and returned file:line-referenced inventories.
+- Spot-verified load-bearing claims first-hand: zero mermaid/latex/webview hits on both platforms; ChatScreen "Auto" chip + Tune button inert (ChatScreen.kt:662-666); assistant long-press menu = Translate/Read aloud/Save to Library/Branch new chat (1079-1126); iOS AeroDrawer has no panel width constraint (AeroDrawer.swift); 25 AeroRoute cases; 32 Android route constants.
+- Compiled the final 26-section UI audit report and delivered it in-conversation (single source; not duplicated to docs/).
+
+Stage Summary:
+- DELIVERED: complete factual UI map (nav trees, per-screen inventory, chat/composer/markdown anatomy, state matrices, theme audit incl. hardcoded-color bypasses, design tokens, platform audits, mock-vs-real ledger, dead-control census, duplication findings).
+- Key structural facts: 32 Android destinations (GsRoutes), 25 iOS AeroRoute cases + 6 fullScreenCover workspaces outside the router; drawer = primary nav on both; no tabs, no deep links, no mermaid/latex/webview anywhere; markdown = hand-rolled "markdown-lite" on both platforms.
+- Known defects logged in report: iOS drawer full-width (scrim unreachable), dead UI on both platforms (Search kind chips iOS, inert model picker Android, unreachable delete dialog Android ProjectDetail, dead error banner iOS chat), always-dark surfaces inside light theme (Home, drawer, Code/Prompt canvases, Voice), broken iOS DesignSystemTests, English-only hardcoded strings.
+- Next phase (design pass) can proceed from this map without missing any surface.
