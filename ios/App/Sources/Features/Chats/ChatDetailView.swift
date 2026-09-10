@@ -54,6 +54,21 @@ struct ChatDetailView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @FocusState private var composerFocused: Bool
     @ObservedObject private var conversations = ConversationStore.shared
+    // Voice entry (Step 4): the same shared Router every pushed surface reads
+    // (ChatsListView, VoiceView, AssistantDetailView, …) — the composer mic
+    // appends .voice onto the stack this screen was pushed onto.
+    @EnvironmentObject private var router: Router
+    // Offline state (Step 4): one shared NWPathMonitor for the whole process.
+    @ObservedObject private var network = NetworkMonitor.shared
+
+    // Model control (Step 4): the toolbar chip mirrors Home's Task 91-b pill —
+    // the persisted pick (UserDefaults "gs.models.defaultId", fallback
+    // "gs-balanced") resolved against ModelInfo.catalog, with the stored
+    // "gs.models.mode" appended ONLY when that model offers it. Re-read on
+    // appear (return from Model Centre) and after a sheet pick.
+    @State private var showingModelPicker = false
+    @State private var pillModel: ModelInfo?
+    @State private var pillMode: String?
 
     init(conversationID: String?, prefill: String? = nil) {
         _vm = StateObject(wrappedValue: ChatViewModel(conversationID: conversationID))
@@ -71,21 +86,44 @@ struct ChatDetailView: View {
                 .padding(.top, Aero.Spacing.s)
             }
 
-            transcript
-
-            if vm.isStreaming {
-                streamingBar
+            if network.isOffline {
+                offlinePill
             }
 
+            transcript
+
             Divider().overlay(Aero.outline)
-            attachRow
-            inputBar
+            composerZone
         }
         .background(Aero.background.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
         .navigationTitle(conversationTitle)
         .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
+            // Step 4: model chip BEFORE search — the real persisted pick,
+            // not a status fiction. Inline title mode truncates long thread
+            // titles natively; the chip itself is single-line.
+            ToolbarItemGroup(placement: .navigationBarTrailing) {
+                Button {
+                    showingModelPicker = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(LinearGradient(
+                                colors: Aero.aurora,
+                                startPoint: .topLeading, endPoint: .bottomTrailing))
+                            .frame(width: 8, height: 8)
+                        Text(modelPillText)
+                            .font(Aero.label())
+                            .foregroundStyle(Aero.text)
+                            .lineLimit(1)
+                    }
+                    .padding(.horizontal, Aero.Spacing.control)
+                    .padding(.vertical, 7)
+                    .background(Capsule().fill(Aero.raisedSurface))
+                }
+                .buttonStyle(KineticPressStyle())
+                .accessibilityLabel("Model \(modelPillText). Change model")
+
                 Button {
                     searchActive.toggle()
                     if !searchActive {
@@ -118,6 +156,7 @@ struct ChatDetailView: View {
         }
         .onAppear {
             GSHaptics.prepare()
+            refreshModelPill()
             if let prefill, vm.draft.isEmpty, !vm.isStreaming {
                 vm.draft = prefill
             } else if let id = vm.conversationID, vm.draft.isEmpty, !vm.isStreaming {
@@ -128,6 +167,9 @@ struct ChatDetailView: View {
             AttachmentSheetView { option in
                 showToast(attachmentMessage(for: option))
             }
+        }
+        .sheet(isPresented: $showingModelPicker) {
+            modelPickerSheet
         }
         .sheet(item: $translationCard) { card in
             TranslationSheet(
@@ -323,71 +365,169 @@ struct ChatDetailView: View {
         }
     }
 
-    // MARK: Streaming controls
+    // MARK: Composer (Step 4 unified zone)
 
-    private var streamingBar: some View {
-        HStack(spacing: Aero.Spacing.s) {
-            AuroraIndicator()
-            Spacer()
-            Button {
-                vm.stop()
-            } label: {
-                Label("Stop generating", systemImage: "stop.fill")
-                    .font(Aero.label())
-                    .foregroundStyle(Aero.text)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .overlay(Capsule().stroke(Aero.accent, lineWidth: 1))
+    /// One composer zone replaces the old three-row stack (attachRow above
+    /// the bar + a separate streamingBar above the divider): a generating
+    /// line and the attach toast live here, then a single input row —
+    /// [+] [expanding field with the send/stop slot] [mic]. During a stream
+    /// the send slot becomes Stop (real vm.stop()) and the field stays live:
+    /// the draft remains editable, vm.send() itself gates on !isStreaming,
+    /// so nothing sends and nothing stops by accident.
+    private var composerZone: some View {
+        VStack(spacing: Aero.Spacing.s) {
+            if let message = toast {
+                HStack(spacing: Aero.Spacing.xs) {
+                    Image(systemName: "checkmark.circle")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Aero.accent)
+                    Text(message)
+                        .font(Aero.label())
+                        .foregroundStyle(Aero.textMuted)
+                        .lineLimit(1)
+                    Spacer()
+                }
+                .accessibilityElement(children: .combine)
             }
-            .buttonStyle(KineticPressStyle())
+            if vm.isStreaming {
+                HStack(spacing: Aero.Spacing.s) {
+                    AuroraIndicator()
+                    Text("Generating…")
+                        .font(Aero.label())
+                        .foregroundStyle(Aero.textMuted)
+                    Spacer()
+                }
+                .accessibilityElement(children: .combine)
+            }
+            HStack(spacing: Aero.Spacing.s) {
+                Button {
+                    showingAttachments = true
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Aero.text)
+                        .frame(width: 30, height: 30)
+                        .background(Circle().fill(Aero.container))
+                        .overlay(Circle().stroke(Aero.outline, lineWidth: 1))
+                }
+                .buttonStyle(KineticPressStyle())
+                .accessibilityLabel("Add attachment")
+
+                AeroInputBar(
+                    text: $vm.draft,
+                    action: {
+                        userIsReading = false
+                        sendAndClearDraft()
+                    },
+                    focus: $composerFocused,
+                    busy: vm.isStreaming,
+                    onStop: { vm.stop() })
+
+                Button {
+                    router.path.append(.voice)
+                } label: {
+                    Image(systemName: "mic")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Aero.text)
+                        .frame(width: 30, height: 30)
+                        .background(Circle().fill(Aero.container))
+                        .overlay(Circle().stroke(Aero.outline, lineWidth: 1))
+                }
+                .buttonStyle(KineticPressStyle())
+                .accessibilityLabel("Voice input")
+            }
         }
         .padding(.horizontal, Aero.Spacing.m)
         .padding(.vertical, Aero.Spacing.s)
+        .frame(maxWidth: columnMaxWidth)
+        .background(Aero.surface.ignoresSafeArea(edges: .bottom))
     }
 
-    // MARK: Input
-
-    private var inputBar: some View {
-        AeroInputBar(text: $vm.draft, action: {
-            userIsReading = false
-            sendAndClearDraft()
-        }, focus: $composerFocused)
-            .padding(.horizontal, Aero.Spacing.m)
-            .padding(.vertical, Aero.Spacing.s)
-            .frame(maxWidth: columnMaxWidth)
-            .background(Aero.surface.ignoresSafeArea(edges: .bottom))
-    }
-
-    // MARK: Attach row (sits above the input bar — outside the frozen AeroInputBar)
-
-    private var attachRow: some View {
+    /// Slim honest offline line (Step 4): shown only while the system reports
+    /// no usable network. Copy reflects what actually happens — sends are NOT
+    /// queued for later; the turn is answered by the on-device responder
+    /// (ChatViewModel's GS Lite path) and persists in the local store, so the
+    /// thread keeps working until connectivity returns.
+    private var offlinePill: some View {
         HStack(spacing: Aero.Spacing.s) {
-            Button {
-                showingAttachments = true
-            } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Aero.text)
-                    .frame(width: 30, height: 30)
-                    .background(Circle().fill(Aero.container))
-                    .overlay(Circle().stroke(Aero.outline, lineWidth: 1))
-            }
-            .buttonStyle(KineticPressStyle())
-            .accessibilityLabel("Add attachment")
-            if let message = toast {
-                Image(systemName: "checkmark.circle")
-                    .font(.system(size: 12))
-                    .foregroundStyle(Aero.accent)
-                Text(message)
-                    .font(Aero.label())
-                    .foregroundStyle(Aero.textMuted)
-                    .lineLimit(1)
-            }
-            Spacer()
+            Image(systemName: "wifi.slash")
+                .font(.system(size: 12))
+            Text("Offline — replies come from the on-device responder until you reconnect.")
+                .font(Aero.label())
+                .foregroundStyle(Aero.textMuted)
+                .multilineTextAlignment(.leading)
         }
+        .foregroundStyle(Aero.textMuted)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: Aero.Radius.sm).fill(Aero.elevatedSurface))
         .padding(.horizontal, Aero.Spacing.m)
         .padding(.top, Aero.Spacing.s)
-        .frame(maxWidth: columnMaxWidth)
+        .accessibilityElement(children: .combine)
+    }
+
+    // MARK: Model control (Step 4)
+
+    /// The chip always shows the REAL persisted pick — Home's Task 91-b pill
+    /// logic mirrored exactly: the catalog name for UserDefaults
+    /// "gs.models.defaultId" (fallback "gs-balanced"), plus a " · mode"
+    /// suffix ONLY when the stored "gs.models.mode" is one that model
+    /// actually offers. An unknown id falls back to the catalog's flagged
+    /// default — the same server-default semantics ChatViewModel's send path
+    /// applies — and the suffix disappears rather than inventing a tier.
+    private var modelPillText: String {
+        let model = pillModel ?? ModelInfo.catalog.first { $0.isDefault }
+        guard let model else { return "" }
+        if let mode = pillMode, model.modes.contains(mode) {
+            return "\(model.name) · \(mode)"
+        }
+        return model.name
+    }
+
+    private var activeModelID: String {
+        pillModel?.id ?? ModelInfo.catalog.first { $0.isDefault }?.id ?? "gs-balanced"
+    }
+
+    private func refreshModelPill() {
+        let storedID = UserDefaults.standard.string(forKey: "gs.models.defaultId") ?? "gs-balanced"
+        pillModel = ModelInfo.catalog.first { $0.id == storedID }
+        // The Model Centre treats an unset mode as "Balanced" — mirror it so
+        // every model surface agrees.
+        pillMode = UserDefaults.standard.string(forKey: "gs.models.mode") ?? "Balanced"
+    }
+
+    /// Sheet pick: writes the SAME key Model Centre writes and refreshes the
+    /// chip immediately. ChatViewModel resolves the id per send
+    /// (resolvePreferredModelID runs inside beginStreaming), so the new model
+    /// governs from the next message — never a mid-stream switch.
+    private func selectModel(_ model: ModelInfo) {
+        UserDefaults.standard.set(model.id, forKey: "gs.models.defaultId")
+        refreshModelPill()
+        showingModelPicker = false
+    }
+
+    /// Real picker over the EXISTING ModelInfo.catalog (never duplicated):
+    /// one row per model with its tagline/capabilities/context from the
+    /// catalog struct, the active one checked. The honesty line documents the
+    /// send-time resolution reality.
+    private var modelPickerSheet: some View {
+        AeroSheetShell(title: "Model") {
+            ScrollView {
+                VStack(spacing: Aero.Spacing.s) {
+                    Text("Applies from your next message — a reply already streaming keeps the model it started with.")
+                        .font(Aero.caption())
+                        .foregroundStyle(Aero.textMuted)
+                    ForEach(ModelInfo.catalog) { model in
+                        ModelOptionRow(
+                            model: model,
+                            isActive: model.id == activeModelID,
+                            action: { selectModel(model) })
+                    }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
     }
 
     private func attachmentMessage(for option: String) -> String {
@@ -601,6 +741,49 @@ struct ChatDetailView: View {
     }
 }
 
+// MARK: - Model picker row (Step 4)
+
+/// One catalog row in the chat's model sheet — name, tagline and the
+/// capability/context line come straight from ModelInfo (nothing invented);
+/// checkmark + VoiceOver "selected" trait mark the active pick.
+private struct ModelOptionRow: View {
+    let model: ModelInfo
+    let isActive: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(model.name)
+                        .font(Aero.title())
+                        .foregroundStyle(Aero.text)
+                    Text(model.tagline)
+                        .font(Aero.caption())
+                        .foregroundStyle(Aero.textMuted)
+                    Text(model.capabilities.joined(separator: " · ") + " · \(model.contextK)K context")
+                        .font(Aero.metadata())
+                        .foregroundStyle(Aero.textTertiary)
+                }
+                Spacer()
+                if isActive {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Aero.accent)
+                }
+            }
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: Aero.Radius.md)
+                    .fill(isActive ? AnyShapeStyle(Aero.accentSoft) : AnyShapeStyle(Aero.raisedSurface)))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(KineticPressStyle())
+        .accessibilityLabel("\(model.name). \(model.tagline)")
+        .accessibilityAddTraits(isActive ? [.isSelected] : [])
+    }
+}
+
 // MARK: - Reply content segmentation (text + fenced code blocks)
 
 /// One renderable chunk of an assistant reply: plain text or a fenced code block.
@@ -612,6 +795,13 @@ private struct ContentSegment: Identifiable {
 }
 
 /// Split on ``` fences; an unterminated trailing fence (mid-stream) still renders as code.
+///
+/// UI rebuild Step 5 seam: THIS function is the message → ordered-blocks
+/// boundary. MessageBubble consumes only `[ContentSegment]` (prose | fenced
+/// code, in order) — nothing downstream re-reads the raw string — so the
+/// future markdown engine (Step 5) replaces the body of this parser without
+/// touching a single call site. The per-message NSCache in MessageBubble
+/// keeps the parse off the streaming path (finalized turns only).
 private func parseContentSegments(_ content: String) -> [ContentSegment] {
     var segments: [ContentSegment] = []
     var id = 0
@@ -1052,10 +1242,19 @@ private struct MessageBubble: View, Equatable {
                     }
                 }
             }
-            .padding(14)
-            .background(RoundedRectangle(cornerRadius: 18).fill(Aero.surface))
-            .overlay(RoundedRectangle(cornerRadius: 18).stroke(highlight ? Aero.accent : Aero.outline, lineWidth: highlight ? 2 : 1))
-            .frame(maxWidth: 320, alignment: .leading)
+            // Step 4 de-card: assistant prose sits straight on the canvas
+            // background at the transcript's reading column (no 320pt cap, no
+            // card padding/fill/stroke) — chrome stays only on content that
+            // earns it (code blocks). The find-in-chat tint remains as a soft
+            // accent wash instead of a permanent outline.
+            .background {
+                if highlight {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Aero.accentSoft)
+                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Aero.accent, lineWidth: 1))
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .contextMenu { bubbleMenu }
             Spacer(minLength: 40)
         }
@@ -1161,6 +1360,12 @@ private struct MessageBubble: View, Equatable {
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Aero.outline, lineWidth: 1))
     }
 
+    /// Step 4 hierarchy: the visible row carries the three high-frequency
+    /// actions (Copy · Read aloud/Stop · Regenerate); everything else lives in
+    /// the long-press menu — Translate (real streaming sheet), Save to
+    /// Library, Branch new chat, Share. No dead entries: every item fires a
+    /// real closure verified against ChatDetailView's wiring. Edit is a
+    /// USER-turn action and stays on the user bubble (its row + menu).
     private var actionRow: some View {
         HStack(spacing: 18) {
             if let stamp = timeLabel(message.createdAt) {
@@ -1175,27 +1380,15 @@ private struct MessageBubble: View, Equatable {
                     .foregroundStyle(copied ? Aero.accent : Aero.textMuted)
             }
             .accessibilityLabel(copied ? "Copied" : "Copy reply")
-            Button(action: onRegenerate) {
-                Image(systemName: "arrow.clockwise")
-            }
-            .accessibilityLabel("Regenerate reply")
-            ShareLink(item: message.content) {
-                Image(systemName: "square.and.arrow.up")
-            }
-            .accessibilityLabel("Share reply")
             Button(action: onReadAloud) {
                 Image(systemName: isSpeaking ? "stop.fill" : "speaker.wave.2")
                     .foregroundStyle(isSpeaking ? Aero.accent : Aero.textMuted)
             }
             .accessibilityLabel(isSpeaking ? "Stop reading aloud" : "Read reply aloud")
-            Button(action: onTranslate) {
-                Image(systemName: "translate")
+            Button(action: onRegenerate) {
+                Image(systemName: "arrow.clockwise")
             }
-            .accessibilityLabel("Translate reply")
-            Button(action: onSave) {
-                Image(systemName: "bookmark")
-            }
-            .accessibilityLabel("Save reply")
+            .accessibilityLabel("Regenerate reply")
         }
         .font(Aero.responsive(13, relativeTo: .footnote))
         .foregroundStyle(Aero.textMuted)
@@ -1209,14 +1402,17 @@ private struct MessageBubble: View, Equatable {
             } label: {
                 Label("Copy", systemImage: "doc.on.doc")
             }
-            Button(action: onRegenerate) {
-                Label("Regenerate", systemImage: "arrow.clockwise")
+            Button(action: onTranslate) {
+                Label("Translate", systemImage: "translate")
             }
-            ShareLink(item: message.content) {
-                Label("Share", systemImage: "square.and.arrow.up")
+            Button(action: onSave) {
+                Label("Save", systemImage: "bookmark")
             }
             Button(action: onBranch) {
                 Label("Branch new chat", systemImage: "arrow.triangle.branch")
+            }
+            ShareLink(item: message.content) {
+                Label("Share", systemImage: "square.and.arrow.up")
             }
         }
     }

@@ -268,7 +268,12 @@ private fun ChipLabel(
             .semantics {
                 this.selected = selected
                 role = Role.Button
-            }
+            },
+        // A chip is a pill, never a paragraph: long labels (a chat header can
+        // carry "GS Balanced · Balanced") ellipsize instead of wrapping and
+        // growing the row they sit in.
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis
     )
 }
 
@@ -346,7 +351,14 @@ fun GsInputBar(
     imeAction: ImeAction = ImeAction.Default,
     // Swap the paper-plane for a field-appropriate affordance (a Search icon
     // on query fields) without changing the shared bar's look anywhere else.
-    trailingIcon: (@Composable () -> Unit)? = null
+    trailingIcon: (@Composable () -> Unit)? = null,
+    // Optional growth contract (STEP 4 chat composer): the field starts at
+    // [minLines] and grows naturally to [maxLines]; beyond that the text field
+    // scrolls internally instead of eating the screen. Defaults reproduce the
+    // original single bar exactly — every pre-existing call site (search,
+    // library, vision, research, explore) is untouched by these params.
+    minLines: Int = 1,
+    maxLines: Int = 4
 ) {
     val keyboard = LocalSoftwareKeyboardController.current
     OutlinedTextField(
@@ -389,7 +401,8 @@ fun GsInputBar(
                 )
             }
         },
-        maxLines = 4
+        minLines = minLines,
+        maxLines = maxLines
     )
 }
 
@@ -598,6 +611,12 @@ fun GsScreenScaffold(
                     MaterialTheme.typography.headlineSmall
                 },
                 color = MaterialTheme.colorScheme.onBackground,
+                // Compact tier is ONE row: a long navigation title (chat threads
+                // title themselves from the first message) ellipsizes — it must
+                // never wrap to a second line and push the trailing actions out
+                // or grow the header height mid-conversation.
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
             )
             actions()

@@ -171,6 +171,15 @@ struct AeroInputBar: View {
     /// keyboard, the behaviour a reader expects when they hit "search".
     var onCommit: (() -> Void)? = nil
 
+    /// Streaming-chat variant (UI rebuild Step 4): while `busy`, the trailing
+    /// slot renders a real stop control firing `onStop` instead of the send
+    /// arrow — one composer, the send slot BECOMES Stop. The field itself
+    /// stays live (drafts remain editable mid-stream); keyboard submit still
+    /// routes to `action`, whose caller-side send gate is a no-op while a
+    /// stream runs, so the return key can never stop a generation.
+    var busy: Bool = false
+    var onStop: (() -> Void)? = nil
+
     /// Returns are read at submit time: Enter-to-send fires the send closure
     /// only when the setting is on; when it is off the vertical-axis field's
     /// default applies — Return inserts a newline and nothing sends.
@@ -188,7 +197,17 @@ struct AeroInputBar: View {
         HStack(spacing: Aero.Spacing.s) {
             Image(systemName: "sparkles").foregroundStyle(Aero.accent)
             field
-            if let action {
+            if busy, let onStop {
+                // Send slot → Stop: always tappable (no text gate — stopping
+                // must work with an empty composer).
+                Button(action: onStop) {
+                    Image(systemName: "stop.fill")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(Aero.text)
+                }
+                .buttonStyle(KineticPressStyle())
+                .accessibilityLabel("Stop generating")
+            } else if let action {
                 Button(action: action) {
                     Image(systemName: "arrow.up.circle.fill")
                         .font(.system(size: 24))

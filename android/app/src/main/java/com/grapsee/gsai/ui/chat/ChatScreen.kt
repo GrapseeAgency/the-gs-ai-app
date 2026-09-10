@@ -36,6 +36,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -62,23 +63,23 @@ import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.Mic
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.StickyNote2
-import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material.icons.outlined.VolumeOff
 import androidx.compose.material.icons.outlined.VolumeUp
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -151,6 +152,7 @@ import com.grapsee.gsai.ui.components.GsScreenScaffold
 import com.grapsee.gsai.ui.components.rememberDeviceOffline
 import com.grapsee.gsai.ui.theme.GsColors
 import com.grapsee.gsai.ui.theme.GsMotion
+import com.grapsee.gsai.ui.theme.GsRadius
 import com.grapsee.gsai.ui.theme.GsHaptics
 import com.grapsee.gsai.ui.theme.GsTheme
 import com.grapsee.gsai.ui.theme.gsHaptic
@@ -210,13 +212,20 @@ private fun highlightCode(code: String, language: String?, colors: GsColors): An
     }
 }
 
-/** One renderable chat turn. role is "user" or "assistant" (error bubbles included). */
+/** One renderable chat turn. role is "user" or "assistant".
+ *  [failed] marks a turn whose stream ended in a controller error (Done+error):
+ *  the partial content — if any streamed — stays committed verbatim, and the
+ *  surface renders an honest inline system-status notice under the turn instead
+ *  of pretending the failure is assistant prose. Failed turns are transient
+ *  presentation state: they are never persisted to Room, so a reload shows the
+ *  committed partial as an ordinary turn. */
 private data class ChatUiMessage(
     val id: String,
     val role: String,
     val content: String,
     val isStreaming: Boolean = false,
-    val createdAt: String = ""
+    val createdAt: String = "",
+    val failed: Boolean = false
 )
 
 /**
@@ -570,34 +579,48 @@ fun ChatScreen(
      *  the controller's terminal phase (Done / Cancelled) — idempotent: only a
      *  still-streaming bubble carrying the controller's message id commits, so
      *  the Finalizing→Done conflation or a re-observed terminal state never
-     *  double-commits. Fires ONE "Reply complete" announcement per stream for
-     *  TalkBack — deliberately a commit-time announcement, never a liveRegion
-     *  on the 30 Hz updating text. [86-d: declared BEFORE the collector below —
+     *  double-commits. Fires ONE commit-time accessibility announcement per
+     *  stream for TalkBack ("Reply complete"; "Reply failed" on the error path)
+     *  — deliberately a commit-time announcement, never a liveRegion on the
+     *  30 Hz updating text. [86-d: declared BEFORE the collector below —
      *  Kotlin resolves local declarations in order, so a lambda that runs later
      *  still cannot reference a local fun declared after it.] */
-    fun commitStreamResult(state: ChatStreamController.StreamState) {
+    fun commitStreamResult(
+        state: ChatStreamController.StreamState,
+        announcement: String = "Reply complete"
+    ) {
         val index = messages.indexOfFirst { it.id == state.assistantMessageId && it.isStreaming }
         if (index < 0) return
         if (state.streamText.isBlank()) messages.removeAt(index)
         else {
             messages[index] = messages[index].copy(content = state.streamText, isStreaming = false)
-            view.announceForAccessibility("Reply complete")
+            view.announceForAccessibility(announcement)
         }
     }
 
-    /** Safety net only — the repository lands offline turns itself before this
-     *  can fire. Quiet by design: no raw errors, no connectivity talk. */
+    /** Honest failure state: the partial content stays committed exactly as a
+     *  cancelled stream would leave it, and the failed turn carries an inline
+     *  system-status notice (FailedTurnNotice) with a real Regenerate action.
+     *  NOTHING is ever written as assistant prose here — a failure is a system
+     *  status, not a fabricated reply. A Done+error with a blank stream still
+     *  removes the empty bubble (commitStreamResult); the notice then stands
+     *  alone as its own lightweight row so Regenerate stays reachable. */
     fun reportStreamFailure(state: ChatStreamController.StreamState) {
-        commitStreamResult(state)
-        messages.add(
-            ChatUiMessage(
-                id = UUID.randomUUID().toString(),
-                role = "assistant",
-                content = "That turn didn't land cleanly — tap Regenerate and I'll " +
-                    "take another pass at it.",
-                createdAt = ChatRepository.nowIso()
+        commitStreamResult(state, announcement = "Reply failed")
+        if (state.streamText.isBlank()) {
+            messages.add(
+                ChatUiMessage(
+                    id = UUID.randomUUID().toString(),
+                    role = "assistant",
+                    content = "",
+                    failed = true,
+                    createdAt = ChatRepository.nowIso()
+                )
             )
-        )
+        } else {
+            val index = messages.indexOfFirst { it.id == state.assistantMessageId }
+            if (index >= 0) messages[index] = messages[index].copy(failed = true)
+        }
     }
 
     // App-scoped stream observation — the screen's single reaction point to the
@@ -840,19 +863,31 @@ fun ChatScreen(
                     tint = MaterialTheme.colorScheme.onBackground)
             }
             // Real model state: the chip carries the default the send path
-            // actually uses (ModelPrefs), and opens the Model Centre for the
-            // full picker. Never a fake "Auto" label.
+            // actually uses (ModelPrefs), suffixed with the stored reasoning
+            // mode ONLY when that model supports it — the same contract as the
+            // Home model pill — and opens the Model Centre for the full picker.
+            // Never a fabricated mode or a fake "Auto · mode" label.
+            val activeModel = ModelCatalog.byId(ModelPrefs.defaultId(context))
+            val storedMode = ModelPrefs.mode(context)
+            val chipLabel = if (activeModel != null && storedMode in activeModel.modes) {
+                "${activeModel.displayName} · $storedMode"
+            } else {
+                activeModel?.displayName ?: "Auto"
+            }
             GsChip(
-                text = ModelCatalog.byId(ModelPrefs.defaultId(context))?.displayName ?: "Auto",
+                text = chipLabel,
                 selected = false,
                 onClick = onNavigateModels
             )
-            // Tune: quick model switcher over the same live preference the
-            // Model Centre writes — the chat send path reads it immediately.
+            // Model settings live in the overflow menu: the same quick switcher
+            // the old inline Tune menu carried — every entry writes the same
+            // ModelPrefs.setDefaultId the chat send path reads immediately.
             var modelMenuOpen by remember { mutableStateOf(false) }
-            IconButton(onClick = { modelMenuOpen = true }) {
-                Icon(Icons.Outlined.Tune, contentDescription = "Model settings",
-                    tint = MaterialTheme.colorScheme.onBackground)
+            Box {
+                IconButton(onClick = { modelMenuOpen = true }) {
+                    Icon(Icons.Outlined.MoreVert, contentDescription = "Model settings",
+                        tint = MaterialTheme.colorScheme.onBackground)
+                }
                 DropdownMenu(
                     expanded = modelMenuOpen,
                     onDismissRequest = { modelMenuOpen = false }
@@ -890,6 +925,8 @@ fun ChatScreen(
         ) {
             // Honest connectivity in the primary surface — same banner as the
             // Chats hub (navigation-bar inset now comes from the scaffold).
+            // Already the compact treatment (one quiet line, 16dp icon), so it
+            // stays exactly as the shared component renders it.
             GsOfflineBanner(visible = offline)
 
             AnimatedVisibility(visible = searchOpen, enter = fadeIn(), exit = fadeOut()) {
@@ -938,8 +975,6 @@ fun ChatScreen(
                 }
             }
 
-            if (isStreaming) AuroraIndicator()
-
             Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
                 if (messages.isEmpty()) {
                     StarterPrompts(onPick = { dispatch(it, echoUser = true) })
@@ -957,10 +992,13 @@ fun ChatScreen(
                         itemsIndexed(
                             messages,
                             key = { _, message -> message.id },
-                            // User and assistant turns have structurally different
-                            // layouts — declaring contentType lets Compose reuse
-                            // the right slot when items scroll through the viewport.
-                            contentType = { _, message -> message.role }
+                            // User, assistant and failed-status rows have
+                            // structurally different layouts — declaring
+                            // contentType lets Compose reuse the right slot
+                            // when items scroll through the viewport.
+                            contentType = { _, message ->
+                                if (message.failed) "failed" else message.role
+                            }
                         ) { index, message ->
                             // ISO stamps parse once per message and stay cached —
                             // row recompositions (search highlights, edit states,
@@ -973,7 +1011,25 @@ fun ChatScreen(
                                 ) stamp else null
                             }
                             if (dayHeader != null) DaySeparator(dayHeader!!)
-                            if (message.role == "user") {
+                            // Turn-group identity: the assistant identity row
+                            // renders only when the previous VISIBLE turn is not
+                            // an assistant turn — a day separator resets the
+                            // group. Failed-status rows are system notices, not
+                            // assistant turns, and never suppress the next
+                            // group's identity.
+                            val prevMessage = if (index > 0) messages[index - 1] else null
+                            val assistantGroupStart = message.role == "assistant" && !message.failed &&
+                                (prevMessage == null || prevMessage.failed ||
+                                    prevMessage.role != "assistant" || dayHeader != null)
+                            if (message.failed && message.content.isBlank()) {
+                                // A failed stream with nothing committed: the
+                                // empty bubble is already gone, so the honest
+                                // system status stands alone, Regenerate attached.
+                                FailedTurnNotice(
+                                    hasPartial = false,
+                                    onRegenerate = { regenerate(message.id) }
+                                )
+                            } else if (message.role == "user") {
                                 UserMessage(
                                     message = message,
                                     isEditing = editingId == message.id,
@@ -994,6 +1050,7 @@ fun ChatScreen(
                                     message = message,
                                     isSpeaking = speakingMessageId == message.id,
                                     highlight = index == activeMatchIndex,
+                                    showIdentity = assistantGroupStart,
                                     // The growing answer is read inside the bubble
                                     // (controller State), so mid-stream flushes
                                     // touch exactly one item instead of the whole
@@ -1005,8 +1062,7 @@ fun ChatScreen(
                                     onReadAloud = { readAloud(message.id, message.content) },
                                     onBranch = { branchFrom(message.id) },
                                     onSaveToLibrary = { saveToLibrary(message.content) },
-                                    onTranslate = { translateMessage(message.content) },
-                                    onContextAction = showSnack
+                                    onTranslate = { translateMessage(message.content) }
                                 )
                             }
                         }
@@ -1028,37 +1084,31 @@ fun ChatScreen(
                 }
             }
 
-            if (!isStreaming) {
-                // Draft text is read inside ComposerRow, so typing recomposes
-                // only the composer — not the transcript above it.
-                ComposerRow(
-                    draftText = { draft },
-                    onDraftChange = { draft = it },
-                    onSend = { text -> dispatch(text, echoUser = true) },
-                    onAttach = { attachSheetOpen = true },
-                    enterToSend = SettingsStore.enterToSend
-                )
-            } else {
-                Button(
-                    onClick = {
-                        // Cancelling finalizes in the controller: the cancelled
-                        // repository job persists the partial (NonCancellable)
-                        // and the Cancelled phase commits the full buffered text
-                        // through the observer — same contract as before.
-                        chatStream.cancelAndFinalize()
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        contentColor = MaterialTheme.colorScheme.onSurface
-                    ),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
-                ) {
-                    Icon(Icons.Filled.Stop, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("Stop generating")
-                }
-            }
+            // The composer NEVER disappears while streaming: the send slot
+            // inside the input bar becomes the stop control (stop lives exactly
+            // where send always is), and the aurora life-sign sits directly on
+            // top of the composer row — the active state is obvious without a
+            // full-width bar replacing the composer.
+            if (isStreaming) AuroraIndicator()
+            ComposerRow(
+                draftText = { draft },
+                onDraftChange = { draft = it },
+                onSend = { text -> dispatch(text, echoUser = true) },
+                onAttach = { attachSheetOpen = true },
+                // Real voice entry right in the composer; hidden — never
+                // disabled-dead — when no voice route was wired, and the attach
+                // sheet keeps its own honest Voice option as the fallback path.
+                onMic = onNavigateVoice,
+                isStreaming = isStreaming,
+                onStop = {
+                    // Cancelling finalizes in the controller: the cancelled
+                    // repository job persists the partial (NonCancellable)
+                    // and the Cancelled phase commits the full buffered text
+                    // through the observer — same contract as before.
+                    chatStream.cancelAndFinalize()
+                },
+                enterToSend = SettingsStore.enterToSend
+            )
 
             SnackbarHost(hostState = snackbarHostState)
         }
@@ -1150,13 +1200,17 @@ private fun UserMessage(
         } else {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 Surface(
-                    modifier = Modifier.combinedClickable(
-                        onClick = {},
-                        onLongClick = {
-                            if (GsHaptics.enabled()) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onCopy(message.content)
-                        }
-                    ),
+                    modifier = Modifier
+                        // Long user turns wrap inside a readable column instead
+                        // of spanning the full width edge to edge.
+                        .widthIn(max = 340.dp)
+                        .combinedClickable(
+                            onClick = {},
+                            onLongClick = {
+                                if (GsHaptics.enabled()) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onCopy(message.content)
+                            }
+                        ),
                     shape = RoundedCornerShape(18.dp),
                     color = MaterialTheme.colorScheme.primary.copy(
                         alpha = if (highlight) 0.34f else 0.14f
@@ -1193,14 +1247,27 @@ private fun UserMessage(
     }
 }
 
-/** Composer row isolated into its own recompose scope: keystrokes re-render
- *  this and only this — the transcript, scaffold and snackbar never react. */
+/**
+ * Composer row isolated into its own recompose scope: keystrokes re-render
+ * this and only this — the transcript, scaffold and snackbar never react.
+ *
+ * STEP 4 hierarchy: [attach] [expanding input] [mic] [send/stop]. The send/
+ * stop slot lives INSIDE GsInputBar's trailing slot — while a stream is live
+ * that slot hands over to the accent-outline stop control, so the composer
+ * never disappears behind a full-width bar and stop is exactly where send
+ * always is. The mic is a real voice entry ([onMic]); it is hidden — not left
+ * disabled-dead — when no voice route was wired, and the attach sheet keeps
+ * its own Voice option as the honest fallback.
+ */
 @Composable
 private fun ComposerRow(
     draftText: () -> String,
     onDraftChange: (String) -> Unit,
     onSend: (String) -> Unit,
     onAttach: () -> Unit,
+    onMic: (() -> Unit)?,
+    isStreaming: Boolean,
+    onStop: () -> Unit,
     enterToSend: Boolean
 ) {
     Row(verticalAlignment = Alignment.Bottom) {
@@ -1217,8 +1284,49 @@ private fun ComposerRow(
             onSend = onSend,
             placeholder = "Ask anything…",
             modifier = Modifier.weight(1f),
-            imeAction = if (enterToSend) ImeAction.Send else ImeAction.Default
+            imeAction = if (enterToSend) ImeAction.Send else ImeAction.Default,
+            // Native multiline composer: one line at rest, six at most — past
+            // that the field scrolls internally instead of eating the
+            // transcript. (The shared bar keeps its old 4-line default for the
+            // search/library/vision/research call sites.)
+            maxLines = 6,
+            trailingIcon = if (isStreaming) {
+                { StopGeneratingControl(onStop = onStop) }
+            } else null
         )
+        if (onMic != null) {
+            IconButton(onClick = onMic) {
+                Icon(
+                    Icons.Outlined.Mic,
+                    contentDescription = "Dictate with voice",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+    }
+}
+
+/** Accent-outline stop control living in the composer's send slot — the
+ *  streaming-active affordance, semantically "Stop generating". */
+@Composable
+private fun StopGeneratingControl(onStop: () -> Unit) {
+    Surface(
+        onClick = onStop,
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary),
+        modifier = Modifier
+            .padding(end = 4.dp)
+            .size(40.dp)
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                Icons.Filled.Stop,
+                contentDescription = "Stop generating",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(20.dp)
+            )
+        }
     }
 }
 
@@ -1243,16 +1351,30 @@ private fun JumpToLatestPill(onClick: () -> Unit) {
     }
 }
 
+/**
+ * One assistant turn — DOCUMENT style. The answer is not a card: content sits
+ * directly on the app background at the scaffold's reading column (the shell
+ * clamps the whole surface to GsLayout.contentMaxWidth, so tablets get the
+ * reading column and phones full width minus padding). Identity is a compact
+ * avatar+name row rendered once per turn GROUP ([showIdentity] — see the
+ * grouping logic at the call site), not a badge on every turn. Actions are a
+ * quiet icon row BELOW the content (Copy / Regenerate / Read aloud / Share;
+ * Translate / Save-to-Library / Branch stay in the long-press menu — all
+ * real). The search-hit treatment tints the content field, replacing the old
+ * card-border highlight. Mid-stream the visible answer comes from the
+ * app-scoped controller state (read below, so only this bubble recomposes on
+ * flush); once finalized the committed content wins. The State carries a
+ * NULLABLE snapshot — collectAsState on StateFlow<StreamState?> yields
+ * State<StreamState?>. A failed turn keeps its partial content and renders
+ * the honest FailedTurnNotice system status under the action row.
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun AssistantMessage(
     message: ChatUiMessage,
     isSpeaking: Boolean,
     highlight: Boolean = false,
-    // Mid-stream the visible answer comes from the app-scoped controller state
-    // (read below, so only this bubble recomposes on flush); once finalized the
-    // committed content wins. The State carries a NULLABLE snapshot —
-    // collectAsState on StateFlow<StreamState?> yields State<StreamState?>.
+    showIdentity: Boolean = true,
     live: State<ChatStreamController.StreamState?>? = null,
     onCopy: (String) -> Unit,
     onShare: () -> Unit = {},
@@ -1260,121 +1382,131 @@ private fun AssistantMessage(
     onReadAloud: () -> Unit = {},
     onBranch: () -> Unit = {},
     onSaveToLibrary: () -> Unit = {},
-    onTranslate: () -> Unit = {},
-    onContextAction: (String) -> Unit = {}
+    onTranslate: () -> Unit = {}
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     val haptics = LocalHapticFeedback.current
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
-        AssistantAvatar()
-        Spacer(Modifier.width(8.dp))
-        Box {
-            Surface(
-                modifier = Modifier.combinedClickable(
-                    onClick = {},
-                    onLongClick = {
-                        if (GsHaptics.enabled()) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                        menuExpanded = true
-                    }
-                ),
-                shape = RoundedCornerShape(18.dp),
-                color = MaterialTheme.colorScheme.surface,
-                border = BorderStroke(
-                    if (highlight) 2.dp else 1.dp,
-                    if (highlight) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
-                )
-            ) {
-                Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-                    SegmentedContent(
-                        content = live?.value?.streamText ?: message.content,
-                        isStreaming = message.isStreaming,
-                        onCopyCode = onCopy
+    Box(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            if (showIdentity) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    AssistantAvatar()
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = "GS",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    if (!message.isStreaming) {
-                        Spacer(Modifier.height(6.dp))
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(2.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            val stamp = remember(message.createdAt) { timeLabel(message.createdAt) }
-                            if (stamp.isNotEmpty()) {
-                                Text(
-                                    text = stamp,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.outline,
-                                    modifier = Modifier.padding(end = 4.dp)
-                                )
-                            }
-                            BubbleAction(Icons.Outlined.ContentCopy, "Copy") { onCopy(message.content) }
-                            BubbleAction(Icons.Outlined.Refresh, "Regenerate", onRegenerate)
-                            BubbleAction(
-                                if (isSpeaking) Icons.Outlined.VolumeOff else Icons.Outlined.VolumeUp,
-                                if (isSpeaking) "Stop reading" else "Read aloud",
-                                onReadAloud
-                            )
-                            BubbleAction(Icons.Outlined.Share, "Share", onShare)
+                }
+                Spacer(Modifier.height(6.dp))
+            }
+            // Document-style content: no card container, no border — just the
+            // answer on the app background. The content column carries the
+            // long-press context menu and (when this turn is the active search
+            // hit) a soft accent field instead of the old card border.
+            Column(
+                modifier = Modifier
+                    .background(
+                        color = if (highlight) MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
+                        else androidx.compose.ui.graphics.Color.Transparent,
+                        shape = GsRadius.smShape()
+                    )
+                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                    .combinedClickable(
+                        onClick = {},
+                        onLongClick = {
+                            if (GsHaptics.enabled()) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            menuExpanded = true
                         }
+                    )
+            ) {
+                SegmentedContent(
+                    content = live?.value?.streamText ?: message.content,
+                    isStreaming = message.isStreaming,
+                    onCopyCode = onCopy
+                )
+            }
+            if (!message.isStreaming) {
+                Spacer(Modifier.height(2.dp))
+                // Quiet per-turn action row: timestamp folded in, compact icon
+                // actions below the content — per-turn capabilities stay
+                // per-turn, without card chrome.
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val stamp = remember(message.createdAt) { timeLabel(message.createdAt) }
+                    if (stamp.isNotEmpty()) {
+                        Text(
+                            text = stamp,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline,
+                            modifier = Modifier.padding(end = 4.dp)
+                        )
                     }
+                    BubbleAction(Icons.Outlined.ContentCopy, "Copy") { onCopy(message.content) }
+                    BubbleAction(Icons.Outlined.Refresh, "Regenerate", onRegenerate)
+                    BubbleAction(
+                        if (isSpeaking) Icons.Outlined.VolumeOff else Icons.Outlined.VolumeUp,
+                        if (isSpeaking) "Stop reading" else "Read aloud",
+                        onReadAloud
+                    )
+                    BubbleAction(Icons.Outlined.Share, "Share", onShare)
+                }
+                if (message.failed) {
+                    Spacer(Modifier.height(6.dp))
+                    FailedTurnNotice(
+                        hasPartial = message.content.isNotBlank(),
+                        onRegenerate = onRegenerate
+                    )
                 }
             }
-            DropdownMenu(
-                expanded = menuExpanded,
-                onDismissRequest = { menuExpanded = false }
-            ) {
-                DropdownMenuItem(
-                    text = { Text("Translate") },
-                    leadingIcon = {
-                        Icon(Icons.Outlined.Translate, contentDescription = null, modifier = Modifier.size(18.dp))
-                    },
-                    onClick = {
-                        menuExpanded = false
-                        onTranslate()
-                    }
-                )
-                DropdownMenuItem(
-                    text = { Text(if (isSpeaking) "Stop reading" else "Read aloud") },
-                    leadingIcon = {
-                        Icon(
-                            if (isSpeaking) Icons.Outlined.VolumeOff else Icons.Outlined.VolumeUp,
-                            contentDescription = null, modifier = Modifier.size(18.dp)
-                        )
-                    },
-                    onClick = {
-                        menuExpanded = false
-                        onReadAloud()
-                    }
-                )
-                DropdownMenuItem(
-                    text = { Text("Save to Library") },
-                    leadingIcon = {
-                        Icon(Icons.Outlined.Save, contentDescription = null, modifier = Modifier.size(18.dp))
-                    },
-                    onClick = {
-                        menuExpanded = false
-                        onSaveToLibrary()
-                    }
-                )
-                DropdownMenuItem(
-                    text = { Text("Branch new chat") },
-                    leadingIcon = {
-                        Icon(Icons.Outlined.CallSplit, contentDescription = null, modifier = Modifier.size(18.dp))
-                    },
-                    onClick = {
-                        menuExpanded = false
-                        onBranch()
-                    }
-                )
-            }
+        }
+        DropdownMenu(
+            expanded = menuExpanded,
+            onDismissRequest = { menuExpanded = false }
+        ) {
+            DropdownMenuItem(
+                text = { Text("Translate") },
+                leadingIcon = {
+                    Icon(Icons.Outlined.Translate, contentDescription = null, modifier = Modifier.size(18.dp))
+                },
+                onClick = {
+                    menuExpanded = false
+                    onTranslate()
+                }
+            )
+            DropdownMenuItem(
+                text = { Text("Save to Library") },
+                leadingIcon = {
+                    Icon(Icons.Outlined.Save, contentDescription = null, modifier = Modifier.size(18.dp))
+                },
+                onClick = {
+                    menuExpanded = false
+                    onSaveToLibrary()
+                }
+            )
+            DropdownMenuItem(
+                text = { Text("Branch new chat") },
+                leadingIcon = {
+                    Icon(Icons.Outlined.CallSplit, contentDescription = null, modifier = Modifier.size(18.dp))
+                },
+                onClick = {
+                    menuExpanded = false
+                    onBranch()
+                }
+            )
         }
     }
 }
 
-/** Small assistant badge — the benchmark apps mark every AI turn with one. */
+/** Compact assistant identity mark — small avatar beside the "GS" name in the
+ *  turn-group header row (decorative: the name text carries the meaning). */
 @Composable
 private fun AssistantAvatar() {
     Box(
         modifier = Modifier
-            .size(26.dp)
+            .size(22.dp)
             .clip(CircleShape)
             .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
         contentAlignment = Alignment.Center
@@ -1383,8 +1515,48 @@ private fun AssistantAvatar() {
             Icons.Outlined.AutoAwesome,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(15.dp)
+            modifier = Modifier.size(13.dp)
         )
+    }
+}
+
+/**
+ * Honest failure state — a compact inline SYSTEM STATUS under the turn it
+ * belongs to: real role framing (a status row with an error marker, never
+ * assistant prose), one short factual explanation, and the working Regenerate
+ * action wired to the same regenerate() the action row uses. The partial
+ * content above it stays committed exactly as streamed.
+ */
+@Composable
+private fun FailedTurnNotice(hasPartial: Boolean, onRegenerate: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            Icons.Outlined.ErrorOutline,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.error,
+            modifier = Modifier.size(16.dp)
+        )
+        Spacer(Modifier.width(8.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "Reply failed",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = if (hasPartial) {
+                    "GS stopped before finishing — the part that arrived is kept above."
+                } else {
+                    "GS couldn't generate a reply for this turn."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        TextButton(onClick = onRegenerate) { Text("Regenerate") }
     }
 }
 
@@ -1445,7 +1617,17 @@ private data class ContentSegment(
 
 private val fenceRegex = Regex("```(\\w*)\\n?([\\s\\S]*?)```")
 
-/** Split on ``` fences; an unterminated trailing fence (mid-stream) still renders as code. */
+/**
+ * STEP 5 SEAM — message → ordered blocks. [parseContentSegments] is today's
+ * ordered-block producer: it splits one message string into the ordered
+ * [ContentSegment] list (prose | fenced code, in source order) that
+ * [SegmentedContent] renders. The Step 5 blocks engine replaces this splitter
+ * with the richer ordered-blocks pipeline (headings, lists, tables, …) behind
+ * the same [SegmentedContent] contract — nothing above this seam changes.
+ * No markdown engine is implemented here by design.
+ *
+ * Split on ``` fences; an unterminated trailing fence (mid-stream) still renders as code.
+ */
 private fun parseContentSegments(content: String): List<ContentSegment> {
     if (content.isEmpty()) return listOf(ContentSegment(content))
     val segments = mutableListOf<ContentSegment>()
@@ -1534,6 +1716,10 @@ private class StreamParseCache {
  * benchmark apps. Mid-stream the segment list comes from [StreamParseCache] —
  * frozen blocks keep their instances across flushes, so their composables skip
  * recomposition entirely and only the live tail repaints.
+ *
+ * This composable is the renderer half of the STEP 5 SEAM: it consumes the
+ * ordered-block list produced by [parseContentSegments] (see that doc). When
+ * the Step 5 blocks engine lands, only the producer side is swapped.
  */
 @Composable
 private fun SegmentedContent(content: String, isStreaming: Boolean, onCopyCode: (String) -> Unit) {
@@ -1964,19 +2150,21 @@ private fun AttachTile(
 /**
  * Centered day pill — the benchmark thread rhythm ("Today", "Yesterday", dates).
  * Anything without a parsable stamp (legacy rows) simply shows no header.
+ * Deliberately the QUIETEST element on the surface: labelSmall, soft field —
+ * it marks time, it never competes with the transcript.
  */
 @Composable
 private fun DaySeparator(label: String) {
     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         Text(
             label,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.outline,
             // TalkBack: day separators navigate as headings, like section titles.
             modifier = Modifier
                 .clip(RoundedCornerShape(50))
                 .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                .padding(horizontal = 12.dp, vertical = 4.dp)
+                .padding(horizontal = 10.dp, vertical = 3.dp)
                 .semantics { heading() }
         )
     }
