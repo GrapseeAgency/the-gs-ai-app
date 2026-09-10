@@ -73,3 +73,6 @@ ios/GSApp.xcodeproj/
 
 # ---- CI housekeeping ----
 .Trash-*/
+# Never commit toolchain archives (GitHub 100MB limit)
+cmdline-tools.zip
+*.zip
