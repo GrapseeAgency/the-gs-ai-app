@@ -115,7 +115,7 @@ fun BlocksContent(content: String, isStreaming: Boolean, onCopyCode: (String) ->
     val blocks = remember(content, isStreaming) { cache.update(content, isStreaming) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         blocks.forEachIndexed { index, block ->
-            key(block) {
+            key(streamBlockKey(block, index)) {
                 BlockView(
                     block = block,
                     isLast = index == blocks.lastIndex,
@@ -125,6 +125,26 @@ fun BlocksContent(content: String, isStreaming: Boolean, onCopyCode: (String) ->
             }
         }
     }
+}
+
+/**
+ * O(1) sibling identity for one top-level block, stable across ~30 Hz stream
+ * flushes. Content blocks own a unique, strictly increasing [Block.sourceStart]
+ * — a real byte offset into the message (lists included, never a fake 0) — so
+ * the same block keeps the same key while it grows in place and Compose REUSES
+ * its node instead of replacing it. Metadata seams carry no source position;
+ * they are keyed by kind + index (defensive: the streaming path never emits
+ * them).
+ *
+ * This replaces `key(block)` — a data-class key whose hashCode/equals walk the
+ * ENTIRE span tree of EVERY block on EVERY flush, an O(document) tax that no
+ * amount of parser incrementality could hide, and which also replaced every
+ * node at finalize (fresh instances → unequal keys → full subtree churn).
+ */
+private fun streamBlockKey(block: Block, index: Int): Any = when (block) {
+    is Block.ToolResultBlock -> "tool:$index"
+    is Block.CitationsBlock -> "citations"
+    else -> block.sourceStart
 }
 
 @Composable
@@ -692,7 +712,10 @@ private fun ImageViewerDialog(bitmap: ImageBitmap?, alt: String, onDismiss: () -
 
 @Composable
 private fun CollapsibleBlockView(block: Block.CollapsibleBlock) {
-    var expanded by remember(block) { mutableStateOf(false) }
+    // Keyed on the stable summary text, not the whole block: `remember(block)`
+    // deep-equals the entire collapsible subtree on every recomposition and
+    // reset the reader's expanded state whenever the block instance changed.
+    var expanded by remember(block.summary) { mutableStateOf(false) }
     val rotation by animateFloatAsState(
         targetValue = if (expanded) 180f else 0f,
         animationSpec = tween(durationMillis = GsMotion.REDUCED_TWEEN_MS),
@@ -796,7 +819,9 @@ private fun CitationsBlockView(block: Block.CitationsBlock) {
 
 @Composable
 private fun ToolResultBlockView(block: Block.ToolResultBlock) {
-    var expanded by remember(block) { mutableStateOf(false) }
+    // Same contract as CollapsibleBlockView: key the state on the stable
+    // entry, never on the (freshly re-parsed) block instance.
+    var expanded by remember(block.entry) { mutableStateOf(false) }
     Surface(
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow,

@@ -102,4 +102,8 @@ dependencies {
     ksp(libs.androidx.room.compiler)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
+
+    // JVM unit tests (parser correctness + incrementality). Test-only —
+    // nothing here ships in either APK.
+    testImplementation("junit:junit:4.13.2")
 }

@@ -308,7 +308,18 @@ private func parseFence(_ lines: [GSLine], start: Int) -> (Block, Int) {
     while i < lines.count {
         let trimmed = lines[i].text.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.hasPrefix("```") && trimmed.dropFirst(3).trimmingCharacters(in: .whitespaces).isEmpty {
-            return (.codeBlock(language: language, code: String(body.dropLast(body.hasSuffix("\n") ? 1 : 0)), open: false, sourceStart: lines[start].offset), i + 1)
+            let code = String(body.dropLast(body.hasSuffix("\n") ? 1 : 0))
+            // A CLOSED mermaid fence is a first-class diagram block (native
+            // renderer, finalize-time layout); an OPEN one stays plain code so
+            // the stream never lays out a diagram mid-flight. Parity with the
+            // Android twin's fenceToBlock.
+            let block: Block
+            if language?.lowercased() == "mermaid" {
+                block = .mermaid(source: code, sourceStart: lines[start].offset)
+            } else {
+                block = .codeBlock(language: language, code: code, open: false, sourceStart: lines[start].offset)
+            }
+            return (block, i + 1)
         }
         if !body.isEmpty { body.append("\n") }
         body.append(lines[i].text)

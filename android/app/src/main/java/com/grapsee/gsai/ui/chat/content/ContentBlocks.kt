@@ -288,11 +288,11 @@ private fun parseFence(lines: List<Line>, start: Int): Pair<Block, Int> {
         val trimmed = lines[i].text.trim()
         if (trimmed.startsWith("```") && trimmed.removePrefix("```").isBlank()) {
             return Pair(
-                Block.CodeBlock(
+                fenceToBlock(
                     language = language,
                     code = body.toString().trimEnd('\n'),
                     open = false,
-                    sourceStart = lines[start].offset
+                    offset = lines[start].offset
                 ),
                 i + 1
             )
@@ -312,6 +312,15 @@ private fun parseFence(lines: List<Line>, start: Int): Pair<Block, Int> {
         lines.size
     )
 }
+
+/** A closed fence in the mermaid language is a first-class diagram block; an
+ *  open one stays plain code so the stream never lays out a diagram mid-flight. */
+private fun fenceToBlock(language: String?, code: String, open: Boolean, offset: Int): Block =
+    if (language.equals("mermaid", ignoreCase = true) && !open) {
+        Block.MermaidBlock(code, offset)
+    } else {
+        Block.CodeBlock(language, code, open, offset)
+    }
 
 private fun parseMathBlock(lines: List<Line>, start: Int, blocks: MutableList<Block>): Int {
     val first = lines[start].text.trimStart()
@@ -377,8 +386,12 @@ private data class ListRecord(
     val ordered: Boolean,
     val number: Int,
     val text: String,
-    val continuation: MutableList<String> = mutableListOf()
+    val offset: Int,
+    val continuation: MutableList<ContinuationLine> = mutableListOf()
 )
+
+/** A continuation line riding a list item — kept with its real source offset. */
+private data class ContinuationLine(val offset: Int, val text: String)
 
 private fun parseList(lines: List<Line>, start: Int): Pair<List<Block>, Int> {
     val records = mutableListOf<ListRecord>()
@@ -390,19 +403,19 @@ private fun parseList(lines: List<Line>, start: Int): Pair<List<Block>, Int> {
         when {
             bullet != null -> {
                 val indent = bullet.groupValues[1].count { it == ' ' } + bullet.groupValues[1].count { it == '\t' } * 2
-                records += ListRecord(indent / 2, false, 0, bullet.groupValues[3])
+                records += ListRecord(indent / 2, false, 0, bullet.groupValues[3], lines[i].offset)
                 i++
             }
             ordered != null -> {
                 val indent = ordered.groupValues[1].count { it == ' ' } + ordered.groupValues[1].count { it == '\t' } * 2
-                records += ListRecord(indent / 2, true, ordered.groupValues[2].toInt(), ordered.groupValues[3])
+                records += ListRecord(indent / 2, true, ordered.groupValues[2].toInt(), ordered.groupValues[3], lines[i].offset)
                 i++
             }
             // Continuation: a line indented deeper than the last item's own
             // indent (level*2) rides that item — level is indent/2.
             text.isNotBlank() && records.isNotEmpty() &&
                 text.startsWith(" ".repeat(records.last().level * 2 + 2)) -> {
-                records[records.size - 1].continuation += text.trim()
+                records[records.size - 1].continuation += ContinuationLine(lines[i].offset, text.trim())
                 i++
             }
             else -> break
@@ -433,7 +446,7 @@ private fun buildList(records: List<ListRecord>, from: Int, level: Int): Pair<Bl
             j++
         }
         val children = mutableListOf<Block>()
-        for (c in record.continuation) children += Block.Paragraph(parseInline(c), 0)
+        for (c in record.continuation) children += Block.Paragraph(parseInline(c.text), c.offset)
         if (childRecords.isNotEmpty()) {
             children += buildList(childRecords, 0, childRecords.first().level).first
         }
@@ -444,10 +457,14 @@ private fun buildList(records: List<ListRecord>, from: Int, level: Int): Pair<Bl
         )
         i = j
     }
+    // Real source offsets at EVERY nesting level — the frozen-prefix stream
+    // parser and the renderer's block keys both depend on them. A fake 0 here
+    // used to disable incrementality for the most common answer shape
+    // (anything ending in a list) and split growing lists into duplicates.
     val block = if (ordered) {
-        Block.OrderedList(start = records[from].number, items = items, sourceStart = 0)
+        Block.OrderedList(start = records[from].number, items = items, sourceStart = records[from].offset)
     } else {
-        Block.BulletList(items = items, sourceStart = 0)
+        Block.BulletList(items = items, sourceStart = records[from].offset)
     }
     return Pair(block, i - from)
 }
@@ -489,43 +506,126 @@ private fun parseDetails(lines: List<Line>, start: Int): Pair<Block, Int> {
 // ---------------------------------------------------------------------------
 
 /**
- * Appending a delta can only affect the LAST block of the previous parse —
- * everything before it is frozen forever. Re-parsing from the last block's
- * source start keeps every earlier block instance identical across ~30 Hz
- * flushes, so the renderer skips all completed blocks and only the live tail
- * recomposes. Falls back to a full parse whenever the append assumption does
- * not hold (content replaced, cache cold).
+ * Appending a delta can only affect blocks in the LAST contiguous non-blank
+ * line-run of the document — every line-run separated from the end by a blank
+ * line is closed forever (every family in this grammar — paragraphs, lists,
+ * quotes, tables, fences, math, details — absorbs only CONSECUTIVE lines).
+ *
+ * So a flush re-parses at most [lastLineRunStart] and freezes everything
+ * before it: earlier block instances stay byte-identical across ~30 Hz
+ * flushes, the renderer skips all completed blocks, and only the live tail
+ * recomposes. A full parse happens only when genuinely necessary:
+ *  - cache cold ([previousBlocks] empty), or
+ *  - the append-only contract broke ([content] does not extend
+ *    [previousContent] — content replaced, history jump, CRLF split).
+ *
+ * The tail boundary is the whole last line-RUN, not just the last block:
+ * a flush can cut a line in a state that parses as a different family
+ * (a bare "-" or "1." pending marker parses as prose today, a list item
+ * tomorrow). Re-parsing from the last BLOCK alone then froze a still-open
+ * list and spawned a duplicate sibling list on the next flush. The run
+ * boundary makes that state impossible by construction.
+ *
+ * Streaming contract note: this path is metadata-free (StreamBlockCache only
+ * ever feeds plain content), so every block here carries a real source
+ * offset — never a fake 0.
+ *
+ * All arithmetic happens in the CRLF-normalized space ([parseBlocks]
+ * normalizes internally, so offsets are normalized-space offsets); both
+ * inputs are normalized up front to keep the two spaces identical. On an
+ * LF-only stream Kotlin's replace returns the receiver — zero cost.
  */
 fun parseStreamingBlocks(
     previousContent: String,
     previousBlocks: List<Block>,
     content: String
 ): List<Block> {
-    if (previousBlocks.isEmpty() || !content.startsWith(previousContent)) {
-        return parseBlocks(content)
+    val previous = previousContent.replace("\r\n", "\n")
+    val current = content.replace("\r\n", "\n")
+    if (previousBlocks.isEmpty() || !current.startsWith(previous)) {
+        return parseBlocks(current)
     }
-    val lastStart = previousBlocks.last().sourceStart
-    if (lastStart <= 0 || lastStart >= content.length) return parseBlocks(content)
-    val head = previousBlocks.dropLast(1)
-    val tail = parseBlocks(content.substring(lastStart)).map { block ->
-        block.withShiftedSource(block.sourceStart + lastStart)
+    val tailStart = lastLineRunStart(previous)
+    if (tailStart <= 0) {
+        // The live run starts at the document start (single growing run —
+        // most commonly the first paragraph, legitimately at offset 0):
+        // there is no frozen prefix, so the tail IS the document.
+        return parseBlocks(current)
+    }
+    if (tailStart >= current.length) return parseBlocks(current) // defensive: nothing to append
+    val head = previousBlocks.takeWhile { it.sourceStart < tailStart }
+    if (head.isEmpty()) return parseBlocks(current) // defensive: boundary sanity
+    val tail = parseBlocks(current.substring(tailStart)).map { block ->
+        block.withShiftedSource(tailStart)
     }
     return head + tail
 }
 
+/**
+ * Start offset of the last contiguous non-blank line-run of [text] (blank
+ * trailing lines are skipped). Pure index arithmetic on the raw string —
+ * O(length of that run), no allocations. Returns 0 when the document is one
+ * run or empty. Internal so the incrementality tests can assert the exact
+ * frozen-prefix contract.
+ */
+internal fun lastLineRunStart(text: String): Int {
+    var end = text.length
+    while (end > 0) {
+        val c = text[end - 1]
+        if (c == '\n' || c == ' ' || c == '\t' || c == '\r') end-- else break
+    }
+    if (end == 0) return 0
+    var runStart = 0
+    var searchEnd = end
+    while (searchEnd > 0) {
+        val lineStart = text.lastIndexOf('\n', searchEnd - 1) + 1
+        var blank = true
+        var k = lineStart
+        while (k < searchEnd) {
+            val c = text[k]
+            if (c != ' ' && c != '\t' && c != '\r') { blank = false; break }
+            k++
+        }
+        if (blank) break
+        runStart = lineStart
+        if (lineStart == 0) break
+        searchEnd = lineStart - 1
+    }
+    return runStart
+}
+
+/**
+ * Re-bases every source offset in the block (and its whole nested subtree —
+ * list children, quote and collapsible innards) from tail-relative space into
+ * absolute document space. The delta is the tail start ALONE: the previous
+ * call passed `block.sourceStart + tailStart`, which double-counted the
+ * block's own offset and corrupted every tail block not starting at zero.
+ */
 private fun Block.withShiftedSource(delta: Int): Block = when (this) {
     is Block.Paragraph -> copy(sourceStart = sourceStart + delta)
     is Block.Heading -> copy(sourceStart = sourceStart + delta)
-    is Block.BulletList -> copy(sourceStart = sourceStart + delta)
-    is Block.OrderedList -> copy(sourceStart = sourceStart + delta)
-    is Block.BlockQuote -> copy(sourceStart = sourceStart + delta)
+    is Block.BulletList -> copy(
+        sourceStart = sourceStart + delta,
+        items = items.map { item -> item.copy(children = item.children.map { it.withShiftedSource(delta) }) }
+    )
+    is Block.OrderedList -> copy(
+        sourceStart = sourceStart + delta,
+        items = items.map { item -> item.copy(children = item.children.map { it.withShiftedSource(delta) }) }
+    )
+    is Block.BlockQuote -> copy(
+        sourceStart = sourceStart + delta,
+        blocks = blocks.map { it.withShiftedSource(delta) }
+    )
     is Block.CodeBlock -> copy(sourceStart = sourceStart + delta)
     is Block.TableBlock -> copy(sourceStart = sourceStart + delta)
     is Block.Divider -> copy(sourceStart = sourceStart + delta)
     is Block.MathBlock -> copy(sourceStart = sourceStart + delta)
     is Block.MermaidBlock -> copy(sourceStart = sourceStart + delta)
     is Block.ImageBlock -> copy(sourceStart = sourceStart + delta)
-    is Block.CollapsibleBlock -> copy(sourceStart = sourceStart + delta)
+    is Block.CollapsibleBlock -> copy(
+        sourceStart = sourceStart + delta,
+        blocks = blocks.map { it.withShiftedSource(delta) }
+    )
     is Block.CitationsBlock -> copy(sourceStart = sourceStart + delta)
     is Block.ToolResultBlock -> copy(sourceStart = sourceStart + delta)
 }

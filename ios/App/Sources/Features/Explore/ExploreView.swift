@@ -180,7 +180,6 @@ struct ExploreView: View {
             Button("Keep", role: .cancel) { pendingDelete = nil }
         }
         .onAppear { GSHaptics.prepare() }
->>>>>>> 4418691 (c5dbb0b6-b487-4fa4-9552-e757cb13f3a7)
     }
 
     // MARK: Header
