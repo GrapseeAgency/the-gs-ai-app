@@ -71,12 +71,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import com.grapsee.gsai.data.AccountStore
 import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.ui.theme.GsMotion
 import androidx.compose.animation.EnterTransition
@@ -111,6 +113,7 @@ private fun resetCode(codes: SnapshotStateList<String>) {
 
 @Composable
 fun AuthScreen(onFinished: () -> Unit) {
+    val context = LocalContext.current
     var step by remember { mutableStateOf(AuthStep.Welcome) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -207,7 +210,25 @@ fun AuthScreen(onFinished: () -> Unit) {
                 )
                 AuthStep.TwoFactor -> TwoFactorStep(
                     code = twoFactorCode,
-                    onVerify = onFinished,
+                    onVerify = {
+                        // IDENTITY PERSISTENCE — the honest latest-known-success
+                        // point. Every credential path (sign-up AND sign-in)
+                        // funnels through VerifyEmail → TwoFactor, and this is
+                        // the moment the flow actually completes: both code
+                        // steps verified, [onFinished] hands off to Onboarding
+                        // (which activates the session and writes nothing
+                        // here, so there is no double write). The sign-up path
+                        // knows the name; sign-in only captured the email — a
+                        // blank value is skipped rather than written, so the
+                        // empty→clear store contract is reserved for real
+                        // edits and a stored name survives a later sign-in.
+                        // The Passkey shortcut (no validated credentials) is
+                        // deliberately NOT wired: nothing known, nothing
+                        // stored, nothing invented.
+                        if (name.isNotBlank()) AccountStore.setDisplayName(context, name)
+                        if (email.isNotBlank()) AccountStore.setEmail(context, email)
+                        onFinished()
+                    },
                     onBackupCode = { showMessage("Backup code sign-in is coming in a future build") }
                 )
                 AuthStep.ResetPassword -> ResetPasswordStep(

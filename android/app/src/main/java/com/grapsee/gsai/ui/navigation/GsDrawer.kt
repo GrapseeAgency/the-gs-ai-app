@@ -55,6 +55,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.paneTitle
@@ -64,6 +65,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.data.local.ConversationEntity
+import com.grapsee.gsai.data.AccountStore
 import com.grapsee.gsai.di.ServiceLocator
 import com.grapsee.gsai.ui.components.ConversationActionsSheet
 import com.grapsee.gsai.ui.components.GsButton
@@ -105,6 +107,14 @@ fun GsDrawerContent(
 ) {
     val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
+    // Account identity (STEP 3 minimal wiring): the name/email the user
+    // actually typed at auth, via AccountStore. Nothing is fabricated — a
+    // blank stored value degrades to a neutral label, never a made-up name
+    // or address. Read per composition; the drawer re-runs this body each
+    // time it is opened.
+    val context = LocalContext.current
+    val storedName = AccountStore.displayName(context)
+    val storedEmail = AccountStore.email(context)
     val recents by remember {
         runCatching { ServiceLocator.chat.activeConversations() }.getOrElse { flowOf(emptyList()) }
     }.collectAsState(initial = emptyList())
@@ -157,7 +167,7 @@ fun GsDrawerContent(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    "GA",
+                    initialsFor(storedName),
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.SemiBold,
                     color = GsTheme.colors.accent
@@ -166,12 +176,16 @@ fun GsDrawerContent(
             Spacer(Modifier.width(GsMotion.spaceS))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    "Grapsee Admin",
+                    // Real identity only: the stored name, else a neutral
+                    // label — never an invented "Admin".
+                    storedName.ifBlank { "GS account" },
                     style = MaterialTheme.typography.titleMedium,
                     color = GsTheme.colors.textPrimary
                 )
                 Text(
-                    "graphesee@gmail.com",
+                    // The stored email, else a neutral line — never a
+                    // fabricated address.
+                    storedEmail.ifBlank { "Signed in" },
                     style = MaterialTheme.typography.labelMedium,
                     color = GsTheme.colors.textSecondary
                 )
@@ -428,6 +442,17 @@ private fun DrawerRow(
 }
 
 private const val RECENT_LIMIT = 5
+
+/**
+ * Initials from the REAL stored name: the first letter of each of the first
+ * two words, uppercased. No stored name → the neutral "GS" mark — never
+ * initials of a name that does not exist.
+ */
+private fun initialsFor(name: String): String {
+    val words = name.trim().split(Regex("\\s+")).filter { it.isNotBlank() }
+    if (words.isEmpty()) return "GS"
+    return words.take(2).map { it.first().uppercaseChar() }.joinToString("")
+}
 
 private data class SampleRecent(val id: String, val title: String)
 

@@ -1,27 +1,46 @@
 import SwiftUI
 
 /**
- * AERUO KINETIC home canvas — benchmark pattern (ChatGPT · Claude · Kimi):
- * full-bleed Aero.background (theme-following), top bar (menu · model pill · new chat), centred brand
- * orb + time-aware serif greeting + upgrade pill, quick chips and one hero
- * input bar pinned to the bottom. Navigation lives in the drawer.
+ * AERUO KINETIC home — the content-driven workbench (UI rebuild Step 3).
+ * The canvas answers three questions with REAL content only:
+ *   1. What can GS do?        — capability tiles, each routed to a real screen
+ *   2. What was I doing?      — live Continue/Recent rows from ConversationStore
+ *   3. What can GS help with? — starter prompts that prefill the composer
+ *
+ * Honesty contract: every control performs a real action or real
+ * navigation. No invented identity (the greeting falls back to a plain
+ * time-of-day line via `AccountStore`), no fabricated model label (the
+ * pill resolves the persisted pick against the catalog), no tagline
+ * rotation loop, no demo recents (those stay drawer-only), no attach
+ * affordance (attachments live in the real composer), and no fabricated
+ * category labels (Trending / Popular / For you are gone).
  */
 struct HomeView: View {
 
     var onOpenDrawer: (() -> Void)? = nil
-    /// Programmatic route bridge — the hero orb's voice hold hands its
-    /// transcript to a brand-new chat through `.chatPrefill`.
+    /// Programmatic route bridge — the composer orb's voice hold hands its
+    /// transcript to a brand-new chat through `.chatPrefill`, and the orb's
+    /// quick tap opens full voice mode.
     var onRoute: ((AeroRoute) -> Void)? = nil
 
-    private enum HomeWorkspace: String, Identifiable {
-        case research, vision, writing, code, image
-        var id: String { rawValue }
-    }
-    @State private var activeWorkspace: HomeWorkspace?
-    @State private var breathe: CGFloat = 1.0
-    @State private var taglineIndex = 0
+    // Live content sources — the greeting re-renders when identity changes,
+    // the recents re-render when conversations change.
+    @ObservedObject private var account = AccountStore.shared
+    @ObservedObject private var store = ConversationStore.shared
 
-    // Voice press-and-hold on the hero orb
+    @State private var breathe: CGFloat = 1.0
+
+    // Model pill resolution, re-read from UserDefaults each time Home
+    // surfaces (returning from the Model Centre refreshes it via onAppear).
+    @State private var pillModel: ModelInfo?
+    @State private var pillMode: String?
+
+    // Research has no registered AeroRoute — it stays a fullScreenCover
+    // workspace (the only one Home still needs; the Vision / Writing / Code /
+    // Image tiles died with the chip wall).
+    @State private var showResearch = false
+
+    // Voice press-and-hold on the composer orb
     @StateObject private var dictation = VoiceDictation()
     @State private var holdTimer: Task<Void, Never>?
     @State private var holdTriggered = false
@@ -32,26 +51,82 @@ struct HomeView: View {
     // session instead of leaving a dead capture behind a suspended UI.
     @Environment(\.scenePhase) private var scenePhase
 
+    // Home recents long-press — same action set as the drawer rows.
+    @State private var renameTarget: StoredConversation?
+    @State private var renameDraft = ""
+
+    // MARK: Static tile lists (let-constants — no per-render rebuilds, no
+    // rotation loops; every symbol is a verified, rendering SF Symbol).
+
+    private struct StarterPrompt: Identifiable {
+        let symbol: String
+        let label: String
+        var id: String { label }
+    }
+
+    private let starters: [StarterPrompt] = [
+        StarterPrompt(symbol: "doc.text", label: "Summarise a PDF into a brief"),
+        StarterPrompt(symbol: "pencil.line", label: "Draft a launch email"),
+        StarterPrompt(symbol: "lightbulb", label: "Explain a concept step by step")
+    ]
+
+    private enum TileTarget {
+        case route(AeroRoute)
+        case research
+    }
+
+    private struct HomeTile: Identifiable {
+        let symbol: String
+        let label: String
+        let target: TileTarget
+        var id: String { label }
+    }
+
+    private let toolTiles: [HomeTile] = [
+        HomeTile(symbol: "doc.text.magnifyingglass", label: "Research", target: .research),
+        HomeTile(symbol: "sparkles", label: "Create", target: .route(.createTab)),
+        HomeTile(symbol: "magnifyingglass", label: "Search", target: .route(.search))
+    ]
+
+    private let workspaceTiles: [HomeTile] = [
+        HomeTile(symbol: "folder", label: "Projects", target: .route(.projects)),
+        HomeTile(symbol: "cpu", label: "Assistants", target: .route(.assistants))
+    ]
+
     var body: some View {
         ZStack {
             Aero.background.ignoresSafeArea()
 
             VStack(spacing: 0) {
                 topBar
-                Spacer(minLength: 8)
-                hero
-                Spacer(minLength: 8)
-                bottomCluster
+                    .padding(.horizontal, Aero.Spacing.m)
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: Aero.Spacing.xl) {
+                        hero
+                        composerEntry
+                        continuation
+                        startersSection
+                        capabilitySection
+                        disclaimer
+                    }
+                    .padding(.horizontal, Aero.Spacing.m)
+                    .gsContentWidth()
+                    .padding(.top, Aero.Spacing.s)
+                    .padding(.bottom, Aero.Spacing.l)
+                }
             }
-            .padding(.horizontal, Aero.Spacing.m)
         }
         .toolbar(.hidden, for: .navigationBar)
         .onAppear {
             // Reduce animations / Reduce motion: the orb holds its resting
-            // frame — the breathe loop is skipped entirely.
-            guard !SettingsStore.shared.animationReduced else { return }
-            withAnimation(.easeInOut(duration: 2.4).repeatForever(autoreverses: true)) {
-                breathe = 1.06
+            // frame — the breathe loop is skipped entirely. The voice
+            // handoff wiring below is intentionally OUTSIDE this gate: it
+            // is behaviour, not decoration, and must exist under reduce
+            // motion too.
+            if !SettingsStore.shared.animationReduced {
+                withAnimation(.easeInOut(duration: 2.4).repeatForever(autoreverses: true)) {
+                    breathe = 1.06
+                }
             }
             // Voice press-and-hold: a finished hold hands its transcript to
             // a fresh chat composer (blank transcripts quietly do nothing).
@@ -59,6 +134,9 @@ struct HomeView: View {
                 guard !text.isEmpty else { return }
                 onRoute?(.chatPrefill(text))
             }
+            // Real model pill: resolve the persisted pick whenever Home
+            // surfaces (first show, and returning from the Model Centre).
+            refreshModelPill()
         }
         .onDisappear {
             // Deep-perf pass 80-b: the hero breathe is a repeatForever
@@ -66,21 +144,8 @@ struct HomeView: View {
             // never keeps ticking behind a pushed screen. onAppear restarts it.
             breathe = 1.0
         }
-        .task {
-            // Claude-style tagline rotation — one quiet crossfade every few seconds.
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 5_200_000_000)
-                withAnimation(.easeInOut(duration: 0.7)) { taglineIndex += 1 }
-            }
-        }
-        .fullScreenCover(item: $activeWorkspace) { workspace in
-            switch workspace {
-            case .research: ResearchView()
-            case .vision: VisionView()
-            case .writing: WritingStudioView()
-            case .code: CodeWorkspaceView()
-            case .image: ImageStudioView()
-            }
+        .fullScreenCover(isPresented: $showResearch) {
+            ResearchView()
         }
         .onChange(of: scenePhase) { phase in
             // Scene went to the background mid-hold: the mic session closes
@@ -89,9 +154,27 @@ struct HomeView: View {
                 dictation.suspendForBackground()
             }
         }
+        .alert("Rename chat", isPresented: Binding(
+            get: { renameTarget != nil },
+            set: { if !$0 { renameTarget = nil } }
+        )) {
+            TextField("Chat name", text: $renameDraft)
+            Button("Rename") {
+                let trimmed = renameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+                if let target = renameTarget, !trimmed.isEmpty {
+                    store.rename(id: target.id, to: trimmed)
+                    sync(target.id, title: trimmed)
+                    GSHaptics.success()
+                }
+                renameTarget = nil
+            }
+            Button("Cancel", role: .cancel) { renameTarget = nil }
+        } message: {
+            Text("Give this conversation a name you'll recognise.")
+        }
     }
 
-    // MARK: Top bar — menu · model pill · new chat
+    // MARK: Top bar — menu · real model pill · new chat
 
     private var topBar: some View {
         HStack(spacing: Aero.Spacing.s) {
@@ -112,7 +195,7 @@ struct HomeView: View {
                             colors: Aero.aurora,
                             startPoint: .topLeading, endPoint: .bottomTrailing))
                         .frame(width: 8, height: 8)
-                    Text("GS Balanced · High")
+                    Text(modelPillText)
                         .font(Aero.label())
                         .foregroundColor(Aero.text)
                 }
@@ -142,8 +225,36 @@ struct HomeView: View {
         }
     }
 
-    // MARK: Hero — orb · greeting · upgrade
+    /// The pill always shows the REAL persisted pick: the catalog name for
+    /// UserDefaults "gs.models.defaultId", plus a " · mode" suffix ONLY when
+    /// the stored "gs.models.mode" is one that model actually offers
+    /// (gs-balanced supports ["Fast", "Balanced"] — the fabricated
+    /// "GS Balanced · High" is gone). An unknown id falls back to the
+    /// catalog's flagged default — the same "server default" semantics the
+    /// chat send path applies — and the suffix disappears rather than
+    /// inventing a tier.
+    private var modelPillText: String {
+        let model = pillModel ?? ModelInfo.catalog.first { $0.isDefault }
+        guard let model else { return "" }
+        if let mode = pillMode, model.modes.contains(mode) {
+            return "\(model.name) · \(mode)"
+        }
+        return model.name
+    }
 
+    private func refreshModelPill() {
+        let storedID = UserDefaults.standard.string(forKey: "gs.models.defaultId") ?? "gs-balanced"
+        pillModel = ModelInfo.catalog.first { $0.id == storedID }
+        // The Model Centre treats an unset mode as "Balanced" — mirror it so
+        // the pill agrees with what the Model Centre displays.
+        pillMode = UserDefaults.standard.string(forKey: "gs.models.mode") ?? "Balanced"
+    }
+
+    // MARK: Hero — orb · greeting (identity, never invention)
+
+    /// The old "Upgrade plan" pill was deleted with the Step-3 rebuild —
+    /// billing stays reachable through the drawer's Account header Pro chip
+    /// (routes to .billing).
     private var hero: some View {
         VStack(spacing: Aero.Spacing.s) {
             ZStack {
@@ -166,223 +277,49 @@ struct HomeView: View {
                 .font(Aero.displayTitle())
                 .foregroundColor(Aero.text)
                 .multilineTextAlignment(.center)
+                .accessibilityAddTraits(.isHeader)
 
-            Text(taglines[taglineIndex % taglines.count])
+            // One static quiet line — no rotation loop behind it.
+            Text("What would you like to work on?")
                 .font(Aero.body())
                 .foregroundColor(Aero.textSecondary)
-                .id(taglineIndex)
-                .transition(.opacity)
-                .padding(.bottom, Aero.Spacing.s)
-
-            NavigationLink(value: AeroRoute.billing) {
-                HStack(spacing: 6) {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 11))
-                        .foregroundColor(Aero.accent)
-                    Text("Upgrade plan")
-                        .font(Aero.label())
-                        .foregroundColor(Aero.text)
-                }
-                .padding(.horizontal, Aero.Spacing.m)
-                .padding(.vertical, 10)
-                .background(Capsule().fill(Aero.raisedSurface))
-            }
-            .buttonStyle(KineticPressStyle())
+                .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
     }
 
+    /// Time-of-day + the user's actual first name (AccountStore). The
+    /// neutral fallback is the bare line — never "Admin", never an invented
+    /// name.
     private var greeting: String {
         let hour = Calendar.current.component(.hour, from: Date())
+        let name = account.firstName
         switch hour {
-        case 23, 0...4: return "Up late, Admin?"
-        case 5...11: return "Good morning, Admin"
-        case 12...17: return "Good afternoon, Admin"
-        default: return "Good evening, Admin"
+        case 23, 0...4:
+            return name.isEmpty ? "Up late?" : "Up late, \(name)?"
+        case 5...11:
+            return name.isEmpty ? "Good morning" : "Good morning, \(name)"
+        case 12...17:
+            return name.isEmpty ? "Good afternoon" : "Good afternoon, \(name)"
+        default:
+            return name.isEmpty ? "Good evening" : "Good evening, \(name)"
         }
     }
 
-    /// Time-aware tagline set; the hero crossfades one line every few seconds.
-    private var taglines: [String] {
-        let hour = Calendar.current.component(.hour, from: Date())
-        let first = (hour >= 23 || hour < 5) ? "Working while the world sleeps?" : "What should we make today?"
-        return [first, "Ask, build, refine — all in one thread.", "Your move. GS is listening."]
-    }
+    // MARK: Composer entry — the one dominant action
 
-    // MARK: Bottom cluster — suggestions · chips · hero input
-
-    private var bottomCluster: some View {
-        VStack(spacing: Aero.Spacing.m) {
-            VStack(spacing: Aero.Spacing.xs) {
-                suggestion("doc.text", "Summarise a PDF into a brief")
-                suggestion("pencil.line", "Draft a launch email")
-            }
-
-            trending
-
-            chips
-
-            heroInput
-
-            Text("GS can make mistakes — double-check important info.")
-                .font(Aero.caption())
-                .foregroundColor(Aero.textSecondary)
-                .frame(maxWidth: .infinity)
-                .padding(.bottom, Aero.Spacing.s)
-        }
-    }
-
-    private func suggestion(_ symbol: String, _ label: String) -> some View {
-        NavigationLink(value: AeroRoute.chatPrefill(label)) {
-            HStack(spacing: Aero.Spacing.m) {
-                ZStack {
-                    Circle().fill(Aero.raisedSurface).frame(width: 38, height: 38)
-                    Image(systemName: symbol)
-                        .font(.system(size: 14))
-                        .foregroundColor(Aero.text)
-                }
-                Text(label)
-                    .font(Aero.body())
-                    .foregroundColor(Aero.text)
-                Spacer()
-            }
-            .padding(.horizontal, 6)
-            .padding(.vertical, 6)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(KineticPressStyle())
-    }
-
-    /// ChatGPT-style explore/trending strip — benchmark pattern (Kimi trending
-    /// prompts + ChatGPT suggestion depth) in Aeruo Kinetic surfaces.
-    private var trending: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: Aero.Spacing.s) {
-                Button { activeWorkspace = .research } label: {
-                    trendCard("safari", "Trending", "Deep research agent")
-                }
-                .buttonStyle(KineticPressStyle())
-
-                NavigationLink(value: AeroRoute.createTab) {
-                    trendCard("sparkles", "Popular", "Prompt builder")
-                }
-                .buttonStyle(KineticPressStyle())
-
-                Button { activeWorkspace = .image } label: {
-                    trendCard("photo", "New", "Image studio")
-                }
-                .buttonStyle(KineticPressStyle())
-
-                Button { activeWorkspace = .code } label: {
-                    trendCard("curlybraces", "For you", "Code workspace")
-                }
-                .buttonStyle(KineticPressStyle())
-
-                NavigationLink(value: AeroRoute.explore) {
-                    trendCard("arrow.forward", "Browse all", "All assistants")
-                }
-                .buttonStyle(KineticPressStyle())
-            }
-            .padding(.horizontal, 2)
-            .padding(.vertical, 2)
-        }
-    }
-
-    private func trendCard(_ symbol: String, _ category: String, _ title: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                Image(systemName: symbol)
-                    .font(.system(size: 10))
-                    .foregroundColor(Aero.accent)
-                Text(category)
-                    .font(Aero.caption())
-                    .foregroundColor(Aero.textSecondary)
-            }
-            Text(title)
-                .font(Aero.body())
-                .foregroundColor(Aero.text)
-                .lineLimit(1)
-        }
-        .frame(width: 176, alignment: .leading)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .background(RoundedRectangle(cornerRadius: 16).fill(Aero.raisedSurface))
-    }
-
-    private var chips: some View {
-        let items: [(String, String, HomeWorkspace?)] = [
-            ("Projects", "folder", nil),
-            ("Research", "safari", .research),
-            ("Vision", "eye", .vision),
-            ("Image", "photo", .image),
-            ("Writing", "pencil.line", .writing),
-            ("Code", "curlybraces", .code),
-            ("Voice", "mic", nil),
-            ("Library", "books.vertical", nil),
-            ("Models", "speed", nil)
-        ]
-        let routes: [String: AeroRoute] = [
-            "Projects": .projects,
-            "Voice": .voice,
-            "Library": .library,
-            "Models": .models
-        ]
-        return ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: Aero.Spacing.s) {
-                ForEach(items, id: \.0) { label, symbol, workspace in
-                    if let workspace {
-                        Button {
-                            activeWorkspace = workspace
-                        } label: {
-                            chipLabel(label, symbol)
-                        }
-                        .buttonStyle(KineticPressStyle())
-                    } else if let route = routes[label] {
-                        NavigationLink(value: route) {
-                            chipLabel(label, symbol)
-                        }
-                        .buttonStyle(KineticPressStyle())
-                    }
-                }
-            }
-            .padding(.horizontal, 2)
-            .padding(.vertical, 2)
-        }
-    }
-
-    private func chipLabel(_ label: String, _ symbol: String) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: symbol)
-                .font(.system(size: 11))
-                .foregroundColor(Aero.textSecondary)
-            Text(label)
-                .font(Aero.label())
-                .foregroundColor(Aero.text)
-        }
-        .padding(.horizontal, Aero.Spacing.m)
-        .padding(.vertical, 10)
-        .background(Capsule().fill(Aero.raisedSurface))
-    }
-
-    private var heroInput: some View {
+    /// Honest composer entry: raised surface, real placeholder, tap opens
+    /// the real composer (.chat(nil)). The old fake attach (+) affordance is
+    /// gone — attachments live in the real composer. Mic tap opens full
+    /// voice mode; the orb carries the verbatim press-and-hold machinery.
+    private var composerEntry: some View {
         HStack(spacing: Aero.Spacing.s) {
-            NavigationLink(value: AeroRoute.chat(nil)) {
-                ZStack {
-                    Circle().fill(Aero.accent.opacity(0.16)).frame(width: 42, height: 42)
-                    Image(systemName: "plus")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(Aero.accent)
-                }
-            }
-            .buttonStyle(KineticPressStyle())
-            .accessibilityLabel("Attach — new chat")
-
             NavigationLink(value: AeroRoute.chat(nil)) {
                 Text(dictation.isListening
                     ? (dictation.transcript.isEmpty ? "Listening…" : dictation.transcript)
-                    : "Ask anything")
+                    : "Ask GS anything…")
                     .font(Aero.body())
-                    .foregroundColor(dictation.isListening ? Aero.text : Aero.textSecondary)
+                    .foregroundColor(dictation.isListening ? Aero.text : Aero.textPlaceholder)
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, Aero.Spacing.s)
@@ -404,14 +341,268 @@ struct HomeView: View {
             voiceHoldOrb
         }
         .padding(Aero.Spacing.s)
-        .background(RoundedRectangle(cornerRadius: 28).fill(Aero.raisedSurface))
+        .background(RoundedRectangle(cornerRadius: Aero.Radius.input).fill(Aero.raisedSurface))
     }
 
-    // MARK: Voice press-and-hold — the hero affordance
+    // MARK: Continuation — "What was I doing?"
 
-    /// Aurora orb: hold past the threshold to dictate (live transcript in the
-    /// hero line), quick tap still opens full voice mode. Every failure path
-    /// dissolves quietly — nothing is ever shown as an error.
+    /// Live data only, straight from ConversationStore with the SAME
+    /// filtering/ordering the drawer recents use (activeConversations:
+    /// archived hidden, pins float, newest first) — up to 3 rows total, and
+    /// NOTHING at all when the store is empty (no demo fallback here; the
+    /// demo recents stay drawer-only so starter prompts can breathe).
+    @ViewBuilder
+    private var continuation: some View {
+        if let latest = visibleConversations.first {
+            VStack(alignment: .leading, spacing: Aero.Spacing.s) {
+                sectionLabel("Continue")
+                conversationRow(latest)
+                allChatsLink
+            }
+            let older = Array(visibleConversations.dropFirst().prefix(2))
+            if !older.isEmpty {
+                VStack(alignment: .leading, spacing: Aero.Spacing.s) {
+                    sectionLabel("Recent")
+                    ForEach(older) { conversation in
+                        conversationRow(conversation)
+                    }
+                }
+            }
+        }
+    }
+
+    private var visibleConversations: [StoredConversation] {
+        Array(store.activeConversations.prefix(3))
+    }
+
+    private var allChatsLink: some View {
+        NavigationLink(value: AeroRoute.chats) {
+            HStack(spacing: Aero.Spacing.xs) {
+                Text("All chats")
+                    .font(Aero.label())
+                    .foregroundColor(Aero.textSecondary)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(Aero.textSecondary)
+            }
+            .padding(.horizontal, Aero.Spacing.s)
+            .padding(.vertical, 10)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(KineticPressStyle())
+    }
+
+    /// One clear row: title + relative time + optional model indicator
+    /// (catalog name for the stored modelId; unknown ids are omitted, never
+    /// guessed). Tap opens the conversation; long-press offers the same
+    /// action set as the drawer rows.
+    private func conversationRow(_ conversation: StoredConversation) -> some View {
+        NavigationLink(value: AeroRoute.chat(conversation.id)) {
+            HStack(spacing: Aero.Spacing.s) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(gsConversationTitle(conversation.title))
+                        .font(Aero.body())
+                        .foregroundColor(Aero.text)
+                        .lineLimit(1)
+                    Text(rowMeta(conversation))
+                        .font(Aero.caption())
+                        .foregroundColor(Aero.textSecondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                if conversation.pinned {
+                    Image(systemName: "star.fill")
+                        .font(.system(size: 10))
+                        .foregroundColor(Aero.accent)
+                }
+            }
+            .padding(.horizontal, Aero.Spacing.m)
+            .padding(.vertical, 11)
+            .background(RoundedRectangle(cornerRadius: Aero.Radius.md).fill(Aero.raisedSurface))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(KineticPressStyle())
+        .contextMenu {
+            conversationMenu(conversation)
+        }
+    }
+
+    /// "2h ago · GS Balanced" — empty segments are dropped, so an
+    /// unparseable stamp or unknown model shrinks the line honestly.
+    private func rowMeta(_ conversation: StoredConversation) -> String {
+        var parts = [GSFormatters.relativeTime(from: conversation.updatedAt)]
+        if let model = ModelInfo.catalog.first(where: { $0.id == conversation.modelId }) {
+            parts.append(model.name)
+        }
+        return parts.filter { !$0.isEmpty }.joined(separator: " · ")
+    }
+
+    /// The drawer's four actions, applied against the same store — compact
+    /// inline construction (the drawer's menu is private view code, not
+    /// worth a shared extraction for two surfaces).
+    @ViewBuilder
+    private func conversationMenu(_ conversation: StoredConversation) -> some View {
+        Button {
+            GSHaptics.success()
+            let target = !conversation.pinned
+            store.setPinned(id: conversation.id, target)
+            GSHaptics.success()
+            sync(conversation.id, pinned: target)
+        } label: {
+            Label(conversation.pinned ? "Unpin" : "Pin to top", systemImage: "pin")
+        }
+        Button {
+            renameTarget = conversation
+            renameDraft = conversation.title
+        } label: {
+            Label("Rename…", systemImage: "pencil")
+        }
+        Button {
+            GSHaptics.success()
+            store.setArchived(id: conversation.id, true)
+            GSHaptics.success()
+            sync(conversation.id, archived: true)
+        } label: {
+            Label("Archive", systemImage: "archivebox")
+        }
+        Button(role: .destructive) {
+            GSHaptics.warning()
+            store.delete(id: conversation.id)
+            GSHaptics.warning()
+            syncDelete(conversation.id)
+        } label: {
+            Label("Delete", systemImage: "trash")
+        }
+    }
+
+    // Local-first: the store already changed; demo/local ids stay local.
+    private func sync(_ id: String, pinned: Bool? = nil, archived: Bool? = nil, title: String? = nil) {
+        guard !id.hasPrefix("demo-"), !id.hasPrefix("local-") else { return }
+        Task { try? await APIClient.shared.updateConversation(id: id, pinned: pinned, archived: archived, title: title) }
+    }
+
+    private func syncDelete(_ id: String) {
+        guard !id.hasPrefix("demo-"), !id.hasPrefix("local-") else { return }
+        Task { try? await APIClient.shared.deleteConversation(id: id) }
+    }
+
+    // MARK: Starter prompts — "What can GS help with?"
+
+    private var startersSection: some View {
+        VStack(alignment: .leading, spacing: Aero.Spacing.s) {
+            sectionLabel("Start a new thread")
+            ForEach(starters) { starter in
+                promptRow(starter)
+            }
+        }
+    }
+
+    /// Each prompt prefills the real composer — the label IS the payload.
+    private func promptRow(_ starter: StarterPrompt) -> some View {
+        NavigationLink(value: AeroRoute.chatPrefill(starter.label)) {
+            HStack(spacing: Aero.Spacing.m) {
+                ZStack {
+                    Circle().fill(Aero.raisedSurface).frame(width: 38, height: 38)
+                    Image(systemName: starter.symbol)
+                        .font(.system(size: 14))
+                        .foregroundColor(Aero.text)
+                }
+                Text(starter.label)
+                    .font(Aero.body())
+                    .foregroundColor(Aero.text)
+                Spacer()
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 6)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(KineticPressStyle())
+    }
+
+    // MARK: Capability discovery — honest, route-backed, max 5 tiles
+
+    /// One compact section split Tools / Workspaces. Every tile is a REAL
+    /// destination: registered AeroRoute cases where they exist; Research
+    /// keeps its (real) fullScreenCover because it has no registered route.
+    /// No Trending / Popular / For you labels, and no LiveUpdate equivalent —
+    /// that is an Android-only real feature and is not faked here.
+    private var capabilitySection: some View {
+        VStack(alignment: .leading, spacing: Aero.Spacing.l) {
+            VStack(alignment: .leading, spacing: Aero.Spacing.s) {
+                sectionLabel("Tools")
+                ForEach(toolTiles) { tile in
+                    tileRow(tile)
+                }
+            }
+            VStack(alignment: .leading, spacing: Aero.Spacing.s) {
+                sectionLabel("Workspaces")
+                ForEach(workspaceTiles) { tile in
+                    tileRow(tile)
+                }
+            }
+        }
+    }
+
+    private func tileRow(_ tile: HomeTile) -> some View {
+        Group {
+            switch tile.target {
+            case .research:
+                Button {
+                    showResearch = true
+                } label: {
+                    tileLabel(tile)
+                }
+            case .route(let route):
+                NavigationLink(value: route) {
+                    tileLabel(tile)
+                }
+            }
+        }
+        .buttonStyle(KineticPressStyle())
+        .accessibilityLabel(tile.label)
+    }
+
+    private func tileLabel(_ tile: HomeTile) -> some View {
+        HStack(spacing: Aero.Spacing.m) {
+            ZStack {
+                Circle().fill(Aero.raisedSurface).frame(width: 38, height: 38)
+                Image(systemName: tile.symbol)
+                    .font(.system(size: 14))
+                    .foregroundColor(Aero.text)
+            }
+            Text(tile.label)
+                .font(Aero.body())
+                .foregroundColor(Aero.text)
+            Spacer()
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 6)
+        .contentShape(Rectangle())
+    }
+
+    // MARK: Footer
+
+    private var disclaimer: some View {
+        Text("GS can make mistakes — double-check important info.")
+            .font(Aero.caption())
+            .foregroundColor(Aero.textSecondary)
+            .frame(maxWidth: .infinity)
+            .padding(.bottom, Aero.Spacing.s)
+    }
+
+    private func sectionLabel(_ text: String) -> some View {
+        Text(text.uppercased())
+            .font(Aero.label())
+            .foregroundColor(Aero.textSecondary)
+            .padding(.horizontal, 4)
+            .accessibilityAddTraits(.isHeader)
+    }
+
+    // MARK: Voice press-and-hold — the composer affordance (verbatim)
+
+    /// Aurora orb: hold past the threshold to dictate (live transcript in
+    /// the composer line), quick tap still opens full voice mode. Every
+    /// failure path dissolves quietly — nothing is ever shown as an error.
     private var voiceHoldOrb: some View {
         ZStack {
             if dictation.isListening {

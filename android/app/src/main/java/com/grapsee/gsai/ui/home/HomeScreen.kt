@@ -11,20 +11,18 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -38,27 +36,24 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.AutoAwesome
-import androidx.compose.material.icons.outlined.Bookmarks
-import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.EditNote
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material.icons.outlined.Menu
 import androidx.compose.material.icons.outlined.Mic
-import androidx.compose.material.icons.outlined.Palette
-import androidx.compose.material.icons.outlined.Speed
+import androidx.compose.material.icons.outlined.School
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.SmartToy
 import androidx.compose.material.icons.outlined.TravelExplore
-import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarDuration
@@ -72,48 +67,83 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLifecycleOwner
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
-import com.grapsee.gsai.data.liveupdate.LiveUpdateState
-import com.grapsee.gsai.data.liveupdate.LiveUpdater
-import com.grapsee.gsai.ui.navigation.GsRoutes
-import com.grapsee.gsai.ui.theme.auroraBackground
-import com.grapsee.gsai.ui.theme.GsMotion
-import com.grapsee.gsai.ui.theme.GsTheme
-import com.grapsee.gsai.ui.theme.kineticPress
-import com.grapsee.gsai.ui.theme.rememberAuroraBrush
-import kotlinx.coroutines.delay
-import com.grapsee.gsai.ui.theme.gsHaptic
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.traversalIndex
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import com.grapsee.gsai.data.AccountStore
+import com.grapsee.gsai.data.SettingsStore
+import com.grapsee.gsai.data.liveupdate.LiveUpdateState
+import com.grapsee.gsai.data.liveupdate.LiveUpdater
+import com.grapsee.gsai.data.local.ConversationEntity
+import com.grapsee.gsai.data.model.ModelCatalog
+import com.grapsee.gsai.data.ModelPrefs
+import com.grapsee.gsai.di.ServiceLocator
+import com.grapsee.gsai.ui.components.ConversationActionsSheet
+import com.grapsee.gsai.ui.components.GsSectionHeader
+import com.grapsee.gsai.ui.components.gsContentWidth
+import com.grapsee.gsai.ui.components.gsConversationTitle
+import com.grapsee.gsai.ui.navigation.GsRoutes
+import com.grapsee.gsai.ui.theme.GsHaptics
+import com.grapsee.gsai.ui.theme.GsMotion
+import com.grapsee.gsai.ui.theme.GsRadius
+import com.grapsee.gsai.ui.theme.GsTheme
+import com.grapsee.gsai.ui.theme.gsHaptic
+import com.grapsee.gsai.ui.theme.kineticPress
+import com.grapsee.gsai.ui.theme.rememberAuroraBrush
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
+import java.time.Duration
+import java.time.OffsetDateTime
 import java.util.Calendar
 
 /**
- * AERUO KINETIC home canvas — benchmark pattern (ChatGPT · Claude · Kimi):
- * obsidian full-bleed, top bar (menu · model pill · new chat), centred brand
- * orb + time-aware serif greeting + upgrade pill, quick-action chips and one
- * hero input bar pinned to the bottom. Navigation lives in the drawer.
+ * The Home workbench answers three questions with REAL data only (no fake
+ * features, no fabricated labels):
+ *
+ *  1. WHAT CAN GS DO?   — three seeded starters (each opens the real chat
+ *     composer with a prompt) and a compact Tools/Workspaces group of five
+ *     real destinations. No "Trending"/"Popular" fiction, no chip wall.
+ *  2. WHAT WAS I DOING? — the Continue section, driven by the exact same
+ *     Room flow the drawer's RECENT list uses (archived hidden, pins float,
+ *     newest first). At most three conversations — continuity taste here,
+ *     full history lives in Chats. No conversations → no section at all.
+ *  3. WHAT CAN GS HELP WITH? — the composer entry: the dominant action,
+ *     opening the real chat composer; press-and-hold the orb to dictate;
+ *     mic opens full voice mode.
+ *
+ * Identity is real too: the greeting uses the name the user actually typed
+ * at auth (AccountStore) and degrades to a neutral line when nothing is
+ * stored. The old rotating tagline, hardcoded "Admin" greeting, hardcoded
+ * model pill, fake attach affordance and "Upgrade plan" upsell are gone —
+ * Billing stays reachable from the drawer's Account group, and attaching
+ * files belongs to the real composer (Chat, step 4 scope).
  */
 @Composable
 fun HomeScreen(
@@ -128,6 +158,32 @@ fun HomeScreen(
     // lives inside the app's own layout, respects the theme and can act.
     val snackbarHostState = remember { SnackbarHostState() }
 
+    // Identity — the name the user actually typed at auth. Read per
+    // composition: returning from Auth/Onboarding re-runs this body, so the
+    // greeting reflects the stored identity with no observers.
+    val displayName = AccountStore.displayName(context)
+
+    // Continuation source — the SAME flow the drawer's RECENT list uses
+    // (Room: archived hidden, pins float, newest first). No separate query
+    // and no fabricated samples: an empty inbox renders neither Continue
+    // nor Recents, and the starters take the space instead.
+    val recents by remember {
+        runCatching { ServiceLocator.chat.activeConversations() }.getOrElse { flowOf(emptyList()) }
+    }.collectAsState(initial = emptyList())
+
+    // Long-press actions — the exact sheet the drawer and Chats use, fed by
+    // the same ServiceLocator mutations.
+    var actionTarget by remember { mutableStateOf<ConversationEntity?>(null) }
+    val scope = rememberCoroutineScope()
+    val haptics = LocalHapticFeedback.current
+    val mutate: (suspend (ConversationEntity) -> Unit) -> Unit = { action ->
+        val target = actionTarget
+        actionTarget = null
+        if (target != null) {
+            scope.launch { runCatching { action(target) } }
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -138,45 +194,95 @@ fun HomeScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                // TalkBack visits: top bar → composer entry → scroll content
+                // (orb → greeting → continue → starters → tools). The
+                // composer is the primary action and is PINNED at the visual
+                // bottom; traversal indices keep it early in the swipe order
+                // instead of dead last. (The exact spec order orb → greeting
+                // → composer is unachievable with the pinned-composer
+                // skeleton, because the greeting lives inside the scrollable
+                // middle — this is the closest compliant order.)
+                .semantics { isTraversalGroup = true }
                 .padding(horizontal = GsMotion.spaceM)
         ) {
             TopBar(
                 onOpenDrawer = onOpenDrawer,
-                onNavigate = onNavigate
+                onNavigate = onNavigate,
+                modifier = Modifier.semantics { traversalIndex = 0f }
             )
 
             // Everything between the pinned top bar and the pinned composer
-            // scrolls: at large system font scales the fixed canvas used to
-            // clip the hero/quick-action stack. The composer and disclaimer
-            // stay pinned; the hero scrolls away only when it must.
+            // scrolls: at large system font scales a fixed hero would clip.
+            // gsContentWidth() (STEP 2 foundation): phones unaffected, tablets/
+            // landscape get the 640dp reading column.
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
                     .weight(1f)
-                    .verticalScroll(rememberScrollState()),
+                    .gsContentWidth()
+                    .verticalScroll(rememberScrollState())
+                    .semantics { traversalIndex = 2f },
                 verticalArrangement = Arrangement.spacedBy(GsMotion.spaceM)
             ) {
                 Spacer(Modifier.height(GsMotion.spaceL))
-                HeroBlock(onNavigate = onNavigate)
-                SuggestionRows(onNavigate = onNavigate)
-                TrendingRow(onNavigate = onNavigate)
-                QuickChips(onNavigate = onNavigate)
+                HeroBlock(displayName = displayName)
+
+                // WHAT WAS I DOING? — the most recent conversation first,
+                // then up to two more (three total, the drawer owns history).
+                val continueConversation = recents.firstOrNull()
+                if (continueConversation != null) {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
+                    ) {
+                        GsSectionHeader(
+                            title = "Continue",
+                            actionLabel = "All chats",
+                            onAction = { onNavigate(GsRoutes.CHATS) }
+                        )
+                        HomeConversationRow(
+                            conversation = continueConversation,
+                            onOpen = { onNavigate(GsRoutes.chat(continueConversation.id)) },
+                            onActions = {
+                                GsHaptics.longPress(haptics)
+                                actionTarget = continueConversation
+                            }
+                        )
+                        recents.drop(1).take(2).forEach { conversation ->
+                            HomeConversationRow(
+                                conversation = conversation,
+                                onOpen = { onNavigate(GsRoutes.chat(conversation.id)) },
+                                onActions = {
+                                    GsHaptics.longPress(haptics)
+                                    actionTarget = conversation
+                                }
+                            )
+                        }
+                    }
+                }
+
+                StartersSection(onNavigate = onNavigate)
+                ToolsSection(onNavigate = onNavigate)
                 // GS LiveUpdate — appears only when a newer build exists on GitHub.
                 LiveUpdatePill()
             }
 
-            Spacer(Modifier.height(GsMotion.spaceS))
-            HeroInput(onNavigate = onNavigate, snackbarHostState = snackbarHostState)
-            Spacer(Modifier.height(GsMotion.spaceS))
-            Text(
-                "GS can make mistakes — double-check important info.",
-                style = MaterialTheme.typography.labelMedium,
-                color = GsTheme.colors.textSecondary,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = GsMotion.spaceS),
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center
-            )
+            // Pinned composer entry + disclaimer — one traversal group so
+            // TalkBack reaches the primary action right after the top bar.
+            Column(
+                modifier = Modifier.semantics { traversalIndex = 1f }
+            ) {
+                Spacer(Modifier.height(GsMotion.spaceS))
+                HeroInput(onNavigate = onNavigate, snackbarHostState = snackbarHostState)
+                Spacer(Modifier.height(GsMotion.spaceS))
+                Text(
+                    "GS can make mistakes — double-check important info.",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = GsTheme.colors.textSecondary,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = GsMotion.spaceS),
+                    textAlign = TextAlign.Center
+                )
+            }
         }
 
         SnackbarHost(
@@ -184,15 +290,35 @@ fun HomeScreen(
             modifier = Modifier.align(Alignment.BottomCenter)
         )
     }
+
+    if (actionTarget != null) {
+        ConversationActionsSheet(
+            title = gsConversationTitle(actionTarget?.title),
+            pinned = actionTarget?.pinned == true,
+            onDismiss = { actionTarget = null },
+            onTogglePin = { mutate { c -> ServiceLocator.chat.setPinned(c.id, !c.pinned) } },
+            onArchive = { mutate { c -> ServiceLocator.chat.setArchived(c.id, true) } },
+            onDelete = { mutate { c -> ServiceLocator.chat.delete(c.id) } },
+            onRename = { name ->
+                val target = actionTarget
+                actionTarget = null
+                if (target != null) {
+                    scope.launch { runCatching { ServiceLocator.chat.rename(target.id, name) } }
+                }
+            }
+        )
+    }
 }
 
 @Composable
 private fun TopBar(
     onOpenDrawer: () -> Unit,
-    onNavigate: (String) -> Unit
+    onNavigate: (String) -> Unit,
+    modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(vertical = GsMotion.spaceS),
         verticalAlignment = Alignment.CenterVertically
@@ -206,7 +332,12 @@ private fun TopBar(
 
         Spacer(Modifier.weight(1f))
 
-        // Model pill — "Instant High" pattern
+        // Model pill — the REAL default model and mode (ModelPrefs), never a
+        // hardcoded label. The mode suffix renders only when the stored mode
+        // is one this model actually supports; otherwise the name alone.
+        val model = ModelCatalog.byId(ModelPrefs.defaultId(context)) ?: ModelCatalog.default
+        val mode = ModelPrefs.mode(context)
+        val pillLabel = if (mode in model.modes) "${model.displayName} · $mode" else model.displayName
         val modelPillInteraction = remember { MutableInteractionSource() }
         Surface(
             shape = RoundedCornerShape(GsMotion.radiusChip),
@@ -217,7 +348,11 @@ private fun TopBar(
                 modifier = Modifier
                     .clickable(
                         interactionSource = modelPillInteraction,
-                        indication = LocalIndication.current
+                        indication = LocalIndication.current,
+                        role = Role.Button,
+                        // Announces with the real model name (the label text)
+                        // and a factual action, not a hardcoded one.
+                        onClickLabel = "Change model"
                     ) { onNavigate(GsRoutes.MODELS) }
                     .padding(
                         horizontal = GsMotion.spaceM,
@@ -233,7 +368,7 @@ private fun TopBar(
                         .background(rememberAuroraBrush(CircleShape))
                 )
                 Text(
-                    "GS Balanced · High",
+                    pillLabel,
                     style = MaterialTheme.typography.labelLarge,
                     color = GsTheme.colors.textPrimary
                 )
@@ -283,17 +418,25 @@ private fun CircleButton(
 }
 
 @Composable
-private fun HeroBlock(onNavigate: (String) -> Unit) {
-    val transition = rememberInfiniteTransition(label = "orb")
-    val breathe by transition.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.06f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2400),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "orbBreathe"
-    )
+private fun HeroBlock(displayName: String) {
+    // Reduce-motion gate (reactive — the settings are snapshot state): when
+    // on, the infinite breathe transition is NEVER created and the orb holds
+    // its resting frame. No faster loop — no loop at all.
+    val reduced = SettingsStore.reduceAnimations || SettingsStore.reduceMotion
+    val breathe: Float = if (reduced) {
+        1f
+    } else {
+        val transition = rememberInfiniteTransition(label = "orb")
+        transition.animateFloat(
+            initialValue = 1f,
+            targetValue = 1.06f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(2400),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "orbBreathe"
+        ).value
+    }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -325,106 +468,289 @@ private fun HeroBlock(onNavigate: (String) -> Unit) {
         Spacer(Modifier.height(GsMotion.spaceL))
 
         Text(
-            greeting(),
+            greetingFor(displayName),
             style = MaterialTheme.typography.displayLarge,
             color = GsTheme.colors.textPrimary,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            textAlign = TextAlign.Center,
+            // TalkBack: the greeting is the page heading.
+            modifier = Modifier.semantics { heading() }
         )
         Spacer(Modifier.height(GsMotion.spaceS))
 
-        // Claude-style rotating tagline — one quiet line that slowly cycles
-        RotatingTagline(modifier = Modifier)
+        // One quiet static line — the old rotating tagline loop is gone
+        // (infinite recomposition for zero information).
+        Text(
+            "What would you like to work on?",
+            style = MaterialTheme.typography.bodyMedium,
+            color = GsTheme.colors.textSecondary,
+            textAlign = TextAlign.Center
+        )
 
-        Spacer(Modifier.height(GsMotion.spaceM))
+        // The old "Upgrade plan" pill is deliberately absent from Home:
+        // Billing stays reachable from the drawer's Account group.
+    }
+}
 
-        // Upgrade pill — subtle, under the greeting (Kimi pattern)
-        val upgradeInteraction = remember { MutableInteractionSource() }
-        Surface(
-            shape = RoundedCornerShape(GsMotion.radiusChip),
-            color = GsTheme.colors.raisedSurface,
-            modifier = Modifier.kineticPress(upgradeInteraction)
-        ) {
+/**
+ * Time-of-day greeting built from the user's REAL first name (AccountStore).
+ * Nothing stored → a neutral line: no name, no invented title.
+ */
+private fun greetingFor(displayName: String): String {
+    val firstName = displayName.trim()
+        .split(Regex("\\s+"))
+        .firstOrNull { it.isNotBlank() }
+        .orEmpty()
+    val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+    return when {
+        hour in 23..24 || hour in 0..4 -> if (firstName.isEmpty()) "Up late?" else "Up late, $firstName?"
+        hour in 5..11 -> salutation("Good morning", firstName)
+        hour in 12..17 -> salutation("Good afternoon", firstName)
+        else -> salutation("Good evening", firstName)
+    }
+}
+
+private fun salutation(base: String, firstName: String): String =
+    if (firstName.isEmpty()) base else "$base, $firstName"
+
+/**
+ * One real conversation row: title + relative time + (when the stored model
+ * id is known to the catalogue) the model name. Tap opens the conversation;
+ * long-press opens the same pin/rename/archive/delete sheet as the drawer.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun HomeConversationRow(
+    conversation: ConversationEntity,
+    onOpen: () -> Unit,
+    onActions: () -> Unit
+) {
+    val rowInteraction = remember { MutableInteractionSource() }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(GsRadius.mdShape())
+            .background(GsTheme.colors.raisedSurface)
+            .kineticPress(rowInteraction)
+            .combinedClickable(
+                interactionSource = rowInteraction,
+                indication = LocalIndication.current,
+                role = Role.Button,
+                onClick = onOpen,
+                onLongClickLabel = "More options",
+                onLongClick = onActions
+            )
+            .padding(horizontal = GsMotion.spaceM, vertical = GsMotion.spaceS),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                gsConversationTitle(conversation.title),
+                style = MaterialTheme.typography.bodyMedium,
+                color = GsTheme.colors.textPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
             Row(
-                modifier = Modifier
-                    .clickable(
-                        interactionSource = upgradeInteraction,
-                        indication = LocalIndication.current
-                    ) { onNavigate(GsRoutes.BILLING) }
-                    .padding(
-                        horizontal = GsMotion.spaceM,
-                        vertical = 10.dp
-                    ),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceXS)
             ) {
-                Icon(
-                    Icons.Outlined.AutoAwesome,
-                    contentDescription = null,
-                    tint = GsTheme.colors.accent,
-                    modifier = Modifier.size(14.dp)
-                )
                 Text(
-                    "Upgrade plan",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = GsTheme.colors.textPrimary
+                    relativeTime(conversation.updatedAt),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = GsTheme.colors.textSecondary
                 )
+                // Model indicator only from a real catalogue hit — an unknown
+                // or absent model id is omitted, never guessed.
+                modelNameFor(conversation.modelId)?.let { model ->
+                    Text(
+                        "· $model",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = GsTheme.colors.textTertiary
+                    )
+                }
+            }
+        }
+        if (conversation.pinned) {
+            Icon(
+                Icons.Filled.Star,
+                contentDescription = "Pinned",
+                tint = GsTheme.colors.accent,
+                modifier = Modifier.size(14.dp)
+            )
+        }
+    }
+}
+
+/**
+ * WHAT CAN GS HELP WITH? — three honest seeds into the REAL chat composer.
+ * Each one opens chat(null, prompt): no fake capability, just a head start.
+ */
+@Composable
+private fun StartersSection(onNavigate: (String) -> Unit) {
+    val starters = remember {
+        listOf(
+            Starter(Icons.Outlined.Description, "Summarise a PDF into a brief"),
+            Starter(Icons.Outlined.EditNote, "Draft a launch email"),
+            Starter(Icons.Outlined.School, "Explain a concept step by step")
+        )
+    }
+    Column(
+        verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
+    ) {
+        SectionLabel("Start something")
+        starters.forEach { starter ->
+            StarterRow(icon = starter.icon, label = starter.label) {
+                onNavigate(GsRoutes.chat(null, starter.label))
             }
         }
     }
 }
 
-private fun greeting(): String {
-    val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-    return when {
-        hour in 23..24 || hour in 0..4 -> "Up late, Admin?"
-        hour in 5..11 -> "Good morning, Admin"
-        hour in 12..17 -> "Good afternoon, Admin"
-        else -> "Good evening, Admin"
-    }
-}
-
-/** Time-aware tagline set; the hero crossfades one line every few seconds. */
-private fun taglines(): List<String> {
-    val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-    val first = if (hour >= 23 || hour < 5) "Working while the world sleeps?" else "What should we make today?"
-    return listOf(
-        first,
-        "Ask, build, refine — all in one thread.",
-        "Your move. GS is listening."
-    )
-}
+private data class Starter(val icon: ImageVector, val label: String)
 
 @Composable
-private fun RotatingTagline(modifier: Modifier = Modifier) {
-    val lines = remember { taglines() }
-    var index by remember { mutableIntStateOf(0) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            kotlinx.coroutines.delay(TAGLINE_ROTATE_MS)
-            index = (index + 1) % lines.size
+private fun StarterRow(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit
+) {
+    val rowInteraction = remember { MutableInteractionSource() }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(GsRadius.mdShape())
+            .kineticPress(rowInteraction)
+            .clickable(
+                interactionSource = rowInteraction,
+                indication = LocalIndication.current,
+                role = Role.Button,
+                onClickLabel = "Start a chat"
+            ) { onClick() }
+            .padding(horizontal = 6.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceM)
+    ) {
+        Surface(
+            shape = CircleShape,
+            color = GsTheme.colors.raisedSurface,
+            modifier = Modifier.size(38.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = GsTheme.colors.textPrimary,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
         }
-    }
-    AnimatedContent(
-        targetState = index,
-        transitionSpec = {
-            fadeIn(tween(TAGLINE_FADE_MS)) togetherWith fadeOut(tween(TAGLINE_FADE_MS))
-        },
-        label = "tagline",
-        modifier = modifier
-    ) { current ->
         Text(
-            lines[current],
+            label,
             style = MaterialTheme.typography.bodyMedium,
-            color = GsTheme.colors.textSecondary
+            color = GsTheme.colors.textPrimary
         )
     }
 }
 
-private const val TAGLINE_ROTATE_MS = 5_200L
-private const val TAGLINE_FADE_MS = 700
+/**
+ * WHAT CAN GS DO? — capability discovery, honestly labelled: no "Trending",
+ * no "Popular", no fabricated rankings. Five real destinations total — three
+ * tools and two workspaces — each a compact raised-surface card.
+ */
+@Composable
+private fun ToolsSection(onNavigate: (String) -> Unit) {
+    // Static content, remembered once — recomposition-stable.
+    val tools = remember {
+        listOf(
+            ToolEntry("Research", Icons.Outlined.TravelExplore, GsRoutes.RESEARCH),
+            ToolEntry("Create", Icons.Outlined.AutoAwesome, GsRoutes.CREATE),
+            ToolEntry("Search", Icons.Outlined.Search, GsRoutes.SEARCH)
+        )
+    }
+    val workspaces = remember {
+        listOf(
+            ToolEntry("Projects", Icons.Outlined.Folder, GsRoutes.PROJECTS),
+            ToolEntry("Assistants", Icons.Outlined.SmartToy, GsRoutes.ASSISTANTS)
+        )
+    }
+    Column(
+        verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
+    ) {
+        SectionLabel("Tools")
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
+        ) {
+            tools.forEach { entry ->
+                ToolCard(entry = entry, modifier = Modifier.weight(1f), onNavigate = onNavigate)
+            }
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
+        ) {
+            workspaces.forEach { entry ->
+                ToolCard(entry = entry, modifier = Modifier.weight(1f), onNavigate = onNavigate)
+            }
+        }
+    }
+}
+
+private data class ToolEntry(val label: String, val icon: ImageVector, val route: String)
+
+@Composable
+private fun ToolCard(
+    entry: ToolEntry,
+    modifier: Modifier = Modifier,
+    onNavigate: (String) -> Unit
+) {
+    val cardInteraction = remember { MutableInteractionSource() }
+    Surface(
+        shape = GsRadius.mdShape(),
+        color = GsTheme.colors.raisedSurface,
+        modifier = modifier.kineticPress(cardInteraction)
+    ) {
+        Row(
+            modifier = Modifier
+                .clickable(
+                    interactionSource = cardInteraction,
+                    indication = LocalIndication.current,
+                    role = Role.Button,
+                    onClickLabel = "Open ${entry.label}"
+                ) { onNavigate(entry.route) }
+                .padding(horizontal = GsMotion.spaceS, vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
+        ) {
+            Icon(
+                entry.icon,
+                contentDescription = null,
+                tint = GsTheme.colors.accent,
+                modifier = Modifier.size(18.dp)
+            )
+            Text(
+                entry.label,
+                style = MaterialTheme.typography.labelLarge,
+                color = GsTheme.colors.textPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+/** Quiet uppercase section label — the same language as the drawer's groups. */
+@Composable
+private fun SectionLabel(text: String) {
+    Text(
+        text.uppercase(),
+        style = MaterialTheme.typography.labelMedium,
+        color = GsTheme.colors.textSecondary,
+        modifier = Modifier.padding(horizontal = 4.dp)
+    )
+}
 
 /**
- * GS LiveUpdate pill — benchmark-quiet surface (raised dark + aurora dot, same
+ * GS LiveUpdate pill — benchmark-quiet surface (raised + aurora dot, same
  * language as the model pill). Only rendered when a newer build is published:
  * "v0.2.0 ready" → tap → "Downloading update · 42%" → "Update ready · tap to
  * install" → system installer. A dropped stream resumes from the exact byte it
@@ -490,191 +816,16 @@ private fun UpdatePill(text: String, onClick: () -> Unit) {
 }
 
 /**
- * ChatGPT-style explore/trending strip — one horizontal row of compact cards
- * surfacing Explore-section content on the canvas. Benchmark pattern: Kimi's
- * trending prompts + ChatGPT's suggestion depth, in Aeruo Kinetic surfaces.
+ * The composer ENTRY — the primary action of Home, visually dominant. A
+ * raised bar that reads as the place to start: tapping it opens the real
+ * chat composer (GsRoutes.chat(null)). This is an entry, not a composer:
+ * there is no attach affordance here (attaching files belongs to the real
+ * composer in Chat — step 4 scope) and the field never pretends to accept
+ * typed text. The mic opens full voice mode; press-and-hold the orb to
+ * dictate — live partials fill the bar, release hands the transcript to the
+ * chat composer. A quick tap still opens full voice mode. Every failure path
+ * dissolves quietly — nothing surfaces as an error.
  */
-@Composable
-private fun TrendingRow(onNavigate: (String) -> Unit) {
-    data class TrendCard(val category: String, val title: String, val icon: ImageVector, val route: String)
-
-    val cards = remember {
-        listOf(
-            TrendCard("Trending", "Deep research agent", Icons.Outlined.TravelExplore, GsRoutes.RESEARCH),
-            TrendCard("Popular", "Prompt builder", Icons.Outlined.AutoAwesome, GsRoutes.PROMPT_BUILDER),
-            TrendCard("New", "Image studio", Icons.Outlined.Palette, GsRoutes.IMAGE_STUDIO),
-            TrendCard("For you", "Code workspace", Icons.Outlined.Code, GsRoutes.CODE_WORKSPACE),
-            TrendCard("Browse all", "All assistants", Icons.Outlined.ArrowForward, GsRoutes.EXPLORE)
-        )
-    }
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
-    ) {
-        cards.forEach { card ->
-            val cardInteraction = remember { MutableInteractionSource() }
-            Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = GsTheme.colors.raisedSurface,
-                modifier = Modifier
-                    .width(176.dp)
-                    .kineticPress(cardInteraction)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .clickable(
-                            interactionSource = cardInteraction,
-                            indication = LocalIndication.current
-                        ) { onNavigate(card.route) }
-                        .padding(horizontal = 14.dp, vertical = 12.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            card.icon,
-                            contentDescription = null,
-                            tint = GsTheme.colors.accent,
-                            modifier = Modifier.size(13.dp)
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            card.category,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = GsTheme.colors.textSecondary
-                        )
-                    }
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        card.title,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = GsTheme.colors.textPrimary,
-                        maxLines = 1,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SuggestionRows(onNavigate: (String) -> Unit) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
-    ) {
-        SuggestionRow(Icons.Outlined.Description, "Summarise a PDF into a brief") {
-            onNavigate(GsRoutes.chat(null, "Summarise a PDF into a brief"))
-        }
-        SuggestionRow(Icons.Outlined.EditNote, "Draft a launch email") {
-            onNavigate(GsRoutes.chat(null, "Draft a launch email"))
-        }
-    }
-}
-
-@Composable
-private fun SuggestionRow(
-    icon: ImageVector,
-    label: String,
-    onClick: () -> Unit
-) {
-    val rowInteraction = remember { MutableInteractionSource() }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .kineticPress(rowInteraction)
-            .clickable(
-                interactionSource = rowInteraction,
-                indication = LocalIndication.current,
-                onClick = onClick
-            )
-            .padding(horizontal = 6.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceM)
-    ) {
-        Surface(
-            shape = CircleShape,
-            color = GsTheme.colors.raisedSurface,
-            modifier = Modifier.size(38.dp)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    icon,
-                    contentDescription = null,
-                    tint = GsTheme.colors.textPrimary,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-        }
-        Text(
-            label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = GsTheme.colors.textPrimary
-        )
-    }
-}
-
-@Composable
-private fun QuickChips(onNavigate: (String) -> Unit) {
-    data class Chip(val label: String, val icon: ImageVector, val route: String)
-
-    val chips = remember {
-        listOf(
-            Chip("Projects", Icons.Outlined.Folder, GsRoutes.PROJECTS),
-            Chip("Research", Icons.Outlined.TravelExplore, GsRoutes.RESEARCH),
-            Chip("Vision", Icons.Outlined.Visibility, GsRoutes.VISION),
-            Chip("Image", Icons.Outlined.Palette, GsRoutes.IMAGE_STUDIO),
-            Chip("Writing", Icons.Outlined.EditNote, GsRoutes.WRITING_STUDIO),
-            Chip("Code", Icons.Outlined.Code, GsRoutes.CODE_WORKSPACE),
-            Chip("Voice", Icons.Outlined.Mic, GsRoutes.VOICE),
-            Chip("Library", Icons.Outlined.Bookmarks, GsRoutes.LIBRARY),
-            Chip("Models", Icons.Outlined.Speed, GsRoutes.MODELS)
-        )
-    }
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
-    ) {
-        chips.forEach { chip ->
-            val chipInteraction = remember { MutableInteractionSource() }
-            Surface(
-                shape = RoundedCornerShape(GsMotion.radiusChip),
-                color = GsTheme.colors.raisedSurface,
-                modifier = Modifier.kineticPress(chipInteraction)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .clickable(
-                            interactionSource = chipInteraction,
-                            indication = LocalIndication.current
-                        ) { onNavigate(chip.route) }
-                        .padding(horizontal = GsMotion.spaceM, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Icon(
-                        chip.icon,
-                        contentDescription = null,
-                        tint = GsTheme.colors.textSecondary,
-                        modifier = Modifier.size(15.dp)
-                    )
-                    Text(
-                        chip.label,
-                        style = MaterialTheme.typography.labelLarge,
-                        color = GsTheme.colors.textPrimary
-                    )
-                }
-            }
-        }
-    }
-}
-
 @Composable
 private fun HeroInput(
     onNavigate: (String) -> Unit,
@@ -684,10 +835,6 @@ private fun HeroInput(
     val view = LocalView.current
 
     // --- Voice press-and-hold -------------------------------------------------
-    // Hold the aurora orb to dictate: live partials fill the hero line, release
-    // hands the transcript to the chat composer. A quick tap still opens full
-    // voice mode. Every failure path dissolves quietly — nothing surfaces as
-    // an error.
     var listening by remember { mutableStateOf(false) }
     var transcript by remember { mutableStateOf("") }
     val recognizerRef = remember { mutableStateOf<SpeechRecognizer?>(null) }
@@ -823,59 +970,45 @@ private fun HeroInput(
         }
     }
 
+    val entryInteraction = remember { MutableInteractionSource() }
     Surface(
-        shape = RoundedCornerShape(28.dp),
+        shape = GsRadius.inputShape(),
         color = GsTheme.colors.raisedSurface,
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .kineticPress(entryInteraction)
     ) {
         Row(
-            modifier = Modifier.padding(
-                horizontal = GsMotion.spaceS,
-                vertical = GsMotion.spaceS
-            ),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Attach — opens a new chat with the attach sheet
-            val attachInteraction = remember { MutableInteractionSource() }
-            Surface(
-                shape = CircleShape,
-                color = GsTheme.colors.accentSoft,
-                modifier = Modifier
-                    .size(42.dp)
-                    .kineticPress(attachInteraction)
-            ) {
-                Box(
-                    modifier = Modifier.clickable(
-                        interactionSource = attachInteraction,
-                        indication = LocalIndication.current
-                    ) { onNavigate(GsRoutes.chat(null)) },
-                    contentAlignment = Alignment.Center
+            modifier = Modifier
+                .clickable(
+                    interactionSource = entryInteraction,
+                    indication = LocalIndication.current,
+                    role = Role.Button,
+                    onClickLabel = "Start a new chat"
                 ) {
-                    Icon(
-                        Icons.Outlined.Add,
-                        contentDescription = "Attach and new chat",
-                        tint = GsTheme.colors.accent,
-                        modifier = Modifier.size(20.dp)
-                    )
+                    // Mid-dictation the entry does not navigate — releasing
+                    // the orb decides what happens to the transcript.
+                    if (!listening) onNavigate(GsRoutes.chat(null))
                 }
-            }
-
-            Spacer(Modifier.width(GsMotion.spaceS))
-
+                .padding(
+                    horizontal = GsMotion.spaceS,
+                    vertical = GsMotion.spaceS
+                ),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
+        ) {
             Text(
                 when {
                     listening && transcript.isBlank() -> "Listening…"
                     listening -> transcript
-                    else -> "Ask anything"
+                    else -> "Ask GS anything…"
                 },
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (listening) GsTheme.colors.textPrimary else GsTheme.colors.textSecondary,
+                style = MaterialTheme.typography.bodyLarge,
+                color = if (listening) GsTheme.colors.textPrimary else GsTheme.colors.textPlaceholder,
                 maxLines = 1,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier
                     .weight(1f)
-                    .clip(RoundedCornerShape(12.dp))
-                    .clickable { onNavigate(GsRoutes.chat(null)) }
                     .padding(vertical = GsMotion.spaceS)
             )
 
@@ -906,9 +1039,9 @@ private fun HeroInput(
 
             // Aurora orb — press-and-hold to dictate (the hero affordance)
             var orbHeld by remember { mutableStateOf(false) }
-            val orbScale by androidx.compose.animation.core.animateFloatAsState(
+            val orbScale by animateFloatAsState(
                 targetValue = if (orbHeld) 0.93f else 1f,
-                animationSpec = com.grapsee.gsai.ui.theme.GsMotion.standard(),
+                animationSpec = GsMotion.standard(),
                 label = "orbHold"
             )
             Box(
@@ -981,6 +1114,12 @@ private fun HeroInput(
 /** Breathing aurora halo around the hero orb while dictation is live. */
 @Composable
 private fun VoicePulseHalo() {
+    // Reduce-motion gate: the resting frame is held — a static halo, no
+    // infinite transition created at all (not a faster one).
+    if (SettingsStore.reduceAnimations || SettingsStore.reduceMotion) {
+        HaloFrame(haloScale = 1f, haloAlpha = 0.5f)
+        return
+    }
     val transition = rememberInfiniteTransition(label = "voiceHalo")
     val pulse by transition.animateFloat(
         initialValue = 1f,
@@ -1000,13 +1139,39 @@ private fun VoicePulseHalo() {
         ),
         label = "voiceHaloFade"
     )
+    HaloFrame(haloScale = pulse, haloAlpha = fade)
+}
+
+@Composable
+private fun HaloFrame(haloScale: Float, haloAlpha: Float) {
     Box(
         modifier = Modifier
             .size(46.dp)
-            .graphicsLayer { scaleX = pulse; scaleY = pulse; alpha = fade }
+            .graphicsLayer { scaleX = haloScale; scaleY = haloScale; alpha = haloAlpha }
             .clip(CircleShape)
             .background(rememberAuroraBrush(CircleShape))
     )
 }
 
 private const val VOICE_HOLD_TRIGGER_MS = 280L
+
+/** modelId → real catalogue display name; null/unknown ids yield null. */
+private fun modelNameFor(modelId: String?): String? =
+    modelId?.let { ModelCatalog.byId(it)?.displayName }
+
+/**
+ * Same relative-time language as the Chats inbox (ChatsScreen.relativeTime):
+ * minutes → hours → days → date, empty string when the timestamp is not
+ * parseable (a broken stamp never renders as garbage).
+ */
+private fun relativeTime(iso: String): String = runCatching {
+    val timestamp = OffsetDateTime.parse(iso)
+    val elapsed = Duration.between(timestamp, OffsetDateTime.now())
+    when {
+        elapsed.toMinutes() < 1 -> "just now"
+        elapsed.toHours() < 1 -> "${elapsed.toMinutes()}m ago"
+        elapsed.toHours() < 24 -> "${elapsed.toHours()}h ago"
+        elapsed.toDays() < 7 -> "${elapsed.toDays()}d ago"
+        else -> timestamp.toLocalDate().toString()
+    }
+}.getOrElse { "" }

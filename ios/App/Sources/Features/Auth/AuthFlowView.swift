@@ -41,6 +41,12 @@ struct AuthFlowView: View {
     // Backup code note
     @State private var showBackupNote = false
 
+    /// Which committed form the current verification belongs to (UI rebuild
+    /// Step 3): sign-up persists name + email, sign-in persists email only.
+    /// Flipped at the moment each form commits, read at the flow's single
+    /// success point.
+    @State private var committedSignUp = false
+
     private let codeLength = 6
 
     var body: some View {
@@ -310,6 +316,7 @@ struct AuthFlowView: View {
         guard !email.isEmpty, !password.isEmpty else { return }
         GSHaptics.tap()   // committed — the sign-in attempt goes out
         passwordFocus = false
+        committedSignUp = false
         go(.verifyEmail)
     }
 
@@ -317,7 +324,28 @@ struct AuthFlowView: View {
         guard signUpReady else { return }
         GSHaptics.tap()
         passwordFocus = false
+        committedSignUp = true
         go(.verifyEmail)
+    }
+
+    // MARK: Identity persistence (UI rebuild Step 3)
+
+    /// The true success points of this flow are the two closures that call
+    /// `onComplete()`: the two-factor verify (the last gate after EITHER
+    /// committed form) and the social buttons. Persistence lives here — at
+    /// the success point, not at form commit — so an abandoned verification
+    /// never leaves a stored account behind.
+    ///
+    /// Sign-up persists BOTH the typed full name and the email. Sign-in
+    /// persists the email only: a display name stored earlier (sign-up, or a
+    /// previous session) must survive a sign-in, so the name is deliberately
+    /// left untouched. The social path collects no identity fields and
+    /// therefore persists nothing — nothing is invented.
+    private func persistAccountIdentity() {
+        if committedSignUp {
+            AccountStore.shared.setDisplayName(fullName)
+        }
+        AccountStore.shared.setEmail(email)
     }
 
     private var passwordStrength: Int {
@@ -382,6 +410,9 @@ struct AuthFlowView: View {
             footer: { backupFooter },
             onVerify: {
                 GSHaptics.tap()
+                // True success point — the session starts here. Persist the
+                // committed form's identity (see persistAccountIdentity).
+                persistAccountIdentity()
                 onComplete()
             }
         )
@@ -735,6 +766,9 @@ private struct OptionalFocus: ViewModifier {
     private func socialButton(_ title: String, icon: String) -> some View {
         Button {
             GSHaptics.tap()
+            // Social sign-in completes the session without collecting any
+            // identity fields, so nothing is persisted here (nothing is
+            // invented) — any stored identity simply survives.
             onComplete()
         } label: {
             HStack(spacing: Aero.Spacing.s) {

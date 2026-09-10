@@ -300,6 +300,17 @@ enum Aero {
         static let input: CGFloat = 26  // composer / input bars
         static let chip: CGFloat = 999  // full pill: chips & status only
     }
+
+    // MARK: Layout
+
+    /// Reading-column foundation (UI rebuild Step 2; Android twin:
+    /// GsLayout.contentMaxWidth = 640.dp). Wide canvases (iPad, landscape)
+    /// center-clamp content at this width instead of stretching edge to
+    /// edge; phones are already narrower and are unaffected. Generic — any
+    /// screen can adopt it via View.gsContentWidth().
+    enum Layout {
+        static let contentMaxWidth: CGFloat = 640
+    }
 }
 
 // MARK: - Shared cached formatters (deep-perf pass 80-b)
@@ -361,6 +372,18 @@ struct KineticPressStyle: ButtonStyle {
         configuration.label
             .scaleEffect(configuration.isPressed ? Aero.pressScale : 1)
             .animation(Aero.spring, value: configuration.isPressed)
+    }
+}
+
+// MARK: - Reading column (Step-2 content-width foundation)
+
+extension View {
+    /// Center-clamps the view's width to `Aero.Layout.contentMaxWidth` —
+    /// the iOS twin of Android's `Modifier.gsContentWidth()`: on canvases
+    /// narrower than the cap it is a no-op, on wider ones the column stays
+    /// at 640pt and centers. Generic: any screen can adopt it.
+    func gsContentWidth() -> some View {
+        frame(maxWidth: Aero.Layout.contentMaxWidth)
     }
 }
 
