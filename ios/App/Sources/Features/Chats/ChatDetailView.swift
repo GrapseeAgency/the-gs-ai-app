@@ -784,260 +784,6 @@ private struct ModelOptionRow: View {
     }
 }
 
-// MARK: - Reply content segmentation (text + fenced code blocks)
-
-/// One renderable chunk of an assistant reply: plain text or a fenced code block.
-private struct ContentSegment: Identifiable {
-    let id: Int
-    let text: String
-    let isCode: Bool
-    let language: String?
-}
-
-/// Split on ``` fences; an unterminated trailing fence (mid-stream) still renders as code.
-///
-/// UI rebuild Step 5 seam: THIS function is the message → ordered-blocks
-/// boundary. MessageBubble consumes only `[ContentSegment]` (prose | fenced
-/// code, in order) — nothing downstream re-reads the raw string — so the
-/// future markdown engine (Step 5) replaces the body of this parser without
-/// touching a single call site. The per-message NSCache in MessageBubble
-/// keeps the parse off the streaming path (finalized turns only).
-private func parseContentSegments(_ content: String) -> [ContentSegment] {
-    var segments: [ContentSegment] = []
-    var id = 0
-    let ns = content as NSString
-    guard let regex = try? NSRegularExpression(pattern: "```(\\w*)\\n?([\\s\\S]*?)```") else {
-        return [ContentSegment(id: 0, text: content, isCode: false, language: nil)]
-    }
-    var cursor = 0
-    for match in regex.matches(in: content, range: NSRange(location: 0, length: ns.length)) {
-        if match.range.location > cursor {
-            segments.append(ContentSegment(
-                id: id,
-                text: ns.substring(with: NSRange(location: cursor, length: match.range.location - cursor)),
-                isCode: false,
-                language: nil
-            ))
-            id += 1
-        }
-        let language = match.range(at: 1).length > 0 ? ns.substring(with: match.range(at: 1)) : nil
-        let bodyRange = match.range(at: 2)
-        let body = bodyRange.length > 0
-            ? ns.substring(with: bodyRange).trimmingCharacters(in: CharacterSet(charactersIn: "\n"))
-            : ""
-        segments.append(ContentSegment(id: id, text: body, isCode: true, language: language))
-        id += 1
-        cursor = match.range.location + match.range.length
-    }
-    if cursor < ns.length {
-        let tail = ns.substring(from: cursor)
-        if let openRange = tail.range(of: "```") {
-            let before = String(tail[..<openRange.lowerBound])
-            if !before.isEmpty {
-                segments.append(ContentSegment(id: id, text: before, isCode: false, language: nil))
-                id += 1
-            }
-            let rest = String(tail[openRange.upperBound...])
-            var language: String? = nil
-            var body = rest
-            if let newline = rest.firstIndex(of: "\n") {
-                let candidate = String(rest[..<newline]).trimmingCharacters(in: .whitespaces)
-                language = candidate.isEmpty ? nil : candidate
-                body = String(rest[rest.index(after: newline)...])
-            }
-            segments.append(ContentSegment(id: id, text: body, isCode: true, language: language))
-            id += 1
-        } else if !tail.isEmpty {
-            segments.append(ContentSegment(id: id, text: tail, isCode: false, language: nil))
-            id += 1
-        }
-    }
-    if segments.isEmpty {
-        segments.append(ContentSegment(id: 0, text: content, isCode: false, language: nil))
-    }
-    return segments
-}
-
-/// Languages whose line comments start with '#' rather than '//'.
-private let hashCommentLanguages: Set<String> = ["python", "py", "bash", "sh", "shell", "ruby", "rb", "yaml", "yml", "toml"]
-
-/// Words tinted in code blocks — a deliberately small cross-language set.
-private let codeKeywords: Set<String> = [
-    "val", "var", "fun", "func", "function", "def", "class", "struct", "enum", "interface",
-    "object", "trait", "impl", "type", "if", "else", "elif", "for", "while", "switch", "case",
-    "match", "when", "break", "continue", "return", "yield", "import", "from", "package",
-    "public", "private", "protected", "static", "final", "const", "new", "this", "self",
-    "super", "null", "nil", "none", "true", "false", "try", "catch", "finally", "throw",
-    "throws", "await", "async", "let", "in", "is", "as", "of", "do", "end", "override",
-    "open", "suspend", "data", "where", "with", "lambda", "and", "or", "not"
-]
-
-/// Lightweight syntax colouring — comments, strings, numbers, keywords.
-/// Purely cosmetic: an unknown token stays plain, nothing can break the layout.
-/// Tokens are dynamic UIColors (light + dark + high-contrast); they resolve
-/// per trait collection at render, so no manual dark-mode branch is needed.
-private func highlightedCode(_ code: String, language: String?) -> Text {
-    let kw = UIColor(Aero.codeKeyword)
-    let st = UIColor(Aero.codeString)
-    let cm = UIColor(Aero.codeComment)
-    let nm = UIColor(Aero.codeNumber)
-    let hashComments = hashCommentLanguages.contains((language ?? "").lowercased())
-
-    let result = NSMutableAttributedString(string: "")
-    let ns = code as NSString
-    let pattern = "(//[^\\n]*|\"(?:\\\\.|[^\"\\\\])*\"|'(?:\\\\.|[^'\\\\])*'|\\b\\d+(?:\\.\\d+)?\\b|[A-Za-z_][A-Za-z0-9_]*)"
-    guard let regex = try? NSRegularExpression(pattern: pattern) else { return Text(code) }
-    var cursor = 0
-    for match in regex.matches(in: code, range: NSRange(location: 0, length: ns.length)) {
-        if match.range.location > cursor {
-            result.append(NSAttributedString(string: ns.substring(with: NSRange(location: cursor, length: match.range.location - cursor))))
-        }
-        let token = ns.substring(with: match.range)
-        let color: UIColor? = {
-            if token.hasPrefix("//") || (hashComments && token.hasPrefix("#")) { return cm }
-            if token.hasPrefix("\"") || token.hasPrefix("'") { return st }
-            if let first = token.first, first.isNumber { return nm }
-            if codeKeywords.contains(token) { return kw }
-            return nil
-        }()
-        if let color = color {
-            result.append(NSAttributedString(string: token, attributes: [.foregroundColor: color]))
-        } else {
-            result.append(NSAttributedString(string: token))
-        }
-        cursor = match.range.location + match.range.length
-    }
-    if cursor < ns.length {
-        result.append(NSAttributedString(string: ns.substring(from: cursor)))
-    }
-    var attributed = AttributedString(result)
-    attributed.font = .system(size: 12, weight: .regular, design: .monospaced)
-    return Text(attributed)
-}
-
-// MARK: - Markdown-lite prose (headings, lists, bold/italic/inline code)
-
-private enum ProseKind { case plain, h1, h2, h3, bullet, numbered }
-
-private struct ProseLine {
-    let kind: ProseKind
-    let marker: String
-    let text: String
-}
-
-private let numberedLineRegex = try! NSRegularExpression(pattern: "^(\\d{1,2})[.)]\\s+(.+)$")
-
-/// Inline pass: `code` | **bold** | *italic* | https:// links — unclosed
-/// markers stay literal mid-stream, and plain gaps gain tappable URLs
-/// (AttributedString `.link` is auto-tappable inside SwiftUI Text, iOS 15+).
-private let inlineMdRegex = try! NSRegularExpression(
-    pattern: "`([^`\\n]+)`|\\*\\*([^*\\n]+?)\\*\\*|(?<!\\*)\\*([^*\\n]+?)\\*(?!\\*)")
-
-/// Bare http(s) URLs in prose — conservative host/body characters; trailing
-/// sentence punctuation is trimmed by the renderer so links don't 404.
-private let inlineURLRegex = try! NSRegularExpression(
-    pattern: "https?://[^\\s<>()\"']+")
-
-/// Classify one markdown-lite line; blank lines drop (spacing handles rhythm).
-private func classifyProseLine(_ raw: String) -> ProseLine? {
-    let line = raw.replacingOccurrences(of: "\\s+$", with: "", options: .regularExpression)
-    if line.isEmpty { return nil }
-    let ns = line as NSString
-    if line.hasPrefix("### ") { return ProseLine(kind: .h3, marker: "", text: String(line.dropFirst(4))) }
-    if line.hasPrefix("## ") { return ProseLine(kind: .h2, marker: "", text: String(line.dropFirst(3))) }
-    if line.hasPrefix("# ") { return ProseLine(kind: .h1, marker: "", text: String(line.dropFirst(2))) }
-    if line.hasPrefix("- ") || line.hasPrefix("* ") {
-        return ProseLine(kind: .bullet, marker: "\u{2022}", text: String(line.dropFirst(2)))
-    }
-    let numbered = numberedLineRegex.firstMatch(
-        in: line, range: NSRange(location: 0, length: ns.length))
-    if let m = numbered, m.range.length == ns.length {
-        let marker = ns.substring(with: m.range(at: 1))
-        return ProseLine(kind: .numbered, marker: marker + ".", text: ns.substring(with: m.range(at: 2)))
-    }
-    return ProseLine(kind: .plain, marker: "", text: line)
-}
-
-/// Inline markdown → AttributedString; unmatched markers render literally, so streaming never flickers.
-private func renderInline(_ text: String, monoBackground: Color) -> AttributedString {
-    var result = AttributedString()
-    let ns = text as NSString
-    var cursor = 0
-    for match in inlineMdRegex.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
-        if match.range.location > cursor {
-            appendPlainWithLinks(
-                ns.substring(with: NSRange(location: cursor, length: match.range.location - cursor)),
-                into: &result)
-        }
-        if match.range(at: 1).length > 0 {
-            var run = AttributedString(ns.substring(with: match.range(at: 1)))
-            run.font = .system(size: 12, weight: .regular, design: .monospaced)
-            run.backgroundColor = monoBackground
-            result.append(run)
-        } else if match.range(at: 2).length > 0 {
-            var run = AttributedString(ns.substring(with: match.range(at: 2)))
-            run.inlinePresentationIntent = .stronglyEmphasized
-            result.append(run)
-        } else if match.range(at: 3).length > 0 {
-            var run = AttributedString(ns.substring(with: match.range(at: 3)))
-            run.inlinePresentationIntent = .emphasized
-            result.append(run)
-        }
-        cursor = match.range.location + match.range.length
-    }
-    if cursor < ns.length {
-        appendPlainWithLinks(ns.substring(from: cursor), into: &result)
-    }
-    return result
-}
-
-/// One plain-text gap of the inline pass, with bare URLs turned into tappable
-/// links (accent + underline + `.link` — SwiftUI Text opens them in Safari).
-private func appendPlainWithLinks(_ raw: String, into result: inout AttributedString) {
-    let ns = raw as NSString
-    var cursor = 0
-    for match in inlineURLRegex.matches(in: raw, range: NSRange(location: 0, length: ns.length)) {
-        if match.range.location > cursor {
-            result.append(AttributedString(
-                ns.substring(with: NSRange(location: cursor, length: match.range.location - cursor))))
-        }
-        let token = ns.substring(with: match.range)
-        var urlText = token
-        while let last = urlText.last, ".;:,!?".contains(last) {
-            urlText.removeLast()
-        }
-        if let url = URL(string: urlText) {
-            var run = AttributedString(urlText)
-            run.link = url
-            run.underlineStyle = .single
-            run.foregroundColor = Aero.accentDeep
-            result.append(run)
-            let tail = String(token.dropFirst(urlText.count))
-            if !tail.isEmpty {
-                result.append(AttributedString(tail))
-            }
-        } else {
-            result.append(AttributedString(token))
-        }
-        cursor = match.range.location + match.range.length
-    }
-    if cursor < ns.length {
-        result.append(AttributedString(ns.substring(from: cursor)))
-    }
-}
-
-/// Heading hierarchy inside bubbles; everything else rides the body voice.
-/// Dynamic Type (Task 85-e): headings scale with their semantic role —
-/// h1→.title2, h2→.title3, h3→.headline — at the same point size by default.
-private func proseFont(_ kind: ProseKind) -> Font {
-    switch kind {
-    case .h1: return Aero.responsive(16, .bold, relativeTo: .title2)
-    case .h2: return Aero.responsive(15, .bold, relativeTo: .title3)
-    case .h3: return Aero.responsive(14, .bold, relativeTo: .headline)
-    case .plain, .bullet, .numbered: return Aero.body()
-    }
-}
-
 // MARK: - Translate
 
 /// Sheet identity for `.sheet(item:)` — carries the tapped turn's source text.
@@ -1230,13 +976,7 @@ private struct MessageBubble: View, Equatable {
                         .foregroundStyle(Aero.text)
                     AuroraIndicator()
                 } else {
-                    ForEach(parsedSegments) { segment in
-                        if segment.isCode {
-                            codeBlock(segment)
-                        } else {
-                            proseBlock(segment)
-                        }
-                    }
+                    BlocksView(blocks: finalizedBlocks)
                     if !message.content.isEmpty {
                         actionRow
                     }
@@ -1270,94 +1010,36 @@ private struct MessageBubble: View, Equatable {
             .overlay(Circle().stroke(Aero.outline, lineWidth: 1))
     }
 
-    private var parsedSegments: [ContentSegment] {
+    /// Finalized content → ordered blocks (STEP 5). Empty content renders the
+    /// quiet ellipsis paragraph; everything else parses once and caches.
+    private var finalizedBlocks: [Block] {
         if message.content.isEmpty {
-            return [ContentSegment(id: 0, text: "…", isCode: false, language: nil)]
+            return [.paragraph(spans: [.text("…")], sourceStart: 0)]
         }
-        return Self.cachedSegments(for: message)
+        return Self.cachedBlocks(for: message)
     }
 
-    // MARK: Per-message parse cache (deep-perf pass 80-b)
+    // MARK: Per-message parse cache (deep-perf pass 80-b, STEP 5 upgrade)
 
-    /// Segment parse per finished message, keyed by turn id. LazyVStack rows
-    /// re-evaluate on every (re)materialisation — without the cache, scrolling
-    /// back through a thread re-ran the fence regex per bubble per pass.
-    /// NSCache auto-evicts under memory pressure; segments are style-free
-    /// data, so one entry serves both appearances.
-    private static let segmentCache = NSCache<NSString, SegmentBox>()
+    /// Block parse per finished message, keyed by turn id AND content — the
+    /// content suffix keeps a regenerated turn from serving a stale parse.
+    /// LazyVStack rows re-evaluate on every (re)materialisation — without the
+    /// cache, scrolling back through a thread re-parsed per bubble per pass.
+    /// NSCache auto-evicts under memory pressure; blocks are style-free data,
+    /// so one entry serves both appearances.
+    private static let blockCache = NSCache<NSString, BlockBox>()
 
-    private final class SegmentBox {
-        let segments: [ContentSegment]
-        init(_ segments: [ContentSegment]) { self.segments = segments }
+    private final class BlockBox {
+        let blocks: [Block]
+        init(_ blocks: [Block]) { self.blocks = blocks }
     }
 
-    private static func cachedSegments(for message: ChatViewModel.ChatMessage) -> [ContentSegment] {
-        let key = message.id.uuidString as NSString
-        if let box = segmentCache.object(forKey: key) { return box.segments }
-        let segments = parseContentSegments(message.content)
-        segmentCache.setObject(SegmentBox(segments), forKey: key)
-        return segments
-    }
-
-    /// One prose segment rendered as markdown-lite: headings, bullets, numbered
-    /// lists, inline styling — mirror of the Android ProseBlock.
-    private func proseBlock(_ segment: ContentSegment) -> some View {
-        let lines = segment.text
-            .components(separatedBy: "\n")
-            .compactMap(classifyProseLine)
-        return VStack(alignment: .leading, spacing: 4) {
-            if lines.isEmpty {
-                Text(" ")
-                    .font(Aero.body())
-            } else {
-                ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        if !line.marker.isEmpty {
-                            Text(line.marker)
-                                .font(Aero.body())
-                                .foregroundStyle(Aero.accent)
-                        }
-                        Text(renderInline(line.text, monoBackground: Aero.container))
-                            .font(proseFont(line.kind))
-                            .foregroundStyle(Aero.text)
-                            .textSelection(.enabled)
-                    }
-                }
-            }
-        }
-    }
-
-    /// Fenced code block styled like the benchmark apps: language label, copy,
-    /// monospaced body. An unterminated trailing fence (mid-stream) renders live.
-    private func codeBlock(_ segment: ContentSegment) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text(segment.language ?? "code")
-                    .font(Aero.label())
-                    .foregroundStyle(Aero.textMuted)
-                Spacer()
-                CodeCopyButton(text: segment.text)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            if segment.text.isEmpty {
-                Text("…")
-                    .font(.system(size: 12, weight: .regular, design: .monospaced))
-                    .foregroundStyle(Aero.text)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 10)
-                    .textSelection(.enabled)
-            } else {
-                highlightedCode(segment.text, language: segment.language)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 10)
-                    .textSelection(.enabled)
-            }
-        }
-        .background(RoundedRectangle(cornerRadius: 12).fill(Aero.container))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Aero.outline, lineWidth: 1))
+    private static func cachedBlocks(for message: ChatViewModel.ChatMessage) -> [Block] {
+        let key = "\(message.id.uuidString):\(message.content)" as NSString
+        if let box = blockCache.object(forKey: key) { return box.blocks }
+        let blocks = parseBlocks(message.content)
+        blockCache.setObject(BlockBox(blocks), forKey: key)
+        return blocks
     }
 
     /// Step 4 hierarchy: the visible row carries the three high-frequency
@@ -1415,28 +1097,6 @@ private struct MessageBubble: View, Equatable {
                 Label("Share", systemImage: "square.and.arrow.up")
             }
         }
-    }
-}
-
-/// Code-header copy with its own checkmark confirmation.
-private struct CodeCopyButton: View {
-    let text: String
-    @State private var copied = false
-
-    var body: some View {
-        Button {
-            UIPasteboard.general.string = text
-            GSHaptics.success()
-            withAnimation(.easeOut(duration: 0.15)) { copied = true }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
-                withAnimation(.easeIn(duration: 0.2)) { copied = false }
-            }
-        } label: {
-            Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                .foregroundStyle(copied ? Aero.accent : Aero.textMuted)
-        }
-        .buttonStyle(KineticPressStyle())
-        .accessibilityLabel(copied ? "Copied" : "Copy code")
     }
 }
 
