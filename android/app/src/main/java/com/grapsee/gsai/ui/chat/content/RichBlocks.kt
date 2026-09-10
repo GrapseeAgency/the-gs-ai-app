@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -358,11 +360,13 @@ private fun NestedChildView(block: Block, selectable: Boolean) {
 
 @Composable
 private fun BlockQuoteView(block: Block.BlockQuote, selectable: Boolean) {
-    Row {
+    // IntrinsicSize.Min + fillMaxHeight: the accent bar spans the FULL quote
+    // height (multi-line quotes keep one continuous bar), matching the iOS twin.
+    Row(modifier = Modifier.height(IntrinsicSize.Min)) {
         Box(
             modifier = Modifier
                 .width(3.dp)
-                .height(20.dp)
+                .fillMaxHeight()
                 .clip(RoundedCornerShape(2.dp))
                 .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.55f))
         )
