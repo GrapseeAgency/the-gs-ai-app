@@ -2538,3 +2538,93 @@ Stage Summary:
 - Smoke review verdict: Step 5 renderer pipeline is sound on all the user's manual-test axes (markdown, links/security, code, tables, math, mermaid, streaming, actions, themes, a11y); one cosmetic defect (Android quote bar) found and fixed pre-build.
 - Known limitations (honest, unchanged from Step 5 commit): class/state/er/journey/gantt/mindmap + subgraphs → "Diagram unavailable" fallback with source viewer; citations/tool blocks render only with real backend metadata (seams, never faked); image block needs real https URLs; iOS inline code-block highlight is finalize-time only (stream shows plain mono).
 - NEXT: user installs APK and runs the manual device audit; NO Step 6 until explicit pass.
+
+---
+Task ID: F-1
+Agent: general-purpose (forensic timeline)
+Task: UI/UX commit timeline forensics for full reconciliation (read-only)
+
+Work Log:
+- Read worklog.md (Tasks 1-89 + Steps 1-5 + S5-build entries) and the full git log to frame the eras; verified HEAD = 783ff3d (hash-noise + .zscripts/dev.pid only) and tag v0.60.0 -> 0975be3.
+- For each non-trivial commit 0975be3..HEAD (102b5fe, e0f5cd7, 5e37a4d, fe213c7, 052560f, 328ec33, 21be974, fe9bd1c) captured git show --stat --format=fuller and read targeted diffs of the load-bearing files (ChatStreamController.kt, MainActivity/themes.xml, Tokens.kt, GsButtons/GsOverlays, GsRoutes/GsNavHost/GsDrawer/AeroDrawer, HomeScreen/HomeView, ChatScreen/ChatDetailView/NetworkMonitor, the Content/ packages, RichBlocks blockquote fix).
+- Read the v0.60.0 baseline sources (HomeScreen.kt, ChatScreen.kt, GsDrawer.kt, DesignSystem.swift at 0975be3) to document the visual character the user remembers; condensed the Tasks 1-85 pre-rebuild evolution (Aeruo Kinetic freeze, obsidian Home + drawer, feature waterfall v0.3-0.42, perf passes v0.43-0.48, native pass v0.56, native-feel/quality v0.58-0.59, audit v0.60).
+- Extracted the complete versionCode/versionName table from git log -p --follow on android/app/build.gradle.kts (61 entries, last bump = 0975be3 at 61/0.60.0) and verified the device-validation APK record in the worklog (sha256 61838b21e828f76e1d4f8f48574f16c2de9bfad2e93273c3d4b54c0d6a96a20a, 19,985,255 bytes, gs-live cert b1ffd75d…a483).
+- Ran the D4 diff shape: git diff --stat/--numstat/--diff-filter A|D 0975be3 HEAD with Android/iOS LOC split and top-25 churn ranking. No source files modified; no builds run.
+
+Stage Summary:
+- NOTHING after 0975be3 was released or bumped: HEAD and v0.60.0 are both versionCode 61 / versionName 0.60.0; the only build artifact is the Step-5 device-validation APK (sha256 61838b21…a20a) built from 21be974 + the fe9bd1c blockquote fix.
+- The perceived "developer-oriented" shift is real and localized: Step 3 (052560f) deleted the rotating tagline, Upgrade pill, Trending fiction and chip wall from Home; Step 5 (21be974, +6,182/−770) replaced markdown-lite with a typed content-block pipeline (headings/tables/math/native Mermaid — MermaidDiagram.kt 955 lines is the largest new file).
+- The diff is additive-only: 92 files, +12,662/−2,672 (Android +6,566/−1,431, iOS +5,332/−1,239), 24 new code files, ZERO deleted files, zero new dependencies, zero WebView.
+- Performance mechanisms from the fast build were preserved by the Steps (30 Hz isolated streaming bubble, frozen-block incremental parse on Android, finalize-time render on iOS, reduce-motion gates) — but the new renderer surface (content parsing + Mermaid + document layout) and the 220 ms section-switch nav tier are the plausible next profiling targets; device-validation/CHECKLIST.md already exists for that audit.
+- Full structured report (D1 per-commit evidence, D2 pre-rebuild narrative, D3 version/artifact record, D4 diff shape) delivered in the agent response.
+
+---
+Task ID: F-3
+Agent: Explore (iOS UI inventory)
+Task: read-only full iOS UI inventory for forensic reconciliation
+Work Log:
+- Read all 52 SwiftUI/source files under ios/App/Sources (18,908 LOC; wc -l per file) incl. every view body: DesignSystem, GSApp/AppRouter/AeroDrawer, all 32 feature screens, all 7 chat content renderers, all 11 networking stores (ChatViewModel streaming path read line-by-line).
+- Mapped navigation ground truth: no tab bar (AeroTab enum is dead code); single NavigationStack + 26-case AeroRoute + AeroDrawer overlay (340pt panel, finger-tracked edge reveal/close); iPad has no columns — only the 640pt content clamp.
+- Enumerated every sheet/alert/confirmationDialog/contextMenu/modifier site (31 modal sites, 9 context menus), every animation + its reduce-motion gate, and every model-selection surface (Home pill, chat chip + sheet, ModelCentre, ModelCompare, Settings row).
+- Extracted the full Aero token table (40 named colors / 94 literals all in DesignSystem.swift, 12 type roles w/ relativeTo, spacing/radius/640pt column), and grepped hard-coded colours outside the token file: exactly 2 (Color.black shadows, AeroDrawer:115 + ChatDetailView:356).
+- Performed chat + home deep dives (StreamAccumulator 33ms/~30Hz flush, finalize-only block parse w/ NSCache, full action-row + menu enumeration, per-block chrome, find bar, edit flow; Home top-to-bottom element + count audit).
+- Flagged fake/placeholder data per screen (≈20 surfaces) and 1 compile risk: unresolved git conflict marker at ExploreView.swift:183. No files modified; no builds run.
+
+Stage Summary:
+- Token discipline is strong and the benchmark-app architecture is real (drawer + 640pt reading column, honest empty/error states, reduce-motion gating on every decorative loop), but the UI carries heavy developer-oriented drift: 8-model catalog jargon + "128K context" on 5 surfaces, Settings/Onboarding "Reasoning Low/Medium/High" chips wired to nothing, tool-status text ("completed/failed", "Reading 5 sources"), a fake Kotlin IDE (CodeWorkspace), and "GS LiveUpdate" claimed on iOS.
+- Fabrication map: Research, Vision, Image/Writing/Code studios are end-to-end fake (sleep timers → canned synthesis/detections/drafts/placeholder tiles); Folders, Shared chats, Library seeds, Explore prompts/tools, 8 assistant samples, Billing (Visa •• 4242, 240 credits), Notifications (8 samples), Profile (usage/identity) are hard-coded; GS Lite offline replies are deliberately engineered to hide offline state.
+- Real, working core: chat streaming + rich blocks (code/table/math/mermaid native), SQLite search, Library saves, Projects/Assistants stores, Voice mode (SFSpeechRecognizer + TTS), JSON export, Settings persistence, model-pick persistence + registry-gated send.
+- Defects found: ExploreView.swift:183 contains an unresolved merge-conflict marker (compile risk); Settings "Default model" subtitle hard-codes "GS Balanced"; AssistantDetailView ignores a user assistant's stored instructions (category template) and hard-codes starters/capabilities; onboarding selections incl. display name are never persisted; 2 raw Color.black literals outside tokens; AeroSheetShell used by only 1 of ~6 sheets.
+- NEXT: reconcile inventory against the design spec; prioritise killing the conflict marker, unifying sheet chrome, and deciding keep/kill per fabricated surface (Research, Vision, studios, Folders, Shared) before any "consumer-first" restyle.
+
+---
+Task ID: F-2
+Agent: Explore (Android UI inventory)
+Task: read-only full Android UI inventory for forensic reconciliation
+Work Log:
+- Read every ui/ file end-to-end (~16.8k LOC): theme (Color/Tokens/Type/Theme/Motion/GsHaptics), navigation (GsRoutes/GsNavHost/GsDrawer), shared components, ChatScreen (1792) + content renderer stack (ContentBlocks/RichBlocks/CodeBlockCard/Mermaid/Math), HomeScreen (1177), and all 25+ screens incl. sheets/dialogs/menus; grepped Color(0x, AlertDialog/ModalBottomSheet/DropdownMenu/Dialog, model surfaces.
+- Verified design-token discipline: 49-field semantic GsColors (light/dark/high-contrast constructors) over 46 raw Aeruo values; ZERO hard-coded colors outside theme files; 15 Material type slots + 4 custom roles; 7 radii / 7 spacings / 3 elevations / 640dp content clamp.
+- Enumerated nav: 32 routes, SECTION(13)/SESSION(2)/DETAIL classes, per-class transitions (220ms section fade-settle, 320ms detail slide+parallax, None under reduce-motion), 304dp drawer with full row map, back/overlay BackHandler discipline.
+- Chat deep dive: header (search + "GS Balanced · Balanced" chip + overflow menu w/ all 8 models), document-style assistant turns (no bubble), 4 visible actions (Copy/Regenerate/Read aloud/Share) + 3 long-press (Translate/Save to Library/Branch) + timestamp, user bubble 340dp w/ Copy+Edit+truncating edit, composer attach/input(1-6 lines)/mic + in-slot stop control + 4dp aurora live bar, day pills, 60-page scroll-up pagination, ~30Hz single-bubble streaming with frozen-prefix block parse.
+- Audited every screen for real vs fake data; catalogued all fabricated surfaces (Research, Vision, studios, Billing, Profile identity, Shared, Folders, Notifications, marketplace stats) vs real ones (Chat, Search, ChatSearch, Library saves, Projects, user assistants, Settings appearance/accessibility, Voice, LiveUpdate).
+Stage Summary:
+- Token system is clean and complete (zero off-token colors; aurora trio #2DD4A8/#4CC3FF/#9D7BFF reserved for AI moments; everything else neutral paper/obsidian) — the "developer drift" is NOT a styling problem.
+- Drift is conceptual, concentrated in 3 places: (1) ModelCentre + ModelCompare expose a model registry (8 reasoning-mode chips, "128K context", speed dots, capability taxonomy); (2) Home/Chat header model pills render mode suffixes ("GS Balanced · Balanced"); (3) Settings/Onboarding carry "Reasoning effort" and duplicate model rows (one hardcoded "GS Balanced" contradicting the real row below it).
+- Large fake surface area inflates perceived complexity: Research, Vision, Image/Writing/Code studios, Billing, Shared chats, Folders, Notifications, Profile (hardcoded "Grapsee Admin / graphesee@gmail.com") are sample data or no-op controls, vs genuinely real Chat/Search/Library/Projects cores.
+- Assistant message anatomy is already document-style and quiet (8 affordances/turn total); visual complexity per screen is moderate (Home ≤9 cards/6 orbs; biggest chip walls: ModelCentre 8 mode chips, Explore ~12 category chips, Onboarding 12 interest chips).
+- Full structured report delivered in agent response (sections I1-I10) with file map, LOC, token hex values, control counts, animation gating table (notable: chat aurora bar + Voice waveform deliberately not reduce-motion gated; Onboarding step slides un-gated).
+
+---
+Task ID: F-4
+Agent: general-purpose (performance forensics)
+Task: read-only performance regression analysis 0975be3..HEAD
+Work Log:
+- Diffed the full UI-rebuild delta (5e37a4d→fe9bd1c): 44 Android files +6,566/-1,431; read current ChatScreen.kt (1792 ln), ContentBlocks/RichBlocks/CodeBlockCard/SyntaxHighlight/InlineMarkdown/MathText/MermaidDiagram (~3,100 ln) fully, and extracted + read the 0975be3 twins (old ChatScreen 1825 ln incl. parseContentSegments/StreamParseCache/SegmentedContent, old streaming loop, old HomeScreen).
+- Traced the Android streaming hot path old→new: 33ms/30Hz coalescing + StringBuilder + app-scoped ChatStreamController (new file, cadence identical), single-bubble recompose isolation preserved; the delta is entirely inside BlocksContent: `remember(content,isStreaming){cache.update()}` → parseStreamingBlocks per flush.
+- Found parseStreamingBlocks' frozen-prefix contract breaks whenever the last block's sourceStart==0 — which is ALWAYS true for lists (sourceStart hardcoded 0 at buildList) and for the first paragraph — triggering full parseBlocks + full-document deep-equals every 33ms; the old incremental parse only ever re-ran one precompiled fence regex over the tail.
+- Audited rich blocks: highlight finalize-only preserved, Math/Mermaid finalize-only (Mermaid never laid out mid-stream), fe9bd1c added IntrinsicSize.Min blockquote + 2-axis code scroll + horizontalScroll tables/math; image blocks have no cross-disposal bitmap cache.
+- Verified preserved mechanisms: baseline-prof.txt unchanged, ProfileInstaller, HISTORY_PAGE=60 paging, formatter caches, derivedStateOf isAtBottom, LazyColumn key=id (+ NEW contentType improvement), aurora draw-phase, Home animation inventory identical (tagline loop removed = improvement); iOS: plain-Text 30Hz live bubble + finalize-only BlocksView + NSCache (key improved) + Equatable MessageBubble + StreamAccumulator all intact.
+Stage Summary:
+- #1 suspect (HIGH, static-inferred): list-tailed/first-paragraph streams fall back to full-document re-parse + structural-equals scan per flush (ContentBlocks.kt:507-513 + sourceStart=0 at :448/:450) — the exact shape of most assistant answers.
+- #2 suspect (MEDIUM-HIGH): per-flush tail constant inflated ~10x — line→block re-parse granularity (9 line-regexes/line, 16-alternation inline regex, span-tree allocations) and whole-tail-block re-render (non-lazy Column of every list item) vs old last-line-only rendering.
+- #3 (MEDIUM): 30Hz allocation churn (Block/Line/InlineSpan/AnnotatedString/SpanTheme/Shape objects) → GC pressure; finalize hitch heavier (SelectionContainer per paragraph + highlight + tables/quotes in one frame) and remember(block) resets Collapsible/ToolResult expanded state.
+- #4 (LOW-MED): fe9bd1c IntrinsicSize.Min blockquote double-measures; nested 2-axis code scroll + horizontal tables/math add measure passes inside LazyColumn items; images re-fetch on scroll return.
+- iOS streaming path NOT regressed (plain text at 30Hz, rich render once at finalize); no FPS/latency numbers measured — static analysis only, full report in agent response.
+---
+Task ID: F-RECON (coordinator) with F-1..F-4 subagents
+Agent: Z.ai Code (main — coordinator) + 4 forensic subagents
+Task: READ-ONLY forensic reconciliation of UI/UX and performance (user reported: newer build slower + drifting developer-oriented). No implementation permitted.
+
+Work Log:
+- Froze state: HEAD 783ff3d, known-good 0975be3 (v0.60.0, 61/0.60.0), APK 61838b21…a20a verified; delta = UI rebuild Steps 1–5 only (92 files, +12,662/−2,672).
+- F-1 timeline: per-commit forensic detail for 102b5fe/e0f5cd7/Steps 1–5/fe9bd1c + condensed Tasks 1–85 narrative + version/APK record.
+- F-2 Android inventory: every screen/sheet/dialog/state inventoried from view bodies; 49-token audit (zero off-token colors); model surfaces mapped (7); complexity counts per screen.
+- F-3 iOS inventory: same depth; found ExploreView.swift:183 unresolved conflict marker (compile error the static gates cannot catch); fabricated-estate census; AeroTab dead code.
+- F-4 performance: static analysis 0975be3..HEAD; HIGH = parseStreamingBlocks full-parse fallback whenever last block sourceStart<=0 (ALWAYS true for lists + first paragraph) → O(document) parse + deep-equals at 30Hz; plus tail-constant inflation, 30Hz allocation churn, finalize hitch + remember(block) state loss; iOS path confirmed intact.
+- Coordinator personally verified: ContentBlocks.kt:448/450/508 (fallback), ModelCentre jargon, both hardcoded "GS Balanced" rows, conflict marker at file level, iOS gate passes despite marker (gate blind to this class), Home composer is entry-not-composer, completeness cross-check of all 32 Android / 34 iOS UI files.
+- Full report written to docs/forensic-ui-ux-performance-reconciliation.md (sections A–W).
+
+Stage Summary:
+- Verdict: visual SYSTEM (tokens/themes/chat anatomy/streaming architecture) should be KEPT (~70%); product HIERARCHY must be redesigned (model registry demoted, Home recomposed conversation-first, ~25%); fabricated estate DELETED (~20 surfaces incl. fake IDE, billing fiction, fake pipelines); parser regression fixed surgically (F1/F2/F3/F4).
+- Top defects: iOS conflict marker (blocker), streaming full-parse fallback (high), expand-state loss, Settings contradictions, AssistantDetail ignoring stored instructions, onboarding persistence absent.
+- NOTHING implemented. Awaiting explicit user instruction.
