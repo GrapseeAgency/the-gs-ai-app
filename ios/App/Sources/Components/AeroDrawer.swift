@@ -113,7 +113,8 @@ struct AeroDrawer: View {
             }
         }
         .padding(.top, Aero.Spacing.xl)
-        .frame(width: panelWidth, maxHeight: .infinity, alignment: .top)
+        .frame(width: panelWidth, alignment: .top)
+        .frame(maxHeight: .infinity, alignment: .top)
         .background(panel)
         .shadow(color: Color.black.opacity(0.18), radius: 24, x: 8)
         .offset(x: entryOffset + closeOffset)

@@ -361,8 +361,8 @@ struct ChatDetailView: View {
                 },
                 onBranch: { vm.branch(at: index) }
             )
+            .id(message.id)
         }
-        .id(message.id)
     }
 
     /// 1pt row after the newest turn — materialized ⇔ the reader is at the
