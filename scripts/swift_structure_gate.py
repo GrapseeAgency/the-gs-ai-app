@@ -20,10 +20,17 @@ The tokenizer is Swift-aware so depth tracking is honest:
   carries balance-relevant braces in this codebase; covered by tests below)
 """
 import glob
+import os
 import re
 import sys
 
-FILES = sorted(glob.glob("/home/z/my-project/ios/App/Sources/**/*.swift", recursive=True))
+# Repo-relative (portable to CI runners) — a hardcoded sandbox path matched
+# zero files elsewhere, which would silently disable the gate (false green).
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+FILES = sorted(glob.glob(os.path.join(_REPO_ROOT, "ios", "App", "Sources", "**", "*.swift"), recursive=True))
+if not FILES:
+    print("FATAL: gate matched zero Swift sources — path resolution broken", file=sys.stderr)
+    sys.exit(2)
 
 # A declaration opener we care about at file scope (with member-style indentation).
 DECL_KEYWORDS = (

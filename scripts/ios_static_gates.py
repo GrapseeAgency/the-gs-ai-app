@@ -16,7 +16,14 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from swift_structure_gate import structural_issues  # noqa: E402
 
 # Auto-cover every Swift source so new feature files can never escape the gate.
-FILES = sorted(glob.glob("/home/z/my-project/ios/App/Sources/**/*.swift", recursive=True))
+# Repo-relative (portable to CI runners) — the previous hardcoded
+# /home/z/my-project path silently matched zero files on any other machine,
+# producing a false-green gate.
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+FILES = sorted(glob.glob(os.path.join(_REPO_ROOT, "ios", "App", "Sources", "**", "*.swift"), recursive=True))
+if not FILES:
+    print("FATAL: gate matched zero Swift sources — path resolution broken", file=sys.stderr)
+    sys.exit(2)
 
 BANNED = [
     r"\.fontDesign", r"SwiftData", r"@Observable", r"ContentUnavailableView",

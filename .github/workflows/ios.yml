@@ -1,0 +1,185 @@
+name: iOS (macOS) — Xcode build & test
+
+# REAL compilation verification on a GitHub-hosted macOS runner.
+#
+# This workflow is the iOS compile gate. The Python static gates
+# (scripts/ios_static_gates.py, scripts/swift_structure_gate.py) are
+# supplementary structural checks only — they are NOT a substitute for
+# Xcode compilation and are run here merely as a cheap pre-flight.
+#
+# Code signing: intentionally disabled (project.yml sets
+# CODE_SIGNING_ALLOWED=NO and the workflow passes it explicitly), so
+# headless CI needs no certificates, provisioning profiles, or team ID.
+# The artifacts produced are unsigned simulator builds/archives.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "ios/**"
+      - ".github/workflows/ios.yml"
+      - "scripts/ios_static_gates.py"
+      - "scripts/swift_structure_gate.py"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ios-build-test:
+    name: Compile + test (macOS runner, real Xcode)
+    runs-on: macos-15
+    timeout-minutes: 60
+
+    env:
+      PROJECT_DIR: ios
+      PROJECT_FILE: ios/GSApp.xcodeproj
+      SCHEME: GSApp
+      DERIVED_DATA: ios/build/DerivedData
+
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Host toolchain report (before selection)
+        run: |
+          sw_vers
+          xcode-select -p
+          xcodebuild -version
+          swift --version || true
+
+      - name: Select Xcode (latest stable available on the runner image)
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Toolchain report (after selection — recorded for the report)
+        run: |
+          echo "xcodebuild: $(xcodebuild -version | tr '\n' ' ')"
+          echo "iOS SDK: $(xcrun --sdk iphoneos --show-sdk-version)"
+          swift --version
+          echo "XCODE_VERSION=$(xcodebuild -version | head -1 | awk '{print $2}')" >> "$GITHUB_ENV"
+
+      - name: Static validation (supplementary — NOT a substitute for compilation)
+        run: |
+          python3 scripts/ios_static_gates.py
+          python3 scripts/swift_structure_gate.py
+
+      - name: Generate Xcode project (XcodeGen)
+        run: |
+          brew install xcodegen
+          cd "$PROJECT_DIR"
+          xcodegen generate
+          test -d GSApp.xcodeproj || { echo "::error::GSApp.xcodeproj was not generated"; exit 1; }
+          xcodebuild -list -project GSApp.xcodeproj
+
+      - name: Resolve available iPhone simulator destination
+        run: |
+          xcrun simctl list devices available
+          NAME=$(xcrun simctl list devices available \
+            | sed -n 's/^[[:space:]]*\(iPhone[^()]*\) ([^)]*) ([^)]*)$/\1/p' \
+            | head -1 | xargs)
+          if [ -z "$NAME" ]; then
+            echo "::error::No available iPhone simulator found on runner image"
+            exit 1
+          fi
+          DEST="platform=iOS Simulator,name=${NAME},OS=latest"
+          echo "IOS_DESTINATION=$DEST" >> "$GITHUB_ENV"
+          echo "Using destination: $DEST"
+
+      - name: Build (real Xcode compilation of the iOS target)
+        run: |
+          set -o pipefail
+          mkdir -p ios/build
+          xcodebuild build \
+            -project "$PROJECT_FILE" \
+            -scheme "$SCHEME" \
+            -configuration Debug \
+            -destination "$IOS_DESTINATION" \
+            -derivedDataPath "$DERIVED_DATA" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            2>&1 | tee ios/build/xcodebuild-build.log
+
+      - name: Test (XCTest unit tests on iOS simulator)
+        run: |
+          set -o pipefail
+          RESULT_BUNDLE="ios/build/GSApp-tests-$(date +%Y%m%dT%H%M%S).xcresult"
+          rm -rf "$RESULT_BUNDLE"
+          xcodebuild test \
+            -project "$PROJECT_FILE" \
+            -scheme "$SCHEME" \
+            -destination "$IOS_DESTINATION" \
+            -derivedDataPath "$DERIVED_DATA" \
+            -resultBundlePath "$RESULT_BUNDLE" \
+            CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee ios/build/xcodebuild-test.log
+
+      - name: Package — zip unsigned simulator .app
+        run: |
+          APP_PATH="ios/build/DerivedData/Build/Products/Debug-iphonesimulator/GSApp.app"
+          test -d "$APP_PATH" || { echo "::error::Compiled GSApp.app not found"; exit 1; }
+          cd "$(dirname "$APP_PATH")"
+          zip -qry "$GITHUB_WORKSPACE/ios/build/GSApp-simulator-debug.zip" GSApp.app
+          ls -l "$GITHUB_WORKSPACE/ios/build/GSApp-simulator-debug.zip"
+
+      - name: Archive — unsigned Release xcarchive (packaging evidence)
+        run: |
+          set -o pipefail
+          rm -rf ios/build/GSApp.xcarchive
+          xcodebuild archive \
+            -project "$PROJECT_FILE" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -destination "generic/platform=iOS Simulator" \
+            -archivePath ios/build/GSApp.xcarchive \
+            CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee ios/build/xcodebuild-archive.log
+
+      - name: Summarise results
+        if: always()
+        run: |
+          APP_BUILT=$([ -d ios/build/DerivedData/Build/Products/Debug-iphonesimulator/GSApp.app ] && echo "YES" || echo "NO")
+          ARCHIVED=$([ -d ios/build/GSApp.xcarchive ] && echo "YES" || echo "NO")
+          TESTS=$(grep -Eo "Test Suite 'All tests' (passed|failed)" ios/build/xcodebuild-test.log 2>/dev/null | head -1 || echo "n/a")
+          {
+            echo "## iOS CI summary"
+            echo ""
+            echo "| Item | Value |"
+            echo "| --- | --- |"
+            echo "| Commit | \`${GITHUB_SHA}\` |"
+            echo "| Runner | \`${RUNNER_NAME}\` (${RUNNER_OS} ${ImageOS:-}) |"
+            echo "| Xcode | \`${XCODE_VERSION:-unknown}\` |"
+            echo "| App target compiled | ${APP_BUILT} |"
+            echo "| XCTest result | ${TESTS} |"
+            echo "| Unsigned xcarchive | ${ARCHIVED} |"
+            echo "| Code signing | disabled by design (unsigned artifacts) |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload build artifact (unsigned simulator app)
+        uses: actions/upload-artifact@v4
+        with:
+          name: GSApp-simulator-debug-${{ github.sha }}
+          path: ios/build/GSApp-simulator-debug.zip
+          if-no-files-found: error
+
+      - name: Upload unsigned Release xcarchive
+        uses: actions/upload-artifact@v4
+        with:
+          name: GSApp-xcarchive-unsigned-${{ github.sha }}
+          path: ios/build/GSApp.xcarchive
+          if-no-files-found: error
+
+      - name: Upload full xcodebuild logs (failure diagnostics)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build-logs-${{ github.run_id }}
+          path: ios/build/*.log
+          if-no-files-found: ignore
