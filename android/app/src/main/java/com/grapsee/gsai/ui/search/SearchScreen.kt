@@ -179,7 +179,9 @@ fun SearchScreen(onNavigate: (String) -> Unit) {
                 SearchHit(
                     HitKind.ASSISTANTS,
                     assistant.name,
-                    "${assistant.category} · ★ ${String.format(java.util.Locale.US, "%.1f", assistant.rating)}",
+                    // PHASE 2: category only — the ★ rating was fabricated
+                    // marketplace telemetry.
+                    assistant.category,
                     GsRoutes.assistant(assistant.id)
                 )
             }

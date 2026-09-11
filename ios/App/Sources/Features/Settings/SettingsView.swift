@@ -140,12 +140,22 @@ struct SettingsView: View {
 
     // MARK: Chat
 
+    /// The REAL default-model row (Phase 2 honesty fix): the subtitle is the
+    /// live stored pick — the same UserDefaults key the send path reads —
+    /// never a hardcoded name. Tap opens the Model Centre.
+    private var defaultModelName: String {
+        let storedID = UserDefaults.standard.string(forKey: "gs.models.defaultId") ?? "gs-balanced"
+        return ModelInfo.catalog.first { $0.id == storedID }?.name
+            ?? ModelInfo.catalog.first { $0.isDefault }?.name
+            ?? "Default"
+    }
+
     private var chatSection: some View {
         section("Chat") {
             NavigationLink(value: AeroRoute.models) {
                 AeroListRow(
                     title: "Default model",
-                    subtitle: "GS Balanced",
+                    subtitle: defaultModelName,
                     leading: {
                         Image(systemName: "sparkles")
                             .font(.system(size: 14))
@@ -168,19 +178,13 @@ struct SettingsView: View {
 
     // MARK: AI
 
+    /// The "Reasoning effort" Low/Medium/High chips are DELETED (Phase 2):
+    /// they persisted a value that nothing in the pipeline reads. Memory and
+    /// Personalisation stay — they are honest preferences.
     private var aiSection: some View {
         section("AI") {
             toggleRow("Memory", isOn: $settings.memory)
             toggleRow("Personalisation", isOn: $settings.personalisation)
-            HStack(spacing: Aero.Spacing.s) {
-                ForEach(["Low", "Medium", "High"], id: \.self) { level in
-                    AeroChip(text: level, selected: settings.reasoning == level) {
-                        GSHaptics.select()
-                        settings.reasoning = level
-                    }
-                }
-                Spacer()
-            }
         }
     }
 
@@ -230,25 +234,13 @@ struct SettingsView: View {
 
     // MARK: Security
 
+    /// Only the REAL controls remain (Phase 2): the fabricated "Two-factor:
+    /// On" and "Trusted devices: 2" values are gone — nothing was measured
+    /// behind them. The passcode toggles persist locally and stay.
     private var securitySection: some View {
         section("Security") {
             toggleRow("App passcode", isOn: $settings.appPasscode)
             toggleRow("Biometric unlock", isOn: $settings.biometricUnlock)
-            AeroListRow(
-                title: "Two-factor",
-                subtitle: "Authenticator app",
-                leading: { leadingIcon("lock.shield") },
-                trailing: { AeroChip(text: "On", selected: true) }
-            )
-            AeroListRow(
-                title: "Trusted devices",
-                leading: { leadingIcon("desktopcomputer") },
-                trailing: {
-                    Text("2")
-                        .font(Aero.caption())
-                        .foregroundStyle(Aero.textMuted)
-                }
-            )
         }
     }
 
@@ -336,11 +328,13 @@ struct SettingsView: View {
 
     // MARK: About
 
+    /// Version + build only (Phase 2 honesty fix): the "Automatic via GS
+    /// LiveUpdate" row is gone — LiveUpdate is an Android-only distribution
+    /// mechanism and iOS does not have it.
     private var aboutSection: some View {
         section("About") {
             valueRow("Version", value: appVersion)
             valueRow("Build", value: buildNumber)
-            valueRow("Updates", value: "Automatic via GS LiveUpdate")
         }
     }
 

@@ -19,7 +19,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.ContentCopy
@@ -29,11 +28,9 @@ import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.TipsAndUpdates
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SnackbarHost
@@ -60,47 +57,25 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import com.grapsee.gsai.data.local.SavedItemEntity
 import com.grapsee.gsai.di.ServiceLocator
 import kotlinx.coroutines.launch
-import com.grapsee.gsai.ui.components.GsCard
 import com.grapsee.gsai.ui.components.GsChip
 import com.grapsee.gsai.ui.components.GsEmptyState
 import com.grapsee.gsai.ui.components.GsInputBar
 import com.grapsee.gsai.ui.components.GsListItem
 import com.grapsee.gsai.ui.components.GsScreenScaffold
-import com.grapsee.gsai.ui.components.GsSectionHeader
 import com.grapsee.gsai.ui.navigation.GsRoutes
 import com.grapsee.gsai.ui.theme.GsMotion
 
 /**
  * AERUO KINETIC — LIBRARY, the personal knowledge space.
  * Live search sits above the index; filter chips switch the saved-items
- * index; collections sit above as horizontal editorial cards. Files filter
- * has no samples yet → empty state.
+ * index. Everything shown is a real save from the chat surface (Room is
+ * the source of truth) — the hardcoded sample documents/images/prompts and
+ * the fake "Collections" cards that used to sit above the list are gone,
+ * and an empty library says so honestly.
  */
 
 private val libraryFilters = listOf(
     "All", "Messages", "Documents", "Images", "Files", "Prompts"
-)
-
-private data class LibraryItem(
-    val title: String,
-    val subtitle: String,
-    val icon: ImageVector,
-    val kind: String
-)
-
-private val libraryItems = listOf(
-    LibraryItem("Q3 report.pdf", "Document · 1h ago", Icons.Outlined.Description, "Documents"),
-    LibraryItem("Brand guidelines.docx", "Document · 3d ago", Icons.Outlined.Description, "Documents"),
-    LibraryItem("hero-banner-v2.png", "Image · yesterday", Icons.Outlined.Image, "Images"),
-    LibraryItem("Cold email sequence prompt", "Prompt · last week", Icons.Outlined.TipsAndUpdates, "Prompts")
-)
-
-private data class Collection(val name: String, val count: String)
-
-private val collections = listOf(
-    Collection("Brand kit", "12 items"),
-    Collection("Research papers", "8 items"),
-    Collection("Design refs", "21 items")
 )
 
 /** A saved item's kind string maps onto the Library chip that owns it. */
@@ -117,24 +92,20 @@ fun LibraryScreen(onNavigate: (String) -> Unit) {
     var selectedFilter by remember { mutableIntStateOf(0) }
     val filter = libraryFilters[selectedFilter]
 
-    // Live search over the whole library — titles and contents of real saves,
-    // titles of the sample rows. Empty term passes everything, so the chips
-    // keep their meaning and the two gates simply compose.
+    // Live search over the whole library — titles and contents of real saves.
+    // Empty term passes everything, so the chips keep their meaning and the
+    // two gates simply compose.
     var searchQuery by remember { mutableStateOf("") }
     val term = searchQuery.trim()
     val matchesTerm: (String) -> Boolean = { text ->
         term.isEmpty() || text.contains(term, ignoreCase = true)
     }
 
-    val visibleItems = libraryItems.filter {
-        (selectedFilter == 0 || it.kind == filter) && matchesTerm(it.title)
-    }
-
     // Real saves from the chat surface and the studios — persist in Room, render
     // under the chip that owns their kind (messages, images, documents…).
     val savedItems by remember { ServiceLocator.chat.savedItems() }
         .collectAsState(initial = emptyList())
-    val realVisible = savedItems.filter {
+    val visible = savedItems.filter {
         (selectedFilter == 0 || filterLabelFor(it.kind) == filter) &&
             (matchesTerm(it.title) || matchesTerm(it.content))
     }
@@ -157,18 +128,7 @@ fun LibraryScreen(onNavigate: (String) -> Unit) {
         modifier = Modifier
             .fillMaxSize()
     ) {
-        GsScreenScaffold(
-            title = "Library",
-            actions = {
-                IconButton(onClick = {}) {
-                    Icon(
-                        imageVector = Icons.Outlined.Add,
-                        contentDescription = "Add to library",
-                        tint = MaterialTheme.colorScheme.onBackground
-                    )
-                }
-            }
-        ) {
+        GsScreenScaffold(title = "Library") {
             // Virtualised index: the library grows without bound, so the item
             // list is lazy — only what's on screen composes or lays out, and
             // a thousand saves scroll exactly as smoothly as ten.
@@ -186,25 +146,28 @@ fun LibraryScreen(onNavigate: (String) -> Unit) {
                     )
                 }
                 item(key = "filters") { FilterChips(selectedFilter, onSelect = { selectedFilter = it }) }
-                item(key = "collections") { CollectionsSection() }
-                if (realVisible.isEmpty() && visibleItems.isEmpty()) {
+                if (visible.isEmpty()) {
                     item(key = "empty") {
                         GsEmptyState(
                             icon = if (term.isEmpty()) Icons.Outlined.Folder else Icons.Outlined.Search,
-                            title = if (term.isEmpty()) "No ${filter.lowercase()} yet"
-                                    else "No matches for \"$term\"",
-                            message = if (term.isEmpty()) {
-                                "Saved ${filter.lowercase()} will collect here as you work."
-                            } else {
-                                "Try different words — or save something new from a chat or studio."
+                            title = when {
+                                term.isNotEmpty() -> "No matches for \"$term\""
+                                selectedFilter == 0 -> "Nothing saved yet"
+                                else -> "No saved ${filter.lowercase()} yet"
+                            },
+                            message = when {
+                                term.isNotEmpty() -> "Try different words — or save something new from a chat."
+                                selectedFilter == 0 -> "Save messages and files from your chats and they'll appear here."
+                                else -> "Save something from a chat and it will land under this filter."
                             }
                         )
                     }
                 } else {
-                    items(realVisible, key = { "save-${it.id}" }) { item ->
+                    items(visible, key = { "save-${it.id}" }) { item ->
                         val (badge, label) = when (item.kind) {
                             "image" -> Icons.Outlined.Image to "Saved image"
                             "document" -> Icons.Outlined.Description to "Saved document"
+                            "file" -> Icons.Outlined.Description to "Saved file"
                             else -> Icons.Outlined.BookmarkBorder to "Saved message"
                         }
                         GsListItem(
@@ -220,22 +183,6 @@ fun LibraryScreen(onNavigate: (String) -> Unit) {
                                 )
                             },
                             onClick = { viewingItem = item }
-                        )
-                    }
-                    items(visibleItems, key = { "sample-${it.title}" }) { item ->
-                        GsListItem(
-                            title = item.title,
-                            subtitle = item.subtitle,
-                            leading = { ItemBadge(item.icon) },
-                            trailing = {
-                                Icon(
-                                    imageVector = Icons.Outlined.MoreVert,
-                                    contentDescription = "More",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            },
-                            onClick = { onNavigate(GsRoutes.chat(null)) }
                         )
                     }
                 }
@@ -301,36 +248,6 @@ private fun FilterChips(selectedIndex: Int, onSelect: (Int) -> Unit) {
     ) {
         libraryFilters.forEachIndexed { index, label ->
             GsChip(text = label, selected = index == selectedIndex) { onSelect(index) }
-        }
-    }
-}
-
-@Composable
-private fun CollectionsSection() {
-    Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)) {
-        GsSectionHeader(title = "Collections")
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
-        ) {
-            collections.forEach { collection ->
-                GsCard(modifier = Modifier.width(150.dp)) {
-                    Text(
-                        text = collection.name,
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = collection.count,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
         }
     }
 }

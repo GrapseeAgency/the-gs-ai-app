@@ -15,6 +15,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.Arrangement
@@ -65,7 +66,6 @@ import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.Mic
-import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Save
@@ -240,10 +240,15 @@ fun ChatScreen(
     onBack: () -> Unit,
     // Voice press-and-hold hands its transcript to the composer through this.
     prefillPrompt: String? = null,
+    // PHASE 2 Home inline composer: when true, [prefillPrompt] is dispatched
+    // immediately on arrival (tap → type → send with no second keypress).
+    // One-shot guarded so process death / re-entry never re-sends.
+    autoSendInitialPrompt: Boolean = false,
     // Optional voice entry point — the main agent wires this to GsRoutes.VOICE in GsNavHost.
     onNavigateVoice: (() -> Unit)? = null,
-    // The model centre exists — the header's model controls route there / to
-    // the live default-model state this screen already sends with.
+    // The model centre exists — the header chip's sheet links there for the
+    // full catalogue ("About models"); the send path reads the live default
+    // model state this screen already sends with.
     onNavigateModels: (() -> Unit)? = null
 ) {
     val scope = rememberCoroutineScope()
@@ -640,6 +645,18 @@ fun ChatScreen(
         )
     }
 
+    // PHASE 2 Home: the inline composer dispatches straight into a new chat —
+    // the typed text arrives via the nav args and is sent exactly once. The
+    // one-shot guard survives process death (rememberSaveable), so restoring
+    // the entry never re-sends the prompt.
+    val autoSendConsumed = rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(prefillPrompt, autoSendInitialPrompt) {
+        if (autoSendInitialPrompt && !prefillPrompt.isNullOrBlank() && !autoSendConsumed.value) {
+            autoSendConsumed.value = true
+            dispatch(prefillPrompt, echoUser = true)
+        }
+    }
+
     /**
      * Benchmark edit flow: replace a sent user turn — the persisted thread tail
      * (the turn itself and everything after) is dropped, then the edited text
@@ -808,57 +825,31 @@ fun ChatScreen(
                 Icon(Icons.Outlined.Search, contentDescription = "Search in chat",
                     tint = MaterialTheme.colorScheme.onBackground)
             }
-            // Real model state: the chip carries the default the send path
-            // actually uses (ModelPrefs), suffixed with the stored reasoning
-            // mode ONLY when that model supports it — the same contract as the
-            // Home model pill — and opens the Model Centre for the full picker.
-            // Never a fabricated mode or a fake "Auto · mode" label.
+            // PHASE 2 model indicator — small, quiet, NAME ONLY. No mode
+            // suffix, no technical vocabulary: an ordinary user can ignore it
+            // forever. Tapping opens a native bottom sheet with three plain
+            // language tiers; the full catalogue stays behind "About models"
+            // (never a route exit away from the conversation).
             val activeModel = ModelCatalog.byId(ModelPrefs.defaultId(context))
-            val storedMode = ModelPrefs.mode(context)
-            val chipLabel = if (activeModel != null && storedMode in activeModel.modes) {
-                "${activeModel.displayName} · $storedMode"
-            } else {
-                activeModel?.displayName ?: "Auto"
-            }
+            var modelSheetOpen by remember { mutableStateOf(false) }
             GsChip(
-                text = chipLabel,
+                text = activeModel?.displayName ?: "Auto",
                 selected = false,
-                onClick = onNavigateModels
+                onClick = { modelSheetOpen = true }
             )
-            // Model settings live in the overflow menu: the same quick switcher
-            // the old inline Tune menu carried — every entry writes the same
-            // ModelPrefs.setDefaultId the chat send path reads immediately.
-            var modelMenuOpen by remember { mutableStateOf(false) }
-            Box {
-                IconButton(onClick = { modelMenuOpen = true }) {
-                    Icon(Icons.Outlined.MoreVert, contentDescription = "Model settings",
-                        tint = MaterialTheme.colorScheme.onBackground)
-                }
-                DropdownMenu(
-                    expanded = modelMenuOpen,
-                    onDismissRequest = { modelMenuOpen = false }
-                ) {
-                    val activeModelId = ModelPrefs.defaultId(context)
-                    ModelCatalog.all.forEach { model ->
-                        DropdownMenuItem(
-                            text = { Text(model.displayName) },
-                            leadingIcon = {
-                                if (model.id == activeModelId) {
-                                    Icon(
-                                        Icons.Outlined.Check,
-                                        contentDescription = "Default model",
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                            },
-                            onClick = {
-                                ModelPrefs.setDefaultId(context, model.id)
-                                modelMenuOpen = false
-                            }
-                        )
+            if (modelSheetOpen) {
+                ModelPickerSheet(
+                    activeId = remember(modelSheetOpen) { ModelPrefs.defaultId(context) },
+                    onDismiss = { modelSheetOpen = false },
+                    onSelect = { id ->
+                        ModelPrefs.setDefaultId(context, id)
+                        modelSheetOpen = false
+                    },
+                    onAboutModels = {
+                        modelSheetOpen = false
+                        onNavigateModels?.invoke()
                     }
-                }
+                )
             }
         }
     ) {
@@ -1790,3 +1781,111 @@ private fun dayLabel(iso: String): String? = runCatching {
         else -> date.format(DAY_LABEL_FORMAT)
     }
 }.getOrNull()
+
+/**
+ * PHASE 2 model picker — a native bottom sheet, three plain-language tiers.
+ * No context windows, no speed dots, no reasoning vocabulary: that material
+ * lives behind "Advanced details" in the Model Centre. Selecting writes the
+ * same ModelPrefs key the send path reads on the very next message, so a
+ * normal user can also just keep chatting and never open this at all.
+ * "About models" is the only exit into the full catalogue — a quiet link,
+ * never a route the conversation pushes the user through.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ModelPickerSheet(
+    activeId: String,
+    onDismiss: () -> Unit,
+    onSelect: (String) -> Unit,
+    onAboutModels: () -> Unit
+) {
+    // Static tiering of the catalogue — remembered once, recomposition-stable.
+    val tiers = remember {
+        listOf(
+            Triple(
+                "Fast",
+                "Quick answers when speed matters",
+                ModelCatalog.all.filter { it.speedTier == "fast" }
+            ),
+            Triple(
+                "Everyday",
+                "Smart help for daily questions",
+                ModelCatalog.all.filter { it.speedTier == "balanced" }
+            ),
+            Triple(
+                "Best for difficult questions",
+                "Takes its time, thinks deeper",
+                ModelCatalog.all.filter { it.speedTier == "deep" }
+            )
+        )
+    }
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = GsMotion.spaceL)
+                .padding(bottom = GsMotion.spaceL),
+            verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
+        ) {
+            Text(
+                "Choose a model",
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+            Text(
+                "GS uses your choice from the next message — you can also just keep chatting.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            tiers.forEach { (tierTitle, tierSubtitle, models) ->
+                Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceXS)) {
+                    Text(
+                        tierTitle,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    Text(
+                        tierSubtitle,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    models.forEach { model ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(MaterialTheme.shapes.medium)
+                                .clickable(onClick = { onSelect(model.id) })
+                                .padding(horizontal = GsMotion.spaceS, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    model.displayName,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onBackground
+                                )
+                                Text(
+                                    model.tagline,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            if (model.id == activeId) {
+                                Icon(
+                                    Icons.Outlined.Check,
+                                    contentDescription = "Current model",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            TextButton(onClick = onAboutModels) {
+                Text("About models")
+            }
+        }
+    }
+}

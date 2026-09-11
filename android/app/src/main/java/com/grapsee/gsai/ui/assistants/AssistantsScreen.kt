@@ -46,7 +46,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.data.AssistantsStore
@@ -61,6 +60,15 @@ import com.grapsee.gsai.ui.navigation.GsRoutes
 import com.grapsee.gsai.ui.theme.GsMotion
 
 private val segmentTabs = listOf("Marketplace", "My assistants", "Favourites", "Published", "Archived")
+
+/**
+ * Assistants hub. Curated sample assistants stay visible as content, but
+ * UNBADGED: the fabricated marketplace stats (★4.4–4.9 ratings, "12.4k
+ * uses") that used to decorate them are gone — cards carry name,
+ * description and category only. Everything else is real: the user's own
+ * assistants have full CRUD (create/edit/delete/favourite/pin/archive)
+ * against AssistantsStore, and the segment chips only surface real state.
+ */
 
 @Composable
 fun AssistantsScreen(onNavigate: (String) -> Unit) {
@@ -100,8 +108,10 @@ fun AssistantsScreen(onNavigate: (String) -> Unit) {
                 1 -> userAssistants.filter { !it.archived }.sortedByDescending { it.pinned }
                 2 -> (SampleData.assistants + userAssistants.filter { !it.archived })
                     .filter { it.id in favourites }
-                3 -> SampleData.assistants.filter { it.published } +
-                    userAssistants.filter { it.published && !it.archived }
+                // Published lists YOUR published assistants. The samples have
+                // no publish story — their old "published" flag was invented
+                // metadata — so they never appear here.
+                3 -> userAssistants.filter { it.published && !it.archived }
                 4 -> userAssistants.filter { it.archived }
                 else -> SampleData.assistants +
                     userAssistants.filter { it.published && !it.archived }
@@ -203,7 +213,8 @@ fun AssistantsScreen(onNavigate: (String) -> Unit) {
     }
 }
 
-/** Featured marketplace card — flat surface with a 4dp aurora-teal accent bar (no gradient). */
+/** Featured card — flat surface with a 4dp aurora-teal accent bar (no gradient).
+ *  Curated content, unbadged: name, description and category only. */
 @Composable
 private fun FeaturedCard(assistant: AssistantSample, onClick: () -> Unit) {
     GsCard(onClick = onClick) {
@@ -235,9 +246,9 @@ private fun FeaturedCard(assistant: AssistantSample, onClick: () -> Unit) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = "★ ${assistant.rating} · ${assistant.uses} uses · ${assistant.category}",
+                    text = assistant.category,
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
         }
@@ -248,6 +259,7 @@ private fun FeaturedCard(assistant: AssistantSample, onClick: () -> Unit) {
  * Card with real state: tap opens the profile, long-press opens the action
  * sheet (favourite for everything; pin/archive/edit/delete for user-owned).
  * Pin and favourite badges render inline so state is visible at a glance.
+ * No marketplace stats — nothing here is measured, so nothing is claimed.
  */
 @Composable
 private fun AssistantCard(
@@ -316,11 +328,6 @@ private fun AssistantCard(
                 Text(
                     text = assistant.category,
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = "★ ${assistant.rating} · ${assistant.uses} uses",
-                    style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }

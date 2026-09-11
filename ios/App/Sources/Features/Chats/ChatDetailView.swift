@@ -10,6 +10,11 @@ struct ChatDetailView: View {
 
     // Voice press-and-hold handoff — seeds the composer once on arrival.
     private let prefill: String?
+    // Phase 2 routing contract (.chatAutoSend): open a NEW chat and send the
+    // prefilled prompt automatically on first appear. The once-guard lives
+    // in @State so rotation / re-appear never re-sends.
+    private let autoSendPrefill: Bool
+    @State private var autoSendConsumed = false
 
     // Attach + local toasts (added 8-d; streaming/VM logic untouched)
     @State private var showingAttachments = false
@@ -61,18 +66,18 @@ struct ChatDetailView: View {
     // Offline state (Step 4): one shared NWPathMonitor for the whole process.
     @ObservedObject private var network = NetworkMonitor.shared
 
-    // Model control (Step 4): the toolbar chip mirrors Home's Task 91-b pill —
-    // the persisted pick (UserDefaults "gs.models.defaultId", fallback
-    // "gs-balanced") resolved against ModelInfo.catalog, with the stored
-    // "gs.models.mode" appended ONLY when that model offers it. Re-read on
-    // appear (return from Model Centre) and after a sheet pick.
+    // Model control (Phase 2): the header chip is SMALL and shows ONLY the
+    // user-friendly model display name — no mode suffix, no context/speed
+    // info. Tapping it opens the tiered "Choose a model" sheet (same shelves
+    // as the Model Centre). Re-read on appear (return from Model Centre) and
+    // after a sheet pick.
     @State private var showingModelPicker = false
     @State private var pillModel: ModelInfo?
-    @State private var pillMode: String?
 
-    init(conversationID: String?, prefill: String? = nil) {
+    init(conversationID: String?, prefill: String? = nil, autoSendPrefill: Bool = false) {
         _vm = StateObject(wrappedValue: ChatViewModel(conversationID: conversationID))
         self.prefill = prefill
+        self.autoSendPrefill = autoSendPrefill
     }
 
     var body: some View {
@@ -161,6 +166,18 @@ struct ChatDetailView: View {
                 vm.draft = prefill
             } else if let id = vm.conversationID, vm.draft.isEmpty, !vm.isStreaming {
                 vm.draft = UserDefaults.standard.string(forKey: "draft_\(id)") ?? ""
+            }
+            // Auto-send (Phase 2 routing contract): a .chatAutoSend route
+            // arrives with the prompt already in the composer — send it once
+            // on first appear. The @State once-guard makes every later
+            // onAppear (rotation, re-appear from Voice, back-navigation)
+            // a no-op, so the prompt can never re-send.
+            if autoSendPrefill, !autoSendConsumed, !vm.isStreaming {
+                autoSendConsumed = true
+                if vm.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, let prefill {
+                    vm.draft = prefill
+                }
+                sendAndClearDraft()
             }
         }
         .sheet(isPresented: $showingAttachments) {
@@ -467,22 +484,16 @@ struct ChatDetailView: View {
         .accessibilityElement(children: .combine)
     }
 
-    // MARK: Model control (Step 4)
+    // MARK: Model control (Phase 2)
 
-    /// The chip always shows the REAL persisted pick — Home's Task 91-b pill
-    /// logic mirrored exactly: the catalog name for UserDefaults
-    /// "gs.models.defaultId" (fallback "gs-balanced"), plus a " · mode"
-    /// suffix ONLY when the stored "gs.models.mode" is one that model
-    /// actually offers. An unknown id falls back to the catalog's flagged
-    /// default — the same server-default semantics ChatViewModel's send path
-    /// applies — and the suffix disappears rather than inventing a tier.
+    /// The chip always shows the REAL persisted pick — the catalog display
+    /// name for UserDefaults "gs.models.defaultId" (fallback: the catalog's
+    /// flagged default, the same server-default semantics ChatViewModel's
+    /// send path applies). Name only — no mode suffix, no context/speed
+    /// info: model education is opt-in via the sheet's "About models".
     private var modelPillText: String {
         let model = pillModel ?? ModelInfo.catalog.first { $0.isDefault }
-        guard let model else { return "" }
-        if let mode = pillMode, model.modes.contains(mode) {
-            return "\(model.name) · \(mode)"
-        }
-        return model.name
+        return model?.name ?? ""
     }
 
     private var activeModelID: String {
@@ -492,9 +503,6 @@ struct ChatDetailView: View {
     private func refreshModelPill() {
         let storedID = UserDefaults.standard.string(forKey: "gs.models.defaultId") ?? "gs-balanced"
         pillModel = ModelInfo.catalog.first { $0.id == storedID }
-        // The Model Centre treats an unset mode as "Balanced" — mirror it so
-        // every model surface agrees.
-        pillMode = UserDefaults.standard.string(forKey: "gs.models.mode") ?? "Balanced"
     }
 
     /// Sheet pick: writes the SAME key Model Centre writes and refreshes the
@@ -507,23 +515,44 @@ struct ChatDetailView: View {
         showingModelPicker = false
     }
 
-    /// Real picker over the EXISTING ModelInfo.catalog (never duplicated):
-    /// one row per model with its tagline/capabilities/context from the
-    /// catalog struct, the active one checked. The honesty line documents the
-    /// send-time resolution reality.
+    /// The consumer model sheet: the 3 tiers EXACTLY as the Model Centre
+    /// shelves them (ModelInfo.consumerTiers — shared, never duplicated),
+    /// name + tagline + checkmark on the active pick, and a quiet
+    /// "About models" footer into the Model Centre. No raw 8-name overflow,
+    /// no context/speed figures outside the Model Centre's Advanced details.
     private var modelPickerSheet: some View {
-        AeroSheetShell(title: "Model") {
+        AeroSheetShell(title: "Choose a model") {
             ScrollView {
-                VStack(spacing: Aero.Spacing.s) {
+                VStack(alignment: .leading, spacing: Aero.Spacing.l) {
                     Text("Applies from your next message — a reply already streaming keeps the model it started with.")
                         .font(Aero.caption())
                         .foregroundStyle(Aero.textMuted)
-                    ForEach(ModelInfo.catalog) { model in
-                        ModelOptionRow(
-                            model: model,
-                            isActive: model.id == activeModelID,
-                            action: { selectModel(model) })
+                    ForEach(ModelInfo.consumerTiers) { tier in
+                        VStack(alignment: .leading, spacing: Aero.Spacing.s) {
+                            Text(tier.title)
+                                .font(Aero.label())
+                                .foregroundStyle(Aero.textMuted)
+                            ForEach(tier.models) { model in
+                                TierModelRow(
+                                    model: model,
+                                    isActive: model.id == activeModelID,
+                                    action: { selectModel(model) })
+                            }
+                        }
                     }
+                    Button {
+                        showingModelPicker = false
+                        router.path.append(.models)
+                    } label: {
+                        Label("About models", systemImage: "info.circle")
+                            .font(Aero.label())
+                            .foregroundStyle(Aero.textMuted)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, Aero.Spacing.s)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(KineticPressStyle())
+                    .accessibilityHint("Opens the Model Centre")
                 }
             }
         }
@@ -741,12 +770,12 @@ struct ChatDetailView: View {
     }
 }
 
-// MARK: - Model picker row (Step 4)
+// MARK: - Model sheet row (Phase 2)
 
-/// One catalog row in the chat's model sheet — name, tagline and the
-/// capability/context line come straight from ModelInfo (nothing invented);
-/// checkmark + VoiceOver "selected" trait mark the active pick.
-private struct ModelOptionRow: View {
+/// One tier-sheet row — display name + tagline + checkmark on the active
+/// pick. No capability/context line: technical detail lives in the Model
+/// Centre's per-model "Advanced details" only.
+private struct TierModelRow: View {
     let model: ModelInfo
     let isActive: Bool
     let action: () -> Void
@@ -761,9 +790,6 @@ private struct ModelOptionRow: View {
                     Text(model.tagline)
                         .font(Aero.caption())
                         .foregroundStyle(Aero.textMuted)
-                    Text(model.capabilities.joined(separator: " · ") + " · \(model.contextK)K context")
-                        .font(Aero.metadata())
-                        .foregroundStyle(Aero.textTertiary)
                 }
                 Spacer()
                 if isActive {

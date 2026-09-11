@@ -44,8 +44,6 @@ import com.grapsee.gsai.ui.chat.ArchivedChatsScreen
 import com.grapsee.gsai.ui.chat.ChatScreen
 import com.grapsee.gsai.ui.chat.ChatSearchScreen
 import com.grapsee.gsai.ui.chat.ChatsScreen
-import com.grapsee.gsai.ui.chat.ConversationFoldersScreen
-import com.grapsee.gsai.ui.chat.SharedChatsScreen
 import com.grapsee.gsai.ui.create.CreateScreen
 import com.grapsee.gsai.ui.explore.ExploreScreen
 import com.grapsee.gsai.ui.home.HomeScreen
@@ -257,8 +255,6 @@ fun GsNavHost(modifier: Modifier = Modifier) {
             )
         }
         composable(GsRoutes.CHAT_ARCHIVE) { ArchivedChatsScreen(onBack = back) }
-        composable(GsRoutes.CHAT_FOLDERS) { ConversationFoldersScreen(onBack = back) }
-        composable(GsRoutes.CHAT_SHARED) { SharedChatsScreen(onBack = back) }
         composable(GsRoutes.CHAT_SEARCH) {
             ChatSearchScreen(
                 onBack = back,
@@ -309,14 +305,19 @@ fun GsNavHost(modifier: Modifier = Modifier) {
                 },
                 navArgument(GsRoutes.ARG_PROMPT) {
                     type = NavType.StringType; defaultValue = ""
+                },
+                navArgument(GsRoutes.ARG_SEND) {
+                    type = NavType.BoolType; defaultValue = false
                 }
             )
         ) { entry ->
             val id = entry.arguments?.getString(GsRoutes.ARG_CONVERSATION)
             val prompt = entry.arguments?.getString(GsRoutes.ARG_PROMPT).orEmpty()
+            val autoSend = entry.arguments?.getBoolean(GsRoutes.ARG_SEND) ?: false
             ChatScreen(
                 conversationId = if (id == "new") null else id,
                 prefillPrompt = prompt.takeIf { it.isNotBlank() },
+                autoSendInitialPrompt = autoSend,
                 onBack = back,
                 onNavigateVoice = { navController.navigate(GsRoutes.VOICE) },
                 onNavigateModels = { navController.navigate(GsRoutes.MODELS) }

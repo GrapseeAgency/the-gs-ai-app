@@ -2,16 +2,15 @@ import SwiftUI
 
 /// Chats hub — `ConversationStore` is the source of truth (JSON-persisted,
 /// offline-first); a native pull-to-refresh best-effort syncs server rows on
-/// top. Falls back to the sample seed on a fresh install. Rows are a real
-/// `List` (Task 86-e) carrying the benchmark action set (pin / archive /
-/// delete) as native swipe actions + context menu, mirroring the Android
-/// drawer.
+/// top. Real rows only (Phase 2): an empty store renders the honest empty
+/// state, never samples. Rows are a real `List` (Task 86-e) carrying the
+/// benchmark action set (pin / archive / delete) as native swipe actions +
+/// context menu, mirroring the Android drawer.
 struct ChatsListView: View {
 
     private enum Filter: String, CaseIterable, Identifiable {
         case all = "All"
         case pinned = "Pinned"
-        case unread = "Unread"
         var id: String { rawValue }
     }
 
@@ -21,7 +20,6 @@ struct ChatsListView: View {
         let preview: String
         let time: String
         var pinned: Bool = false
-        var unread: Bool = false
     }
 
     @ObservedObject private var store = ConversationStore.shared
@@ -36,13 +34,6 @@ struct ChatsListView: View {
     @State private var reloadToken = 0
     @State private var renameTarget: StoredConversation?
     @State private var renameDraft = ""
-
-    private let demoRows: [ConversationRow] = [
-        ConversationRow(id: "demo-1", title: "Q3 pricing strategy", preview: "You: send the revised deck?", time: "2h", pinned: true),
-        ConversationRow(id: "demo-2", title: "Kyoto trip planning", preview: "GS: temples worth the early train…", time: "5h", unread: true),
-        ConversationRow(id: "demo-3", title: "Kotlin coroutines debug", preview: "You: why does launch block here?", time: "1d"),
-        ConversationRow(id: "demo-4", title: "Brand voice workshop", preview: "GS: three tone pillars emerged…", time: "3d")
-    ]
 
     /// Card-row insets (Task 86-e): horizontal margins reproduce the
     /// LazyVStack's `.padding(.horizontal, Aero.Spacing.m)`; the 4pt top/bottom
@@ -210,13 +201,14 @@ struct ChatsListView: View {
 
     // MARK: Quick access
 
+    /// Archive only (Phase 2 honesty purge): the Folders and Shared cards
+    /// led to fabricated screens and are gone — their views and routes are
+    /// deleted. Archive is real and stays.
     private var quickAccess: some View {
         VStack(alignment: .leading, spacing: Aero.Spacing.s) {
             SectionHeader(title: "Quick access")
             HStack(spacing: Aero.Spacing.s) {
-                quickCard("Folders", icon: "folder", route: .chatFolders)
                 quickCard("Archived", icon: "archivebox", route: .chatArchive)
-                quickCard("Shared", icon: "person.2", route: .chatShared)
             }
         }
     }
@@ -260,11 +252,10 @@ struct ChatsListView: View {
 
     // MARK: Conversation list
 
-    /// Store rows win when present; samples only fill a fresh, offline first run.
+    /// The real store rows — no sample fallback: an empty inbox is rendered
+    /// as the honest empty state below (Phase 2).
     private var rows: [ConversationRow] {
-        let active = store.activeConversations
-        if active.isEmpty { return demoRows }
-        return active.map { conversation in
+        store.activeConversations.map { conversation in
             // O(1) preview from the store's maintained last-message index —
             // messages(for:) here meant a full filter+sort PER ROW every render.
             let last = store.lastMessage(for: conversation.id)
@@ -285,7 +276,6 @@ struct ChatsListView: View {
             switch filter {
             case .all: return true
             case .pinned: return row.pinned
-            case .unread: return row.unread
             }
         }
     }
@@ -295,7 +285,6 @@ struct ChatsListView: View {
         switch filter {
         case .all: return "No conversations yet"
         case .pinned: return "Nothing pinned yet"
-        case .unread: return "All caught up"
         }
     }
 
@@ -303,7 +292,6 @@ struct ChatsListView: View {
         switch filter {
         case .all: return "Start a chat with the + button and it will show up here."
         case .pinned: return "Pin a chat from its context menu and it will live here."
-        case .unread: return "Nothing unread — enjoy the quiet."
         }
     }
 

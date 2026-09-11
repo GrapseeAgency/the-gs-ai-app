@@ -17,10 +17,8 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
-import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.MoreVert
-import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -70,9 +68,11 @@ import kotlinx.coroutines.launch
 
 /**
  * Chats hub — Room conversation list as the source of truth with the
- * backend sync engine behind it. Falls back to tasteful sample rows while
- * the backend is unreachable so the surface is never dead. Rows carry the
- * benchmark action set (pin / archive / delete) via the overflow menu.
+ * backend sync engine behind it. Nothing is invented when the list is
+ * empty: an honest empty state is shown instead of sample rows. The only
+ * quick link is Archive (a real store-backed surface — Folders and Shared
+ * were dead fabrication and are gone). Rows carry the benchmark action set
+ * (pin / archive / delete) via the overflow menu.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -99,11 +99,10 @@ fun ChatsScreen(onNavigate: (String) -> Unit) {
 
     LaunchedEffect(Unit) { doRefresh() }
 
-    val display = conversations.ifEmpty { if (firstLoadDone) sampleConversations() else emptyList() }
+    // No sample fallback: when Room is empty the honest empty state shows.
     val rows = when (filter) {
-        FILTER_PINNED -> display.filter { it.pinned }
-        FILTER_UNREAD -> emptyList()
-        else -> display
+        FILTER_PINNED -> conversations.filter { it.pinned }
+        else -> conversations
     }
     val loading = !firstLoadDone && conversations.isEmpty()
 
@@ -135,14 +134,18 @@ fun ChatsScreen(onNavigate: (String) -> Unit) {
         ) {
             GsOfflineBanner(visible = offline)
 
+            // Archive only: the one quick link with a real destination behind
+            // it. Folders and Shared led to hardcoded fake screens and are
+            // deliberately not offered.
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                QuickLink("Folders", Icons.Outlined.Folder) { onNavigate(GsRoutes.CHAT_FOLDERS) }
                 QuickLink("Archive", Icons.Outlined.Archive) { onNavigate(GsRoutes.CHAT_ARCHIVE) }
-                QuickLink("Shared", Icons.Outlined.People) { onNavigate(GsRoutes.CHAT_SHARED) }
             }
 
+            // All/Pinned only — both are computed from real Room state. The
+            // old "Unread" chip was hardcoded to filter to an empty list
+            // (nothing tracks read state), so it never offered anything true.
             Row(horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)) {
-                listOf(FILTER_ALL, FILTER_PINNED, FILTER_UNREAD).forEach { label ->
+                listOf(FILTER_ALL, FILTER_PINNED).forEach { label ->
                     GsChip(text = label, selected = filter == label) {
                         view.gsHaptic(HapticFeedbackConstants.VIRTUAL_KEY)
                         filter = label
@@ -158,15 +161,11 @@ fun ChatsScreen(onNavigate: (String) -> Unit) {
                 }
                 rows.isEmpty() -> GsEmptyState(
                     icon = Icons.Outlined.Inbox,
-                    title = when (filter) {
-                        FILTER_UNREAD -> "All caught up"
-                        FILTER_PINNED -> "Nothing pinned yet"
-                        else -> "No conversations yet"
-                    },
-                    message = when (filter) {
-                        FILTER_UNREAD -> "Nothing unread — enjoy the quiet."
-                        FILTER_PINNED -> "Pin a chat from its overflow menu and it will live here."
-                        else -> "Start a chat with the + button and it will show up here."
+                    title = if (filter == FILTER_PINNED) "Nothing pinned yet" else "No conversations yet",
+                    message = if (filter == FILTER_PINNED) {
+                        "Pin a chat from its overflow menu and it will live here."
+                    } else {
+                        "Start a chat with the + button and it will show up here."
                     }
                 )
                 else -> LazyColumn(
@@ -274,41 +273,13 @@ private fun RowScope.QuickLink(label: String, icon: ImageVector, onClick: () -> 
 private fun conversationsFlow(): Flow<List<ConversationEntity>> =
     runCatching { ServiceLocator.chat.activeConversations() }.getOrElse { flowOf(emptyList()) }
 
-// --- sample data (shown seamlessly when Room is empty and backend is away) --
+// --- filters -----------------------------------------------------------------
 
 private const val FILTER_ALL = "All"
 private const val FILTER_PINNED = "Pinned"
-private const val FILTER_UNREAD = "Unread"
-
-private data class SampleChat(
-    val id: String,
-    val title: String,
-    val pinned: Boolean,
-    val preview: String
-)
-
-private val sampleChats = listOf(
-    SampleChat("sample-1", "Launch plan review", true, "Summarised the Q3 positioning deck · 09:41"),
-    SampleChat("sample-2", "Kotlin coroutines deep-dive", false, "Explained structured concurrency · Yesterday"),
-    SampleChat("sample-3", "Kyoto trip planning", true, "Built a 7-day design-focused itinerary · Mon"),
-    SampleChat("sample-4", "Log-parsing regex", false, "Drafted a pattern for multi-line stack traces · Sun")
-)
-
-private fun sampleConversations(): List<ConversationEntity> = sampleChats.map {
-    ConversationEntity(
-        id = it.id,
-        title = it.title,
-        modelId = null,
-        pinned = it.pinned,
-        archived = false,
-        updatedAt = "sample",
-        createdAt = "sample"
-    )
-}
 
 private fun previewLine(entity: ConversationEntity): String =
-    sampleChats.firstOrNull { it.id == entity.id }?.preview
-        ?: "Last message · ${relativeTime(entity.updatedAt)}"
+    "Last message · ${relativeTime(entity.updatedAt)}"
 
 private fun relativeTime(iso: String): String = runCatching {
     val timestamp = OffsetDateTime.parse(iso)

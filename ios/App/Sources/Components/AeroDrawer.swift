@@ -6,11 +6,18 @@ import SwiftUI
  * account header, one-tap new chat, LIVE recents from `ConversationStore`
  * (pin / archive / delete on long-press), and the section map.
  *
- * Task 90-b rebuild: the panel is width-bounded and leading-anchored so the
- * scrim stays tappable beyond it, carries a single sanctioned soft shadow,
- * and follows the canonical hierarchy — account header, dominant primary
- * "New chat" action, RECENT, primary navigation, Tools, Account — with live
- * selected-state routing and VoiceOver containment/escape.
+ * Phase 2 reclassification — conversation-first, honest, calm:
+ *   1. Account header (REAL stored identity via AccountStore — no fake
+ *      plan chip; the row opens Profile)
+ *   2. "New chat" — the single loud primary action
+ *   3. Recent — REAL conversations only (no samples when empty), with
+ *      All chats + Archived always visible
+ *   4. PRIMARY (no label): Home · Chats · Explore · Create · Library
+ *   5. SECONDARY ("More"): Projects · Assistants · Voice · Search
+ *   6. ACCOUNT ("Account"): Profile · Notifications · Billing · Settings
+ *   7. ADVANCED (collapsed by default): Models · Compare models
+ * Folders / Shared are gone (fabricated surfaces); machinery (tracked
+ * dismissal, VoiceOver containment, rename) is unchanged.
  */
 struct AeroDrawer: View {
 
@@ -32,9 +39,15 @@ struct AeroDrawer: View {
     var onHome: (() -> Void)? = nil
 
     @ObservedObject private var store = ConversationStore.shared
+    /// The drawer header shows the REAL stored identity — it re-renders the
+    /// moment the account changes (sign-in, name edit).
+    @ObservedObject private var account = AccountStore.shared
 
     @State private var renameTarget: StoredConversation?
     @State private var renameDraft = ""
+    /// ADVANCED group — collapsed by default (Phase 2): model machinery is
+    /// opt-in, never front-door navigation.
+    @State private var advancedExpanded = false
 
     /// Close-drag tracking (Task 85-e I9): while the finger is down the panel
     /// follows it 1:1 leftward; the state flip only happens on release, and
@@ -68,19 +81,17 @@ struct AeroDrawer: View {
                         newChat
                         Group {
                             sectionLabel("Recent")
-                            if recentRows.isEmpty {
-                                ForEach(demoRecents, id: \.id) { sample in
-                                    row(title: sample.title, icon: nil) { onRoute(.chat(sample.id)) }
-                                }
-                            } else {
-                                ForEach(recentRows) { conversation in
-                                    recentRow(conversation)
-                                }
-                                row(title: "All chats", icon: "tray") { onRoute(.chats) }
-                                row(title: "Archived", icon: "archivebox") { onRoute(.chatArchive) }
+                            ForEach(recentRows) { conversation in
+                                recentRow(conversation)
                             }
+                            // Always visible — real destinations even when
+                            // the recent list above is empty. No samples.
+                            row(title: "All chats", icon: "tray", isSelected: activeRoute == .chats) { onRoute(.chats) }
+                            row(title: "Archived", icon: "archivebox", isSelected: activeRoute == .chatArchive) { onRoute(.chatArchive) }
                         }
                         divider
+                        // PRIMARY — no label. The five surfaces a reader
+                        // actually lives in.
                         Group {
                             row(title: "Home", icon: "house", isSelected: atHomeRoot) { onHome?() }
                             row(title: "Chats", icon: "bubble.left", isSelected: activeRoute == .chats) { onRoute(.chats) }
@@ -90,10 +101,10 @@ struct AeroDrawer: View {
                         }
                         divider
                         Group {
-                            sectionLabel("Tools")
+                            sectionLabel("More")
                             row(title: "Projects", icon: "folder", isSelected: activeRoute == .projects) { onRoute(.projects) }
                             row(title: "Assistants", icon: "cpu", isSelected: activeRoute == .assistants) { onRoute(.assistants) }
-                            row(title: "Models", icon: "speedometer", isSelected: activeRoute == .models) { onRoute(.models) }
+                            row(title: "Voice", icon: "waveform", isSelected: activeRoute == .voice) { onRoute(.voice) }
                             row(title: "Search", icon: "magnifyingglass", isSelected: activeRoute == .search) { onRoute(.search) }
                         }
                         divider
@@ -104,6 +115,8 @@ struct AeroDrawer: View {
                             row(title: "Billing", icon: "creditcard", isSelected: activeRoute == .billing) { onRoute(.billing) }
                             row(title: "Settings", icon: "gearshape", isSelected: activeRoute == .settings) { onRoute(.settings) }
                         }
+                        divider
+                        advancedGroup
                     }
                     .padding(.horizontal, Aero.Spacing.m)
                     .padding(.bottom, Aero.Spacing.xl)
@@ -181,6 +194,48 @@ struct AeroDrawer: View {
         Array(store.activeConversations.prefix(5))
     }
 
+    // MARK: Advanced group (collapsed by default)
+
+    /// One expandable "Advanced" row; model machinery lives inside it.
+    private var advancedGroup: some View {
+        VStack(alignment: .leading, spacing: Aero.Spacing.s) {
+            Button {
+                GSHaptics.select()
+                withAnimation(Aero.snappy) { advancedExpanded.toggle() }
+            } label: {
+                HStack(spacing: Aero.Spacing.s) {
+                    Image(systemName: "gearshape.2")
+                        .font(.system(size: 13))
+                        .foregroundColor(Aero.textSecondary)
+                        .frame(width: 18)
+                    Text("Advanced")
+                        .font(Aero.body())
+                        .foregroundColor(Aero.text)
+                        .lineLimit(1)
+                    Spacer()
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(Aero.textSecondary)
+                        .rotationEffect(.degrees(advancedExpanded ? 180 : 0))
+                }
+                .padding(.horizontal, Aero.Spacing.m)
+                .padding(.vertical, 11)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(KineticPressStyle())
+            .accessibilityLabel("Advanced")
+            .accessibilityAddTraits(advancedExpanded ? [.isSelected] : [])
+
+            if advancedExpanded {
+                VStack(alignment: .leading, spacing: Aero.Spacing.s) {
+                    row(title: "Models", icon: "speedometer", isSelected: activeRoute == .models) { onRoute(.models) }
+                    row(title: "Compare models", icon: "rectangle.on.rectangle", isSelected: activeRoute == .modelCompare) { onRoute(.modelCompare) }
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+    }
+
     /// One live recent: tap to open, long-press for the benchmark action set.
     private func recentRow(_ conversation: StoredConversation) -> some View {
         row(title: gsConversationTitle(conversation.title), icon: nil, isPinned: conversation.pinned) {
@@ -231,49 +286,59 @@ struct AeroDrawer: View {
         Task { try? await APIClient.shared.deleteConversation(id: id) }
     }
 
-    private struct DemoRecent: Identifiable {
-        let id: String
-        let title: String
-    }
-
-    private let demoRecents: [DemoRecent] = [
-        DemoRecent(id: "demo-1", title: "Q3 pricing strategy"),
-        DemoRecent(id: "demo-2", title: "Kyoto trip plan"),
-        DemoRecent(id: "demo-3", title: "Kotlin coroutines notes"),
-        DemoRecent(id: "demo-4", title: "Brand voice guidelines"),
-        DemoRecent(id: "demo-5", title: "Research: AI market")
-    ]
-
     // MARK: Header
 
-    /// Account header — tappable as a whole (account action); the Pro chip
-    /// stays an independent button so it still wins taps over the row gesture
-    /// and keeps its own billing route.
+    /// Account header — the REAL stored identity (AccountStore; neutral
+    /// fallback when the reader never gave a name: initials yield to a
+    /// person glyph, the name line reads "Account", a missing email line is
+    /// simply absent). Nothing is invented. The whole row opens Profile —
+    /// the fabricated "Pro" plan chip is gone.
     private var header: some View {
         HStack(spacing: Aero.Spacing.s) {
             ZStack {
                 Circle().fill(Aero.accent.opacity(0.16)).frame(width: 44, height: 44)
-                Text("GA")
-                    .font(Aero.label())
-                    .foregroundColor(Aero.accent)
+                if account.displayName.isEmpty {
+                    Image(systemName: "person.fill")
+                        .font(.system(size: 15))
+                        .foregroundColor(Aero.accent)
+                } else {
+                    Text(accountInitials)
+                        .font(Aero.label())
+                        .foregroundColor(Aero.accent)
+                }
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text("Grapsee Admin")
+                Text(account.displayName.isEmpty ? "Account" : account.displayName)
                     .font(Aero.body())
                     .foregroundColor(Aero.text)
-                Text("graphesee@gmail.com")
-                    .font(Aero.caption())
-                    .foregroundColor(Aero.textSecondary)
+                    .lineLimit(1)
+                if !account.email.isEmpty {
+                    Text(account.email)
+                        .font(Aero.caption())
+                        .foregroundColor(Aero.textSecondary)
+                        .lineLimit(1)
+                }
             }
             Spacer()
-            AeroChip(text: "Pro", selected: true) { onRoute(.billing) }
         }
         .contentShape(Rectangle())
         .onTapGesture {
             GSHaptics.tap()   // committed open — the drawer routes
             onRoute(.profile)
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Account. Open profile")
         .padding(.bottom, Aero.Spacing.m)
+    }
+
+    /// Up to two leading initials of the stored display name — derived only,
+    /// never invented (empty name never reaches here).
+    private var accountInitials: String {
+        account.displayName
+            .split(separator: " ")
+            .prefix(2)
+            .map { String($0.prefix(1)).uppercased() }
+            .joined()
     }
 
     /// Dominant primary action (Task 90-b): full-width accent-filled button.

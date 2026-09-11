@@ -23,6 +23,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -37,23 +38,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.AutoAwesome
-import androidx.compose.material.icons.outlined.Description
-import androidx.compose.material.icons.outlined.EditNote
-import androidx.compose.material.icons.outlined.Folder
-import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material.icons.outlined.Menu
 import androidx.compose.material.icons.outlined.Mic
-import androidx.compose.material.icons.outlined.School
-import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.SmartToy
-import androidx.compose.material.icons.outlined.TravelExplore
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarDuration
@@ -81,6 +74,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
@@ -89,6 +83,8 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.traversalIndex
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -100,10 +96,10 @@ import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.data.liveupdate.LiveUpdateState
 import com.grapsee.gsai.data.liveupdate.LiveUpdater
 import com.grapsee.gsai.data.local.ConversationEntity
-import com.grapsee.gsai.data.model.ModelCatalog
-import com.grapsee.gsai.data.ModelPrefs
 import com.grapsee.gsai.di.ServiceLocator
 import com.grapsee.gsai.ui.components.ConversationActionsSheet
+import com.grapsee.gsai.ui.components.GsChip
+import com.grapsee.gsai.ui.components.GsInputBar
 import com.grapsee.gsai.ui.components.GsSectionHeader
 import com.grapsee.gsai.ui.components.gsContentWidth
 import com.grapsee.gsai.ui.components.gsConversationTitle
@@ -124,26 +120,27 @@ import java.time.OffsetDateTime
 import java.util.Calendar
 
 /**
- * The Home workbench answers three questions with REAL data only (no fake
- * features, no fabricated labels):
+ * PHASE 2 — Home is a CONVERSATION-FIRST launch surface. The hierarchy is:
  *
- *  1. WHAT CAN GS DO?   — three seeded starters (each opens the real chat
- *     composer with a prompt) and a compact Tools/Workspaces group of five
- *     real destinations. No "Trending"/"Popular" fiction, no chip wall.
- *  2. WHAT WAS I DOING? — the Continue section, driven by the exact same
- *     Room flow the drawer's RECENT list uses (archived hidden, pins float,
- *     newest first). At most three conversations — continuity taste here,
- *     full history lives in Chats. No conversations → no section at all.
- *  3. WHAT CAN GS HELP WITH? — the composer entry: the dominant action,
- *     opening the real chat composer; press-and-hold the orb to dictate;
- *     mic opens full voice mode.
+ *  PRIMARY    the inline composer — a real input, pinned at the bottom.
+ *             Tap → type → send: sending composes a NEW chat and hands the
+ *             text straight to the streaming path (GsRoutes.chat(autoSend)),
+ *             so the front door IS the conversation, not a gateway to it.
+ *  SECONDARY  a little supporting context — the Continue section (real
+ *             conversations only) and three quiet starter chips that fill
+ *             the composer rather than navigate away.
+ *  CONTEXTUAL voice — tap the mic for full voice mode, hold it to dictate
+ *             into the composer field.
+ *  OPTIONAL   everything else lives in the drawer (drawer navigation owns
+ *             tools/discovery; the old 5-card Tools grid is gone).
  *
- * Identity is real too: the greeting uses the name the user actually typed
- * at auth (AccountStore) and degrades to a neutral line when nothing is
- * stored. The old rotating tagline, hardcoded "Admin" greeting, hardcoded
- * model pill, fake attach affordance and "Upgrade plan" upsell are gone —
- * Billing stays reachable from the drawer's Account group, and attaching
- * files belongs to the real composer (Chat, step 4 scope).
+ * Removed in this phase (per the consumer-first mandate): the model pill
+ * ("GS Balanced · Balanced") from the top bar — a quiet brand mark replaces
+ * it; the 84 dp hero orb and its halo — identity shrinks to a 44 dp mark;
+ * the Tools/workbench card grid; the composer ENTRY bar that pretended to be
+ * an input. Kept: real identity greeting, real Continue/Recents, honest
+ * starters, the LiveUpdate pill (appears only when an update exists), the
+ * disclaimer line.
  */
 @Composable
 fun HomeScreen(
@@ -154,25 +151,24 @@ fun HomeScreen(
     // GS LiveUpdate: quiet GitHub manifest check on every Home appearance (10-min throttle).
     LaunchedEffect(Unit) { LiveUpdater.syncFrom(context) }
     // Platform feedback surface — permission denials etc. answer with a
-    // snackbar (with a recovery action), never a system Toast: the snackbar
-    // lives inside the app's own layout, respects the theme and can act.
+    // snackbar (with a recovery action), never a system Toast.
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // Identity — the name the user actually typed at auth. Read per
-    // composition: returning from Auth/Onboarding re-runs this body, so the
-    // greeting reflects the stored identity with no observers.
+    // Identity — the name the user actually typed at auth.
     val displayName = AccountStore.displayName(context)
 
-    // Continuation source — the SAME flow the drawer's RECENT list uses
-    // (Room: archived hidden, pins float, newest first). No separate query
-    // and no fabricated samples: an empty inbox renders neither Continue
-    // nor Recents, and the starters take the space instead.
+    // Continuation source — the SAME Room flow the drawer's Recent list uses
+    // (archived hidden, pins float, newest first). No fabricated samples:
+    // an empty history renders neither Continue nor starters filler.
     val recents by remember {
         runCatching { ServiceLocator.chat.activeConversations() }.getOrElse { flowOf(emptyList()) }
     }.collectAsState(initial = emptyList())
 
-    // Long-press actions — the exact sheet the drawer and Chats use, fed by
-    // the same ServiceLocator mutations.
+    // The one composer draft. Starters pour their text here; sending hands it
+    // to a fresh conversation with autoSend so the answer starts immediately.
+    var draft by remember { mutableStateOf("") }
+
+    // Long-press actions — the exact sheet the drawer and Chats use.
     var actionTarget by remember { mutableStateOf<ConversationEntity?>(null) }
     val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
@@ -194,14 +190,10 @@ fun HomeScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                // TalkBack visits: top bar → composer entry → scroll content
-                // (orb → greeting → continue → starters → tools). The
-                // composer is the primary action and is PINNED at the visual
-                // bottom; traversal indices keep it early in the swipe order
-                // instead of dead last. (The exact spec order orb → greeting
-                // → composer is unachievable with the pinned-composer
-                // skeleton, because the greeting lives inside the scrollable
-                // middle — this is the closest compliant order.)
+                // TalkBack visits: top bar → composer → scroll content
+                // (hero → continue → starters). The composer is the primary
+                // action and is PINNED at the visual bottom; traversal indices
+                // keep it early in the swipe order instead of dead last.
                 .semantics { isTraversalGroup = true }
                 .padding(horizontal = GsMotion.spaceM)
         ) {
@@ -213,8 +205,8 @@ fun HomeScreen(
 
             // Everything between the pinned top bar and the pinned composer
             // scrolls: at large system font scales a fixed hero would clip.
-            // gsContentWidth() (STEP 2 foundation): phones unaffected, tablets/
-            // landscape get the 640dp reading column.
+            // gsContentWidth(): phones unaffected, tablets/landscape get the
+            // 640dp reading column.
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -223,11 +215,11 @@ fun HomeScreen(
                     .semantics { traversalIndex = 2f },
                 verticalArrangement = Arrangement.spacedBy(GsMotion.spaceM)
             ) {
-                Spacer(Modifier.height(GsMotion.spaceL))
+                Spacer(Modifier.height(GsMotion.spaceM))
                 HeroBlock(displayName = displayName)
 
                 // WHAT WAS I DOING? — the most recent conversation first,
-                // then up to two more (three total, the drawer owns history).
+                // then up to two more (three total; the drawer owns history).
                 val continueConversation = recents.firstOrNull()
                 if (continueConversation != null) {
                     Column(
@@ -259,19 +251,27 @@ fun HomeScreen(
                     }
                 }
 
-                StartersSection(onNavigate = onNavigate)
-                ToolsSection(onNavigate = onNavigate)
+                StartersSection(onPick = { starter -> draft = starter })
                 // GS LiveUpdate — appears only when a newer build exists on GitHub.
                 LiveUpdatePill()
             }
 
-            // Pinned composer entry + disclaimer — one traversal group so
+            // Pinned inline composer + disclaimer — one traversal group so
             // TalkBack reaches the primary action right after the top bar.
             Column(
                 modifier = Modifier.semantics { traversalIndex = 1f }
             ) {
                 Spacer(Modifier.height(GsMotion.spaceS))
-                HeroInput(onNavigate = onNavigate, snackbarHostState = snackbarHostState)
+                HomeComposer(
+                    draft = draft,
+                    onDraftChange = { draft = it },
+                    onSend = { text ->
+                        draft = ""
+                        onNavigate(GsRoutes.chat(conversationId = null, prompt = text, autoSend = true))
+                    },
+                    onOpenVoice = { onNavigate(GsRoutes.VOICE) },
+                    snackbarHostState = snackbarHostState
+                )
                 Spacer(Modifier.height(GsMotion.spaceS))
                 Text(
                     "GS can make mistakes — double-check important info.",
@@ -316,7 +316,6 @@ private fun TopBar(
     onNavigate: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val context = LocalContext.current
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -332,47 +331,24 @@ private fun TopBar(
 
         Spacer(Modifier.weight(1f))
 
-        // Model pill — the REAL default model and mode (ModelPrefs), never a
-        // hardcoded label. The mode suffix renders only when the stored mode
-        // is one this model actually supports; otherwise the name alone.
-        val model = ModelCatalog.byId(ModelPrefs.defaultId(context)) ?: ModelCatalog.default
-        val mode = ModelPrefs.mode(context)
-        val pillLabel = if (mode in model.modes) "${model.displayName} · $mode" else model.displayName
-        val modelPillInteraction = remember { MutableInteractionSource() }
-        Surface(
-            shape = RoundedCornerShape(GsMotion.radiusChip),
-            color = GsTheme.colors.raisedSurface,
-            modifier = Modifier.kineticPress(modelPillInteraction)
+        // Quiet brand mark. The model name/pill is GONE from the hero — an
+        // ordinary user should never meet "GS Balanced · Balanced" on screen
+        // one (model choice lives in chat + Model Centre, quietly).
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Row(
+            Box(
                 modifier = Modifier
-                    .clickable(
-                        interactionSource = modelPillInteraction,
-                        indication = LocalIndication.current,
-                        role = Role.Button,
-                        // Announces with the real model name (the label text)
-                        // and a factual action, not a hardcoded one.
-                        onClickLabel = "Change model"
-                    ) { onNavigate(GsRoutes.MODELS) }
-                    .padding(
-                        horizontal = GsMotion.spaceM,
-                        vertical = 10.dp
-                    ),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .clip(CircleShape)
-                        .background(rememberAuroraBrush(CircleShape))
-                )
-                Text(
-                    pillLabel,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = GsTheme.colors.textPrimary
-                )
-            }
+                    .size(10.dp)
+                    .clip(CircleShape)
+                    .background(rememberAuroraBrush(CircleShape))
+            )
+            Text(
+                "GS",
+                style = MaterialTheme.typography.titleMedium,
+                color = GsTheme.colors.textPrimary
+            )
         }
 
         Spacer(Modifier.weight(1f))
@@ -417,11 +393,13 @@ private fun CircleButton(
     }
 }
 
+/**
+ * Compact identity moment: a 44 dp orb (was an 84 dp hero) + the greeting
+ * built from the user's REAL first name. It supports the composer below; it
+ * no longer competes with it. Reduce-motion holds the resting frame.
+ */
 @Composable
 private fun HeroBlock(displayName: String) {
-    // Reduce-motion gate (reactive — the settings are snapshot state): when
-    // on, the infinite breathe transition is NEVER created and the orb holds
-    // its resting frame. No faster loop — no loop at all.
     val reduced = SettingsStore.reduceAnimations || SettingsStore.reduceMotion
     val breathe: Float = if (reduced) {
         1f
@@ -442,52 +420,42 @@ private fun HeroBlock(displayName: String) {
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Brand orb — the one sanctioned aurora mark on the canvas (breathe reads in draw phase)
         Box(
             modifier = Modifier
-                .size(84.dp)
+                .size(44.dp)
                 .graphicsLayer { scaleX = breathe; scaleY = breathe }
                 .clip(CircleShape)
                 .background(rememberAuroraBrush(CircleShape)),
             contentAlignment = Alignment.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .size(66.dp)
-                    .clip(CircleShape)
-                    .background(GsTheme.colors.appBackground.copy(alpha = 0.35f))
-            )
             Icon(
                 Icons.Outlined.AutoAwesome,
                 contentDescription = "GS",
                 tint = GsTheme.colors.textPrimary,
-                modifier = Modifier.size(22.dp)
+                modifier = Modifier.size(16.dp)
             )
         }
 
-        Spacer(Modifier.height(GsMotion.spaceL))
+        Spacer(Modifier.height(GsMotion.spaceM))
 
         Text(
             greetingFor(displayName),
-            style = MaterialTheme.typography.displayLarge,
+            style = MaterialTheme.typography.headlineMedium,
             color = GsTheme.colors.textPrimary,
             textAlign = TextAlign.Center,
             // TalkBack: the greeting is the page heading.
             modifier = Modifier.semantics { heading() }
         )
-        Spacer(Modifier.height(GsMotion.spaceS))
+        Spacer(Modifier.height(GsMotion.spaceXS))
 
-        // One quiet static line — the old rotating tagline loop is gone
-        // (infinite recomposition for zero information).
+        // One quiet static line — no rotating tagline loop (infinite
+        // recomposition for zero information).
         Text(
             "What would you like to work on?",
             style = MaterialTheme.typography.bodyMedium,
             color = GsTheme.colors.textSecondary,
             textAlign = TextAlign.Center
         )
-
-        // The old "Upgrade plan" pill is deliberately absent from Home:
-        // Billing stays reachable from the drawer's Account group.
     }
 }
 
@@ -513,9 +481,10 @@ private fun salutation(base: String, firstName: String): String =
     if (firstName.isEmpty()) base else "$base, $firstName"
 
 /**
- * One real conversation row: title + relative time + (when the stored model
- * id is known to the catalogue) the model name. Tap opens the conversation;
- * long-press opens the same pin/rename/archive/delete sheet as the drawer.
+ * One real conversation row: title + relative time. Tap opens the
+ * conversation; long-press opens the same pin/rename/archive/delete sheet as
+ * the drawer. (The per-row model-name subline is gone — model names are not
+ * ordinary-user furniture.)
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -551,25 +520,11 @@ private fun HomeConversationRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceXS)
-            ) {
-                Text(
-                    relativeTime(conversation.updatedAt),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = GsTheme.colors.textSecondary
-                )
-                // Model indicator only from a real catalogue hit — an unknown
-                // or absent model id is omitted, never guessed.
-                modelNameFor(conversation.modelId)?.let { model ->
-                    Text(
-                        "· $model",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = GsTheme.colors.textTertiary
-                    )
-                }
-            }
+            Text(
+                relativeTime(conversation.updatedAt),
+                style = MaterialTheme.typography.labelMedium,
+                color = GsTheme.colors.textSecondary
+            )
         }
         if (conversation.pinned) {
             Icon(
@@ -583,179 +538,308 @@ private fun HomeConversationRow(
 }
 
 /**
- * WHAT CAN GS HELP WITH? — three honest seeds into the REAL chat composer.
- * Each one opens chat(null, prompt): no fake capability, just a head start.
+ * SECONDARY invitation — three honest seeds. A starter fills the ONE composer
+ * above (no navigation, no second input system): the user reviews the text and
+ * presses send. Tap → review → send. Quiet text chips — no icon theatre.
  */
 @Composable
-private fun StartersSection(onNavigate: (String) -> Unit) {
+private fun StartersSection(onPick: (String) -> Unit) {
     val starters = remember {
         listOf(
-            Starter(Icons.Outlined.Description, "Summarise a PDF into a brief"),
-            Starter(Icons.Outlined.EditNote, "Draft a launch email"),
-            Starter(Icons.Outlined.School, "Explain a concept step by step")
+            "Summarise a PDF into a brief",
+            "Draft a launch email",
+            "Explain a concept step by step"
         )
     }
-    Column(
-        verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
-    ) {
-        SectionLabel("Start something")
-        starters.forEach { starter ->
-            StarterRow(icon = starter.icon, label = starter.label) {
-                onNavigate(GsRoutes.chat(null, starter.label))
-            }
-        }
-    }
-}
-
-private data class Starter(val icon: ImageVector, val label: String)
-
-@Composable
-private fun StarterRow(
-    icon: ImageVector,
-    label: String,
-    onClick: () -> Unit
-) {
-    val rowInteraction = remember { MutableInteractionSource() }
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(GsRadius.mdShape())
-            .kineticPress(rowInteraction)
-            .clickable(
-                interactionSource = rowInteraction,
-                indication = LocalIndication.current,
-                role = Role.Button,
-                onClickLabel = "Start a chat"
-            ) { onClick() }
-            .padding(horizontal = 6.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceM)
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
     ) {
-        Surface(
-            shape = CircleShape,
-            color = GsTheme.colors.raisedSurface,
-            modifier = Modifier.size(38.dp)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    icon,
-                    contentDescription = null,
-                    tint = GsTheme.colors.textPrimary,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
+        starters.forEach { label ->
+            GsChip(
+                text = label,
+                selected = false,
+                onClick = { onPick(label) }
+            )
         }
-        Text(
-            label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = GsTheme.colors.textPrimary
-        )
     }
 }
 
 /**
- * WHAT CAN GS DO? — capability discovery, honestly labelled: no "Trending",
- * no "Popular", no fabricated rankings. Five real destinations total — three
- * tools and two workspaces — each a compact raised-surface card.
+ * The PRIMARY action — a REAL inline composer. The old bar was an entry that
+ * routed to chat before the user could type; this field accepts the text right
+ * here and sending opens the conversation with the prompt already dispatched
+ * (GsRoutes.chat(autoSend = true)). Anatomy mirrors the chat composer: the
+ * shared [GsInputBar] (send lives in its trailing slot), one mic to the right
+ * — quick tap opens full voice mode, press-and-hold dictates straight into the
+ * field. Every dictation failure path dissolves quietly; denial is spoken via
+ * the snackbar with a recovery action.
  */
 @Composable
-private fun ToolsSection(onNavigate: (String) -> Unit) {
-    // Static content, remembered once — recomposition-stable.
-    val tools = remember {
-        listOf(
-            ToolEntry("Research", Icons.Outlined.TravelExplore, GsRoutes.RESEARCH),
-            ToolEntry("Create", Icons.Outlined.AutoAwesome, GsRoutes.CREATE),
-            ToolEntry("Search", Icons.Outlined.Search, GsRoutes.SEARCH)
-        )
-    }
-    val workspaces = remember {
-        listOf(
-            ToolEntry("Projects", Icons.Outlined.Folder, GsRoutes.PROJECTS),
-            ToolEntry("Assistants", Icons.Outlined.SmartToy, GsRoutes.ASSISTANTS)
-        )
-    }
-    Column(
-        verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
-    ) {
-        SectionLabel("Tools")
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
-        ) {
-            tools.forEach { entry ->
-                ToolCard(entry = entry, modifier = Modifier.weight(1f), onNavigate = onNavigate)
-            }
-        }
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
-        ) {
-            workspaces.forEach { entry ->
-                ToolCard(entry = entry, modifier = Modifier.weight(1f), onNavigate = onNavigate)
-            }
-        }
-    }
-}
-
-private data class ToolEntry(val label: String, val icon: ImageVector, val route: String)
-
-@Composable
-private fun ToolCard(
-    entry: ToolEntry,
-    modifier: Modifier = Modifier,
-    onNavigate: (String) -> Unit
+private fun HomeComposer(
+    draft: String,
+    onDraftChange: (String) -> Unit,
+    onSend: (String) -> Unit,
+    onOpenVoice: () -> Unit,
+    snackbarHostState: SnackbarHostState
 ) {
-    val cardInteraction = remember { MutableInteractionSource() }
-    Surface(
-        shape = GsRadius.mdShape(),
-        color = GsTheme.colors.raisedSurface,
-        modifier = modifier.kineticPress(cardInteraction)
+    val context = LocalContext.current
+    val view = LocalView.current
+    val keyboard = LocalSoftwareKeyboardController.current
+
+    // --- Voice press-and-hold (dictate into the field) ------------------------
+    var listening by remember { mutableStateOf(false) }
+    val recognizerRef = remember { mutableStateOf<SpeechRecognizer?>(null) }
+
+    fun quietReset() {
+        listening = false
+    }
+
+    fun startRecognizer() {
+        if (!SpeechRecognizer.isRecognitionAvailable(context)) {
+            // Device has no speech service — hand the user to full voice mode.
+            quietReset()
+            onOpenVoice()
+            return
+        }
+        runCatching {
+            val recognizer = SpeechRecognizer.createSpeechRecognizer(context)
+            recognizerRef.value = recognizer
+            recognizer.setRecognitionListener(object : RecognitionListener {
+                override fun onReadyForSpeech(params: Bundle?) {
+                    listening = true
+                }
+
+                override fun onBeginningOfSpeech() {}
+                override fun onRmsChanged(rmsdB: Float) {}
+                override fun onBufferReceived(buffer: ByteArray?) {}
+                override fun onEndOfSpeech() {}
+
+                override fun onError(error: Int) {
+                    // No match / timeout / busy — dissolve back to idle quietly.
+                    quietReset()
+                }
+
+                override fun onResults(results: Bundle?) {
+                    listening = false
+                    val text = results
+                        ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                        ?.firstOrNull()
+                    if (!text.isNullOrBlank()) {
+                        onDraftChange((draft + " " + text).trim())
+                    }
+                }
+
+                override fun onPartialResults(partialResults: Bundle?) {
+                    // Partials stay spoken-only; the committed result fills the
+                    // field once — no half-words flickering in the input.
+                }
+
+                override fun onEvent(eventType: Int, params: Bundle?) {}
+            })
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(
+                    RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                    RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+                )
+            }
+            recognizer.startListening(intent)
+        }.onFailure { quietReset() }
+    }
+
+    fun beginVoiceHold() {
+        val granted = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+        when {
+            granted -> startRecognizer()
+            // The system dialog covers the app; the grant callback picks up.
+            else -> listening = true
+        }
+    }
+
+    val holdScope = rememberCoroutineScope()
+
+    val micPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            startRecognizer()
+        } else {
+            // Denial is spoken, not silent: a snackbar says where the fix lives
+            // and hands the user straight to the app settings.
+            view.gsHaptic(android.view.HapticFeedbackConstants.CLOCK_TICK)
+            holdScope.launch {
+                val result = snackbarHostState.showSnackbar(
+                    message = "Microphone is off — allow it in Settings to talk",
+                    actionLabel = "Open Settings",
+                    duration = SnackbarDuration.Long
+                )
+                if (result == SnackbarResult.ActionPerformed) {
+                    runCatching {
+                        context.startActivity(
+                            Intent(AndroidSettings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                                .setData(Uri.fromParts("package", context.packageName, null))
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        )
+                    }
+                }
+            }
+            quietReset()
+        }
+    }
+
+    // Background lifecycle: the dictation mic is a foreground-only session.
+    // ON_STOP tears the recognizer down immediately; the dispose twin
+    // guarantees a created recognizer never outlives this canvas.
+    fun cancelDictation() {
+        runCatching {
+            recognizerRef.value?.stopListening()
+            recognizerRef.value?.destroy()
+        }
+        recognizerRef.value = null
+        quietReset()
+    }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) cancelDictation()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            cancelDictation()
+        }
+    }
+
+    val keyboardController = keyboard
+    Row(
+        verticalAlignment = Alignment.Bottom,
+        horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceXS)
     ) {
-        Row(
+        GsInputBar(
+            value = draft,
+            onValueChange = onDraftChange,
+            onSend = { text ->
+                keyboardController?.hide()
+                onSend(text)
+            },
+            placeholder = "Ask GS anything…",
+            modifier = Modifier.weight(1f),
+            imeAction = ImeAction.Send,
+            minLines = 1,
+            maxLines = 4
+        )
+
+        // Mic — tap: full voice mode; hold: dictate into the field.
+        var micHeld by remember { mutableStateOf(false) }
+        val micScale by animateFloatAsState(
+            targetValue = if (micHeld) 0.93f else 1f,
+            animationSpec = GsMotion.standard(),
+            label = "micHold"
+        )
+        Box(
             modifier = Modifier
-                .clickable(
-                    interactionSource = cardInteraction,
-                    indication = LocalIndication.current,
-                    role = Role.Button,
-                    onClickLabel = "Open ${entry.label}"
-                ) { onNavigate(entry.route) }
-                .padding(horizontal = GsMotion.spaceS, vertical = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
+                .size(56.dp)
+                .scale(micScale)
+                // TalkBack parity: the mic is a button — its double-tap opens
+                // voice mode exactly like a sighted tap; the hold behaviour
+                // stays a gesture the finger performs.
+                .semantics {
+                    role = Role.Button
+                    onClick(label = "Open voice mode") {
+                        onOpenVoice()
+                        true
+                    }
+                }
+                .pointerInput(Unit) {
+                    detectTapGestures(
+                        onPress = {
+                            micHeld = true
+                            var isHold = false
+                            val timer = holdScope.launch {
+                                delay(VOICE_HOLD_TRIGGER_MS)
+                                isHold = true
+                                view.gsHaptic(android.view.HapticFeedbackConstants.CLOCK_TICK)
+                                beginVoiceHold()
+                            }
+                            val released = tryAwaitRelease()
+                            micHeld = false
+                            timer.cancel()
+                            when {
+                                isHold -> recognizerRef.value?.stopListening()
+                                released -> onOpenVoice()
+                                // else — gesture cancelled: quiet no-op
+                            }
+                        }
+                    )
+                },
+            contentAlignment = Alignment.Center
         ) {
+            if (listening) VoicePulseHalo()
             Icon(
-                entry.icon,
-                contentDescription = null,
-                tint = GsTheme.colors.accent,
-                modifier = Modifier.size(18.dp)
-            )
-            Text(
-                entry.label,
-                style = MaterialTheme.typography.labelLarge,
-                color = GsTheme.colors.textPrimary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                Icons.Outlined.Mic,
+                contentDescription = "Voice input",
+                tint = if (listening) GsTheme.colors.accent else GsTheme.colors.textSecondary,
+                modifier = Modifier.size(22.dp)
             )
         }
     }
 }
 
-/** Quiet uppercase section label — the same language as the drawer's groups. */
+/** Breathing aurora halo around the mic while dictation is live. */
 @Composable
-private fun SectionLabel(text: String) {
-    Text(
-        text.uppercase(),
-        style = MaterialTheme.typography.labelMedium,
-        color = GsTheme.colors.textSecondary,
-        modifier = Modifier.padding(horizontal = 4.dp)
+private fun VoicePulseHalo() {
+    // Reduce-motion gate: the resting frame is held — a static halo, no
+    // infinite transition created at all (not a faster one).
+    if (SettingsStore.reduceAnimations || SettingsStore.reduceMotion) {
+        HaloFrame(haloScale = 1f, haloAlpha = 0.5f)
+        return
+    }
+    val transition = rememberInfiniteTransition(label = "voiceHalo")
+    val pulse by transition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.42f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(850),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "voiceHaloPulse"
+    )
+    val fade by transition.animateFloat(
+        initialValue = 0.5f,
+        targetValue = 0.1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(850),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "voiceHaloFade"
+    )
+    HaloFrame(haloScale = pulse, haloAlpha = fade)
+}
+
+@Composable
+private fun HaloFrame(haloScale: Float, haloAlpha: Float) {
+    Box(
+        modifier = Modifier
+            .size(46.dp)
+            .graphicsLayer { scaleX = haloScale; scaleY = haloScale; alpha = haloAlpha }
+            .clip(CircleShape)
+            .background(rememberAuroraBrush(CircleShape))
     )
 }
 
+private const val VOICE_HOLD_TRIGGER_MS = 280L
+
 /**
- * GS LiveUpdate pill — benchmark-quiet surface (raised + aurora dot, same
- * language as the model pill). Only rendered when a newer build is published:
- * "v0.2.0 ready" → tap → "Downloading update · 42%" → "Update ready · tap to
- * install" → system installer. A dropped stream resumes from the exact byte it
- * broke at, and if a download truly cannot finish the pill says so and stays
- * tappable — it never dissolves into nothing.
+ * GS LiveUpdate pill — benchmark-quiet surface (raised + aurora dot). Only
+ * rendered when a newer build is published: "v0.2.0 ready" → tap →
+ * "Downloading update · 42%" → "Update ready · tap to install" → system
+ * installer. A dropped stream resumes from the exact byte it broke at, and if
+ * a download truly cannot finish the pill says so and stays tappable.
  */
 @Composable
 private fun LiveUpdatePill() {
@@ -814,350 +898,6 @@ private fun UpdatePill(text: String, onClick: () -> Unit) {
         }
     }
 }
-
-/**
- * The composer ENTRY — the primary action of Home, visually dominant. A
- * raised bar that reads as the place to start: tapping it opens the real
- * chat composer (GsRoutes.chat(null)). This is an entry, not a composer:
- * there is no attach affordance here (attaching files belongs to the real
- * composer in Chat — step 4 scope) and the field never pretends to accept
- * typed text. The mic opens full voice mode; press-and-hold the orb to
- * dictate — live partials fill the bar, release hands the transcript to the
- * chat composer. A quick tap still opens full voice mode. Every failure path
- * dissolves quietly — nothing surfaces as an error.
- */
-@Composable
-private fun HeroInput(
-    onNavigate: (String) -> Unit,
-    snackbarHostState: SnackbarHostState
-) {
-    val context = LocalContext.current
-    val view = LocalView.current
-
-    // --- Voice press-and-hold -------------------------------------------------
-    var listening by remember { mutableStateOf(false) }
-    var transcript by remember { mutableStateOf("") }
-    val recognizerRef = remember { mutableStateOf<SpeechRecognizer?>(null) }
-
-    fun quietReset() {
-        listening = false
-        transcript = ""
-    }
-
-    fun startRecognizer() {
-        if (!SpeechRecognizer.isRecognitionAvailable(context)) {
-            // Device has no speech service — hand the user to full voice mode.
-            quietReset()
-            onNavigate(GsRoutes.VOICE)
-            return
-        }
-        runCatching {
-            val recognizer = SpeechRecognizer.createSpeechRecognizer(context)
-            recognizerRef.value = recognizer
-            recognizer.setRecognitionListener(object : RecognitionListener {
-                override fun onReadyForSpeech(params: Bundle?) {
-                    listening = true
-                }
-
-                override fun onBeginningOfSpeech() {}
-                override fun onRmsChanged(rmsdB: Float) {}
-                override fun onBufferReceived(buffer: ByteArray?) {}
-                override fun onEndOfSpeech() {}
-
-                override fun onError(error: Int) {
-                    // No match / timeout / busy — dissolve back to idle quietly.
-                    quietReset()
-                }
-
-                override fun onResults(results: Bundle?) {
-                    listening = false
-                    val text = results
-                        ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                        ?.firstOrNull()
-                    transcript = ""
-                    if (!text.isNullOrBlank()) onNavigate(GsRoutes.chat(null, text))
-                }
-
-                override fun onPartialResults(partialResults: Bundle?) {
-                    transcript = partialResults
-                        ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                        ?.firstOrNull()
-                        .orEmpty()
-                }
-
-                override fun onEvent(eventType: Int, params: Bundle?) {}
-            })
-            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                putExtra(
-                    RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-                    RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
-                )
-                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-            }
-            recognizer.startListening(intent)
-        }.onFailure { quietReset() }
-    }
-
-    fun beginVoiceHold() {
-        val granted = ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.RECORD_AUDIO
-        ) == PackageManager.PERMISSION_GRANTED
-        when {
-            granted -> startRecognizer()
-            // The system dialog covers the app; if the user is still holding
-            // when they return, the grant callback picks the hold right up.
-            else -> listening = true
-        }
-    }
-
-    val holdScope = rememberCoroutineScope()
-
-    val micPermission = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        if (granted) {
-            startRecognizer()
-        } else {
-            // Denial is spoken, not silent: a snackbar says where the fix lives
-            // and hands the user straight to the app settings (the system can
-            // also keep asking — the launcher still re-fires on the next hold).
-            // Then the orb quietly resets.
-            view.gsHaptic(android.view.HapticFeedbackConstants.CLOCK_TICK)
-            holdScope.launch {
-                val result = snackbarHostState.showSnackbar(
-                    message = "Microphone is off — allow it in Settings to talk",
-                    actionLabel = "Open Settings",
-                    duration = SnackbarDuration.Long
-                )
-                if (result == SnackbarResult.ActionPerformed) {
-                    runCatching {
-                        context.startActivity(
-                            Intent(AndroidSettings.ACTION_APPLICATION_DETAILS_SETTINGS)
-                                .setData(Uri.fromParts("package", context.packageName, null))
-                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        )
-                    }
-                }
-            }
-            quietReset()
-        }
-    }
-
-    // Background lifecycle (req 17): the dictation mic is a foreground-only
-    // session. ON_STOP (home, recents, screen off) tears the recognizer down
-    // immediately instead of leaving an open mic behind a stopped UI; the
-    // dispose twin guarantees a created recognizer never outlives this canvas
-    // — SpeechRecognizer must be destroyed explicitly, and leaking one per
-    // hold eventually starves the system speech-service binding.
-    fun cancelDictation() {
-        runCatching {
-            recognizerRef.value?.stopListening()
-            recognizerRef.value?.destroy()
-        }
-        recognizerRef.value = null
-        quietReset()
-    }
-    val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_STOP) cancelDictation()
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-            cancelDictation()
-        }
-    }
-
-    val entryInteraction = remember { MutableInteractionSource() }
-    Surface(
-        shape = GsRadius.inputShape(),
-        color = GsTheme.colors.raisedSurface,
-        modifier = Modifier
-            .fillMaxWidth()
-            .kineticPress(entryInteraction)
-    ) {
-        Row(
-            modifier = Modifier
-                .clickable(
-                    interactionSource = entryInteraction,
-                    indication = LocalIndication.current,
-                    role = Role.Button,
-                    onClickLabel = "Start a new chat"
-                ) {
-                    // Mid-dictation the entry does not navigate — releasing
-                    // the orb decides what happens to the transcript.
-                    if (!listening) onNavigate(GsRoutes.chat(null))
-                }
-                .padding(
-                    horizontal = GsMotion.spaceS,
-                    vertical = GsMotion.spaceS
-                ),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
-        ) {
-            Text(
-                when {
-                    listening && transcript.isBlank() -> "Listening…"
-                    listening -> transcript
-                    else -> "Ask GS anything…"
-                },
-                style = MaterialTheme.typography.bodyLarge,
-                color = if (listening) GsTheme.colors.textPrimary else GsTheme.colors.textPlaceholder,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(vertical = GsMotion.spaceS)
-            )
-
-            // Mic — full voice mode
-            val micInteraction = remember { MutableInteractionSource() }
-            Surface(
-                shape = CircleShape,
-                color = androidx.compose.ui.graphics.Color.Transparent,
-                modifier = Modifier
-                    .size(42.dp)
-                    .kineticPress(micInteraction)
-            ) {
-                Box(
-                    modifier = Modifier.clickable(
-                        interactionSource = micInteraction,
-                        indication = LocalIndication.current
-                    ) { onNavigate(GsRoutes.VOICE) },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        Icons.Outlined.Mic,
-                        contentDescription = "Voice input",
-                        tint = GsTheme.colors.textSecondary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-            }
-
-            // Aurora orb — press-and-hold to dictate (the hero affordance)
-            var orbHeld by remember { mutableStateOf(false) }
-            val orbScale by animateFloatAsState(
-                targetValue = if (orbHeld) 0.93f else 1f,
-                animationSpec = GsMotion.standard(),
-                label = "orbHold"
-            )
-            Box(
-                modifier = Modifier
-                    .size(62.dp)
-                    .scale(orbScale)
-                    // TalkBack parity: the orb is a button — its double-tap
-                    // opens voice mode exactly like a sighted tap; the hold
-                    // behaviour stays a gesture the finger performs.
-                    .semantics {
-                        role = Role.Button
-                        onClick(label = "Open voice mode") {
-                            onNavigate(GsRoutes.VOICE)
-                            true
-                        }
-                    }
-                    .pointerInput(Unit) {
-                        detectTapGestures(
-                            onPress = {
-                                orbHeld = true
-                                var isHold = false
-                                val timer = holdScope.launch {
-                                    delay(VOICE_HOLD_TRIGGER_MS)
-                                    isHold = true
-                                    // Hold threshold crossed — the system's
-                                    // quiet tick announces "dictation armed"
-                                    // before the mic actually opens.
-                                    view.gsHaptic(android.view.HapticFeedbackConstants.CLOCK_TICK)
-                                    beginVoiceHold()
-                                }
-                                val released = tryAwaitRelease()
-                                orbHeld = false
-                                timer.cancel()
-                                when {
-                                    isHold -> recognizerRef.value?.stopListening()
-                                    released -> onNavigate(GsRoutes.VOICE)
-                                    // else — gesture cancelled: quiet no-op
-                                }
-                            }
-                        )
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                if (listening) VoicePulseHalo()
-                Surface(
-                    shape = CircleShape,
-                    color = GsTheme.colors.accentSoft,
-                    modifier = Modifier
-                        .size(44.dp)
-                        .kineticPress()
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .background(rememberAuroraBrush(CircleShape), CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            Icons.Outlined.GraphicEq,
-                            contentDescription = "Hold to talk",
-                            tint = GsTheme.colors.textPrimary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-/** Breathing aurora halo around the hero orb while dictation is live. */
-@Composable
-private fun VoicePulseHalo() {
-    // Reduce-motion gate: the resting frame is held — a static halo, no
-    // infinite transition created at all (not a faster one).
-    if (SettingsStore.reduceAnimations || SettingsStore.reduceMotion) {
-        HaloFrame(haloScale = 1f, haloAlpha = 0.5f)
-        return
-    }
-    val transition = rememberInfiniteTransition(label = "voiceHalo")
-    val pulse by transition.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.42f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(850),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "voiceHaloPulse"
-    )
-    val fade by transition.animateFloat(
-        initialValue = 0.5f,
-        targetValue = 0.1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(850),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "voiceHaloFade"
-    )
-    HaloFrame(haloScale = pulse, haloAlpha = fade)
-}
-
-@Composable
-private fun HaloFrame(haloScale: Float, haloAlpha: Float) {
-    Box(
-        modifier = Modifier
-            .size(46.dp)
-            .graphicsLayer { scaleX = haloScale; scaleY = haloScale; alpha = haloAlpha }
-            .clip(CircleShape)
-            .background(rememberAuroraBrush(CircleShape))
-    )
-}
-
-private const val VOICE_HOLD_TRIGGER_MS = 280L
-
-/** modelId → real catalogue display name; null/unknown ids yield null. */
-private fun modelNameFor(modelId: String?): String? =
-    modelId?.let { ModelCatalog.byId(it)?.displayName }
 
 /**
  * Same relative-time language as the Chats inbox (ChatsScreen.relativeTime):

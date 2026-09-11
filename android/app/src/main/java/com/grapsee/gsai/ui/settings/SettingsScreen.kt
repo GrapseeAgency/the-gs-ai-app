@@ -82,7 +82,6 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 private val themeOptions = listOf("Light", "Dark", "System")
-private val effortOptions = listOf("Low", "Medium", "High")
 private val aiLanguageOptions = listOf("EN", "中文", "हिन्दी", "العربية")
 
 @Composable
@@ -157,7 +156,6 @@ fun SettingsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {}) {
                 expandedId = expandedId,
                 onToggle = { expandedId = if (expandedId == "chat") null else "chat" }
             ) {
-                ValueRow(title = "Default model", value = "GS Balanced")
                 SwitchRow(
                     title = "Enter to send",
                     checked = SettingsStore.enterToSend,
@@ -174,8 +172,11 @@ fun SettingsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {}) {
                     checked = SettingsStore.sendDoubleTap,
                     onCheckedChange = { SettingsStore.updateSendDoubleTap(it) }
                 )
-                // Real model state: shows the default the chat send path reads,
-                // and hands the reader to the Model Centre to change it.
+                // THE model row — the single source of truth for the default
+                // model. It reads the same ModelPrefs the chat send path reads
+                // (the hardcoded "GS Balanced" row that contradicted it from
+                // above is gone) and hands the reader to the Model Centre to
+                // change it.
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -216,12 +217,11 @@ fun SettingsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {}) {
                     checked = SettingsStore.personalisation,
                     onCheckedChange = { SettingsStore.updatePersonalisation(it) }
                 )
-                Text(
-                    text = "Reasoning effort",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                ChipRow(options = effortOptions, selected = SettingsStore.reasoningEffort) { SettingsStore.updateReasoningEffort(it) }
+                // "Reasoning effort" (Low/Medium/High) deleted: it was a
+                // parameter dial wired to nothing — no send path, model or
+                // prompt ever read it. SettingsStore keeps its keys (other
+                // code may own migration); the UI simply no longer presents
+                // a control that does nothing.
             }
 
             ExpandCard(
@@ -295,19 +295,10 @@ fun SettingsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {}) {
                     checked = SettingsStore.biometricUnlock,
                     onCheckedChange = { SettingsStore.updateBiometricUnlock(it) }
                 )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Two-factor authentication",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.weight(1f)
-                    )
-                    GsChip(text = "On", selected = true)
-                }
-                ValueRow(title = "Trusted devices", value = "2")
+                // The fake "Two-factor: On" / "Trusted devices: 2" rows are
+                // gone — nothing on the device backs them, and a security
+                // value the app invented is worse than no row at all. Only
+                // the genuinely wired toggles above remain.
             }
 
             ExpandCard(
@@ -430,6 +421,8 @@ fun SettingsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {}) {
             ) {
                 ValueRow(title = "Version", value = BuildConfig.VERSION_NAME)
                 ValueRow(title = "Build", value = BuildConfig.VERSION_CODE.toString())
+                // True on Android: LiveUpdater (data/liveupdate) checks the
+                // GitHub-hosted manifest and self-updates the installed APK.
                 ValueRow(title = "Updates", value = "Automatic via GS LiveUpdate")
             }
 

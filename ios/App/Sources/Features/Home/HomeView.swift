@@ -1,26 +1,36 @@
 import SwiftUI
 
 /**
- * AERUO KINETIC home — the content-driven workbench (UI rebuild Step 3).
- * The canvas answers three questions with REAL content only:
- *   1. What can GS do?        — capability tiles, each routed to a real screen
- *   2. What was I doing?      — live Continue/Recent rows from ConversationStore
- *   3. What can GS help with? — starter prompts that prefill the composer
+ * GS home — the conversation-first launch surface (Phase 2 hierarchy).
  *
- * Honesty contract: every control performs a real action or real
- * navigation. No invented identity (the greeting falls back to a plain
- * time-of-day line via `AccountStore`), no fabricated model label (the
- * pill resolves the persisted pick against the catalog), no tagline
- * rotation loop, no demo recents (those stay drawer-only), no attach
- * affordance (attachments live in the real composer), and no fabricated
- * category labels (Trending / Popular / For you are gone).
+ * Mental model: "Open app → talk to AI → get answer → continue conversation."
+ * One primary element — the REAL inline composer pinned at the bottom —
+ * supported by a compact identity moment and quiet real content:
+ *   1. Compact hero   — small orb + time-of-day greeting (real first name
+ *                       via AccountStore; neutral fallback, never invented)
+ *                       + one quiet subline.
+ *   2. Continue       — up to 3 REAL recent conversations; the section
+ *                       disappears entirely when there is nothing to show.
+ *   3. Starters       — up to 3 quiet chips that fill the inline composer
+ *                       and raise the keyboard (they never navigate away).
+ *   4. Pinned composer— a real field ("Ask GS anything…") that grows to
+ *                       ~4 lines, send (enabled only with text → opens a NEW
+ *                       chat and auto-sends via .chatAutoSend), mic (tap =
+ *                       Voice screen; hold = the existing dictation mechanic,
+ *                       transcript lands in THIS field), disclaimer line.
+ *
+ * Honesty contract: every control performs a real action or real navigation.
+ * No model pill (model choice lives quietly in chat), no tool cards, no
+ * fabricated content, no competing invitation systems beyond Continue +
+ * starters. The orb survives only as a small, reduce-motion-gated identity
+ * mark — the existing breathing loop, demoted in size.
  */
 struct HomeView: View {
 
     var onOpenDrawer: (() -> Void)? = nil
-    /// Programmatic route bridge — the composer orb's voice hold hands its
-    /// transcript to a brand-new chat through `.chatPrefill`, and the orb's
-    /// quick tap opens full voice mode.
+    /// Programmatic route bridge — the composer's send hands the typed text
+    /// to a brand-new chat through `.chatAutoSend`, and the mic's quick tap
+    /// opens full voice mode.
     var onRoute: ((AeroRoute) -> Void)? = nil
 
     // Live content sources — the greeting re-renders when identity changes,
@@ -30,17 +40,12 @@ struct HomeView: View {
 
     @State private var breathe: CGFloat = 1.0
 
-    // Model pill resolution, re-read from UserDefaults each time Home
-    // surfaces (returning from the Model Centre refreshes it via onAppear).
-    @State private var pillModel: ModelInfo?
-    @State private var pillMode: String?
+    // The inline composer — the one primary element of the screen.
+    @State private var composerText = ""
+    @FocusState private var composerFocused: Bool
 
-    // Research has no registered AeroRoute — it stays a fullScreenCover
-    // workspace (the only one Home still needs; the Vision / Writing / Code /
-    // Image tiles died with the chip wall).
-    @State private var showResearch = false
-
-    // Voice press-and-hold on the composer orb
+    // Voice press-and-hold on the composer mic (mechanics unchanged from the
+    // Step-3 orb; the transcript now lands in the inline composer field).
     @StateObject private var dictation = VoiceDictation()
     @State private var holdTimer: Task<Void, Never>?
     @State private var holdTriggered = false
@@ -55,8 +60,7 @@ struct HomeView: View {
     @State private var renameTarget: StoredConversation?
     @State private var renameDraft = ""
 
-    // MARK: Static tile lists (let-constants — no per-render rebuilds, no
-    // rotation loops; every symbol is a verified, rendering SF Symbol).
+    // MARK: Starters (quiet chips — the label IS the payload)
 
     private struct StarterPrompt: Identifiable {
         let symbol: String
@@ -70,29 +74,6 @@ struct HomeView: View {
         StarterPrompt(symbol: "lightbulb", label: "Explain a concept step by step")
     ]
 
-    private enum TileTarget {
-        case route(AeroRoute)
-        case research
-    }
-
-    private struct HomeTile: Identifiable {
-        let symbol: String
-        let label: String
-        let target: TileTarget
-        var id: String { label }
-    }
-
-    private let toolTiles: [HomeTile] = [
-        HomeTile(symbol: "doc.text.magnifyingglass", label: "Research", target: .research),
-        HomeTile(symbol: "sparkles", label: "Create", target: .route(.createTab)),
-        HomeTile(symbol: "magnifyingglass", label: "Search", target: .route(.search))
-    ]
-
-    private let workspaceTiles: [HomeTile] = [
-        HomeTile(symbol: "folder", label: "Projects", target: .route(.projects)),
-        HomeTile(symbol: "cpu", label: "Assistants", target: .route(.assistants))
-    ]
-
     var body: some View {
         ZStack {
             Aero.background.ignoresSafeArea()
@@ -103,17 +84,19 @@ struct HomeView: View {
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: Aero.Spacing.xl) {
                         hero
-                        composerEntry
                         continuation
                         startersSection
-                        capabilitySection
-                        disclaimer
                     }
                     .padding(.horizontal, Aero.Spacing.m)
                     .gsContentWidth()
                     .padding(.top, Aero.Spacing.s)
                     .padding(.bottom, Aero.Spacing.l)
                 }
+                Divider().overlay(Aero.outline)
+                pinnedComposer
+                    .padding(.horizontal, Aero.Spacing.m)
+                    .padding(.top, Aero.Spacing.s)
+                    .gsContentWidth()
             }
         }
         .toolbar(.hidden, for: .navigationBar)
@@ -128,24 +111,20 @@ struct HomeView: View {
                     breathe = 1.06
                 }
             }
-            // Voice press-and-hold: a finished hold hands its transcript to
-            // a fresh chat composer (blank transcripts quietly do nothing).
+            // Voice press-and-hold: a finished hold fills the INLINE composer
+            // field with its transcript and raises the keyboard (blank
+            // transcripts quietly do nothing).
             dictation.onFinish = { text in
                 guard !text.isEmpty else { return }
-                onRoute?(.chatPrefill(text))
+                composerText = text
+                composerFocused = true
             }
-            // Real model pill: resolve the persisted pick whenever Home
-            // surfaces (first show, and returning from the Model Centre).
-            refreshModelPill()
         }
         .onDisappear {
             // Deep-perf pass 80-b: the hero breathe is a repeatForever
             // animation — let it settle when Home leaves the hierarchy so it
             // never keeps ticking behind a pushed screen. onAppear restarts it.
             breathe = 1.0
-        }
-        .fullScreenCover(isPresented: $showResearch) {
-            ResearchView()
         }
         .onChange(of: scenePhase) { phase in
             // Scene went to the background mid-hold: the mic session closes
@@ -174,7 +153,7 @@ struct HomeView: View {
         }
     }
 
-    // MARK: Top bar — menu · real model pill · new chat
+    // MARK: Top bar — menu · brand mark · new chat
 
     private var topBar: some View {
         HStack(spacing: Aero.Spacing.s) {
@@ -188,22 +167,12 @@ struct HomeView: View {
 
             Spacer()
 
-            NavigationLink(value: AeroRoute.models) {
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(LinearGradient(
-                            colors: Aero.aurora,
-                            startPoint: .topLeading, endPoint: .bottomTrailing))
-                        .frame(width: 8, height: 8)
-                    Text(modelPillText)
-                        .font(Aero.label())
-                        .foregroundColor(Aero.text)
-                }
-                .padding(.horizontal, Aero.Spacing.m)
-                .padding(.vertical, 10)
-                .background(Capsule().fill(Aero.raisedSurface))
-            }
-            .buttonStyle(KineticPressStyle())
+            // Simple brand mark — no model name, no mode suffix. Model
+            // choice lives quietly in the chat header, not on the front door.
+            Text("GS")
+                .font(Aero.headline())
+                .foregroundColor(Aero.text)
+                .accessibilityAddTraits(.isHeader)
 
             Spacer()
 
@@ -225,36 +194,10 @@ struct HomeView: View {
         }
     }
 
-    /// The pill always shows the REAL persisted pick: the catalog name for
-    /// UserDefaults "gs.models.defaultId", plus a " · mode" suffix ONLY when
-    /// the stored "gs.models.mode" is one that model actually offers
-    /// (gs-balanced supports ["Fast", "Balanced"] — the fabricated
-    /// "GS Balanced · High" is gone). An unknown id falls back to the
-    /// catalog's flagged default — the same "server default" semantics the
-    /// chat send path applies — and the suffix disappears rather than
-    /// inventing a tier.
-    private var modelPillText: String {
-        let model = pillModel ?? ModelInfo.catalog.first { $0.isDefault }
-        guard let model else { return "" }
-        if let mode = pillMode, model.modes.contains(mode) {
-            return "\(model.name) · \(mode)"
-        }
-        return model.name
-    }
+    // MARK: Compact hero — small orb · greeting (identity, never invention)
 
-    private func refreshModelPill() {
-        let storedID = UserDefaults.standard.string(forKey: "gs.models.defaultId") ?? "gs-balanced"
-        pillModel = ModelInfo.catalog.first { $0.id == storedID }
-        // The Model Centre treats an unset mode as "Balanced" — mirror it so
-        // the pill agrees with what the Model Centre displays.
-        pillMode = UserDefaults.standard.string(forKey: "gs.models.mode") ?? "Balanced"
-    }
-
-    // MARK: Hero — orb · greeting (identity, never invention)
-
-    /// The old "Upgrade plan" pill was deleted with the Step-3 rebuild —
-    /// billing stays reachable through the drawer's Account header Pro chip
-    /// (routes to .billing).
+    /// The orb is demoted to a small identity mark: the existing aurora
+    /// treatment and breathing loop at ~36pt, reduce-motion gated.
     private var hero: some View {
         VStack(spacing: Aero.Spacing.s) {
             ZStack {
@@ -262,19 +205,19 @@ struct HomeView: View {
                     .fill(LinearGradient(
                         colors: Aero.aurora,
                         startPoint: .topLeading, endPoint: .bottomTrailing))
-                    .frame(width: 84, height: 84)
+                    .frame(width: 36, height: 36)
                     .scaleEffect(breathe)
                 Circle()
                     .fill(Aero.background.opacity(0.35))
-                    .frame(width: 66, height: 66)
+                    .frame(width: 26, height: 26)
                 Image(systemName: "sparkles")
-                    .font(.system(size: 20))
+                    .font(.system(size: 12))
                     .foregroundColor(Aero.text)
             }
-            .padding(.bottom, Aero.Spacing.m)
+            .padding(.bottom, Aero.Spacing.xs)
 
             Text(greeting)
-                .font(Aero.displayTitle())
+                .font(Aero.headline())
                 .foregroundColor(Aero.text)
                 .multilineTextAlignment(.center)
                 .accessibilityAddTraits(.isHeader)
@@ -286,6 +229,7 @@ struct HomeView: View {
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
+        .padding(.top, Aero.Spacing.l)
     }
 
     /// Time-of-day + the user's actual first name (AccountStore). The
@@ -306,66 +250,19 @@ struct HomeView: View {
         }
     }
 
-    // MARK: Composer entry — the one dominant action
-
-    /// Honest composer entry: raised surface, real placeholder, tap opens
-    /// the real composer (.chat(nil)). The old fake attach (+) affordance is
-    /// gone — attachments live in the real composer. Mic tap opens full
-    /// voice mode; the orb carries the verbatim press-and-hold machinery.
-    private var composerEntry: some View {
-        HStack(spacing: Aero.Spacing.s) {
-            NavigationLink(value: AeroRoute.chat(nil)) {
-                Text(dictation.isListening
-                    ? (dictation.transcript.isEmpty ? "Listening…" : dictation.transcript)
-                    : "Ask GS anything…")
-                    .font(Aero.body())
-                    .foregroundColor(dictation.isListening ? Aero.text : Aero.textPlaceholder)
-                    .lineLimit(1)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, Aero.Spacing.s)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(KineticPressStyle())
-            .disabled(dictation.isListening)
-
-            NavigationLink(value: AeroRoute.voice) {
-                Image(systemName: "mic")
-                    .font(.system(size: 16))
-                    .foregroundColor(Aero.textSecondary)
-                    .frame(width: 42, height: 42)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(KineticPressStyle())
-            .accessibilityLabel("Voice input")
-
-            voiceHoldOrb
-        }
-        .padding(Aero.Spacing.s)
-        .background(RoundedRectangle(cornerRadius: Aero.Radius.input).fill(Aero.raisedSurface))
-    }
-
     // MARK: Continuation — "What was I doing?"
 
     /// Live data only, straight from ConversationStore with the SAME
     /// filtering/ordering the drawer recents use (activeConversations:
     /// archived hidden, pins float, newest first) — up to 3 rows total, and
-    /// NOTHING at all when the store is empty (no demo fallback here; the
-    /// demo recents stay drawer-only so starter prompts can breathe).
+    /// NOTHING at all when the store is empty (no demo fallback anywhere).
     @ViewBuilder
     private var continuation: some View {
-        if let latest = visibleConversations.first {
+        if !visibleConversations.isEmpty {
             VStack(alignment: .leading, spacing: Aero.Spacing.s) {
                 sectionLabel("Continue")
-                conversationRow(latest)
-                allChatsLink
-            }
-            let older = Array(visibleConversations.dropFirst().prefix(2))
-            if !older.isEmpty {
-                VStack(alignment: .leading, spacing: Aero.Spacing.s) {
-                    sectionLabel("Recent")
-                    ForEach(older) { conversation in
-                        conversationRow(conversation)
-                    }
+                ForEach(visibleConversations) { conversation in
+                    conversationRow(conversation)
                 }
             }
         }
@@ -373,23 +270,6 @@ struct HomeView: View {
 
     private var visibleConversations: [StoredConversation] {
         Array(store.activeConversations.prefix(3))
-    }
-
-    private var allChatsLink: some View {
-        NavigationLink(value: AeroRoute.chats) {
-            HStack(spacing: Aero.Spacing.xs) {
-                Text("All chats")
-                    .font(Aero.label())
-                    .foregroundColor(Aero.textSecondary)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundColor(Aero.textSecondary)
-            }
-            .padding(.horizontal, Aero.Spacing.s)
-            .padding(.vertical, 10)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(KineticPressStyle())
     }
 
     /// One clear row: title + relative time + optional model indicator
@@ -486,108 +366,128 @@ struct HomeView: View {
         Task { try? await APIClient.shared.deleteConversation(id: id) }
     }
 
-    // MARK: Starter prompts — "What can GS help with?"
+    // MARK: Starters — quiet chips that seed the inline composer
 
+    /// Tapping a starter NEVER navigates away: the text lands in the pinned
+    /// composer field and the keyboard rises — the reader stays on Home and
+    /// sends when ready.
     private var startersSection: some View {
         VStack(alignment: .leading, spacing: Aero.Spacing.s) {
-            sectionLabel("Start a new thread")
+            sectionLabel("Try asking")
             ForEach(starters) { starter in
-                promptRow(starter)
-            }
-        }
-    }
-
-    /// Each prompt prefills the real composer — the label IS the payload.
-    private func promptRow(_ starter: StarterPrompt) -> some View {
-        NavigationLink(value: AeroRoute.chatPrefill(starter.label)) {
-            HStack(spacing: Aero.Spacing.m) {
-                ZStack {
-                    Circle().fill(Aero.raisedSurface).frame(width: 38, height: 38)
-                    Image(systemName: starter.symbol)
-                        .font(.system(size: 14))
-                        .foregroundColor(Aero.text)
-                }
-                Text(starter.label)
-                    .font(Aero.body())
-                    .foregroundColor(Aero.text)
-                Spacer()
-            }
-            .padding(.horizontal, 6)
-            .padding(.vertical, 6)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(KineticPressStyle())
-    }
-
-    // MARK: Capability discovery — honest, route-backed, max 5 tiles
-
-    /// One compact section split Tools / Workspaces. Every tile is a REAL
-    /// destination: registered AeroRoute cases where they exist; Research
-    /// keeps its (real) fullScreenCover because it has no registered route.
-    /// No Trending / Popular / For you labels, and no LiveUpdate equivalent —
-    /// that is an Android-only real feature and is not faked here.
-    private var capabilitySection: some View {
-        VStack(alignment: .leading, spacing: Aero.Spacing.l) {
-            VStack(alignment: .leading, spacing: Aero.Spacing.s) {
-                sectionLabel("Tools")
-                ForEach(toolTiles) { tile in
-                    tileRow(tile)
-                }
-            }
-            VStack(alignment: .leading, spacing: Aero.Spacing.s) {
-                sectionLabel("Workspaces")
-                ForEach(workspaceTiles) { tile in
-                    tileRow(tile)
-                }
-            }
-        }
-    }
-
-    private func tileRow(_ tile: HomeTile) -> some View {
-        Group {
-            switch tile.target {
-            case .research:
                 Button {
-                    showResearch = true
+                    GSHaptics.select()
+                    composerText = starter.label
+                    composerFocused = true
                 } label: {
-                    tileLabel(tile)
+                    HStack(spacing: Aero.Spacing.s) {
+                        Image(systemName: starter.symbol)
+                            .font(.system(size: 13))
+                            .foregroundColor(Aero.textSecondary)
+                        Text(starter.label)
+                            .font(Aero.body())
+                            .foregroundColor(Aero.text)
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, Aero.Spacing.m)
+                    .padding(.vertical, 10)
+                    .background(Capsule().fill(Aero.raisedSurface))
+                    .contentShape(Rectangle())
                 }
-            case .route(let route):
-                NavigationLink(value: route) {
-                    tileLabel(tile)
-                }
+                .buttonStyle(KineticPressStyle())
+                .accessibilityLabel("\(starter.label). Fills the composer below")
             }
+        }
+    }
+
+    // MARK: Pinned inline composer — the primary element
+
+    private var pinnedComposer: some View {
+        VStack(spacing: Aero.Spacing.xs) {
+            HStack(alignment: .bottom, spacing: Aero.Spacing.s) {
+                if dictation.isListening {
+                    // Live transcript while the hold is active — the field
+                    // fills for real, so the reader watches their words land.
+                    Text(dictation.transcript.isEmpty ? "Listening…" : dictation.transcript)
+                        .font(Aero.body())
+                        .foregroundColor(dictation.transcript.isEmpty ? Aero.textPlaceholder : Aero.text)
+                        .multilineTextAlignment(.leading)
+                        .lineLimit(4)
+                        .frame(maxWidth: .infinity, minHeight: 24, alignment: .leading)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
+                        .background(Capsule().fill(Aero.inputSurface))
+                        .overlay(Capsule().stroke(Aero.outline, lineWidth: 1))
+                        .accessibilityLabel("Dictating")
+                } else {
+                    TextField("Ask GS anything…", text: $composerText, axis: .vertical)
+                        .font(Aero.body())
+                        .foregroundColor(Aero.text)
+                        .lineLimit(1...4)
+                        .focused($composerFocused)
+                        .submitLabel(.send)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
+                        .background(Capsule().fill(Aero.inputSurface))
+                        .overlay(Capsule().stroke(Aero.outline, lineWidth: 1))
+                        .onSubmit {
+                            // Mirror the app's Enter-to-send setting — the
+                            // same gate the chat composer applies.
+                            if SettingsStore.shared.enterToSend {
+                                sendComposer()
+                            }
+                        }
+                        .onChange(of: composerText) { newValue in
+                            // Multi-line fields land Return as a trailing
+                            // newline on some iOS builds — same coalescing
+                            // trick the chat composer uses.
+                            guard SettingsStore.shared.enterToSend, newValue.hasSuffix("\n") else { return }
+                            composerText = String(newValue.dropLast())
+                            sendComposer()
+                        }
+                }
+
+                sendButton
+
+                voiceHoldOrb
+            }
+            Text("GS can make mistakes — double-check important info.")
+                .font(Aero.caption())
+                .foregroundColor(Aero.textSecondary)
+                .frame(maxWidth: .infinity)
+        }
+        .padding(.bottom, Aero.Spacing.s)
+    }
+
+    /// Send is enabled only when the field holds real text; a send opens a
+    /// NEW chat and the typed text is sent automatically on arrival
+    /// (.chatAutoSend — the conversation starts, not a prefill).
+    private var sendButton: some View {
+        Button {
+            sendComposer()
+        } label: {
+            Image(systemName: "arrow.up.circle.fill")
+                .font(.system(size: 24))
+                .foregroundStyle(
+                    composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        ? AnyShapeStyle(Aero.textDisabled)
+                        : AnyShapeStyle(Aero.accent))
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
         }
         .buttonStyle(KineticPressStyle())
-        .accessibilityLabel(tile.label)
+        .disabled(composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        .accessibilityLabel("Send")
     }
 
-    private func tileLabel(_ tile: HomeTile) -> some View {
-        HStack(spacing: Aero.Spacing.m) {
-            ZStack {
-                Circle().fill(Aero.raisedSurface).frame(width: 38, height: 38)
-                Image(systemName: tile.symbol)
-                    .font(.system(size: 14))
-                    .foregroundColor(Aero.text)
-            }
-            Text(tile.label)
-                .font(Aero.body())
-                .foregroundColor(Aero.text)
-            Spacer()
-        }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 6)
-        .contentShape(Rectangle())
-    }
-
-    // MARK: Footer
-
-    private var disclaimer: some View {
-        Text("GS can make mistakes — double-check important info.")
-            .font(Aero.caption())
-            .foregroundColor(Aero.textSecondary)
-            .frame(maxWidth: .infinity)
-            .padding(.bottom, Aero.Spacing.s)
+    private func sendComposer() {
+        let text = composerText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        GSHaptics.tap()   // committed send — the same tick the chat plays
+        composerText = ""
+        composerFocused = false
+        onRoute?(.chatAutoSend(text))
     }
 
     private func sectionLabel(_ text: String) -> some View {
@@ -600,9 +500,10 @@ struct HomeView: View {
 
     // MARK: Voice press-and-hold — the composer affordance (verbatim)
 
-    /// Aurora orb: hold past the threshold to dictate (live transcript in
-    /// the composer line), quick tap still opens full voice mode. Every
-    /// failure path dissolves quietly — nothing is ever shown as an error.
+    /// Aurora orb: hold past the threshold to dictate (the transcript fills
+    /// the inline composer field), quick tap still opens full voice mode.
+    /// Every failure path dissolves quietly — nothing is ever shown as an
+    /// error.
     private var voiceHoldOrb: some View {
         ZStack {
             if dictation.isListening {

@@ -97,7 +97,6 @@ fun OnboardingScreen(onFinished: () -> Unit) {
     var stepIndex by remember { mutableIntStateOf(0) }
     val interests = remember { mutableStateListOf<String>() }
     var responseStyle by remember { mutableStateOf("Balanced") }
-    var reasoningEffort by remember { mutableStateOf("Medium") }
     var personality by remember { mutableStateOf("Friendly") }
     val capabilities = remember { mutableStateListOf<String>() }
     var taskAlerts by remember { mutableStateOf(true) }
@@ -163,8 +162,6 @@ fun OnboardingScreen(onFinished: () -> Unit) {
                 OnboardingStep.AiPreferences -> AiPreferencesStep(
                     responseStyle = responseStyle,
                     onStyleChange = { responseStyle = it },
-                    reasoningEffort = reasoningEffort,
-                    onEffortChange = { reasoningEffort = it },
                     personality = personality,
                     onPersonalityChange = { personality = it }
                 )
@@ -284,8 +281,6 @@ private fun InterestsStep(interests: SnapshotStateList<String>) {
 private fun AiPreferencesStep(
     responseStyle: String,
     onStyleChange: (String) -> Unit,
-    reasoningEffort: String,
-    onEffortChange: (String) -> Unit,
     personality: String,
     onPersonalityChange: (String) -> Unit
 ) {
@@ -302,18 +297,13 @@ private fun AiPreferencesStep(
         )
         Spacer(Modifier.height(GsMotion.spaceS))
         PreferenceChipCard(
-            title = "Reasoning effort",
-            options = listOf("Low", "Medium", "High"),
-            selected = reasoningEffort,
-            onSelect = onEffortChange
-        )
-        Spacer(Modifier.height(GsMotion.spaceS))
-        PreferenceChipCard(
             title = "Personality",
             options = listOf("Professional", "Friendly", "Playful"),
             selected = personality,
             onSelect = onPersonalityChange
         )
+        // PHASE 2: the "Reasoning effort" cards are removed — reasoning-mode
+        // vocabulary is not ordinary-user configuration (and never persisted).
     }
 }
 

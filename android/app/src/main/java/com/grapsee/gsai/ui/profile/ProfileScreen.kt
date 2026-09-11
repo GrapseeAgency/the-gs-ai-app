@@ -1,10 +1,8 @@
 package com.grapsee.gsai.ui.profile
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -12,19 +10,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Devices
-import androidx.compose.material.icons.outlined.History
-import androidx.compose.material.icons.outlined.Link
-import androidx.compose.material.icons.outlined.Notifications
-import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.Shield
-import androidx.compose.material.icons.outlined.WorkspacePremium
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -32,37 +22,34 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import com.grapsee.gsai.ui.components.GsCard
-import com.grapsee.gsai.ui.components.GsChip
+import com.grapsee.gsai.data.AccountStore
 import com.grapsee.gsai.ui.components.GsListItem
 import com.grapsee.gsai.ui.components.GsScreenScaffold
 import com.grapsee.gsai.ui.components.GsSectionHeader
 import com.grapsee.gsai.ui.navigation.GsRoutes
 import com.grapsee.gsai.ui.theme.GsMotion
-import com.grapsee.gsai.ui.theme.rememberAuroraBrush
 
+/**
+ * Profile — the honest version. The identity is the REAL stored account
+ * (the name/email the user typed at sign-in, read from AccountStore — the
+ * same source the drawer header uses). Nothing is invented: a blank store
+ * degrades to neutral lines, never a fabricated name. The fake usage card
+ * (1,284 messages / 45m voice / 32 images / 68% bar) and the fake
+ * Devices/Security/Sessions values that used to live here are gone — no
+ * data, no numbers. Below the identity: the only two destinations that
+ * actually exist, Settings and Billing.
+ */
 @Composable
 fun ProfileScreen(onNavigate: (String) -> Unit) {
-    GsScreenScaffold(
-        title = "Profile",
-        actions = {
-            IconButton(onClick = { onNavigate(GsRoutes.SETTINGS) }) {
-                Icon(
-                    imageVector = Icons.Outlined.Settings,
-                    contentDescription = "Settings",
-                    tint = MaterialTheme.colorScheme.onBackground
-                )
-            }
-            IconButton(onClick = { onNavigate(GsRoutes.NOTIFICATIONS) }) {
-                Icon(
-                    imageVector = Icons.Outlined.Notifications,
-                    contentDescription = "Notifications",
-                    tint = MaterialTheme.colorScheme.onBackground
-                )
-            }
-        }
-    ) {
+    // AccountStore is a SharedPreferences read (same pattern as the drawer
+    // account header): a stable snapshot per entry into this screen.
+    val context = LocalContext.current
+    val storedName = AccountStore.displayName(context)
+    val storedEmail = AccountStore.email(context)
+
+    GsScreenScaffold(title = "Profile") {
         Column(
             modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(GsMotion.spaceM)
@@ -80,115 +67,43 @@ fun ProfileScreen(onNavigate: (String) -> Unit) {
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Text(
-                            text = "GA",
+                            // Initials of the REAL stored name, or the neutral
+                            // "GS" mark — never initials of a name that does
+                            // not exist (mirrors the drawer's rule).
+                            text = initialsFor(storedName),
                             style = MaterialTheme.typography.headlineMedium,
                             color = MaterialTheme.colorScheme.onPrimaryContainer
                         )
                     }
                 }
                 Text(
-                    text = "Grapsee Admin",
+                    text = storedName.ifBlank { "GS account" },
                     style = MaterialTheme.typography.titleLarge,
                     color = MaterialTheme.colorScheme.onBackground
                 )
                 Text(
-                    text = "graphesee@gmail.com",
+                    // The stored email, else a neutral line — never a
+                    // fabricated address.
+                    text = storedEmail.ifBlank { "Signed in" },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
-            // Monthly usage
-            GsCard {
-                Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceM)) {
-                    Text(
-                        text = "Monthly AI usage",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Row(modifier = Modifier.fillMaxWidth()) {
-                        UsageStat(value = "1,284", label = "Messages", modifier = Modifier.weight(1f))
-                        UsageStat(value = "45m", label = "Voice", modifier = Modifier.weight(1f))
-                        UsageStat(value = "32", label = "Images", modifier = Modifier.weight(1f))
-                    }
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(8.dp)
-                            .background(
-                                MaterialTheme.colorScheme.surfaceContainerHigh,
-                                RoundedCornerShape(4.dp)
-                            )
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth(0.68f)
-                                .height(8.dp)
-                                .background(rememberAuroraBrush(), RoundedCornerShape(4.dp))
-                        )
-                    }
-                    Text(
-                        text = "68% of monthly allowance · Resets in 12 days",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            // Account
+            // Account — navigation only. Every row is a real destination.
             Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)) {
                 GsSectionHeader(title = "Account")
                 GsListItem(
-                    title = "Personal information",
-                    leading = { AccountIcon(Icons.Outlined.Person) },
-                    onClick = {}
+                    title = "Settings",
+                    subtitle = "Appearance, privacy, security, accessibility",
+                    leading = { AccountIcon(Icons.Outlined.Settings) },
+                    onClick = { onNavigate(GsRoutes.SETTINGS) }
                 )
                 GsListItem(
-                    title = "Subscription",
-                    leading = { AccountIcon(Icons.Outlined.WorkspacePremium) },
-                    trailing = { GsChip(text = "Pro", selected = true, onClick = {}) },
+                    title = "Billing",
+                    subtitle = "GS AI is in early access",
+                    leading = { AccountIcon(Icons.Outlined.CreditCard) },
                     onClick = { onNavigate(GsRoutes.BILLING) }
-                )
-                GsListItem(
-                    title = "Connected services",
-                    leading = { AccountIcon(Icons.Outlined.Link) },
-                    onClick = {}
-                )
-                GsListItem(
-                    title = "Devices",
-                    leading = { AccountIcon(Icons.Outlined.Devices) },
-                    trailing = {
-                        Text(
-                            text = "3",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    },
-                    onClick = {}
-                )
-                GsListItem(
-                    title = "Security",
-                    leading = { AccountIcon(Icons.Outlined.Shield) },
-                    trailing = {
-                        Text(
-                            text = "Strong",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    },
-                    onClick = {}
-                )
-                GsListItem(
-                    title = "Sessions",
-                    leading = { AccountIcon(Icons.Outlined.History) },
-                    trailing = {
-                        Text(
-                            text = "2 active",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    },
-                    onClick = {}
                 )
             }
 
@@ -209,22 +124,12 @@ private fun AccountIcon(icon: ImageVector) {
     )
 }
 
-@Composable
-private fun UsageStat(value: String, label: String, modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(2.dp)
-    ) {
-        Text(
-            text = value,
-            style = MaterialTheme.typography.titleLarge,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
+/**
+ * Initials from the REAL stored name: the first letter of each of the first
+ * two words, uppercased. No stored name → the neutral "GS" mark.
+ */
+private fun initialsFor(name: String): String {
+    val words = name.trim().split(Regex("\\s+")).filter { it.isNotBlank() }
+    if (words.isEmpty()) return "GS"
+    return words.take(2).map { it.first().uppercaseChar() }.joinToString("")
 }

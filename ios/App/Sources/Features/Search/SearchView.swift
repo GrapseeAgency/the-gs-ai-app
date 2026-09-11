@@ -144,7 +144,7 @@ struct SearchView: View {
                 id: "asst-\(assistant.id)",
                 kind: .assistants,
                 title: assistant.name,
-                detail: "\(assistant.category) · ★ \(assistant.ratingText)",
+                detail: assistant.category,
                 route: .assistant(assistant.id)))
         }
         for project in projectStore.projects

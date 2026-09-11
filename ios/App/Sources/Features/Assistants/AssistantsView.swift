@@ -22,11 +22,10 @@ struct AssistantSample: Identifiable, Hashable, Codable {
     var archived: Bool = false
 
     /// "12.4k" style usage label.
-    var usesText: String {
-        uses >= 1000 ? String(format: "%.1fk", Double(uses) / 1000) : "\(uses)"
-    }
-
-    var ratingText: String { String(format: "%.1f", rating) }
+    ///
+    /// Phase 2 honesty purge: the fabricated marketplace stats (★ ratings,
+    /// "12.4k uses") are no longer rendered anywhere — samples stay, unbadged.
+    /// The stored fields remain for persisted-JSON compatibility.
 
     private enum CodingKeys: String, CodingKey {
         case id, name, category, desc, uses, rating, isFav, published
@@ -209,9 +208,10 @@ struct AssistantsView: View {
                 emptyMessage: "Tap the heart on any assistant to keep it close."
             )
         case .published:
+            // PHASE 2 parity with Android: user assistants only. The curated
+            // samples' published=true flags were invented marketplace metadata.
             filteredList(
-                AssistantSample.catalog.filter(\.published)
-                    + store.userAssistants.filter { $0.published && !$0.archived },
+                store.userAssistants.filter { $0.published && !$0.archived },
                 emptyTitle: "Nothing published yet",
                 emptyMessage: "Publish an assistant to share it on the marketplace."
             )
@@ -265,9 +265,6 @@ struct AssistantsView: View {
                         Text(featured.desc)
                             .font(Aero.caption())
                             .foregroundStyle(Aero.textMuted)
-                        Text("\(featured.usesText) uses · ★ \(featured.ratingText)")
-                            .font(Aero.caption())
-                            .foregroundStyle(Aero.textMuted)
                     }
                 }
             }
@@ -291,7 +288,7 @@ struct AssistantsView: View {
                         NavigationLink(value: AeroRoute.assistant(assistant.id)) {
                             AeroListRow(
                                 title: assistant.name,
-                                subtitle: "\(assistant.category) · \(assistant.usesText) uses · ★ \(assistant.ratingText)",
+                                subtitle: assistant.category,
                                 leading: {
                                     Image(systemName: "smarttoy")
                                         .font(.system(size: 15))
@@ -397,9 +394,6 @@ private struct AssistantGridCard: View {
                     .foregroundStyle(Aero.text)
                     .lineLimit(1)
                 Text(assistant.category)
-                    .font(Aero.caption())
-                    .foregroundStyle(Aero.textMuted)
-                Text("\(assistant.usesText) · ★ \(assistant.ratingText)")
                     .font(Aero.caption())
                     .foregroundStyle(Aero.textMuted)
             }

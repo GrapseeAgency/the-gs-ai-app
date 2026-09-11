@@ -24,15 +24,12 @@ private struct StaggerIn<Content: View>: View {
 
 // MARK: - Explore — the discovery layer
 
-/// EXPLORE tab root, ChatGPT-store style: horizontal discovery rows —
-/// Top picks, Trending now, Popular prompts, Featured AI tools and — when
-/// the user has created assistants — Made by you. One catalogue feeds the
-/// assistant rows, shared with the Assistants hub (`AssistantSample.catalog`
-/// plus published user creations), so names, ratings and usage never drift
-/// between surfaces. Category chips are built from the live catalogue —
-/// every chip leads somewhere real. Search + chip filter the rows together;
-/// serif prompt cards carry the editorial voice. Every card pushes an
-/// `AeroRoute` through NavigationLink(value:).
+/// EXPLORE section root (Phase 2): honest discovery — search + category
+/// chips over the real assistant catalogue (curated samples + the reader's
+/// published creations), a Helpful prompts carousel, and Made by you when
+/// the reader has creations. Fabricated ★ ratings, usage counts, the
+/// "Trending" ranking (sorted by invented numbers) and the "Featured tools"
+/// section are gone. Every card pushes a real `AeroRoute`.
 struct ExploreView: View {
 
     // MARK: Row-local sample content
@@ -42,17 +39,7 @@ struct ExploreView: View {
         /// re-identify every card on each keystroke and kill row continuity.
         var id: String { text }
         let text: String
-        let caption: String
         let category: String
-    }
-
-    private struct ToolCard: Identifiable {
-        var id: String { name }
-        let name: String
-        let detail: String
-        let icon: String
-        let category: String
-        let starter: String
     }
 
     @ObservedObject private var store = AssistantsStore.shared
@@ -62,16 +49,9 @@ struct ExploreView: View {
     @State private var pendingDelete: AssistantSample?
 
     private let prompts: [PromptCard] = [
-        .init(text: "Write a launch announcement in our brand voice", caption: "Writing · 8.2k uses", category: "Writing"),
-        .init(text: "Explain this quarter's numbers to a new hire", caption: "Business · 6.4k uses", category: "Business"),
-        .init(text: "Design a 7-day learning plan for Swift", caption: "Education · 5.1k uses", category: "Education")
-    ]
-
-    private let tools: [ToolCard] = [
-        .init(name: "Web Researcher", detail: "Live sources, citations and clean reports.", icon: "magnifyingglass", category: "Research",
-              starter: "Research this topic with live sources and citations: "),
-        .init(name: "Diagrammer", detail: "Turn messy ideas into clean diagrams.", icon: "rectangle.3.group", category: "Design",
-              starter: "Turn these ideas into a clean diagram: ")
+        .init(text: "Write a launch announcement in our brand voice", category: "Writing"),
+        .init(text: "Explain this quarter's numbers to a new hire", category: "Business"),
+        .init(text: "Design a 7-day learning plan for Swift", category: "Education")
     ]
 
     // MARK: Catalogue — one source, shared with the Assistants hub
@@ -105,30 +85,24 @@ struct ExploreView: View {
     private var filtered: [AssistantSample] {
         catalogue.filter { matches($0.category) && containsTerm([$0.name, $0.category, $0.desc]) }
     }
-    private var topPicks: [AssistantSample] {
-        Array(filtered.prefix(4))
-    }
-    private var trending: [AssistantSample] {
-        filtered.sorted { $0.uses > $1.uses }
+    private var curated: [AssistantSample] {
+        Array(filtered.prefix(6))
     }
     private var mine: [AssistantSample] {
         store.userAssistants
             .filter { !$0.archived && containsTerm([$0.name, $0.category]) }
     }
     private var filteredPrompts: [PromptCard] {
-        prompts.filter { matches($0.category) && containsTerm([$0.text, $0.caption]) }
-    }
-    private var filteredTools: [ToolCard] {
-        tools.filter { matches($0.category) && containsTerm([$0.name, $0.detail]) }
+        prompts.filter { matches($0.category) && containsTerm([$0.text, $0.category]) }
     }
 
     private var nothingToShow: Bool {
-        filtered.isEmpty && filteredPrompts.isEmpty && filteredTools.isEmpty
+        filtered.isEmpty && filteredPrompts.isEmpty
     }
 
     private var nothingMessage: String {
         term.isEmpty
-            ? "No assistants, prompts or tools in this category — try another one."
+            ? "No assistants or prompts in this category — try another one."
             : "Nothing matched “\(term)”. Try different words or another category."
     }
 
@@ -147,11 +121,9 @@ struct ExploreView: View {
                         message: nothingMessage
                     )
                 } else {
-                    if !topPicks.isEmpty { StaggerIn(index: 3) { picksRow } }
-                    if !trending.isEmpty { StaggerIn(index: 4) { trendingRow } }
-                    if !filteredPrompts.isEmpty { StaggerIn(index: 5) { promptsRow } }
-                    if !filteredTools.isEmpty { StaggerIn(index: 6) { toolsRow } }
-                    if !mine.isEmpty { StaggerIn(index: 7) { mineRow } }
+                    if !curated.isEmpty { StaggerIn(index: 3) { curatedRow } }
+                    if !filteredPrompts.isEmpty { StaggerIn(index: 4) { promptsRow } }
+                    if !mine.isEmpty { StaggerIn(index: 5) { mineRow } }
                 }
             }
             .padding(.horizontal, Aero.Spacing.m)
@@ -189,7 +161,7 @@ struct ExploreView: View {
             // The screen title lives in the inline nav bar now (Task 85-e I7)
             // — the duplicate in-content header text was dropped so the name
             // doesn't render twice. The tagline stays.
-            Text("The AI app store — assistants, prompts and tools.")
+            Text("Assistants and prompts to start from.")
                 .font(Aero.caption())
                 .foregroundStyle(Aero.textMuted)
         }
@@ -202,7 +174,7 @@ struct ExploreView: View {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 15, weight: .medium))
                 .foregroundStyle(Aero.textMuted)
-            TextField("Search assistants, prompts, tools…", text: $query)
+            TextField("Search assistants and prompts…", text: $query)
                 .font(Aero.body())
                 .foregroundStyle(Aero.text)
                 .focused($searchFocused)
@@ -262,11 +234,11 @@ struct ExploreView: View {
         }
     }
 
-    private var picksRow: some View {
+    private var curatedRow: some View {
         VStack(alignment: .leading, spacing: Aero.Spacing.s) {
-            SectionHeader(title: "Top picks")
+            SectionHeader(title: "Curated")
             carousel {
-                ForEach(topPicks) { assistant in
+                ForEach(curated) { assistant in
                     NavigationLink(value: AeroRoute.assistant(assistant.id)) {
                         AeroCard {
                             VStack(alignment: .leading, spacing: 0) {
@@ -281,10 +253,11 @@ struct ExploreView: View {
                                         .font(Aero.title())
                                         .foregroundStyle(Aero.text)
                                         .lineLimit(1)
-                                    Text("★ \(assistant.ratingText) · \(assistant.usesText) uses")
+                                    Text(assistant.desc)
                                         .font(Aero.caption())
                                         .foregroundStyle(Aero.textMuted)
-                                        .lineLimit(1)
+                                        .lineLimit(2)
+                                        .multilineTextAlignment(.leading)
                                     Text(assistant.category)
                                         .font(Aero.caption())
                                         .foregroundStyle(Aero.accent)
@@ -292,39 +265,7 @@ struct ExploreView: View {
                                 }
                             }
                         }
-                        .frame(width: 232, height: 148)
-                    }
-                    .buttonStyle(KineticPressStyle())
-                }
-            }
-        }
-    }
-
-    private var trendingRow: some View {
-        VStack(alignment: .leading, spacing: Aero.Spacing.s) {
-            SectionHeader(title: "Trending now")
-            carousel {
-                ForEach(Array(trending.enumerated()), id: \.element.id) { index, assistant in
-                    NavigationLink(value: AeroRoute.assistant(assistant.id)) {
-                        AeroCard {
-                            VStack(alignment: .leading, spacing: 0) {
-                                Text("\(index + 1)")
-                                    .font(Aero.display())
-                                    .foregroundStyle(Aero.accent)
-                                Spacer(minLength: 0)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(assistant.name)
-                                        .font(Aero.title())
-                                        .foregroundStyle(Aero.text)
-                                        .lineLimit(2)
-                                    Text("\(assistant.usesText) uses")
-                                        .font(Aero.caption())
-                                        .foregroundStyle(Aero.textMuted)
-                                        .lineLimit(1)
-                                }
-                            }
-                        }
-                        .frame(width: 148, height: 140)
+                        .frame(width: 232, height: 168)
                     }
                     .buttonStyle(KineticPressStyle())
                 }
@@ -334,7 +275,7 @@ struct ExploreView: View {
 
     private var promptsRow: some View {
         VStack(alignment: .leading, spacing: Aero.Spacing.s) {
-            SectionHeader(title: "Popular prompts")
+            SectionHeader(title: "Helpful prompts")
             carousel {
                 ForEach(filteredPrompts) { prompt in
                     NavigationLink(value: AeroRoute.chatPrefill(prompt.text)) {
@@ -346,50 +287,12 @@ struct ExploreView: View {
                                     .fixedSize(horizontal: false, vertical: true)
                                     .multilineTextAlignment(.leading)
                                 Spacer(minLength: 0)
-                                Text(prompt.caption)
+                                Text(prompt.category)
                                     .font(Aero.caption())
                                     .foregroundStyle(Aero.textMuted)
                             }
                         }
                         .frame(width: 248, height: 150)
-                    }
-                    .buttonStyle(KineticPressStyle())
-                }
-            }
-        }
-    }
-
-    private var toolsRow: some View {
-        VStack(alignment: .leading, spacing: Aero.Spacing.s) {
-            SectionHeader(title: "Featured AI tools")
-            carousel {
-                ForEach(filteredTools) { tool in
-                    NavigationLink(value: AeroRoute.chatPrefill(tool.starter)) {
-                        AeroCard {
-                            VStack(alignment: .leading, spacing: 0) {
-                                Image(systemName: tool.icon)
-                                    .font(.system(size: 15, weight: .medium))
-                                    .foregroundStyle(Aero.text)
-                                    .frame(width: 40, height: 40)
-                                    .background(Circle().fill(Aero.container))
-                                Spacer(minLength: 0)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(tool.name)
-                                        .font(Aero.title())
-                                        .foregroundStyle(Aero.text)
-                                        .lineLimit(1)
-                                    Text(tool.detail)
-                                        .font(Aero.caption())
-                                        .foregroundStyle(Aero.textMuted)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                        .multilineTextAlignment(.leading)
-                                    Image(systemName: "chevron.right")
-                                        .font(.system(size: 12, weight: .semibold))
-                                        .foregroundStyle(Aero.textMuted)
-                                }
-                            }
-                        }
-                        .frame(width: 236, height: 172)
                     }
                     .buttonStyle(KineticPressStyle())
                 }

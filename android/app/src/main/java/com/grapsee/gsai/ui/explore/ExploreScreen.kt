@@ -20,9 +20,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.Slideshow
 import androidx.compose.material.icons.outlined.SmartToy
-import androidx.compose.material.icons.outlined.TravelExplore
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -35,7 +33,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -52,45 +49,26 @@ import com.grapsee.gsai.ui.navigation.GsRoutes
 import com.grapsee.gsai.ui.theme.GsMotion
 
 /**
- * AERUO KINETIC — EXPLORE, the discovery layer / AI app store.
- * ChatGPT-store-style horizontal rows: Top picks, Trending now, Popular
- * prompts, Featured AI tools and — when the user has created assistants —
- * Made by you. One catalogue feeds the assistant rows, shared with the
- * Assistants hub (sample catalogue + published user creations), so names,
- * ratings and usage never drift between surfaces. Category chips are built
- * from the live catalogue — every chip leads somewhere real. Search + chip
- * filter the rows together; serif prompt cards carry the editorial voice.
+ * AERUO KINETIC — EXPLORE, the discovery layer / curated catalogue.
+ * Horizontal rows: Top picks, Curated for you, Helpful prompts and — when
+ * the user has created assistants — Made by you. One catalogue feeds the
+ * assistant rows, shared with the Assistants hub (curated samples +
+ * published user creations), so names never drift between surfaces.
+ * NOTHING is measured, so nothing is claimed: the star ratings and "8.2k
+ * uses" badges and the fabricated "Featured tools" inventory are gone —
+ * cards carry name, description and category only, and every row title
+ * describes curation, never popularity data that does not exist. Search +
+ * category chips filter the rows together; serif prompt cards carry the
+ * editorial voice.
  */
 
-private data class ExplorePrompt(val text: String, val category: String, val uses: String)
+private data class ExplorePrompt(val text: String, val category: String)
 
 private val popularPrompts = listOf(
-    ExplorePrompt("Turn rough notes into a crisp launch email", "Business", "3.2k uses"),
-    ExplorePrompt("Plan my week around three priorities", "Productivity", "2.7k uses"),
-    ExplorePrompt("Explain this codebase like I'm brand new", "Engineering", "2.1k uses")
+    ExplorePrompt("Turn rough notes into a crisp launch email", "Business"),
+    ExplorePrompt("Plan my week around three priorities", "Productivity"),
+    ExplorePrompt("Explain this codebase like I'm brand new", "Engineering")
 )
-
-private data class ExploreTool(val name: String, val blurb: String, val icon: ImageVector, val category: String, val starter: String)
-
-private val featuredTools = listOf(
-    ExploreTool(
-        "Deep Research", "Multi-source answers with citations", Icons.Outlined.TravelExplore, "Research",
-        starter = "Research this topic in depth and cite your sources: "
-    ),
-    ExploreTool(
-        "Slide Studio", "Decks from a single prompt", Icons.Outlined.Slideshow, "Business",
-        starter = "Draft a slide deck outline about: "
-    )
-)
-
-/** "12.4k" style usage label → sortable number (12_400); unparseable sorts last. */
-private fun usesNumber(raw: String): Int {
-    val trimmed = raw.trim()
-    if (trimmed.endsWith("k", ignoreCase = true)) {
-        trimmed.removeSuffix("k").removeSuffix(",").trim().toFloatOrNull()?.let { return (it * 1000).toInt() }
-    }
-    return trimmed.filter { it.isDigit() }.toIntOrNull() ?: 0
-}
 
 @Composable
 fun ExploreScreen(onNavigate: (String) -> Unit) {
@@ -113,17 +91,17 @@ fun ExploreScreen(onNavigate: (String) -> Unit) {
         (category == "All" || it.category == category) && matchesTerm(term, it.name, it.category, it.description)
     }
     val topPicks = remember(filtered) { filtered.take(4) }
-    val trending = remember(filtered) { filtered.sortedByDescending { usesNumber(it.uses) } }
+    // Curated for you: the full filtered catalogue in catalogue order — the
+    // order the editors of the app chose, not a popularity metric (no
+    // measured usage exists to rank by).
+    val curated = remember(filtered) { filtered }
     val mine = remember(userAssistants, term) {
         userAssistants.filter { !it.archived && matchesTerm(term, it.name, it.category) }
     }
     val prompts = popularPrompts.filter {
         (category == "All" || it.category == category) && matchesTerm(term, it.text, it.category)
     }
-    val tools = featuredTools.filter {
-        (category == "All" || it.category == category) && matchesTerm(term, it.name, it.blurb)
-    }
-    val nothingToShow = filtered.isEmpty() && prompts.isEmpty() && tools.isEmpty()
+    val nothingToShow = filtered.isEmpty() && prompts.isEmpty()
 
     Box(
         modifier = Modifier
@@ -144,7 +122,7 @@ fun ExploreScreen(onNavigate: (String) -> Unit) {
                     // by dismissing the keyboard so the reader sees them.
                     onSend = {},
                     imeAction = ImeAction.Search,
-                    placeholder = "Search assistants, prompts, tools…"
+                    placeholder = "Search assistants and prompts…"
                 )
                 CategoryChips(categories, selectedCategory, onSelect = { selectedCategory = it })
 
@@ -153,23 +131,20 @@ fun ExploreScreen(onNavigate: (String) -> Unit) {
                         icon = Icons.Outlined.Search,
                         title = if (term.isEmpty()) "Nothing in $category yet" else "No matches for \"$term\"",
                         message = if (term.isEmpty()) {
-                            "Try another category — new assistants, prompts and tools land every week."
+                            "Try another category to browse the catalogue."
                         } else {
-                            "Try different words or another category — the catalogue grows every week."
+                            "Try different words or another category."
                         }
                     )
                 } else {
                     if (topPicks.isNotEmpty()) {
                         TopPicksRow(topPicks, onNavigate)
                     }
-                    if (trending.isNotEmpty()) {
-                        TrendingRow(trending, onNavigate)
+                    if (curated.isNotEmpty()) {
+                        CuratedRow(curated, onNavigate)
                     }
                     if (prompts.isNotEmpty()) {
                         PromptsRow(prompts, onNavigate)
-                    }
-                    if (tools.isNotEmpty()) {
-                        ToolsRow(tools, onNavigate)
                     }
                     if (mine.isNotEmpty()) {
                         MadeByYouRow(mine, onNavigate)
@@ -226,13 +201,6 @@ private fun TopPicksRow(assistants: List<AssistantSample>, onNavigate: (String) 
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = "★ ${assistant.rating} · ${assistant.uses} uses",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
                                 text = assistant.category,
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.primary,
@@ -248,13 +216,15 @@ private fun TopPicksRow(assistants: List<AssistantSample>, onNavigate: (String) 
 }
 
 @Composable
-private fun TrendingRow(assistants: List<AssistantSample>, onNavigate: (String) -> Unit) {
+private fun CuratedRow(assistants: List<AssistantSample>, onNavigate: (String) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)) {
-        GsSectionHeader(title = "Trending now")
+        GsSectionHeader(title = "Curated for you")
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS),
             contentPadding = PaddingValues(horizontal = GsMotion.spaceXS)
         ) {
+            // The numeral is the card's editorial ordinal — the position in
+            // the curated catalogue, not a measured rank.
             itemsIndexedRanked(assistants) { rank, assistant ->
                 GsCard(
                     onClick = { onNavigate(GsRoutes.assistant(assistant.id)) },
@@ -278,7 +248,7 @@ private fun TrendingRow(assistants: List<AssistantSample>, onNavigate: (String) 
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = "${assistant.uses} uses",
+                                text = assistant.category,
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
@@ -292,7 +262,7 @@ private fun TrendingRow(assistants: List<AssistantSample>, onNavigate: (String) 
     }
 }
 
-/** Ranked lazy items — index flows in as the trending position (1-based). */
+/** Ranked lazy items — index flows in as the curated position (1-based). */
 private fun androidx.compose.foundation.lazy.LazyListScope.itemsIndexedRanked(
     assistants: List<AssistantSample>,
     card: @Composable (Int, AssistantSample) -> Unit
@@ -305,7 +275,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.itemsIndexedRanked(
 @Composable
 private fun PromptsRow(prompts: List<ExplorePrompt>, onNavigate: (String) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)) {
-        GsSectionHeader(title = "Popular prompts")
+        GsSectionHeader(title = "Helpful prompts")
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS),
             contentPadding = PaddingValues(horizontal = GsMotion.spaceXS)
@@ -332,55 +302,6 @@ private fun PromptsRow(prompts: List<ExplorePrompt>, onNavigate: (String) -> Uni
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.primary
                             )
-                            Text(
-                                text = "  ·  ${prompt.uses}",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ToolsRow(tools: List<ExploreTool>, onNavigate: (String) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)) {
-        GsSectionHeader(title = "Featured AI tools")
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS),
-            contentPadding = PaddingValues(horizontal = GsMotion.spaceXS)
-        ) {
-            items(tools, key = { it.name }) { tool ->
-                GsCard(
-                    onClick = { onNavigate(GsRoutes.chat(null, tool.starter)) },
-                    modifier = Modifier.width(236.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth().height(136.dp),
-                        verticalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        ToolBadge(tool.icon)
-                        Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceXS)) {
-                            Text(
-                                text = tool.name,
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                text = tool.blurb,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            GsChip(text = "Try it", selected = false) {
-                                onNavigate(GsRoutes.chat(null, tool.starter))
-                            }
                         }
                     }
                 }
@@ -447,24 +368,6 @@ private fun AssistantBadge(person: Boolean = false) {
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(18.dp)
-            )
-        }
-    }
-}
-
-@Composable
-private fun ToolBadge(icon: ImageVector) {
-    Surface(
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-        modifier = Modifier.size(44.dp)
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(20.dp)
             )
         }
     }

@@ -21,9 +21,9 @@ object GsRoutes {
     const val ASSISTANT_CREATE = "assistants/create"
     const val ASSISTANT_EDIT = "assistants/edit/{assistantId}"
     fun assistantEdit(id: String) = "assistants/edit/$id"
+    // PHASE 2: the fabricated Folders/Shared destinations are gone — Archive
+    // (real) remains the only chats hub quick-link.
     const val CHAT_ARCHIVE = "chats/archived"
-    const val CHAT_FOLDERS = "chats/folders"
-    const val CHAT_SHARED = "chats/shared"
     const val CHAT_SEARCH = "chats/search"
 
     // Session — first launch walks Auth → Onboarding before the command centre.
@@ -41,14 +41,22 @@ object GsRoutes {
     const val CODE_WORKSPACE = "create/code"
     const val PROMPT_BUILDER = "create/prompt"
 
-    const val CHAT = "chat/{conversationId}?prompt={prompt}"
+    const val CHAT = "chat/{conversationId}?prompt={prompt}&send={send}"
     const val ARG_CONVERSATION = "conversationId"
     const val ARG_PROMPT = "prompt"
+    const val ARG_SEND = "send"
 
-    /** Voice press-and-hold hands its transcript to the composer via ?prompt=. */
-    fun chat(conversationId: String?, prompt: String? = null): String {
+    /**
+     * Open a conversation. [prompt] prefills the composer; [autoSend] sends it
+     * immediately on arrival (PHASE 2 Home: the inline composer sends straight
+     * into a new chat — tap → type → send, no second keypress).
+     */
+    fun chat(conversationId: String?, prompt: String? = null, autoSend: Boolean = false): String {
         val base = "chat/${conversationId ?: "new"}"
-        return if (prompt.isNullOrBlank()) base else "$base?prompt=${Uri.encode(prompt)}"
+        val params = mutableListOf<String>()
+        if (!prompt.isNullOrBlank()) params += "prompt=${Uri.encode(prompt)}"
+        if (autoSend) params += "send=1"
+        return if (params.isEmpty()) base else "$base?${params.joinToString("&")}"
     }
 
     const val PROJECT_DETAIL = "project/{projectId}"

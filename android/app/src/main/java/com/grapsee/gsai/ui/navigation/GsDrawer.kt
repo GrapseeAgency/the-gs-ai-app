@@ -31,8 +31,10 @@ import androidx.compose.material.icons.outlined.Bookmarks
 import androidx.compose.material.icons.outlined.Chat
 import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.Notifications
@@ -69,7 +71,6 @@ import com.grapsee.gsai.data.AccountStore
 import com.grapsee.gsai.di.ServiceLocator
 import com.grapsee.gsai.ui.components.ConversationActionsSheet
 import com.grapsee.gsai.ui.components.GsButton
-import com.grapsee.gsai.ui.components.GsChip
 import com.grapsee.gsai.ui.components.gsConversationTitle
 import com.grapsee.gsai.ui.theme.GsHaptics
 import com.grapsee.gsai.ui.theme.GsMotion
@@ -81,22 +82,24 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
 /**
- * AERUO KINETIC drawer — the primary navigation of the product shell
- * (STEP 2). One coherent hierarchy, top to bottom:
+ * AERUO KINETIC drawer — the primary navigation of the product shell.
+ * PHASE 2 reclassification — a product navigation system, not an app
+ * directory. Top to bottom:
  *
- *  1. ACCOUNT — avatar, identity, subscription indicator; the row itself is
- *     the account action (Profile) and the plan chip routes to Billing.
- *  2. NEW CHAT — the single dominant action, styled as the Primary button.
- *  3. RECENT — live conversations (tap to open, long-press for actions),
- *     capped so history never drowns navigation; All chats / Archived below.
- *  4. PRIMARY — the core product areas: Home, Chats, Explore, Create, Library.
- *  5. TOOLS — the workspace surface: Projects, Assistants, Models, Search.
- *  6. ACCOUNT — Profile, Notifications, Billing, Settings; deliberately
- *     separated from product navigation.
+ *  1. ACCOUNT HEADER — real stored identity; the row opens Profile.
+ *     (The fabricated "Pro" plan chip is gone — no plan system exists.)
+ *  2. NEW CHAT — the single dominant action.
+ *  3. RECENT — LIVE conversations only; when there are none the group says
+ *     nothing (the hardcoded sample chats are deleted — an honest empty
+ *     state beats invented history). All chats / Archived always visible.
+ *  4. PRIMARY — Home, Chats, Explore, Create, Library.
+ *  5. SECONDARY ("More") — Projects, Assistants, Voice, Search.
+ *  6. ACCOUNT — Profile, Notifications, Billing, Settings.
+ *  7. ADVANCED — collapsed by default: Models, Compare models. Technical
+ *     surfaces stay reachable without sitting at parity with conversation.
  *
  * Every section row exposes a selected state driven by the current route —
- * the drawer always answers "where am I?". Content follows the active theme
- * through GsTheme tokens; nothing here is forced dark.
+ * the drawer always answers "where am I?".
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -190,7 +193,8 @@ fun GsDrawerContent(
                     color = GsTheme.colors.textSecondary
                 )
             }
-            GsChip(text = "Pro", selected = true, onClick = { onNavigate(GsRoutes.BILLING) })
+            // The fabricated "Pro" plan chip is removed — there is no plan
+            // system; Billing (honest early-access state) stays in Account.
         }
 
         Spacer(Modifier.height(GsMotion.spaceL))
@@ -208,41 +212,31 @@ fun GsDrawerContent(
 
         Spacer(Modifier.height(GsMotion.spaceL))
 
-        // 3 · Recent — accessible history, never overwhelming
+        // 3 · Recent — live history only. When the store is empty the group
+        // collapses to its two real destinations; nothing is invented.
         DrawerLabel("Recent")
         Spacer(Modifier.height(GsMotion.spaceS))
 
-        val liveRecents = recents.take(RECENT_LIMIT)
-        if (liveRecents.isEmpty()) {
-            // Cold cache — tasteful samples keep the drawer alive (same policy as Chats).
-            sampleRecents.forEach { sample ->
-                DrawerRow(sample.title) {
+        recents.take(RECENT_LIMIT).forEach { conversation ->
+            RecentRow(
+                conversation = conversation,
+                onOpen = {
                     onClose()
-                    onNavigate(GsRoutes.chat(sample.id))
+                    onNavigate(GsRoutes.chat(conversation.id))
+                },
+                onActions = {
+                    // The reveal haptic the system lists play on long-press.
+                    GsHaptics.longPress(haptics)
+                    actionTarget = conversation
                 }
-            }
-        } else {
-            liveRecents.forEach { conversation ->
-                RecentRow(
-                    conversation = conversation,
-                    onOpen = {
-                        onClose()
-                        onNavigate(GsRoutes.chat(conversation.id))
-                    },
-                    onActions = {
-                        // The reveal haptic the system lists play on long-press.
-                        GsHaptics.longPress(haptics)
-                        actionTarget = conversation
-                    }
-                )
-            }
-            Spacer(Modifier.height(GsMotion.spaceXS))
-            DrawerRow("All chats", icon = Icons.Outlined.Inbox) {
-                onClose(); onNavigate(GsRoutes.CHATS)
-            }
-            DrawerRow("Archived", icon = Icons.Outlined.Archive) {
-                onClose(); onNavigate(GsRoutes.CHAT_ARCHIVE)
-            }
+            )
+        }
+        Spacer(Modifier.height(GsMotion.spaceXS))
+        DrawerRow("All chats", icon = Icons.Outlined.Inbox) {
+            onClose(); onNavigate(GsRoutes.CHATS)
+        }
+        DrawerRow("Archived", icon = Icons.Outlined.Archive) {
+            onClose(); onNavigate(GsRoutes.CHAT_ARCHIVE)
         }
 
         Spacer(Modifier.height(GsMotion.spaceL))
@@ -271,8 +265,8 @@ fun GsDrawerContent(
         DrawerDivider()
         Spacer(Modifier.height(GsMotion.spaceL))
 
-        // 5 · Tools — the workspace surface
-        DrawerLabel("Tools")
+        // 5 · Secondary — real workspaces, one step below the product core
+        DrawerLabel("More")
         Spacer(Modifier.height(GsMotion.spaceS))
         DrawerRow("Projects", icon = Icons.Outlined.Folder, selected = selectedRoute == GsRoutes.PROJECTS) {
             onClose(); onNavigate(GsRoutes.PROJECTS)
@@ -280,8 +274,8 @@ fun GsDrawerContent(
         DrawerRow("Assistants", icon = Icons.Outlined.SmartToy, selected = selectedRoute == GsRoutes.ASSISTANTS) {
             onClose(); onNavigate(GsRoutes.ASSISTANTS)
         }
-        DrawerRow("Models", icon = Icons.Outlined.Speed, selected = selectedRoute == GsRoutes.MODELS) {
-            onClose(); onNavigate(GsRoutes.MODELS)
+        DrawerRow("Voice", icon = Icons.Outlined.GraphicEq, selected = selectedRoute == GsRoutes.VOICE) {
+            onClose(); onNavigate(GsRoutes.VOICE)
         }
         DrawerRow("Search", icon = Icons.Outlined.Search, selected = selectedRoute == GsRoutes.SEARCH) {
             onClose(); onNavigate(GsRoutes.SEARCH)
@@ -305,6 +299,55 @@ fun GsDrawerContent(
         }
         DrawerRow("Settings", icon = Icons.Outlined.Settings, selected = selectedRoute == GsRoutes.SETTINGS) {
             onClose(); onNavigate(GsRoutes.SETTINGS)
+        }
+
+        Spacer(Modifier.height(GsMotion.spaceL))
+        DrawerDivider()
+        Spacer(Modifier.height(GsMotion.spaceL))
+
+        // 7 · Advanced — technical surfaces, collapsed by default. A normal
+        // user never needs them; they stay reachable without competing with
+        // conversation at row parity.
+        var advancedOpen by remember { mutableStateOf(false) }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(GsRadius.mdShape())
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = LocalIndication.current,
+                    role = Role.Button
+                ) { advancedOpen = !advancedOpen }
+                .padding(horizontal = GsMotion.spaceM, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
+        ) {
+            Icon(
+                Icons.Outlined.Speed,
+                contentDescription = null,
+                tint = GsTheme.colors.textSecondary,
+                modifier = Modifier.size(18.dp)
+            )
+            Text(
+                "Advanced",
+                style = MaterialTheme.typography.bodyMedium,
+                color = GsTheme.colors.textPrimary,
+                modifier = Modifier.weight(1f)
+            )
+            Icon(
+                Icons.Outlined.ExpandMore,
+                contentDescription = if (advancedOpen) "Collapse advanced" else "Expand advanced",
+                tint = GsTheme.colors.textSecondary,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+        if (advancedOpen) {
+            DrawerRow("Models", icon = Icons.Outlined.SmartToy, selected = selectedRoute == GsRoutes.MODELS) {
+                onClose(); onNavigate(GsRoutes.MODELS)
+            }
+            DrawerRow("Compare models", selected = selectedRoute == GsRoutes.MODEL_COMPARE) {
+                onClose(); onNavigate(GsRoutes.MODEL_COMPARE)
+            }
         }
 
         Spacer(Modifier.height(GsMotion.spaceXL))
@@ -453,13 +496,3 @@ private fun initialsFor(name: String): String {
     if (words.isEmpty()) return "GS"
     return words.take(2).map { it.first().uppercaseChar() }.joinToString("")
 }
-
-private data class SampleRecent(val id: String, val title: String)
-
-private val sampleRecents = listOf(
-    SampleRecent("demo-1", "Q3 pricing strategy"),
-    SampleRecent("demo-2", "Kyoto trip plan"),
-    SampleRecent("demo-3", "Kotlin coroutines notes"),
-    SampleRecent("demo-4", "Brand voice guidelines"),
-    SampleRecent("demo-5", "Research: AI market")
-)

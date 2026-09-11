@@ -278,6 +278,14 @@ enum Aero {
 
     static func stagger(_ index: Int) -> Double { Double(index) * staggerStep }
 
+    /// Motion bridge (Phase 2): a dozen call sites read
+    /// `Aero.motion(Aero.spring)` — the pre-Step-1 helper that flattened
+    /// one-shot transitions under reduce motion by returning nil. Its duty
+    /// now lives inside the springs themselves (spring/snappy/gentle
+    /// self-degrade above), so this is an identity pass-through. Without it
+    /// the call sites reference a symbol that no longer exists.
+    static func motion(_ animation: Animation) -> Animation { animation }
+
     // MARK: Metrics
 
     enum Spacing {

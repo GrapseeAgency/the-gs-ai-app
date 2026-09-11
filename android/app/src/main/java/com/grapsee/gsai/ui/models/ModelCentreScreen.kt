@@ -1,6 +1,7 @@
 package com.grapsee.gsai.ui.models
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -9,17 +10,19 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -33,6 +36,7 @@ import android.view.HapticFeedbackConstants
 import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.data.ModelPrefs
 import com.grapsee.gsai.data.model.ModelCatalog
+import com.grapsee.gsai.data.model.ModelInfo
 import com.grapsee.gsai.ui.components.GsCard
 import com.grapsee.gsai.ui.components.GsChip
 import com.grapsee.gsai.ui.components.GsListItem
@@ -43,11 +47,17 @@ import com.grapsee.gsai.ui.theme.GsMotion
 import com.grapsee.gsai.ui.theme.gsHaptic
 import com.grapsee.gsai.ui.theme.rememberAuroraBrush
 
-private val reasoningModes = listOf(
-    "Fast", "Balanced", "Deep reasoning", "Research",
-    "Coding", "Creative", "Vision", "Voice"
-)
-
+/**
+ * PHASE 2 — the Model Centre speaks USER language, not architecture language.
+ *
+ * The catalogue is grouped into three plain tiers a normal person can act on:
+ * Fast / Everyday / Best for difficult questions. Picking a tier member is a
+ * single tap (it writes the same ModelPrefs key the chat send path reads).
+ * Everything technical — context windows, speed dots, capability chips,
+ * reasoning modes — lives ONLY inside a per-model "Advanced details"
+ * disclosure, collapsed by default. "Compare models" (the spec-sheet view) is
+ * demoted to the Advanced section at the bottom, off the consumer path.
+ */
 @Composable
 fun ModelCentreScreen(onNavigate: (String) -> Unit) {
     val context = LocalContext.current
@@ -55,24 +65,36 @@ fun ModelCentreScreen(onNavigate: (String) -> Unit) {
     // Preference-backed: the pick survives relaunches and the chat send path
     // reads the same id (ChatRepository gates it against the remote registry).
     var defaultId by remember { mutableStateOf(ModelPrefs.defaultId(context)) }
-    var expandedId by remember { mutableStateOf<String?>(null) }
-    var selectedMode by remember { mutableStateOf(ModelPrefs.mode(context)) }
+    var advancedId by remember { mutableStateOf<String?>(null) }
 
     val current = ModelCatalog.byId(defaultId) ?: ModelCatalog.default
 
-    GsScreenScaffold(
-        title = "Models",
-        actions = {
-            TextButton(onClick = { onNavigate(GsRoutes.MODEL_COMPARE) }) {
-                Text("Compare")
-            }
-        }
-    ) {
+    val tiers = remember {
+        listOf(
+            Triple(
+                "Fast",
+                "Quick answers when speed matters",
+                ModelCatalog.all.filter { it.speedTier == "fast" }
+            ),
+            Triple(
+                "Everyday",
+                "Smart help for daily questions",
+                ModelCatalog.all.filter { it.speedTier == "balanced" }
+            ),
+            Triple(
+                "Best for difficult questions",
+                "Takes its time, thinks deeper",
+                ModelCatalog.all.filter { it.speedTier == "deep" }
+            )
+        )
+    }
+
+    GsScreenScaffold(title = "Models") {
         Column(
             modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(GsMotion.spaceM)
         ) {
-            // Current default
+            // Current default — quiet, plain language only.
             GsCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(modifier = Modifier.weight(1f)) {
@@ -80,7 +102,11 @@ fun ModelCentreScreen(onNavigate: (String) -> Unit) {
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
                         ) {
-                            AuroraIndicator()
+                            Box(
+                                modifier = Modifier
+                                    .size(10.dp)
+                                    .background(rememberAuroraBrush(), CircleShape)
+                            )
                             Text(
                                 text = "Current default",
                                 style = MaterialTheme.typography.labelMedium,
@@ -99,103 +125,85 @@ fun ModelCentreScreen(onNavigate: (String) -> Unit) {
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    GsChip(text = "Default", selected = true)
                 }
             }
 
-            // Reasoning mode
-            Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)) {
-                GsSectionHeader(title = "Reasoning mode")
-                Row(
-                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
-                ) {
-                    reasoningModes.forEach { mode ->
-                        GsChip(
-                            text = mode,
-                            selected = mode == selectedMode,
-                            onClick = {
-                                view.gsHaptic(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
-                                selectedMode = mode
-                                ModelPrefs.setMode(context, mode)
-                            }
-                        )
-                    }
-                }
-            }
-
-            // Catalogue
-            Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)) {
-                GsSectionHeader(title = "All models")
-                ModelCatalog.all.forEach { model ->
-                    Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceXS)) {
-                        GsListItem(
-                            title = model.displayName,
-                            subtitle = "${model.tagline} · ${model.contextK}K context",
-                            leading = { ModelInitials(model.displayName) },
-                            trailing = {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    SpeedDots(model.speedTier)
-                                    if (model.id == defaultId) {
+            // The three consumer tiers. A tap selects — that is the whole
+            // consumer surface. No "128K context" subtitles, no speed dots.
+            tiers.forEach { (tierTitle, tierSubtitle, models) ->
+                Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)) {
+                    GsSectionHeader(title = tierTitle)
+                    Text(
+                        text = tierSubtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    )
+                    models.forEach { model ->
+                        Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceXS)) {
+                            GsListItem(
+                                title = model.displayName,
+                                subtitle = model.tagline,
+                                leading = { ModelInitials(model.displayName) },
+                                trailing = {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        if (model.id == defaultId) {
+                                            Icon(
+                                                imageVector = Icons.Outlined.Check,
+                                                contentDescription = "Default model",
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
                                         Icon(
-                                            imageVector = Icons.Outlined.Check,
-                                            contentDescription = "Default model",
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(16.dp)
+                                            imageVector = if (advancedId == model.id) {
+                                                Icons.Outlined.ExpandLess
+                                            } else {
+                                                Icons.Outlined.ExpandMore
+                                            },
+                                            contentDescription = if (advancedId == model.id) {
+                                                "Hide advanced details"
+                                            } else {
+                                                "Advanced details"
+                                            },
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier
+                                                .size(36.dp)
+                                                .clickable {
+                                                    advancedId =
+                                                        if (advancedId == model.id) null else model.id
+                                                }
+                                                .padding(6.dp)
                                         )
                                     }
+                                },
+                                onClick = {
+                                    view.gsHaptic(HapticFeedbackConstants.VIRTUAL_KEY)
+                                    defaultId = model.id
+                                    ModelPrefs.setDefaultId(context, model.id)
                                 }
-                            },
-                            onClick = {
-                                expandedId = if (expandedId == model.id) null else model.id
-                            }
-                        )
-                        if (expandedId == model.id) {
-                            GsCard {
-                                Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)) {
-                                    Text(
-                                        text = "Capabilities",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                                        horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
-                                    ) {
-                                        model.capabilities.forEach { capability ->
-                                            GsChip(text = capability, selected = false)
-                                        }
-                                    }
-                                    Text(
-                                        text = "Modes",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                                        horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
-                                    ) {
-                                        model.modes.forEach { mode ->
-                                            GsChip(text = mode, selected = false)
-                                        }
-                                    }
-                                    TextButton(onClick = {
-                                        defaultId = model.id
-                                        ModelPrefs.setDefaultId(context, model.id)
-                                    }) {
-                                        Text(
-                                            text = "Set as default",
-                                            color = MaterialTheme.colorScheme.primary
-                                        )
-                                    }
-                                }
+                            )
+                            // Technical material lives ONLY behind this
+                            // disclosure — collapsed for every normal user.
+                            if (advancedId == model.id) {
+                                ModelAdvancedDetails(model)
                             }
                         }
                     }
                 }
+            }
+
+            // Advanced — the deliberate secondary path. Compare (the spec
+            // table) is no longer part of normal consumer navigation.
+            Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)) {
+                GsSectionHeader(title = "Advanced")
+                GsListItem(
+                    title = "Compare models",
+                    subtitle = "Side-by-side technical view",
+                    onClick = { onNavigate(GsRoutes.MODEL_COMPARE) }
+                )
             }
 
             Spacer(modifier = Modifier.height(GsMotion.spaceL))
@@ -203,15 +211,72 @@ fun ModelCentreScreen(onNavigate: (String) -> Unit) {
     }
 }
 
-/** Small pulsing aurora dot — the "AI is alive" marker on the default card. */
+/** The full technical row — reachable only via the "Advanced details" toggle. */
 @Composable
-private fun AuroraIndicator() {
-    Box(
-        modifier = Modifier
-            .size(10.dp)
-            .background(rememberAuroraBrush(), CircleShape)
-    )
+private fun ModelAdvancedDetails(model: ModelInfo) {
+    GsCard {
+        Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)) {
+            DetailLine("Context window", "${model.contextK}K tokens")
+            DetailLine("Speed", speedLabel(model.speedTier))
+            Text(
+                text = "Capabilities",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScrollSafe(),
+                horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
+            ) {
+                model.capabilities.forEach { capability ->
+                    GsChip(text = capability, selected = false)
+                }
+            }
+            Text(
+                text = "Modes",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScrollSafe(),
+                horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
+            ) {
+                model.modes.forEach { mode ->
+                    GsChip(text = mode, selected = false)
+                }
+            }
+        }
+    }
 }
+
+@Composable
+private fun DetailLine(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+    }
+}
+
+private fun speedLabel(tier: String): String = when (tier) {
+    "fast" -> "Fastest"
+    "balanced" -> "Balanced"
+    else -> "Deepest"
+}
+
+/** Small horizontal scroller for chip rows — bounded, one line. */
+@Composable
+private fun Modifier.horizontalScrollSafe(): Modifier =
+    this.horizontalScroll(rememberScrollState())
 
 @Composable
 private fun ModelInitials(displayName: String) {
@@ -232,32 +297,6 @@ private fun ModelInitials(displayName: String) {
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onPrimaryContainer
             )
-        }
-    }
-}
-
-/** 1–3 filled dots by speed tier: fast=3, balanced=2, deep=1. */
-@Composable
-private fun SpeedDots(tier: String) {
-    val filled = when (tier) {
-        "fast" -> 3
-        "balanced" -> 2
-        else -> 1
-    }
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(3.dp)
-    ) {
-        repeat(3) { index ->
-            Surface(
-                shape = CircleShape,
-                color = if (index < filled) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.surfaceContainerHigh
-                },
-                modifier = Modifier.size(6.dp)
-            ) {}
         }
     }
 }

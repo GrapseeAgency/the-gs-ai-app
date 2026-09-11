@@ -124,9 +124,6 @@ struct AssistantDetailView: View {
                 .font(Aero.body())
                 .foregroundStyle(Aero.textMuted)
                 .multilineTextAlignment(.center)
-            Text("\(assistant.usesText) uses · ★ \(assistant.ratingText) · \(assistant.category)")
-                .font(Aero.caption())
-                .foregroundStyle(Aero.textMuted)
         }
         .frame(maxWidth: .infinity)
     }

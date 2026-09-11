@@ -24,16 +24,13 @@ private struct StaggerIn<Content: View>: View {
 
 // MARK: - Library — personal knowledge space
 
-/// LIBRARY tab root. Live search sits above the index; filter chips
-/// (All/Messages/Documents/Images/Files/Prompts) drive the saved-item list;
-/// collections scroll horizontally. Static samples.
+/// LIBRARY section root (Phase 2): live search + filter chips over the REAL
+/// saved items (messages and documents saved from chats). The three fake
+/// collection cards and the four fake file seeds are gone — what you see is
+/// exactly what you saved; nothing here is seeded.
 struct LibraryView: View {
 
-    // MARK: Sample data
-
-    private enum Kind: String, CaseIterable {
-        case message, document, image, file, prompt
-    }
+    // MARK: Filters over real saves
 
     private enum Filter: String, CaseIterable, Identifiable {
         case all = "All"
@@ -44,30 +41,6 @@ struct LibraryView: View {
         case prompts = "Prompts"
 
         var id: String { rawValue }
-
-        func matches(_ kind: Kind) -> Bool {
-            switch self {
-            case .all: return true
-            case .messages: return kind == .message
-            case .documents: return kind == .document
-            case .images: return kind == .image
-            case .files: return kind == .file
-            case .prompts: return kind == .prompt
-            }
-        }
-    }
-
-    private struct SavedItem: Identifiable {
-        let id = UUID()
-        let title: String
-        let detail: String
-        let kind: Kind
-    }
-
-    private struct SavedCollection: Identifiable {
-        let id = UUID()
-        let name: String
-        let count: String
     }
 
     @State private var filter: Filter = .all
@@ -75,30 +48,13 @@ struct LibraryView: View {
     @FocusState private var searchFocused: Bool
     @State private var pendingDelete: LibraryItem?
 
-    // Real saves from the chat surface — loaded on appear, rendered above seeds.
+    // Real saves from the chat surface — loaded on appear.
     @State private var savedMessages: [LibraryItem] = []
 
     // Item management: tap a real save to read it in full, copy or remove it.
     @State private var viewingItem: LibraryItem?
 
     @EnvironmentObject private var router: Router
-
-    private let collections: [SavedCollection] = [
-        .init(name: "Brand kit", count: "12 items"),
-        .init(name: "Client work", count: "8 items"),
-        .init(name: "Learning", count: "15 items")
-    ]
-
-    private let items: [SavedItem] = [
-        .init(title: "Q3 report.pdf", detail: "PDF · 2.4 MB · 12 pages", kind: .document),
-        .init(title: "hero-banner-v2.png", detail: "PNG · 1600 × 900", kind: .image),
-        .init(title: "contracts.zip", detail: "ZIP · 8 files · 18 MB", kind: .file),
-        .init(title: "Cold email sequence", detail: "Prompt · 5 steps", kind: .prompt)
-    ]
-
-    private var filteredItems: [SavedItem] {
-        items.filter { filter.matches($0.kind) && containsTerm([$0.title, $0.detail]) }
-    }
 
     // MARK: Search gate — same contract as Explore
 
@@ -129,9 +85,6 @@ struct LibraryView: View {
             StaggerIn(index: 2) { filterChips }
                 .gsListRowChrome(EdgeInsets(
                     top: Aero.Spacing.l, leading: Aero.Spacing.m, bottom: 0, trailing: Aero.Spacing.m))
-            StaggerIn(index: 3) { collectionsSection }
-                .gsListRowChrome(EdgeInsets(
-                    top: Aero.Spacing.l, leading: Aero.Spacing.m, bottom: 0, trailing: Aero.Spacing.m))
 
             // Saved items (filtered) — the section lead stays a row above the
             // item rows so the rows themselves can swipe (Task 86-e). It keeps
@@ -146,28 +99,26 @@ struct LibraryView: View {
                 (filter == .all || filter == filterForKind(item.kind)) &&
                     containsTerm([item.title, item.content])
             }
-            if realRows.isEmpty && filteredItems.isEmpty {
+            if realRows.isEmpty {
                 if term.isEmpty {
+                    // Honest empty state (Phase 2) — no seeds, no samples.
                     EmptyStateView(
-                        icon: "tray",
-                        title: "Nothing here yet",
-                        message: "Items you save will appear in this filter."
+                        icon: "bookmark",
+                        title: "Nothing saved yet",
+                        message: "Save messages and files from your chats and they'll appear here."
                     )
                     .gsListRowChrome(rowInsets)
                 } else {
                     EmptyStateView(
                         icon: "magnifyingglass",
                         title: "No matches for \"\(term)\"",
-                        message: "Try different words — or save something new from a chat or studio."
+                        message: "Try different words — or save something new from a chat."
                     )
                     .gsListRowChrome(rowInsets)
                 }
             } else {
                 ForEach(realRows) { real in
                     realRow(real)
-                }
-                ForEach(filteredItems) { item in
-                    itemRow(item)
                 }
             }
 
@@ -273,47 +224,7 @@ struct LibraryView: View {
         }
     }
 
-    // MARK: Collections
-
-    private var collectionsSection: some View {
-        VStack(alignment: .leading, spacing: Aero.Spacing.m) {
-            SectionHeader(title: "Collections")
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: Aero.Spacing.m) {
-                    ForEach(collections) { collection in
-                        AeroCard {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Image(systemName: "square.stack.3d.up.fill")
-                                    .font(.system(size: 15, weight: .medium))
-                                    .foregroundStyle(Aero.text)
-                                Text(collection.name)
-                                    .font(Aero.title())
-                                    .foregroundStyle(Aero.text)
-                                    .lineLimit(1)
-                                Text(collection.count)
-                                    .font(Aero.caption())
-                                    .foregroundStyle(Aero.textMuted)
-                            }
-                        }
-                        .frame(width: 150)
-                    }
-                }
-                .padding(.vertical, 2)
-            }
-        }
-    }
-
     // MARK: Row builders
-
-    private func kindIcon(_ kind: Kind) -> String {
-        switch kind {
-        case .message: return "bubble.left"
-        case .document: return "doc.text"
-        case .image: return "photo"
-        case .file: return "folder"
-        case .prompt: return "lightbulb"
-        }
-    }
 
     /// A saved item's kind string maps onto the chip that owns it.
     private func filterForKind(_ kind: String) -> Filter {
@@ -324,26 +235,6 @@ struct LibraryView: View {
         case "prompt": return .prompts
         default: return .messages
         }
-    }
-
-    private func itemRow(_ item: SavedItem) -> some View {
-        AeroListRow(
-            title: item.title,
-            subtitle: item.detail,
-            leading: {
-                Image(systemName: kindIcon(item.kind))
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(Aero.text)
-                    .frame(width: 36, height: 36)
-                    .background(Circle().fill(Aero.containerHigh))
-            },
-            trailing: {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Aero.textMuted)
-            }
-        )
-        .gsListRowChrome(rowInsets)
     }
 
     /// A real save: taps into the reader sheet where the full item can be
@@ -357,8 +248,10 @@ struct LibraryView: View {
         } label: {
             AeroListRow(
                 title: item.title,
-                subtitle: item.kind == "image" ? "Image · saved from the studio"
-                    : item.kind == "document" ? "Document · saved from the studio"
+                subtitle: item.kind == "image" ? "Image"
+                    : item.kind == "document" ? "Document"
+                    : item.kind == "file" ? "File"
+                    : item.kind == "prompt" ? "Prompt"
                     : "Message · saved from your chats",
                 leading: {
                     Image(systemName: item.kind == "image" ? "photo"

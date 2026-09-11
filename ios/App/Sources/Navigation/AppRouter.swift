@@ -9,7 +9,15 @@ import SwiftUI
 
 enum AeroRoute: Hashable {
     case chat(String?)                 // nil = new chat
-    case chatPrefill(String)           // voice press-and-hold hands its transcript here
+    /// Opens a NEW chat with the prompt seeded into the composer (never
+    /// auto-sent) — Explore prompts, Create tiles, Library "Continue",
+    /// Assistant starters, Voice handoff consumers that expect a draft.
+    case chatPrefill(String)
+    /// Phase 2 routing contract (Android twin: `chat(null, prompt, autoSend)`):
+    /// opens a NEW chat and immediately sends the prompt on appear — the Home
+    /// composer's send and Voice's "Send to chat". ChatDetailView guards the
+    /// send with a once-flag so re-appear/rotation never re-sends.
+    case chatAutoSend(String)
     case assistant(String)
     case assistantCreate
     case assistantEdit(String)
@@ -22,8 +30,6 @@ enum AeroRoute: Hashable {
     case voice
     case imageStudio              // Image Studio — also the New image quick action
     case chatArchive
-    case chatFolders
-    case chatShared
     case chatSearch
 
     // Section roots — reached from the drawer (no tab bar anywhere)
@@ -35,30 +41,6 @@ enum AeroRoute: Hashable {
     case assistants
     case profile
     case billing
-}
-
-private enum AeroTab: String, CaseIterable {
-    case home, chats, explore, create, library
-
-    var title: String {
-        switch self {
-        case .home: return "Home"
-        case .chats: return "Chats"
-        case .explore: return "Explore"
-        case .create: return "Create"
-        case .library: return "Library"
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .home: return "house"
-        case .chats: return "bubble.left"
-        case .explore: return "safari"
-        case .create: return "plus.circle"
-        case .library: return "books.vertical"
-        }
-    }
 }
 
 /// Programmatic navigation: any view — including one inside a sheet — can
@@ -175,9 +157,6 @@ struct RootView: View {
     }
 }
 
-/// Legacy alias — kept so any external reference keeps compiling.
-typealias RootTabView = RootView
-
 /// Install once per NavigationStack: resolves every pushed route.
 struct AeroDestinations: ViewModifier {
     func body(content: Content) -> some View {
@@ -185,6 +164,7 @@ struct AeroDestinations: ViewModifier {
             switch route {
             case .chat(let id): ChatDetailView(conversationID: id)
             case .chatPrefill(let prompt): ChatDetailView(conversationID: nil, prefill: prompt)
+            case .chatAutoSend(let prompt): ChatDetailView(conversationID: nil, prefill: prompt, autoSendPrefill: true)
             case .assistant(let id): AssistantDetailView(assistantID: id)
             case .assistantCreate: AssistantCreateView()
             case .assistantEdit(let id): AssistantCreateView(editID: id)
@@ -197,8 +177,6 @@ struct AeroDestinations: ViewModifier {
             case .voice: VoiceView()
             case .imageStudio: ImageStudioView()
             case .chatArchive: ArchivedChatsView()
-            case .chatFolders: FoldersView()
-            case .chatShared: SharedChatsView()
             case .chatSearch: ChatSearchView()
 
             // Section roots (drawer)
