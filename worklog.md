@@ -2817,3 +2817,26 @@ Stage Summary:
 - PHASE 2 directive verified COMPLIANT at HEAD on both platforms; the pass closed the last 3 honesty gaps (iOS onboarding reasoning chips, iOS dead search chips w/ hardcoded model name, FEATURED spotlights both platforms) + Android fabricated-metric seams. Product surfaces, frozen areas, and version identity untouched (61/0.60.0).
 - iOS real-Xcode gate in flight (run 34618724261) — verdict appended below when concluded.
 - VERDICT (run 34618724261, commit ca2c39d): iOS real-Xcode CI gate GREEN — all steps success (XcodeGen ✓, destination resolve ✓, xcodebuild build ✓ `** BUILD SUCCEEDED **`, xcodebuild test ✓ `Test Suite 'All tests' passed — Executed 3 tests, 0 failures (0 unexpected)` + `** TEST SUCCEEDED **`, unsigned zip ✓, unsigned Release xcarchive ✓). Runner: macOS 15 arm64, Xcode 26.3 (17C529), iOS SDK 26.2, Apple Swift 6.2.4 (Swift-5 language mode). :app:lintDebug ✓ (BUILD SUCCESSFUL). PHASE 2 STOP condition fully satisfied — awaiting user inspection; no further phases started.
+
+---
+Task ID: PHASE-3-WORKSPACE
+Agent: Z.ai Code (main)
+Task: PHASE 3 — recompose the primary application shell after Phase 2 device-validation REJECTION. The conversation workspace becomes the app root; sidebar becomes a chat history panel; visual system resets to monochrome. (23-section directive; report A–Q; then STOP.)
+
+Work Log:
+- Read dual-platform shell maps (Android: GsNavHost/GsRoutes/GsDrawer/HomeScreen/ChatScreen/theme; iOS: AppRouter/AeroDrawer/HomeView/ChatDetailView/DesignSystem).
+- ROOT EXPERIENCE: deleted HomeScreen.kt (Android) + HomeView.swift (iOS). App now OPENS into the conversation workspace: fresh conversation = the empty state of the same screen that renders the transcript. No Home launcher, no separate "New chat" page.
+- Android routing: start destination = GsRoutes.CHAT; HOME route removed from GsRoutes/NavHost/drawer; "New chat" (drawer row / header "+" / launcher shortcut) resets the stack to one fresh workspace via popUpTo(CHAT) inclusive + launchSingleTop; onboarding finish → chat(null); section pattern now anchors popUpTo(workspace).
+- iOS routing: RootView root = ChatDetailView(conversationID: nil) keyed on Router.workspaceEpoch; Router.resetWorkspace() = path=[] + epoch++ (true re-seed, no stale VM state); drawer + quick-action chat(nil) routes intercepted as shell resets; isWorkspaceRoot flag drives menu-vs-back toolbar.
+- Sidebar → chat history panel (both platforms, equivalent): compact account row revealing a Profile/Settings/Notifications/Billing sheet → New chat + Search → RECENT heart (12 live conversations, long-press pin/rename/archive/delete, honest "No conversations yet", All chats overflow) → one "More" row revealing Explore/Create/Projects/Library/Assistants/Voice/Models/Compare models in a sheet. Route catalogue removed from first level.
+- Empty state: small time-of-day greeting + 3 identical outline composer suggestions (seed the composer, never navigate/auto-send, vanish while typing, replaced by transcript on first turn). Hero orb/halo/greeting-block deleted on both platforms (kills the infinite breathing animations = perf win).
+- Model control: header chip now shows the consumer tier WORD only (Fast/Everyday/Best) — model names, aurora dot, all technical metadata removed; same 3-tier human picker sheet ("Choose a model") + About models.
+- MONOCHROME: Color.kt/Tokens.kt (Android) + DesignSystem.swift (iOS) reset — dark = #000 canvas/white text/neutral grays; light = white canvas/black ink/neutral grays; teal accent family + cyan/violet streaming + aurora colour trio deleted (life-sign gradient now white→gray shimmer); launch backgrounds matched (#000 night); only semantic status hues + code syntax colours remain (content states). Zero hardcoded colour literals in screens (swept + verified).
+- Composer/IME: workspace keeps statusBars+navigationBars scaffold + imePadding + imeNestedScroll + adjustResize + edge-to-edge; the broken surface (Home, no imePadding — the keyboard screenshot) is deleted outright.
+- Preserved: streaming engine, rich-content/Mermaid renderers, message architecture, Room/SQLite stores + repository contracts, drawer gesture machinery, accessibility (roles/labels/announcements), all secondary screens behind the new shell.
+
+Stage Summary:
+- Android gates at HEAD e177a57: :app:compileDebugKotlin ✓, :app:testDebugUnitTest 23/23 ✓, :app:assembleDebug ✓ (aapt2 com.grapsee.gsai 61 / 0.60.0 UNCHANGED), :app:lintDebug ✓.
+- iOS: real-Xcode CI — run 34630849424 FAILED (orphaned legacy 'starters' redeclaration in ChatDetailView — my new empty-state block kept the old list alive); fixed bee0736. Run 34631285717 FAILED (custom init suppressed memberwise init — RootView's workspace-shell args had no matching signature); fixed fb5b4b8 by threading the 3 params through the explicit init. Final run 34631771400 on fb5b4b8 GREEN: all 16 steps ✓ — XcodeGen, ** BUILD SUCCEEDED **, Executed 3 tests / 0 failures + ** TEST SUCCEEDED **, zip + Release xcarchive packaging (Xcode 26.3, iOS SDK 26.2). HEAD = fb5b4b8.
+- Commit e177a57 (16 files, +850/−2114). No version bump, no release, no new product features.
+- STOP per directive: awaiting user device validation; only explicitly-reported findings will be fixed.
