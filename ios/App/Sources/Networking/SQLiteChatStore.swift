@@ -248,19 +248,22 @@ final class SQLiteChatStore: @unchecked Sendable {
 
     /// Symbol-heavy or non-ASCII queries (CJK) fall back to LIKE; plain word
     /// queries go through the FTS5 index with each word quoted.
+    ///
+    /// Character-level classification (Android twin: ChatDatabase.ftsMatchQuery,
+    /// whose `it` is also a Char). The previous scalar-based version never
+    /// compiled: Unicode.Scalar has no isLetter/isNumber/isWhitespace — those
+    /// live on Character. isASCII covers the >0x7F scalar test exactly
+    /// (a Character is ASCII only when every scalar it carries is).
     static func matchQuery(_ raw: String) -> String? {
         let term = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !term.isEmpty else { return nil }
-        let scalars = term.unicodeScalars
-        let hasSymbol = scalars.contains(where: { !$0.isLetter && !$0.isNumber && !$0.isWhitespace })
-        if hasSymbol || scalars.contains(where: { $0.value > 0x7F }) { return nil }
+        if term.contains(where: { !$0.isLetter && !$0.isNumber && !$0.isWhitespace }) { return nil }
+        if term.contains(where: { !$0.isASCII }) { return nil }
         let words = term
             .split(whereSeparator: { $0.isWhitespace })
             .compactMap { (word: Substring) -> String? in
-                let cleaned = word.unicodeScalars
-                    .filter { $0.isLetter || $0.isNumber }
-                    .reduce(into: "") { $0.unicodeScalars.append($1) }
-                return cleaned.isEmpty ? nil : cleaned
+                let cleaned = word.filter { $0.isLetter || $0.isNumber }
+                return cleaned.isEmpty ? nil : String(cleaned)
             }
         guard !words.isEmpty else { return nil }
         return words.map { "\"\($0)\"" }.joined(separator: " ")

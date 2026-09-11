@@ -188,8 +188,8 @@ final class VoiceDictation: ObservableObject {
                     } else if error != nil {
                         // Hiccup mid-hold — keep whatever partials we already
                         // have and drop back honestly.
-                        isListening = false
-                        if !handedOff { sessionState = .error }
+                        self.isListening = false
+                        if !self.handedOff { self.sessionState = .error }
                     }
                 }
             }
