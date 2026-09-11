@@ -82,8 +82,10 @@ jobs:
       - name: Resolve available iPhone simulator destination
         run: |
           xcrun simctl list devices available
+          # simctl device lines end with a trailing space: "  iPhone 16 Pro (UUID) (Shutdown) "
+          # — the regex must tolerate it (fixed after run #1 failed exactly here).
           NAME=$(xcrun simctl list devices available \
-            | sed -n 's/^[[:space:]]*\(iPhone[^()]*\) ([^)]*) ([^)]*)$/\1/p' \
+            | sed -n 's/^[[:space:]]*\(iPhone[^()]*\) ([^)]*) ([^)]*)[[:space:]]*$/\1/p' \
             | head -1 | xargs)
           if [ -z "$NAME" ]; then
             echo "::error::No available iPhone simulator found on runner image"
