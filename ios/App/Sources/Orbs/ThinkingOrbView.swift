@@ -115,7 +115,7 @@ func orbStateForChatStreaming(isStreaming: Bool, liveContentEmpty: Bool) -> OrbS
     return liveContentEmpty ? .breathing : .composing
 }
 
-func orbStateForVoiceSession(_ sessionState: VoiceDictation.SessionState) -> OrbState? {
+func orbStateForVoiceSession(_ sessionState: VoiceSessionState) -> OrbState? {
     switch sessionState {
     case .listening: return .listening
     case .processing: return .working
