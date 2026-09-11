@@ -199,7 +199,8 @@ function genSwift() {
     const arms = SIZES.map((size) => {
       const r = resolvedFor(state, size);
       const sizeName = size === 20 ? 'inline' : 'standard';
-      return `            case .${sizeName}: return ResolvedOrb(mode: .${r.mode}, speed: ${fmtFloat(r.speed)}, opts: .${r.wrapper}(${r.cls}(${r.args})))`;
+      const swiftArgs = r.args.replace(/ = /g, ': ');
+      return `            case .${sizeName}: return ResolvedOrb(mode: .${r.mode}, speed: ${fmtFloat(r.speed)}, opts: .${r.wrapper}(${r.cls}(${swiftArgs})))`;
     }).join('\n');
     return `        case .${state}:\n            switch size {\n${arms}\n            }`;
   }).join('\n');

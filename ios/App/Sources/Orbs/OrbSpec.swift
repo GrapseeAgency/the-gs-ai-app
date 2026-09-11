@@ -257,48 +257,48 @@ public enum OrbSpec {
         switch state {
         case .working:
             switch size {
-            case .standard: return ResolvedOrb(mode: .orbits, speed: 1.885, opts: .orbits(OrbitsOpts(orbitN = 12, ghostN = 40, ghostR = 0.9, ghostA = 0.5, particles = 3, partR = 1.2, partRDepth = 1.6, rsPow = 0.6, rMin = 0.3)))
-            case .inline: return ResolvedOrb(mode: .orbits, speed: 3.9, opts: .orbits(OrbitsOpts(orbitN = 3, ghostN = 10, ghostR = 2.16, ghostA = 0.5, particles = 3, partR = 2.88, partRDepth = 3.84, rsPow = 0.6, rMin = 0.3)))
+            case .standard: return ResolvedOrb(mode: .orbits, speed: 1.885, opts: .orbits(OrbitsOpts(orbitN: 12, ghostN: 40, ghostR: 0.9, ghostA: 0.5, particles: 3, partR: 1.2, partRDepth: 1.6, rsPow: 0.6, rMin: 0.3)))
+            case .inline: return ResolvedOrb(mode: .orbits, speed: 3.9, opts: .orbits(OrbitsOpts(orbitN: 3, ghostN: 10, ghostR: 2.16, ghostA: 0.5, particles: 3, partR: 2.88, partRDepth: 3.84, rsPow: 0.6, rMin: 0.3)))
             }
         case .searching:
             switch size {
-            case .standard: return ResolvedOrb(mode: .globe, speed: 2.015, opts: .globe(GlobeOpts(latRings = 11, lonDensity = 29, rBase = 0.69, rDepth = 1.9549999999999998, rBoost = 1.0, inkFar = 0.62, inkSpan = 0.54, rsPow = 0.6, rMin = 0.3, scanMul = 4.08, dimBase = 0.45)))
-            case .inline: return ResolvedOrb(mode: .globe, speed: 2.665, opts: .globe(GlobeOpts(latRings = 6, lonDensity = 14, rBase = 1.05, rDepth = 2.975, rBoost = 1.0, inkFar = 0.62, inkSpan = 0.54, rsPow = 0.6, rMin = 0.3, scanMul = 4.335, dimBase = 0.45)))
+            case .standard: return ResolvedOrb(mode: .globe, speed: 2.015, opts: .globe(GlobeOpts(latRings: 11, lonDensity: 29, rBase: 0.69, rDepth: 1.9549999999999998, rBoost: 1.0, inkFar: 0.62, inkSpan: 0.54, rsPow: 0.6, rMin: 0.3, scanMul: 4.08, dimBase: 0.45)))
+            case .inline: return ResolvedOrb(mode: .globe, speed: 2.665, opts: .globe(GlobeOpts(latRings: 6, lonDensity: 14, rBase: 1.05, rDepth: 2.975, rBoost: 1.0, inkFar: 0.62, inkSpan: 0.54, rsPow: 0.6, rMin: 0.3, scanMul: 4.335, dimBase: 0.45)))
             }
         case .solving:
             switch size {
-            case .standard: return ResolvedOrb(mode: .rubik, speed: 1.82, opts: .rubik(RubikOpts(latRings = 9, lonDensity = 24, moveCount = 14, rBase = 0.63, rDepth = 1.785, rActive = 0.315, inkFar = 0.62, inkSpan = 0.54, rsPow = 0.6, rMin = 0.3)))
-            case .inline: return ResolvedOrb(mode: .rubik, speed: 1.95, opts: .rubik(RubikOpts(latRings = 4, lonDensity = 12, moveCount = 14, rBase = 1.14, rDepth = 3.23, rActive = 0.57, inkFar = 0.62, inkSpan = 0.54, rsPow = 0.6, rMin = 0.3)))
+            case .standard: return ResolvedOrb(mode: .rubik, speed: 1.82, opts: .rubik(RubikOpts(latRings: 9, lonDensity: 24, moveCount: 14, rBase: 0.63, rDepth: 1.785, rActive: 0.315, inkFar: 0.62, inkSpan: 0.54, rsPow: 0.6, rMin: 0.3)))
+            case .inline: return ResolvedOrb(mode: .rubik, speed: 1.95, opts: .rubik(RubikOpts(latRings: 4, lonDensity: 12, moveCount: 14, rBase: 1.14, rDepth: 3.23, rActive: 0.57, inkFar: 0.62, inkSpan: 0.54, rsPow: 0.6, rMin: 0.3)))
             }
         case .listening:
             switch size {
-            case .standard: return ResolvedOrb(mode: .wave, speed: 4.388, opts: .wave(WaveOpts(rings = 9, lonDensity = 23, rBase = 0.6, rDepth = 1.7, rsPow = 0.6, rMin = 0.3)))
-            case .inline: return ResolvedOrb(mode: .wave, speed: 3.998, opts: .wave(WaveOpts(rings = 5, lonDensity = 13, rBase = 0.96, rDepth = 2.72, rsPow = 0.6, rMin = 0.3)))
+            case .standard: return ResolvedOrb(mode: .wave, speed: 4.388, opts: .wave(WaveOpts(rings: 9, lonDensity: 23, rBase: 0.6, rDepth: 1.7, rsPow: 0.6, rMin: 0.3)))
+            case .inline: return ResolvedOrb(mode: .wave, speed: 3.998, opts: .wave(WaveOpts(rings: 5, lonDensity: 13, rBase: 0.96, rDepth: 2.72, rsPow: 0.6, rMin: 0.3)))
             }
         case .connecting:
             switch size {
-            case .standard: return ResolvedOrb(mode: .web, speed: 3.315, opts: .web(WebOpts(nodeN = 41, thr = 0.72, signals = 7, nodeR = 1.3299999999999998, nodeRDepth = 1.71, lineW = 0.8, rsPow = 0.6, rMin = 0.3)))
-            case .inline: return ResolvedOrb(mode: .web, speed: 6.63, opts: .web(WebOpts(nodeN = 8, thr = 0.72, signals = 1, nodeR = 2.1279999999999997, nodeRDepth = 2.736, lineW = 0.8, rsPow = 0.6, rMin = 0.3)))
+            case .standard: return ResolvedOrb(mode: .web, speed: 3.315, opts: .web(WebOpts(nodeN: 41, thr: 0.72, signals: 7, nodeR: 1.3299999999999998, nodeRDepth: 1.71, lineW: 0.8, rsPow: 0.6, rMin: 0.3)))
+            case .inline: return ResolvedOrb(mode: .web, speed: 6.63, opts: .web(WebOpts(nodeN: 8, thr: 0.72, signals: 1, nodeR: 2.1279999999999997, nodeRDepth: 2.736, lineW: 0.8, rsPow: 0.6, rMin: 0.3)))
             }
         case .weaving:
             switch size {
-            case .standard: return ResolvedOrb(mode: .braid, speed: 1.625, opts: .braid(BraidOpts(strandN = 26, turns = 3.0, ghostN = 75, rBase = 1.2, rDepth = 1.8, rsPow = 0.6, rMin = 0.3)))
-            case .inline: return ResolvedOrb(mode: .braid, speed: 2.75, opts: .braid(BraidOpts(strandN = 6, turns = 3.0, ghostN = 17, rBase = 1.6320000000000001, rDepth = 2.4480000000000004, rsPow = 0.6, rMin = 0.3)))
+            case .standard: return ResolvedOrb(mode: .braid, speed: 1.625, opts: .braid(BraidOpts(strandN: 26, turns: 3.0, ghostN: 75, rBase: 1.2, rDepth: 1.8, rsPow: 0.6, rMin: 0.3)))
+            case .inline: return ResolvedOrb(mode: .braid, speed: 2.75, opts: .braid(BraidOpts(strandN: 6, turns: 3.0, ghostN: 17, rBase: 1.6320000000000001, rDepth: 2.4480000000000004, rsPow: 0.6, rMin: 0.3)))
             }
         case .composing:
             switch size {
-            case .standard: return ResolvedOrb(mode: .ribbon, speed: 2.34, opts: .ribbon(RibbonOpts(lanes = 3, segs = 44, ghostN = 38, spin = 0.0, bandMul = 3.9, wobMul = 1.0, faceOn = false, rBase = 0.935, rDepth = 1.4449999999999998, rsPow = 0.6, rMin = 0.3)))
-            case .inline: return ResolvedOrb(mode: .ribbon, speed: 3.12, opts: .ribbon(RibbonOpts(lanes = 2, segs = 20, ghostN = 8, spin = 0.0, bandMul = 4.94, wobMul = 1.0, faceOn = false, rBase = 1.1803000000000001, rDepth = 1.8240999999999998, rsPow = 0.6, rMin = 0.3)))
+            case .standard: return ResolvedOrb(mode: .ribbon, speed: 2.34, opts: .ribbon(RibbonOpts(lanes: 3, segs: 44, ghostN: 38, spin: 0.0, bandMul: 3.9, wobMul: 1.0, faceOn: false, rBase: 0.935, rDepth: 1.4449999999999998, rsPow: 0.6, rMin: 0.3)))
+            case .inline: return ResolvedOrb(mode: .ribbon, speed: 3.12, opts: .ribbon(RibbonOpts(lanes: 2, segs: 20, ghostN: 8, spin: 0.0, bandMul: 4.94, wobMul: 1.0, faceOn: false, rBase: 1.1803000000000001, rDepth: 1.8240999999999998, rsPow: 0.6, rMin: 0.3)))
             }
         case .breathing:
             switch size {
-            case .standard: return ResolvedOrb(mode: .ring, speed: 3.24, opts: .ribbon(RibbonOpts(lanes = 3, segs = 44, ghostN = 0, spin = 0.0, bandMul = 3.627, wobMul = 0.368, faceOn = true, rBase = 1.0516, rDepth = 1.6252, rsPow = 0.6, rMin = 0.3)))
-            case .inline: return ResolvedOrb(mode: .ring, speed: 3.78, opts: .ribbon(RibbonOpts(lanes = 2, segs = 15, ghostN = 0, spin = 0.0, bandMul = 3.968, wobMul = 0.565, faceOn = true, rBase = 1.7842000000000002, rDepth = 2.7574, rsPow = 0.6, rMin = 0.3)))
+            case .standard: return ResolvedOrb(mode: .ring, speed: 3.24, opts: .ribbon(RibbonOpts(lanes: 3, segs: 44, ghostN: 0, spin: 0.0, bandMul: 3.627, wobMul: 0.368, faceOn: true, rBase: 1.0516, rDepth: 1.6252, rsPow: 0.6, rMin: 0.3)))
+            case .inline: return ResolvedOrb(mode: .ring, speed: 3.78, opts: .ribbon(RibbonOpts(lanes: 2, segs: 15, ghostN: 0, spin: 0.0, bandMul: 3.968, wobMul: 0.565, faceOn: true, rBase: 1.7842000000000002, rDepth: 2.7574, rsPow: 0.6, rMin: 0.3)))
             }
         case .shaping:
             switch size {
-            case .standard: return ResolvedOrb(mode: .morph, speed: 2.405, opts: .morph(MorphOpts(rDot = 0.008295, iconD = 0.702, rMin = 0.25, spread = 1.45)))
-            case .inline: return ResolvedOrb(mode: .morph, speed: 2.08, opts: .morph(MorphOpts(rDot = 0.021231, iconD = 0.53, rMin = 0.25, spread = 1.45)))
+            case .standard: return ResolvedOrb(mode: .morph, speed: 2.405, opts: .morph(MorphOpts(rDot: 0.008295, iconD: 0.702, rMin: 0.25, spread: 1.45)))
+            case .inline: return ResolvedOrb(mode: .morph, speed: 2.08, opts: .morph(MorphOpts(rDot: 0.021231, iconD: 0.53, rMin: 0.25, spread: 1.45)))
             }
         }
     }
