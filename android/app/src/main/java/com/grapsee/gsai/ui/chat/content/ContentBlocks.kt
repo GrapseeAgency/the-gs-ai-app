@@ -517,7 +517,7 @@ private fun parseDetails(lines: List<Line>, start: Int): Pair<Block, Int> {
  * recomposes. A full parse happens only when genuinely necessary:
  *  - cache cold ([previousBlocks] empty), or
  *  - the append-only contract broke ([content] does not extend
- *    [previousContent] — content replaced, history jump, CRLF split).
+ *    [previousContent] — content replaced, history jump).
  *
  * The tail boundary is the whole last line-RUN, not just the last block:
  * a flush can cut a line in a state that parses as a different family
@@ -532,33 +532,45 @@ private fun parseDetails(lines: List<Line>, start: Int): Pair<Block, Int> {
  *
  * All arithmetic happens in the CRLF-normalized space ([parseBlocks]
  * normalizes internally, so offsets are normalized-space offsets); both
- * inputs are normalized up front to keep the two spaces identical. On an
- * LF-only stream Kotlin's replace returns the receiver — zero cost.
+ * inputs are normalized up front to keep the two spaces identical. A flush
+ * may split a CRLF pair; the trailing lone CR is dropped so the normalized
+ * previous text stays a strict prefix of the normalized current text (a
+ * retained trailing CR would break that prefix property and force one full
+ * reparse per split pair). The dropped CR is trailing whitespace — no block
+ * or offset can depend on it. On an LF-only stream Kotlin's replace returns
+ * the receiver — zero cost.
  */
 fun parseStreamingBlocks(
     previousContent: String,
     previousBlocks: List<Block>,
     content: String
 ): List<Block> {
-    val previous = previousContent.replace("\r\n", "\n")
-    val current = content.replace("\r\n", "\n")
+    val previous = normalizeStreamText(previousContent)
+    val current = normalizeStreamText(content)
     if (previousBlocks.isEmpty() || !current.startsWith(previous)) {
         return parseBlocks(current)
     }
     val tailStart = lastLineRunStart(previous)
-    if (tailStart <= 0) {
-        // The live run starts at the document start (single growing run —
-        // most commonly the first paragraph, legitimately at offset 0):
-        // there is no frozen prefix, so the tail IS the document.
-        return parseBlocks(current)
-    }
-    if (tailStart >= current.length) return parseBlocks(current) // defensive: nothing to append
     val head = previousBlocks.takeWhile { it.sourceStart < tailStart }
     if (head.isEmpty()) return parseBlocks(current) // defensive: boundary sanity
     val tail = parseBlocks(current.substring(tailStart)).map { block ->
         block.withShiftedSource(tailStart)
     }
     return head + tail
+}
+
+/**
+ * Streaming normalisation: CRLF pairs collapse to LF, and a trailing lone CR
+ * is dropped — a flush may split a CRLF pair, and the normalized previous
+ * text must stay a strict prefix of the normalized current text (a retained
+ * trailing CR would break that prefix property and force one full reparse
+ * per split pair). The dropped CR is trailing whitespace: no block or offset
+ * can depend on it ([parseCore] trims it away; [lastLineRunStart] already
+ * treats CR as blank). On LF-only input this is the identity.
+ */
+private fun normalizeStreamText(text: String): String {
+    val replaced = text.replace("\r\n", "\n")
+    return if (replaced.endsWith('\r')) replaced.dropLast(1) else replaced
 }
 
 /**
