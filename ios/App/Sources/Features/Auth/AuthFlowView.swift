@@ -708,7 +708,7 @@ private struct OptionalFocus: ViewModifier {
             .onSubmit(onSubmit)
             // The Return-key chain only works when the state the onSubmit
             // handlers drive is actually bound to the field.
-            .modifier(OptionalFocus(focus))
+            .modifier(OptionalFocus(binding: focus))
             .font(Aero.body())
             .foregroundStyle(Aero.text)
             .padding(.horizontal, 16)
@@ -735,7 +735,7 @@ private struct OptionalFocus: ViewModifier {
             .textContentType(new ? .newPassword : .password)
             .submitLabel(.done)
             .onSubmit(onSubmit)
-            .modifier(OptionalFocus(focus))
+            .modifier(OptionalFocus(binding: focus))
 
             Button {
                 showPassword.toggle()

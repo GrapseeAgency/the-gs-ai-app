@@ -148,8 +148,9 @@ private extension String {
     func captureGroups(_ regex: NSRegularExpression) -> [String]? {
         let ns = self as NSString
         guard let m = regex.firstMatch(in: self, range: NSRange(location: 0, length: ns.length)) else { return nil }
-        return (1..<m.numberOfRanges).map { range in
-            range.location == NSNotFound ? "" : ns.substring(with: range)
+        return (1..<m.numberOfRanges).map { group in
+            let range = m.range(at: group)
+            return range.location == NSNotFound ? "" : ns.substring(with: range)
         }
     }
 }
@@ -242,7 +243,7 @@ private func parseCore(_ lines: [GSLine]) -> [Block] {
                 inner.append(GSLine(text: g[0], offset: lines[i].offset))
                 i += 1
             }
-            blocks.append(.blockQuote(parseCore(inner), sourceStart: line.offset))
+            blocks.append(.blockQuote(blocks: parseCore(inner), sourceStart: line.offset))
             continue
         }
 

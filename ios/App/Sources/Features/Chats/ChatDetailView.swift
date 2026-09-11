@@ -275,55 +275,14 @@ struct ChatDetailView: View {
                     }
 
                     ForEach(Array(vm.messages.enumerated()), id: \.element.id) { index, message in
-                        if let stamp = dayLabel(message.createdAt),
-                           index == 0 || dayKey(vm.messages[index - 1].createdAt) != dayKey(message.createdAt) {
-                            DaySeparator(label: stamp)
-                        }
-                        if editingIndex == index {
-                            editEditor
-                        } else {
-                            MessageBubble(
-                                message: message,
-                                isSpeaking: speech.speakingMessageID == message.id,
-                                editEnabled: !vm.isStreaming && editingIndex == nil,
-                                highlight: message.id == activeMatch,
-                                onRegenerate: {
-                                    userIsReading = false
-                                    vm.regenerate()
-                                },
-                                onReadAloud: { speech.toggle(messageID: message.id, text: message.content) },
-                                onTranslate: { beginTranslation(message.content) },
-                                onSave: {
-                                    ConversationStore.shared.saveToLibrary(content: message.content)
-                                    showToast("Saved to Library")
-                                },
-                                onEditStart: {
-                                    editDraft = message.content
-                                    editingIndex = index
-                                },
-                                onBranch: { vm.branch(at: index) }
-                            )
-                        }
-                        .id(message.id)
+                        messageRow(index, message, activeMatch: activeMatch)
                     }
 
                     // Live-edge sentinel: 1pt after the newest turn. Materialized
                     // ⇔ the reader is at the bottom — the iOS16-honest position
                     // signal (no scroll-offset API). Pinned by the follow scroll
                     // itself, so streaming never flickers it.
-                    Color.clear
-                        .frame(height: 1)
-                        .id(liveEdgeID)
-                        .onAppear {
-                            atBottom = true
-                            disengageWork?.cancel()
-                            disengageWork = nil
-                            userIsReading = false
-                        }
-                        .onDisappear {
-                            atBottom = false
-                            scheduleDisengage(after: 0.6)
-                        }
+                    liveEdgeSentinel
                 }
                 .padding(.horizontal, Aero.Spacing.m)
                 .padding(.vertical, Aero.Spacing.m)
@@ -357,28 +316,95 @@ struct ChatDetailView: View {
             }
             .onDisappear { disengageWork?.cancel() }
             .overlay(alignment: .bottomTrailing) {
-                if userIsReading && !vm.messages.isEmpty {
-                    Button {
-                        userIsReading = false
-                        withAnimation(Aero.gentle) {
-                            proxy.scrollTo(liveEdgeID, anchor: .bottom)
-                        }
-                    } label: {
-                        Image(systemName: "arrow.down")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(Aero.text)
-                            .frame(width: 36, height: 36)
-                            .background(Circle().fill(Aero.surface))
-                            .overlay(Circle().stroke(Aero.outline, lineWidth: 1))
-                            .shadow(color: Color.black.opacity(0.18), radius: 8, y: 2)
-                    }
-                    .buttonStyle(KineticPressStyle())
-                    .padding(.trailing, Aero.Spacing.m)
-                    .padding(.bottom, Aero.Spacing.m)
-                    .transition(.opacity)
+                jumpToLive(proxy)
+            }
+            }
+        }
+    }
+
+    // MARK: Transcript building blocks (type-check split — the previous single
+    // expression exceeded the Swift type-checker's budget; same view tree,
+    // decomposed into named sub-expressions)
+
+    /// One bubble (and its day separator when the day rolls over).
+    @ViewBuilder
+    private func messageRow(
+        _ index: Int,
+        _ message: ChatViewModel.ChatMessage,
+        activeMatch: ChatViewModel.ChatMessage.ID?
+    ) -> some View {
+        if let stamp = dayLabel(message.createdAt),
+           index == 0 || dayKey(vm.messages[index - 1].createdAt) != dayKey(message.createdAt) {
+            DaySeparator(label: stamp)
+        }
+        if editingIndex == index {
+            editEditor
+        } else {
+            MessageBubble(
+                message: message,
+                isSpeaking: speech.speakingMessageID == message.id.uuidString,
+                editEnabled: !vm.isStreaming && editingIndex == nil,
+                highlight: message.id == activeMatch,
+                onRegenerate: {
+                    userIsReading = false
+                    vm.regenerate()
+                },
+                onReadAloud: { speech.toggle(messageID: message.id.uuidString, text: message.content) },
+                onTranslate: { beginTranslation(message.content) },
+                onSave: {
+                    ConversationStore.shared.saveToLibrary(content: message.content)
+                    showToast("Saved to Library")
+                },
+                onEditStart: {
+                    editDraft = message.content
+                    editingIndex = index
+                },
+                onBranch: { vm.branch(at: index) }
+            )
+        }
+        .id(message.id)
+    }
+
+    /// 1pt row after the newest turn — materialized ⇔ the reader is at the
+    /// bottom (the iOS16-honest position signal, no scroll-offset API).
+    private var liveEdgeSentinel: some View {
+        Color.clear
+            .frame(height: 1)
+            .id(liveEdgeID)
+            .onAppear {
+                atBottom = true
+                disengageWork?.cancel()
+                disengageWork = nil
+                userIsReading = false
+            }
+            .onDisappear {
+                atBottom = false
+                scheduleDisengage(after: 0.6)
+            }
+    }
+
+    /// Jump-to-latest affordance while the reader is away from the live edge.
+    @ViewBuilder
+    private func jumpToLive(_ proxy: ScrollViewProxy) -> some View {
+        if userIsReading && !vm.messages.isEmpty {
+            Button {
+                userIsReading = false
+                withAnimation(Aero.gentle) {
+                    proxy.scrollTo(liveEdgeID, anchor: .bottom)
                 }
+            } label: {
+                Image(systemName: "arrow.down")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Aero.text)
+                    .frame(width: 36, height: 36)
+                    .background(Circle().fill(Aero.surface))
+                    .overlay(Circle().stroke(Aero.outline, lineWidth: 1))
+                    .shadow(color: Color.black.opacity(0.18), radius: 8, y: 2)
             }
-            }
+            .buttonStyle(KineticPressStyle())
+            .padding(.trailing, Aero.Spacing.m)
+            .padding(.bottom, Aero.Spacing.m)
+            .transition(.opacity)
         }
     }
 
@@ -629,7 +655,9 @@ struct ChatDetailView: View {
     }
 
     /// The message id under the active hit — bubbles tint when they match.
-    private var activeMatchID: String? {
+    /// Typed as ChatMessage.ID (UUID): bubbles compare their own message.id
+    /// against this directly.
+    private var activeMatchID: ChatViewModel.ChatMessage.ID? {
         let matches = searchMatches
         guard !matches.isEmpty else { return nil }
         let wrapped = ((searchIndex % matches.count) + matches.count) % matches.count

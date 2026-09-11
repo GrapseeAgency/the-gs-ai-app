@@ -67,72 +67,8 @@ struct AeroDrawer: View {
 
     var body: some View {
         ZStack(alignment: .leading) {
-            Aero.scrim
-                .ignoresSafeArea()
-                .onTapGesture { onClose() }
-                .accessibilityLabel("Close menu")
-                .accessibilityAddTraits(.isButton)
-                .transition(.opacity)
-
-            VStack(alignment: .leading, spacing: 0) {
-                ScrollView(showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: Aero.Spacing.s) {
-                        header
-                        newChat
-                        Group {
-                            sectionLabel("Recent")
-                            ForEach(recentRows) { conversation in
-                                recentRow(conversation)
-                            }
-                            // Always visible — real destinations even when
-                            // the recent list above is empty. No samples.
-                            row(title: "All chats", icon: "tray", isSelected: activeRoute == .chats) { onRoute(.chats) }
-                            row(title: "Archived", icon: "archivebox", isSelected: activeRoute == .chatArchive) { onRoute(.chatArchive) }
-                        }
-                        divider
-                        // PRIMARY — no label. The five surfaces a reader
-                        // actually lives in.
-                        Group {
-                            row(title: "Home", icon: "house", isSelected: atHomeRoot) { onHome?() }
-                            row(title: "Chats", icon: "bubble.left", isSelected: activeRoute == .chats) { onRoute(.chats) }
-                            row(title: "Explore", icon: "safari", isSelected: activeRoute == .explore) { onRoute(.explore) }
-                            row(title: "Create", icon: "sparkles", isSelected: activeRoute == .createTab) { onRoute(.createTab) }
-                            row(title: "Library", icon: "books.vertical", isSelected: activeRoute == .library) { onRoute(.library) }
-                        }
-                        divider
-                        Group {
-                            sectionLabel("More")
-                            row(title: "Projects", icon: "folder", isSelected: activeRoute == .projects) { onRoute(.projects) }
-                            row(title: "Assistants", icon: "cpu", isSelected: activeRoute == .assistants) { onRoute(.assistants) }
-                            row(title: "Voice", icon: "waveform", isSelected: activeRoute == .voice) { onRoute(.voice) }
-                            row(title: "Search", icon: "magnifyingglass", isSelected: activeRoute == .search) { onRoute(.search) }
-                        }
-                        divider
-                        Group {
-                            sectionLabel("Account")
-                            row(title: "Profile", icon: "person", isSelected: activeRoute == .profile) { onRoute(.profile) }
-                            row(title: "Notifications", icon: "bell", isSelected: activeRoute == .notifications) { onRoute(.notifications) }
-                            row(title: "Billing", icon: "creditcard", isSelected: activeRoute == .billing) { onRoute(.billing) }
-                            row(title: "Settings", icon: "gearshape", isSelected: activeRoute == .settings) { onRoute(.settings) }
-                        }
-                        divider
-                        advancedGroup
-                    }
-                    .padding(.horizontal, Aero.Spacing.m)
-                    .padding(.bottom, Aero.Spacing.xl)
-                }
-            }
-            .padding(.top, Aero.Spacing.xl)
-            .frame(width: panelWidth, maxHeight: .infinity, alignment: .top)
-            .background(panel)
-            .shadow(color: Color.black.opacity(0.18), radius: 24, x: 8)
-            .offset(x: entryOffset + closeOffset)
-            .gesture(closeDragGesture)
-            .transition(.move(edge: .leading).combined(with: .opacity))
-            .onAppear {
-                // A stale tracked offset must never survive a fresh presentation.
-                closeOffset = 0
-            }
+            scrimLayer
+            panelLayer
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Navigation menu")
@@ -154,6 +90,101 @@ struct AeroDrawer: View {
             Button("Cancel", role: .cancel) { renameTarget = nil }
         } message: {
             Text("Give this conversation a name you'll recognise.")
+        }
+    }
+
+    // MARK: Body building blocks (type-check split — the previous single
+    // expression exceeded the Swift type-checker's budget; same view tree,
+    // decomposed into named sub-expressions)
+
+    private var scrimLayer: some View {
+        Aero.scrim
+            .ignoresSafeArea()
+            .onTapGesture { onClose() }
+            .accessibilityLabel("Close menu")
+            .accessibilityAddTraits(.isButton)
+            .transition(.opacity)
+    }
+
+    private var panelLayer: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ScrollView(showsIndicators: false) {
+                panelList
+            }
+        }
+        .padding(.top, Aero.Spacing.xl)
+        .frame(width: panelWidth, maxHeight: .infinity, alignment: .top)
+        .background(panel)
+        .shadow(color: Color.black.opacity(0.18), radius: 24, x: 8)
+        .offset(x: entryOffset + closeOffset)
+        .gesture(closeDragGesture)
+        .transition(.move(edge: .leading).combined(with: .opacity))
+        .onAppear {
+            // A stale tracked offset must never survive a fresh presentation.
+            closeOffset = 0
+        }
+    }
+
+    private var panelList: some View {
+        VStack(alignment: .leading, spacing: Aero.Spacing.s) {
+            header
+            newChat
+            recentGroup
+            divider
+            // PRIMARY — no label. The five surfaces a reader
+            // actually lives in.
+            primaryGroup
+            divider
+            moreGroup
+            divider
+            accountGroup
+            divider
+            advancedGroup
+        }
+        .padding(.horizontal, Aero.Spacing.m)
+        .padding(.bottom, Aero.Spacing.xl)
+    }
+
+    private var recentGroup: some View {
+        Group {
+            sectionLabel("Recent")
+            ForEach(recentRows) { conversation in
+                recentRow(conversation)
+            }
+            // Always visible — real destinations even when
+            // the recent list above is empty. No samples.
+            row(title: "All chats", icon: "tray", isSelected: activeRoute == .chats) { onRoute(.chats) }
+            row(title: "Archived", icon: "archivebox", isSelected: activeRoute == .chatArchive) { onRoute(.chatArchive) }
+        }
+    }
+
+    private var primaryGroup: some View {
+        Group {
+            row(title: "Home", icon: "house", isSelected: atHomeRoot) { onHome?() }
+            row(title: "Chats", icon: "bubble.left", isSelected: activeRoute == .chats) { onRoute(.chats) }
+            row(title: "Explore", icon: "safari", isSelected: activeRoute == .explore) { onRoute(.explore) }
+            row(title: "Create", icon: "sparkles", isSelected: activeRoute == .createTab) { onRoute(.createTab) }
+            row(title: "Library", icon: "books.vertical", isSelected: activeRoute == .library) { onRoute(.library) }
+        }
+    }
+
+    private var moreGroup: some View {
+        Group {
+            sectionLabel("More")
+            row(title: "Projects", icon: "folder", isSelected: activeRoute == .projects) { onRoute(.projects) }
+            row(title: "Assistants", icon: "cpu", isSelected: activeRoute == .assistants) { onRoute(.assistants) }
+            row(title: "Voice", icon: "waveform", isSelected: activeRoute == .voice) { onRoute(.voice) }
+            row(title: "Search", icon: "magnifyingglass", isSelected: activeRoute == .search) { onRoute(.search) }
+        }
+    }
+
+    private var accountGroup: some View {
+        Group {
+            sectionLabel("Account")
+            row(title: "Profile", icon: "person", isSelected: activeRoute == .profile) { onRoute(.profile) }
+            row(title: "Notifications", icon: "bell", isSelected: activeRoute == .notifications) { onRoute(.notifications) }
+            row(title: "Billing", icon: "creditcard", isSelected: activeRoute == .billing) { onRoute(.billing) }
+            row(title: "Settings", icon: "gearshape", isSelected: activeRoute == .settings) { onRoute(.settings) }
         }
     }
 
