@@ -2840,3 +2840,23 @@ Stage Summary:
 - iOS: real-Xcode CI — run 34630849424 FAILED (orphaned legacy 'starters' redeclaration in ChatDetailView — my new empty-state block kept the old list alive); fixed bee0736. Run 34631285717 FAILED (custom init suppressed memberwise init — RootView's workspace-shell args had no matching signature); fixed fb5b4b8 by threading the 3 params through the explicit init. Final run 34631771400 on fb5b4b8 GREEN: all 16 steps ✓ — XcodeGen, ** BUILD SUCCEEDED **, Executed 3 tests / 0 failures + ** TEST SUCCEEDED **, zip + Release xcarchive packaging (Xcode 26.3, iOS SDK 26.2). HEAD = fb5b4b8.
 - Commit e177a57 (16 files, +850/−2114). No version bump, no release, no new product features.
 - STOP per directive: awaiting user device validation; only explicitly-reported findings will be fixed.
+
+---
+Task ID: RELEASE-SWAP
+Agent: Z.ai Code (main)
+Task: Update the v0.60.0 release page to actually host the Phase 3 workspace-shell build (user-ordered release-page update; the live asset turned out to be the Phase 2 build rejected on device validation)
+
+Work Log:
+- Forensic check of the live page: v0.60.0 asset GS-AI-App.apk = SHA-256 32f87b75… (13,003,969 B, uploaded 16:52 UTC) — byte-identical to the Phase 2 delivery REJECTED in device validation; Phase 3 was committed 18:00–18:22 UTC, AFTER that upload. Local download/GS-AI-App.apk held the same stale build. Old GS-AI-App-Step5.apk was already gone (removed in the earlier release update).
+- Verified Phase 3 state at HEAD 8344305: e177a57 (recomposition) + bee0736/fb5b4b8 (iOS compile fixes) + 31cc93a (worklog; Android gates green, iOS CI 34631771400 green) + 8344305 (screenshots only, zero source changes).
+- :app:assembleRelease from HEAD: BUILD SUCCESSFUL in 24s — all compile/package tasks UP-TO-DATE vs current inputs (artifact faithful to the Phase 3 tree; APK mtime 18:21:24, inside the Phase 3 window).
+- Artifact forensics: aapt2 com.grapsee.gsai versionCode 61 / versionName 0.60.0 UNCHANGED; apksigner "Verified using v2 scheme: true" (v1/v3 false); cert SHA-256 b1ffd75dd410c84bd9467e418c419cd377d57569ae7ac5e26b778e6418b1a483 (gs-live.keystore — same cert as installed base → over-install safe); 12,971,201 B; SHA-256 acb52ebb1761f3cbc422cdc12caf9bb73ca314ddda72322f8bc3e304c87cf615.
+- Dex audit for shell honesty: zero app-owned HomeScreen class refs in classes*.dex (initial 90 binary hits = androidx material-icons AddToHomeScreenKt substring false-positive, resolved via strings extraction); GsDrawer/ChatScreen refs present → recomposed workspace shell confirmed inside the artifact; source tree grep "HomeScreen" = 0 matches.
+- Release swap (GitHub API): deleted asset 557634983 (Phase 2 build), uploaded Phase 3 APK as GS-AI-App.apk on release 384909935 (new asset id 557827180, state uploaded), round-trip re-download hash-verified byte-identical (acb52ebb…).
+- Release page coherence: body previously linked the deleted GS-AI-App-Step5.apk (~19 MB, would 404) and described an old commit — body rewritten to match the actual artifact (download link, build table incl. SHA-256/cert/gates, "what this build is" = recomposed-shell facts, manual-install note); release title renamed from "Platform-behaviour audit pass" to "Primary workspace shell (recomposed)" to match the payload.
+- Repo sync: download/GS-AI-App.apk refreshed to the Phase 3 build (raw URL now serves the workspace build); update-manifest.json intentionally untouched (versionCode still 61 — the in-app updater stays silent on 61-devices by design; no auto-push of a user-gated build).
+
+Stage Summary:
+- v0.60.0 release page now hosts the PHASE 3 recomposed workspace-shell APK: GS-AI-App.apk · 12,971,201 B · SHA-256 acb52ebb1761f3cbc422cdc12caf9bb73ca314ddda72322f8bc3e304c87cf615 · versionCode 61 / 0.60.0 · gs-live.keystore cert b1ffd75d… · v2 signature.
+- Same cert + same versionCode → installs directly over the rejected Phase 2 install; the in-app updater will NOT prompt (versionCode unchanged by design) — manual install required.
+- Device-validation gate returns to the user. No version bump, no new release tag, no other product changes. STOP.
