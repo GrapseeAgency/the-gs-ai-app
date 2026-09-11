@@ -13,6 +13,12 @@ import UIKit
 ///     GSHaptics.success()   // copy, pin, archive, hand-off done
 ///     GSHaptics.warning()   // destructive commit (delete)
 ///     GSHaptics.select()    // inline state flip (selection, segment)
+///
+/// MainActor by architecture: the generators are main-thread UIKit objects
+/// and every call site is UI interaction (view bodies / actions), which is
+/// exactly the context the compiler requires for reading the Settings
+/// "Haptics" toggle on the MainActor store.
+@MainActor
 enum GSHaptics {
 
     private static let tapGenerator = UIImpactFeedbackGenerator(style: .light)

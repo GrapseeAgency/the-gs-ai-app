@@ -279,7 +279,7 @@ final class ConversationStore: ObservableObject {
                 createdAt: now,
                 updatedAt: now))
         } else {
-            touch(message.conversationId)
+            touch(id: message.conversationId)
         }
         messages.append(message)
         if let existing = lastMessageByConversation[message.conversationId],

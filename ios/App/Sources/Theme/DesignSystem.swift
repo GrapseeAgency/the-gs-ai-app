@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /**
  * AERUO KINETIC — single source of design truth for iOS.
@@ -224,27 +225,93 @@ enum Aero {
         dark: UIColor(red: 0.137, green: 0.169, blue: 0.227, alpha: 1))        // 232B3A   stronger container
 
     // MARK: Typography — serif display voice, sans interface.
-    // Dynamic Type is the scaling mechanism: fonts use relativeTo text styles
-    // and the Settings › font-scale slider maps to DynamicTypeSize at the app
-    // root (GSApp.gsDynamicTypeSize). `responsive(...)` is the sanctioned way
-    // for screens to get role-matched scaling at custom point sizes.
+    // Dynamic Type is the scaling mechanism, and the Settings › font-scale
+    // slider multiplies every Aero type role (GSAccessibilityFlags.fontScale,
+    // propagated by SettingsStore.propagateFlags).
+    //
+    // Implementation note (iOS build repair): the previously written
+    // `Font.system(size:weight:design:relativeTo:)` does not exist in
+    // SwiftUI — no SDK ever shipped it (the real Xcode CI gate proved it).
+    // The exact same contract is assembled here from documented UIKit +
+    // SwiftUI APIs only:
+    //   1. `UIFontMetrics(forTextStyle:)` applies Apple's actual per-role
+    //      Dynamic Type scaling curve for the current content size category.
+    //      At the default category it is the identity transform, so every
+    //      spec point size below renders exactly as designed; as the
+    //      reader's Dynamic Type setting grows or shrinks, the resolved
+    //      size follows the role's real curve.
+    //   2. `GSAccessibilityFlags.shared.fontScale` (Settings › font scale)
+    //      multiplies the role-scaled result.
+    //   3. `Font.system(size:weight:design:)` renders the resolved size with
+    //      the exact weight and design (serif display, sans interface,
+    //      monospaced code).
+    // Signatures are unchanged — every call site compiles as before.
 
-    static func displayTitle() -> Font { .system(size: 34, weight: .semibold, design: .serif, relativeTo: .largeTitle) }
-    static func display() -> Font { .system(size: 28, weight: .semibold, design: .serif, relativeTo: .title) }
-    static func headline() -> Font { .system(size: 22, weight: .semibold, design: .serif, relativeTo: .title2) }
-    static func title() -> Font { .system(size: 17, weight: .semibold, relativeTo: .headline) }
-    static func body() -> Font { .system(size: 15, weight: .regular, relativeTo: .body) }
-    static func bodyMedium() -> Font { .system(size: 14, weight: .regular, relativeTo: .body) }
-    static func caption() -> Font { .system(size: 13, weight: .regular, relativeTo: .footnote) }
-    static func label() -> Font { .system(size: 12, weight: .medium, relativeTo: .caption) }
-    static func metadata() -> Font { .system(size: 11, weight: .medium, relativeTo: .caption2) }
-    static func button() -> Font { .system(size: 14, weight: .medium, relativeTo: .callout) }
-    static func code() -> Font { .system(size: 13, weight: .regular, design: .monospaced, relativeTo: .footnote) }
-    static func codeBlock() -> Font { .system(size: 14, weight: .regular, design: .monospaced, relativeTo: .body) }
+    /// SwiftUI text style → UIKit text style for the metrics engine.
+    private static func uiKitStyle(_ style: Font.TextStyle) -> UIFont.TextStyle {
+        switch style {
+        case .largeTitle: return .largeTitle
+        case .title: return .title1
+        case .title2: return .title2
+        case .title3: return .title3
+        case .headline: return .headline
+        case .body: return .body
+        case .callout: return .callout
+        case .subheadline: return .subheadline
+        case .footnote: return .footnote
+        case .caption: return .caption1
+        case .caption2: return .caption2
+        @unknown default: return .body
+        }
+    }
+
+    /// One metrics engine per role, built once. Token fonts are constructed
+    /// inside view bodies on every render pass, so the cache keeps that
+    /// allocation-free; `scaledValue` itself is pure arithmetic.
+    private static let metrics: [UIFont.TextStyle: UIFontMetrics] = [
+        .largeTitle: UIFontMetrics(forTextStyle: .largeTitle),
+        .title1: UIFontMetrics(forTextStyle: .title1),
+        .title2: UIFontMetrics(forTextStyle: .title2),
+        .title3: UIFontMetrics(forTextStyle: .title3),
+        .headline: UIFontMetrics(forTextStyle: .headline),
+        .body: UIFontMetrics(forTextStyle: .body),
+        .callout: UIFontMetrics(forTextStyle: .callout),
+        .subheadline: UIFontMetrics(forTextStyle: .subheadline),
+        .footnote: UIFontMetrics(forTextStyle: .footnote),
+        .caption1: UIFontMetrics(forTextStyle: .caption1),
+        .caption2: UIFontMetrics(forTextStyle: .caption2)
+    ]
+
+    /// The real "custom point size that scales with Dynamic Type": exact
+    /// spec size at the default category, the role's own Dynamic Type curve
+    /// beyond it, then the Settings font-scale multiplier on top.
+    private static func scaledFont(
+        _ size: CGFloat,
+        _ weight: Font.Weight,
+        _ design: Font.Design,
+        relativeTo style: Font.TextStyle
+    ) -> Font {
+        let engine = metrics[uiKitStyle(style)] ?? UIFontMetrics(forTextStyle: uiKitStyle(style))
+        let dynamic = engine.scaledValue(for: size)
+        return .system(size: dynamic * GSAccessibilityFlags.shared.fontScale, weight: weight, design: design)
+    }
+
+    static func displayTitle() -> Font { scaledFont(34, .semibold, .serif, relativeTo: .largeTitle) }
+    static func display() -> Font { scaledFont(28, .semibold, .serif, relativeTo: .title) }
+    static func headline() -> Font { scaledFont(22, .semibold, .serif, relativeTo: .title2) }
+    static func title() -> Font { scaledFont(17, .semibold, .default, relativeTo: .headline) }
+    static func body() -> Font { scaledFont(15, .regular, .default, relativeTo: .body) }
+    static func bodyMedium() -> Font { scaledFont(14, .regular, .default, relativeTo: .body) }
+    static func caption() -> Font { scaledFont(13, .regular, .default, relativeTo: .footnote) }
+    static func label() -> Font { scaledFont(12, .medium, .default, relativeTo: .caption) }
+    static func metadata() -> Font { scaledFont(11, .medium, .default, relativeTo: .caption2) }
+    static func button() -> Font { scaledFont(14, .medium, .default, relativeTo: .callout) }
+    static func code() -> Font { scaledFont(13, .regular, .monospaced, relativeTo: .footnote) }
+    static func codeBlock() -> Font { scaledFont(14, .regular, .monospaced, relativeTo: .body) }
 
     /// Dynamic-Type-responsive system font at a custom point size — identical
     /// appearance at the default type category, scaling with the reader's
-    /// Dynamic Type setting (and the Settings font-scale override) exactly
+    /// Dynamic Type setting and the Settings font-scale multiplier exactly
     /// like the token fonts above. Map the point size to the closest semantic
     /// style (11→.caption2, 12→.caption, 13→.footnote, 14/15→.subheadline,
     /// 16→.callout, 17→.body, 22→.title2) so scaling behaviour matches the role.
@@ -254,7 +321,7 @@ enum Aero {
         relativeTo style: Font.TextStyle = .body,
         design: Font.Design = .default
     ) -> Font {
-        .system(size: size, weight: weight, design: design, relativeTo: style)
+        scaledFont(size, weight, design, relativeTo: style)
     }
 
     // MARK: Motion — springs over eases; reduced-motion degrades to calm.
@@ -380,6 +447,42 @@ struct KineticPressStyle: ButtonStyle {
         configuration.label
             .scaleEffect(configuration.isPressed ? Aero.pressScale : 1)
             .animation(Aero.spring, value: configuration.isPressed)
+    }
+}
+
+// MARK: - Recovered shared modifiers (iOS build repair)
+// Both definitions were lost from this file in the 5e37a4d union-merge while
+// their call sites survived across the app — the same lost-symbol family as
+// the Aero.motion bridge. Restored verbatim from their historical definitions
+// (gsKeyboardDoneBar @ 0975be3, gsListRowChrome @ 102b5fe / Task 86-e) so the
+// call sites keep their exact original behaviour.
+
+extension View {
+    /// Keyboard accessory: a trailing Done button that resigns the first
+    /// responder. Attached to the text surfaces that hold the keyboard with
+    /// no other way to put it away (fixed-height TextEditors, find-in-chat,
+    /// the invisible auth code field) — shared so every site stays identical.
+    func gsKeyboardDoneBar() -> some View {
+        toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") {
+                    UIApplication.shared.sendAction(
+                        #selector(UIResponder.resignFirstResponder),
+                        to: nil, from: nil, for: nil)
+                }
+            }
+        }
+    }
+
+    /// Chrome for rows on the List-converted surfaces (Task 86-e): the List
+    /// container must disappear so rows render exactly like the LazyVStack
+    /// cards they replace — no separators, no tinted row background, and the
+    /// old card margins carried by the row insets.
+    func gsListRowChrome(_ insets: EdgeInsets) -> some View {
+        listRowInsets(insets)
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
     }
 }
 
