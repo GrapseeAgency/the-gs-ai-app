@@ -82,10 +82,16 @@ struct ChatDetailView: View {
     var onOpenDrawer: (() -> Void)? = nil
     var onNewChat: (() -> Void)? = nil
 
-    init(conversationID: String?, prefill: String? = nil, autoSendPrefill: Bool = false) {
+    init(conversationID: String?, prefill: String? = nil, autoSendPrefill: Bool = false,
+         isWorkspaceRoot: Bool = false,
+         onOpenDrawer: (() -> Void)? = nil,
+         onNewChat: (() -> Void)? = nil) {
         _vm = StateObject(wrappedValue: ChatViewModel(conversationID: conversationID))
         self.prefill = prefill
         self.autoSendPrefill = autoSendPrefill
+        self.isWorkspaceRoot = isWorkspaceRoot
+        self.onOpenDrawer = onOpenDrawer
+        self.onNewChat = onNewChat
     }
 
     var body: some View {
