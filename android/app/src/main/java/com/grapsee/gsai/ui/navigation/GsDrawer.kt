@@ -25,17 +25,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.outlined.Archive
+import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Bookmarks
-import androidx.compose.material.icons.outlined.Chat
 import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.GraphicEq
-import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Person
@@ -43,9 +40,12 @@ import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.SmartToy
 import androidx.compose.material.icons.outlined.Speed
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -57,6 +57,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
@@ -82,26 +83,24 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
 /**
- * AERUO KINETIC drawer — the primary navigation of the product shell.
- * PHASE 2 reclassification — a product navigation system, not an app
- * directory. Top to bottom:
+ * AERUO KINETIC drawer — a CHAT HISTORY PANEL, not a route directory.
+ * The sidebar is primarily about starting and navigating conversations:
  *
- *  1. ACCOUNT HEADER — real stored identity; the row opens Profile.
- *     (The fabricated "Pro" plan chip is gone — no plan system exists.)
- *  2. NEW CHAT — the single dominant action.
- *  3. RECENT — LIVE conversations only; when there are none the group says
- *     nothing (the hardcoded sample chats are deleted — an honest empty
- *     state beats invented history). All chats / Archived always visible.
- *  4. PRIMARY — Home, Chats, Explore, Create, Library.
- *  5. SECONDARY ("More") — Projects, Assistants, Voice, Search.
- *  6. ACCOUNT — Profile, Notifications, Billing, Settings.
- *  7. ADVANCED — collapsed by default: Models, Compare models. Technical
- *     surfaces stay reachable without sitting at parity with conversation.
+ *  1. ACCOUNT — one compact identity row; opening it reveals the account
+ *     controls (Profile · Settings · Notifications · Billing) in a sheet
+ *     instead of spending four sidebar rows on them.
+ *  2. NEW CHAT + SEARCH — the two conversation actions, always first.
+ *  3. RECENT — the visual heart: live conversations, tap to open, long-press
+ *     for pin / rename / archive / delete. Genuine empty state — nothing is
+ *     invented. "All chats" is the quiet overflow into the full history hub.
+ *  4. MORE — one row. Explore, Create, Projects, Library, Assistants, Voice,
+ *     Models and Compare models live behind it, in a sheet, one step away —
+ *     present, but never competing with conversation at row parity.
  *
- * Every section row exposes a selected state driven by the current route —
- * the drawer always answers "where am I?".
+ * Everything else the old drawer exposed is gone from the first level. The
+ * screens still exist underneath; the sidebar simply stops cataloguing them.
  */
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun GsDrawerContent(
     selectedRoute: String?,
@@ -110,11 +109,9 @@ fun GsDrawerContent(
 ) {
     val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
-    // Account identity (STEP 3 minimal wiring): the name/email the user
-    // actually typed at auth, via AccountStore. Nothing is fabricated — a
-    // blank stored value degrades to a neutral label, never a made-up name
-    // or address. Read per composition; the drawer re-runs this body each
-    // time it is opened.
+    // Account identity: the name/email the user actually typed at auth, via
+    // AccountStore. Nothing is fabricated — a blank stored value degrades to a
+    // neutral label, never a made-up name or address.
     val context = LocalContext.current
     val storedName = AccountStore.displayName(context)
     val storedEmail = AccountStore.email(context)
@@ -123,6 +120,17 @@ fun GsDrawerContent(
     }.collectAsState(initial = emptyList())
 
     var actionTarget by remember { mutableStateOf<ConversationEntity?>(null) }
+    var accountSheetOpen by remember { mutableStateOf(false) }
+    var moreSheetOpen by remember { mutableStateOf(false) }
+
+    // Sheet rows dismiss their own sheet first, then close the drawer and
+    // navigate — no stuck bottom sheet over the destination.
+    val navigateFromSheet: (String) -> Unit = { route ->
+        accountSheetOpen = false
+        moreSheetOpen = false
+        onClose()
+        onNavigate(route)
+    }
 
     val mutate: (suspend (ConversationEntity) -> Unit) -> Unit = { action ->
         val target = actionTarget
@@ -146,7 +154,7 @@ fun GsDrawerContent(
     ) {
         Spacer(Modifier.height(GsMotion.spaceL))
 
-        // 1 · Account header — identity + subscription indicator + account action
+        // 1 · Account — compact entry; the row reveals the account sheet.
         val headerInteraction = remember { MutableInteractionSource() }
         Row(
             modifier = Modifier
@@ -157,8 +165,8 @@ fun GsDrawerContent(
                     interactionSource = headerInteraction,
                     indication = LocalIndication.current,
                     role = Role.Button,
-                    onClickLabel = "Open profile"
-                ) { onNavigate(GsRoutes.PROFILE) }
+                    onClickLabel = "Account options"
+                ) { accountSheetOpen = true }
                 .padding(horizontal = GsMotion.spaceS, vertical = GsMotion.spaceS),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -173,7 +181,7 @@ fun GsDrawerContent(
                     initialsFor(storedName),
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.SemiBold,
-                    color = GsTheme.colors.accent
+                    color = GsTheme.colors.textPrimary
                 )
             }
             Spacer(Modifier.width(GsMotion.spaceS))
@@ -193,162 +201,84 @@ fun GsDrawerContent(
                     color = GsTheme.colors.textSecondary
                 )
             }
-            // The fabricated "Pro" plan chip is removed — there is no plan
-            // system; Billing (honest early-access state) stays in Account.
         }
 
         Spacer(Modifier.height(GsMotion.spaceL))
 
-        // 2 · New chat — the one loud action, dressed as the Primary button
-        GsButton(
-            label = "New chat",
-            leadingIcon = Icons.Outlined.Edit,
-            onClick = {
-                onClose()
-                onNavigate(GsRoutes.chat(null))
-            },
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Spacer(Modifier.height(GsMotion.spaceL))
-
-        // 3 · Recent — live history only. When the store is empty the group
-        // collapses to its two real destinations; nothing is invented.
-        DrawerLabel("Recent")
-        Spacer(Modifier.height(GsMotion.spaceS))
-
-        recents.take(RECENT_LIMIT).forEach { conversation ->
-            RecentRow(
-                conversation = conversation,
-                onOpen = {
-                    onClose()
-                    onNavigate(GsRoutes.chat(conversation.id))
-                },
-                onActions = {
-                    // The reveal haptic the system lists play on long-press.
-                    GsHaptics.longPress(haptics)
-                    actionTarget = conversation
-                }
-            )
-        }
-        Spacer(Modifier.height(GsMotion.spaceXS))
-        DrawerRow("All chats", icon = Icons.Outlined.Inbox) {
-            onClose(); onNavigate(GsRoutes.CHATS)
-        }
-        DrawerRow("Archived", icon = Icons.Outlined.Archive) {
-            onClose(); onNavigate(GsRoutes.CHAT_ARCHIVE)
-        }
-
-        Spacer(Modifier.height(GsMotion.spaceL))
-        DrawerDivider()
-        Spacer(Modifier.height(GsMotion.spaceL))
-
-        // 4 · Primary navigation — the core product areas (no label; the
-        // divider already separates them from history)
-        DrawerRow("Home", icon = Icons.Outlined.Home, selected = selectedRoute == GsRoutes.HOME) {
-            onClose(); onNavigate(GsRoutes.HOME)
-        }
-        DrawerRow("Chats", icon = Icons.Outlined.Chat, selected = selectedRoute == GsRoutes.CHATS) {
-            onClose(); onNavigate(GsRoutes.CHATS)
-        }
-        DrawerRow("Explore", icon = Icons.Outlined.Explore, selected = selectedRoute == GsRoutes.EXPLORE) {
-            onClose(); onNavigate(GsRoutes.EXPLORE)
-        }
-        DrawerRow("Create", icon = Icons.Outlined.AutoAwesome, selected = selectedRoute == GsRoutes.CREATE) {
-            onClose(); onNavigate(GsRoutes.CREATE)
-        }
-        DrawerRow("Library", icon = Icons.Outlined.Bookmarks, selected = selectedRoute == GsRoutes.LIBRARY) {
-            onClose(); onNavigate(GsRoutes.LIBRARY)
-        }
-
-        Spacer(Modifier.height(GsMotion.spaceL))
-        DrawerDivider()
-        Spacer(Modifier.height(GsMotion.spaceL))
-
-        // 5 · Secondary — real workspaces, one step below the product core
-        DrawerLabel("More")
-        Spacer(Modifier.height(GsMotion.spaceS))
-        DrawerRow("Projects", icon = Icons.Outlined.Folder, selected = selectedRoute == GsRoutes.PROJECTS) {
-            onClose(); onNavigate(GsRoutes.PROJECTS)
-        }
-        DrawerRow("Assistants", icon = Icons.Outlined.SmartToy, selected = selectedRoute == GsRoutes.ASSISTANTS) {
-            onClose(); onNavigate(GsRoutes.ASSISTANTS)
-        }
-        DrawerRow("Voice", icon = Icons.Outlined.GraphicEq, selected = selectedRoute == GsRoutes.VOICE) {
-            onClose(); onNavigate(GsRoutes.VOICE)
-        }
-        DrawerRow("Search", icon = Icons.Outlined.Search, selected = selectedRoute == GsRoutes.SEARCH) {
-            onClose(); onNavigate(GsRoutes.SEARCH)
-        }
-
-        Spacer(Modifier.height(GsMotion.spaceL))
-        DrawerDivider()
-        Spacer(Modifier.height(GsMotion.spaceL))
-
-        // 6 · Account — system areas, clearly separated from product navigation
-        DrawerLabel("Account")
-        Spacer(Modifier.height(GsMotion.spaceS))
-        DrawerRow("Profile", icon = Icons.Outlined.Person, selected = selectedRoute == GsRoutes.PROFILE) {
-            onClose(); onNavigate(GsRoutes.PROFILE)
-        }
-        DrawerRow("Notifications", icon = Icons.Outlined.Notifications, selected = selectedRoute == GsRoutes.NOTIFICATIONS) {
-            onClose(); onNavigate(GsRoutes.NOTIFICATIONS)
-        }
-        DrawerRow("Billing", icon = Icons.Outlined.CreditCard, selected = selectedRoute == GsRoutes.BILLING) {
-            onClose(); onNavigate(GsRoutes.BILLING)
-        }
-        DrawerRow("Settings", icon = Icons.Outlined.Settings, selected = selectedRoute == GsRoutes.SETTINGS) {
-            onClose(); onNavigate(GsRoutes.SETTINGS)
-        }
-
-        Spacer(Modifier.height(GsMotion.spaceL))
-        DrawerDivider()
-        Spacer(Modifier.height(GsMotion.spaceL))
-
-        // 7 · Advanced — technical surfaces, collapsed by default. A normal
-        // user never needs them; they stay reachable without competing with
-        // conversation at row parity.
-        var advancedOpen by remember { mutableStateOf(false) }
+        // 2 · New chat + Search — the two conversation actions, first.
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(GsRadius.mdShape())
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = LocalIndication.current,
-                    role = Role.Button
-                ) { advancedOpen = !advancedOpen }
-                .padding(horizontal = GsMotion.spaceM, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
         ) {
-            Icon(
-                Icons.Outlined.Speed,
-                contentDescription = null,
-                tint = GsTheme.colors.textSecondary,
-                modifier = Modifier.size(18.dp)
-            )
-            Text(
-                "Advanced",
-                style = MaterialTheme.typography.bodyMedium,
-                color = GsTheme.colors.textPrimary,
+            GsButton(
+                label = "New chat",
+                leadingIcon = Icons.Outlined.Edit,
+                onClick = {
+                    onClose()
+                    onNavigate(GsRoutes.chat(null))
+                },
                 modifier = Modifier.weight(1f)
             )
-            Icon(
-                Icons.Outlined.ExpandMore,
-                contentDescription = if (advancedOpen) "Collapse advanced" else "Expand advanced",
-                tint = GsTheme.colors.textSecondary,
-                modifier = Modifier.size(18.dp)
+            IconButton(
+                onClick = {
+                    onClose()
+                    onNavigate(GsRoutes.CHAT_SEARCH)
+                },
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(GsRadius.mdShape())
+                    .background(GsTheme.colors.raisedSurface)
+            ) {
+                Icon(
+                    Icons.Outlined.Search,
+                    contentDescription = "Search chats",
+                    tint = GsTheme.colors.textPrimary
+                )
+            }
+        }
+
+        Spacer(Modifier.height(GsMotion.spaceL))
+
+        // 3 · Recent — the heart of the sidebar. Live history only; when the
+        // store is empty the panel says so honestly and nothing is invented.
+        if (recents.isEmpty()) {
+            DrawerLabel("Recent")
+            Spacer(Modifier.height(GsMotion.spaceS))
+            Text(
+                "No conversations yet",
+                style = MaterialTheme.typography.bodyMedium,
+                color = GsTheme.colors.textSecondary,
+                modifier = Modifier.padding(horizontal = GsMotion.spaceM, vertical = GsMotion.spaceS)
             )
-        }
-        if (advancedOpen) {
-            DrawerRow("Models", icon = Icons.Outlined.SmartToy, selected = selectedRoute == GsRoutes.MODELS) {
-                onClose(); onNavigate(GsRoutes.MODELS)
+        } else {
+            DrawerLabel("Recent")
+            Spacer(Modifier.height(GsMotion.spaceS))
+            recents.take(RECENT_LIMIT).forEach { conversation ->
+                RecentRow(
+                    conversation = conversation,
+                    onOpen = {
+                        onClose()
+                        onNavigate(GsRoutes.chat(conversation.id))
+                    },
+                    onActions = {
+                        // The reveal haptic the system lists play on long-press.
+                        GsHaptics.longPress(haptics)
+                        actionTarget = conversation
+                    }
+                )
             }
-            DrawerRow("Compare models", selected = selectedRoute == GsRoutes.MODEL_COMPARE) {
-                onClose(); onNavigate(GsRoutes.MODEL_COMPARE)
-            }
         }
+        Spacer(Modifier.height(GsMotion.spaceXS))
+        DrawerRow("All chats", icon = Icons.Outlined.Inbox, selected = selectedRoute == GsRoutes.CHATS) {
+            onClose(); onNavigate(GsRoutes.CHATS)
+        }
+
+        Spacer(Modifier.height(GsMotion.spaceL))
+        DrawerDivider()
+        Spacer(Modifier.height(GsMotion.spaceL))
+
+        // 4 · More — every other product surface, one quiet row away.
+        DrawerRow("More", icon = Icons.Outlined.Apps) { moreSheetOpen = true }
 
         Spacer(Modifier.height(GsMotion.spaceXL))
     }
@@ -369,6 +299,28 @@ fun GsDrawerContent(
                 }
             }
         )
+    }
+
+    if (accountSheetOpen) {
+        DrawerNavSheet(onDismiss = { accountSheetOpen = false }) {
+            SheetRow("Profile", Icons.Outlined.Person) { navigateFromSheet(GsRoutes.PROFILE) }
+            SheetRow("Settings", Icons.Outlined.Settings) { navigateFromSheet(GsRoutes.SETTINGS) }
+            SheetRow("Notifications", Icons.Outlined.Notifications) { navigateFromSheet(GsRoutes.NOTIFICATIONS) }
+            SheetRow("Billing", Icons.Outlined.CreditCard) { navigateFromSheet(GsRoutes.BILLING) }
+        }
+    }
+
+    if (moreSheetOpen) {
+        DrawerNavSheet(onDismiss = { moreSheetOpen = false }) {
+            SheetRow("Explore", Icons.Outlined.Explore, selectedRoute == GsRoutes.EXPLORE) { navigateFromSheet(GsRoutes.EXPLORE) }
+            SheetRow("Create", Icons.Outlined.AutoAwesome, selectedRoute == GsRoutes.CREATE) { navigateFromSheet(GsRoutes.CREATE) }
+            SheetRow("Projects", Icons.Outlined.Folder, selectedRoute == GsRoutes.PROJECTS) { navigateFromSheet(GsRoutes.PROJECTS) }
+            SheetRow("Library", Icons.Outlined.Bookmarks, selectedRoute == GsRoutes.LIBRARY) { navigateFromSheet(GsRoutes.LIBRARY) }
+            SheetRow("Assistants", Icons.Outlined.SmartToy, selectedRoute == GsRoutes.ASSISTANTS) { navigateFromSheet(GsRoutes.ASSISTANTS) }
+            SheetRow("Voice", Icons.Outlined.GraphicEq, selectedRoute == GsRoutes.VOICE) { navigateFromSheet(GsRoutes.VOICE) }
+            SheetRow("Models", Icons.Outlined.Speed, selectedRoute == GsRoutes.MODELS) { navigateFromSheet(GsRoutes.MODELS) }
+            SheetRow("Compare models", icon = null, selectedRoute == GsRoutes.MODEL_COMPARE) { navigateFromSheet(GsRoutes.MODEL_COMPARE) }
+        }
     }
 }
 
@@ -409,14 +361,80 @@ private fun RecentRow(
             Icon(
                 Icons.Filled.Star,
                 contentDescription = "Pinned",
-                tint = GsTheme.colors.accent,
+                tint = GsTheme.colors.textSecondary,
                 modifier = Modifier.size(14.dp)
             )
         }
     }
 }
 
-/** Pin / archive / delete sheet now lives in ui/components.ConversationActionsSheet (shared with Chats). */
+/** Pin / archive / delete sheet lives in ui/components.ConversationActionsSheet (shared with Chats). */
+
+/**
+ * The compact account/More reveal: a native bottom sheet so the sidebar itself
+ * never becomes a catalogue. Rows navigate and dismiss everything.
+ */
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun DrawerNavSheet(
+    onDismiss: () -> Unit,
+    content: @Composable () -> Unit
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = GsMotion.spaceM)
+                .padding(bottom = GsMotion.spaceL),
+            verticalArrangement = Arrangement.spacedBy(GsMotion.spaceXS)
+        ) {
+            content()
+        }
+    }
+}
+
+@Composable
+private fun SheetRow(
+    title: String,
+    icon: ImageVector?,
+    selected: Boolean = false,
+    onClick: () -> Unit
+) {
+    val colors = GsTheme.colors
+    val rowInteraction = remember { MutableInteractionSource() }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(GsRadius.mdShape())
+            .background(if (selected) colors.accentSoft else colors.appBackground.copy(alpha = 0f))
+            .kineticPress(rowInteraction)
+            .clickable(
+                interactionSource = rowInteraction,
+                indication = LocalIndication.current,
+                role = Role.Button
+            ) { onClick() }
+            .padding(horizontal = GsMotion.spaceM, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
+    ) {
+        if (icon != null) {
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = colors.textSecondary,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+        Text(
+            title,
+            style = MaterialTheme.typography.bodyLarge,
+            color = colors.textPrimary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
 
 @Composable
 private fun DrawerLabel(text: String) {
@@ -428,7 +446,7 @@ private fun DrawerLabel(text: String) {
     )
 }
 
-/** The drawer's one hairline — structural separation between route groups. */
+/** The drawer's one hairline — structural separation between groups. */
 @Composable
 private fun DrawerDivider() {
     HorizontalDivider(color = GsTheme.colors.divider, thickness = 1.dp)
@@ -436,13 +454,12 @@ private fun DrawerDivider() {
 
 /**
  * One navigation row. [selected] marks the drawer's answer to "where am I":
- * a soft accent container with accent content — deliberately quieter than a
- * filled pill, loud enough to read at a glance.
+ * a soft neutral container — quiet, readable, colourless.
  */
 @Composable
 private fun DrawerRow(
     title: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    icon: ImageVector? = null,
     selected: Boolean = false,
     onClick: () -> Unit
 ) {
@@ -468,7 +485,7 @@ private fun DrawerRow(
             Icon(
                 icon,
                 contentDescription = null,
-                tint = if (selected) colors.accent else colors.textSecondary,
+                tint = if (selected) colors.textPrimary else colors.textSecondary,
                 modifier = Modifier.size(18.dp)
             )
         } else {
@@ -477,14 +494,14 @@ private fun DrawerRow(
         Text(
             title,
             style = MaterialTheme.typography.bodyMedium,
-            color = if (selected) colors.accent else colors.textPrimary,
+            color = if (selected) colors.textPrimary else colors.textPrimary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
     }
 }
 
-private const val RECENT_LIMIT = 5
+private const val RECENT_LIMIT = 12
 
 /**
  * Initials from the REAL stored name: the first letter of each of the first

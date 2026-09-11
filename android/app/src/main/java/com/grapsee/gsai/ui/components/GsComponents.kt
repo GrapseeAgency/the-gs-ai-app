@@ -581,6 +581,13 @@ fun GsScreenScaffold(
     subtitle: String? = null,
     largeTitle: Boolean = false,
     onBack: (() -> Unit)? = null,
+    /** Leading slot for screens that are their own root (the conversation
+     *  workspace shows the drawer menu here instead of a back arrow). Only
+     *  rendered when [onBack] is null — back keeps priority. */
+    leading: (@Composable RowScope.() -> Unit)? = null,
+    /** Compact title tier — the workspace header reads as a quiet label, not
+     *  a page headline. */
+    compactTitle: Boolean = false,
     actions: @Composable RowScope.() -> Unit = {},
     content: @Composable ColumnScope.() -> Unit
 ) {
@@ -602,11 +609,15 @@ fun GsScreenScaffold(
                         contentDescription = "Back",
                         tint = MaterialTheme.colorScheme.onBackground)
                 }
+            } else if (leading != null) {
+                leading()
             }
             Text(
                 title,
                 style = if (largeTitle) {
                     MaterialTheme.typography.headlineMedium
+                } else if (compactTitle) {
+                    MaterialTheme.typography.titleMedium
                 } else {
                     MaterialTheme.typography.headlineSmall
                 },

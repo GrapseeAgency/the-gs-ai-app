@@ -48,12 +48,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ArrowDownward
 import androidx.compose.material.icons.outlined.AttachFile
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.CallSplit
 import androidx.compose.material.icons.outlined.CameraAlt
-import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Code
@@ -65,6 +65,7 @@ import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
+import androidx.compose.material.icons.outlined.Menu
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.Refresh
@@ -134,12 +135,11 @@ import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.data.ModelPrefs
 import com.grapsee.gsai.data.chat.ChatStreamController
 import com.grapsee.gsai.data.model.ModelCatalog
+import com.grapsee.gsai.data.model.ModelInfo
 import com.grapsee.gsai.data.repository.ChatRepository
 import com.grapsee.gsai.di.ServiceLocator
 import androidx.activity.compose.BackHandler
-import com.grapsee.gsai.ui.components.GsCard
 import com.grapsee.gsai.ui.components.GsChip
-import com.grapsee.gsai.ui.components.GsEmptyState
 import com.grapsee.gsai.ui.components.GsOfflineBanner
 import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.data.tts.TtsFocus
@@ -238,11 +238,19 @@ private fun Context.findActivity(): Activity? {
 fun ChatScreen(
     conversationId: String?,
     onBack: () -> Unit,
+    // PHASE 3 workspace model: this screen IS the app root. When true (start
+    // destination, nothing beneath it in the stack) the header shows the drawer
+    // menu instead of a back arrow and a "+" resets to a fresh workspace.
+    atWorkspaceRoot: Boolean = false,
+    // Drawer reveal for the workspace root header.
+    onOpenDrawer: (() -> Unit)? = null,
+    // Reset to a fresh workspace (nav-owned: pops to a single chat/new).
+    onNewChat: (() -> Unit)? = null,
     // Voice press-and-hold hands its transcript to the composer through this.
     prefillPrompt: String? = null,
-    // PHASE 2 Home inline composer: when true, [prefillPrompt] is dispatched
-    // immediately on arrival (tap → type → send with no second keypress).
-    // One-shot guarded so process death / re-entry never re-sends.
+    // Typed-elsewhere prompts (Voice handoff / launcher shortcut): dispatched
+    // immediately on arrival. One-shot guarded so process death / re-entry
+    // never re-sends.
     autoSendInitialPrompt: Boolean = false,
     // Optional voice entry point — the main agent wires this to GsRoutes.VOICE in GsNavHost.
     onNavigateVoice: (() -> Unit)? = null,
@@ -260,7 +268,10 @@ fun ChatScreen(
     var activeConversationId by rememberSaveable { mutableStateOf(conversationId) }
     val messages = remember { mutableStateListOf<ChatUiMessage>() }
     var draft by remember { mutableStateOf("") }
-    var conversationTitle by rememberSaveable { mutableStateOf("New chat") }
+    // Fresh workspace reads "GS" — the product's quiet identity mark, not a
+    // page name. The first exchange re-titles the thread from the prompt (and
+    // existing conversations load their stored title below).
+    var conversationTitle by rememberSaveable { mutableStateOf("GS") }
     var editingId by rememberSaveable { mutableStateOf<String?>(null) }
     var editingDraft by remember { mutableStateOf("") }
     var searchOpen by rememberSaveable { mutableStateOf(false) }
@@ -811,9 +822,27 @@ fun ChatScreen(
         }
     }
 
+    // Workspace header: menu (at root) / back (pushed), quiet title, and the
+    // model control as a SECONDARY utility — a small name-only pill the
+    // ordinary user can ignore forever. Tapping opens a native bottom sheet
+    // with three plain-language tiers; the full catalogue stays behind
+    // "About models" (never a route exit away from the conversation).
+    // "No technical model metadata, no coloured indicator" — the pill is a
+    // bordered neutral chip with the tier WORD only (Fast / Everyday / Best).
+    val menuAction = onOpenDrawer
+    val newChatAction = onNewChat
     GsScreenScaffold(
         title = conversationTitle,
-        onBack = onBack,
+        onBack = if (atWorkspaceRoot) null else onBack,
+        leading = if (atWorkspaceRoot && menuAction != null) {
+            {
+                IconButton(onClick = menuAction) {
+                    Icon(Icons.Outlined.Menu, contentDescription = "Open menu",
+                        tint = MaterialTheme.colorScheme.onBackground)
+                }
+            }
+        } else null,
+        compactTitle = true,
         actions = {
             IconButton(onClick = {
                 searchOpen = !searchOpen
@@ -825,15 +854,13 @@ fun ChatScreen(
                 Icon(Icons.Outlined.Search, contentDescription = "Search in chat",
                     tint = MaterialTheme.colorScheme.onBackground)
             }
-            // PHASE 2 model indicator — small, quiet, NAME ONLY. No mode
-            // suffix, no technical vocabulary: an ordinary user can ignore it
-            // forever. Tapping opens a native bottom sheet with three plain
-            // language tiers; the full catalogue stays behind "About models"
-            // (never a route exit away from the conversation).
+            // PHASE 3 model control — nearly invisible: consumer tier word
+            // only (Fast / Everyday / Best), no product/model names, no dot,
+            // no metadata. The send path still uses the real persisted model.
             val activeModel = ModelCatalog.byId(ModelPrefs.defaultId(context))
             var modelSheetOpen by remember { mutableStateOf(false) }
             GsChip(
-                text = activeModel?.displayName ?: "Auto",
+                text = consumerTierLabel(activeModel),
                 selected = false,
                 onClick = { modelSheetOpen = true }
             )
@@ -850,6 +877,12 @@ fun ChatScreen(
                         onNavigateModels?.invoke()
                     }
                 )
+            }
+            if (newChatAction != null) {
+                IconButton(onClick = newChatAction) {
+                    Icon(Icons.Outlined.Add, contentDescription = "New chat",
+                        tint = MaterialTheme.colorScheme.onBackground)
+                }
             }
         }
     ) {
@@ -914,7 +947,16 @@ fun ChatScreen(
 
             Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
                 if (messages.isEmpty()) {
-                    StarterPrompts(onPick = { dispatch(it, echoUser = true) })
+                    // PHASE 3 empty state — part of the chat surface, not a
+                    // separate landing composition: a quiet greeting, a handful
+                    // of composer suggestions, and space. Suggestions vanish
+                    // the moment the reader types; the greeting stays until the
+                    // first real turn replaces the whole block with the
+                    // transcript. Same screen throughout — no navigation hop.
+                    WorkspaceEmptyState(
+                        draft = draft,
+                        onSuggestion = { suggestion -> draft = suggestion }
+                    )
                 } else {
                     LazyColumn(
                         state = listState,
@@ -1521,37 +1563,92 @@ private fun AuroraIndicator() {
     )
 }
 
-// --- empty-state starters ----------------------------------------------------
+// --- workspace empty state ---------------------------------------------------
 
-private val starterPrompts = listOf(
+private val workspaceSuggestions = listOf(
     "Draft a crisp product update email for our beta testers",
     "Explain Kotlin coroutines like I'm a senior Java developer",
     "Plan a three-day Tokyo itinerary focused on design studios"
 )
 
+/** Time-of-day greeting — the empty state's whole identity, no orb, no hero. */
+private fun greetingFor(): String {
+    val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+    return when (hour) {
+        in 23..23, in 0..4 -> "Up late?"
+        in 5..11 -> "Good morning"
+        in 12..17 -> "Good afternoon"
+        else -> "Good evening"
+    }
+}
+
+/**
+ * The consumer tier word for the header chip — Fast / Everyday / Best.
+ * Deliberately NOT the model's display name: the header answers "how hard is
+ * GS thinking right now" in ordinary language, and nothing else.
+ */
+private fun consumerTierLabel(model: ModelInfo?): String = when (model?.speedTier) {
+    "fast" -> "Fast"
+    "deep" -> "Best"
+    null -> "Auto"
+    else -> "Everyday"
+}
+
+/**
+ * PHASE 3 empty state — the fresh workspace IS this: a small greeting, a few
+ * quiet composer suggestions, readable empty space, and the composer already
+ * waiting at the bottom. No orb, no halo, no invitation cards, no navigation.
+ * A suggestion taps INTO the composer (the reader stays in control of the
+ * send) and the whole block yields to the transcript on the first turn.
+ */
 @Composable
-private fun StarterPrompts(onPick: (String) -> Unit) {
+private fun WorkspaceEmptyState(
+    draft: String,
+    onSuggestion: (String) -> Unit
+) {
     Column(
         modifier = Modifier
-            .fillMaxWidth()
+            .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(top = GsMotion.spaceM),
-        verticalArrangement = Arrangement.spacedBy(GsMotion.spaceM)
+            .padding(horizontal = GsMotion.spaceM),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
     ) {
-        GsEmptyState(
-            icon = Icons.Outlined.ChatBubbleOutline,
-            title = "Start the conversation",
-            message = "Pick a starter or type your own — replies stream in as they are written."
+        Text(
+            text = greetingFor(),
+            style = MaterialTheme.typography.headlineSmall,
+            color = GsTheme.colors.textPrimary,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            modifier = Modifier.semantics { heading() }
         )
-        starterPrompts.forEach { prompt ->
-            GsCard(onClick = { onPick(prompt) }) {
-                Text(
-                    text = prompt,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+        if (draft.isBlank()) {
+            Spacer(Modifier.height(GsMotion.spaceXL))
+            workspaceSuggestions.forEach { prompt ->
+                SuggestionPill(text = prompt, onClick = { onSuggestion(prompt) })
+                Spacer(Modifier.height(GsMotion.spaceS))
             }
         }
+    }
+}
+
+/** One quiet composer suggestion — hairline outline pill, no surface fill. */
+@Composable
+private fun SuggestionPill(text: String, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = GsRadius.pill,
+        color = androidx.compose.ui.graphics.Color.Transparent,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = GsTheme.colors.textSecondary,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            modifier = Modifier
+                .padding(horizontal = GsMotion.spaceL, vertical = 10.dp)
+                .widthIn(max = 320.dp)
+        )
     }
 }
 

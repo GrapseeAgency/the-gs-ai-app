@@ -4,7 +4,6 @@ import android.net.Uri
 
 /** AERUO KINETIC — route map. Screens are plain composables; this file owns all routing. */
 object GsRoutes {
-    const val HOME = "home"
     const val CHATS = "chats"
     const val EXPLORE = "explore"
     const val CREATE = "create"
@@ -48,8 +47,12 @@ object GsRoutes {
 
     /**
      * Open a conversation. [prompt] prefills the composer; [autoSend] sends it
-     * immediately on arrival (PHASE 2 Home: the inline composer sends straight
-     * into a new chat — tap → type → send, no second keypress).
+     * immediately on arrival.
+     *
+     * PHASE 3 workspace model: this is the ROOT surface. `chat(null)` (the
+     * fresh conversation) is the app's start destination — the empty state of
+     * the same screen the transcript renders in. There is no separate Home
+     * launcher and no separate "New chat" page.
      */
     fun chat(conversationId: String?, prompt: String? = null, autoSend: Boolean = false): String {
         val base = "chat/${conversationId ?: "new"}"
@@ -67,26 +70,25 @@ object GsRoutes {
     const val ARG_ASSISTANT = "assistantId"
     fun assistant(id: String) = "assistant/$id"
 
-    // --- Shell navigation classes (STEP 2) -----------------------------------
+    // --- Shell navigation classes ---------------------------------------------
     //
     // The route map distinguishes three navigation classes so the shell can
     // treat each with its own grammar instead of one generic transition:
     //
     //  SECTION  — root-level product/account areas, switched from the drawer
     //             with the canonical section pattern (launchSingleTop +
-    //             popUpTo(home) + saveState/restoreState). Back from a section
-    //             lands on Home; the stack never accumulates duplicates.
+    //             popUpTo(workspace) + saveState/restoreState). Back from a
+    //             section lands on the conversation workspace; the stack never
+    //             accumulates duplicates.
     //  SESSION  — the auth/onboarding gate. The drawer must never exist here
     //             (no content, no edge-swipe) — an unauthenticated user has no
     //             product navigation to reveal.
     //  DETAIL   — everything else: pushed on top of the current context with
     //             the directional transition and its own back affordance.
 
-    /** Root-level destinations the drawer switches between (Home included —
-     *  the drawer is reachable from every screen, so an explicit Home row
-     *  gives section screens a one-tap return to the main canvas). */
+    /** Root-level destinations the drawer's More surface switches to. */
     val SECTION_ROUTES = setOf(
-        HOME, CHATS, EXPLORE, CREATE, LIBRARY,
+        CHATS, EXPLORE, CREATE, LIBRARY,
         PROJECTS, ASSISTANTS, MODELS, SEARCH,
         PROFILE, NOTIFICATIONS, SETTINGS, BILLING
     )

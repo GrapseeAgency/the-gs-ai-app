@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Night variant of the launch theme: the app's obsidian launch surface
-         (Aeruo.Obsidian) with light system-bar icons — no white flash and no
+         (true black) with light system-bar icons — no white flash and no
          dark-icons-on-obsidian when the system boots the app in dark mode. -->
     <style name="Theme.TheGsAiApp" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">@color/gs_launch_background_night</item>

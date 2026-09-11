@@ -46,7 +46,6 @@ import com.grapsee.gsai.ui.chat.ChatSearchScreen
 import com.grapsee.gsai.ui.chat.ChatsScreen
 import com.grapsee.gsai.ui.create.CreateScreen
 import com.grapsee.gsai.ui.explore.ExploreScreen
-import com.grapsee.gsai.ui.home.HomeScreen
 import com.grapsee.gsai.ui.library.LibraryScreen
 import com.grapsee.gsai.ui.models.ModelCentreScreen
 import com.grapsee.gsai.ui.models.ModelCompareScreen
@@ -64,17 +63,23 @@ import com.grapsee.gsai.ui.theme.gsHaptic
 import kotlinx.coroutines.launch
 
 /**
- * AERUO KINETIC nav graph — the product shell. The home canvas is the hub,
- * the drawer is the primary navigation (benchmark AI-app pattern) and
- * everything else is pushed from within.
+ * AERUO KINETIC nav graph — the product shell. THE CONVERSATION WORKSPACE IS
+ * THE ROOT: the app opens directly into the AI workspace (fresh conversation =
+ * the empty state of the same screen that renders the transcript), the drawer
+ * is the quiet navigation layer, and everything else is pushed from within.
+ * There is no Home launcher and no separate "New chat" page.
  *
- * STEP 2 shell contract:
+ * Shell contract:
  *  · The drawer belongs to the PRODUCT only. Auth/Onboarding sit outside it:
  *    no drawer content and no edge-swipe reveal while the session gate is up.
- *  · Motion is hierarchical, not one-size: section switches (drawer →
- *    Home/Chats/Explore/…) use a fast subtle fade-settle; detail pushes use
- *    the directional slide/parallax grammar; the session gate fades. The
- *    predictive-back gesture scrubs the pop transitions on Android 14+.
+ *  · "New chat" (drawer row, workspace + button) resets the stack to one
+ *    fresh workspace — popUpTo(workspace) inclusive + launchSingleTop — so
+ *    the back gesture from a fresh workspace exits the app, never unwinds a
+ *    pile of discarded conversations. A conversation already in flight stays
+ *    in history (it is persisted) and remains reachable from the drawer.
+ *  · Motion is hierarchical: section switches use a fast subtle fade-settle;
+ *    detail pushes use the directional slide/parallax grammar; the session
+ *    gate fades. Reduce-motion kills all of it.
  *  · The drawer knows the current route and marks it selected.
  */
 @Composable
@@ -84,8 +89,9 @@ fun GsNavHost(modifier: Modifier = Modifier) {
     val back: () -> Unit = { navController.popBackStack() }
     val context = LocalContext.current
     val view = LocalView.current
-    // Session gate — first launch walks Auth → Onboarding; later launches go straight Home.
-    val start = if (SessionStore.isSessionActive(context)) GsRoutes.HOME else GsRoutes.AUTH
+    // Session gate — first launch walks Auth → Onboarding; later launches go
+    // straight into the workspace.
+    val start = if (SessionStore.isSessionActive(context)) GsRoutes.CHAT else GsRoutes.AUTH
 
     // The current destination drives two shell behaviours at once: whether the
     // drawer may exist at all (never inside the session gate) and which row
@@ -95,14 +101,27 @@ fun GsNavHost(modifier: Modifier = Modifier) {
     val currentRoute = backStackEntry?.destination?.route
     val drawerAllowed = !GsRoutes.isSessionRoute(currentRoute)
 
+    // New chat = reset the workspace. The stack is trimmed back to a single
+    // fresh conversation surface no matter where the call comes from — the
+    // drawer row, the workspace header "+", or the launcher shortcut.
+    val newChat: () -> Unit = {
+        navController.navigate(GsRoutes.chat(null)) {
+            popUpTo(GsRoutes.CHAT) { inclusive = true }
+            launchSingleTop = true
+        }
+    }
+
     // Home-screen quick actions (New chat / New image / Ask GS): consume exactly
     // once and navigate with a route the drawer already uses. Dropped silently
-    // when the session gate is still at Auth — no signed-out navigation.
+    // when the session gate is still at Auth — no signed-out navigation. The
+    // New-chat shortcut resets the workspace instead of stacking a new one.
     val shortcutRoute by ShortcutBus.route.collectAsState()
     LaunchedEffect(shortcutRoute) {
         val route = shortcutRoute ?: return@LaunchedEffect
         ShortcutBus.consume()
-        if (start == GsRoutes.HOME) open(route)
+        if (start == GsRoutes.CHAT) {
+            if (route == GsRoutes.chat(null)) newChat() else open(route)
+        }
     }
 
     val drawerState = rememberDrawerState(DrawerValue.Closed)
@@ -111,25 +130,22 @@ fun GsNavHost(modifier: Modifier = Modifier) {
 
     // Drawer rows carry two navigation classes, each with platform-idiomatic
     // options:
-    //  - SECTION switches (home/chats/explore/create/library/…/settings) use
-    //    the canonical bottom-nav pattern: launchSingleTop + popUpTo(home)
-    //    with saveState, restoreState — the back stack never accumulates
-    //    duplicate section destinations, and back from a section lands on
-    //    Home instead of unwinding every screen the reader passed through.
-    //    Recent chats, archive and account routes that need their own back
-    //    affordance are deliberately NOT sections — see GsRoutes.SECTION_ROUTES
-    //    for the exact membership.
+    //  - SECTION switches (chats/explore/create/library/…/settings) use the
+    //    canonical pattern: launchSingleTop + popUpTo(WORKSPACE) with
+    //    saveState/restoreState — the stack never accumulates duplicate
+    //    section destinations, and back from a section lands on the
+    //    conversation workspace instead of unwinding every screen the reader
+    //    passed through.
     //  - DETAIL pushes (chat / assistant / project / archive / …)
-    //    stay plain navigate so every tap opens a fresh instance — crucially
-    //    "New chat" (chat(null)) must create a new conversation each tap,
-    //    never dedupe onto the current one, and sub-screens keep the context
-    //    they were opened from (back from Archived returns to Chats, not Home).
+    //    stay plain navigate so every tap opens a fresh instance — sub-screens
+    //    keep the context they were opened from (back from Archived returns to
+    //    Chats, not the workspace).
     val openFromDrawer: (String) -> Unit = { route ->
         closeDrawer()
         if (GsRoutes.isSectionRoute(route)) {
             navController.navigate(route) {
                 launchSingleTop = true
-                popUpTo(GsRoutes.HOME) { saveState = true }
+                popUpTo(GsRoutes.CHAT) { saveState = true }
                 restoreState = true
             }
         } else {
@@ -208,16 +224,6 @@ fun GsNavHost(modifier: Modifier = Modifier) {
             }
         }
     ) {
-        composable(GsRoutes.HOME) {
-            HomeScreen(
-                onNavigate = open,
-                onOpenDrawer = {
-                    // The menu reveal gets the platform's light list tick.
-                    view.gsHaptic(HapticFeedbackConstants.CLOCK_TICK)
-                    scope.launch { drawerState.open() }
-                }
-            )
-        }
         composable(GsRoutes.CHATS) { ChatsScreen(onNavigate = open) }
         composable(GsRoutes.EXPLORE) { ExploreScreen(onNavigate = open) }
         composable(GsRoutes.CREATE) { CreateScreen(onNavigate = open) }
@@ -277,7 +283,7 @@ fun GsNavHost(modifier: Modifier = Modifier) {
                 onFinished = {
                     SessionStore.activateSession(context)
                     SessionStore.setOnboarded(context, true)
-                    navController.navigate(GsRoutes.HOME) {
+                    navController.navigate(GsRoutes.chat(null)) {
                         popUpTo(0) { inclusive = true }
                     }
                 }
@@ -314,10 +320,20 @@ fun GsNavHost(modifier: Modifier = Modifier) {
             val id = entry.arguments?.getString(GsRoutes.ARG_CONVERSATION)
             val prompt = entry.arguments?.getString(GsRoutes.ARG_PROMPT).orEmpty()
             val autoSend = entry.arguments?.getBoolean(GsRoutes.ARG_SEND) ?: false
+            // The workspace root (the start destination, nothing beneath it)
+            // shows the drawer menu in the header instead of a back arrow.
+            val atWorkspaceRoot = navController.previousBackStackEntry == null
             ChatScreen(
                 conversationId = if (id == "new") null else id,
                 prefillPrompt = prompt.takeIf { it.isNotBlank() },
                 autoSendInitialPrompt = autoSend,
+                atWorkspaceRoot = atWorkspaceRoot,
+                onOpenDrawer = {
+                    // The menu reveal gets the platform's light list tick.
+                    view.gsHaptic(HapticFeedbackConstants.CLOCK_TICK)
+                    scope.launch { drawerState.open() }
+                },
+                onNewChat = { newChat() },
                 onBack = back,
                 onNavigateVoice = { navController.navigate(GsRoutes.VOICE) },
                 onNavigateModels = { navController.navigate(GsRoutes.MODELS) }

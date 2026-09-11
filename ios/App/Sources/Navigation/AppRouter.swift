@@ -1,10 +1,12 @@
 import SwiftUI
 
 /**
- * AERUO KINETIC navigation shell — benchmark AI-app architecture:
- * one Home canvas + an obsidian drawer as primary navigation
- * (ChatGPT / Claude / Kimi pattern). Everything else is pushed onto
- * the single NavigationStack.
+ * MONOCHROME workspace shell navigation. The CONVERSATION WORKSPACE is the
+ * root: opening the app lands directly in the AI workspace (a fresh
+ * conversation is simply the empty state of that same surface). There is no
+ * Home launcher and no separate "New chat" page — the drawer swaps content
+ * inside one continuous shell, and "New chat" resets the workspace in place
+ * (stack emptied + workspace re-seeded via [Router.resetWorkspace]).
  */
 
 enum AeroRoute: Hashable {
@@ -48,9 +50,22 @@ enum AeroRoute: Hashable {
 /// per the project's iOS baseline (the modern observation macro is banned).
 final class Router: ObservableObject {
     @Published var path: [AeroRoute] = []
+    /// Bumped by every workspace reset ("New chat"). RootView keys the root
+    /// ChatDetailView on it, so the fresh state is a genuinely new surface —
+    /// no stale draft, transcript or adopted conversation id survives.
+    @Published var workspaceEpoch = 0
+
+    /// New chat = reset the workspace: the stack returns to the bare root and
+    /// the root re-seeds. This is the ONE way a fresh conversation opens —
+    /// never a pushed second page.
+    func resetWorkspace() {
+        path = []
+        workspaceEpoch += 1
+    }
 }
 
-/// Root shell — Home canvas + drawer overlay over one NavigationStack.
+/// Root shell — the conversation workspace IS the app; the drawer is quiet
+/// chrome over it.
 struct RootView: View {
     @StateObject private var router = Router()
     @ObservedObject private var quickActions = QuickActionBus.shared
@@ -72,13 +87,20 @@ struct RootView: View {
     var body: some View {
         ZStack {
             NavigationStack(path: $router.path) {
-                HomeView(
+                // THE WORKSPACE — the app's root surface. conversationID nil =
+                // a fresh conversation; its empty state (greeting + composer
+                // suggestions) lives inside this very screen. Keyed on
+                // workspaceEpoch so a reset is a true re-seed.
+                ChatDetailView(
+                    conversationID: nil,
+                    isWorkspaceRoot: true,
                     onOpenDrawer: {
                         drawerEntryOffset = 0
                         withAnimation(Aero.motion(Aero.spring)) { showDrawer = true }
                     },
-                    onRoute: { router.path.append($0) }
+                    onNewChat: { router.resetWorkspace() }
                 )
+                .id(router.workspaceEpoch)
                 .aeroDestinations()
             }
             .environmentObject(router)
@@ -88,18 +110,18 @@ struct RootView: View {
                     entryOffset: $drawerEntryOffset,
                     onRoute: { route in
                         withAnimation(Aero.motion(Aero.spring)) { showDrawer = false }
-                        router.path.append(route)
+                        // "New chat" is a shell reset, never a pushed page:
+                        // pushing chat(nil) over an adopted conversation would
+                        // stack a second composer (the duplicate-composer
+                        // hierarchy this shell exists to kill).
+                        if case .chat(nil) = route {
+                            router.resetWorkspace()
+                        } else {
+                            router.path.append(route)
+                        }
                     },
                     onClose: { withAnimation(Aero.motion(Aero.spring)) { showDrawer = false } },
-                    activeRoute: router.path.last,
-                    atHomeRoot: router.path.isEmpty,
-                    // Home is a shell state, not an AeroRoute: close the drawer
-                    // and empty the stack (native pop motion) — mirrors the
-                    // onRoute pattern, and no unregistered route is appended.
-                    onHome: {
-                        withAnimation(Aero.motion(Aero.spring)) { showDrawer = false }
-                        router.path = []
-                    }
+                    activeRoute: router.path.last
                 )
                 .transition(.opacity)
             }
@@ -109,7 +131,11 @@ struct RootView: View {
             guard let route else { return }
             quickActions.consume()
             withAnimation(Aero.motion(Aero.spring)) { showDrawer = false }
-            router.path.append(route)
+            if case .chat(nil) = route {
+                router.resetWorkspace()
+            } else {
+                router.path.append(route)
+            }
         }
         .tint(Aero.accent)
     }

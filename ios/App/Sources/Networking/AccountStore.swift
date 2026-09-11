@@ -20,7 +20,7 @@ import Foundation
  * real account profile when the backend session API lands.
  *
  * CHOICE — ObservableObject with @Published properties (not a static-func
- * enum): HomeView's greeting must re-render the moment identity changes
+ * enum): the workspace greeting must re-render the moment identity changes
  * while Home is on screen, and one `@ObservedObject` gives that reactivity
  * with zero extra machinery — the exact pattern ConversationStore.shared /
  * SettingsStore.shared already use across the app.

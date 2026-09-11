@@ -66,13 +66,21 @@ struct ChatDetailView: View {
     // Offline state (Step 4): one shared NWPathMonitor for the whole process.
     @ObservedObject private var network = NetworkMonitor.shared
 
-    // Model control (Phase 2): the header chip is SMALL and shows ONLY the
-    // user-friendly model display name — no mode suffix, no context/speed
-    // info. Tapping it opens the tiered "Choose a model" sheet (same shelves
+    // Model control (Phase 3): the header chip is a SECONDARY utility — tier
+    // word only (Fast / Everyday / Best), no product/model name, NO colour
+    // dot. Tapping it opens the tiered "Choose a model" sheet (same shelves
     // as the Model Centre). Re-read on appear (return from Model Centre) and
     // after a sheet pick.
     @State private var showingModelPicker = false
     @State private var pillModel: ModelInfo?
+
+    // PHASE 3 workspace model: the app-root instance of this screen carries
+    // the shell chrome — the drawer menu replaces the back button, and "+"
+    // resets to a fresh workspace via the router. Pushed instances (opened
+    // from the drawer's recents) keep the standard back affordance.
+    var isWorkspaceRoot: Bool = false
+    var onOpenDrawer: (() -> Void)? = nil
+    var onNewChat: (() -> Void)? = nil
 
     init(conversationID: String?, prefill: String? = nil, autoSendPrefill: Bool = false) {
         _vm = StateObject(wrappedValue: ChatViewModel(conversationID: conversationID))
@@ -103,31 +111,45 @@ struct ChatDetailView: View {
         .background(Aero.background.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
         .navigationTitle(conversationTitle)
+        .navigationBarBackButtonHidden(isWorkspaceRoot)
         .toolbar {
-            // Step 4: model chip BEFORE search — the real persisted pick,
-            // not a status fiction. Inline title mode truncates long thread
-            // titles natively; the chip itself is single-line.
+            // Workspace root: the drawer menu lives where back would be —
+            // this screen IS the app, there is nothing to go back to.
+            ToolbarItemGroup(placement: .navigationBarLeading) {
+                if isWorkspaceRoot, let openDrawer = onOpenDrawer {
+                    Button(action: openDrawer) {
+                        Image(systemName: "line.3.horizontal")
+                    }
+                    .accessibilityLabel("Open menu")
+                }
+            }
+            // Phase 3: model chip BEFORE search — a bordered neutral pill with
+            // the consumer tier WORD only. No aurora dot, no model name, no
+            // metadata — a quiet secondary utility the ordinary user can
+            // ignore forever. "+" resets to a fresh workspace (root only).
             ToolbarItemGroup(placement: .navigationBarTrailing) {
                 Button {
                     showingModelPicker = true
                 } label: {
-                    HStack(spacing: 6) {
-                        Circle()
-                            .fill(LinearGradient(
-                                colors: Aero.aurora,
-                                startPoint: .topLeading, endPoint: .bottomTrailing))
-                            .frame(width: 8, height: 8)
-                        Text(modelPillText)
-                            .font(Aero.label())
-                            .foregroundStyle(Aero.text)
-                            .lineLimit(1)
-                    }
-                    .padding(.horizontal, Aero.Spacing.control)
-                    .padding(.vertical, 7)
-                    .background(Capsule().fill(Aero.raisedSurface))
+                    Text(modelPillText)
+                        .font(Aero.label())
+                        .foregroundStyle(Aero.text)
+                        .lineLimit(1)
+                        .padding(.horizontal, Aero.Spacing.control)
+                        .padding(.vertical, 7)
+                        .background(Capsule().stroke(Aero.outline, lineWidth: 1))
                 }
                 .buttonStyle(KineticPressStyle())
                 .accessibilityLabel("Model \(modelPillText). Change model")
+
+                if let newChat = onNewChat {
+                    Button {
+                        newChat()
+                    } label: {
+                        Image(systemName: "square.and.pencil")
+                    }
+                    .accessibilityLabel("New chat")
+                }
 
                 Button {
                     searchActive.toggle()
@@ -512,14 +534,23 @@ struct ChatDetailView: View {
 
     // MARK: Model control (Phase 2)
 
-    /// The chip always shows the REAL persisted pick — the catalog display
-    /// name for UserDefaults "gs.models.defaultId" (fallback: the catalog's
-    /// flagged default, the same server-default semantics ChatViewModel's
-    /// send path applies). Name only — no mode suffix, no context/speed
-    /// info: model education is opt-in via the sheet's "About models".
+    /// The chip always shows the consumer tier WORD for the REAL persisted
+    /// pick — Fast / Everyday / Best (never a model name, never metadata).
+    /// Model education stays opt-in via the sheet's "About models".
     private var modelPillText: String {
         let model = pillModel ?? ModelInfo.catalog.first { $0.isDefault }
-        return model?.name ?? ""
+        return Self.consumerTierWord(model?.speedTier)
+    }
+
+    /// speedTier → consumer word. "Deep" reads as "Best" (matches the
+    /// picker's tier shelves); everything balanced is "Everyday".
+    static func consumerTierWord(_ speedTier: String?) -> String {
+        switch speedTier {
+        case "Fast": return "Fast"
+        case "Deep": return "Best"
+        case .some: return "Everyday"
+        case nil: return "Auto"
+        }
     }
 
     private var activeModelID: String {
@@ -621,9 +652,14 @@ struct ChatDetailView: View {
     }
 
     /// Live nav-bar title — follows the store row as it appears/renames
-    /// (auto-titled threads update while the reply streams).
+    /// (auto-titled threads update while the reply streams). A FRESH root
+    /// workspace reads "GS": the product's quiet identity mark, never a page
+    /// name like "New chat".
     private var conversationTitle: String {
-        gsConversationTitle(vm.conversationID.flatMap { conversations.conversation(withID: $0)?.title })
+        guard let id = vm.conversationID else {
+            return isWorkspaceRoot ? "GS" : "New chat"
+        }
+        return gsConversationTitle(conversations.conversation(withID: id)?.title)
     }
 
     /// iPad / regular width: the transcript column and the composer row cap
@@ -777,24 +813,60 @@ struct ChatDetailView: View {
         }
     }
 
+    // MARK: Workspace empty state (Phase 3)
+
+    /// The starters — immediate composer suggestions, mirroring the Android
+    /// workspace exactly. No navigation, no giant cards: a tap seeds the
+    /// composer and raises the keyboard; the reader stays in control of send.
+    private let starters = [
+        "Draft a crisp product update email for our beta testers",
+        "Explain Kotlin coroutines like I'm a senior Java developer",
+        "Plan a three-day Tokyo itinerary focused on design studios"
+    ]
+
+    /// Time-of-day greeting — the empty state's whole identity. No orb, no
+    /// hero, no aurora: a quiet line of text.
+    private var workspaceGreeting: String {
+        let hour = Calendar.current.component(.hour, from: Date())
+        let base: String
+        switch hour {
+        case 23, 0...4: base = "Up late?"
+        case 5...11: base = "Good morning"
+        case 12...17: base = "Good afternoon"
+        default: base = "Good evening"
+        }
+        let name = AccountStore.shared.firstName
+        return name.isEmpty ? base : "\(base), \(name)"
+    }
+
+    /// The fresh workspace IS the chat surface: small greeting, a few
+    /// composer suggestions, readable empty space — and the composer already
+    /// waiting at the bottom of the very same screen. Suggestions vanish the
+    /// moment the reader types; the first turn replaces the whole block with
+    /// the transcript. No navigation hop anywhere.
     private var emptyState: some View {
         VStack(spacing: Aero.Spacing.l) {
-            EmptyStateView(
-                icon: "sparkles",
-                title: "New conversation",
-                message: "Ask anything — GS is listening."
-            )
-            VStack(spacing: Aero.Spacing.s) {
-                ForEach(starters, id: \.self) { starter in
-                    AeroChip(text: starter) {
-                        // Seed the composer and raise the keyboard — the reader
-                        // edits, then sends through the gated send path.
-                        vm.draft = starter
-                        composerFocused = true
+            Text(workspaceGreeting)
+                .font(Aero.headline())
+                .foregroundStyle(Aero.text)
+                .multilineTextAlignment(.center)
+            if vm.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                VStack(spacing: Aero.Spacing.s) {
+                    ForEach(starters, id: \.self) { starter in
+                        AeroChip(text: starter) {
+                            // Seed the composer and raise the keyboard — the
+                            // reader edits, then sends through the gated send
+                            // path.
+                            vm.draft = starter
+                            composerFocused = true
+                        }
                     }
                 }
             }
         }
+        .frame(maxWidth: .infinity)
+        .frame(minHeight: UIScreen.main.bounds.height * 0.5)
+        .accessibilityElement(children: .contain)
     }
 }
 
