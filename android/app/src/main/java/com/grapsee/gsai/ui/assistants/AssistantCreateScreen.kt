@@ -221,8 +221,12 @@ fun AssistantCreateScreen(assistantId: String? = null, onBack: () -> Unit) {
                             description = description.trim(),
                             instructions = instructions.trim(),
                             starters = starters.map { it.trim() }.filter { it.isNotBlank() },
-                            uses = existing?.uses ?: "1",
-                            rating = existing?.rating ?: 5.0,
+                            // PHASE 2 honesty: no invented metrics. A new
+                            // assistant starts with zero usage and no rating;
+                            // the fields persist for JSON-schema stability but
+                            // no surface renders them.
+                            uses = existing?.uses ?: "",
+                            rating = existing?.rating ?: 0.0,
                             published = published,
                             capabilities = selectedCapabilities.filter { it.isNotBlank() }
                         )

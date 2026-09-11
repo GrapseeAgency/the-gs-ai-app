@@ -120,8 +120,6 @@ struct AssistantsView: View {
         GridItem(.flexible())
     ]
 
-    private var featured: AssistantSample { AssistantSample.catalog[0] }
-
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Aero.Spacing.l) {
@@ -228,7 +226,10 @@ struct AssistantsView: View {
 
     private var marketplace: some View {
         VStack(alignment: .leading, spacing: Aero.Spacing.m) {
-            featuredCard
+            // PHASE 2 honesty: the "FEATURED" spotlight is gone. It hardcoded
+            // catalog[0] behind an editorial label — invented curation of a
+            // sample, the same pattern purged from Explore. The marketplace
+            // grid below is the whole, truthful catalogue.
             VStack(alignment: .leading, spacing: Aero.Spacing.s) {
                 SectionHeader(title: "All assistants")
                 LazyVGrid(columns: gridColumns, spacing: 12) {
@@ -245,31 +246,6 @@ struct AssistantsView: View {
                 }
             }
         }
-    }
-
-    /// Featured assistant — accent left bar marks the spotlight.
-    private var featuredCard: some View {
-        NavigationLink(value: AeroRoute.assistant(featured.id)) {
-            AeroCard {
-                HStack(alignment: .top, spacing: Aero.Spacing.m) {
-                    Rectangle()
-                        .fill(Aero.accent)
-                        .frame(width: 4)
-                    VStack(alignment: .leading, spacing: Aero.Spacing.xs) {
-                        Text("FEATURED")
-                            .font(Aero.label())
-                            .foregroundStyle(Aero.accent)
-                        Text(featured.name)
-                            .font(Aero.headline())
-                            .foregroundStyle(Aero.text)
-                        Text(featured.desc)
-                            .font(Aero.caption())
-                            .foregroundStyle(Aero.textMuted)
-                    }
-                }
-            }
-        }
-        .buttonStyle(KineticPressStyle())
     }
 
     // MARK: Filtered lists (My assistants / Favourites / Published)

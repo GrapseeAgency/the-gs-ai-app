@@ -21,9 +21,10 @@ struct OnboardingView: View {
         "Science", "Language", "Productivity", "Entertainment", "Marketing", "Data"
     ]
 
-    // AI preferences (sensible defaults pre-selected)
+    // AI preferences (sensible defaults pre-selected). PHASE 2 parity with
+    // Android: the "Reasoning effort" card is gone — reasoning-mode vocabulary
+    // is not ordinary-user configuration, and none of these picks is persisted.
     @State private var responseStyle = "Balanced"
-    @State private var reasoningEffort = "Medium"
     @State private var personality = "Professional"
 
     // Capabilities (multi-select, >= 1 to continue)
@@ -171,7 +172,7 @@ struct OnboardingView: View {
                     Text("Tune your AI")
                         .font(Aero.headline())
                         .foregroundStyle(Aero.text)
-                    Text("Change any of this later in Settings.")
+                    Text("Set the defaults — every chat can override them.")
                         .font(Aero.caption())
                         .foregroundStyle(Aero.textMuted)
                 }
@@ -185,14 +186,6 @@ struct OnboardingView: View {
                 }
             }
             StaggerIn(index: 2) {
-                AeroCard {
-                    VStack(alignment: .leading, spacing: Aero.Spacing.s + 4) {
-                        SectionHeader(title: "Reasoning effort")
-                        chipRow(["Low", "Medium", "High"], selection: $reasoningEffort)
-                    }
-                }
-            }
-            StaggerIn(index: 3) {
                 AeroCard {
                     VStack(alignment: .leading, spacing: Aero.Spacing.s + 4) {
                         SectionHeader(title: "Personality")

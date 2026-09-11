@@ -116,10 +116,10 @@ fun GsNavHost(modifier: Modifier = Modifier) {
     //    with saveState, restoreState — the back stack never accumulates
     //    duplicate section destinations, and back from a section lands on
     //    Home instead of unwinding every screen the reader passed through.
-    //    Recent chats, archive/folders/shared and account routes that need
-    //    their own back affordance are deliberately NOT sections — see
-    //    GsRoutes.SECTION_ROUTES for the exact membership.
-    //  - DETAIL pushes (chat / assistant / project / archive / folders / …)
+    //    Recent chats, archive and account routes that need their own back
+    //    affordance are deliberately NOT sections — see GsRoutes.SECTION_ROUTES
+    //    for the exact membership.
+    //  - DETAIL pushes (chat / assistant / project / archive / …)
     //    stay plain navigate so every tap opens a fresh instance — crucially
     //    "New chat" (chat(null)) must create a new conversation each tap,
     //    never dedupe onto the current one, and sub-screens keep the context

@@ -21,7 +21,11 @@ struct ChatSearchView: View {
     // longer runs synchronously in the body on every keystroke.
     @State private var results: [SearchHit] = []
 
-    private static let filterChips = ["This week", "Has files", "Model: GS Balanced"]
+    // PHASE 2 honesty: the only filter chip is the one that actually filters.
+    // "Has files" and "Model: GS Balanced" were visual toggles wired to
+    // nothing — a dead filter and a hardcoded model name (raw model taxonomy
+    // in a consumer surface) — both removed rather than left pretending.
+    private static let filterChips = ["This week"]
 
     private var term: String {
         query.trimmingCharacters(in: .whitespacesAndNewlines)

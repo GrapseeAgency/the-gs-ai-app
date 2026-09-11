@@ -5,7 +5,6 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -117,14 +116,6 @@ fun AssistantsScreen(onNavigate: (String) -> Unit) {
                     userAssistants.filter { it.published && !it.archived }
             }
 
-            if (tab == 0) {
-                val featured = SampleData.assistants.first()
-                FeaturedCard(
-                    assistant = featured,
-                    onClick = { onNavigate(GsRoutes.assistant(featured.id)) }
-                )
-            }
-
             if (visible.isEmpty()) {
                 val (emptyTitle, emptyMessage) = when (tab) {
                     1 -> "No assistants yet" to "Create your first assistant and it will live here."
@@ -210,48 +201,6 @@ fun AssistantsScreen(onNavigate: (String) -> Unit) {
                 TextButton(onClick = { deleteTarget = null }) { Text("Keep") }
             }
         )
-    }
-}
-
-/** Featured card — flat surface with a 4dp aurora-teal accent bar (no gradient).
- *  Curated content, unbadged: name, description and category only. */
-@Composable
-private fun FeaturedCard(assistant: AssistantSample, onClick: () -> Unit) {
-    GsCard(onClick = onClick) {
-        Row(modifier = Modifier.height(IntrinsicSize.Min)) {
-            Box(
-                modifier = Modifier
-                    .width(4.dp)
-                    .fillMaxHeight()
-                    .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp))
-            )
-            Spacer(modifier = Modifier.width(GsMotion.spaceM))
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(GsMotion.spaceXS)
-            ) {
-                Text(
-                    text = "FEATURED",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = assistant.name,
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-                Text(
-                    text = assistant.description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = assistant.category,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-        }
     }
 }
 

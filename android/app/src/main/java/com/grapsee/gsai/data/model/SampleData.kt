@@ -1,9 +1,16 @@
 package com.grapsee.gsai.data.model
 
 /**
- * Static UI sample data — pure presentation seeds for Assistants and
- * Notifications screens. Replaced by the repository layer (Room + Ktor)
+ * Static UI sample data — the curated assistant catalogue shown in the
+ * Assistants marketplace. Replaced by the repository layer (Room + Ktor)
  * when the first data feature slices land.
+ *
+ * PHASE 2: the fabricated notifications list (8 invented events incl. a
+ * fake "Maya shared a chat") is deleted — NotificationsScreen renders the
+ * real (currently empty) store with an honest empty state instead, and the
+ * invented marketplace metrics on the samples ("12.4k uses" / 4.8★) are
+ * neutralised: the fields survive only as JSON-schema placeholders that no
+ * surface renders.
  */
 
 data class AssistantSample(
@@ -13,6 +20,8 @@ data class AssistantSample(
     val description: String,
     val instructions: String,
     val starters: List<String>,
+    // PHASE 2 honesty: never rendered anywhere (the ★/uses line was purged);
+    // kept only because AssistantsStore persists them for schema stability.
     val uses: String,
     val rating: Double,
     val published: Boolean = false,
@@ -23,16 +32,6 @@ data class AssistantSample(
     // archive parks it in the Archived tab. Samples default both false.
     val pinned: Boolean = false,
     val archived: Boolean = false
-)
-
-/** type is one of: task | file | assistant | share | project | system | security */
-data class NotificationSample(
-    val id: String,
-    val type: String,
-    val title: String,
-    val body: String,
-    val time: String,
-    val unread: Boolean
 )
 
 object SampleData {
@@ -49,8 +48,8 @@ object SampleData {
                 "Rewrite this email so it sounds warmer",
                 "Suggest five headline options"
             ),
-            uses = "12.4k",
-            rating = 4.8,
+            uses = "",
+            rating = 0.0,
             published = true
         ),
         AssistantSample(
@@ -64,8 +63,8 @@ object SampleData {
                 "What edge cases am I missing?",
                 "Write unit tests for this class"
             ),
-            uses = "9.1k",
-            rating = 4.7,
+            uses = "",
+            rating = 0.0,
             published = true
         ),
         AssistantSample(
@@ -79,8 +78,8 @@ object SampleData {
                 "Compare these two vendors",
                 "Draft a research plan for entering Japan"
             ),
-            uses = "7.8k",
-            rating = 4.6
+            uses = "",
+            rating = 0.0
         ),
         AssistantSample(
             id = "asst-4",
@@ -93,8 +92,8 @@ object SampleData {
                 "Correct my past-tense story",
                 "Teach me ten kitchen words in Japanese"
             ),
-            uses = "11.2k",
-            rating = 4.9
+            uses = "",
+            rating = 0.0
         ),
         AssistantSample(
             id = "asst-5",
@@ -107,8 +106,8 @@ object SampleData {
                 "Extract action items and owners",
                 "Draft the follow-up email"
             ),
-            uses = "8.6k",
-            rating = 4.7
+            uses = "",
+            rating = 0.0
         ),
         AssistantSample(
             id = "asst-6",
@@ -121,8 +120,8 @@ object SampleData {
                 "Ten features for a habit tracker",
                 "Poke holes in my idea"
             ),
-            uses = "6.3k",
-            rating = 4.5
+            uses = "",
+            rating = 0.0
         ),
         AssistantSample(
             id = "asst-7",
@@ -135,8 +134,8 @@ object SampleData {
                 "Why did churn spike in March?",
                 "Which chart fits this data?"
             ),
-            uses = "5.4k",
-            rating = 4.6
+            uses = "",
+            rating = 0.0
         ),
         AssistantSample(
             id = "asst-8",
@@ -149,75 +148,8 @@ object SampleData {
                 "Audit our tone of voice",
                 "Name this product line"
             ),
-            uses = "4.9k",
-            rating = 4.4
-        )
-    )
-
-    val notifications = listOf(
-        NotificationSample(
-            id = "ntf-1",
-            type = "task",
-            title = "Voice memo transcribed",
-            body = "interview-draft.m4a is ready — 48 min, 12 speakers detected.",
-            time = "2m ago",
-            unread = true
-        ),
-        NotificationSample(
-            id = "ntf-2",
-            type = "assistant",
-            title = "Code Reviewer updated",
-            body = "New capability added: repository-wide diff review.",
-            time = "1h ago",
-            unread = true
-        ),
-        NotificationSample(
-            id = "ntf-3",
-            type = "share",
-            title = "Maya shared a chat",
-            body = "\u201CQ3 pricing experiment\u201D — you now have view access.",
-            time = "3h ago",
-            unread = true
-        ),
-        NotificationSample(
-            id = "ntf-4",
-            type = "file",
-            title = "Report summarised",
-            body = "annual-review.pdf condensed into 9 key findings.",
-            time = "Yesterday",
-            unread = false
-        ),
-        NotificationSample(
-            id = "ntf-5",
-            type = "project",
-            title = "Aurora launch",
-            body = "Priya uploaded brand-guidelines-v2.fig to the project.",
-            time = "Yesterday",
-            unread = false
-        ),
-        NotificationSample(
-            id = "ntf-6",
-            type = "system",
-            title = "Scheduled maintenance",
-            body = "GS AI will be briefly unavailable on Sunday, 02:00–02:30 UTC.",
-            time = "2d ago",
-            unread = false
-        ),
-        NotificationSample(
-            id = "ntf-7",
-            type = "security",
-            title = "New sign-in detected",
-            body = "Pixel 9 Pro · London, UK. Was this you?",
-            time = "3d ago",
-            unread = false
-        ),
-        NotificationSample(
-            id = "ntf-8",
-            type = "task",
-            title = "Batch export finished",
-            body = "42 conversations exported to JSON in your downloads.",
-            time = "4d ago",
-            unread = false
+            uses = "",
+            rating = 0.0
         )
     )
 }

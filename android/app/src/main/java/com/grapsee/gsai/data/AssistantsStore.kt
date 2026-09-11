@@ -101,8 +101,10 @@ object AssistantsStore {
                 description = o.optString("description"),
                 instructions = o.optString("instructions"),
                 starters = stringList(o, "starters").filter { it.isNotBlank() },
-                uses = o.optString("uses", "1"),
-                rating = o.optDouble("rating", 5.0),
+                // PHASE 2 honesty: neutral decode defaults — no invented
+                // "1 use / 5.0★" for rows persisted before the purge.
+                uses = o.optString("uses", ""),
+                rating = o.optDouble("rating", 0.0),
                 published = o.optBoolean("published", false),
                 capabilities = stringList(o, "capabilities").filter { it.isNotBlank() },
                 pinned = o.optBoolean("pinned", false),
