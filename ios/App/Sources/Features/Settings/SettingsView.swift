@@ -363,7 +363,7 @@ struct SettingsView: View {
 
     private func section<Content: View>(
         _ title: String,
-        @ViewBuilder content: () -> Content
+        @ViewBuilder content: @escaping () -> Content
     ) -> some View {
         AeroCard {
             VStack(alignment: .leading, spacing: Aero.Spacing.s + 4) {
