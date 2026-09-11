@@ -252,11 +252,11 @@ final class SQLiteChatStore: @unchecked Sendable {
         let term = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !term.isEmpty else { return nil }
         let scalars = term.unicodeScalars
-        let hasSymbol = scalars.contains { !$0.isLetter && !$0.isNumber && !$0.isWhitespace }
+        let hasSymbol = scalars.contains(where: { !$0.isLetter && !$0.isNumber && !$0.isWhitespace })
         if hasSymbol || scalars.contains(where: { $0.value > 0x7F }) { return nil }
         let words = term
             .split(whereSeparator: { $0.isWhitespace })
-            .compactMap { word -> String? in
+            .compactMap { (word: Substring) -> String? in
                 let cleaned = word.unicodeScalars
                     .filter { $0.isLetter || $0.isNumber }
                     .reduce(into: "") { $0.unicodeScalars.append($1) }

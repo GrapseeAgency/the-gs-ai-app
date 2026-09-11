@@ -413,13 +413,24 @@ private struct TableBlockView: View {
         Text(text)
             .font(emphasize ? Aero.label() : Aero.caption())
             .foregroundStyle(emphasize ? Aero.text : Aero.textSecondary)
-            .frame(width: width, alignment: alignment(for: align))
+            .frame(width: width, alignment: frameAlignment(for: align))
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .multilineTextAlignment(alignment(for: align))
     }
 
     private func alignment(for align: TableAlign) -> TextAlignment {
+        switch align {
+        case .center: return .center
+        case .right: return .trailing
+        case .left: return .leading
+        }
+    }
+
+    /// Frame-level twin of `alignment(for:)` — `frame(width:alignment:)`
+    /// takes `Alignment`, not `TextAlignment` (the two members coincide for
+    /// the table roles, but they are distinct types).
+    private func frameAlignment(for align: TableAlign) -> Alignment {
         switch align {
         case .center: return .center
         case .right: return .trailing

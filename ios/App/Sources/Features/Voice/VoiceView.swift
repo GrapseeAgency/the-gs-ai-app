@@ -1,5 +1,7 @@
 import SwiftUI
 import UIKit
+import Speech
+import AVFoundation
 
 /// Full-screen voice session — kinetic aurora waveform, live transcript,
 /// call controls. Now real: the on-device SpeechRecognizer (via VoiceDictation)

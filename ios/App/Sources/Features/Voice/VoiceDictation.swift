@@ -150,7 +150,7 @@ final class VoiceDictation: ObservableObject {
         starting = true
 
         let speechRecognizer = SFSpeechRecognizer()
-        guard speechRecognizer?.isAvailable == true else {
+        guard let speechRecognizer, speechRecognizer.isAvailable == true else {
             starting = false
             isListening = false
             sessionState = .unavailable
