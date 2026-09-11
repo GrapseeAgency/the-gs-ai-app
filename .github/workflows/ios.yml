@@ -125,10 +125,12 @@ jobs:
 
       - name: Package — zip unsigned simulator .app
         run: |
-          APP_PATH="ios/build/DerivedData/Build/Products/Debug-iphonesimulator/GSApp.app"
-          test -d "$APP_PATH" || { echo "::error::Compiled GSApp.app not found"; exit 1; }
+          # XcodeGen's default PRODUCT_NAME = target name → the built bundle
+          # is App.app (overriding PRODUCT_NAME desyncs the auto TEST_HOST).
+          APP_PATH="ios/build/DerivedData/Build/Products/Debug-iphonesimulator/App.app"
+          test -d "$APP_PATH" || { echo "::error::Compiled App.app not found"; exit 1; }
           cd "$(dirname "$APP_PATH")"
-          zip -qry "$GITHUB_WORKSPACE/ios/build/GSApp-simulator-debug.zip" GSApp.app
+          zip -qry "$GITHUB_WORKSPACE/ios/build/GSApp-simulator-debug.zip" App.app
           ls -l "$GITHUB_WORKSPACE/ios/build/GSApp-simulator-debug.zip"
 
       - name: Archive — unsigned Release xcarchive (packaging evidence)
@@ -147,7 +149,7 @@ jobs:
       - name: Summarise results
         if: always()
         run: |
-          APP_BUILT=$([ -d ios/build/DerivedData/Build/Products/Debug-iphonesimulator/GSApp.app ] && echo "YES" || echo "NO")
+          APP_BUILT=$([ -d ios/build/DerivedData/Build/Products/Debug-iphonesimulator/App.app ] && echo "YES" || echo "NO")
           ARCHIVED=$([ -d ios/build/GSApp.xcarchive ] && echo "YES" || echo "NO")
           TESTS=$(grep -Eo "Test Suite 'All tests' (passed|failed)" ios/build/xcodebuild-test.log 2>/dev/null | head -1 || echo "n/a")
           {

@@ -28,9 +28,9 @@ targets:
         # `@testable import GSApp` (default module name would be "App" and
         # the test target would fail to build with "no such module 'GSApp'").
         PRODUCT_MODULE_NAME: GSApp
-        # Product/bundle name — default would be the target name ("App.app");
-        # GSApp.app keeps the built artifact named after the product.
-        PRODUCT_NAME: GSApp
+        # NOTE: PRODUCT_NAME deliberately left at the XcodeGen default
+        # ($(TARGET_NAME) = "App") — overriding it desynchronises the
+        # auto-generated TEST_HOST for AppTests ("Could not find test host").
         MARKETING_VERSION: "0.1.0"
         CURRENT_PROJECT_VERSION: "1"
         GENERATE_INFOPLIST_FILE: "YES"
