@@ -776,8 +776,6 @@ struct ChatDetailView: View {
 
     // MARK: Empty state
 
-    private let starters = ["Draft a launch plan", "Explain quantum computing", "Plan a Kyoto itinerary"]
-
     /// Inline edit surface for a sent user turn (benchmark pencil flow):
     /// Cancel returns the bubble untouched; Save & resend truncates the tail
     /// and streams a fresh reply.
