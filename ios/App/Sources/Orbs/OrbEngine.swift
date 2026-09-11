@@ -111,23 +111,23 @@ final class OrbFrameBuffer {
     private(set) var dotCount = 0
     private(set) var lineCount = 0
 
-    let px: [Double]
-    let py: [Double]
-    let pz: [Double]
-    let pr: [Double]
-    let pWhite: [Double]
-    let pAlpha: [Double]
+    var px: [Double]
+    var py: [Double]
+    var pz: [Double]
+    var pr: [Double]
+    var pWhite: [Double]
+    var pAlpha: [Double]
 
-    let lx1: [Double]
-    let ly1: [Double]
-    let lx2: [Double]
-    let ly2: [Double]
-    let lWhite: [Double]
-    let lAlpha: [Double]
-    let lWidth: [Double]
+    var lx1: [Double]
+    var ly1: [Double]
+    var lx2: [Double]
+    var ly2: [Double]
+    var lWhite: [Double]
+    var lAlpha: [Double]
+    var lWidth: [Double]
 
     /// Indices into the dot arrays, far→near, after finalize(rMin:).
-    let drawOrder: [Int]
+    var drawOrder: [Int]
 
     let proj = Proj()
 
@@ -138,7 +138,7 @@ final class OrbFrameBuffer {
     var morphSegLen: [Double] = Array(repeating: 0, count: 160)
     var webNodes: [Double] = Array(repeating: 0, count: 3 * 128)
 
-    private let orderScratch: [Int]
+    private var orderScratch: [Int]
 
     init(maxDots: Int = 1024, maxLines: Int = 1024) {
         self.maxDots = maxDots
