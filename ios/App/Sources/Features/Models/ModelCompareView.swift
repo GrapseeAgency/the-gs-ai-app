@@ -156,7 +156,7 @@ struct ModelCompareView: View {
 
     private func compareRow<Cell: View>(
         _ label: String,
-        @ViewBuilder cell: (ModelInfo) -> Cell
+        @ViewBuilder cell: @escaping (ModelInfo) -> Cell
     ) -> some View {
         HStack(alignment: .center, spacing: Aero.Spacing.s) {
             Text(label)
