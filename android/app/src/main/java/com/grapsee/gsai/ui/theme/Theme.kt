@@ -38,6 +38,12 @@ val LocalScreenReaderHints = staticCompositionLocalOf { false }
  *  lets component-layer code react (e.g. heavier dividers). */
 val LocalHighContrast = staticCompositionLocalOf { false }
 
+/** The APP-resolved appearance (Light/Dark/System themeMode already applied) —
+ *  ink-mirroring custom drawing like the Phase 4 activity orb needs the app's
+ *  dark flag, not the OS one (a forced-light app on a dark system must draw
+ *  dark ink). */
+val LocalGsIsDark = staticCompositionLocalOf { false }
+
 /**
  * AERUO KINETIC theme root.
  *
@@ -100,6 +106,7 @@ fun TheGsAiTheme(
         LocalGsTextSet provides textSet,
         LocalScreenReaderHints provides SettingsStore.screenReaderHints,
         LocalHighContrast provides highContrast,
+        LocalGsIsDark provides dark,
         com.grapsee.gsai.ui.components.LocalGsScreenReaderHints provides SettingsStore.screenReaderHints,
     ) {
         MaterialTheme(

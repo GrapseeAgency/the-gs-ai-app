@@ -150,11 +150,14 @@ import com.grapsee.gsai.ui.theme.GsMotion
 import com.grapsee.gsai.ui.theme.GsRadius
 import com.grapsee.gsai.ui.theme.GsHaptics
 import com.grapsee.gsai.ui.chat.content.BlocksContent
+import com.grapsee.gsai.ui.orbs.OrbSize
+import com.grapsee.gsai.ui.orbs.OrbState
+import com.grapsee.gsai.ui.orbs.ThinkingOrb
+import com.grapsee.gsai.ui.orbs.orbStateForChatStream
 import com.grapsee.gsai.ui.theme.GsTheme
 import com.grapsee.gsai.ui.theme.gsHaptic
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
-import com.grapsee.gsai.ui.theme.auroraBackground
 import java.util.UUID
 import kotlinx.coroutines.launch
 
@@ -298,6 +301,14 @@ fun ChatScreen(
     val streamStateRaw = chatStream.state.collectAsState()
     val isStreaming by remember {
         derivedStateOf { streamStateRaw.value?.phase == ChatStreamController.Phase.Streaming }
+    }
+    // Phase-4 activity orb state — derived from the REAL stream state only.
+    // It changes twice per stream (no tokens yet ↔ tokens flowing), so the
+    // ~30 Hz text flushes recompute this but never recompose anything below.
+    val liveOrbState by remember {
+        derivedStateOf {
+            orbStateForChatStream(streamStateRaw.value?.phase, streamStateRaw.value?.streamText)
+        }
     }
     // This screen's live-stream token (saveable): a rotation re-attach only
     // adopts a stream dispatched by this screen's own lineage — a fresh nav
@@ -1065,10 +1076,26 @@ fun ChatScreen(
 
             // The composer NEVER disappears while streaming: the send slot
             // inside the input bar becomes the stop control (stop lives exactly
-            // where send always is), and the aurora life-sign sits directly on
-            // top of the composer row — the active state is obvious without a
-            // full-width bar replacing the composer.
-            if (isStreaming) AuroraIndicator()
+            // where send always is), and the activity orb sits directly on top
+            // of the composer row. The REAL stream phase drives it (Phase 4):
+            // "Thinking…" before the first token, "Composing…" while tokens
+            // flow — never a fabricated state, never a full-width bar
+            // replacing the composer, never a distraction from the answer.
+            liveOrbState?.let { orbState ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    ThinkingOrb(state = orbState, size = OrbSize.INLINE)
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = orbState.label,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
             ComposerRow(
                 draftText = { draft },
                 onDraftChange = { draft = it },
@@ -1551,18 +1578,6 @@ private fun BubbleAction(icon: ImageVector, label: String, onClick: () -> Unit) 
     }
 }
 
-/** Aurora life-sign above the input while the model is generating (draw-phase animated). */
-@Composable
-private fun AuroraIndicator() {
-    val shape = RoundedCornerShape(999.dp)
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(4.dp)
-            .auroraBackground(shape)
-    )
-}
-
 // --- workspace empty state ---------------------------------------------------
 
 private val workspaceSuggestions = listOf(
@@ -1571,7 +1586,8 @@ private val workspaceSuggestions = listOf(
     "Plan a three-day Tokyo itinerary focused on design studios"
 )
 
-/** Time-of-day greeting — the empty state's whole identity, no orb, no hero. */
+/** Time-of-day greeting — the empty state's written identity (the Phase 4
+ *  breathing orb above it is the living one; neither is a hero). */
 private fun greetingFor(): String {
     val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
     return when (hour) {
@@ -1597,9 +1613,12 @@ private fun consumerTierLabel(model: ModelInfo?): String = when (model?.speedTie
 /**
  * PHASE 3 empty state — the fresh workspace IS this: a small greeting, a few
  * quiet composer suggestions, readable empty space, and the composer already
- * waiting at the bottom. No orb, no halo, no invitation cards, no navigation.
- * A suggestion taps INTO the composer (the reader stays in control of the
+ * waiting at the bottom. No halo, no invitation cards, no navigation. A
+ * suggestion taps INTO the composer (the reader stays in control of the
  * send) and the whole block yields to the transcript on the first turn.
+ * Phase 4 adds exactly one identity element: a small, calm, breathing orb —
+ * secondary to the composer by contract (§14), gone once the conversation
+ * takes over the surface.
  */
 @Composable
 private fun WorkspaceEmptyState(
@@ -1614,6 +1633,14 @@ private fun WorkspaceEmptyState(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
+        // Phase 4 §14: a very restrained breathing identity mark — small,
+        // monochrome, calm, and strictly secondary to the composer below.
+        ThinkingOrb(
+            state = OrbState.BREATHING,
+            size = OrbSize.STANDARD,
+            contentDescription = "GS assistant"
+        )
+        Spacer(Modifier.height(GsMotion.spaceM))
         Text(
             text = greetingFor(),
             style = MaterialTheme.typography.headlineSmall,

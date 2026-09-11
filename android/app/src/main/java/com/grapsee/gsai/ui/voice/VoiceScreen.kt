@@ -72,6 +72,9 @@ import androidx.core.content.ContextCompat
 import androidx.core.app.ActivityCompat
 import com.grapsee.gsai.data.tts.TtsFocus
 import com.grapsee.gsai.ui.components.GsChip
+import com.grapsee.gsai.ui.orbs.OrbSize
+import com.grapsee.gsai.ui.orbs.ThinkingOrb
+import com.grapsee.gsai.ui.orbs.orbStateForVoice
 import com.grapsee.gsai.ui.theme.GsHaptics
 import com.grapsee.gsai.ui.theme.GsMotion
 import com.grapsee.gsai.ui.theme.GsTheme
@@ -82,7 +85,7 @@ import com.grapsee.gsai.ui.theme.gsHaptic
  * the recognizer is actually doing — voice mode never performs "Listening…"
  * with the microphone off.
  */
-private enum class VoicePhase {
+internal enum class VoicePhase {
     Idle,        // mic not started yet — one tap begins
     Listening,   // recognizer live, partial words stream in
     Processing,  // end of speech captured, waiting for the final result
@@ -293,6 +296,19 @@ fun VoiceScreen(
             }
 
             Spacer(modifier = Modifier.weight(1f))
+
+            // Phase 4: the activity orb mirrors the recognizer's REAL phase —
+            // "Listening…" while the mic is live, "Working…" while it
+            // processes. Idle, error and permission states show no orb: an
+            // absent state is never faked.
+            orbStateForVoice(phase)?.let { orbState ->
+                ThinkingOrb(
+                    state = orbState,
+                    size = OrbSize.STANDARD,
+                    contentDescription = orbState.label,
+                    modifier = Modifier.padding(bottom = GsMotion.spaceM)
+                )
+            }
 
             Text(
                 text = statusLine,

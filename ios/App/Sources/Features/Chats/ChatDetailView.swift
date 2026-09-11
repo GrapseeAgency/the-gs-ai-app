@@ -460,10 +460,16 @@ struct ChatDetailView: View {
                 }
                 .accessibilityElement(children: .combine)
             }
-            if vm.isStreaming {
+            if let orbState = orbStateForChatStreaming(
+                isStreaming: vm.isStreaming,
+                liveContentEmpty: vm.messages.last?.content.isEmpty ?? true
+            ) {
+                // Phase 4: the activity orb — the REAL stream phase drives it:
+                // "Thinking…" before the first token, "Composing…" while
+                // tokens flow. Never a fabricated state.
                 HStack(spacing: Aero.Spacing.s) {
-                    AuroraIndicator()
-                    Text("Generating…")
+                    ThinkingOrbView(state: orbState, size: .inline)
+                    Text(orbState.label)
                         .font(Aero.label())
                         .foregroundStyle(Aero.textMuted)
                     Spacer()
@@ -828,8 +834,8 @@ struct ChatDetailView: View {
         "Plan a three-day Tokyo itinerary focused on design studios"
     ]
 
-    /// Time-of-day greeting — the empty state's whole identity. No orb, no
-    /// hero, no aurora: a quiet line of text.
+    /// Time-of-day greeting — the empty state's written identity (the Phase 4
+    /// breathing orb above it is the living one; neither is a hero).
     private var workspaceGreeting: String {
         let hour = Calendar.current.component(.hour, from: Date())
         let base: String
@@ -850,6 +856,13 @@ struct ChatDetailView: View {
     /// the transcript. No navigation hop anywhere.
     private var emptyState: some View {
         VStack(spacing: Aero.Spacing.l) {
+            // Phase 4 §14: a very restrained breathing identity mark — small,
+            // monochrome, calm, and strictly secondary to the composer below.
+            ThinkingOrbView(
+                state: .breathing,
+                size: .standard,
+                contentDescription: "GS assistant"
+            )
             Text(workspaceGreeting)
                 .font(Aero.headline())
                 .foregroundStyle(Aero.text)
@@ -1104,7 +1117,12 @@ private struct MessageBubble: View, Equatable {
                     Text(message.content.isEmpty ? "…" : message.content)
                         .font(Aero.body())
                         .foregroundStyle(Aero.text)
-                    AuroraIndicator()
+                    // Phase 4: the live bubble's activity orb — same honest
+                    // mapping as the composer zone above.
+                    ThinkingOrbView(
+                        state: message.content.isEmpty ? .breathing : .composing,
+                        size: .inline
+                    )
                 } else {
                     BlocksView(blocks: finalizedBlocks)
                     if !message.content.isEmpty {

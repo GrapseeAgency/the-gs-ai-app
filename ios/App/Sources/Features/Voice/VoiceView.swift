@@ -106,6 +106,18 @@ struct VoiceView: View {
 
     private var status: some View {
         VStack(spacing: Aero.Spacing.xs) {
+            // Phase 4: the activity orb mirrors the recognizer's REAL phase —
+            // "Listening…" while the mic is live, "Working…" while it
+            // processes. Idle, error and permission states show no orb: an
+            // absent state is never faked.
+            if let orbState = orbStateForVoiceSession(dictation.sessionState) {
+                ThinkingOrbView(
+                    state: orbState,
+                    size: .standard,
+                    contentDescription: orbState.label
+                )
+                .padding(.bottom, Aero.Spacing.xs)
+            }
             Text(statusLine)
                 .font(Aero.display())
                 .foregroundStyle(statusIsTrouble ? Aero.textMuted : Aero.text)
