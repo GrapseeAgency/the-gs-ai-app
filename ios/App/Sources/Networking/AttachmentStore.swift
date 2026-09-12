@@ -635,8 +635,8 @@ final class AttachmentStore: ObservableObject {
             }
             guard !bytes.isEmpty else { return .failure(.readFailed) }
             try bytes.write(to: target, options: .atomic)
-            let size = (try? fileManager.attributesOfItem(atPath: target.path)[.size] as? NSNumber)
-                ?.intValue ?? bytes.count
+            let attrs = try? fileManager.attributesOfItem(atPath: target.path)
+            let size = (attrs?[.size] as? NSNumber)?.intValue ?? bytes.count
             return .staged(byteSize: size, path: target.path)
         } catch {
             return .failure(.readFailed)
