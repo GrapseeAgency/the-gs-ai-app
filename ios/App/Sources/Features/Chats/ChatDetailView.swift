@@ -213,7 +213,6 @@ struct ChatDetailView: View {
         }
         .sheet(isPresented: $showingAttachments) {
             AttachmentSheetView(
-                remainingSlots: attachments.remainingSlots,
                 onImageData: { data, mime, source in
                     if source == .camera {
                         attachments.addCameraCapture(data)
@@ -226,7 +225,8 @@ struct ChatDetailView: View {
                 },
                 onUnavailable: { option in
                     showToast(attachmentMessage(for: option))
-                })
+                },
+                remainingSlots: attachments.remainingSlots)
         }
         .sheet(isPresented: $showingModelPicker) {
             modelPickerSheet
