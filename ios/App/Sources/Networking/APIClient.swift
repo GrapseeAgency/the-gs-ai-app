@@ -30,12 +30,11 @@ final class APIClient {
 
     static let shared = APIClient()
 
-    /// REAL transport origin (audit fix): the previous default (localhost:3000)
-    /// only worked against a machine-local backend — on any real device every
-    /// call failed before HTTP. The platform edge additionally REQUIRES the
-    /// `x-session-id` header (session affinity) — applied centrally below and
-    /// in AttachmentStore's multipart upload.
-    var baseURL = URL(string: "https://ws-c-f-d-a-abd-raphpugywm.cn-hongkong-vpc.fcapp.run")!
+    /// REAL transport origin (device-reachability fix): the platform's fcapp.run
+    /// endpoint is VPC-internal only (public DNS → CGNAT 100.118.36.1) — no real
+    /// device can reach it. The public preview-gateway origin below is globally
+    /// routable; uploads verified 201 at all audited sizes/types/encodings.
+    var baseURL = URL(string: "https://preview-chat-c945696f-6447-4dfa-b510-971d8b9eb5bf.space-z.ai")!
 
     /// Stable per-install identifier sent as `x-session-id` on every request.
     /// The edge rejects invocations missing it; a stable value keeps this

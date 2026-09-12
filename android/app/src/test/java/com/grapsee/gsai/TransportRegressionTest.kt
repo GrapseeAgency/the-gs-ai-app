@@ -59,9 +59,15 @@ class TransportRegressionTest {
             "BASE_URL must be HTTPS (release): ${BuildConfig.BASE_URL}",
             BuildConfig.BASE_URL.startsWith("https://")
         )
+        // The fcapp.run origin is VPC-internal (resolves to CGNAT space) —
+        // a regression here reintroduces the device "Network error".
         assertTrue(
-            "BASE_URL must target the platform edge (release): ${BuildConfig.BASE_URL}",
-            BuildConfig.BASE_URL.contains("fcapp.run")
+            "BASE_URL must target the public gateway (release): ${BuildConfig.BASE_URL}",
+            BuildConfig.BASE_URL.contains("space-z.ai")
+        )
+        assertTrue(
+            "BASE_URL must NOT be the emulator alias: ${BuildConfig.BASE_URL}",
+            !BuildConfig.BASE_URL.contains("10.0.2.2")
         )
     }
 }

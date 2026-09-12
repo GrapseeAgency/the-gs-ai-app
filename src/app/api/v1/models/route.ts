@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -79,21 +79,6 @@ const MODELS: {
   },
 ]
 
-export async function GET(req: NextRequest) {
-  // TEMP origin-diag: find the PUBLIC origin the user's browser really uses
-  // (the fcapp.run VPC host resolves to a non-routable internal IP).
-  console.log(
-    '[origin-diag]',
-    JSON.stringify({
-      url: req.url,
-      host: req.headers.get('host'),
-      origin: req.headers.get('origin'),
-      referer: req.headers.get('referer'),
-      ua: (req.headers.get('user-agent') || '').slice(0, 80),
-      xf: Object.fromEntries(
-        [...req.headers.entries()].filter(([k]) => k.startsWith('x-') || k.startsWith('cf-'))
-      ),
-    })
-  )
+export async function GET() {
   return NextResponse.json({ models: MODELS })
 }

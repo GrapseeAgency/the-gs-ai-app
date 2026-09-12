@@ -1,6 +1,6 @@
 {
-  "versionCode": 63,
-  "versionName": "0.62.0",
+  "versionCode": 64,
+  "versionName": "0.63.0",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "Transport fix: the app could not reach the server from a real device — uploads (and everything else that needs the network) failed with a generic network error. The app now talks to the real server over HTTPS and presents the session credential the network edge requires, so attaching images and chatting on-device work for real. Same design, same features; no other changes."
+  "notes": "Device reachability fix: the server address previous builds carried was platform-internal only — no phone could ever connect (uploads and network chat failed with a generic network error). This build points at the publicly reachable gateway. Same design, same features; no other changes."
 }

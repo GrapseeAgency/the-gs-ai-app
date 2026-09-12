@@ -23,6 +23,6 @@ final class SessionHeaderTests: XCTestCase {
 
     func testBaseURLIsRealHTTPSEdge() {
         XCTAssertTrue(APIClient.shared.baseURL.absoluteString.hasPrefix("https://"))
-        XCTAssertTrue(APIClient.shared.baseURL.absoluteString.contains("fcapp.run"))
+        XCTAssertTrue(APIClient.shared.baseURL.absoluteString.contains("space-z.ai"))
     }
 }

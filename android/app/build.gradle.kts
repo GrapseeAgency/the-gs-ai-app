@@ -15,8 +15,8 @@ android {
         applicationId = "com.grapsee.gsai"
         minSdk = 26
         targetSdk = 35
-        versionCode = 63
-        versionName = "0.62.0"
+        versionCode = 64
+        versionName = "0.63.0"
 
         // Backend origin for the Android emulator (host loopback). Override per build type if needed.
         buildConfigField("String", "BASE_URL", "\"http://10.0.2.2:3000\"")
@@ -43,15 +43,18 @@ android {
         release {
             isMinifyEnabled = false
             signingConfig = signingConfigs.getByName("liveUpdate")
-            // REAL transport origin (audit fix): the default 10.0.2.2 emulator
-            // alias is unroutable on physical devices — every backend call died
-            // before HTTP. The platform edge also requires x-session-id (set on
-            // every request in ServiceLocator/ServiceLocator-equivalent) —
-            // without it the edge 400s regardless of destination.
+            // REAL transport origin (device-reachability fix): the platform's
+            // fcapp.run endpoint is VPC-INTERNAL ONLY (public DNS resolves it to
+            // CGNAT 100.118.36.1; the non-vpc variant answers 403 "function
+            // internet URL is disabled") — no phone can ever reach it. The
+            // public preview-gateway origin below sits on a globally routable
+            // ALB (47.239.x.x), complete TLS chain, uploads verified 201 at
+            // 200 KB / 400 KB / 1 MB / chunked / PDF / text. The x-session-id
+            // header (ServiceLocator) stays: harmless here, required elsewhere.
             buildConfigField(
                 "String",
                 "BASE_URL",
-                "\"https://ws-c-f-d-a-abd-raphpugywm.cn-hongkong-vpc.fcapp.run\""
+                "\"https://preview-chat-c945696f-6447-4dfa-b510-971d8b9eb5bf.space-z.ai\""
             )
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
