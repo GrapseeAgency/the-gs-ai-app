@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { messageToJson } from '@/lib/serializers'
 import {
   SYSTEM_PROMPT,
+  VISION_GROUNDING_PROMPT,
   streamChat,
   completeChat,
   streamVisionChat,
@@ -241,7 +242,11 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     const selectedTurnIds = new Set(recentImageTurnIds)
     let imageBudget = VISION_MAX_IMAGES_PER_REQUEST - visionPrepared.length
 
-    const visionContext: VisionChatMessage[] = [{ role: 'system', content: systemPrompt }]
+    // PHASE 7: the grounding instruction rides ONLY on vision turns — the
+    // text-only branch below keeps the untouched persona/base system prompt.
+    const visionContext: VisionChatMessage[] = [
+      { role: 'system', content: `${systemPrompt}\n\n${VISION_GROUNDING_PROMPT}` },
+    ]
     for (const m of history) {
       if (m.role.toLowerCase() === 'user' && selectedTurnIds.has(m.id) && imageBudget > 0) {
         const turnImages = m.attachments.filter((a) => a.kind === 'image')

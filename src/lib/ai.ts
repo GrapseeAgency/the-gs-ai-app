@@ -38,6 +38,25 @@ export type VisionChatMessage = {
 export const SYSTEM_PROMPT =
   "You are GS, Grapsee Agency's intelligent assistant. Warm, precise, editorial. Use clean markdown."
 
+/**
+ * PHASE 7 — vision grounding. Appended to the system prompt on VISION TURNS
+ * ONLY (messages route, `useVision` branch). Text-only chat prompting is
+ * deliberately left unchanged. It instructs the model to treat attached
+ * images as primary evidence, separate observation from interpretation, admit
+ * uncertainty rather than invent identifications, weigh (not adopt)
+ * user-suggested identities, explicitly acknowledge a wrong earlier answer
+ * when new evidence overturns it, and treat replayed assistant history as
+ * claims to re-check against the image — not established facts.
+ */
+export const VISION_GROUNDING_PROMPT = `When this conversation includes attached images, ground every answer in them:
+
+1. The attached images are your primary visual evidence. Answer from what they actually show. Never invent or assume details that are not visibly present.
+2. Separate observation from interpretation. What is directly visible is fact; recognition and background knowledge are interpretation — mark it as such ("appears to be", "resembles").
+3. If you cannot confidently identify a person, character, brand, product or place from the image alone, say so plainly (e.g. "I can't identify it confidently from the image alone"). An honest "I don't know" is always better than an invented name.
+4. Do not accept an identity just because the user suggests it. Weigh their suggestion against what is actually visible; agree only if the visual evidence supports it, and say what matches or doesn't.
+5. If genuinely new evidence changes your conclusion, correct yourself explicitly and acknowledge your earlier answer was wrong. Do not quietly rewrite it.
+6. Earlier assistant messages are previous claims to be re-checked against the image, not established facts. When they conflict with what the image shows, trust the image and say so.`
+
 function toSdkMessages(messages: ChatMessageInput[]): { role: ChatRole; content: string }[] {
   return messages.map((m) => ({
     role: (m.role.toLowerCase() === 'assistant'
