@@ -2940,3 +2940,21 @@ Stage Summary:
 - The assistant now genuinely UNDERSTANDS images: attach → chip → question → the backend decodes + normalizes the real bytes → glm-5v-turbo receives the actual image (never a filename, never a fabricated description) → streamed answer in the existing transcript; follow-ups keep image context; every failure is honest and named.
 - Wire contract unchanged (Phase 5 attachments:[ids] from both platforms); backend is the sole multimodal authority. Model routing invisible to users (§4); orb WORKING now maps a REAL image-analysis phase (§7/§15); no new product hierarchy; versionCode untouched; release untouched.
 - Commits: a0972e1. STOP per directive — PDF intelligence / OCR-product / Research / web search / image generation / tool execution NOT started.
+
+---
+Task ID: RELEASE-V0.61.0
+Agent: Z.ai Code (main)
+Task: Publish the accepted Phase 5 + Phase 6 work to the GitHub release page (user request: "upload the latest apk then i will start my audit") — bump version, rebuild from HEAD, forensics, atomic asset swap, download/ sync.
+
+Work Log:
+- Confirmed release 384909935 (tag v0.60.0, asset 557827180, 12,971,201 B, Sep 11) was the Phase-3-era build; HEAD 8afcb4e contains Phase 5 (590e7e2 + iOS fixes) and Phase 6 (a0972e1) — both accepted, worklog says "NOT published — user's call".
+- Sandbox toolchain had been wiped again → re-provisioned from /home/z/toolchain archives (symlinks /home/z/jdk17 → jdk-17.0.20.1+1, /home/z/gradle-8.9 → gradle-8.9); android-sdk survived.
+- Version bump 61/0.60.0 → **62/0.61.0** in android/app/build.gradle.kts (deliberate: distinguishes the audit build in-app and lets the in-app updater offer it — 62 > 61).
+- Build from HEAD: :app:testDebugUnitTest ✓ **50/50**, :app:assembleRelease ✓ (first attempt hit a daemon OOM-kill; retry with -Xmx1200m + workers.max=2 succeeded, 2m29s).
+- FORENSICS: aapt2 badging com.grapsee.gsai versionCode='62' versionName='0.61.0', minSdk 26 / targetSdk 35; apksigner — v2 scheme true, cert SHA-256 b1ffd75d… (gs-live.keystore, same cert as installed base → over-install safe); artifact **13,053,161 B**, sha256 **f802d3483c67f1ed5a49e6f70bf6c286f71ae6ed9518c9a64a0ceb4775d13562**.
+- download/ sync: GS-AI-App.apk replaced (hash matches build output), update-manifest.json → versionCode 62 / 0.61.0 + plain-language notes for attachments + image understanding (updater will now prompt for the first time since the version gate was previously held at 61).
+- Release swap on release 384909935: delete old asset → upload GS-AI-App.apk (13,053,161 B) → PATCH name/tag → v0.61.0 + body rewrite; roundtrip sha256 verified from the public download URL.
+- Commit includes build.gradle.kts bump + download/ artifacts + this worklog record; tag v0.61.0 points at this commit (v0.60.0 tag left in history).
+
+Stage Summary:
+- The release page now serves the real Phase 5 + Phase 6 build: attachments (gallery/camera/files → chips → upload → persistence) AND image understanding (backend decodes real bytes → glm-5v-turbo → streamed answer, follow-ups keep image context). versionCode 62 / 0.61.0, cert unchanged, gates re-verified on this exact tree.
