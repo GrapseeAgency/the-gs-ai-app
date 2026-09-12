@@ -48,6 +48,10 @@ final class ChatViewModel: ObservableObject {
         var content: String
         var isStreaming: Bool = false
         var createdAt: String = ""
+        /// PHASE 5: server attachment records on user turns (max 6, docs/
+        /// ATTACHMENTS.md §7) — rendered as read-only chips above the text.
+        /// Assistant turns carry none today; nil = none (tolerant decode).
+        var attachments: [Attachment]? = nil
     }
 
     // MARK: - Published state
@@ -99,12 +103,18 @@ final class ChatViewModel: ObservableObject {
 
     // MARK: - Intents
 
-    func send() {
+    /// PHASE 5: `attachments` (every draft `ready` — the caller gates on
+    /// AttachmentStore) travel as their uploaded server ids; the optimistic
+    /// user bubble renders the chips immediately. Text may be empty ONLY
+    /// when attachments are present (server rule, mirrored here).
+    func send(attachments: [Attachment] = []) {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, !isStreaming else { return }
+        guard !text.isEmpty || !attachments.isEmpty, !isStreaming else { return }
         draft = ""
-        lastSentText = text
-        beginStreaming(text: text, appendUserMessage: true)
+        // Attachments-only turns are not regenerable: the ids are claimed by
+        // the sent message server-side, so retry/regenerate stays text-only.
+        lastSentText = text.isEmpty ? nil : text
+        beginStreaming(text: text, appendUserMessage: true, attachments: attachments.isEmpty ? nil : attachments)
     }
 
     /// Resends the last user text after a failure (also backs regenerate).
@@ -163,7 +173,8 @@ final class ChatViewModel: ObservableObject {
                 conversationId: conversation.id,
                 role: turn.role,
                 content: turn.content,
-                createdAt: turn.createdAt.isEmpty ? fallbackStamp : turn.createdAt))
+                createdAt: turn.createdAt.isEmpty ? fallbackStamp : turn.createdAt,
+                attachments: turn.attachments))
         }
         conversationID = conversation.id
         messages = turns
@@ -234,13 +245,14 @@ final class ChatViewModel: ObservableObject {
         return ids.contains(preferred) ? preferred : nil
     }
 
-    private func beginStreaming(text: String, appendUserMessage: Bool) {
+    private func beginStreaming(text: String, appendUserMessage: Bool, attachments: [Attachment]? = nil) {
         errorMessage = nil
         if appendUserMessage {
             messages.append(ChatMessage(
                 role: "user",
                 content: text,
-                createdAt: ConversationStore.now()))
+                createdAt: ConversationStore.now(),
+                attachments: attachments))
         }
         messages.append(ChatMessage(
             role: "assistant",
@@ -263,12 +275,14 @@ final class ChatViewModel: ObservableObject {
                         conversationId: conversationID,
                         role: "user",
                         content: text,
-                        createdAt: ConversationStore.now()))
+                        createdAt: ConversationStore.now(),
+                        attachments: attachments))
                 }
                 try await APIClient.shared.stream(
                     message: text,
                     conversationID: conversationID,
                     modelId: modelID,
+                    attachmentIDs: attachments?.map { $0.id },
                     onDelta: { [buffer = self.streamBuffer] delta in
                         buffer.append(delta) // lock-guarded — no main hop per token
                     },
@@ -312,7 +326,8 @@ final class ChatViewModel: ObservableObject {
     /// is renamed.
     private func ensureConversation(for text: String) async throws -> String {
         if let conversationID { return conversationID }
-        let title = SettingsStore.shared.autoTitle ? String(text.prefix(40)) : "New chat"
+        // Attachments-only first messages (empty text) keep the default title.
+        let title = SettingsStore.shared.autoTitle && !text.isEmpty ? String(text.prefix(40)) : "New chat"
         do {
             let conversation = try await APIClient.shared.createConversation(title: title)
             conversationID = conversation.id
@@ -405,7 +420,10 @@ final class ChatViewModel: ObservableObject {
     /**
      * Streams the on-device reply word by word with the same cadence as
      * Android, so an offline turn reads exactly like a networked one. Stop
-     * keeps whatever streamed before it was pressed.
+     * keeps whatever streamed before it was pressed. PHASE 5 note: an
+     * offline turn keeps its attachments on the LOCAL user message (they
+     * were uploaded earlier — a ready draft restores across relaunches); the
+     * responder answers from the text prompt exactly as before, unchanged.
      */
     private func streamLocalReply(_ prompt: String) async {
         let reply = Self.localReply(prompt)
@@ -519,7 +537,9 @@ final class ChatViewModel: ObservableObject {
             do {
                 let history = try await APIClient.shared.messages(conversationID: conversationID)
                 guard let self else { return }
-                self.messages = history.map { ChatMessage(role: $0.role, content: $0.content, createdAt: $0.createdAt) }
+                self.messages = history.map {
+                    ChatMessage(role: $0.role, content: $0.content, createdAt: $0.createdAt, attachments: $0.attachments)
+                }
                 // The remote seed carries the full thread — nothing older locally.
                 self.oldestStamp = self.messages.first?.createdAt
                 self.hasOlder = false
@@ -536,7 +556,9 @@ final class ChatViewModel: ObservableObject {
     }
 
     private func applyWindow(_ page: [StoredMessage]) {
-        messages = page.map { ChatMessage(role: $0.role, content: $0.content, createdAt: $0.createdAt) }
+        messages = page.map {
+            ChatMessage(role: $0.role, content: $0.content, createdAt: $0.createdAt, attachments: $0.attachments)
+        }
         oldestStamp = page.first?.createdAt
         hasOlder = page.count == historyPageSize
     }
@@ -564,7 +586,7 @@ final class ChatViewModel: ObservableObject {
             return
         }
         messages.insert(contentsOf: page.map {
-            ChatMessage(role: $0.role, content: $0.content, createdAt: $0.createdAt)
+            ChatMessage(role: $0.role, content: $0.content, createdAt: $0.createdAt, attachments: $0.attachments)
         }, at: 0)
         oldestStamp = page.first?.createdAt
         if page.count < historyPageSize { hasOlder = false }

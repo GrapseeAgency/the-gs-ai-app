@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- GS LiveUpdate: the downloaded update APK lives in cacheDir/liveupdate/. -->
+<!-- PHASE 5: camera captures stage in cacheDir/camera/ — the FileProvider URI
+     is handed to the system camera app for the TakePicture handoff only. -->
 <paths>
     <cache-path name="liveupdate" path="liveupdate/" />
+    <cache-path name="camera" path="camera/" />
 </paths>

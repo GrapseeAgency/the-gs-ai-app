@@ -47,7 +47,8 @@ final class SQLiteChatStore: @unchecked Sendable {
         conversationId TEXT NOT NULL,
         role TEXT NOT NULL,
         content TEXT NOT NULL,
-        createdAt TEXT NOT NULL
+        createdAt TEXT NOT NULL,
+        attachments TEXT NOT NULL DEFAULT '[]'
     );
     CREATE INDEX IF NOT EXISTS messages_by_conversation ON messages(conversationId, createdAt);
     CREATE TABLE IF NOT EXISTS store_meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -89,12 +90,51 @@ final class SQLiteChatStore: @unchecked Sendable {
         sqlite3_exec(opened, "PRAGMA journal_mode=WAL;", nil, nil, nil)
         queue.sync {
             exec(schemaSQL)
+            migrateSchemaIfNeeded()
             importLegacyJSONIfNeeded()
         }
     }
 
     deinit {
         if let db = db { sqlite3_close(db) }
+    }
+
+    // MARK: - Schema migration (PHASE 5)
+
+    /// PHASE 5: the messages table gains `attachments TEXT NOT NULL DEFAULT
+    /// '[]'`. Fresh installs create the column via schemaSQL above; existing
+    /// installs migrate through a guarded ALTER (PRAGMA table_info check) so
+    /// re-running is always safe. The column is NOT in the FTS external-
+    /// content index — the triggers index `content` only and stay untouched.
+    private func migrateSchemaIfNeeded() {
+        guard let db = db else { return }
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, "PRAGMA table_info(messages)", -1, &stmt, nil) == SQLITE_OK else { return }
+        defer { sqlite3_finalize(stmt) }
+        var hasAttachments = false
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            if let name = sqlite3_column_text(stmt, 1), String(cString: name) == "attachments" {
+                hasAttachments = true
+            }
+        }
+        if !hasAttachments {
+            exec("ALTER TABLE messages ADD COLUMN attachments TEXT NOT NULL DEFAULT '[]';")
+        }
+    }
+
+    // MARK: - Attachments column codec
+
+    /// [Attachment] ↔ the `attachments` TEXT column (JSON array; '[]' = none).
+    /// Decode failures degrade to nil — a corrupt blob never fails the read.
+    private func attachmentsJSON(_ attachments: [Attachment]?) -> String {
+        let list = attachments ?? []
+        guard !list.isEmpty, let data = try? JSONEncoder().encode(list) else { return "[]" }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    private func decodeAttachments(_ raw: String) -> [Attachment]? {
+        guard let data = raw.data(using: .utf8) else { return nil }
+        return (try? JSONDecoder().decode([Attachment].self, from: data)).flatMap { $0.isEmpty ? nil : $0 }
     }
 
     // MARK: - Row writes (write-through from ConversationStore)
@@ -119,14 +159,15 @@ final class SQLiteChatStore: @unchecked Sendable {
     func upsertMessage(_ message: StoredMessage) {
         queue.sync {
             guard let stmt = prepare(
-                "INSERT OR REPLACE INTO messages(id, conversationId, role, content, createdAt) " +
-                "VALUES(?, ?, ?, ?, ?)") else { return }
+                "INSERT OR REPLACE INTO messages(id, conversationId, role, content, createdAt, attachments) " +
+                "VALUES(?, ?, ?, ?, ?, ?)") else { return }
             defer { sqlite3_finalize(stmt) }
             bind(stmt, 1, message.id)
             bind(stmt, 2, message.conversationId)
             bind(stmt, 3, message.role)
             bind(stmt, 4, message.content)
             bind(stmt, 5, message.createdAt)
+            bind(stmt, 6, attachmentsJSON(message.attachments))
             sqlite3_step(stmt)
         }
     }
@@ -172,7 +213,7 @@ final class SQLiteChatStore: @unchecked Sendable {
     func loadMessages() -> [StoredMessage] {
         queue.sync {
             guard let stmt = prepare(
-                "SELECT id, conversationId, role, content, createdAt FROM messages") else { return [] }
+                "SELECT id, conversationId, role, content, createdAt, attachments FROM messages") else { return [] }
             defer { sqlite3_finalize(stmt) }
             var rows: [StoredMessage] = []
             while sqlite3_step(stmt) == SQLITE_ROW {
@@ -181,7 +222,8 @@ final class SQLiteChatStore: @unchecked Sendable {
                     conversationId: text(stmt, 1),
                     role: text(stmt, 2),
                     content: text(stmt, 3),
-                    createdAt: text(stmt, 4)))
+                    createdAt: text(stmt, 4),
+                    attachments: decodeAttachments(text(stmt, 5))))
             }
             return rows
         }
@@ -199,7 +241,7 @@ final class SQLiteChatStore: @unchecked Sendable {
     func loadRecentMessages(conversationId: String, limit: Int) -> [StoredMessage] {
         queue.sync {
             guard let stmt = prepare(
-                "SELECT id, conversationId, role, content, createdAt FROM messages " +
+                "SELECT id, conversationId, role, content, createdAt, attachments FROM messages " +
                 "WHERE conversationId = ? ORDER BY createdAt DESC LIMIT ?") else { return [] }
             defer { sqlite3_finalize(stmt) }
             bind(stmt, 1, conversationId)
@@ -211,7 +253,8 @@ final class SQLiteChatStore: @unchecked Sendable {
                     conversationId: text(stmt, 1),
                     role: text(stmt, 2),
                     content: text(stmt, 3),
-                    createdAt: text(stmt, 4)))
+                    createdAt: text(stmt, 4),
+                    attachments: decodeAttachments(text(stmt, 5))))
             }
             return rows.reversed()
         }
@@ -225,7 +268,7 @@ final class SQLiteChatStore: @unchecked Sendable {
     func loadMessagesBefore(conversationId: String, before: String, limit: Int) -> [StoredMessage] {
         queue.sync {
             guard let stmt = prepare(
-                "SELECT id, conversationId, role, content, createdAt FROM messages " +
+                "SELECT id, conversationId, role, content, createdAt, attachments FROM messages " +
                 "WHERE conversationId = ? AND createdAt < ? ORDER BY createdAt DESC LIMIT ?") else { return [] }
             defer { sqlite3_finalize(stmt) }
             bind(stmt, 1, conversationId)
@@ -238,7 +281,8 @@ final class SQLiteChatStore: @unchecked Sendable {
                     conversationId: text(stmt, 1),
                     role: text(stmt, 2),
                     content: text(stmt, 3),
-                    createdAt: text(stmt, 4)))
+                    createdAt: text(stmt, 4),
+                    attachments: decodeAttachments(text(stmt, 5))))
             }
             return rows.reversed()
         }

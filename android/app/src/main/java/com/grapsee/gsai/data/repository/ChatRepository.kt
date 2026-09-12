@@ -1,13 +1,18 @@
 package com.grapsee.gsai.data.repository
 
+import com.grapsee.gsai.data.attachment.AttachmentDraft
+import com.grapsee.gsai.data.attachment.AttachmentPhase
 import com.grapsee.gsai.data.local.AppDatabase
 import com.grapsee.gsai.data.local.ConversationEntity
 import com.grapsee.gsai.data.local.MessageEntity
 import com.grapsee.gsai.data.local.SavedItemEntity
 import com.grapsee.gsai.data.remote.ApiClient
+import com.grapsee.gsai.data.remote.AttachmentDto
 import com.grapsee.gsai.data.remote.ConversationDto
+import com.grapsee.gsai.data.remote.GsApiJson
 import com.grapsee.gsai.data.remote.MessageDto
 import com.grapsee.gsai.data.remote.UpdateConversationRequest
+import kotlinx.serialization.encodeToString
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -283,9 +288,15 @@ class ChatRepository(
     /**
      * Stream one assistant turn. Returns the conversation id the turn belongs to.
      *
+     * PHASE 5: [attachments] are the composer's READY drafts (server ids
+     * present); their ids travel on SendMessageRequest and the SAME records are
+     * serialized into the locally persisted user turn — including on the GS
+     * Lite offline path below, so the on-device thread keeps its honest local
+     * state (files attached; the offline reply simply cannot read them either).
+     *
      * Offline contract (backend unreachable at any step):
      * - conversation creation fabricates a local id and the row appears in recents,
-     * - the user turn is always persisted,
+     * - the user turn is always persisted (with its attachments JSON),
      * - the assistant bubble is closed with a short graceful notice (streamed
      *   through [onDelta] too, so UI and disk stay identical) — never an exception.
      */
@@ -293,10 +304,16 @@ class ChatRepository(
         conversationId: String?,
         content: String,
         modelId: String? = null,
+        attachments: List<AttachmentDraft> = emptyList(),
         onConversationResolved: (String) -> Unit = {},
         onDelta: (String) -> Unit
     ): String {
         activeJob = currentCoroutineContext()[Job]
+
+        // Send gate in depth: only ready drafts with a server id may travel.
+        val readyAttachments = attachments
+            .filter { it.phase == AttachmentPhase.Ready && !it.remoteId.isNullOrBlank() }
+        val attachmentIds = readyAttachments.mapNotNull { it.remoteId }.ifEmpty { null }
 
         val activeId = resolveConversation(conversationId, content)
         // Published the moment the owning conversation is known (the server id for
@@ -310,7 +327,8 @@ class ChatRepository(
             conversationId = activeId,
             role = ROLE_USER,
             content = content,
-            createdAt = nowIso()
+            createdAt = nowIso(),
+            attachments = attachmentsJsonOf(readyAttachments)
         )
         db.messageDao().upsert(userMessage)
 
@@ -321,6 +339,7 @@ class ChatRepository(
                 conversationId = activeId,
                 content = content,
                 modelId = resolveRemoteModelId(modelId),
+                attachments = attachmentIds,
                 onDelta = { delta ->
                     accumulated.append(delta)
                     onDelta(delta)
@@ -518,13 +537,38 @@ class ChatRepository(
         conversationId = conversationId,
         role = role,
         content = content,
-        createdAt = createdAt
+        createdAt = createdAt,
+        attachments = attachmentsJson(attachments)
     )
 
     companion object {
         const val ROLE_USER = "user"
         const val ROLE_ASSISTANT = "assistant"
         private const val TITLE_SNIPPET_LENGTH = 40
+
+        /** PHASE 5 attachment JSON codec for the Room column (kotlinx-serialization). */
+        fun attachmentsJson(dtos: List<AttachmentDto>): String =
+            runCatching { GsApiJson.encodeToString(dtos) }.getOrDefault("[]")
+
+        /** Tolerant decode — a corrupt column degrades to "no attachments", never a crash. */
+        fun decodeAttachments(json: String): List<AttachmentDto> =
+            runCatching { GsApiJson.decodeFromString<List<AttachmentDto>>(json) }.getOrDefault(emptyList())
+
+        /** Ready composer drafts → wire records for the locally persisted user turn. */
+        fun attachmentsJsonOf(drafts: List<AttachmentDraft>): String =
+            attachmentsJson(
+                drafts.map { draft ->
+                    AttachmentDto(
+                        id = draft.remoteId ?: draft.id,
+                        kind = draft.kind.wire,
+                        displayName = draft.displayName,
+                        mimeType = draft.mimeType,
+                        byteSize = draft.byteSize,
+                        createdAt = draft.createdAt,
+                        url = draft.remoteUrl ?: "/api/v1/files/${draft.remoteId ?: draft.id}"
+                    )
+                }
+            )
 
         // Fixed-width UTC ISO-8601 keeps lexicographic Room ORDER BY createdAt ASC chronological.
         private val TIMESTAMP_FORMAT: DateTimeFormatter =

@@ -1,10 +1,27 @@
 package com.grapsee.gsai.ui.chat
 
 import android.app.Activity
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
 import android.speech.tts.TextToSpeech
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.FileProvider
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.grapsee.gsai.data.attachment.AttachmentDraft
+import com.grapsee.gsai.data.attachment.AttachmentPhase
+import com.grapsee.gsai.data.attachment.AttachmentRules
+import com.grapsee.gsai.data.attachment.AttachmentSource
+import com.grapsee.gsai.data.attachment.AttachmentStateMachine
+import com.grapsee.gsai.data.attachment.asDisplayDraft
+import com.grapsee.gsai.data.remote.AttachmentDto
+import com.grapsee.gsai.ui.attachment.AttachmentChipRow
+import java.io.File
 import android.view.HapticFeedbackConstants
 import android.speech.tts.UtteranceProgressListener
 import androidx.compose.animation.AnimatedVisibility
@@ -109,6 +126,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
@@ -174,7 +192,9 @@ private data class ChatUiMessage(
     val content: String,
     val isStreaming: Boolean = false,
     val createdAt: String = "",
-    val failed: Boolean = false
+    val failed: Boolean = false,
+    /** PHASE 5: real attachment records on the turn (user turns only today). */
+    val attachments: List<AttachmentDto> = emptyList()
 )
 
 /**
@@ -283,6 +303,11 @@ fun ChatScreen(
     val clipboard = LocalClipboardManager.current
     val snackbarHostState = remember { SnackbarHostState() }
     var attachSheetOpen by rememberSaveable { mutableStateOf(false) }
+    // PHASE 5: app-scoped attachment store — the composer's drafts, real
+    // staging and real multipart uploads. Process-scoped, so in-flight uploads
+    // and the live draft list survive rotation.
+    val attachStore = remember { ServiceLocator.attachments }
+    val attachDrafts by attachStore.drafts.collectAsState()
     // Translate: the source turn rides in the sheet key; the answer streams in live.
     var translationSource by remember { mutableStateOf<String?>(null) }
     var translationText by remember { mutableStateOf("") }
@@ -345,6 +370,65 @@ fun ChatScreen(
             context.startActivity(Intent.createChooser(send, null))
         }.onFailure { showSnack("Sharing isn't set up on this device") }
     }
+    // PHASE 5 real pickers — system Photo Picker, TakePicture through the
+    // existing FileProvider, SAF OpenMultipleDocuments. No storage or camera
+    // permission is ever requested: the system surfaces own their permissions,
+    // we consume only their results. Picker grants are transient — the store
+    // copies bytes into app-private staging immediately (§4).
+    val remainingSlots = AttachmentRules.remainingSlots(attachDrafts.size)
+    var cameraCaptureFile by remember { mutableStateOf<File?>(null) }
+    val galleryPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickMultipleVisualMedia(maxItems = AttachmentRules.MAX_PER_MESSAGE)
+    ) { uris ->
+        if (uris.size > remainingSlots) {
+            showSnack("Up to ${AttachmentRules.MAX_PER_MESSAGE} attachments per message")
+        }
+        uris.take(remainingSlots).forEach { attachStore.stageFromUri(it, AttachmentSource.Gallery) }
+    }
+    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { captured ->
+        val file = cameraCaptureFile
+        cameraCaptureFile = null
+        if (captured && file != null) attachStore.stageFromCameraFile(file)
+    }
+    val documentPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris ->
+        if (uris.size > remainingSlots) {
+            showSnack("Up to ${AttachmentRules.MAX_PER_MESSAGE} attachments per message")
+        }
+        uris.take(remainingSlots).forEach { attachStore.stageFromUri(it, AttachmentSource.Files) }
+    }
+    fun launchCamera() {
+        if (remainingSlots == 0) {
+            showSnack("Up to ${AttachmentRules.MAX_PER_MESSAGE} attachments per message")
+            return
+        }
+        val dir = File(context.cacheDir, "camera").apply { mkdirs() }
+        val file = File(dir, "attach-${System.currentTimeMillis()}.jpg")
+        val uri = FileProvider.getUriForFile(context, context.packageName + ".fileprovider", file)
+        cameraCaptureFile = file
+        try {
+            cameraLauncher.launch(uri)
+        } catch (e: ActivityNotFoundException) {
+            // No camera app on the device — say so, never fake a capture.
+            cameraCaptureFile = null
+            showSnack("No camera app available")
+        }
+    }
+    // The store binds to the active conversation: a switch drops or rehydrates
+    // that conversation's persisted ready drafts; a rotation re-bind no-ops
+    // (same id), so live uploads are never disturbed.
+    LaunchedEffect(activeConversationId) { attachStore.bind(activeConversationId) }
+    // Background leave also snapshots the composer — the dispose-time save
+    // below never runs on process death.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) attachStore.persistSnapshot(activeConversationId, draft)
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     // True while the newest turn is on screen — the reader is at the live edge.
     val isAtBottom by remember {
         derivedStateOf {
@@ -393,7 +477,9 @@ fun ChatScreen(
     // Draft hand-off: leaving the thread parks the unsent text, re-entering
     // restores it. Cleared the moment a send actually lands.
     DisposableEffect(activeConversationId) {
-        onDispose { saveDraft(context, activeConversationId, draft) }
+        // PHASE 5: the store owns the draft entry {text, attachments} — the
+        // leave-time snapshot covers both halves in one atomic write.
+        onDispose { attachStore.persistSnapshot(activeConversationId, draft) }
     }
 
     // Stream disposal contract (rotation vs navigation-away): the stream lives
@@ -426,7 +512,15 @@ fun ChatScreen(
         olderArmed = false
         val recent = runCatching { ServiceLocator.chat.historyRecent(id, HISTORY_PAGE) }.getOrElse { emptyList() }
         messages.clear()
-        messages.addAll(recent.map { ChatUiMessage(it.id, it.role, it.content, createdAt = it.createdAt) })
+        messages.addAll(
+            recent.map {
+                ChatUiMessage(
+                    it.id, it.role, it.content,
+                    createdAt = it.createdAt,
+                    attachments = ChatRepository.decodeAttachments(it.attachments)
+                )
+            }
+        )
         hasOlder = recent.size == HISTORY_PAGE
         transcriptLoadedForId = id
         // Rotation re-attach (Task 86-d): an EXISTING-chat rotation re-runs this
@@ -455,7 +549,7 @@ fun ChatScreen(
         val loadedTitle = runCatching { ServiceLocator.db.conversationDao().getById(id) }
             .getOrNull()?.title
         if (!loadedTitle.isNullOrBlank()) conversationTitle = loadedTitle
-        if (draft.isBlank()) draft = loadDraft(context, id) ?: ""
+        if (draft.isBlank()) draft = attachStore.loadPersistedText(id) ?: ""
     }
 
     // Transcript rebuild (re-attach / adopted-id reconciliation): triggered by
@@ -469,7 +563,13 @@ fun ChatScreen(
         olderArmed = false
         val recent = if (id == null) emptyList()
         else runCatching { ServiceLocator.chat.historyRecent(id, HISTORY_PAGE) }.getOrElse { emptyList() }
-        val rebuilt = recent.map { ChatUiMessage(it.id, it.role, it.content, createdAt = it.createdAt) }.toMutableList()
+        val rebuilt = recent.map {
+            ChatUiMessage(
+                it.id, it.role, it.content,
+                createdAt = it.createdAt,
+                attachments = ChatRepository.decodeAttachments(it.attachments)
+            )
+        }.toMutableList()
         val live = chatStream.state.value
         if (live?.phase == ChatStreamController.Phase.Streaming &&
             live.assistantMessageId == myStreamMessageId &&
@@ -506,7 +606,16 @@ fun ChatScreen(
                         hasOlder = false
                     } else {
                         val anchor = listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset
-                        messages.addAll(0, older.map { ChatUiMessage(it.id, it.role, it.content, createdAt = it.createdAt) })
+                        messages.addAll(
+                            0,
+                            older.map {
+                                ChatUiMessage(
+                                    it.id, it.role, it.content,
+                                    createdAt = it.createdAt,
+                                    attachments = ChatRepository.decodeAttachments(it.attachments)
+                                )
+                            }
+                        )
                         listState.scrollToItem(anchor.first + older.size, anchor.second)
                         hasOlder = older.size == HISTORY_PAGE
                     }
@@ -637,16 +746,43 @@ fun ChatScreen(
 
     fun dispatch(text: String, echoUser: Boolean) {
         val prompt = text.trim()
-        if (prompt.isEmpty() || chatStream.isStreaming) return
+        // PHASE 5: attachments-only sends are real — the text may be empty when
+        // the composer holds ready attachments. Anything not yet ready blocks
+        // the send honestly; nothing silently drops.
+        val readyDrafts = attachDrafts.toList()
+        if ((prompt.isEmpty() && readyDrafts.isEmpty()) || chatStream.isStreaming) return
+        if (!AttachmentStateMachine.canSend(readyDrafts)) {
+            showSnack("Attachments aren't ready yet")
+            return
+        }
         // A committed send gets the platform's virtual-key tick — the touch
         // confirmation native keyboards and dial pads use, gated by Settings.
         view.gsHaptic(HapticFeedbackConstants.VIRTUAL_KEY)
         draft = ""
-        clearDraft(context, activeConversationId)
-        if (echoUser) {
-            messages.add(ChatUiMessage(UUID.randomUUID().toString(), "user", prompt, createdAt = ChatRepository.nowIso()))
+        attachStore.clearPersistedDraft(activeConversationId)
+        val userAttachments = readyDrafts.map { d ->
+            AttachmentDto(
+                id = d.remoteId ?: d.id,
+                kind = d.kind.wire,
+                displayName = d.displayName,
+                mimeType = d.mimeType,
+                byteSize = d.byteSize,
+                createdAt = d.createdAt,
+                url = d.remoteUrl ?: ""
+            )
         }
-        if (activeConversationId == null) conversationTitle = prompt.take(40)
+        if (echoUser) {
+            messages.add(
+                ChatUiMessage(
+                    UUID.randomUUID().toString(), "user", prompt,
+                    createdAt = ChatRepository.nowIso(),
+                    attachments = userAttachments
+                )
+            )
+        }
+        if (activeConversationId == null) {
+            conversationTitle = prompt.ifEmpty { readyDrafts.firstOrNull()?.displayName ?: "GS" }.take(40)
+        }
         val assistantId = UUID.randomUUID().toString()
         messages.add(ChatUiMessage(assistantId, "assistant", "", isStreaming = true, createdAt = ChatRepository.nowIso()))
         // Sending always returns the reader to the live edge (benchmark behaviour).
@@ -663,8 +799,12 @@ fun ChatScreen(
             conversationId = activeConversationId,
             prompt = prompt,
             modelId = ModelPrefs.defaultId(context),
-            assistantMessageId = assistantId
+            assistantMessageId = assistantId,
+            attachments = readyDrafts
         )
+        // The send consumed the drafts: ready staged copies persist on disk
+        // (they were uploaded), never-uploaded leftovers are cleaned up (§4).
+        attachStore.clear()
     }
 
     // PHASE 2 Home: the inline composer dispatches straight into a new chat —
@@ -1101,6 +1241,9 @@ fun ChatScreen(
                 onDraftChange = { draft = it },
                 onSend = { text -> dispatch(text, echoUser = true) },
                 onAttach = { attachSheetOpen = true },
+                drafts = attachDrafts,
+                onRemoveAttachment = { attachStore.remove(it) },
+                onRetryAttachment = { attachStore.retry(it) },
                 // Real voice entry right in the composer; hidden — never
                 // disabled-dead — when no voice route was wired, and the attach
                 // sheet keeps its own honest Voice option as the fallback path.
@@ -1135,15 +1278,37 @@ fun ChatScreen(
     if (attachSheetOpen) {
         AttachSheet(
             onDismiss = { attachSheetOpen = false },
+            onGallery = {
+                attachSheetOpen = false
+                if (remainingSlots == 0) {
+                    showSnack("Up to ${AttachmentRules.MAX_PER_MESSAGE} attachments per message")
+                } else {
+                    galleryPicker.launch(
+                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                    )
+                }
+            },
+            onCamera = {
+                attachSheetOpen = false
+                launchCamera()
+            },
+            onFiles = {
+                attachSheetOpen = false
+                if (remainingSlots == 0) {
+                    showSnack("Up to ${AttachmentRules.MAX_PER_MESSAGE} attachments per message")
+                } else {
+                    documentPicker.launch(arrayOf("image/*", "application/pdf", "text/*"))
+                }
+            },
             onVoice = {
                 attachSheetOpen = false
                 val navigateVoice = onNavigateVoice
                 if (navigateVoice != null) navigateVoice()
                 else showSnack("Voice note arrives with the device permissions build")
             },
-            onFallback = { label ->
+            onUnavailable = { label ->
                 attachSheetOpen = false
-                showSnack("$label arrives with the device permissions build")
+                showSnack("$label isn't available yet — nothing fake behind it")
             }
         )
     }
@@ -1204,30 +1369,42 @@ private fun UserMessage(
                 }
             }
         } else {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                Surface(
-                    modifier = Modifier
-                        // Long user turns wrap inside a readable column instead
-                        // of spanning the full width edge to edge.
-                        .widthIn(max = 340.dp)
-                        .combinedClickable(
-                            onClick = {},
-                            onLongClick = {
-                                if (GsHaptics.enabled()) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                onCopy(message.content)
-                            }
-                        ),
-                    shape = RoundedCornerShape(18.dp),
-                    color = MaterialTheme.colorScheme.primary.copy(
-                        alpha = if (highlight) 0.34f else 0.14f
-                    )
-                ) {
-                    Text(
-                        text = message.content,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
-                    )
+            // PHASE 5: the turn's real attachments render as read-only chips
+            // above the text bubble (spec §7 — message anatomy otherwise
+            // unchanged). An attachments-only turn shows chips alone.
+            if (message.attachments.isNotEmpty()) {
+                AttachmentChipRow(
+                    drafts = message.attachments.map { it.asDisplayDraft() },
+                    editable = false,
+                    horizontalArrangement = Arrangement.End
+                )
+            }
+            if (message.content.isNotEmpty()) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    Surface(
+                        modifier = Modifier
+                            // Long user turns wrap inside a readable column instead
+                            // of spanning the full width edge to edge.
+                            .widthIn(max = 340.dp)
+                            .combinedClickable(
+                                onClick = {},
+                                onLongClick = {
+                                    if (GsHaptics.enabled()) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    onCopy(message.content)
+                                }
+                            ),
+                        shape = RoundedCornerShape(18.dp),
+                        color = MaterialTheme.colorScheme.primary.copy(
+                            alpha = if (highlight) 0.34f else 0.14f
+                        )
+                    ) {
+                        Text(
+                            text = message.content,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+                        )
+                    }
                 }
             }
             val stamp = remember(message.createdAt) { timeLabel(message.createdAt) }
@@ -1274,9 +1451,20 @@ private fun ComposerRow(
     onMic: (() -> Unit)?,
     isStreaming: Boolean,
     onStop: () -> Unit,
-    enterToSend: Boolean
+    enterToSend: Boolean,
+    // PHASE 5: the live attachment drafts — chips row above the field,
+    // recomposition stays scoped to the row (the transcript never reacts).
+    drafts: List<AttachmentDraft> = emptyList(),
+    onRemoveAttachment: (String) -> Unit = {},
+    onRetryAttachment: (String) -> Unit = {}
 ) {
-    Row(verticalAlignment = Alignment.Bottom) {
+    Column {
+        AttachmentChipRow(
+            drafts = drafts,
+            onRemove = onRemoveAttachment,
+            onRetry = onRetryAttachment
+        )
+        Row(verticalAlignment = Alignment.Bottom) {
         IconButton(onClick = onAttach) {
             Icon(
                 Icons.Outlined.AttachFile,
@@ -1296,6 +1484,9 @@ private fun ComposerRow(
             // transcript. (The shared bar keeps its old 4-line default for the
             // search/library/vision/research call sites.)
             maxLines = 6,
+            // PHASE 5: attachments-only sends are real — the send affordance
+            // stays live on an empty field when ready attachments exist.
+            allowEmptySend = drafts.isNotEmpty(),
             trailingIcon = if (isStreaming) {
                 { StopGeneratingControl(onStop = onStop) }
             } else null
@@ -1308,6 +1499,7 @@ private fun ComposerRow(
                     tint = MaterialTheme.colorScheme.primary
                 )
             }
+        }
         }
     }
 }
@@ -1681,17 +1873,27 @@ private fun SuggestionPill(text: String, onClick: () -> Unit) {
 
 // --- attach sheet -------------------------------------------------------------
 
-private data class AttachOption(val label: String, val icon: ImageVector, val isVoice: Boolean = false)
+/**
+ * PHASE 5: every REAL capability has a real handler behind it; every tile
+ * without a backend consumer is explicitly [available] = false and renders
+ * muted with an honest caption — option §5B "clearly show unavailable".
+ * The two pre-PHASE-5 duplicate tiles ("Camera Photo"/"Camera",
+ * "Files"/"Document") collapsed into their single real entry points.
+ */
+private data class AttachOption(
+    val label: String,
+    val icon: ImageVector,
+    val isVoice: Boolean = false,
+    val available: Boolean = true
+)
 
 private val attachOptions = listOf(
-    AttachOption("Camera Photo", Icons.Outlined.PhotoCamera),
     AttachOption("Gallery", Icons.Outlined.Image),
+    AttachOption("Camera", Icons.Outlined.PhotoCamera),
     AttachOption("Files", Icons.Outlined.Folder),
-    AttachOption("Camera", Icons.Outlined.CameraAlt),
-    AttachOption("Code snippet", Icons.Outlined.Code),
-    AttachOption("Document", Icons.Outlined.Description),
-    AttachOption("Prompt template", Icons.Outlined.StickyNote2),
-    AttachOption("Voice note", Icons.Outlined.Mic, isVoice = true)
+    AttachOption("Voice note", Icons.Outlined.Mic, isVoice = true),
+    AttachOption("Code snippet", Icons.Outlined.Code, available = false),
+    AttachOption("Prompt template", Icons.Outlined.StickyNote2, available = false)
 )
 
 /**
@@ -1772,13 +1974,17 @@ private fun TranslationSheet(
     }
 }
 
-/** 2-column grid of attach entry points; non-voice options wait for the device-permissions build. */
+/** 2-column grid of attach entry points — real pickers for the real
+ *  capabilities, explicitly-unavailable tiles for the rest (PHASE 5 §6). */
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
 private fun AttachSheet(
     onDismiss: () -> Unit,
+    onGallery: () -> Unit,
+    onCamera: () -> Unit,
+    onFiles: () -> Unit,
     onVoice: () -> Unit,
-    onFallback: (String) -> Unit
+    onUnavailable: (String) -> Unit
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
@@ -1803,7 +2009,13 @@ private fun AttachSheet(
                             option = option,
                             modifier = Modifier.weight(1f),
                             onClick = {
-                                if (option.isVoice) onVoice() else onFallback(option.label)
+                                when {
+                                    option.isVoice -> onVoice()
+                                    !option.available -> onUnavailable(option.label)
+                                    option.label == "Gallery" -> onGallery()
+                                    option.label == "Camera" -> onCamera()
+                                    option.label == "Files" -> onFiles()
+                                }
                             }
                         )
                     }
@@ -1829,7 +2041,9 @@ private fun AttachTile(
         color = MaterialTheme.colorScheme.surfaceContainerLow
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            modifier = Modifier
+                .padding(horizontal = 14.dp, vertical = 12.dp)
+                .alpha(if (option.available) 1f else 0.45f),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
@@ -1847,11 +2061,20 @@ private fun AttachTile(
                     )
                 }
             }
-            Text(
-                text = option.label,
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurface
-            )
+            Column {
+                Text(
+                    text = option.label,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                if (!option.available) {
+                    Text(
+                        text = "Not available yet",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
     }
 }

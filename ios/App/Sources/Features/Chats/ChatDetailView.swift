@@ -65,6 +65,9 @@ struct ChatDetailView: View {
     @EnvironmentObject private var router: Router
     // Offline state (Step 4): one shared NWPathMonitor for the whole process.
     @ObservedObject private var network = NetworkMonitor.shared
+    // PHASE 5: the shared attachment store — composer chips, upload phases,
+    // send gating and draft persistence all read/write through it.
+    @ObservedObject private var attachments = AttachmentStore.shared
 
     // Model control (Phase 3): the header chip is a SECONDARY utility — tier
     // word only (Fast / Everyday / Best), no product/model name, NO colour
@@ -192,8 +195,8 @@ struct ChatDetailView: View {
             refreshModelPill()
             if let prefill, vm.draft.isEmpty, !vm.isStreaming {
                 vm.draft = prefill
-            } else if let id = vm.conversationID, vm.draft.isEmpty, !vm.isStreaming {
-                vm.draft = UserDefaults.standard.string(forKey: "draft_\(id)") ?? ""
+            } else {
+                restoreDraft()
             }
             // Auto-send (Phase 2 routing contract): a .chatAutoSend route
             // arrives with the prompt already in the composer — send it once
@@ -209,9 +212,21 @@ struct ChatDetailView: View {
             }
         }
         .sheet(isPresented: $showingAttachments) {
-            AttachmentSheetView { option in
-                showToast(attachmentMessage(for: option))
-            }
+            AttachmentSheetView(
+                remainingSlots: attachments.remainingSlots,
+                onImageData: { data, mime, source in
+                    if source == .camera {
+                        attachments.addCameraCapture(data)
+                    } else {
+                        attachments.addImageData(data, mimeType: mime, source: source)
+                    }
+                },
+                onFileURL: { url in
+                    attachments.addFileURL(url)
+                },
+                onUnavailable: { option in
+                    showToast(attachmentMessage(for: option))
+                })
         }
         .sheet(isPresented: $showingModelPicker) {
             modelPickerSheet
@@ -440,11 +455,12 @@ struct ChatDetailView: View {
 
     /// One composer zone replaces the old three-row stack (attachRow above
     /// the bar + a separate streamingBar above the divider): a generating
-    /// line and the attach toast live here, then a single input row —
+    /// line and the attach toast live here, then (PHASE 5, additive) the
+    /// attachment chips row, then a single input row —
     /// [+] [expanding field with the send/stop slot] [mic]. During a stream
     /// the send slot becomes Stop (real vm.stop()) and the field stays live:
-    /// the draft remains editable, vm.send() itself gates on !isStreaming,
-    /// so nothing sends and nothing stops by accident.
+    /// the draft remains editable, vm.send(attachments:) itself gates on
+    /// !isStreaming, so nothing sends and nothing stops by accident.
     private var composerZone: some View {
         VStack(spacing: Aero.Spacing.s) {
             if let message = toast {
@@ -476,6 +492,28 @@ struct ChatDetailView: View {
                 }
                 .accessibilityElement(children: .combine)
             }
+            if !attachments.drafts.isEmpty {
+                // PHASE 5: chips row ABOVE the field, inside the existing
+                // zone — additive only, the composer architecture is unchanged.
+                AttachmentChipRow(
+                    drafts: attachments.drafts,
+                    onRetry: { attachments.retry(id: $0) },
+                    onRemove: { attachments.remove(id: $0) })
+            }
+            if let reason = attachments.sendBlockReason {
+                // The visible send-block reason — honest, per spec §5.
+                HStack(spacing: Aero.Spacing.xs) {
+                    Image(systemName: "info.circle")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Aero.textMuted)
+                    Text(reason)
+                        .font(Aero.label())
+                        .foregroundStyle(Aero.textMuted)
+                        .lineLimit(1)
+                    Spacer()
+                }
+                .accessibilityElement(children: .combine)
+            }
             HStack(spacing: Aero.Spacing.s) {
                 Button {
                     showingAttachments = true
@@ -488,7 +526,10 @@ struct ChatDetailView: View {
                         .overlay(Circle().stroke(Aero.outline, lineWidth: 1))
                 }
                 .buttonStyle(KineticPressStyle())
-                .accessibilityLabel("Add attachment")
+                .disabled(attachments.remainingSlots <= 0)
+                .accessibilityLabel(attachments.remainingSlots <= 0
+                    ? "Attachments full — six per message"
+                    : "Add attachment")
 
                 AeroInputBar(
                     text: $vm.draft,
@@ -498,7 +539,8 @@ struct ChatDetailView: View {
                     },
                     focus: $composerFocused,
                     busy: vm.isStreaming,
-                    onStop: { vm.stop() })
+                    onStop: { vm.stop() },
+                    allowEmptyText: attachments.hasDrafts && attachments.canSend)
 
                 Button {
                     router.path.append(.voice)
@@ -628,15 +670,13 @@ struct ChatDetailView: View {
         .presentationDetents([.medium, .large])
     }
 
+    /// The two tiles without a backend consumer stay honestly unavailable —
+    /// muted in the sheet, and the toast says exactly that (no fakes).
     private func attachmentMessage(for option: String) -> String {
         switch option {
-        case "Camera": return "Camera capture arrives with device builds"
-        case "Gallery": return "Gallery import arrives with device builds"
-        case "Files": return "File import arrives with the files build"
-        case "Document": return "Document upload arrives with the files build"
         case "Code": return "Code attachments arrive with the repo build"
         case "Prompt template": return "Prompt templates arrive with the library build"
-        default: return "Attachment support lands with the next build"
+        default: return "Not available yet"
         }
     }
 
@@ -651,15 +691,39 @@ struct ChatDetailView: View {
     }
 
     /// Park the unsent draft with the conversation — it comes back when the
-    /// thread reopens. Blank text just clears the slot. Shared by onDisappear
+    /// thread reopens. PHASE 5: the draft is a JSON envelope {text,
+    /// attachments} where ready-or-failed attachment drafts ride along (their
+    /// staged copies are on disk); a legacy plain-string value restores as
+    /// text-only. Blank everything clears the slot. Shared by onDisappear
     /// and the scenePhase background flush so both write identically.
     private func persistDraft() {
-        if let id = vm.conversationID {
-            if vm.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                UserDefaults.standard.removeObject(forKey: "draft_\(id)")
-            } else {
-                UserDefaults.standard.set(vm.draft, forKey: "draft_\(id)")
-            }
+        guard let id = vm.conversationID else { return }
+        let text = vm.draft
+        let persistable = attachments.drafts.filter { $0.phase == .ready || $0.phase == .failed }
+        if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && persistable.isEmpty {
+            UserDefaults.standard.removeObject(forKey: "draft_\(id)")
+            return
+        }
+        let raw = DraftEnvelope.encode(text: text, drafts: persistable) ?? text
+        UserDefaults.standard.set(raw, forKey: "draft_\(id)")
+    }
+
+    /// Restore path: envelope JSON rehydrates text AND attachment drafts
+    /// (AttachmentStore verifies each staged copy still exists — missing
+    /// files are dropped, never faked). Legacy plain strings restore as
+    /// text-only. No-ops once any live state exists, so re-appear from a
+    /// pushed screen never clobbers the composer.
+    private func restoreDraft() {
+        guard let id = vm.conversationID,
+              vm.draft.isEmpty,
+              !attachments.hasDrafts,
+              !vm.isStreaming else { return }
+        guard let raw = UserDefaults.standard.string(forKey: "draft_\(id)") else { return }
+        if let envelope = DraftEnvelope.decode(raw) {
+            vm.draft = envelope.text
+            AttachmentStore.shared.restoreDrafts(envelope.attachments)
+        } else {
+            vm.draft = raw
         }
     }
 
@@ -681,13 +745,40 @@ struct ChatDetailView: View {
     }
 
     /// Sends and, when the composer actually empties, drops the parked draft.
+    /// PHASE 5: ready drafts travel as their uploaded server ids; failed or
+    /// still-uploading drafts block with the visible reason. A successful
+    /// attachments turn clears the composer chips (staged copies stay for
+    /// transcript thumbnails).
     private func sendAndClearDraft() {
+        if let reason = attachments.sendBlockReason {
+            showToast(reason)
+            return
+        }
         // Committed send — the Taptic tick the system keyboard plays on keys.
         GSHaptics.tap()
         let pendingID = vm.conversationID
-        vm.send()
+        let sentAttachments = attachments.drafts.compactMap { draft -> Attachment? in
+            guard let serverID = draft.serverID else { return nil }
+            return Attachment(
+                id: serverID,
+                kind: draft.kind.rawValue,
+                displayName: draft.displayName,
+                mimeType: draft.mimeType,
+                byteSize: draft.byteSize,
+                createdAt: ConversationStore.now(),
+                url: draft.remoteURL ?? "/api/v1/files/\(serverID)")
+        }
+        vm.send(attachments: sentAttachments)
+        if !sentAttachments.isEmpty, vm.draft.isEmpty {
+            // The send went through (send() clears the draft only then).
+            attachments.clearSent()
+        }
         if vm.draft.isEmpty, let pendingID {
-            UserDefaults.standard.removeObject(forKey: "draft_\(pendingID)")
+            if attachments.hasDrafts {
+                persistDraft() // drafts remain parked with the conversation
+            } else {
+                UserDefaults.standard.removeObject(forKey: "draft_\(pendingID)")
+            }
         }
     }
 
@@ -1052,6 +1143,11 @@ private struct MessageBubble: View, Equatable {
 
     private var userBubble: some View {
         VStack(alignment: .trailing, spacing: 4) {
+            // PHASE 5: attachment chips render ABOVE/with the text — the
+            // message anatomy is otherwise unchanged (additive only).
+            if let sentAttachments = message.attachments, !sentAttachments.isEmpty {
+                MessageAttachmentChips(attachments: sentAttachments)
+            }
             HStack(alignment: .bottom, spacing: 0) {
                 Spacer(minLength: 56)
                 Text(message.content)

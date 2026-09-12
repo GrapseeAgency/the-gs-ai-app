@@ -1,6 +1,7 @@
 package com.grapsee.gsai.data.chat
 
 import android.os.SystemClock
+import com.grapsee.gsai.data.attachment.AttachmentDraft
 import com.grapsee.gsai.data.repository.ChatRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -78,6 +79,11 @@ class ChatStreamController(private val chat: ChatRepository) {
      * the user turn happens inside [ChatRepository.send] BEFORE the network
      * stream opens, so a rotation mid-stream reloads a transcript containing it.
      *
+     * PHASE 5 (additive only): [attachments] forwards the composer's ready
+     * attachment drafts to the repository — the ids travel on the send request
+     * and the records serialize into the persisted user turn. The streaming
+     * engine itself is untouched.
+     *
      * Only one stream at a time: if another is somehow still active it is
      * cancelled and finalized exactly like a navigation-away.
      */
@@ -85,7 +91,8 @@ class ChatStreamController(private val chat: ChatRepository) {
         conversationId: String?,
         prompt: String,
         modelId: String?,
-        assistantMessageId: String
+        assistantMessageId: String,
+        attachments: List<AttachmentDraft> = emptyList()
     ) {
         if (isStreaming) cancelAndFinalize()
         val token = assistantMessageId
@@ -103,6 +110,7 @@ class ChatStreamController(private val chat: ChatRepository) {
                     conversationId = conversationId,
                     content = prompt,
                     modelId = modelId,
+                    attachments = attachments,
                     onConversationResolved = { id ->
                         publishIfMine(token) { it.copy(conversationId = id) }
                     },

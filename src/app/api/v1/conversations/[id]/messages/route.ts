@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { messageToJson } from '@/lib/serializers'
 import { SYSTEM_PROMPT, streamChat, completeChat } from '@/lib/ai'
 import { clientKey, rateLimit } from '@/lib/rate-limit'
+import { MAX_ATTACHMENTS_PER_MESSAGE } from '@/lib/attachments'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,6 +23,7 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
   const messages = await db.message.findMany({
     where: { conversationId: id },
     orderBy: { createdAt: 'asc' },
+    include: { attachments: { orderBy: { createdAt: 'asc' } } },
   })
   return NextResponse.json({ items: messages.map(messageToJson) })
 }
@@ -39,9 +41,9 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     )
   }
 
-  let body: { content?: unknown; stream?: unknown; modelId?: unknown }
+  let body: { content?: unknown; stream?: unknown; modelId?: unknown; attachments?: unknown }
   try {
-    body = (await req.json()) as { content?: unknown; stream?: unknown; modelId?: unknown }
+    body = (await req.json()) as { content?: unknown; stream?: unknown; modelId?: unknown; attachments?: unknown }
   } catch {
     return NextResponse.json(
       { code: 'bad_request', message: 'Request body must be valid JSON' },
@@ -49,8 +51,27 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     )
   }
 
+  // PHASE 5: optional attachment ids (uploaded via POST /api/v1/uploads first).
+  const rawAttachments = body?.attachments
+  const attachmentIds = Array.isArray(rawAttachments)
+    ? rawAttachments.filter((v): v is string => typeof v === 'string' && v.trim().length > 0)
+    : []
+  if (Array.isArray(rawAttachments) && attachmentIds.length !== rawAttachments.length) {
+    return NextResponse.json(
+      { code: 'bad_request', message: 'attachments must be an array of attachment ids' },
+      { status: 400 }
+    )
+  }
+  if (attachmentIds.length > MAX_ATTACHMENTS_PER_MESSAGE) {
+    return NextResponse.json(
+      { code: 'bad_request', message: `At most ${MAX_ATTACHMENTS_PER_MESSAGE} attachments per message` },
+      { status: 400 }
+    )
+  }
+
   const content = typeof body?.content === 'string' ? body.content : ''
-  if (content.trim().length === 0) {
+  const attachmentsProvided = attachmentIds.length > 0
+  if (content.trim().length === 0 && !attachmentsProvided) {
     return NextResponse.json(
       { code: 'bad_request', message: 'content must be a non-empty string' },
       { status: 400 }
@@ -61,6 +82,28 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       { code: 'bad_request', message: `content must not exceed ${MAX_CONTENT_LENGTH} characters` },
       { status: 400 }
     )
+  }
+
+  // Validate every attachment up-front: must exist, belong to this
+  // conversation (or be unbound), and not already be attached to a message.
+  let claimedAttachments: Awaited<ReturnType<typeof db.attachment.findMany>> = []
+  if (attachmentsProvided) {
+    claimedAttachments = await db.attachment.findMany({ where: { id: { in: attachmentIds } } })
+    if (claimedAttachments.length !== attachmentIds.length) {
+      return NextResponse.json(
+        { code: 'invalid_attachments', message: 'One or more attachments do not exist' },
+        { status: 400 }
+      )
+    }
+    const foreign = claimedAttachments.find(
+      (a) => (a.conversationId !== null && a.conversationId !== id) || a.messageId !== null
+    )
+    if (foreign) {
+      return NextResponse.json(
+        { code: 'invalid_attachments', message: 'One or more attachments are already in use' },
+        { status: 400 }
+      )
+    }
   }
 
   const conversation = await db.conversation.findUnique({
@@ -82,6 +125,12 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
   const userMessage = await db.message.create({
     data: { conversationId: id, role: 'user', content },
   })
+  if (attachmentsProvided) {
+    await db.attachment.updateMany({
+      where: { id: { in: attachmentIds } },
+      data: { messageId: userMessage.id, conversationId: id },
+    })
+  }
   if (shouldAutoTitle || requestedModelId) {
     await db.conversation.update({
       where: { id },
@@ -109,7 +158,18 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
   const modelMessages = [
     { role: 'system', content: systemPrompt },
     ...history.map((m) => ({ role: m.role.toLowerCase(), content: m.content })),
-    { role: 'user', content },
+    // HONEST MULTIMODAL CONTRACT: attachment bytes are never fed to the model.
+    // Until a real vision/document pipeline exists (Phase 5 deliverable O), the
+    // model is told — truthfully — that files were sent but are not readable.
+    attachmentsProvided
+      ? {
+          role: 'user',
+          content:
+            `${content}${content.length > 0 ? '\n\n' : ''}[The user attached ${claimedAttachments
+              .map((a) => a.displayName)
+              .join(', ')}. Attachment contents are not readable by the assistant yet.]`,
+        }
+      : { role: 'user', content },
   ]
 
   // Catalogue telemetry — count a use when this is the first message.

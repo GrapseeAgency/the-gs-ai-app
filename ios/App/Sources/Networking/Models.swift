@@ -43,6 +43,53 @@ struct Conversation: Codable, Identifiable, Equatable, Hashable {
     }
 }
 
+// MARK: - Attachment (PHASE 5 — docs/ATTACHMENTS.md §1 wire shape)
+
+/// Server-side attachment record, exactly the JSON the uploads endpoint
+/// returns: {id, kind, displayName, mimeType, byteSize, createdAt, url}.
+/// `url` is the RELATIVE "/api/v1/files/<id>" — resolve against the configured
+/// base URL, never render it as an absolute remote address. Tolerant decoding
+/// follows the house pattern: a malformed field degrades to a default instead
+/// of failing the whole message decode.
+struct Attachment: Codable, Identifiable, Equatable, Hashable {
+    let id: String
+    var kind: String        // "image" | "pdf" | "document"
+    var displayName: String
+    var mimeType: String
+    var byteSize: Int
+    var createdAt: String
+    var url: String
+
+    init(
+        id: String,
+        kind: String,
+        displayName: String,
+        mimeType: String,
+        byteSize: Int,
+        createdAt: String,
+        url: String
+    ) {
+        self.id = id
+        self.kind = kind
+        self.displayName = displayName
+        self.mimeType = mimeType
+        self.byteSize = byteSize
+        self.createdAt = createdAt
+        self.url = url
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(String.self, forKey: .id) ?? ""
+        kind = try container.decodeIfPresent(String.self, forKey: .kind) ?? "document"
+        displayName = try container.decodeIfPresent(String.self, forKey: .displayName) ?? "attachment"
+        mimeType = try container.decodeIfPresent(String.self, forKey: .mimeType) ?? "application/octet-stream"
+        byteSize = try container.decodeIfPresent(Int.self, forKey: .byteSize) ?? 0
+        createdAt = try container.decodeIfPresent(String.self, forKey: .createdAt) ?? ""
+        url = try container.decodeIfPresent(String.self, forKey: .url) ?? ""
+    }
+}
+
 // MARK: - Message (`#/components/schemas/Message`)
 
 struct Message: Codable, Identifiable, Equatable, Hashable {
@@ -51,13 +98,24 @@ struct Message: Codable, Identifiable, Equatable, Hashable {
     var role: String        // "user" | "assistant" | "system" | "tool"
     var content: String
     var createdAt: String
+    /// PHASE 5: up to 6 attachments on user turns; assistant messages carry
+    /// none today. Absent on the wire (older servers) decodes to nil.
+    var attachments: [Attachment]?
 
-    init(id: String, conversationId: String, role: String, content: String, createdAt: String) {
+    init(
+        id: String,
+        conversationId: String,
+        role: String,
+        content: String,
+        createdAt: String,
+        attachments: [Attachment]? = nil
+    ) {
         self.id = id
         self.conversationId = conversationId
         self.role = role
         self.content = content
         self.createdAt = createdAt
+        self.attachments = attachments
     }
 
     init(from decoder: Decoder) throws {
@@ -67,6 +125,7 @@ struct Message: Codable, Identifiable, Equatable, Hashable {
         role = try container.decodeIfPresent(String.self, forKey: .role) ?? "assistant"
         content = try container.decodeIfPresent(String.self, forKey: .content) ?? ""
         createdAt = try container.decodeIfPresent(String.self, forKey: .createdAt) ?? ""
+        attachments = try container.decodeIfPresent([Attachment].self, forKey: .attachments)
     }
 }
 
@@ -77,11 +136,17 @@ struct SendMessageRequest: Codable, Equatable {
     var content: String
     var stream: Bool
     var modelId: String?
+    /// PHASE 5: uploaded attachment ids (max 6). Synthesized encoding uses
+    /// encodeIfPresent, so nil keeps text-only sends byte-compatible with the
+    /// pre-attachments wire shape. `content` may be empty only when this
+    /// array is non-empty (server rule).
+    var attachments: [String]?
 
-    init(content: String, stream: Bool = false, modelId: String? = nil) {
+    init(content: String, stream: Bool = false, modelId: String? = nil, attachments: [String]? = nil) {
         self.content = content
         self.stream = stream
         self.modelId = modelId
+        self.attachments = attachments
     }
 
     init(from decoder: Decoder) throws {
@@ -89,6 +154,7 @@ struct SendMessageRequest: Codable, Equatable {
         content = try container.decodeIfPresent(String.self, forKey: .content) ?? ""
         stream = try container.decodeIfPresent(Bool.self, forKey: .stream) ?? false
         modelId = try container.decodeIfPresent(String.self, forKey: .modelId)
+        attachments = try container.decodeIfPresent([String].self, forKey: .attachments)
     }
 }
 

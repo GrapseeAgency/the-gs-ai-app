@@ -46,6 +46,10 @@ targets:
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
         NSSpeechRecognitionUsageDescription: GS turns your voice into text for your prompts when you use voice mode.
         NSMicrophoneUsageDescription: GS uses the microphone when you talk in voice mode.
+        # PHASE 5 (attachments): camera capture handoff for in-the-moment photo
+        # attachments. PhotosPicker and fileImporter need NO permission keys —
+        # do not add others.
+        NSCameraUsageDescription: GS uses the camera when you attach a photo you take in the moment.
         UIApplicationShortcutItems:
           - UIApplicationShortcutItemType: com.grapsee.gsai.quick.newChat
             UIApplicationShortcutItemTitle: New chat

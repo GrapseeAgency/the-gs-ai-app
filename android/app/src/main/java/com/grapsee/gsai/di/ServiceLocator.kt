@@ -1,6 +1,7 @@
 package com.grapsee.gsai.di
 
 import android.content.Context
+import com.grapsee.gsai.data.attachment.AttachmentStore
 import com.grapsee.gsai.data.chat.ChatStreamController
 import com.grapsee.gsai.data.local.AppDatabase
 import com.grapsee.gsai.data.remote.ApiClient
@@ -23,6 +24,13 @@ object ServiceLocator {
     lateinit var db: AppDatabase
     lateinit var api: ApiClient
     lateinit var chat: ChatRepository
+
+    /**
+     * PHASE 5: app-scoped attachment store — staging, real multipart upload,
+     * retry and draft persistence for the composer. One instance per process,
+     * so in-flight uploads and the live draft list survive rotation.
+     */
+    lateinit var attachments: AttachmentStore
 
     /**
      * App-scoped chat-stream owner (Task 86-d): the streaming Job lives here,
@@ -60,5 +68,6 @@ object ServiceLocator {
         api = ApiClient(http)
         chat = ChatRepository(api, db)
         chatStream = ChatStreamController(chat)
+        attachments = AttachmentStore(http, context.applicationContext)
     }
 }

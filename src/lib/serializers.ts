@@ -10,7 +10,10 @@
  * Dates are serialized as ISO-8601 date-time strings.
  */
 
-import type { Assistant, Conversation, Message } from '@prisma/client'
+import type { Assistant, Attachment, Conversation, Message } from '@prisma/client'
+import { attachmentToJson, type AttachmentJson } from '@/lib/attachments'
+
+export type { AttachmentJson }
 
 export type ConversationJson = {
   id: string
@@ -29,6 +32,7 @@ export type MessageJson = {
   role: string
   content: string
   createdAt: string
+  attachments?: AttachmentJson[]
 }
 
 export type AssistantJson = {
@@ -85,12 +89,15 @@ export function conversationToJson(c: Conversation & { assistant?: Assistant | n
   }
 }
 
-export function messageToJson(m: Message): MessageJson {
+export function messageToJson(m: Message & { attachments?: Attachment[] }): MessageJson {
   return {
     id: m.id,
     conversationId: m.conversationId,
     role: m.role,
     content: m.content,
     createdAt: m.createdAt.toISOString(),
+    ...(m.attachments && m.attachments.length > 0
+      ? { attachments: m.attachments.map(attachmentToJson) }
+      : {}),
   }
 }

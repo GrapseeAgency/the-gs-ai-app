@@ -180,6 +180,12 @@ struct AeroInputBar: View {
     var busy: Bool = false
     var onStop: (() -> Void)? = nil
 
+    /// PHASE 5 (attachments-only sends): when true, the send slot stays
+    /// enabled on an EMPTY draft — every attachment is `ready` and the server
+    /// accepts empty content exactly when attachments ride along. The caller
+    /// computes this from AttachmentStore; text sends keep the old gate.
+    var allowEmptyText: Bool = false
+
     /// Returns are read at submit time: Enter-to-send fires the send closure
     /// only when the setting is on; when it is off the vertical-axis field's
     /// default applies — Return inserts a newline and nothing sends.
@@ -211,10 +217,10 @@ struct AeroInputBar: View {
                 Button(action: action) {
                     Image(systemName: "arrow.up.circle.fill")
                         .font(.system(size: 24))
-                        .foregroundStyle(text.isEmpty ? Aero.textMuted : Aero.accent)
+                        .foregroundStyle(text.isEmpty && !allowEmptyText ? Aero.textMuted : Aero.accent)
                 }
                 .buttonStyle(KineticPressStyle())
-                .disabled(text.isEmpty)
+                .disabled(text.isEmpty && !allowEmptyText)
                 .accessibilityLabel(searchField ? "Search" : "Send")
             }
         }
@@ -224,11 +230,12 @@ struct AeroInputBar: View {
         .overlay(Capsule().stroke(Aero.outline, lineWidth: 1))
     }
 
-    /// The send gate is the send button's gate, verbatim: non-empty text,
-    /// Enter-to-send on, and one send per keypress (in-flight guarding stays
-    /// with the caller's send closure, exactly as before).
+    /// The send gate is the send button's gate, verbatim: non-empty text (or
+    /// ready attachments via allowEmptyText), Enter-to-send on, and one send
+    /// per keypress (in-flight guarding stays with the caller's send closure,
+    /// exactly as before).
     private func submitFromKeyboard() {
-        guard enterToSend, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        guard enterToSend, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || allowEmptyText else { return }
         let now = Date()
         guard now.timeIntervalSince(lastSubmitAt) > 0.15 else { return }
         lastSubmitAt = now

@@ -6,7 +6,8 @@ import AVFoundation
 /// Full-screen voice session — kinetic aurora waveform, live transcript,
 /// call controls. Now real: the on-device SpeechRecognizer (via VoiceDictation)
 /// drives the transcript, SpeechPlayer reads a finished result back, and the
-/// result hands off to a brand-new chat through `.chatAutoSend`. Every status
+/// result hands off to a brand-new chat through `.chatPrefill` (PHASE 5 §10:
+/// the draft is seeded WITHOUT auto-send — Android parity). Every status
 /// line maps to what the engine is actually doing — no decorative listening.
 struct VoiceView: View {
 
@@ -186,11 +187,12 @@ struct VoiceView: View {
                         AeroChip(text: "Send to chat", selected: true) {
                             // The engine has finished with the mic by now;
                             // the chat opens on top, voice mode stays beneath.
-                            // Phase 2: the transcript AUTO-SENDS as the first
-                            // message of a new chat (.chatAutoSend) — voice is
-                            // a conversation, not a draft delivery.
+                            // PHASE 5 handoff harmonization (§10): the
+                            // transcript seeds the composer draft WITHOUT
+                            // auto-send — Android parity. The reader stays
+                            // in control of the send.
                             GSHaptics.success()
-                            router.path.append(.chatAutoSend(dictation.lastResult))
+                            router.path.append(.chatPrefill(dictation.lastResult))
                         }
                         AeroChip(text: "Copy", selected: false) {
                             UIPasteboard.general.string = dictation.lastResult

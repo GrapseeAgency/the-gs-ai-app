@@ -93,17 +93,29 @@ class ApiClient(
      * Wire format: `data: {"event":"delta","data":"…"}` for each chunk,
      * `data: {"event":"done","data":"<json Message>"}` as the terminal event.
      * An `error` event (or a non-2xx status) throws; the caller decides how to surface it.
+     *
+     * PHASE 5: [attachments] carries the server attachment ids (uploaded via
+     * /api/v1/uploads first). explicitNulls=false keeps null OFF the wire, so a
+     * plain-text send serializes byte-identically to the pre-attachments contract.
      */
     suspend fun sendMessageStream(
         conversationId: String,
         content: String,
         modelId: String? = null,
+        attachments: List<String>? = null,
         onDelta: (String) -> Unit,
         onDone: (MessageDto?) -> Unit
     ) {
         val response = client.post("$root/conversations/$conversationId/messages") {
             contentType(ContentType.Application.Json)
-            setBody(SendMessageRequest(content = content, stream = true, modelId = modelId))
+            setBody(
+                SendMessageRequest(
+                    content = content,
+                    stream = true,
+                    modelId = modelId,
+                    attachments = attachments?.ifEmpty { null }
+                )
+            )
         }
         val channel = response.bodyAsChannel()
         while (!channel.isClosedForRead) {

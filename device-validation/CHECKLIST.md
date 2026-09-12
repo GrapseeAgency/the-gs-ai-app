@@ -225,3 +225,37 @@ Console/logcat excerpt:     (if any)
 ```
 
 Every accepted failure triggers a code-path-level investigation against the path named in the item, a root-cause fix on this same unreleased tree, and a re-run of the affected steps — no symptom masks, no version bumps, no release until the device results support it.
+
+---
+
+# PHASE 5 — INPUT & MULTIMODAL FOUNDATION (device test matrix)
+
+Backend prerequisite: run the repo's Next.js API (`bun run dev` on :3000) — the
+apps point at it (`10.0.2.2:3000` emulator / `localhost:3000` simulator) and
+uploads land in `uploads/attachments/`.
+
+| # | Case | Android | iOS |
+|---|---|---|---|
+| 1 | Text-only send | unchanged path, byte-identical request body | unchanged path |
+| 2 | Single image (Gallery) | chip → spinner → thumb → send → chip in bubble; file in `filesDir/attachments/` | chip → spinner → thumb → send → chip in bubble; file in Application Support |
+| 3 | Multiple images (Gallery) | multi-select; >remaining slots → honest snackbar; extras not added | same |
+| 4 | Small PDF (Files) | monochrome PDF icon chip + name + size | same |
+| 5 | Large PDF (>10 MB) | chip fails "Too large" BEFORE upload; Retry stays failed | same |
+| 6 | Unsupported file (e.g. .apk/.mp3) | picker filters / honest "Unsupported type" | same |
+| 7 | Cancelled picker | no chip, no state change | same |
+| 8 | Camera capture | TakePicture via FileProvider; cancel → silent; no camera app → honest snackbar | UIImagePickerController; denied → honest state |
+| 9 | Denied photo permission | NOT REQUIRED — system Photo Picker needs no permission | NOT REQUIRED — PHPicker needs no permission |
+| 10 | Upload failure (airplane mid-upload) | chip → "Network error" + Retry; retry re-runs upload only (no re-stage) | same |
+| 11 | Processing failure | N/A — no processing state exists (honest absence) | N/A |
+| 12 | Retry after failure | only failed step re-runs | same |
+| 13 | Remove attachment | staged copy deleted when never uploaded; uploaded record untouched | same |
+| 14 | Rotate / background / foreground | drafts + chips survive (process-scoped store); ON_STOP snapshot | drafts + chips survive; scenePhase background snapshot |
+| 15 | Send after attachment | blocked until every chip ready; attachments-only send works (empty text) | same |
+| 16 | Draft persistence with attachments | ready chips restore with draft text; missing staged file dropped honestly | same |
+| 17 | History reload | chips render from Room JSON (staged thumb or monochrome icon) | chips render from SQLite JSON |
+| 18 | Voice handoff | mic → VoiceScreen → "Send to chat" seeds composer (no auto-send) | mic → VoiceView → "Send to chat" seeds composer (no auto-send) |
+| 19 | Attach sheet honesty | Gallery/Camera/Files/Voice real; Code snippet + Prompt template muted "Not available yet" | same |
+| 20 | Orb discipline | no orb during upload (chip states carry it); streaming/voice mappings unchanged | same |
+
+Monochrome check: all chrome (chips, sheet, icons, spinners) theme-resolved;
+only real user thumbnails may show their own colors.

@@ -358,9 +358,13 @@ fun GsInputBar(
     // original single bar exactly — every pre-existing call site (search,
     // library, vision, research, explore) is untouched by these params.
     minLines: Int = 1,
-    maxLines: Int = 4
+    maxLines: Int = 4,
+    // PHASE 5: the chat composer can send ready attachments with an empty
+    // field — every pre-existing call site keeps the default (text required).
+    allowEmptySend: Boolean = false
 ) {
     val keyboard = LocalSoftwareKeyboardController.current
+    val canCommit = value.isNotBlank() || allowEmptySend
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
@@ -369,7 +373,7 @@ fun GsInputBar(
         keyboardOptions = KeyboardOptions(imeAction = imeAction),
         keyboardActions = when (imeAction) {
             ImeAction.Send -> KeyboardActions(onSend = {
-                if (value.isNotBlank()) onSend(value.trim())
+                if (canCommit) onSend(value.trim())
             })
             // IME parity: a Search action commits the query — results are
             // already live, so commit means fire onSend and dismiss the
@@ -390,13 +394,13 @@ fun GsInputBar(
         ),
         trailingIcon = trailingIcon ?: {
             IconButton(
-                onClick = { if (value.isNotBlank()) onSend(value.trim()) },
-                enabled = enabled && value.isNotBlank()
+                onClick = { if (canCommit) onSend(value.trim()) },
+                enabled = enabled && canCommit
             ) {
                 Icon(
                     imageVector = Icons.Outlined.Send,
                     contentDescription = "Send",
-                    tint = if (value.isNotBlank()) MaterialTheme.colorScheme.primary
+                    tint = if (canCommit) MaterialTheme.colorScheme.primary
                     else hcColor(MaterialTheme.colorScheme.onSurfaceVariant, MaterialTheme.colorScheme.onSurface)
                 )
             }

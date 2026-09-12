@@ -34,7 +34,34 @@ data class MessageDto(
     val conversationId: String,
     val role: String,
     val content: String,
-    val createdAt: String
+    val createdAt: String,
+    /** PHASE 5: attachment records on the message (max 6). Tolerant default keeps
+     *  every pre-attachments payload — history pages, SSE done events — decoding
+     *  unchanged (ignoreUnknownKeys + default for the absent key). */
+    val attachments: List<AttachmentDto> = emptyList()
+)
+
+/**
+ * PHASE 5 wire shape of one uploaded attachment — exact server JSON keys
+ * (docs/ATTACHMENTS.md §1): {id, kind, displayName, mimeType, byteSize,
+ * createdAt, url}. `url` is the server-relative "/api/v1/files/<id>";
+ * resolve against the configured base URL, never render it as an absolute link.
+ */
+@Serializable
+data class AttachmentDto(
+    val id: String,
+    val kind: String,
+    val displayName: String,
+    val mimeType: String,
+    val byteSize: Long = 0,
+    val createdAt: String = "",
+    val url: String = ""
+)
+
+/** POST /api/v1/uploads response envelope: `{ "attachment": {…} }`. */
+@Serializable
+data class UploadResponseDto(
+    val attachment: AttachmentDto
 )
 
 @Serializable
@@ -47,7 +74,11 @@ data class CreateConversationRequest(
 data class SendMessageRequest(
     val content: String,
     val stream: Boolean = true,
-    val modelId: String? = null
+    val modelId: String? = null,
+    /** PHASE 5: server attachment ids uploaded via /api/v1/uploads first.
+     *  explicitNulls=false keeps null OFF the wire — plain-text sends stay
+     *  byte-identical to the pre-attachments contract. */
+    val attachments: List<String>? = null
 )
 
 /**

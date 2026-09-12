@@ -1,6 +1,7 @@
 package com.grapsee.gsai.data.local
 
 import android.content.Context
+import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
@@ -45,7 +46,12 @@ data class MessageEntity(
     val conversationId: String,
     val role: String,
     val content: String,
-    val createdAt: String
+    val createdAt: String,
+    /** PHASE 5: JSON array of AttachmentDto (max 6). Stored as a serialized
+     *  column — attachment records are opaque wire data to Room. The default
+     *  matches the migration so pre-attachments rows decode to "none". */
+    @ColumnInfo(defaultValue = "[]")
+    val attachments: String = "[]"
 )
 
 /** Library — content saved from the chat surface ("Save to Library"). */
@@ -222,7 +228,7 @@ fun ftsMatchQuery(raw: String): String? {
         ConversationFtsEntity::class,
         MessageFtsEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -280,10 +286,26 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v4 → v5: PHASE 5 message attachments — one JSON column of
+         *  AttachmentDto records. Purely additive: the column is NOT NULL with
+         *  a '[]' default so every message written by earlier builds reads
+         *  back as attachment-free, and no chat history is ever rebuilt. */
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE messages ADD COLUMN attachments TEXT NOT NULL DEFAULT '[]'"
+                )
+            }
+        }
+
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "gsai-chat.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
-                .fallbackToDestructiveMigration()
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                // The full 1→5 migration chain is registered, so this fallback
+                // must be unreachable. Destructive fallback is the one thing a
+                // chat app must never silently do to user history — if a future
+                // schema change ships without its migration, fail loudly here
+                // instead of wiping the user's conversations.
                 .build()
     }
 }

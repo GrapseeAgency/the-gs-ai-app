@@ -53,6 +53,7 @@ model Conversation {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   messages     Message[]
+  attachments  Attachment[]
   assistant    Assistant? @relation(fields: [assistantId], references: [id])
 
   @@index([updatedAt])
@@ -66,8 +67,32 @@ model Message {
   role           String
   content        String
   createdAt      DateTime     @default(now())
+  attachments    Attachment[]
 
   @@index([conversationId])
+}
+
+// PHASE 5 input & multimodal foundation — real attachment records.
+// `storagePath` is server-private (relative path under uploads/); the public
+// handle is `GET /api/v1/files/:id`. Kind is extensible: image | pdf | document
+// shipped; audio | video | screenshot reserved for when a real processor exists.
+model Attachment {
+  id             String        @id @default(cuid())
+  conversationId String?
+  conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  messageId      String?
+  message        Message?      @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  kind           String
+  displayName    String
+  mimeType       String
+  byteSize       Int
+  storagePath    String
+  width          Int?
+  height         Int?
+  createdAt      DateTime      @default(now())
+
+  @@index([conversationId])
+  @@index([messageId])
 }
 
 model Assistant {

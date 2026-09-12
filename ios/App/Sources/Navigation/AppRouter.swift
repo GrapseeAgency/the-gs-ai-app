@@ -16,9 +16,10 @@ enum AeroRoute: Hashable {
     /// Assistant starters, Voice handoff consumers that expect a draft.
     case chatPrefill(String)
     /// Phase 2 routing contract (Android twin: `chat(null, prompt, autoSend)`):
-    /// opens a NEW chat and immediately sends the prompt on appear — the Home
-    /// composer's send and Voice's "Send to chat". ChatDetailView guards the
-    /// send with a once-flag so re-appear/rotation never re-sends.
+    /// opens a NEW chat and immediately sends the prompt on appear. PHASE 5
+    /// note: Voice's "Send to chat" now uses .chatPrefill (§10 harmonization
+    /// — seed the draft, never auto-send). This case stays in place for the
+    /// routing contract; it currently has no pusher.
     case chatAutoSend(String)
     case assistant(String)
     case assistantCreate

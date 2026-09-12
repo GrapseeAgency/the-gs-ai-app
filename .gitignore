@@ -76,3 +76,6 @@ ios/GSApp.xcodeproj/
 # Never commit toolchain archives (GitHub 100MB limit)
 cmdline-tools.zip
 *.zip
+
+# PHASE 5 attachment storage (runtime user content — never committed)
+/uploads/

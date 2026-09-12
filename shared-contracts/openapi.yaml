@@ -156,6 +156,68 @@ paths:
                   event: { type: string, enum: [delta, done, error] }
                   data: { type: string }
         '404': { $ref: '#/components/responses/NotFound' }
+  /v1/uploads:
+    post:
+      tags: [attachments]
+      summary: Upload one attachment (multipart/form-data)
+      description: >-
+        PHASE 5 input foundation. Stores the bytes and returns a real
+        Attachment record. The id must later be claimed by
+        POST /v1/conversations/{id}/messages (attachments[]). Reception only —
+        no analysis exists at this contract version.
+      operationId: uploadAttachment
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                conversationId: { type: string }
+                displayName: { type: string }
+      responses:
+        '201':
+          description: Stored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttachmentUploadResult'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '413':
+          description: File exceeds the 10 MB limit
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '415':
+          description: MIME type not in the receive allowlist, or contents do not match the declared type
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/files/{id}:
+    get:
+      tags: [attachments]
+      summary: Fetch attachment bytes
+      operationId: getAttachmentFile
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: The stored bytes, served with the recorded MIME type
+        '404': { $ref: '#/components/responses/NotFound' }
+        '410':
+          description: Record exists but stored contents are unavailable
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
   /v1/assistants:
     get:
       tags: [assistants]
@@ -257,6 +319,12 @@ components:
       required: true
       schema: { type: string, format: uuid }
   responses:
+    BadRequest:
+      description: Malformed or invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
     NotFound:
       description: Resource not found
       content:
@@ -345,6 +413,42 @@ components:
           enum: [user, assistant, system, tool]
         content: { type: string }
         createdAt: { type: string, format: date-time }
+        attachments:
+          type: array
+          maxItems: 6
+          items: { $ref: '#/components/schemas/Attachment' }
+          description: >-
+            Present when the message carries attachments. Reception is real;
+            analysis is NOT part of this contract version — attachment contents
+            are never fed to the model (Phase 5 honest-capability rule).
+    Attachment:
+      type: object
+      required: [id, kind, displayName, mimeType, byteSize, createdAt, url]
+      properties:
+        id: { type: string, format: uuid }
+        kind:
+          type: string
+          enum: [image, pdf, document]
+          description: >-
+            Extensible: audio | video | screenshot are reserved for when a real
+            processor exists. Do not emit them today.
+        displayName: { type: string, maxLength: 200 }
+        mimeType:
+          type: string
+          enum: [image/jpeg, image/png, image/webp, image/gif, image/heic, image/heif,
+                 application/pdf, text/plain, text/markdown, text/csv]
+        byteSize:
+          type: integer
+          maximum: 10485760
+        createdAt: { type: string, format: date-time }
+        url:
+          type: string
+          description: Relative fetch path, e.g. /api/v1/files/:id
+    AttachmentUploadResult:
+      type: object
+      required: [attachment]
+      properties:
+        attachment: { $ref: '#/components/schemas/Attachment' }
     MessageList:
       type: object
       required: [items]
@@ -356,9 +460,21 @@ components:
       type: object
       required: [content]
       properties:
-        content: { type: string, minLength: 1, maxLength: 32000 }
+        content:
+          type: string
+          maxLength: 32000
+          description: >-
+            Required non-empty UNLESS attachments is non-empty; a message may
+            consist of attachments alone.
         stream: { type: boolean, default: false }
         modelId: { type: string }
+        attachments:
+          type: array
+          maxItems: 6
+          items: { type: string }
+          description: >-
+            Ids obtained from POST /v1/uploads. Each must exist, belong to this
+            conversation (or be unbound), and be unused by any prior message.
     Assistant:
       type: object
       required: [id, slug, name, starters]

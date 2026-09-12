@@ -18,6 +18,10 @@ struct StoredMessage: Codable, Identifiable, Equatable {
     var role: String
     var content: String
     var createdAt: String
+    /// PHASE 5: server attachment records on user turns (max 6). Optional
+    /// with a synthesized tolerant decode — the legacy JSON document and old
+    /// rows carry no key and decode to nil.
+    var attachments: [Attachment]? = nil
 }
 
 /**
@@ -306,12 +310,14 @@ final class ConversationStore: ObservableObject {
 
     /// Privacy → Clear local data: every conversation, message and library
     /// save leaves the device for good — SQLite rows, in-memory state and the
-    /// UserDefaults-backed library. Assistants and settings stay.
+    /// UserDefaults-backed library. Staged attachment copies go with them.
+    /// Assistants and settings stay.
     func wipeAllContent() {
         sql.deleteAllContent()
         conversations.removeAll()
         messages.removeAll()
         lastMessageByConversation.removeAll()
+        AttachmentStore.shared.purgeAllStagedFiles()
         UserDefaults.standard.removeObject(forKey: Self.savedLibraryKey)
     }
 
