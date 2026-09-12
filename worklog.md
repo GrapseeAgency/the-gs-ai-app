@@ -2958,3 +2958,16 @@ Work Log:
 
 Stage Summary:
 - The release page now serves the real Phase 5 + Phase 6 build: attachments (gallery/camera/files → chips → upload → persistence) AND image understanding (backend decodes real bytes → glm-5v-turbo → streamed answer, follow-ups keep image context). versionCode 62 / 0.61.0, cert unchanged, gates re-verified on this exact tree.
+
+---
+Task ID: RELEASE-PAGE-CLEANUP
+Agent: Z.ai Code (main)
+Task: User directive — release page held 60 releases (v0.2.0…v0.61.0), a recurring "which APK is latest" confusion. Delete everything except the single latest release; standing rule: the release page must always hold exactly ONE release carrying the current APK.
+
+Work Log:
+- Deleted 59 old releases (v0.2.0…v0.59.0) via API — all returned 204. Old git tags left in place (not visible on the Releases page).
+- Verified: releases list = 1 (v0.61.0), /releases/latest → v0.61.0, asset GS-AI-App.apk 13,053,161 B (sha256 f802d348…, versionCode 62/0.61.0) untouched.
+- STANDING RULE recorded: at the end of every work cycle, update this single release's asset to the latest build (delete old asset → upload new → patch body). Never create a new release.
+
+Stage Summary:
+- Release page now shows exactly one release: v0.61.0 — Real attachments + image understanding (vision), serving the current audit build. Permanent link: /releases/latest/download/GS-AI-App.apk
