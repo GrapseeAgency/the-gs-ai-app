@@ -302,7 +302,7 @@ final class AttachmentLogicTests: XCTestCase {
         // Text-only send must stay byte-compatible with the pre-attachments
         // contract: no "attachments" key travels.
         let textOnly = try JSONEncoder().encode(SendMessageRequest(content: "hi", stream: true))
-        let textObject = try JSONSerialization.jsonObject(with: text) as! [String: Any]
+        let textObject = try JSONSerialization.jsonObject(with: textOnly) as! [String: Any]
         XCTAssertNil(textObject["attachments"])
         XCTAssertEqual(textObject["content"] as? String, "hi")
         XCTAssertEqual(textObject["stream"] as? Bool, true)
