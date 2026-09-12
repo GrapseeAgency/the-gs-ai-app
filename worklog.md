@@ -3022,3 +3022,16 @@ Work Log:
 Stage Summary:
 - 0.63.0 (versionCode 64) is LIVE and is the first build whose backend address is reachable from the public internet. All prior builds ≤ 0.62.0 physically cannot connect from phones — release body now documents this.
 - RISK (stated, not hidden): the public origin embeds this chat's id (preview-chat-c945696f-…). If the platform ever rotates preview URLs, the app needs a one-line BASE_URL re-point + rebuild; the in-app updater keeps working regardless because its manifest lives on GitHub raw. Watch for a future "network error" that appears only after a platform rotation — it means re-point, not debug.
+
+---
+Task ID: TRANSPORT-FIX-V2-OPS
+Agent: Z.ai Code (main)
+Task: Post-publish sanity check caught public 502.
+
+Work Log:
+- Cause: the 7-minute Gradle build's memory pressure killed the Next dev server (curl localhost:3000 → dead; gateway 502 = proxy → dead upstream). Code and release artifact unaffected.
+- Restarted `bun run dev` (append mode, log history preserved). Re-verified: local models 200, PUBLIC models 200, PUBLIC 400 KB upload 201 (post-restart, through the exact URL+path the phone uses).
+- Confirmed zero origin-diag lines in fresh traffic — instrumentation fully removed.
+
+Stage Summary:
+- Release asset v0.63.0 (versionCode 64, sha256 7c1d353f…) live and the backend behind it healthy. Transport fix chain COMPLETE.
