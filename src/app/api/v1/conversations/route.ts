@@ -17,6 +17,20 @@ function parseLimit(raw: string | null): number {
 
 // GET /api/v1/conversations?limit=20 — newest first (updatedAt desc)
 export async function GET(req: NextRequest) {
+  // TEMP origin-diag: capture the PUBLIC origin from real browser traffic.
+  console.log(
+    '[origin-diag]',
+    JSON.stringify({
+      url: req.url,
+      host: req.headers.get('host'),
+      origin: req.headers.get('origin'),
+      referer: req.headers.get('referer'),
+      ua: (req.headers.get('user-agent') || '').slice(0, 80),
+      xf: Object.fromEntries(
+        [...req.headers.entries()].filter(([k]) => k.startsWith('x-') || k.startsWith('cf-'))
+      ),
+    })
+  )
   const limit = parseLimit(new URL(req.url).searchParams.get('limit'))
   const conversations = await db.conversation.findMany({
     orderBy: { updatedAt: 'desc' },
