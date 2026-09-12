@@ -2990,3 +2990,19 @@ Work Log:
 Stage Summary:
 - Root cause was NEVER image size or the server: the shipped app pointed at an address that only exists inside the Android emulator, and (post-discovery) the platform edge additionally requires x-session-id on every request. Both fixed on both platforms; uploads verified 201 through the real origin at all sizes/types incl. chunked.
 - The app store origin is derived from this workspace's stable edge host (not the per-session id) — if the platform ever rotates it, the updater manifest + one buildConfig line re-point it.
+
+---
+Task ID: TRANSPORT-FIX-PUBLISH
+Agent: Z.ai Code (main)
+Task: Close out the upload transport fix — verify the v0.62.0 publish end-to-end after the user reported installing version 62 and still seeing the error (expected: 62 predates the fix).
+
+Work Log:
+- Re-confirmed root cause with live probes through the real public origin: without x-session-id the platform edge rejects EVERY request (400 InvalidArgument, session affinity); with it, uploads return 201 for 200 KB / 400 KB / 1 MB JPEG, 400 KB chunked multipart (Ktor CIO's mode), 512 KB PDF, 300 KB text. Server never was the failure layer.
+- Verified the full fix chain from commit 925fab4 was intact: release BASE_URL = real HTTPS edge, gsHttpClient defaultRequest sets x-session-id on every request, SessionStore.stableClientId persisted per install, iOS APIClient + AttachmentStore carry the same header, TEMP-DIAG instrumentation gone (middleware.ts deleted, no conv-diag/health-diag in src/).
+- Forensically verified the shipped artifact: aapt2 → com.grapsee.gsai versionCode 63 / 0.62.0; sha256 c81bb9a8…; classes2.dex contains the fcapp.run origin string; apksigner cert b1ffd75d… unchanged (installs straight over 62).
+- Verified the LIVE release page serves the fixed build: GET /releases/latest/download/GS-AI-App.apk → sha256 c81bb9a8… (exact match), aapt2 → 63/0.62.0. Release 384909935 titled "v0.62.0 — Transport fix (uploads work on device)", tag v0.62.0, asset id 559131295, single-release policy intact.
+- download/GS-AI-App.apk + update-manifest.json (versionCode 63, updater notes) committed in 925fab4 and pushed.
+- Left remote tag v0.62.0 pointing at its original commit (cosmetic provenance only — release body documents the true build commit 925fab4; not worth touching a live release the user is actively installing from).
+
+Stage Summary:
+- v0.62.0 (versionCode 63) is LIVE on the single release page with the upload fix. The user's version-62 install predates the fix — it could not have worked. Install the fresh asset, no uninstall needed (same signature). Uploads proven working through the real edge at all audited sizes/types/encodings.
