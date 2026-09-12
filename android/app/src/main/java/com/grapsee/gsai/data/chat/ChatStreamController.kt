@@ -2,6 +2,7 @@ package com.grapsee.gsai.data.chat
 
 import android.os.SystemClock
 import com.grapsee.gsai.data.attachment.AttachmentDraft
+import com.grapsee.gsai.data.attachment.AttachmentKind
 import com.grapsee.gsai.data.repository.ChatRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -55,13 +56,18 @@ class ChatStreamController(private val chat: ChatRepository) {
      * [conversationId] starts as the screen's active id (null for a brand-new
      * chat), and is updated the moment the repository resolves the real id —
      * the pending→adopted transition happens mid-stream, not at the end.
+     *
+     * PHASE 6: [hasImages] records whether THIS request carried image
+     * attachments — a real fact of the real request, consumed by the honest
+     * orb mapping (image analysis wait → WORKING) and nothing else.
      */
     data class StreamState(
         val conversationId: String?,
         val assistantMessageId: String,
         val streamText: String,
         val phase: Phase,
-        val error: String? = null
+        val error: String? = null,
+        val hasImages: Boolean = false
     )
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -102,7 +108,8 @@ class ChatStreamController(private val chat: ChatRepository) {
             conversationId = conversationId,
             assistantMessageId = token,
             streamText = "",
-            phase = Phase.Streaming
+            phase = Phase.Streaming,
+            hasImages = attachments.any { it.kind == AttachmentKind.Image }
         )
         job = scope.launch {
             try {

@@ -475,6 +475,12 @@ components:
           description: >-
             Ids obtained from POST /v1/uploads. Each must exist, belong to this
             conversation (or be unbound), and be unused by any prior message.
+            PHASE 6: image attachments are genuinely delivered to the
+            vision-capable model (glm-5v-turbo class) — the server validates,
+            decodes and normalizes them (≤1568 px JPEG) before the request.
+            Non-image kinds still carry the honest "contents not readable"
+            note. A text-only follow-up keeps seeing images from the last two
+            image-bearing turns (bounded re-inclusion).
     Assistant:
       type: object
       required: [id, slug, name, starters]

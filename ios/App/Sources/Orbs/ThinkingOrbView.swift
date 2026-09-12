@@ -101,18 +101,30 @@ public struct ThinkingOrbView: View {
 /// REALLY doing; nothing here may fabricate a state the pipeline does not
 /// have. CURRENT MAPPINGS:
 ///
-///   Chat streaming:  waiting for first token → .breathing ("Thinking…"),
-///                    tokens flowing         → .composing ("Composing…"),
-///                    not streaming          → nil (the turn is settled).
+///   Chat streaming:  waiting for first token, request carried images
+///                                         → .working ("Working…") —
+///                    PHASE 6: the vision model genuinely receives and
+///                    analyses the attached image(s) before the first token;
+///                    a real, distinct pipeline phase — mapped, not invented.
+///                    waiting for first token, text-only → .breathing ("Thinking…"),
+///                    tokens flowing                     → .composing ("Composing…"),
+///                    not streaming                      → nil (the turn is settled).
 ///   Voice session:   .listening → .listening, .processing → .working,
 ///                    everything else (idle/result/error/permission) → nil.
 ///
 /// DELIBERATELY UNMAPPED (exist in the catalogue, no real app state yet):
 /// searching / solving / connecting / weaving / shaping. When the product
 /// grows the real behaviour, map it HERE — never at the call site.
-func orbStateForChatStreaming(isStreaming: Bool, liveContentEmpty: Bool) -> OrbState? {
+func orbStateForChatStreaming(
+    isStreaming: Bool,
+    liveContentEmpty: Bool,
+    requestHasImages: Bool = false
+) -> OrbState? {
     guard isStreaming else { return nil }
-    return liveContentEmpty ? .breathing : .composing
+    if liveContentEmpty {
+        return requestHasImages ? .working : .breathing
+    }
+    return .composing
 }
 
 func orbStateForVoiceSession(_ sessionState: VoiceSessionState) -> OrbState? {

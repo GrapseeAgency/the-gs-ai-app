@@ -259,3 +259,22 @@ uploads land in `uploads/attachments/`.
 
 Monochrome check: all chrome (chips, sheet, icons, spinners) theme-resolved;
 only real user thumbnails may show their own colors.
+
+## PHASE 6 — IMAGE UNDERSTANDING (vision is real)
+
+| # | Scenario | Android | iOS |
+|---|----------|---------|-----|
+| 21 | Attach photo + "What is this?" → send | real analysis streams into transcript; orb = Working… pre-token, Composing… on tokens | same |
+| 22 | Image only (no text) → send | server asks "Describe this image." — real description back | same |
+| 23 | Screenshot text ("Read the text in this image") | model reads actual on-screen strings | same |
+| 24 | Follow-up WITHOUT re-upload ("what colour was it?") | model still sees the image (server re-includes last 2 image turns) | same |
+| 25 | Multiple images (2-6) | order-aware answers; ≤6 images per request | same |
+| 26 | Corrupt image (valid magic bytes, broken body) | honest turn error: "appears to be corrupted and could not be opened" + retry path | same |
+| 27 | GIF attachment | transcoded server-side (provider rejects GIF natively) — real answer | same |
+| 28 | HEIC (iOS camera format) | N/A on Android picker (JPEG) | normalized server-side to JPEG |
+| 29 | Oversized (>10 MB) upload | 413 before send (unchanged) | same |
+| 30 | MIME-spoofed upload (JPEG bytes named .png) | 415 magic-byte reject (unchanged); decoder re-checks server-side | same |
+| 31 | Provider outage mid-vision | honest "Image understanding is unavailable right now. Please try again." | same |
+| 32 | Large image + scrolling during stream | transcript stays responsive (30 Hz coalescing, thumbnail chips) | same |
+
+Monochrome check: vision adds no chrome — orb states reuse the Phase 4 catalogue.

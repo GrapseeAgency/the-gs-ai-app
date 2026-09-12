@@ -330,9 +330,15 @@ fun ChatScreen(
     // Phase-4 activity orb state — derived from the REAL stream state only.
     // It changes twice per stream (no tokens yet ↔ tokens flowing), so the
     // ~30 Hz text flushes recompute this but never recompose anything below.
+    // PHASE 6: the request's real hasImages flag drives the honest
+    // image-analysis wait mapping (WORKING before the first token).
     val liveOrbState by remember {
         derivedStateOf {
-            orbStateForChatStream(streamStateRaw.value?.phase, streamStateRaw.value?.streamText)
+            orbStateForChatStream(
+                streamStateRaw.value?.phase,
+                streamStateRaw.value?.streamText,
+                streamStateRaw.value?.hasImages == true
+            )
         }
     }
     // This screen's live-stream token (saveable): a rotation re-attach only

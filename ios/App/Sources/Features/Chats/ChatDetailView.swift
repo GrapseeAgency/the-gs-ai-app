@@ -476,12 +476,19 @@ struct ChatDetailView: View {
                 }
                 .accessibilityElement(children: .combine)
             }
+            // PHASE 6: the pending turn's real image attachments drive the
+            // honest mapping — image requests waiting for the first token
+            // show .working ("Working…": the vision model is genuinely
+            // analysing the image), text-only requests keep .breathing.
             if let orbState = orbStateForChatStreaming(
                 isStreaming: vm.isStreaming,
-                liveContentEmpty: vm.messages.last?.content.isEmpty ?? true
+                liveContentEmpty: vm.messages.last?.content.isEmpty ?? true,
+                requestHasImages: vm.messages.last(where: { $0.role == "user" })?
+                    .attachments?.contains { $0.kind == "image" } ?? false
             ) {
                 // Phase 4: the activity orb — the REAL stream phase drives it:
-                // "Thinking…" before the first token, "Composing…" while
+                // "Working…" while the image is with the vision model,
+                // "Thinking…" before the first text token, "Composing…" while
                 // tokens flow. Never a fabricated state.
                 HStack(spacing: Aero.Spacing.s) {
                     ThinkingOrbView(state: orbState, size: .inline)

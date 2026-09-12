@@ -20,6 +20,21 @@ type ChatRole = 'system' | 'user' | 'assistant'
 
 export type ChatMessageInput = { role: string; content: string }
 
+/**
+ * PHASE 6 — vision message shapes, mirroring the SDK's VisionMessage /
+ * VisionMultimodalContentItem contract (index.d.ts of z-ai-web-dev-sdk):
+ * a user message content is either plain text or an array of typed parts
+ * ({ type: 'text' } / { type: 'image_url', image_url: { url } }).
+ */
+export type VisionContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } }
+
+export type VisionChatMessage = {
+  role: 'system' | 'user' | 'assistant'
+  content: string | VisionContentPart[]
+}
+
 export const SYSTEM_PROMPT =
   "You are GS, Grapsee Agency's intelligent assistant. Warm, precise, editorial. Use clean markdown."
 
@@ -59,7 +74,8 @@ function extractDelta(parsed: unknown): string {
  */
 async function consumeSseStream(
   body: ReadableStream<Uint8Array>,
-  onDelta: (t: string) => Promise<void> | void
+  onDelta: (t: string) => Promise<void> | void,
+  onModel?: (model: string) => void
 ): Promise<string> {
   const reader = body.getReader()
   const decoder = new TextDecoder()
@@ -76,7 +92,9 @@ async function consumeSseStream(
     if (payload === '[DONE]') return true
     let delta = ''
     try {
-      delta = extractDelta(JSON.parse(payload))
+      const parsed = JSON.parse(payload) as { model?: unknown }
+      if (onModel && typeof parsed?.model === 'string' && parsed.model.length > 0) onModel(parsed.model)
+      delta = extractDelta(parsed)
     } catch {
       // Non-JSON payload (plain-text chunk) — treat the whole payload as a delta.
       delta = payload
@@ -185,6 +203,22 @@ export async function streamChat(
 
 /** Non-streaming chat completion. Resolves with the assistant text. */
 export async function completeChat(messages: ChatMessageInput[]): Promise<string> {
+  return (await completeChatWithMeta(messages)).text
+}
+
+/**
+ * PHASE 6 — non-streaming vision completion via the provider's real vision
+ * endpoint. Resolves with the assistant text and the serving model id.
+ *
+ * MODEL SELECTION (§4/§12, proven empirically): the `model` key is OMITTED,
+ * exactly like the SDK's own vision CLI — the vision endpoint then serves its
+ * compatible default (observed live as `glm-5v-turbo` in the response `model`
+ * field). Omitting keeps the pipeline resilient to gateway-side model
+ * upgrades; the serving model is logged per request for forensics.
+ */
+export async function completeChatWithMeta(
+  messages: ChatMessageInput[]
+): Promise<{ text: string; model: string | null }> {
   let lastError = 'Upstream unavailable'
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -199,9 +233,120 @@ export async function completeChat(messages: ChatMessageInput[]): Promise<string
         new Promise((_, reject) =>
           setTimeout(() => reject(new Error('Upstream completion timeout')), COMPLETION_TIMEOUT_MS)
         ),
-      ])) as { choices?: { message?: { content?: unknown } }[] } | null
+      ])) as { choices?: { message?: { content?: unknown } }[]; model?: unknown } | null
       const text = completion?.choices?.[0]?.message?.content
-      return typeof text === 'string' ? text : ''
+      return {
+        text: typeof text === 'string' ? text : '',
+        model: typeof completion?.model === 'string' ? completion.model : null,
+      }
+    } catch (e) {
+      lastError = errMessage(e)
+      if (attempt < MAX_ATTEMPTS) await sleep(400 * attempt)
+    }
+  }
+  throw new Error(lastError)
+}
+
+/**
+ * PHASE 6 — streaming vision completion. Same SSE wire, same timeout /
+ * retry-before-first-delta semantics as [streamChat]; the request goes to the
+ * provider's real vision endpoint with typed content parts (text + image
+ * data URLs). The vision endpoint was probed to stream the same
+ * OpenAI-ish `choices[0].delta.content` chunks.
+ *
+ * The `model` key is omitted from the body (cast required — the SDK's type
+ * marks it required, but the SDK's own vision CLI omits it and the endpoint
+ * serves its default; see docs/VISION.md for the audit evidence).
+ */
+export async function streamVisionChat(
+  messages: VisionChatMessage[],
+  onDelta: (t: string) => Promise<void> | void
+): Promise<{ text: string; model: string | null }> {
+  let lastError = 'Upstream unavailable'
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    let forwarded = false
+    try {
+      const zai = await ZAI.create()
+      const body = {
+        messages,
+        stream: true,
+        thinking: { type: 'disabled' as const },
+      }
+      const response: unknown = await Promise.race([
+        zai.chat.completions.createVision(
+          // `model` deliberately omitted — CLI-parity; see doc comment.
+          body as unknown as Parameters<typeof zai.chat.completions.createVision>[0]
+        ),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Upstream connect timeout')), CONNECT_TIMEOUT_MS)
+        ),
+      ])
+
+      if (isWebReadableStream(response)) {
+        let servedModel: string | null = null
+        const guardedOnDelta = (t: string) => {
+          forwarded = true
+          return onDelta(t)
+        }
+        const text = await consumeSseStream(response, guardedOnDelta, (m) => (servedModel = m))
+        return { text, model: servedModel }
+      }
+
+      // Upstream ignored `stream: true` — fall back to a single full-text delta.
+      const completion = response as {
+        choices?: { message?: { content?: unknown } }[]
+        model?: unknown
+      } | null
+      const text = completion?.choices?.[0]?.message?.content
+      const full = typeof text === 'string' ? text : ''
+      if (full) {
+        forwarded = true
+        await onDelta(full)
+      }
+      return {
+        text: full,
+        model: typeof completion?.model === 'string' ? completion.model : null,
+      }
+    } catch (e) {
+      lastError = errMessage(e)
+      // Mid-stream failure after output was already forwarded: restarting
+      // would duplicate text on the client — surface the error instead.
+      if (forwarded) throw new Error(lastError)
+      if (attempt < MAX_ATTEMPTS) await sleep(400 * attempt)
+    }
+  }
+  throw new Error(lastError)
+}
+
+/** Non-streaming vision completion. */
+export async function completeVisionChat(
+  messages: VisionChatMessage[]
+): Promise<{ text: string; model: string | null }> {
+  let lastError = 'Upstream unavailable'
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      const zai = await ZAI.create()
+      const body = {
+        messages,
+        stream: false,
+        thinking: { type: 'disabled' as const },
+      }
+      const completion = (await Promise.race([
+        zai.chat.completions.createVision(
+          // `model` deliberately omitted — CLI-parity; see doc comment.
+          body as unknown as Parameters<typeof zai.chat.completions.createVision>[0]
+        ),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Upstream completion timeout')), COMPLETION_TIMEOUT_MS)
+        ),
+      ])) as { choices?: { message?: { content?: unknown } }[]; model?: unknown } | null
+      const text = completion?.choices?.[0]?.message?.content
+      return {
+        text: typeof text === 'string' ? text : '',
+        model: typeof completion?.model === 'string' ? completion.model : null,
+      }
     } catch (e) {
       lastError = errMessage(e)
       if (attempt < MAX_ATTEMPTS) await sleep(400 * attempt)
