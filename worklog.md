@@ -3006,3 +3006,19 @@ Work Log:
 
 Stage Summary:
 - v0.62.0 (versionCode 63) is LIVE on the single release page with the upload fix. The user's version-62 install predates the fix — it could not have worked. Install the fresh asset, no uninstall needed (same signature). Uploads proven working through the real edge at all audited sizes/types/encodings.
+
+---
+Task ID: TRANSPORT-FIX-V2
+Agent: Z.ai Code (main)
+Task: User reported 0.62.0 still failing with "Network error" on device. Find why, fix, republish. No other work.
+
+Work Log:
+- NEW ROOT CAUSE (hard evidence): the origin shipped in 0.62.0 (ws-c-f-d-a-abd-raphpugywm.cn-hongkong-vpc.fcapp.run) is VPC-INTERNAL ONLY. Public DNS (dns.google, unfiltered) resolves it via CNAME cn-hongkong-fc-hk-mongkok-INTERNAL.fc.aliyuncs.com → 100.118.36.1 (CGNAT, non-routable). The non-vpc public variant answers 403 "function internet URL is disabled". NO phone can reach either. All prior builds therefore failed on-device regardless of the earlier emulator-alias fix; sandbox probes passed because the sandbox sits inside the platform network. TLS chain (3 certs) and all server logic were never the issue.
+- USER-PROVIDED PUBLIC ORIGIN: https://preview-chat-c945696f-6447-4dfa-b510-971d8b9eb5bf.space-z.ai (preview panel URL) — resolves via public DNS to a globally routable Alibaba ALB (47.239.134.228 et al.), complete TLS chain. Live upload matrix THROUGH it: 200 KB / 400 KB / 1 MB JPEG, 400 KB chunked multipart, 512 KB PDF, 300 KB text — ALL 201. GET /api/v1/models 200 with and without x-session-id.
+- FIX: Android release BASE_URL + iOS APIClient.baseURL → the public gateway origin; versionCode 64 / 0.63.0. TransportRegressionTest release assertion now requires space-z.ai and rejects 10.0.2.2; iOS SessionHeaderTests likewise. TEMP origin-diag instrumentation removed from models/conversations routes (clean tree).
+- GATES: local.properties restored (sandbox wiped it again); testDebugUnitTest 53/53 ✓, testReleaseUnitTest 53/53 ✓, lintDebug ✓, assembleRelease ✓ (7m). Forensics: aapt2 64/0.63.0, sha256 7c1d353f…, cert b1ffd75d… unchanged, classes2.dex contains space-z.ai.
+- PUBLISH: commit 89a3f15 + tag v0.63.0 pushed; release 384909935 retitled/patched (single release, no new release); old asset 559131295 deleted, new GS-AI-App.apk uploaded (201, state uploaded); roundtrip download of /releases/latest/download/GS-AI-App.apk = sha256 7c1d353f…, aapt2 64/0.63.0. download/ synced (APK + update-manifest.json 64/0.63.0; updater manifest is GitHub-hosted so it survives any future origin change).
+
+Stage Summary:
+- 0.63.0 (versionCode 64) is LIVE and is the first build whose backend address is reachable from the public internet. All prior builds ≤ 0.62.0 physically cannot connect from phones — release body now documents this.
+- RISK (stated, not hidden): the public origin embeds this chat's id (preview-chat-c945696f-…). If the platform ever rotates preview URLs, the app needs a one-line BASE_URL re-point + rebuild; the in-app updater keeps working regardless because its manifest lives on GitHub raw. Watch for a future "network error" that appears only after a platform rotation — it means re-point, not debug.
