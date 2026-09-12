@@ -3035,3 +3035,18 @@ Work Log:
 
 Stage Summary:
 - Release asset v0.63.0 (versionCode 64, sha256 7c1d353f…) live and the backend behind it healthy. Transport fix chain COMPLETE.
+
+---
+Task ID: CONV-MISSING-DIAG
+Agent: Z.ai Code (main)
+Task: User reported "Conversation missing" on upload (phone on WiFi throughout) and asked for full format verification.
+
+Work Log:
+- DISCOVERED PLATFORM TREE REWIND: local git HEAD had regressed to a Phase-4-era auto-commit (3a5252a on top of 21f78b2) — the working tree was pre-Phase-5: no uploads route, no AttachmentUploader, no src/lib/attachments.ts. Remote untouched (origin/main correct at 572e6f3); release page v0.63.0 asset unaffected.
+- Restored with git reset --hard origin/main; files verified back.
+- ROOT CAUSE OF "CONVERSATION MISSING": during the rewind window the running backend was Phase-4 code — POST /api/v1/uploads did not EXIST, so the server answered an honest 404, and the app's chip maps ANY upload-404 to the label "Conversation missing" (AttachmentChipRow.kt:253; AttachmentUploader.kt 404→ConversationMissing). Zero POST /api/v1/uploads lines in dev.log during the window confirm requests hit a server without the route. Mislabel, not a conversation-identity bug; the Android upload never sends conversationId (AttachmentStore.kt:326), so a genuine route-404 was impossible from current code.
+- SECOND LATENT BUG FOUND+FIXED: node_modules/.prisma client had been generated against the OLD schema (tx.attachment undefined → 500 storage_error on uploads during probe). Fixed: bunx prisma generate + db push (in sync) + clean dev restart.
+- FULL RE-VERIFICATION through the public gateway origin: size ladder 400 KB / 2 MB / 8 MB JPEG → 201/201/201 (≥2 MB 500s gone); format matrix ALL 201: JPEG, PNG (400 KB + 3 MB), WebP, GIF, PDF, TXT, Markdown, CSV. HEIC/HEIF are server-accepted MIME but untestable here (no encoder) — Android camera output is JPEG in practice.
+
+Stage Summary:
+- Backend restored to v0.63.0-era code with a regenerated Prisma client; every audited size and format uploads 201 through the public origin. The "Conversation missing" the user saw was the 404 of the missing uploads route during the platform rollback window — retrying now should succeed. Optional future polish: rename the chip label for 404 to reflect "server endpoint missing" rather than conversation identity.
