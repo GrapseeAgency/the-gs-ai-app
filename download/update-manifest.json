@@ -1,6 +1,6 @@
 {
-  "versionCode": 62,
-  "versionName": "0.61.0",
+  "versionCode": 63,
+  "versionName": "0.62.0",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "You can now attach real content to your messages — and the assistant genuinely understands images. Tap the attach button in chat to add photos from your gallery, take a picture, or pick files; they appear as chips above the composer while they upload, and they survive app restarts with the conversation. When you send an image, it is really sent: the backend validates and decodes the actual bytes and a vision-capable model analyses the real picture, then answers right in the chat — ask 'What is this?', 'Explain this screenshot.' or 'Read the text in this image.' Follow-up questions keep the image context, so you don't re-attach anything. When something fails — a corrupted file, an unsupported format, an upload problem — the app says exactly what happened and offers a retry instead of making something up. Same monochrome design, same workspace, everything else unchanged."
+  "notes": "Transport fix: the app could not reach the server from a real device — uploads (and everything else that needs the network) failed with a generic network error. The app now talks to the real server over HTTPS and presents the session credential the network edge requires, so attaching images and chatting on-device work for real. Same design, same features; no other changes."
 }

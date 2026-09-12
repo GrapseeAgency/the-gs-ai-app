@@ -30,7 +30,28 @@ final class APIClient {
 
     static let shared = APIClient()
 
-    var baseURL = URL(string: "http://localhost:3000")!
+    /// REAL transport origin (audit fix): the previous default (localhost:3000)
+    /// only worked against a machine-local backend — on any real device every
+    /// call failed before HTTP. The platform edge additionally REQUIRES the
+    /// `x-session-id` header (session affinity) — applied centrally below and
+    /// in AttachmentStore's multipart upload.
+    var baseURL = URL(string: "https://ws-c-f-d-a-abd-raphpugywm.cn-hongkong-vpc.fcapp.run")!
+
+    /// Stable per-install identifier sent as `x-session-id` on every request.
+    /// The edge rejects invocations missing it; a stable value keeps this
+    /// install affinity-pinned. First access mints and persists a UUID.
+    static let sessionID: String = {
+        let key = "gs.client.session-id"
+        if let saved = UserDefaults.standard.string(forKey: key), !saved.isEmpty {
+            return saved
+        }
+        let fresh = UUID().uuidString
+        UserDefaults.standard.set(fresh, forKey: key)
+        return fresh
+    }()
+
+    /// Header applied to every request built through this client.
+    static let sessionHeaderName = "x-session-id"
 
     private let session: URLSession = .shared
     private let encoder = JSONEncoder()
@@ -182,6 +203,7 @@ final class APIClient {
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.httpBody = body
+        request.setValue(Self.sessionID, forHTTPHeaderField: Self.sessionHeaderName)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         return request

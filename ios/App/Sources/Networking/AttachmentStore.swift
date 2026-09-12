@@ -714,6 +714,7 @@ final class AttachmentStore: ObservableObject {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.timeoutInterval = 120
+        request.setValue(APIClient.sessionID, forHTTPHeaderField: APIClient.sessionHeaderName)
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.httpBody = MultipartFormData.body(
             boundary: boundary,

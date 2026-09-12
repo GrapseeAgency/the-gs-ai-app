@@ -17,10 +17,6 @@ function parseLimit(raw: string | null): number {
 
 // GET /api/v1/conversations?limit=20 — newest first (updatedAt desc)
 export async function GET(req: NextRequest) {
-  // TEMP-DIAG: capture the public origin (removed after transport fix ships).
-  console.log(
-    `[conv-diag] host=${req.headers.get('host')} xfh=${req.headers.get('x-forwarded-host')} proto=${req.headers.get('x-forwarded-proto')}`
-  )
   const limit = parseLimit(new URL(req.url).searchParams.get('limit'))
   const conversations = await db.conversation.findMany({
     orderBy: { updatedAt: 'desc' },

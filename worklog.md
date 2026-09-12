@@ -2971,3 +2971,22 @@ Work Log:
 
 Stage Summary:
 - Release page now shows exactly one release: v0.61.0 — Real attachments + image understanding (vision), serving the current audit build. Permanent link: /releases/latest/download/GS-AI-App.apk
+
+---
+Task ID: TRANSPORT-FIX-UPLOADS
+Agent: Z.ai Code (main)
+Task: User-blocking regression — uploads fail with "Network error" on device. Full transport audit, root cause from evidence, fix both platforms, regression tests, rebuild, publish. No new capability work.
+
+Work Log:
+- AUDIT (evidence, not labels): dev.log contains ZERO POST /api/v1/uploads ever — device requests never reached the backend. BASE_URL hardwired http://10.0.2.2:3000 (emulator loopback alias) in BOTH debug and release → unroutable on any physical device → Ktor throws before HTTP → AttachmentUploader catch-all maps to AttachmentFailure.Network → "Network error" for ANY size/type. The "~400 KB" detail was incidental.
+- EDGE DISCOVERY: platform origin captured via temporary header logging on /api/health + /api/v1/conversations (browser preview traffic): https://ws-c-f-d-a-abd-raphpugywm.cn-hongkong-vpc.fcapp.run (x-forwarded-host = this host). Instrumentation removed after.
+- EDGE MATRIX (curl through the real public origin): GET without x-session-id → 400 InvalidArgument "header 'x-session-id' is required for header field session affinity, but missing" — the edge rejects EVERYTHING without the header (browsers send it via platform JS; native apps never did). WITH any value: GET 200; uploads 201 for 100 KB / 400 KB / 1 MB / 5 MB JPEG, 300 KB PDF, 50 KB text, AND Transfer-Encoding: chunked 400 KB multipart (what Ktor CIO actually sends). No size/encoding limit anywhere below 5 MB. Probe rows + files cleaned after.
+- FIX (Android): build.gradle.kts release buildType BASE_URL → the HTTPS origin (debug keeps 10.0.2.2 for local dev); versionCode 63 / 0.62.0. ServiceLocator.kt: extracted gsHttpClient(sessionId, engine?) factory + defaultRequest plugin setting x-session-id on EVERY request; SessionStore.stableClientId() = persisted per-install UUID (affinity-stable). Fixed my own compile error (DefaultRequest class → defaultRequest DSL) + test dep shape (runTest → runBlocking; zero new main deps, ktor-client-mock is test-only).
+- FIX (iOS): APIClient.baseURL default → same HTTPS origin; APIClient.sessionID (UserDefaults-persisted UUID) + sessionHeaderName; buildRequest applies the header to every request; AttachmentStore.uploadSync multipart request applies it too (URLSession shared — no additionalHeaders global).
+- REGRESSION TESTS: Android TransportRegressionTest (3): MockEngine captures x-session-id on the REAL factory; injected value stable across requests; release-only BuildConfig assertion (https + fcapp.run — fails on the old config, passes now; runs under testReleaseUnitTest). iOS SessionHeaderTests (3): stable per-install id, buildRequest carries header, baseURL is the HTTPS edge.
+- GATES: testDebugUnitTest 53/53 ✓ (50 prior + 3 new), testReleaseUnitTest 53/53 ✓ (incl. release origin assertion), lintDebug ✓, assembleRelease ✓. aapt2: com.grapsee.gsai 63/0.62.0 ✓; apksigner v2 ✓ cert b1ffd75d… unchanged; artifact 13,053,161 B sha256 c81bb9a8….
+- TEMP DIAGNOSTICS REMOVED: health/conversations logging reverted, src/middleware.ts deleted (Next 16 also flagged middleware→proxy rename — noted, not needed).
+
+Stage Summary:
+- Root cause was NEVER image size or the server: the shipped app pointed at an address that only exists inside the Android emulator, and (post-discovery) the platform edge additionally requires x-session-id on every request. Both fixed on both platforms; uploads verified 201 through the real origin at all sizes/types incl. chunked.
+- The app store origin is derived from this workspace's stable edge host (not the per-session id) — if the platform ever rotates it, the updater manifest + one buildConfig line re-point it.

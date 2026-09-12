@@ -15,8 +15,8 @@ android {
         applicationId = "com.grapsee.gsai"
         minSdk = 26
         targetSdk = 35
-        versionCode = 62
-        versionName = "0.61.0"
+        versionCode = 63
+        versionName = "0.62.0"
 
         // Backend origin for the Android emulator (host loopback). Override per build type if needed.
         buildConfigField("String", "BASE_URL", "\"http://10.0.2.2:3000\"")
@@ -43,6 +43,16 @@ android {
         release {
             isMinifyEnabled = false
             signingConfig = signingConfigs.getByName("liveUpdate")
+            // REAL transport origin (audit fix): the default 10.0.2.2 emulator
+            // alias is unroutable on physical devices — every backend call died
+            // before HTTP. The platform edge also requires x-session-id (set on
+            // every request in ServiceLocator/ServiceLocator-equivalent) —
+            // without it the edge 400s regardless of destination.
+            buildConfigField(
+                "String",
+                "BASE_URL",
+                "\"https://ws-c-f-d-a-abd-raphpugywm.cn-hongkong-vpc.fcapp.run\""
+            )
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -106,4 +116,5 @@ dependencies {
     // JVM unit tests (parser correctness + incrementality). Test-only —
     // nothing here ships in either APK.
     testImplementation("junit:junit:4.13.2")
+    testImplementation("io.ktor:ktor-client-mock:2.3.12")
 }
