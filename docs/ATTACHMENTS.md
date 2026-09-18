@@ -185,3 +185,78 @@ URLSession multipart). No WebView anywhere. No cross-platform rendering code.
 Paste-image into composer, share extension, drag & drop, audio/video receive,
 screenshot ingest, server-side analysis of any kind, presigned-URL uploads,
 CDN. Each is listed with its blocker in the PHASE 5 report (deliverable O).
+
+## 13. Document understanding (PHASE 7 — real extraction, honest bounds)
+
+PDF / TXT / Markdown / CSV attachments are now actually READ. The Phase 5
+reception pipeline (upload, storage, chips, claim lifecycle) is unchanged;
+Phase 7 adds server-side extraction and grounded answering in the normal
+chat flow. No separate mode, no new routes, no client protocol change.
+
+### Pipeline
+`attachment` → ownership/claim validation (unchanged Phase 5 gates) → file
+retrieval from storage → magic-byte + MIME validation (upload-time; declared
+MIME parameters like `;charset=` are stripped before the allowlist check) →
+real parser → bounded, normalised text → model context → streamed answer.
+
+### Parsers (real, no simulated extraction)
+- **PDF**: `unpdf` (bundled pdf.js) — per-page `getTextContent` with page
+  markers `[Page N]`, reading order per pdf.js, EOL flags honoured.
+  Limitations (honest): layout/columns are not reconstructed; reading order
+  follows the content stream; no OCR — see failure classes below.
+- **TXT / Markdown**: UTF-8 decode (BOM stripped) + whitespace normalisation.
+  No markdown re-parsing — the text is the evidence.
+- **CSV**: hand-rolled RFC 4180 parser (quoted fields, escaped quotes, CRLF;
+  tolerant of an unterminated final quote), re-rendered as
+  `Columns (N): …` / `Row k: …` lines. No dataframe inference, no type
+  coercion — values are exactly what the file contains.
+
+### Bounds (documented, enforced server-side)
+| Bound | Value | Behaviour when exceeded |
+|---|---|---|
+| Upload size | 10 MB | rejected at upload (Phase 5, unchanged) |
+| PDF pages parsed | 200 | pages beyond reported as "not loaded" |
+| Chars kept per doc | 30 000 | leading pages in full, rest via excerpt map |
+| Doc context per request | 60 000 chars total | deterministic split; later docs may be noted as excluded |
+| CSV rows rendered | 500 | `truncatedRows` flag + visible note |
+| Page excerpt in map | 160 chars, ≤25 lines | overflow noted honestly |
+| Parse timeout | 20 s | `timeout` failure class |
+| Extraction cache | 24 attachments, in-memory | LRU; keyed by id + byteSize + mime |
+
+### Context strategy
+Deterministic, no RAG infrastructure: current-turn documents first, then
+document attachments from the most recent user turns (window of 10 turns —
+follow-up questions without re-upload). Leading pages render in full; pages
+beyond the budget render as a one-line excerpt map; any page the user
+explicitly references ("page 14") is expanded in full from the cache when it
+was loaded. The model is instructed (inline, on document turns only) to cite
+`[Page N]`, to say when the provided text lacks the answer, and never to
+guess unreadable attachments. Text-only turns without documents are
+byte-identical to before.
+
+### Document-only messages
+One documented default: an attachment turn with no written question asks the
+model "Summarise this document." (multi-document turns get the same default
+plus labelled per-document sections).
+
+### Failure classes (one honest sentence each, never fabricated content)
+- `scanned` — PDF pages carry no extractable text: "…pages appear to be
+  scanned images, which I can't read yet."
+- `empty` — text/CSV file contains no readable text.
+- `parse_failed` — real parser rejected the bytes (e.g. malformed PDF).
+- `timeout` — parse exceeded the 20 s bound.
+- `file_missing` — stored file is gone from the server (sandbox storage
+  wipes); surfaced honestly instead of a fake answer.
+All current-turn documents unreadable + no images → the turn short-circuits
+with `422 document_unreadable` (non-stream) / SSE `error` (stream) carrying
+the per-document sentences.
+
+### Multiple documents
+Up to the Phase 5 limit of 6. Each block is labelled
+`=== Document: "name.pdf" (mime · pages/rows) ===` so the model can attribute
+answers to the right file (proven by the Phase 7 probe).
+
+### Deliberately NOT built in Phase 7
+OCR, DOCX/XLSX/PPTX/EPUB, vector databases / embedding retrieval, per-user
+document quotas, server-side page rendering for chips, persistent
+(extraction-beyond-restart) storage of extracted text.
