@@ -13,11 +13,13 @@ import com.grapsee.gsai.ui.voice.VoicePhase
  * CURRENT MAPPINGS (the only real activity states the app has):
  *
  *   Chat streaming (ChatStreamController):
- *     phase Streaming, buffer still empty, request carried images
+ *     phase Streaming, buffer still empty, request carried attachments
  *                                          → WORKING ("Working…")
- *       — PHASE 6: the request is with the vision model, which genuinely
+ *       — PHASE 6: image requests go to the vision model, which genuinely
  *       receives and analyses the attached image(s) before the first token.
- *       A real, distinct pipeline phase — mapped, not invented.
+ *       — PHASE 7: document requests (PDF/TXT/MD/CSV) go through real
+ *       server-side extraction before the first token. Both are real,
+ *       distinct pipeline phases — mapped, not invented.
  *     phase Streaming, buffer still empty  → BREATHING  ("Thinking…")
  *       — text-only request with the model, no token has arrived.
  *     phase Streaming, tokens flowing      → COMPOSING ("Composing…")
@@ -41,11 +43,11 @@ import com.grapsee.gsai.ui.voice.VoicePhase
 internal fun orbStateForChatStream(
     phase: ChatStreamController.Phase?,
     streamText: String?,
-    requestHasImages: Boolean = false
+    requestHasAttachments: Boolean = false
 ): OrbState? =
     when {
         phase != ChatStreamController.Phase.Streaming -> null
-        streamText.isNullOrBlank() && requestHasImages -> OrbState.WORKING
+        streamText.isNullOrBlank() && requestHasAttachments -> OrbState.WORKING
         streamText.isNullOrBlank() -> OrbState.BREATHING
         else -> OrbState.COMPOSING
     }

@@ -138,6 +138,20 @@ object AttachmentRules {
 
     fun isAllowed(mimeType: String): Boolean = mimeType.lowercase() in ALLOWED_MIME_TYPES
 
+    /**
+     * PHASE 7 — map legacy/vendor MIME aliases onto the canonical allowlist
+     * names. Document providers disagree on CSV/Markdown spelling; the file
+     * is what it is, so normalise honestly before the allowlist check.
+     */
+    fun canonicalMime(mimeType: String): String = when (mimeType.lowercase()) {
+        "text/comma-separated-values",
+        "text/x-comma-separated-values",
+        "text/x-csv",
+        "application/csv" -> "text/csv"
+        "text/x-markdown" -> "text/markdown"
+        else -> mimeType.lowercase()
+    }
+
     /** image kinds map to Image, application/pdf to Pdf, text kinds to Document, else null. */
     fun kindForMime(mimeType: String): AttachmentKind? {
         val mime = mimeType.lowercase()

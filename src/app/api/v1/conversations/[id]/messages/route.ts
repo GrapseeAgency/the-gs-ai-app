@@ -15,6 +15,12 @@ import {
 import { clientKey, rateLimit } from '@/lib/rate-limit'
 import { MAX_ATTACHMENTS_PER_MESSAGE } from '@/lib/attachments'
 import {
+  collectDocumentContext,
+  documentFailureMessage,
+  isDocumentAttachment,
+  DOC_HISTORY_TURNS,
+} from '@/lib/document'
+import {
   prepareVisionImage,
   visionFailureMessage,
   isProviderImageRejection,
@@ -125,13 +131,13 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     }
   }
 
-  // PHASE 6: image attachments on the CURRENT turn take the real vision path;
-  // non-image attachments keep the honest Phase 5 "contents not readable"
-  // contract. `useVision` itself is decided after history is loaded below —
-  // a text-only follow-up must still reach the vision model when recent turns
-  // carry images (§13 follow-up-without-re-uploading).
+  // PHASE 6: image attachments on the CURRENT turn take the real vision path.
+  // PHASE 7: document attachments (pdf/document) take the real extraction path
+  // below — no more "contents not readable" contract for PDF/TXT/MD/CSV.
+  // `useVision` itself is decided after history is loaded below — a text-only
+  // follow-up must still reach the vision model when recent turns carry
+  // images (§13 follow-up-without-re-uploading).
   const imageAttachments = claimedAttachments.filter((a) => a.kind === 'image')
-  const otherAttachments = claimedAttachments.filter((a) => a.kind !== 'image')
 
   const conversation = await db.conversation.findUnique({
     where: { id },
@@ -162,7 +168,15 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     await db.conversation.update({
       where: { id },
       data: {
-        ...(shouldAutoTitle ? { title: content.slice(0, 40) } : {}),
+        ...(shouldAutoTitle
+          ? {
+              title: (
+                content.trim().length > 0
+                  ? content
+                  : claimedAttachments[0]?.displayName ?? DEFAULT_TITLE
+              ).slice(0, 40),
+            }
+          : {}),
         ...(requestedModelId ? { modelId: requestedModelId } : {}),
       },
     })
@@ -200,6 +214,24 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     .map((m) => m.id)
   const useVision = imageAttachments.length > 0 || recentImageTurnIds.length > 0
 
+  // ---- PHASE 7 document context ----------------------------------------------
+  // Documents on the CURRENT turn plus document attachments from the most
+  // recent user turns (§6 follow-ups without re-upload). Extraction is cached
+  // per attachment, bounded per request; failures stay honest per class.
+  const currentTurnDocs = claimedAttachments.filter(isDocumentAttachment)
+  const historyDocTurns = recentDesc
+    .filter((m) => m.role.toLowerCase() === 'user' && m.attachments.some(isDocumentAttachment))
+    .slice(0, DOC_HISTORY_TURNS)
+    .map((m) => ({ attachments: m.attachments.filter(isDocumentAttachment) }))
+  const docContext =
+    currentTurnDocs.length > 0 || historyDocTurns.length > 0
+      ? await collectDocumentContext(currentTurnDocs, historyDocTurns, content)
+      : { block: null as string | null, failures: [], readableCount: 0 }
+  // §16 — every current-turn document unreadable and nothing else readable:
+  // short-circuit with the honest failure instead of a fabricated answer.
+  const allDocsFailed =
+    currentTurnDocs.length > 0 && docContext.readableCount === 0 && imageAttachments.length === 0
+
   let visionPrepared: PreparedVisionImage[] = []
   let visionFailures: VisionImageFailure[] = []
   let allImagesFailed = false
@@ -227,11 +259,6 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     const notes: string[] = []
     if (visionFailures.length > 0) {
       notes.push(...visionFailures.map(visionFailureMessage))
-    }
-    if (otherAttachments.length > 0) {
-      notes.push(
-        `The contents of ${otherAttachments.map((a) => a.displayName).join(', ')} are not readable yet.`
-      )
     }
     const finalText =
       notes.length > 0 ? `${textPayload}\n\n(${notes.join(' ')})` : textPayload
@@ -269,28 +296,41 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
         })
       }
     }
-    visionContext.push({
-      role: 'user',
-      content: [
-        { type: 'text', text: finalText },
-        ...visionPrepared.map((p) => ({ type: 'image_url' as const, image_url: { url: p.dataUrl } })),
-      ],
-    })
+    const visionUserParts: VisionContentPart[] = [
+      { type: 'text', text: finalText },
+      // §4 — document context rides the same request on mixed image+document
+      // turns; the extracted text is primary evidence for document questions.
+      ...(docContext.block ? [{ type: 'text' as const, text: docContext.block }] : []),
+      ...visionPrepared.map((p) => ({ type: 'image_url' as const, image_url: { url: p.dataUrl } })),
+    ]
+    visionContext.push({ role: 'user', content: visionUserParts })
     modelMessages = visionContext
   } else {
-    // Text-only context (or honest Phase 5 note for non-image attachments).
+    // Text-only context. PHASE 7: extracted document context (current turn
+    // and/or recent document turns) is appended to the live user message —
+    // history rows stay clean, so follow-ups re-collect context each turn.
+    // §7 — one documented default when a document arrives with no question.
+    const documentOnlyDefault = 'Summarise this document.'
+    const userTurnText =
+      content.trim().length > 0 ? content : currentTurnDocs.length > 0 ? documentOnlyDefault : content
+    const textWithContext = docContext.block
+      ? `${userTurnText}\n\n${docContext.block}`
+      : userTurnText
+    const finalUserMessage: ChatMessageInput =
+      attachmentsProvided && !docContext.block
+        ? {
+            // Defensive fallback: an attachment turn that produced no readable
+            // context and no images (never reachable through the error gates).
+            role: 'user',
+            content: `${textWithContext}${textWithContext.length > 0 ? '\n\n' : ''}[The user attached ${claimedAttachments
+              .map((a) => a.displayName)
+              .join(', ')}. Attachment contents could not be read.]`,
+          }
+        : { role: 'user', content: textWithContext }
     modelMessages = [
       { role: 'system', content: systemPrompt },
       ...history.map((m) => ({ role: m.role.toLowerCase(), content: m.content })),
-      attachmentsProvided
-        ? {
-            role: 'user',
-            content:
-              `${content}${content.length > 0 ? '\n\n' : ''}[The user attached ${claimedAttachments
-                .map((a) => a.displayName)
-                .join(', ')}. Attachment contents are not readable by the assistant yet.]`,
-          }
-        : { role: 'user', content },
+      finalUserMessage,
     ]
   }
 
@@ -318,6 +358,15 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
           message: `None of the attached images could be opened. ${visionFailures
             .map(visionFailureMessage)
             .join(' ')}`,
+        },
+        { status: 422 }
+      )
+    }
+    if (allDocsFailed) {
+      return NextResponse.json(
+        {
+          code: 'document_unreadable',
+          message: docContext.failures.map(documentFailureMessage).join(' '),
         },
         { status: 422 }
       )
@@ -356,6 +405,11 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
               .map(visionFailureMessage)
               .join(' ')}`
           )
+          controller.close()
+          return
+        }
+        if (allDocsFailed) {
+          send('error', docContext.failures.map(documentFailureMessage).join(' '))
           controller.close()
           return
         }

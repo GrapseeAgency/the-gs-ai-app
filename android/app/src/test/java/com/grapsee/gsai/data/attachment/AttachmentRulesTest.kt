@@ -81,4 +81,18 @@ class AttachmentRulesTest {
         assertEquals("1 KB", AttachmentRules.humanSize(1024))
         assertEquals("1.5 MB", AttachmentRules.humanSize(1_572_864))
     }
+
+    @Test
+    fun `PHASE 7 canonical MIME normalises vendor aliases`() {
+        assertEquals("text/csv", AttachmentRules.canonicalMime("text/comma-separated-values"))
+        assertEquals("text/csv", AttachmentRules.canonicalMime("text/x-csv"))
+        assertEquals("text/csv", AttachmentRules.canonicalMime("application/csv"))
+        assertEquals("text/markdown", AttachmentRules.canonicalMime("text/x-markdown"))
+        // Canonical names and unrelated types pass through untouched.
+        assertEquals("text/csv", AttachmentRules.canonicalMime("text/csv"))
+        assertEquals("application/pdf", AttachmentRules.canonicalMime("application/pdf"))
+        assertEquals("application/zip", AttachmentRules.canonicalMime("application/zip"))
+        // Case-insensitive.
+        assertEquals("text/plain", AttachmentRules.canonicalMime("TEXT/PLAIN"))
+    }
 }

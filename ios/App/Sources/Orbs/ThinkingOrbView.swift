@@ -101,11 +101,14 @@ public struct ThinkingOrbView: View {
 /// REALLY doing; nothing here may fabricate a state the pipeline does not
 /// have. CURRENT MAPPINGS:
 ///
-///   Chat streaming:  waiting for first token, request carried images
+///   Chat streaming:  waiting for first token, request carried attachments
 ///                                         → .working ("Working…") —
 ///                    PHASE 6: the vision model genuinely receives and
-///                    analyses the attached image(s) before the first token;
-///                    a real, distinct pipeline phase — mapped, not invented.
+///                    analyses the attached image(s) before the first token.
+///                    PHASE 7: document requests (PDF/TXT/MD/CSV) go through
+///                    real server-side extraction before the first token.
+///                    Both are real, distinct pipeline phases — mapped, not
+///                    invented.
 ///                    waiting for first token, text-only → .breathing ("Thinking…"),
 ///                    tokens flowing                     → .composing ("Composing…"),
 ///                    not streaming                      → nil (the turn is settled).
@@ -118,11 +121,11 @@ public struct ThinkingOrbView: View {
 func orbStateForChatStreaming(
     isStreaming: Bool,
     liveContentEmpty: Bool,
-    requestHasImages: Bool = false
+    requestHasAttachments: Bool = false
 ) -> OrbState? {
     guard isStreaming else { return nil }
     if liveContentEmpty {
-        return requestHasImages ? .working : .breathing
+        return requestHasAttachments ? .working : .breathing
     }
     return .composing
 }

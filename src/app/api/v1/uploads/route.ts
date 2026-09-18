@@ -57,7 +57,10 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  const mimeType = (file.type || 'application/octet-stream').toLowerCase()
+  // PHASE 7 §10: declared MIME may carry parameters ("text/plain;charset=utf-8"
+  // from some clients/blob implementations). Validate the bare type — the
+  // bytes are verified independently below.
+  const mimeType = (file.type || 'application/octet-stream').split(';')[0].trim().toLowerCase()
   const kind = kindForMime(mimeType)
   if (!ALLOWED_MIME_TYPES.has(mimeType) || !kind) {
     return NextResponse.json(
