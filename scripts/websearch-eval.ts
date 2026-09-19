@@ -534,40 +534,59 @@ async function publicMini() {
   console.log(`\n== PUBLIC-ORIGIN ACCEPTANCE (${PUBLIC}) ==`)
   const base = PUBLIC
   const conv = await createConversation(base)
+  // P5 runs FIRST and is LLM-independent, so even a full 429 quota window
+  // still collects public-origin evidence every round (verifier robustness).
   try {
-    // 1. text-only unchanged
-    const t1 = await sendMessage(base, conv, 'What is the capital of France? Answer in one short sentence.')
-    check('P1 text-only normal (Paris, no sources)', /paris/i.test(t1.content) && t1.sources.length === 0, t1.content.slice(0, 100))
-    await sleep(PAUSE)
-
-    // 2. explicit search → real results → citations → persisted sources
-    const s1 = await sendMessageStream(base, conv, 'Search the web for the capital of Australia.')
-    check('P2 status events real', s1.events.some((e) => e.event === 'status' && e.data === 'searching') && s1.events.some((e) => e.event === 'status' && e.data === 'composing'))
-    check('P2 grounded answer (Canberra)', /canberra/i.test(s1.finalText), s1.finalText.slice(0, 140))
-    check('P2 citations present', parseCitedOrdinals(s1.finalText, 99).length >= 1)
-    check('P2 sources persisted', (s1.sources as { url?: string }[]).length >= 1 && (s1.sources as { url?: string }[])[0].url?.startsWith('https://') === true)
-    await sleep(PAUSE)
-
-    // 3. stop searching → answer from existing evidence, NO new search
-    const off = devLogSize()
-    const s2 = await sendMessageStream(base, conv, 'Stop searching. What city did the sources point to?')
-    const tel = readTelemetry(off)
-    check('P3 no new search executed', tel.exec.length === 0, tel.exec.join(' | '))
-    check('P3 obeys latest instruction', /canberra|australia/i.test(s2.finalText), s2.finalText.slice(0, 140))
-    await sleep(PAUSE)
-
-    // 4. explicit new search executes
-    const off2 = devLogSize()
-    const s3 = await sendMessageStream(base, conv, 'Now search the web for the Eiffel Tower height.')
-    const tel2 = readTelemetry(off2)
-    check('P4 explicit re-search executed', tel2.exec.length === 1 && tel2.exec.every((l) => l.includes('trigger=explicit')), tel2.exec.join(' | '))
-    check('P4 grounded answer with citations', /\[1\]/.test(s3.finalText) || parseCitedOrdinals(s3.finalText, 99).length >= 1, s3.finalText.slice(0, 140))
-
-    // 5. fixture page fetch through the reader service (no LLM)
     const zai = await ZAI.create()
     const url = `${PUBLIC}/api/v1/fixtures/web/atlas-budget`
     const r = (await withRetry(() => zai.functions.invoke('page_reader', { url }) as Promise<unknown>, 'P5 page_reader')) as { code?: number; data?: { html?: string } }
     check('P5 controlled fixture fetches with real content', r?.code === 200 && htmlToPlainText(String(r?.data?.html ?? '')).includes('$42,750'))
+  } catch (e) {
+    check('P5 controlled fixture fetches with real content', false, String(e).slice(0, 160))
+  }
+  const step = async (label: string, fn: () => Promise<void>) => {
+    try {
+      await fn()
+    } catch (e) {
+      check(label, false, String(e).slice(0, 160))
+    }
+  }
+  try {
+    // 1. text-only unchanged
+    await step('P1 text-only normal (Paris, no sources)', async () => {
+      const t1 = await sendMessage(base, conv, 'What is the capital of France? Answer in one short sentence.')
+      check('P1 text-only normal (Paris, no sources)', /paris/i.test(t1.content) && t1.sources.length === 0, t1.content.slice(0, 100))
+    })
+    await sleep(PAUSE)
+
+    // 2. explicit search → real results → citations → persisted sources
+    await step('P2 search chain (status/Canberra/citations/sources)', async () => {
+      const s1 = await sendMessageStream(base, conv, 'Search the web for the capital of Australia.')
+      check('P2 status events real', s1.events.some((e) => e.event === 'status' && e.data === 'searching') && s1.events.some((e) => e.event === 'status' && e.data === 'composing'))
+      check('P2 grounded answer (Canberra)', /canberra/i.test(s1.finalText), s1.finalText.slice(0, 140))
+      check('P2 citations present', parseCitedOrdinals(s1.finalText, 99).length >= 1)
+      check('P2 sources persisted', (s1.sources as { url?: string }[]).length >= 1 && (s1.sources as { url?: string }[])[0].url?.startsWith('https://') === true)
+    })
+    await sleep(PAUSE)
+
+    // 3. stop searching → answer from existing evidence, NO new search
+    await step('P3 stop-searching honored (no new search)', async () => {
+      const off = devLogSize()
+      const s2 = await sendMessageStream(base, conv, 'Stop searching. What city did the sources point to?')
+      const tel = readTelemetry(off)
+      check('P3 no new search executed', tel.exec.length === 0, tel.exec.join(' | '))
+      check('P3 obeys latest instruction', /canberra|australia/i.test(s2.finalText), s2.finalText.slice(0, 140))
+    })
+    await sleep(PAUSE)
+
+    // 4. explicit new search executes
+    await step('P4 explicit re-search executes', async () => {
+      const off2 = devLogSize()
+      const s3 = await sendMessageStream(base, conv, 'Now search the web for the Eiffel Tower height.')
+      const tel2 = readTelemetry(off2)
+      check('P4 explicit re-search executed', tel2.exec.length === 1 && tel2.exec.every((l) => l.includes('trigger=explicit')), tel2.exec.join(' | '))
+      check('P4 grounded answer with citations', /\[1\]/.test(s3.finalText) || parseCitedOrdinals(s3.finalText, 99).length >= 1, s3.finalText.slice(0, 140))
+    })
   } finally {
     await deleteConversation(base, conv)
   }

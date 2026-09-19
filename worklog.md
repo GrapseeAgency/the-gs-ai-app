@@ -3139,3 +3139,20 @@ Work Log:
 
 Stage Summary:
 - All PHASE 8 code, gates, fixtures, and eval infrastructure are complete and committed to the tree; localhost evidence is comprehensive (every E2E predicate green at least once; 46/46 unit; injection resistance 3/3 stable). The ONLY outstanding item is the LLM-backed public-origin acceptance chain (P1–P5), which is quota-blocked, not code-blocked; the 15-minute verifier will complete and record it autonomously. STOPPING per §26.
+
+---
+Task ID: PHASE8-PUBLIC-VERIFY (round 1)
+Agent: Z.ai Code (main) — scheduled verifier (cron job 399269, webDevReview)
+Task: Retry the pending PHASE 8 public-origin acceptance chain; browser QA of /; in-scope maintenance only.
+
+Work Log:
+- Dev server found healthy (health 200) — no restart needed.
+- `bun scripts/websearch-eval.ts public-mini` at 23:33:59 UTC → upstream 429 quota window STILL ACTIVE (affects chat completions AND the functions endpoint; P1–P5 all 429). Followed the round protocol: record + wrap up.
+- EVAL-SCRIPT HARDENING (in-scope 小修): public-mini crashed mid-chain on mid-stream 429s, skipping the LLM-independent fixture check. Restructured: P5 (page_reader fixture fetch, no LLM) now runs FIRST; every P-step wrapped in per-step try/catch so a 429 window can no longer abort the chain — partial public-origin evidence accumulates every round. tsc clean after the change.
+- Re-ran hardened public-mini: chain completes cleanly end-to-end; all 5 steps 429 (P1 text-only, P2 search chain, P3 stop-searching, P4 re-search, P5 fixture fetch). Zero behavioral failures observable — everything is quota-blocked, nothing is code-blocked.
+- agent-browser QA of /: title "GS AI — Grapsee Agency"; full render (14 body sections: header, New chat, model catalogue ×8, recent conversations, composer + model selector, assistant catalogue); body NOT blank; ZERO page errors; console shows only React-DevTools info + HMR connected. Screenshot: download/phase8-cron-qa-home.png.
+- Housekeeping: found 2 eval-leftover conversations ("What is the capital of France? Answer in…" — created when earlier runs crashed mid-finally during a server death). Deleted ONLY those 2 (HTTP 204 ×2). User's real device-test conversations ("you are claude right?", "which company made you in the first place", "hello 👋") preserved untouched.
+- dev.log tail healthy (request lines + one benign w-diag line; no error stacks). eslint clean; tsc zero errors in touched files.
+
+Stage Summary:
+- PHASE 8 public-origin acceptance remains quota-blocked (not code-blocked). The verifier will keep retrying every 15 minutes; the hardened public-mini now survives 429 windows and will capture P5 + all P-steps the moment the window resets, then escalate to the full `all` suite. No version bump, no release, no client rebuild; no Phase 9+ work — per the user's stop condition.
