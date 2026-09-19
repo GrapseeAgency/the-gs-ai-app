@@ -10,7 +10,7 @@
  * Dates are serialized as ISO-8601 date-time strings.
  */
 
-import type { Assistant, Attachment, Conversation, Message } from '@prisma/client'
+import type { Assistant, Attachment, Conversation, Message, MessageSource } from '@prisma/client'
 import { attachmentToJson, type AttachmentJson } from '@/lib/attachments'
 
 export type { AttachmentJson }
@@ -33,6 +33,20 @@ export type MessageJson = {
   content: string
   createdAt: string
   attachments?: AttachmentJson[]
+  sources?: MessageSourceJson[]
+}
+
+/** PHASE 8 — canonical web-search source metadata for grounded answers. */
+export type MessageSourceJson = {
+  id: string
+  ordinal: number
+  title: string
+  url: string
+  domain: string
+  snippet: string
+  publishedDate?: string
+  query: string
+  retrievedAt: string
 }
 
 export type AssistantJson = {
@@ -89,7 +103,9 @@ export function conversationToJson(c: Conversation & { assistant?: Assistant | n
   }
 }
 
-export function messageToJson(m: Message & { attachments?: Attachment[] }): MessageJson {
+export function messageToJson(
+  m: Message & { attachments?: Attachment[]; sources?: MessageSource[] }
+): MessageJson {
   return {
     id: m.id,
     conversationId: m.conversationId,
@@ -99,5 +115,22 @@ export function messageToJson(m: Message & { attachments?: Attachment[] }): Mess
     ...(m.attachments && m.attachments.length > 0
       ? { attachments: m.attachments.map(attachmentToJson) }
       : {}),
+    ...(m.sources && m.sources.length > 0
+      ? { sources: m.sources.map(sourceToJson) }
+      : {}),
+  }
+}
+
+export function sourceToJson(s: MessageSource): MessageSourceJson {
+  return {
+    id: s.id,
+    ordinal: s.ordinal,
+    title: s.title,
+    url: s.url,
+    domain: s.domain,
+    snippet: s.snippet,
+    ...(s.publishedDate ? { publishedDate: s.publishedDate } : {}),
+    query: s.query,
+    retrievedAt: s.retrievedAt.toISOString(),
   }
 }

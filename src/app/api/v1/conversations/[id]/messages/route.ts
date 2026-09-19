@@ -4,6 +4,7 @@ import { messageToJson } from '@/lib/serializers'
 import {
   SYSTEM_PROMPT,
   VISION_GROUNDING_PROMPT,
+  SEARCH_GROUNDING_PROMPT,
   streamChat,
   completeChat,
   streamVisionChat,
@@ -31,6 +32,19 @@ import {
   type PreparedVisionImage,
   type VisionImageFailure,
 } from '@/lib/vision'
+import {
+  runWebSearch,
+  evaluateWebSearchGate,
+  buildSearchEvidenceBlock,
+  buildHistoryEvidenceBlock,
+  shouldInjectHistoryEvidence,
+  parseCitedOrdinals,
+  sanitizeCitationMarkers,
+  searchFailureNote,
+  SEARCH_HISTORY_TURNS,
+  type SearchOutcome,
+  type WebSource,
+} from '@/lib/websearch'
 
 export const dynamic = 'force-dynamic'
 
@@ -50,7 +64,10 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
   const messages = await db.message.findMany({
     where: { conversationId: id },
     orderBy: { createdAt: 'asc' },
-    include: { attachments: { orderBy: { createdAt: 'asc' } } },
+    include: {
+      attachments: { orderBy: { createdAt: 'asc' } },
+      sources: { orderBy: { ordinal: 'asc' } },
+    },
   })
   return NextResponse.json({ items: messages.map(messageToJson) })
 }
@@ -187,7 +204,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
   // Assistant persona: when the conversation is linked to an assistant, its
   // instructions become the primary system context (platform prompt stays as
   // a base below it).
-  const systemPrompt = conversation.assistant?.instructions
+  const baseSystemPrompt = conversation.assistant?.instructions
     ? `${conversation.assistant.instructions}\n\n(Platform persona base: ${SYSTEM_PROMPT})`
     : SYSTEM_PROMPT
 
@@ -248,10 +265,52 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
   const allDocsFailed =
     currentTurnDocs.length > 0 && docContext.readableCount === 0 && imageAttachments.length === 0
 
+  // ---- PHASE 8 web search gate ------------------------------------------------
+  // Backend-owned tool routing (§1/§21): the SDK chat endpoint has no native
+  // function calling, so THIS route decides when a turn needs external
+  // information — from the CURRENT user text only (§11: attachments never
+  // trigger a search). Structural loop protection (§18): the gate runs once,
+  // at most one bounded search executes, and there is no model-driven tool
+  // loop at any point.
+  const webGate =
+    content.trim().length > 0 ? evaluateWebSearchGate(content) : { trigger: null as 'explicit' | 'recency' | null }
+  let historyWebSources: {
+    title: string
+    url: string
+    domain: string
+    snippet: string
+    query: string
+    publishedDate: string | null
+  }[] = []
+  let includeHistoryEvidence = false
+  if (content.trim().length > 0) {
+    const recentSourceMessages = await db.message.findMany({
+      where: { conversationId: id, role: 'assistant', sources: { some: {} } },
+      orderBy: { createdAt: 'desc' },
+      take: SEARCH_HISTORY_TURNS,
+      include: { sources: { orderBy: { ordinal: 'asc' } } },
+    })
+    historyWebSources = recentSourceMessages
+      .reverse()
+      .flatMap((m) =>
+        m.sources.map((s) => ({
+          title: s.title,
+          url: s.url,
+          domain: s.domain,
+          snippet: s.snippet,
+          query: s.query,
+          publishedDate: s.publishedDate,
+        }))
+      )
+    includeHistoryEvidence = shouldInjectHistoryEvidence(content, historyWebSources.length > 0)
+  }
+  console.log(
+    `WEBSEARCH-GATE conv=${id} trigger=${webGate.trigger ?? 'none'} historySources=${historyWebSources.length} historyInject=${includeHistoryEvidence}`
+  )
+
   let visionPrepared: PreparedVisionImage[] = []
   let visionFailures: VisionImageFailure[] = []
   let allImagesFailed = false
-  let modelMessages: ChatMessageInput[] | VisionChatMessage[]
 
   if (imageAttachments.length > 0) {
     // §3 — actual image retrieval: every claimed image is re-validated by the
@@ -270,82 +329,135 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     }
   }
 
-  if (useVision && !allImagesFailed) {
-    const textPayload = content.trim().length > 0 ? content : 'Describe this image.'
-    const notes: string[] = []
-    if (visionFailures.length > 0) {
-      notes.push(...visionFailures.map(visionFailureMessage))
+  /**
+   * PHASE 8 — run the search phase. Executed separately from assembly so the
+   * streaming path can emit REAL status events around it (§14) while the
+   * non-streaming path runs it inline. Never runs on short-circuit turns
+   * (all-images-failed / all-docs-failed) — no tool work for a doomed turn.
+   */
+  const executeSearchPhase = async (): Promise<SearchOutcome | null> => {
+    if (allImagesFailed || allDocsFailed) return null
+    if (webGate.trigger === null) return null
+    const outcome = await runWebSearch(content)
+    console.log(
+      `WEBSEARCH-EXEC conv=${id} trigger=${outcome?.trigger} query="${outcome?.query}" ok=${outcome?.ok} results=${outcome?.sources.length} fetchFailures=${outcome?.fetchFailures.length} kind=${outcome?.failure?.kind ?? '-'}`
+    )
+    return outcome
+  }
+
+  /**
+   * PHASE 8 — assemble the model messages for this turn given the search
+   * outcome. Evidence ordering (Phase 7.1 hierarchy extended to web data):
+   *   [document block] → [earlier web evidence] → [fresh search evidence] →
+   *   [end marker] → [the user's words]
+   * so the CURRENT user message is always the final controlling content.
+   */
+  const buildModelMessages = async (
+    outcome: SearchOutcome | null
+  ): Promise<{ messages: ChatMessageInput[] | VisionChatMessage[]; systemPrompt: string }> => {
+    const freshBlock = outcome?.ok ? buildSearchEvidenceBlock(outcome) : null
+    const freshCount = outcome?.ok ? outcome.sources.length : 0
+    const historyBlock = includeHistoryEvidence
+      ? buildHistoryEvidenceBlock(historyWebSources, freshCount + 1)
+      : null
+    const historyCount = historyBlock ? historyWebSources.length : 0
+    const webSearchUsed = freshCount > 0 || historyCount > 0 || outcome?.failure != null
+
+    const systemPrompt = webSearchUsed
+      ? `${baseSystemPrompt}\n\n${SEARCH_GROUNDING_PROMPT}`
+      : baseSystemPrompt
+
+    const evidenceBlocks: string[] = []
+    if (docContext.block) evidenceBlocks.push(docContext.block)
+    if (historyBlock?.block) evidenceBlocks.push(historyBlock.block)
+    if (outcome?.failure && webGate.trigger !== null) {
+      evidenceBlocks.push(
+        `(System note about this turn's search: ${searchFailureNote(outcome.failure)} Do not present any internal knowledge as search results; if you answer from your own knowledge, say clearly that the search did not provide results. The user's request below still stands.)`
+      )
     }
-    const finalText =
-      notes.length > 0 ? `${textPayload}\n\n(${notes.join(' ')})` : textPayload
+    if (freshBlock) evidenceBlocks.push(freshBlock)
+    const combinedEvidence = evidenceBlocks.length > 0 ? evidenceBlocks.join('\n\n') : null
 
-    // Follow-up support: re-include images from the most recent image-bearing
-    // user turns, bounded by turn count and a per-request image budget — the
-    // current turn's images always win the budget first.
-    const selectedTurnIds = new Set(recentImageTurnIds)
-    let imageBudget = VISION_MAX_IMAGES_PER_REQUEST - visionPrepared.length
-
-    // PHASE 7: the grounding instruction rides ONLY on vision turns — the
-    // text-only branch below keeps the untouched persona/base system prompt.
-    const visionContext: VisionChatMessage[] = [
-      { role: 'system', content: `${systemPrompt}\n\n${VISION_GROUNDING_PROMPT}` },
-    ]
-    for (const m of history) {
-      if (m.role.toLowerCase() === 'user' && selectedTurnIds.has(m.id) && imageBudget > 0) {
-        const turnImages = m.attachments.filter((a) => a.kind === 'image')
-        const parts: VisionContentPart[] = [
-          { type: 'text', text: m.content.trim().length > 0 ? m.content : 'Describe this image.' },
-        ]
-        for (const a of turnImages) {
-          if (imageBudget <= 0) break
-          const result = await prepareVisionImage(a)
-          if (result.ok) {
-            parts.push({ type: 'image_url', image_url: { url: result.image.dataUrl } })
-            imageBudget -= 1
-          }
-        }
-        visionContext.push({ role: 'user', content: parts })
-      } else {
-        visionContext.push({
-          role: m.role.toLowerCase() === 'assistant' ? 'assistant' : 'user',
-          content: historyRowText(m),
-        })
+    if (useVision && !allImagesFailed) {
+      const textPayload = content.trim().length > 0 ? content : 'Describe this image.'
+      const notes: string[] = []
+      if (visionFailures.length > 0) {
+        notes.push(...visionFailures.map(visionFailureMessage))
       }
+      const finalText =
+        notes.length > 0 ? `${textPayload}\n\n(${notes.join(' ')})` : textPayload
+
+      // Follow-up support: re-include images from the most recent image-bearing
+      // user turns, bounded by turn count and a per-request image budget — the
+      // current turn's images always win the budget first.
+      const selectedTurnIds = new Set(recentImageTurnIds)
+      let imageBudget = VISION_MAX_IMAGES_PER_REQUEST - visionPrepared.length
+
+      const visionContext: VisionChatMessage[] = [
+        {
+          role: 'system',
+          content:
+            systemPrompt +
+            // PHASE 6: vision grounding rides every vision turn (unchanged).
+            `\n\n${VISION_GROUNDING_PROMPT}`,
+        },
+      ]
+      for (const m of history) {
+        if (m.role.toLowerCase() === 'user' && selectedTurnIds.has(m.id) && imageBudget > 0) {
+          const turnImages = m.attachments.filter((a) => a.kind === 'image')
+          const parts: VisionContentPart[] = [
+            { type: 'text', text: m.content.trim().length > 0 ? m.content : 'Describe this image.' },
+          ]
+          for (const a of turnImages) {
+            if (imageBudget <= 0) break
+            const result = await prepareVisionImage(a)
+            if (result.ok) {
+              parts.push({ type: 'image_url', image_url: { url: result.image.dataUrl } })
+              imageBudget -= 1
+            }
+          }
+          visionContext.push({ role: 'user', content: parts })
+        } else {
+          visionContext.push({
+            role: m.role.toLowerCase() === 'assistant' ? 'assistant' : 'user',
+            content: historyRowText(m),
+          })
+        }
+      }
+      const visionUserParts: VisionContentPart[] = [
+        // §4 — document context rides the same request on mixed image+document
+        // turns. PHASE 7.1/8: evidence FIRST (documents → earlier web → fresh
+        // search), user intent LAST.
+        ...(combinedEvidence ? [{ type: 'text' as const, text: combinedEvidence }] : []),
+        { type: 'text', text: finalText },
+        ...visionPrepared.map((p) => ({ type: 'image_url' as const, image_url: { url: p.dataUrl } })),
+      ]
+      visionContext.push({ role: 'user', content: visionUserParts })
+      return { messages: visionContext, systemPrompt }
     }
-    const visionUserParts: VisionContentPart[] = [
-      // §4 — document context rides the same request on mixed image+document
-      // turns. PHASE 7.1: evidence FIRST, user intent LAST — the extracted
-      // text is data for answering the user's request, never a replacement
-      // for it.
-      ...(docContext.block ? [{ type: 'text' as const, text: docContext.block }] : []),
-      { type: 'text', text: finalText },
-      ...visionPrepared.map((p) => ({ type: 'image_url' as const, image_url: { url: p.dataUrl } })),
-    ]
-    visionContext.push({ role: 'user', content: visionUserParts })
-    modelMessages = visionContext
-  } else {
+
     // Text-only context. PHASE 7: extracted document context (current turn
     // and/or recent document turns) is included in the live user message —
     // history rows stay clean, so follow-ups re-collect context each turn.
     // §7 — one documented default when a document arrives with no question.
     //
-    // PHASE 7.1 — CONVERSATIONAL-CONTROL FIX: the document block is evidence,
-    // not an instruction, and it must NEVER sit between the user's words and
+    // PHASE 7.1 — CONVERSATIONAL-CONTROL FIX: evidence is data, not an
+    // instruction, and it must NEVER sit between the user's words and
     // generation. assembleDocumentUserTurn orders the final message as:
-    //   [grounding frame + document text] → [end marker] → [user's words]
+    //   [all evidence blocks] → [end marker] → [user's words]
     // so the CURRENT user message is the final controlling content the
-    // provider sees, whatever the document size. The document-only default
+    // provider sees, whatever the evidence size. The document-only default
     // fires ONLY for a current-turn document with no user text — never for a
     // text-only follow-up to a historical document.
     const assembled = assembleDocumentUserTurn({
       content,
       currentTurnHasDocuments: currentTurnDocs.length > 0,
-      docBlock: docContext.block,
+      docBlock: combinedEvidence,
     })
     const userTurnText = assembled.userText
     const textWithContext = assembled.finalText
     const finalUserMessage: ChatMessageInput =
-      attachmentsProvided && !docContext.block
+      attachmentsProvided && !combinedEvidence
         ? {
             // Defensive fallback: an attachment turn that produced no readable
             // context and no images (never reachable through the error gates).
@@ -355,11 +467,49 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
               .join(', ')}. Attachment contents could not be read.]`,
           }
         : { role: 'user', content: textWithContext }
-    modelMessages = [
-      { role: 'system', content: systemPrompt },
-      ...history.map((m) => ({ role: m.role.toLowerCase(), content: historyRowText(m) })),
-      finalUserMessage,
-    ]
+    return {
+      messages: [
+        { role: 'system', content: systemPrompt },
+        ...history.map((m) => ({ role: m.role.toLowerCase(), content: historyRowText(m) })),
+        finalUserMessage,
+      ],
+      systemPrompt,
+    }
+  }
+
+  /** PHASE 8 — persist exactly the sources the answer actually cited (§7). */
+  const persistCitedSources = async (
+    messageId: string,
+    answerText: string,
+    outcome: SearchOutcome | null,
+    historySources: WebSource[]
+  ): Promise<void> => {
+    const freshSources = outcome?.ok ? outcome.sources : []
+    const maxOrdinal = freshSources.length + historySources.length
+    if (maxOrdinal === 0) return
+    const cited = parseCitedOrdinals(answerText, maxOrdinal)
+    const byOrdinal = new Map<number, WebSource>()
+    for (const s of freshSources) byOrdinal.set(s.ordinal, s)
+    for (const s of historySources) byOrdinal.set(s.ordinal, s)
+    const rows = cited
+      .map((n) => byOrdinal.get(n))
+      .filter((s): s is WebSource => !!s)
+      .map((s) => ({
+        messageId,
+        ordinal: s.ordinal,
+        title: s.title.slice(0, 500),
+        url: s.url,
+        domain: s.domain.slice(0, 200),
+        snippet: s.snippet.slice(0, 600),
+        ...(s.publishedDate ? { publishedDate: s.publishedDate.slice(0, 100) } : {}),
+        query: s.query.slice(0, 300),
+      }))
+    if (rows.length > 0) {
+      await db.messageSource.createMany({ data: rows })
+    }
+    console.log(
+      `WEBSEARCH-CITED conv=${id} maxOrdinal=${maxOrdinal} cited=[${cited.join(',')}] persisted=${rows.length}`
+    )
   }
 
   /** §8 — one honest sentence per failure class; never a fabricated answer. */
@@ -400,13 +550,27 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       )
     }
     try {
+      const outcome = await executeSearchPhase()
+      const historySources = includeHistoryEvidence
+        ? buildHistoryEvidenceBlock(historyWebSources, (outcome?.ok ? outcome.sources.length : 0) + 1).sources
+        : []
+      const { messages: modelMessages } = await buildModelMessages(outcome)
       const { text } = useVision
         ? await completeVisionChat(modelMessages as VisionChatMessage[])
         : { text: await completeChat(modelMessages as ChatMessageInput[]) }
+      const finalText =
+        outcome?.ok || historySources.length > 0
+          ? sanitizeCitationMarkers(text, outcome?.ok ? outcome.sources.length + historySources.length : 0)
+          : text
       const assistantMessage = await db.message.create({
-        data: { conversationId: id, role: 'assistant', content: text },
+        data: { conversationId: id, role: 'assistant', content: finalText },
       })
-      return NextResponse.json(messageToJson(assistantMessage))
+      await persistCitedSources(assistantMessage.id, finalText, outcome, historySources)
+      const saved = await db.message.findUnique({
+        where: { id: assistantMessage.id },
+        include: { sources: { orderBy: { ordinal: 'asc' } } },
+      })
+      return NextResponse.json(messageToJson(saved ?? assistantMessage))
     } catch (e) {
       const raw = e instanceof Error ? e.message : String(e)
       return NextResponse.json(
@@ -419,7 +583,8 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     }
   }
 
-  // Streaming: text/event-stream — `delta` events, then a final `done` (or `error`).
+  // Streaming: text/event-stream — `status` events (PHASE 8 search phases,
+  // ignored by older clients), then `delta` events, then a final `done` (or `error`).
   return new Response(
     new ReadableStream({
       async start(controller) {
@@ -442,13 +607,35 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
           return
         }
         try {
+          // §14 — real search activity gets real state events. The gate has
+          // already been evaluated; SEARCHING is only ever emitted for an
+          // actual search turn, never for ordinary text generation.
+          let outcome: SearchOutcome | null = null
+          if (webGate.trigger !== null) {
+            send('status', 'searching')
+            outcome = await executeSearchPhase()
+            send('status', outcome?.ok ? 'composing' : 'search_failed')
+          }
+          const historySources = includeHistoryEvidence
+            ? buildHistoryEvidenceBlock(historyWebSources, (outcome?.ok ? outcome.sources.length : 0) + 1).sources
+            : []
+          const { messages: modelMessages } = await buildModelMessages(outcome)
           const full = useVision
             ? (await streamVisionChat(modelMessages as VisionChatMessage[], (d) => send('delta', d))).text
             : await streamChat(modelMessages as ChatMessageInput[], (d) => send('delta', d))
+          const finalText =
+            outcome?.ok || historySources.length > 0
+              ? sanitizeCitationMarkers(full, outcome?.ok ? outcome.sources.length + historySources.length : 0)
+              : full
           const saved = await db.message.create({
-            data: { conversationId: id, role: 'assistant', content: full },
+            data: { conversationId: id, role: 'assistant', content: finalText },
           })
-          send('done', JSON.stringify(messageToJson(saved)))
+          await persistCitedSources(saved.id, finalText, outcome, historySources)
+          const savedWithSources = await db.message.findUnique({
+            where: { id: saved.id },
+            include: { sources: { orderBy: { ordinal: 'asc' } } },
+          })
+          send('done', JSON.stringify(messageToJson(savedWithSources ?? saved)))
           controller.close()
         } catch (e) {
           const raw = String(e instanceof Error ? e.message : e)

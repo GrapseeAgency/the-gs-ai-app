@@ -421,6 +421,15 @@ components:
             Present when the message carries attachments. Reception is real;
             analysis is NOT part of this contract version — attachment contents
             are never fed to the model (Phase 5 honest-capability rule).
+        sources:
+          type: array
+          maxItems: 10
+          items: { $ref: '#/components/schemas/MessageSource' }
+          description: >-
+            PHASE 8: present when the assistant answer was grounded in real web
+            search evidence. Only sources actually cited by the answer ([N]
+            markers parsed server-side) are persisted. Absent for ordinary
+            messages; old clients ignore the field.
     Attachment:
       type: object
       required: [id, kind, displayName, mimeType, byteSize, createdAt, url]
@@ -444,6 +453,26 @@ components:
         url:
           type: string
           description: Relative fetch path, e.g. /api/v1/files/:id
+    MessageSource:
+      type: object
+      required: [id, ordinal, title, url, domain, query, retrievedAt]
+      properties:
+        id: { type: string, format: uuid }
+        ordinal:
+          type: integer
+          minimum: 1
+          description: The [N] citation number shown in the answer text.
+        title: { type: string, maxLength: 500 }
+        url:
+          type: string
+          description: Provider-returned URL of the cited source.
+        domain: { type: string, maxLength: 200 }
+        snippet: { type: string }
+        publishedDate:
+          type: string
+          description: Provider-reported publication date, when present.
+        query: { type: string, maxLength: 300 }
+        retrievedAt: { type: string, format: date-time }
     AttachmentUploadResult:
       type: object
       required: [attachment]

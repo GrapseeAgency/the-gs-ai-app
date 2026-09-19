@@ -61,15 +61,38 @@ model Conversation {
 }
 
 model Message {
-  id             String       @id @default(cuid())
+  id             String          @id @default(cuid())
   conversationId String
-  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversation   Conversation    @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   role           String
   content        String
-  createdAt      DateTime     @default(now())
+  createdAt      DateTime        @default(now())
   attachments    Attachment[]
+  sources        MessageSource[]
 
   @@index([conversationId])
+}
+
+// PHASE 8 — real web search & grounded answers. Canonical source metadata for
+// assistant messages whose answer was grounded in REAL web_search evidence.
+// Only sources actually cited by the generated answer ([N] markers parsed
+// server-side) are persisted; url/domain come from the search provider's
+// response, never from model text — nothing here can be fabricated by the
+// model. Old clients simply ignore the field (ignoreUnknownKeys / Codable).
+model MessageSource {
+  id            String   @id @default(cuid())
+  messageId     String
+  message       Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  ordinal       Int // 1-based citation number the user sees
+  title         String
+  url           String
+  domain        String
+  snippet       String   @default("")
+  publishedDate String? // provider-reported date, when present
+  query         String // the search query that produced this source
+  retrievedAt   DateTime @default(now())
+
+  @@index([messageId])
 }
 
 // PHASE 5 input & multimodal foundation — real attachment records.
