@@ -18,6 +18,8 @@ import {
   collectDocumentContext,
   documentFailureMessage,
   isDocumentAttachment,
+  assembleDocumentUserTurn,
+  DOCUMENT_ONLY_DEFAULT,
   DOC_HISTORY_TURNS,
 } from '@/lib/document'
 import {
@@ -201,6 +203,20 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
   })
   const history = recentDesc.reverse()
 
+  /**
+   * PHASE 7.1 — history rows are replayed as the words the model actually saw
+   * on that turn. A doc-only turn stores content='' but was served the
+   * document-only default; replaying an EMPTY user message corrupts the
+   * reconstructed conversation (payload evidence: `u:0` rows). Same for
+   * image-only turns and their documented default.
+   */
+  const historyRowText = (m: (typeof history)[number]): string => {
+    if (m.role.toLowerCase() !== 'user' || m.content.trim().length > 0) return m.content
+    if (m.attachments.some(isDocumentAttachment)) return DOCUMENT_ONLY_DEFAULT
+    if (m.attachments.some((a) => a.kind === 'image')) return 'Describe this image.'
+    return m.content
+  }
+
   // ---- PHASE 6 vision context ------------------------------------------------
   // `visionPrepared`/`visionFailures` hold the current turn's conversion
   // results; `allImagesFailed` short-circuits the turn with an honest error.
@@ -292,30 +308,42 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       } else {
         visionContext.push({
           role: m.role.toLowerCase() === 'assistant' ? 'assistant' : 'user',
-          content: m.content,
+          content: historyRowText(m),
         })
       }
     }
     const visionUserParts: VisionContentPart[] = [
-      { type: 'text', text: finalText },
       // §4 — document context rides the same request on mixed image+document
-      // turns; the extracted text is primary evidence for document questions.
+      // turns. PHASE 7.1: evidence FIRST, user intent LAST — the extracted
+      // text is data for answering the user's request, never a replacement
+      // for it.
       ...(docContext.block ? [{ type: 'text' as const, text: docContext.block }] : []),
+      { type: 'text', text: finalText },
       ...visionPrepared.map((p) => ({ type: 'image_url' as const, image_url: { url: p.dataUrl } })),
     ]
     visionContext.push({ role: 'user', content: visionUserParts })
     modelMessages = visionContext
   } else {
     // Text-only context. PHASE 7: extracted document context (current turn
-    // and/or recent document turns) is appended to the live user message —
+    // and/or recent document turns) is included in the live user message —
     // history rows stay clean, so follow-ups re-collect context each turn.
     // §7 — one documented default when a document arrives with no question.
-    const documentOnlyDefault = 'Summarise this document.'
-    const userTurnText =
-      content.trim().length > 0 ? content : currentTurnDocs.length > 0 ? documentOnlyDefault : content
-    const textWithContext = docContext.block
-      ? `${userTurnText}\n\n${docContext.block}`
-      : userTurnText
+    //
+    // PHASE 7.1 — CONVERSATIONAL-CONTROL FIX: the document block is evidence,
+    // not an instruction, and it must NEVER sit between the user's words and
+    // generation. assembleDocumentUserTurn orders the final message as:
+    //   [grounding frame + document text] → [end marker] → [user's words]
+    // so the CURRENT user message is the final controlling content the
+    // provider sees, whatever the document size. The document-only default
+    // fires ONLY for a current-turn document with no user text — never for a
+    // text-only follow-up to a historical document.
+    const assembled = assembleDocumentUserTurn({
+      content,
+      currentTurnHasDocuments: currentTurnDocs.length > 0,
+      docBlock: docContext.block,
+    })
+    const userTurnText = assembled.userText
+    const textWithContext = assembled.finalText
     const finalUserMessage: ChatMessageInput =
       attachmentsProvided && !docContext.block
         ? {
@@ -329,7 +357,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
         : { role: 'user', content: textWithContext }
     modelMessages = [
       { role: 'system', content: systemPrompt },
-      ...history.map((m) => ({ role: m.role.toLowerCase(), content: m.content })),
+      ...history.map((m) => ({ role: m.role.toLowerCase(), content: historyRowText(m) })),
       finalUserMessage,
     ]
   }
