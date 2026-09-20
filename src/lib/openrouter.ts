@@ -39,11 +39,35 @@ const IDENTITY_PIN_SUFFIX =
 const CONNECT_TIMEOUT_MS = 15_000
 const COMPLETION_TIMEOUT_MS = 90_000
 
+/**
+ * Durable key file: the platform supervisor can rewrite .env on server
+ * restarts (observed 2026-09-20 — the pool was wiped and every GS Free turn
+ * returned "keys not configured" until re-provisioned). The gitignored
+ * .secrets/openrouter.keys file is NOT touched by the platform, so the pool
+ * survives any process restart. Format: comma- or newline-separated keys.
+ */
+const KEY_FILE_PATH = '/home/z/my-project/.secrets/openrouter.keys'
+
+function readKeyFile(): string[] {
+  try {
+    const fs = require('node:fs') as typeof import('node:fs')
+    const raw = fs.readFileSync(KEY_FILE_PATH, 'utf8')
+    return raw
+      .split(/[\n,]/)
+      .map((k) => k.trim())
+      .filter((k) => k.startsWith('sk-or-'))
+  } catch {
+    return []
+  }
+}
+
 function loadKeyPool(): string[] {
-  return (process.env.OPENROUTER_API_KEYS ?? '')
-    .split(',')
+  const fromEnv = (process.env.OPENROUTER_API_KEYS ?? '')
+    .split(/[,\n]/)
     .map((k) => k.trim())
-    .filter((k) => k.length > 0)
+    .filter((k) => k.startsWith('sk-or-'))
+  if (fromEnv.length > 0) return fromEnv
+  return readKeyFile()
 }
 
 // Cursor into the key pool — starts each request at the last known-good key.
@@ -136,7 +160,7 @@ export async function orCompleteChat(
   models: string[]
 ): Promise<{ text: string; model: string | null }> {
   const keys = loadKeyPool()
-  if (keys.length === 0) throw new Error('OpenRouter keys not configured')
+  if (keys.length === 0) throw new Error('GS Free is offline: the OpenRouter key pool is empty (platform restart wiped the env). Re-provision keys to restore free-tier models.')
   let lastError = 'OpenRouter unavailable'
 
   for (let mi = 0; mi < models.length; mi++) {
@@ -192,7 +216,7 @@ export async function orStreamChat(
   onDelta: (t: string) => Promise<void> | void
 ): Promise<string> {
   const keys = loadKeyPool()
-  if (keys.length === 0) throw new Error('OpenRouter keys not configured')
+  if (keys.length === 0) throw new Error('GS Free is offline: the OpenRouter key pool is empty (platform restart wiped the env). Re-provision keys to restore free-tier models.')
   let lastError = 'OpenRouter unavailable'
 
   for (let mi = 0; mi < models.length; mi++) {

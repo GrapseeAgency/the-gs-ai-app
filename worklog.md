@@ -3373,3 +3373,17 @@ Stage Summary:
 - v0.65.0 (versionCode 66) is LIVE as the single release — the user can install it right now (same cert, over-install) and device-audit the full Phase 8.1 research workflow: live trace, source cards, clarify chips, tappable [N], honest orb, persisted sources. Server keeps the rebuilt multi-engine search; older 0.64.0 clients still benefit from the backend but show no trace UI.
 - Release policy is now owned (GS RELEASE POLICY v1) — future releases proceed without per-release authorization, with all gates + roundtrip proof mandatory and disclosed.
 - Open items: >30s research turns still cut the live stream at the outer proxy (reopen conversation to adopt; unchanged); PHASE8.1-PUBLIC-VERIFY exact-phrase E2E suite still pending z-ai quota recovery; webDevReview cron remains deleted (memory), recreate deliberately if wanted.
+
+---
+Task ID: HOTFIX-KEYPOOL-WIPE
+Agent: Z.ai Code (main)
+Task: User report — app "sends unnecessary replies regardless of my messages", GS Free "doesn't understand what I am saying". Diagnose and fix.
+
+Work Log:
+- REPRODUCED on the public origin (gs-free, plain POST): every turn returns 502 upstream_error. Root cause chain: the APK build killed the dev server (memory) -> platform supervisor auto-restarted it -> the supervisor ALSO REWROTE .env at 17:37 (now only DATABASE_URL) -> OPENROUTER_API_KEYS (13-key pool) lost -> loadKeyPool() empty -> every GS Free turn throws "OpenRouter keys not configured" before any model call. The phone showed errors/stale content, never a real model reply — exactly the user's symptom. No message POSTs ever reached a model.
+- RECOVERY ATTEMPTS (all exhausted): filesystem-wide rg for sk-or- (none), git history -S (never committed), bash history (none), live process envs (none readable/holding keys). Keys are unrecoverable sandbox-side; user must re-supply.
+- HARDENING (src/lib/openrouter.ts): loadKeyPool() now reads process.env.OPENROUTER_API_KEYS first, falls back to a durable gitignored key file /home/z/my-project/.secrets/openrouter.keys (comma/newline separated, sk-or- validated) that the platform does not touch — pool now survives ANY restart. Both empty-pool throw sites now say "GS Free is offline: key pool empty — re-provision keys" (honest, actionable). tsc clean; .secrets/ gitignored, chmod 700.
+- BACKEND VERIFIED otherwise: public origin /, /api/v1/models, /api/v1/conversations all 200; planner/gate logs show correct intent classification (trigger=recency -> intent=none) — search chain healthy, only the model layer is keyless.
+
+Stage Summary:
+- GS Free outage root-caused to platform .env rewrite on supervisor restart; key pool hardened with a durable .secrets file fallback. BLOCKED on user re-supplying the OpenRouter keys — the moment they are pasted they go into .secrets/openrouter.keys + .env, and a live gs-free E2E verifies the turn end-to-end.
