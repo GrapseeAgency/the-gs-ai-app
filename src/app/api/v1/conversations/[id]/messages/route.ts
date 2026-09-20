@@ -180,7 +180,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
   // (with its optional concrete model mapping + modelless fallback).
   const modelRoute = resolveModelRoute(requestedModelId ?? conversation.modelId)
   const providerModel = modelRoute.backend === 'zai' ? modelRoute.providerModel : null
-  const openRouterModel = modelRoute.backend === 'openrouter' ? modelRoute.model : null
+  const openRouterModels = modelRoute.backend === 'openrouter' ? modelRoute.models : null
   const shouldAutoTitle = conversation.title === DEFAULT_TITLE
 
   // Persist the user message + apply auto-title / model override.
@@ -575,8 +575,8 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       const { messages: modelMessages } = await buildModelMessages(outcome)
       const text = useVision
         ? (await completeVisionChat(modelMessages as VisionChatMessage[])).text
-        : openRouterModel
-          ? await orCompleteChat(modelMessages as ChatMessageInput[], openRouterModel).then((r) => r.text)
+        : openRouterModels
+          ? await orCompleteChat(modelMessages as ChatMessageInput[], openRouterModels).then((r) => r.text)
           : await completeChat(modelMessages as ChatMessageInput[], providerModel)
       const finalText =
         outcome?.ok || historySources.length > 0
@@ -642,8 +642,8 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
           const { messages: modelMessages } = await buildModelMessages(outcome)
           const full = useVision
             ? (await streamVisionChat(modelMessages as VisionChatMessage[], (d) => send('delta', d))).text
-            : openRouterModel
-              ? await orStreamChat(modelMessages as ChatMessageInput[], openRouterModel, (d) => send('delta', d))
+            : openRouterModels
+              ? await orStreamChat(modelMessages as ChatMessageInput[], openRouterModels, (d) => send('delta', d))
               : await streamChat(modelMessages as ChatMessageInput[], (d) => send('delta', d), providerModel)
           const finalText =
             outcome?.ok || historySources.length > 0

@@ -42,24 +42,36 @@ export function resolveProviderModel(gsModelId: string | null | undefined): stri
 // ---------------------------------------------------------------------------
 // PHASE 8.1 — OpenRouter free tiers (user-supplied keys in .env, 2026-09-20).
 // These tiers bypass the primary provider's account-level quota entirely.
-// `openrouter/free` is the platform's meta-router: it forwards to whichever
-// free model currently has capacity (proven live: served nex-n2.5-pro while
-// qwen/glm free tiers were individually rate-limited).
+//
+// PHASE 8.1b — MODEL CHAINS. Each tier pins a PROVEN quality model first and
+// keeps the `openrouter/free` meta-router as a last-resort capacity net:
+//  - Live probing (2026-09-20) showed specific free models can saturate at the
+//    PROVIDER level (qwen3.8-27b and gemma-4-31b returned 429 even on fresh
+//    keys) — key rotation cannot fix that.
+//  - The router auto-picks whichever free model has capacity, but its
+//    per-call quality is unpredictable (observed: a junk model answering
+//    "User Safety: safe").
+// So: quality model first, router only if the pinned model fails the whole
+// key pool.
 // ---------------------------------------------------------------------------
 
-const OPENROUTER_MODELS: Record<string, string> = {
-  'gs-free': 'openrouter/free',
-  'gs-free-big': 'nvidia/nemotron-3-ultra-550b-a55b:free',
+const OPENROUTER_MODELS: Record<string, string[]> = {
+  'gs-free': [
+    'nvidia/nemotron-3-super-120b-a12b:free', // persona-faithful in live probes
+    'nex-agi/nex-n2.5-pro:free', // proven quality; leaks its own brand on identity questions
+    'openrouter/free', // last-resort capacity net
+  ],
+  'gs-free-big': ['nvidia/nemotron-3-ultra-550b-a55b:free', 'openrouter/free'],
 }
 
-/** Resolve a catalogue id to an OpenRouter model, or null if it is not one. */
-export function resolveOpenRouterModel(gsModelId: string | null | undefined): string | null {
+/** Resolve a catalogue id to an OpenRouter model chain, or null if not one. */
+export function resolveOpenRouterModel(gsModelId: string | null | undefined): string[] | null {
   if (!gsModelId) return null
   return OPENROUTER_MODELS[gsModelId] ?? null
 }
 
 export type ModelRoute =
-  | { backend: 'openrouter'; model: string }
+  | { backend: 'openrouter'; models: string[] }
   | { backend: 'zai'; providerModel: string | null }
 
 /**
@@ -68,7 +80,7 @@ export type ModelRoute =
  * concrete model mapping.
  */
 export function resolveModelRoute(gsModelId: string | null | undefined): ModelRoute {
-  const orModel = resolveOpenRouterModel(gsModelId)
-  if (orModel) return { backend: 'openrouter', model: orModel }
+  const orModels = resolveOpenRouterModel(gsModelId)
+  if (orModels) return { backend: 'openrouter', models: orModels }
   return { backend: 'zai', providerModel: resolveProviderModel(gsModelId) }
 }
