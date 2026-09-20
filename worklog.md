@@ -3186,3 +3186,4 @@ Stage Summary:
 - Round 2 (00:10:50 UTC): probe → 429. Recorded and STOPPED per protocol (zero further calls).
 - Round 3 (00:12 UTC): probe → 429. Recorded and STOPPED per protocol.
 - ⚠️ ANOMALY: job 399318 is MISFIRING — 3 fires in 3 minutes (00:09/00:10/00:11 UTC) despite fixed_rate=1800s. Delete/list attempts from this cron-spawned context are blocked ("cron tool not available"). NEXT NORMAL-CONTEXT SESSION: DELETE job 399318 immediately (it spams the user's chat thread with verifier rounds); verification of the Phase 8.1 disclosure fix can then be done manually on user request or via a correctly-cadenced one-shot job. Until then, every cron round MUST limit itself to: one probe → one worklog line → stop. NOTHING else.
+- Round 4 (00:12:45 UTC): probe → 429. One probe, one line, stopped (per worklog discipline note).
