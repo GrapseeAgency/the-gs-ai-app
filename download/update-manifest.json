@@ -1,6 +1,6 @@
 {
-  "versionCode": 66,
-  "versionName": "0.65.0",
+  "versionCode": 67,
+  "versionName": "0.65.1",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "Research you can see: live search trace (real queries, engines, pages read), source cards with dates and honest status, clarify quick-choices when a request is ambiguous, tappable [N] citations, orb states driven by real backend events. Sources persist in chat history."
+  "notes": "Offline-banner fix: the 'You are offline' banner no longer sticks as a false positive after an install or wifi/mobile-data handoff \u2014 the network state now revalidates every 5s behind the OS callbacks. Same research UI as 0.65.0. Backend model-key restore needed no app update."
 }

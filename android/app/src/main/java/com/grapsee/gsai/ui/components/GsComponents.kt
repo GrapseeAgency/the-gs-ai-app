@@ -695,6 +695,7 @@ fun rememberDeviceOffline(): State<Boolean> {
     val offline = remember { mutableStateOf(false) }
     DisposableEffect(context) {
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val handler = android.os.Handler(android.os.Looper.getMainLooper())
         fun refresh() {
             val caps = cm.activeNetwork?.let { cm.getNetworkCapabilities(it) }
             offline.value = caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) != true
@@ -714,7 +715,28 @@ fun rememberDeviceOffline(): State<Boolean> {
             }
         }
         runCatching { cm.registerDefaultNetworkCallback(callback) }
-        onDispose { runCatching { cm.unregisterNetworkCallback(callback) } }
+
+        // False-positive guard (v0.65.1): a TRANSIENT null active network (the
+        // instant after an app install, a wifi<->cellular handoff, a VPN
+        // renegotiation) used to flag offline with NO scheduled recheck — the
+        // banner could stick until an unrelated network event happened to
+        // fire. A short periodic revalidation self-heals any stale flag
+        // within one tick while keeping the honest immediate read for real
+        // drops (onLost still flags at once).
+        val recheck = object : Runnable {
+            override fun run() {
+                refresh()
+                handler.postDelayed(this, RECHECK_INTERVAL_MS)
+            }
+        }
+        handler.postDelayed(recheck, RECHECK_INTERVAL_MS)
+
+        onDispose {
+            handler.removeCallbacks(recheck)
+            runCatching { cm.unregisterNetworkCallback(callback) }
+        }
     }
     return offline
 }
+
+private const val RECHECK_INTERVAL_MS = 5_000L
