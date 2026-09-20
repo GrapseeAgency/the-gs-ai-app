@@ -3172,3 +3172,14 @@ Work Log:
 
 Stage Summary:
 - Two real defects found via the user's wild report and fixed server-side (backend-only; no client impact). Unit 49/49; fixes proven to the extent the quota window allows (extraction telemetry-proven; disclosure wired + unit-covered). Background quota competition eliminated. Remaining: single E2E observation of the disclosure opening line once the provider window resets.
+
+---
+Task ID: PHASE8.1-PUBLIC-VERIFY (round 1)
+Agent: Z.ai Code (main) — scheduled verifier (cron job 399318, webDevReview)
+Task: Quota-aware verification round: single probe → only if LLM_OK run the exact-phrase E2E + public-mini; else record and stop.
+
+Work Log:
+- 00:10 UTC: single text-only probe → 429 (window STILL active ~2h after onset; longer than hourly, possibly a daily-cap recovery). Per quota discipline: recorded and STOPPED — zero further LLM/function/page calls this round.
+
+Stage Summary:
+- Nothing new to report beyond quota persistence; all Phase 8/8.1 code fixes remain in place and unit-proven (49/49). Verifier stays on the 30-min cadence and keeps rounds zero-cost while the window is closed.
