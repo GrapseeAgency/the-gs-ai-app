@@ -3387,3 +3387,17 @@ Work Log:
 
 Stage Summary:
 - GS Free outage root-caused to platform .env rewrite on supervisor restart; key pool hardened with a durable .secrets file fallback. BLOCKED on user re-supplying the OpenRouter keys — the moment they are pasted they go into .secrets/openrouter.keys + .env, and a live gs-free E2E verifies the turn end-to-end.
+
+---
+Task ID: HOTFIX-KEYPOOL-RESTORE
+Agent: Z.ai Code (main)
+Task: User re-supplied 12 OpenRouter keys after the platform .env wipe; store durably and prove the model layer end-to-end.
+
+Work Log:
+- VAULT: 12 keys written to /home/z/my-project/.secrets/openrouter.keys (dir 700, file 600, verified gitignored via git check-ignore — invisible to git/GitHub). Key material never echoed to output; only ***last4 fingerprints.
+- LIVE VALIDATION (GET /api/v1/key): 11 VALID (unlimited/limited free tier), 1 EXPIRED 401 (***4a53 — same key already dead in the previous pool). Dead key EVICTED from the file; pool = 11 keys, rotation intact.
+- E2E PROOF via public origin, gs-free: non-stream turn "what is 2+2? answer in exactly 3 words" -> "Result is four." (real model, 200 in 6.6s). Streaming turn (body stream:true, the exact phone path) -> SSE delta+done, joined deltas = "Tokyo" for "capital of japan". Both 200, no 502s, no upstream errors.
+- Diag conversations removed (userDeviceId diag-probe-2 cascade).
+
+Stage Summary:
+- Model layer FULLY RESTORED on the user's keys: pool 11 valid keys in the restart-proof vault, loadKeyPool() env->file fallback live (no server restart needed — file read per call). GS Free + GS Free Deep usable again on phone and web; z-ai tiers resume automatically when the account 429 window lifts. The 502 "unnecessary replies" outage is closed.
