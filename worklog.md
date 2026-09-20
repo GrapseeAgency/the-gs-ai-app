@@ -3183,3 +3183,4 @@ Work Log:
 
 Stage Summary:
 - Nothing new to report beyond quota persistence; all Phase 8/8.1 code fixes remain in place and unit-proven (49/49). Verifier stays on the 30-min cadence and keeps rounds zero-cost while the window is closed.
+- Round 2 (00:10:50 UTC): probe → 429. Recorded and STOPPED per protocol (zero further calls).
