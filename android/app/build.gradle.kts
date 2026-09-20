@@ -15,11 +15,24 @@ android {
         applicationId = "com.grapsee.gsai"
         minSdk = 26
         targetSdk = 35
-        versionCode = 67
-        versionName = "0.65.1"
+        versionCode = 68
+        versionName = "0.66.0"
 
-        // Backend origin for the Android emulator (host loopback). Override per build type if needed.
-        buildConfigField("String", "BASE_URL", "\"http://10.0.2.2:3000\"")
+        // REAL transport origin — applies to EVERY build type (v0.66.0 fix).
+        // HISTORY: this was http://10.0.2.2:3000 (emulator loopback) with the
+        // reachable origin only in the `release` block — but the shipped APKs
+        // are assembleDebug, so EVERY phone release pointed at a dead emulator
+        // address. Sends failed instantly and GS Lite silently answered with
+        // local canned replies — the "unnecessary answers" audit finding. The
+        // public preview-gateway origin sits on a globally routable ALB
+        // (47.239.x.x), complete TLS chain; uploads verified 201 at 200 KB /
+        // 400 KB / 1 MB / chunked / PDF / text. The x-session-id header
+        // (ServiceLocator) stays: harmless here, required elsewhere.
+        buildConfigField(
+            "String",
+            "BASE_URL",
+            "\"https://preview-chat-c945696f-6447-4dfa-b510-971d8b9eb5bf.space-z.ai\""
+        )
     }
 
     /**
@@ -43,19 +56,6 @@ android {
         release {
             isMinifyEnabled = false
             signingConfig = signingConfigs.getByName("liveUpdate")
-            // REAL transport origin (device-reachability fix): the platform's
-            // fcapp.run endpoint is VPC-INTERNAL ONLY (public DNS resolves it to
-            // CGNAT 100.118.36.1; the non-vpc variant answers 403 "function
-            // internet URL is disabled") — no phone can ever reach it. The
-            // public preview-gateway origin below sits on a globally routable
-            // ALB (47.239.x.x), complete TLS chain, uploads verified 201 at
-            // 200 KB / 400 KB / 1 MB / chunked / PDF / text. The x-session-id
-            // header (ServiceLocator) stays: harmless here, required elsewhere.
-            buildConfigField(
-                "String",
-                "BASE_URL",
-                "\"https://preview-chat-c945696f-6447-4dfa-b510-971d8b9eb5bf.space-z.ai\""
-            )
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

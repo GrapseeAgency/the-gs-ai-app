@@ -1,6 +1,6 @@
 {
-  "versionCode": 67,
-  "versionName": "0.65.1",
+  "versionCode": 68,
+  "versionName": "0.66.0",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "Offline-banner fix: the 'You are offline' banner no longer sticks as a false positive after an install or wifi/mobile-data handoff \u2014 the network state now revalidates every 5s behind the OS callbacks. Same research UI as 0.65.0. Backend model-key restore needed no app update."
+  "notes": "THE connectivity fix: every previous APK carried an emulator-only server address (10.0.2.2), so the phone could never reach the real backend and GS Lite local canned replies answered instead. All builds now carry the real public origin, offline fallback replies are labelled 'GS Lite - offline reply', and releases are built by GitHub Actions with the same signing cert."
 }

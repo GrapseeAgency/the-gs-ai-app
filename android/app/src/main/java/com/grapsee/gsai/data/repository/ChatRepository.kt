@@ -377,9 +377,16 @@ class ChatRepository(
             throw ce
         } catch (e: Exception) {
             // On-device landing instead of an error bubble: GS Lite keeps the
-            // conversation flowing with a streamed local reply. No errors, no
-            // connectivity talk — the turn simply gets answered.
+            // conversation flowing with a streamed local reply. v0.66.0 HONESTY
+            // FIX: the reply is now LABELLED — the unlabelled fallback made an
+            // unreachable backend look like a real model answer (the shipped
+            // APKs pointed at 10.0.2.2 for their entire life, so every "answer"
+            // the auditor saw was this path, invisible). The marker makes the
+            // offline state unmistakable in the transcript itself.
             if (accumulated.isEmpty()) {
+                val marker = "— GS Lite · offline reply (backend unreachable) —\n\n"
+                accumulated.append(marker)
+                onDelta(marker)
                 streamLocalReply(content) { chunk ->
                     accumulated.append(chunk)
                     onDelta(chunk)

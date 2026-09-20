@@ -1,0 +1,56 @@
+name: Android release build
+
+# Builds the phone APK on GitHub's infra — the sandbox keeps losing its
+# toolchain and fights OOM on every release. The committed gs-live.keystore
+# gives CI builds the SAME signing cert as sandbox builds (over-install safe),
+# and the BASE_URL gate below proves the APK carries the real public origin
+# (the 10.0.2.2 emulator-loopback regression is exactly what this guards).
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Unit tests + assemble
+        working-directory: android
+        run: gradle --no-build-cache --max-workers=2 testDebugUnitTest assembleDebug
+
+      - name: Gates (badging, cert, BASE_URL)
+        working-directory: android
+        run: |
+          SDK_BUILDTOOLS="$ANDROID_HOME/build-tools/35.0.0"
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          "$SDK_BUILDTOOLS/aapt2" dump badging "$APK" | grep -q "package: name='com.grapsee.gsai'" || exit 1
+          "$SDK_BUILDTOOLS/apksigner" verify --print-certs "$APK" | grep -qi "b1ffd75dd410c84bd9467e418c419cd377d57569ae7ac5e26b778e6418b1a483" || exit 1
+          unzip -p "$APK" 'classes*.dex' | grep -q "https://preview-chat-c945696f-6447-4dfa-b510-971d8b9eb5bf.space-z.ai" || { echo "FATAL: public origin missing from dex"; exit 1; }
+          if unzip -p "$APK" 'classes*.dex' | grep -q "http://10.0.2.2:3000"; then echo "FATAL: emulator loopback leaked into build"; exit 1; fi
+          echo "gates ok"
+
+      - name: Attach to release
+        working-directory: android
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk GS-AI-App.apk
+          gh release create "$TAG" --verify-tag --title "$TAG" --notes "CI build" 2>/dev/null || true
+          gh release upload "$TAG" GS-AI-App.apk --clobber
+          echo "uploaded GS-AI-App.apk for $TAG"
