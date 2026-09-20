@@ -3416,3 +3416,23 @@ Work Log:
 
 Stage Summary:
 - v0.65.1 (versionCode 67) is LIVE. Client: offline-banner self-heals in 5s (the user's "backend offline" ghost is dead). Server: key-pool vault already live from the previous entry. Toolchain provisioning is now a repeatable documented procedure (third wipe survived cleanly).
+
+---
+Task ID: RELEASE-V0.66.0-THE-CONNECTIVITY-FIX
+Agent: Z.ai Code (main)
+Task: User directive — "still same error... he is not connected with actual backend... build a proper app... use github-action its completely free... make your environment as clean as possible."
+
+Work Log:
+- ROOT CAUSE OF THE ENTIRE AUDIT EXPERIENCE (proven from shipped bytes): android/app/build.gradle.kts carried BASE_URL=http://10.0.2.2:3000 (emulator loopback) in defaultConfig, with the real public origin only in the release buildType — but every shipped APK is assembleDebug. dex string-pool proof: 10.0.2.2 sits in BuildConfig's pool next to the model ids; the public-origin hit was a false positive in a header scan. EVERY phone release ever shipped pointed at a dead address. Sends failed instantly -> ChatRepository catch -> GS Lite local canned replies ("No errors, no connectivity talk" by design) -> the user's "unnecessary answers regardless of my messages" and "not connected with actual backend" was LITERALLY CORRECT the whole time. The v0.65.1 "offline banner false-positive fix" treated a symptom; the banner was telling the truth.
+- FIX 1 (build.gradle.kts): public origin moved to defaultConfig — ALL build types; release duplicate + emulator loopback deleted. Comment documents the history.
+- FIX 2 (ChatRepository.kt): GS Lite fallback replies now stream a marker first — "— GS Lite · offline reply (backend unreachable) —" — the unlabelled fallback was the mechanism that hid the outage from the auditor.
+- FIX 3 (USER DIRECTIVE — GitHub Actions): .github/workflows/android-release.yml on tag push v* / dispatch: Temurin 17, Gradle 8.9 (setup-gradle, no wrapper needed), testDebugUnitTest + assembleDebug, gates = badging + cert b1ffd75d… + public-origin-in-dex + 10.0.2.2-absent (dex grep), attach GS-AI-App.apk to the release with --clobber (GITHUB_TOKEN, contents:write). Cert parity holds because gs-live.keystore is committed (verified git ls-files).
+- BUILD: 68/0.66.0, BUILD SUCCESSFUL 1m27s; tests 55/0; dex: public origin True, 10.0.2.2 False; cert b1ffd75d… identical; sha256 baaffd76… (local).
+- PUBLISH: main 16d4bb7..40289c1, tag v0.66.0, release retitled "THE connectivity fix: the app finally talks to the real backend" with a full honest history; asset swapped (local build first, then CI clobbered it).
+- GITHUB ACTIONS: run "Android release build" on v0.66.0 -> completed SUCCESS; roundtrip on the CI-built asset: 68/0.66.0, cert identical, public origin True, 10.0.2.2 False, sha256 35c81e4b… (CI build; differs from local by zip timestamps — expected).
+- download/ mirror synced 68/0.66.0; dev server restarted (200).
+
+Stage Summary:
+- The phone will TALK TO THE REAL BACKEND for the first time. On install: real model replies, live research trace, source cards, clarify chips — the actual Phase 8.1 workflow, not GS Lite canned text. If the backend is ever unreachable again, the reply says so explicitly.
+- Future releases: GitHub Actions builds them (sandbox toolchain wipes/OOM no longer block releases); sandbox stays light per user directive.
+- Pre-existing note: the separate "iOS (macOS) — Xcode build & test" workflow has been failing since before today (09:27Z) — untouched, out of scope, logged for a future task.
