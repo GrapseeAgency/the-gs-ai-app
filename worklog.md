@@ -3401,3 +3401,18 @@ Work Log:
 
 Stage Summary:
 - Model layer FULLY RESTORED on the user's keys: pool 11 valid keys in the restart-proof vault, loadKeyPool() env->file fallback live (no server restart needed — file read per call). GS Free + GS Free Deep usable again on phone and web; z-ai tiers resume automatically when the account 429 window lifts. The 502 "unnecessary replies" outage is closed.
+
+---
+Task ID: RELEASE-V0.65.1
+Agent: Z.ai Code (main)
+Task: User directive — rebuild the APK and update the permanent link. Carried the promised offline-banner fix so the release is a real change.
+
+Work Log:
+- CLIENT FIX (GsComponents.kt rememberDeviceOffline): false-positive guard — transient null active network (post-install instant, wifi<->cellular handoff, VPN renegotiation) flagged offline with NO recheck and could stick indefinitely. Added a 5s main-looper periodic revalidation behind the OS callbacks; real drops still flag instantly via onLost; onDispose removes the runnable. versionCode 67 / versionName 0.65.1.
+- TOOLCHAIN WIPED AGAIN (jdk17 + gradle-8.9 + android-sdk all gone): re-provisioned live — Temurin 17.0.20.1, Gradle 8.9, cmdline-tools 12.0 + platforms;android-35 + build-tools;35.0.0 + platform-tools. Download/cache caveat: shell `&` groups lost the cd — one zip re-located from project root. Winning build invocation unchanged (GRADLE_OPTS=-Xmx192m, daemon -Xmx1400m + capped metaspace, kotlin in-process, --max-workers=1 --no-daemon): BUILD SUCCESSFUL 7m20s on the cold cache.
+- GATES: tests 55/0; aapt2 com.grapsee.gsai 67/0.65.1; cert SHA-256 b1ffd75d… identical (over-install safe); artifact 20,018,063 B sha256 3fe26e94a1d95f7cbb205ae2fb05e9433ba8d6b138101022ffdcbb63cd12aeae.
+- PUBLISH: main c8a2cef..16d4bb7 (incl. the openrouter.ts durable key loader), tag v0.65.1; release 384909935 PATCHed to v0.65.1, old asset deleted (204), new uploaded (state uploaded). Roundtrip: releases/latest sha256 3fe26e94…aeae EXACT, badging 67/0.65.1 on downloaded bytes. download/ mirror synced (67/0.65.1). Dev server restarted (200).
+- Note: the permanent link (releases/latest/download/GS-AI-App.apk) was already perpetual — it now serves 0.65.1.
+
+Stage Summary:
+- v0.65.1 (versionCode 67) is LIVE. Client: offline-banner self-heals in 5s (the user's "backend offline" ghost is dead). Server: key-pool vault already live from the previous entry. Toolchain provisioning is now a repeatable documented procedure (third wipe survived cleanly).
