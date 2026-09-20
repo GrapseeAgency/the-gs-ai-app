@@ -152,6 +152,12 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.data.ModelPrefs
 import com.grapsee.gsai.data.chat.ChatStreamController
+import com.grapsee.gsai.data.chat.ClarifyOption
+import com.grapsee.gsai.data.chat.ClarifyPrompt
+import com.grapsee.gsai.data.chat.SearchTraceItem
+import com.grapsee.gsai.data.chat.SourceCard
+import com.grapsee.gsai.data.chat.decodeClarifyPrompt
+import com.grapsee.gsai.data.chat.decodeSourceCards
 import com.grapsee.gsai.data.model.ModelCatalog
 import com.grapsee.gsai.data.model.ModelInfo
 import com.grapsee.gsai.data.repository.ChatRepository
@@ -194,8 +200,43 @@ private data class ChatUiMessage(
     val createdAt: String = "",
     val failed: Boolean = false,
     /** PHASE 5: real attachment records on the turn (user turns only today). */
-    val attachments: List<AttachmentDto> = emptyList()
+    val attachments: List<AttachmentDto> = emptyList(),
+    /**
+     * PHASE 8.1: the turn's REAL web-search results.
+     *  - [sources] survive reload (Room `sources` column → decoded cards).
+     *  - [clarify] survives reload (Room `clarifyOptions` column → parsed).
+     *  - [traceItems] / [traceSummary] are IN-MEMORY ONLY: the trace detail
+     *    exists exactly as long as the process does. After a reload the
+     *    collapsed summary is re-derived from the source count — the one thing
+     *    actually persisted. Nothing here is ever fabricated for a reload.
+     */
+    val sources: List<SourceCard> = emptyList(),
+    val clarify: ClarifyPrompt? = null,
+    val traceItems: List<SearchTraceItem> = emptyList(),
+    val traceSummary: String? = null
 )
+
+/**
+ * PHASE 8.1: the collapsed one-line trace summary, derived ONLY from what the
+ * wire actually delivered — the terminal `search completed` counts when they
+ * exist, the failure line when the search failed, the query count as the
+ * honest fallback, and null for a turn that never searched. Used at commit
+ * time; after a reload the collapsed line re-derives from the persisted
+ * source count (see [SearchTraceCard] wiring below).
+ */
+private fun traceSummaryOf(state: ChatStreamController.StreamState): String? {
+    if (state.traceItems.any { it.kind == SearchTraceItem.Kind.SearchFailed }) {
+        return "Search failed"
+    }
+    state.searchSummary?.let { summary ->
+        val parts = mutableListOf("Searched ${summary.queries} ${if (summary.queries == 1) "query" else "queries"}")
+        if (summary.sources > 0) parts += "${summary.sources} sources"
+        if (summary.retrieved > 0) parts += "${summary.retrieved} read"
+        return parts.joinToString(" · ")
+    }
+    val queryCount = state.traceItems.count { it.kind == SearchTraceItem.Kind.Query }
+    return if (queryCount > 0) "Searched $queryCount ${if (queryCount == 1) "query" else "queries"}" else null
+}
 
 /**
  * Per-conversation unsent drafts — leave a thread mid-thought, come back,
@@ -338,7 +379,11 @@ fun ChatScreen(
             orbStateForChatStream(
                 streamStateRaw.value?.phase,
                 streamStateRaw.value?.streamText,
-                streamStateRaw.value?.hasAttachments == true
+                streamStateRaw.value?.hasAttachments == true,
+                // PHASE 8.1: the wire's honest search phase (searching/working)
+                // drives SEARCHING/WORKING before the first token. Null for a
+                // plain turn — the mapping is unchanged without a search.
+                streamStateRaw.value?.searchPhase
             )
         }
     }
@@ -376,6 +421,12 @@ fun ChatScreen(
             }
             context.startActivity(Intent.createChooser(send, null))
         }.onFailure { showSnack("Sharing isn't set up on this device") }
+    }
+    // PHASE 8.1: source cards + citation chips open the REAL article URL the
+    // backend persisted — a plain ACTION_VIEW, no in-app browser, and a quiet
+    // honest note when this device has no handler for it.
+    val openSource: (String) -> Unit = { url ->
+        if (!openSourceUrl(context, url)) showSnack("No app can open this link")
     }
     // PHASE 5 real pickers — system Photo Picker, TakePicture through the
     // existing FileProvider, SAF OpenMultipleDocuments. No storage or camera
@@ -524,7 +575,11 @@ fun ChatScreen(
                 ChatUiMessage(
                     it.id, it.role, it.content,
                     createdAt = it.createdAt,
-                    attachments = ChatRepository.decodeAttachments(it.attachments)
+                    attachments = ChatRepository.decodeAttachments(it.attachments),
+                    // PHASE 8.1: persisted sources/clarifyOptions reload the
+                    // turn's citation chips, source cards and quick-choices.
+                    sources = decodeSourceCards(it.sources),
+                    clarify = decodeClarifyPrompt(it.clarifyOptions)
                 )
             }
         )
@@ -574,7 +629,9 @@ fun ChatScreen(
             ChatUiMessage(
                 it.id, it.role, it.content,
                 createdAt = it.createdAt,
-                attachments = ChatRepository.decodeAttachments(it.attachments)
+                attachments = ChatRepository.decodeAttachments(it.attachments),
+                sources = decodeSourceCards(it.sources),
+                clarify = decodeClarifyPrompt(it.clarifyOptions)
             )
         }.toMutableList()
         val live = chatStream.state.value
@@ -619,7 +676,9 @@ fun ChatScreen(
                                 ChatUiMessage(
                                     it.id, it.role, it.content,
                                     createdAt = it.createdAt,
-                                    attachments = ChatRepository.decodeAttachments(it.attachments)
+                                    attachments = ChatRepository.decodeAttachments(it.attachments),
+                                    sources = decodeSourceCards(it.sources),
+                                    clarify = decodeClarifyPrompt(it.clarifyOptions)
                                 )
                             }
                         )
@@ -682,7 +741,20 @@ fun ChatScreen(
         if (index < 0) return
         if (state.streamText.isBlank()) messages.removeAt(index)
         else {
-            messages[index] = messages[index].copy(content = state.streamText, isStreaming = false)
+            messages[index] = messages[index].copy(
+                content = state.streamText,
+                isStreaming = false,
+                // PHASE 8.1: the turn's real search artifacts commit with the
+                // text — live source cards / clarify prompt move onto the turn,
+                // the trace keeps its detail in memory and collapses to a
+                // one-line summary (protocol: "after done, the trace collapses;
+                // source cards stay"). Whatever the wire actually delivered is
+                // what the committed turn shows — nothing more.
+                sources = state.sources,
+                clarify = state.clarify,
+                traceItems = state.traceItems,
+                traceSummary = traceSummaryOf(state)
+            )
             view.announceForAccessibility(announcement)
         }
     }
@@ -1199,7 +1271,13 @@ fun ChatScreen(
                                     onReadAloud = { readAloud(message.id, message.content) },
                                     onBranch = { branchFrom(message.id) },
                                     onSaveToLibrary = { saveToLibrary(message.content) },
-                                    onTranslate = { translateMessage(message.content) }
+                                    onTranslate = { translateMessage(message.content) },
+                                    // PHASE 8.1: real search artifacts — trace
+                                    // card, source cards, citation chips, clarify
+                                    // quick-choices. A picked chip is sent as an
+                                    // ordinary user message through dispatch.
+                                    onOpenSource = openSource,
+                                    onClarifyOption = { option -> dispatch(option.label, echoUser = true) }
                                 )
                             }
                         }
@@ -1572,6 +1650,16 @@ private fun JumpToLatestPill(onClick: () -> Unit) {
  * NULLABLE snapshot — collectAsState on StateFlow<StreamState?> yields
  * State<StreamState?>. A failed turn keeps its partial content and renders
  * the honest FailedTurnNotice system status under the action row.
+ *
+ * PHASE 8.1 anatomy (docs/search-event-protocol.md): the turn's real search
+ * artifacts ride along — the search TRACE card sits above the content
+ * (expanded while streaming, collapsed to its one-line summary after done),
+ * the SOURCE cards render under the content (live as sources complete, then
+ * the persisted done list), [N] citation markers resolve into tappable chips
+ * against those same sources, and a clarify turn's quick-choice chips render
+ * under the content once the turn has settled (so every tap can actually
+ * send). All of it is drawn from the controller state / the committed turn
+ * data — nothing is synthesized here.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -1587,10 +1675,30 @@ private fun AssistantMessage(
     onReadAloud: () -> Unit = {},
     onBranch: () -> Unit = {},
     onSaveToLibrary: () -> Unit = {},
-    onTranslate: () -> Unit = {}
+    onTranslate: () -> Unit = {},
+    // PHASE 8.1: open a real source URL (ACTION_VIEW) + send a clarify pick.
+    onOpenSource: (String) -> Unit = {},
+    onClarifyOption: (ClarifyOption) -> Unit = {}
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     val haptics = LocalHapticFeedback.current
+    // PHASE 8.1: the live stream wins while this bubble is the streaming one;
+    // the committed turn data (memory, or Room after a reload) wins after.
+    val liveState = live?.value
+    val turnSources = if (message.isStreaming) liveState?.sources.orEmpty() else message.sources
+    val turnClarify = if (message.isStreaming) null else message.clarify
+    val turnTraceItems = liveState?.traceItems ?: message.traceItems
+    // Reload-time collapsed summary: the trace detail is memory-only, so a
+    // reloaded turn honestly derives its one-liner from what persisted.
+    val turnTraceSummary = message.traceSummary
+        ?: if (message.sources.isNotEmpty()) "${message.sources.size} sources" else null
+    // Citation chips resolve ONLY against the turn's real sources with a
+    // plain http(s) URL — an [N] without a matching source stays literal text.
+    val citationUrls = remember(turnSources) {
+        turnSources
+            .filter { it.url.startsWith("https://") || it.url.startsWith("http://") }
+            .associate { it.ordinal to it.url }
+    }
     Box(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.fillMaxWidth()) {
             if (showIdentity) {
@@ -1604,6 +1712,32 @@ private fun AssistantMessage(
                     )
                 }
                 Spacer(Modifier.height(6.dp))
+            }
+            // PHASE 8.1: the search trace, ABOVE the bubble — expanded while
+            // the stream runs, collapsed to the one-line summary after done
+            // (protocol honest-state rule). Rendered only when a real search
+            // happened; plain turns show nothing here.
+            if (message.isStreaming) {
+                if (turnTraceItems.isNotEmpty()) {
+                    SearchTraceCard(
+                        items = turnTraceItems,
+                        summary = null,
+                        expandable = true,
+                        defaultExpanded = true
+                    )
+                    Spacer(Modifier.height(8.dp))
+                }
+            } else {
+                val hasTrace = turnTraceItems.isNotEmpty() || turnTraceSummary != null
+                if (hasTrace) {
+                    SearchTraceCard(
+                        items = turnTraceItems,
+                        summary = turnTraceSummary,
+                        expandable = turnTraceItems.isNotEmpty(),
+                        defaultExpanded = false
+                    )
+                    Spacer(Modifier.height(8.dp))
+                }
             }
             // Document-style content: no card container, no border — just the
             // answer on the app background. The content column carries the
@@ -1628,8 +1762,24 @@ private fun AssistantMessage(
                 BlocksContent(
                     content = live?.value?.streamText ?: message.content,
                     isStreaming = message.isStreaming,
-                    onCopyCode = onCopy
+                    onCopyCode = onCopy,
+                    // PHASE 8.1: citation markers [N] become tappable chips
+                    // when N is one of THIS turn's real sources.
+                    citationUrls = citationUrls
                 )
+            }
+            // PHASE 8.1: the turn's real sources — live while streaming (as
+            // `source` events land), persisted done-list afterwards.
+            if (turnSources.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                SourceCardsRow(sources = turnSources, onOpenUrl = onOpenSource)
+            }
+            // PHASE 8.1: clarify quick-choices, only once the turn has settled
+            // — a chip tap sends a normal message, which the in-flight gate
+            // would refuse mid-stream. Honest affordance, honest timing.
+            if (turnClarify != null && !message.isStreaming) {
+                Spacer(Modifier.height(8.dp))
+                ClarifyChips(prompt = turnClarify, onPick = onClarifyOption)
             }
             if (!message.isStreaming) {
                 Spacer(Modifier.height(2.dp))

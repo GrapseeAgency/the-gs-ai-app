@@ -130,6 +130,12 @@ final class APIClient {
     ///   `data: {"event":"delta","data":"…chunk…"}`      → `onDelta`
     ///   `data: {"event":"done","data":"{…Message json…}"}` → `onDone`, stream ends
     ///   `data: {"event":"error","data":"…"}`            → `onError`, then throws
+    /// PHASE 8.1 (docs/search-event-protocol.md) — the search-trace events
+    ///   `status` | `search` | `source` | `clarify` surface RAW through
+    ///   `onEvent` (the payload stays the wire's string — for the new events
+    ///   it is a JSON-encoded object, double-encoded exactly like `done`);
+    ///   decoding and state live in ChatViewModel, the stream consumer.
+    ///   Old behavior is untouched: unknown event names stay ignored.
     ///
     /// Cancellation: cancelling the surrounding `Task` throws
     /// `CancellationError` (or `URLError.cancelled`) and tears the
@@ -141,7 +147,8 @@ final class APIClient {
         attachmentIDs: [String]? = nil,
         onDelta: @escaping (String) -> Void,
         onDone: @escaping (Message?) -> Void,
-        onError: @escaping (Error) -> Void = { _ in }
+        onError: @escaping (Error) -> Void = { _ in },
+        onEvent: @escaping (SseEvent) -> Void = { _ in }
     ) async throws {
         var request = try buildRequest(
             path: "/api/v1/conversations/\(Self.escaped(conversationID))/messages",
@@ -187,6 +194,10 @@ final class APIClient {
                 let failure = APIError.server(event.data ?? "The assistant hit an unexpected error.")
                 onError(failure)
                 throw failure
+            case "status", "search", "source", "clarify":
+                // PHASE 8.1: search-trace events reach the consumer raw —
+                // payload decoding + honest-state mapping live in ChatViewModel.
+                onEvent(event)
             default:
                 continue // unknown event types are ignored for forward-compat
             }

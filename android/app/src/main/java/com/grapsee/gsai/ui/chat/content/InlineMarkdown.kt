@@ -15,6 +15,11 @@ package com.grapsee.gsai.ui.chat.content
  *   6. bold/italic/strike (recursive inner parse)
  *   7. backslash escapes — LAST so "\*" still wins at the backslash position
  *      but never robs the math delimiters above of \( \) \[ \]
+ *   8. PHASE 8.1 citation markers [N] + defensive fullwidth variants — AFTER
+ *      everything else, so a complete markdown link still wins at the same
+ *      '[' position and only a BARE [N] becomes a [InlineSpan.CitationSpan].
+ *      The parser is source-blind (just the number); the renderer decides
+ *      chip vs. literal text.
  */
 private val inlineRegex = Regex(
     """`([^`\n]+)`""" +
@@ -30,7 +35,19 @@ private val inlineRegex = Regex(
         """|(?<!\*)\*([^*\n]+?)\*(?!\*)""" +
         """|(?<![\w])_(?!_)([^_\n]+?)_(?![\w])""" +
         """|~~([\s\S]+?)~~""" +
-        """|\\([*_#`\[\]()~\\-])"""
+        """|\\([*_#`\[\]()~\\-])""" +
+        // PHASE 8.1 citation markers — appended LAST so every group index above
+        // stays stable and the established precedence is preserved: a complete
+        // markdown link [text](url) still wins at the '[' position, escaped
+        // brackets still win at the '\' position, and a bare [N] only becomes a
+        // citation when nothing earlier claimed it. 1–2 digits keeps bracketed
+        // years like [2024] out. Fullwidth variants are the defensive fallback
+        // for a server that skipped bracket normalization (it normalizes; the
+        // client survives if that ever regresses).
+        """|\[(\d{1,2})\]""" +
+        "|【(\\d{1,2})】" +
+        "|〚(\\d{1,2})〛" +
+        "|［(\\d{1,2})］"
 )
 
 // Group indices of the combined pattern.
@@ -50,6 +67,11 @@ private const val G_ITALIC_STAR = 13
 private const val G_ITALIC_UNDER = 14
 private const val G_STRIKE = 15
 private const val G_ESCAPE = 16
+// PHASE 8.1 citation markers (appended last — existing indices untouched).
+private const val G_CITE = 17
+private const val G_CITE_FW_SQUARE = 18  // 【N】
+private const val G_CITE_FW_TORTOISE = 19 // 〚N〛
+private const val G_CITE_FW_FULLWIDTH = 20 // ［N］
 
 /** Schemes we will never turn into links — model output is not trusted. */
 private val blockedSchemes = setOf("javascript:", "data:", "file:", "vbscript:", "blob:")
@@ -91,10 +113,27 @@ fun parseInline(text: String): List<InlineSpan> {
             g[G_STRIKE].isNotEmpty() -> spans += InlineSpan.StrikeSpan(parseInline(g[G_STRIKE]))
 
             g[G_ESCAPE].isNotEmpty() -> spans += InlineSpan.TextSpan(g[G_ESCAPE])
+
+            // PHASE 8.1: a bare complete [N] (or fullwidth twin) — the number
+            // alone travels; chip vs. literal text is a renderer decision.
+            g[G_CITE].isNotEmpty() -> citationSpan(spans, g[G_CITE], match.value)
+            g[G_CITE_FW_SQUARE].isNotEmpty() -> citationSpan(spans, g[G_CITE_FW_SQUARE], match.value)
+            g[G_CITE_FW_TORTOISE].isNotEmpty() -> citationSpan(spans, g[G_CITE_FW_TORTOISE], match.value)
+            g[G_CITE_FW_FULLWIDTH].isNotEmpty() -> citationSpan(spans, g[G_CITE_FW_FULLWIDTH], match.value)
         }
         index = match.range.last + 1
     }
     return spans
+}
+
+private fun citationSpan(spans: MutableList<InlineSpan>, number: String, fullMatch: String) {
+    val value = number.toIntOrNull()
+    if (value != null && value > 0) {
+        spans += InlineSpan.CitationSpan(value)
+    } else {
+        // Defensive: a malformed marker (e.g. "[0]") stays the exact literal text.
+        spans += InlineSpan.TextSpan(fullMatch)
+    }
 }
 
 private fun safeLink(text: String, url: String): InlineSpan {

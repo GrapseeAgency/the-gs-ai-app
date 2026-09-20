@@ -101,7 +101,16 @@ public struct ThinkingOrbView: View {
 /// REALLY doing; nothing here may fabricate a state the pipeline does not
 /// have. CURRENT MAPPINGS:
 ///
-///   Chat streaming:  waiting for first token, request carried attachments
+///   Chat streaming:  real search turn, wire-driven (PHASE 8.1):
+///                    `search started`/status searching → .searching
+///                    ("Searching…"), source opening/reading → .working
+///                    ("Working…") — only while page retrieval is genuinely
+///                    in flight, synthesis start (status composing / first
+///                    delta) → .composing ("Composing…"). A failed search is
+///                    not an orb state: the turn honestly falls through to
+///                    the waiting/composing states below (the disclosure is
+///                    the answer).
+///                    waiting for first token, request carried attachments
 ///                                         → .working ("Working…") —
 ///                    PHASE 6: the vision model genuinely receives and
 ///                    analyses the attached image(s) before the first token.
@@ -116,14 +125,21 @@ public struct ThinkingOrbView: View {
 ///                    everything else (idle/result/error/permission) → nil.
 ///
 /// DELIBERATELY UNMAPPED (exist in the catalogue, no real app state yet):
-/// searching / solving / connecting / weaving / shaping. When the product
-/// grows the real behaviour, map it HERE — never at the call site.
+/// solving / connecting / weaving / shaping. When the product grows the real
+/// behaviour, map it HERE — never at the call site.
 func orbStateForChatStreaming(
     isStreaming: Bool,
     liveContentEmpty: Bool,
-    requestHasAttachments: Bool = false
+    requestHasAttachments: Bool = false,
+    searchPhase: ChatSearchPhase = .idle
 ) -> OrbState? {
     guard isStreaming else { return nil }
+    switch searchPhase {
+    case .searching: return .searching
+    case .working: return .working
+    case .composing: return .composing
+    case .failed, .idle: break // no search orb state — the turn keeps flowing
+    }
     if liveContentEmpty {
         return requestHasAttachments ? .working : .breathing
     }

@@ -67,6 +67,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.BaselineShift
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
@@ -110,7 +111,19 @@ private class StreamBlockCache {
 }
 
 @Composable
-fun BlocksContent(content: String, isStreaming: Boolean, onCopyCode: (String) -> Unit) {
+fun BlocksContent(
+    content: String,
+    isStreaming: Boolean,
+    onCopyCode: (String) -> Unit,
+    /**
+     * PHASE 8.1: ordinal → source URL for THIS turn, built from the turn's
+     * REAL persisted sources (live event cards before done). A [N] citation
+     * marker in the text becomes a tappable chip when N resolves here; a
+     * marker without a matching source renders as the plain literal text it
+     * always was (honest fallback, no dead taps).
+     */
+    citationUrls: Map<Int, String> = emptyMap()
+) {
     val cache = remember { StreamBlockCache() }
     val blocks = remember(content, isStreaming) { cache.update(content, isStreaming) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -120,7 +133,8 @@ fun BlocksContent(content: String, isStreaming: Boolean, onCopyCode: (String) ->
                     block = block,
                     isLast = index == blocks.lastIndex,
                     isStreaming = isStreaming,
-                    onCopyCode = onCopyCode
+                    onCopyCode = onCopyCode,
+                    citationUrls = citationUrls
                 )
             }
         }
@@ -148,25 +162,31 @@ private fun streamBlockKey(block: Block, index: Int): Any = when (block) {
 }
 
 @Composable
-private fun BlockView(block: Block, isLast: Boolean, isStreaming: Boolean, onCopyCode: (String) -> Unit) {
+private fun BlockView(
+    block: Block,
+    isLast: Boolean,
+    isStreaming: Boolean,
+    onCopyCode: (String) -> Unit,
+    citationUrls: Map<Int, String>
+) {
     when (block) {
-        is Block.Paragraph -> ParagraphBlock(block, showCaret = isStreaming && isLast, selectable = !isStreaming)
-        is Block.Heading -> HeadingBlock(block, isFirst = false)
-        is Block.BulletList -> BulletListBlock(block, selectable = !isStreaming)
-        is Block.OrderedList -> OrderedListBlock(block, selectable = !isStreaming)
-        is Block.BlockQuote -> BlockQuoteView(block, selectable = !isStreaming)
+        is Block.Paragraph -> ParagraphBlock(block, showCaret = isStreaming && isLast, selectable = !isStreaming, citationUrls = citationUrls)
+        is Block.Heading -> HeadingBlock(block, isFirst = false, citationUrls = citationUrls)
+        is Block.BulletList -> BulletListBlock(block, selectable = !isStreaming, citationUrls = citationUrls)
+        is Block.OrderedList -> OrderedListBlock(block, selectable = !isStreaming, citationUrls = citationUrls)
+        is Block.BlockQuote -> BlockQuoteView(block, selectable = !isStreaming, citationUrls = citationUrls)
         is Block.CodeBlock -> CodeBlockCard(
             language = block.language,
             code = block.code,
             open = block.open || isStreaming,
             onCopyCode = onCopyCode
         )
-        is Block.TableBlock -> TableBlockView(block, selectable = !isStreaming)
+        is Block.TableBlock -> TableBlockView(block, selectable = !isStreaming, citationUrls = citationUrls)
         is Block.Divider -> DividerBlock()
         is Block.MathBlock -> MathBlockView(block)
         is Block.MermaidBlock -> MermaidBlockView(block, streaming = isStreaming, onCopyCode = onCopyCode)
         is Block.ImageBlock -> ImageBlockView(block)
-        is Block.CollapsibleBlock -> CollapsibleBlockView(block)
+        is Block.CollapsibleBlock -> CollapsibleBlockView(block, citationUrls)
         is Block.CitationsBlock -> CitationsBlockView(block)
         is Block.ToolResultBlock -> ToolResultBlockView(block)
     }
@@ -181,17 +201,23 @@ private data class SpanTheme(
     val linkColor: Color,
     val textColor: Color,
     val caretColor: Color,
-    val fontSize: androidx.compose.ui.unit.TextUnit
+    val fontSize: androidx.compose.ui.unit.TextUnit,
+    /** PHASE 8.1: citation ordinal → source URL (empty map = all markers literal). */
+    val citations: Map<Int, String> = emptyMap()
 )
 
 @Composable
-private fun rememberSpanTheme(defaultFontSize: androidx.compose.ui.unit.TextUnit): SpanTheme =
+private fun rememberSpanTheme(
+    defaultFontSize: androidx.compose.ui.unit.TextUnit,
+    citationUrls: Map<Int, String> = emptyMap()
+): SpanTheme =
     SpanTheme(
         codeBg = MaterialTheme.colorScheme.surfaceContainerHighest,
         linkColor = MaterialTheme.colorScheme.primary,
         textColor = MaterialTheme.colorScheme.onSurface,
         caretColor = MaterialTheme.colorScheme.primary,
-        fontSize = defaultFontSize
+        fontSize = defaultFontSize,
+        citations = citationUrls
     )
 
 private fun appendSpans(builder: AnnotatedString.Builder, spans: List<InlineSpan>, theme: SpanTheme) {
@@ -216,6 +242,24 @@ private fun appendSpans(builder: AnnotatedString.Builder, spans: List<InlineSpan
                     TextLinkStyles(style = SpanStyle(color = theme.linkColor, textDecoration = TextDecoration.Underline))
                 )
             ) { builder.append(span.text) }
+            is InlineSpan.CitationSpan -> {
+                // PHASE 8.1: [N] resolves against the turn's real sources → a
+                // small superscript-style tappable chip that opens the source
+                // URL (LinkAnnotation.Url routes through the platform handler,
+                // same as ordinary links). No matching source → literal "[N]"
+                // text, byte-identical to the pre-8.1 rendering: a citation
+                // that cannot be verified is never dressed up as one.
+                val url = theme.citations[span.number]
+                if (url == null) {
+                    builder.append("[${span.number}]")
+                } else {
+                    builder.withLink(
+                        LinkAnnotation.Url(url, TextLinkStyles(style = citationChipStyle(theme)))
+                    ) {
+                        withStyle(citationChipStyle(theme)) { builder.append(span.number.toString()) }
+                    }
+                }
+            }
             is InlineSpan.MathSpan -> {
                 val rendered = renderMath(span.latex, theme.fontSize, theme.textColor)
                 if (rendered != null) builder.append(rendered) else builder.append(span.latex)
@@ -223,6 +267,15 @@ private fun appendSpans(builder: AnnotatedString.Builder, spans: List<InlineSpan
         }
     }
 }
+
+/** Small superscript-style chip look for a RESOLVED citation marker. */
+private fun citationChipStyle(theme: SpanTheme): SpanStyle = SpanStyle(
+    color = theme.linkColor,
+    background = theme.linkColor.copy(alpha = 0.10f),
+    fontSize = theme.fontSize * 0.78f,
+    baselineShift = BaselineShift(0.18f),
+    fontWeight = FontWeight.SemiBold
+)
 
 private fun spansToAnnotatedString(spans: List<InlineSpan>, theme: SpanTheme, showCaret: Boolean = false): AnnotatedString =
     buildAnnotatedString {
@@ -272,9 +325,14 @@ private fun StreamingCaret() {
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun ParagraphBlock(block: Block.Paragraph, showCaret: Boolean, selectable: Boolean) {
+private fun ParagraphBlock(
+    block: Block.Paragraph,
+    showCaret: Boolean,
+    selectable: Boolean,
+    citationUrls: Map<Int, String>
+) {
     if (block.spans.isEmpty()) return
-    val theme = rememberSpanTheme(MaterialTheme.typography.bodyMedium.fontSize)
+    val theme = rememberSpanTheme(MaterialTheme.typography.bodyMedium.fontSize, citationUrls)
     val styled = remember(block.spans, theme, showCaret) {
         spansToAnnotatedString(block.spans, theme, showCaret)
     }
@@ -289,8 +347,8 @@ private fun ParagraphBlock(block: Block.Paragraph, showCaret: Boolean, selectabl
 }
 
 @Composable
-private fun HeadingBlock(block: Block.Heading, isFirst: Boolean) {
-    val theme = rememberSpanTheme(MaterialTheme.typography.bodyMedium.fontSize)
+private fun HeadingBlock(block: Block.Heading, isFirst: Boolean, citationUrls: Map<Int, String>) {
+    val theme = rememberSpanTheme(MaterialTheme.typography.bodyMedium.fontSize, citationUrls)
     val styled = remember(block.spans, theme) { spansToAnnotatedString(block.spans, theme) }
     val style = when (block.level) {
         1 -> MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
@@ -317,27 +375,33 @@ private fun HeadingBlock(block: Block.Heading, isFirst: Boolean) {
 }
 
 @Composable
-private fun BulletListBlock(block: Block.BulletList, selectable: Boolean) {
+private fun BulletListBlock(block: Block.BulletList, selectable: Boolean, citationUrls: Map<Int, String>) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         block.items.forEach { item ->
-            ListItemRow(marker = "•", markerColor = MaterialTheme.colorScheme.primary, item = item, selectable = selectable)
+            ListItemRow(marker = "•", markerColor = MaterialTheme.colorScheme.primary, item = item, selectable = selectable, citationUrls = citationUrls)
         }
     }
 }
 
 @Composable
-private fun OrderedListBlock(block: Block.OrderedList, selectable: Boolean) {
+private fun OrderedListBlock(block: Block.OrderedList, selectable: Boolean, citationUrls: Map<Int, String>) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         block.items.forEachIndexed { index, item ->
             val number = item.number ?: (block.start + index)
-            ListItemRow(marker = "$number.", markerColor = MaterialTheme.colorScheme.onSurfaceVariant, item = item, selectable = selectable)
+            ListItemRow(marker = "$number.", markerColor = MaterialTheme.colorScheme.onSurfaceVariant, item = item, selectable = selectable, citationUrls = citationUrls)
         }
     }
 }
 
 @Composable
-private fun ListItemRow(marker: String, markerColor: Color, item: ListItem, selectable: Boolean) {
-    val theme = rememberSpanTheme(MaterialTheme.typography.bodyMedium.fontSize)
+private fun ListItemRow(
+    marker: String,
+    markerColor: Color,
+    item: ListItem,
+    selectable: Boolean,
+    citationUrls: Map<Int, String>
+) {
+    val theme = rememberSpanTheme(MaterialTheme.typography.bodyMedium.fontSize, citationUrls)
     val styled = remember(item.spans, theme) { spansToAnnotatedString(item.spans, theme) }
     Column {
         Row {
@@ -361,25 +425,25 @@ private fun ListItemRow(marker: String, markerColor: Color, item: ListItem, sele
                 modifier = Modifier.padding(start = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                item.children.forEach { child -> NestedChildView(child, selectable) }
+                item.children.forEach { child -> NestedChildView(child, selectable, citationUrls) }
             }
         }
     }
 }
 
 @Composable
-private fun NestedChildView(block: Block, selectable: Boolean) {
+private fun NestedChildView(block: Block, selectable: Boolean, citationUrls: Map<Int, String>) {
     when (block) {
-        is Block.Paragraph -> ParagraphBlock(block, showCaret = false, selectable = selectable)
-        is Block.BulletList -> BulletListBlock(block, selectable)
-        is Block.OrderedList -> OrderedListBlock(block, selectable)
-        is Block.BlockQuote -> BlockQuoteView(block, selectable)
-        else -> BlockView(block, isLast = false, isStreaming = false, onCopyCode = {})
+        is Block.Paragraph -> ParagraphBlock(block, showCaret = false, selectable = selectable, citationUrls = citationUrls)
+        is Block.BulletList -> BulletListBlock(block, selectable, citationUrls)
+        is Block.OrderedList -> OrderedListBlock(block, selectable, citationUrls)
+        is Block.BlockQuote -> BlockQuoteView(block, selectable, citationUrls)
+        else -> BlockView(block, isLast = false, isStreaming = false, onCopyCode = {}, citationUrls = citationUrls)
     }
 }
 
 @Composable
-private fun BlockQuoteView(block: Block.BlockQuote, selectable: Boolean) {
+private fun BlockQuoteView(block: Block.BlockQuote, selectable: Boolean, citationUrls: Map<Int, String>) {
     // IntrinsicSize.Min + fillMaxHeight: the accent bar spans the FULL quote
     // height (multi-line quotes keep one continuous bar), matching the iOS twin.
     Row(modifier = Modifier.height(IntrinsicSize.Min)) {
@@ -392,7 +456,7 @@ private fun BlockQuoteView(block: Block.BlockQuote, selectable: Boolean) {
         )
         Spacer(Modifier.width(12.dp))
         Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.weight(1f)) {
-            block.blocks.forEach { inner -> NestedChildView(inner, selectable) }
+            block.blocks.forEach { inner -> NestedChildView(inner, selectable, citationUrls) }
         }
     }
 }
@@ -402,8 +466,8 @@ private fun BlockQuoteView(block: Block.BlockQuote, selectable: Boolean) {
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun TableBlockView(block: Block.TableBlock, selectable: Boolean) {
-    val theme = rememberSpanTheme(MaterialTheme.typography.bodySmall.fontSize)
+private fun TableBlockView(block: Block.TableBlock, selectable: Boolean, citationUrls: Map<Int, String>) {
+    val theme = rememberSpanTheme(MaterialTheme.typography.bodySmall.fontSize, citationUrls)
     val outline = MaterialTheme.colorScheme.outline
     val headers = remember(block.headers, theme) { block.headers.map { spansToAnnotatedString(it, theme) } }
     val rows = remember(block.rows, theme) { block.rows.map { row -> row.map { spansToAnnotatedString(it, theme) } } }
@@ -711,7 +775,7 @@ private fun ImageViewerDialog(bitmap: ImageBitmap?, alt: String, onDismiss: () -
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun CollapsibleBlockView(block: Block.CollapsibleBlock) {
+private fun CollapsibleBlockView(block: Block.CollapsibleBlock, citationUrls: Map<Int, String>) {
     // Keyed on the stable summary text, not the whole block: `remember(block)`
     // deep-equals the entire collapsible subtree on every recomposition and
     // reset the reader's expanded state whenever the block instance changed.
@@ -758,7 +822,9 @@ private fun CollapsibleBlockView(block: Block.CollapsibleBlock) {
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.padding(start = 24.dp, top = 2.dp)
             ) {
-                block.blocks.forEach { inner -> BlockView(inner, isLast = false, isStreaming = false, onCopyCode = {}) }
+                block.blocks.forEach { inner ->
+                    BlockView(inner, isLast = false, isStreaming = false, onCopyCode = {}, citationUrls = citationUrls)
+                }
             }
         }
     }

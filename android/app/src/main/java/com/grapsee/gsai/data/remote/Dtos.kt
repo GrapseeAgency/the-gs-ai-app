@@ -6,6 +6,8 @@ import kotlinx.serialization.json.Json
 /**
  * Single JSON configuration for the whole chat pipeline (client + SSE parsing).
  * - ignoreUnknownKeys: contract evolves server-side without breaking old clients.
+ *   PHASE 8.1 leans on this: search sources and clarify options arrive with
+ *   server-evolved fields (rank?, status?, used?) that old clients may ignore.
  * - encodeDefaults: `stream: true` must always travel on SendMessageRequest
  *   (server default is false — omitting it would silently disable streaming).
  * - explicitNulls: null fields (title?, modelId?) are omitted instead of sent
@@ -28,6 +30,30 @@ data class ConversationDto(
     val updatedAt: String
 )
 
+/**
+ * PHASE 8.1 wire shape of one persisted web-search source
+ * (docs/search-event-protocol.md MessageJson additions): {id, ordinal, title,
+ * url, domain, snippet, publishedDate?, query, retrievedAt, status?, used?, rank?}.
+ * Every field is defaulted + ignoreUnknownKeys is on, so a source record from
+ * any server generation decodes — the same tolerance the `source discovered`
+ * SSE event relies on (it reuses this shape).
+ */
+@Serializable
+data class MessageSourceDto(
+    val id: String = "",
+    val ordinal: Int = 0,
+    val title: String = "",
+    val url: String = "",
+    val domain: String = "",
+    val snippet: String = "",
+    val publishedDate: String? = null,
+    val query: String = "",
+    val retrievedAt: String = "",
+    val status: String? = null,
+    val used: Boolean? = null,
+    val rank: Int? = null
+)
+
 @Serializable
 data class MessageDto(
     val id: String,
@@ -38,7 +64,14 @@ data class MessageDto(
     /** PHASE 5: attachment records on the message (max 6). Tolerant default keeps
      *  every pre-attachments payload — history pages, SSE done events — decoding
      *  unchanged (ignoreUnknownKeys + default for the absent key). */
-    val attachments: List<AttachmentDto> = emptyList()
+    val attachments: List<AttachmentDto> = emptyList(),
+    /** PHASE 8.1: the turn's REAL persisted web-search sources (cited ordinals
+     *  only, per the backend contract). Empty for every non-search turn. */
+    val sources: List<MessageSourceDto> = emptyList(),
+    /** PHASE 8.1: clarify quick-choices as the JSON string of the clarify
+     *  payload {"question":…,"options":[{id,label}…]} — parsed lazily so a
+     *  corrupt column degrades to "no chips", never a crash. */
+    val clarifyOptions: String? = null
 )
 
 /**

@@ -69,6 +69,9 @@ model Message {
   createdAt      DateTime        @default(now())
   attachments    Attachment[]
   sources        MessageSource[]
+  // PHASE 8.1 — when this turn was an ambiguity clarification (§6), the
+  // native quick choices persist here (JSON: {question, options:[{id,label}]}).
+  clarifyOptions String?
 
   @@index([conversationId])
 }
@@ -91,6 +94,13 @@ model MessageSource {
   publishedDate String? // provider-reported date, when present
   query         String // the search query that produced this source
   retrievedAt   DateTime @default(now())
+  // PHASE 8.1 source-evidence object (§11):
+  // retrieved = full page actually read; snippet_only = discovered but not
+  // read (headline honesty); failed/skipped kept only in the live trace.
+  status        String   @default("retrieved")
+  // Whether the final answer actually cited this source ([N] parsed server-side).
+  used          Boolean  @default(false)
+  rank          Int?     // position in its engine's ranking
 
   @@index([messageId])
 }

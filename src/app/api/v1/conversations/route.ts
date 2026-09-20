@@ -25,7 +25,9 @@ export async function GET(req: NextRequest) {
   })
   return NextResponse.json({
     items: conversations.map((c) => ({
-      ...conversationToJson(c),
+      // include-select narrows `assistant` below the full serializer input —
+      // the narrowed row still satisfies every field conversationToJson reads.
+      ...conversationToJson(c as Parameters<typeof conversationToJson>[0]),
       ...(c.assistant ? { assistantName: c.assistant.name } : {}),
     })),
     nextCursor: null,

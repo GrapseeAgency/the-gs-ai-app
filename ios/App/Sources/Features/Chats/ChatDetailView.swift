@@ -370,6 +370,10 @@ struct ChatDetailView: View {
     // decomposed into named sub-expressions)
 
     /// One bubble (and its day separator when the day rolls over).
+    /// PHASE 8.1: assistant rows additionally compose — the live search-trace
+    /// card ABOVE the streaming bubble, the collapsed trace summary + source
+    /// cards + clarify chips around the finalized one — all additive around
+    /// the unchanged MessageBubble.
     @ViewBuilder
     private func messageRow(
         _ index: Int,
@@ -383,29 +387,78 @@ struct ChatDetailView: View {
         if editingIndex == index {
             editEditor
         } else {
-            MessageBubble(
-                message: message,
-                isSpeaking: speech.speakingMessageID == message.id.uuidString,
-                editEnabled: !vm.isStreaming && editingIndex == nil,
-                highlight: message.id == activeMatch,
-                onRegenerate: {
-                    userIsReading = false
-                    vm.regenerate()
-                },
-                onReadAloud: { speech.toggle(messageID: message.id.uuidString, text: message.content) },
-                onTranslate: { beginTranslation(message.content) },
-                onSave: {
-                    ConversationStore.shared.saveToLibrary(content: message.content)
-                    showToast("Saved to Library")
-                },
-                onEditStart: {
-                    editDraft = message.content
-                    editingIndex = index
-                },
-                onBranch: { vm.branch(at: index) }
-            )
+            VStack(alignment: .leading, spacing: 8) {
+                if message.role == "assistant" {
+                    if message.isStreaming, !vm.traceSteps.isEmpty {
+                        // The compact trace card — ONLY steps that really
+                        // arrived as events; after done it collapses to the
+                        // one-line summary below (protocol rule).
+                        SearchTraceView(steps: vm.traceSteps)
+                    }
+                    if !message.isStreaming, let summary = message.traceSummary {
+                        SearchTraceSummaryView(text: summary)
+                    }
+                }
+                MessageBubble(
+                    message: message,
+                    isSpeaking: speech.speakingMessageID == message.id.uuidString,
+                    editEnabled: !vm.isStreaming && editingIndex == nil,
+                    highlight: message.id == activeMatch,
+                    orbState: orbStateForChatStreaming(
+                        isStreaming: message.isStreaming,
+                        liveContentEmpty: message.content.isEmpty,
+                        requestHasAttachments: pendingTurnHasAttachments,
+                        searchPhase: vm.searchPhase),
+                    onRegenerate: {
+                        userIsReading = false
+                        vm.regenerate()
+                    },
+                    onReadAloud: { speech.toggle(messageID: message.id.uuidString, text: message.content) },
+                    onTranslate: { beginTranslation(message.content) },
+                    onSave: {
+                        ConversationStore.shared.saveToLibrary(content: message.content)
+                        showToast("Saved to Library")
+                    },
+                    onEditStart: {
+                        editDraft = message.content
+                        editingIndex = index
+                    },
+                    onBranch: { vm.branch(at: index) }
+                )
+                if message.role == "assistant" {
+                    if message.isStreaming {
+                        if !vm.liveSources.isEmpty {
+                            SourceCardsView(sources: vm.liveSources)
+                        }
+                        if let prompt = vm.clarifyPrompt {
+                            ClarifyChipsView(prompt: prompt, onPick: sendClarifyPick)
+                        }
+                    } else {
+                        if let sources = message.sources, !sources.isEmpty {
+                            SourceCardsView(sources: sources)
+                        }
+                        if let options = message.clarifyOptions,
+                           let prompt = ClarifyPrompt(jsonString: options) {
+                            ClarifyChipsView(prompt: prompt, onPick: sendClarifyPick)
+                        }
+                    }
+                }
+            }
             .id(message.id)
         }
+    }
+
+    /// PHASE 8.1: a tapped clarify chip sends its label as a normal user
+    /// message — the same gated send path the composer uses.
+    private func sendClarifyPick(_ label: String) {
+        userIsReading = false
+        vm.sendClarifyChoice(label)
+    }
+
+    /// The pending turn's attachment presence drives the honest orb mapping
+    /// (vision/extraction wait = .working) — shared by both orb call sites.
+    private var pendingTurnHasAttachments: Bool {
+        !(vm.messages.last(where: { $0.role == "user" })?.attachments?.isEmpty ?? true)
     }
 
     /// 1pt row after the newest turn — materialized ⇔ the reader is at the
@@ -480,11 +533,14 @@ struct ChatDetailView: View {
             // mapping — image requests wait on genuine vision analysis and
             // document requests wait on genuine server-side extraction before
             // the first token (.working), text-only requests keep .breathing.
+            // PHASE 8.1: real search turns override from wire events —
+            // searching while the search runs, working while pages are being
+            // read, composing on synthesis start. Never a fabricated state.
             if let orbState = orbStateForChatStreaming(
                 isStreaming: vm.isStreaming,
                 liveContentEmpty: vm.messages.last?.content.isEmpty ?? true,
-                requestHasAttachments: !(vm.messages.last(where: { $0.role == "user" })?
-                    .attachments?.isEmpty ?? true)
+                requestHasAttachments: pendingTurnHasAttachments,
+                searchPhase: vm.searchPhase
             ) {
                 // Phase 4: the activity orb — the REAL stream phase drives it:
                 // "Working…" while attachments are with the vision/extraction
@@ -1105,6 +1161,10 @@ private struct MessageBubble: View, Equatable {
     var isSpeaking: Bool = false
     var editEnabled: Bool = false
     var highlight: Bool = false
+    /// PHASE 8.1: the honest orb state for the LIVE row, computed by the
+    /// caller from the real stream/search phase. nil = settled turn (the
+    /// mapping helper already returned nil for non-streaming rows).
+    var orbState: OrbState? = nil
     var onRegenerate: () -> Void = {}
     var onReadAloud: () -> Void = {}
     var onTranslate: () -> Void = {}
@@ -1126,7 +1186,8 @@ private struct MessageBubble: View, Equatable {
         lhs.message == rhs.message &&
         lhs.isSpeaking == rhs.isSpeaking &&
         lhs.editEnabled == rhs.editEnabled &&
-        lhs.highlight == rhs.highlight
+        lhs.highlight == rhs.highlight &&
+        lhs.orbState == rhs.orbState
     }
 
     /// Benchmark copy feedback: the icon answers with a brief checkmark —
@@ -1220,14 +1281,15 @@ private struct MessageBubble: View, Equatable {
                     Text(message.content.isEmpty ? "…" : message.content)
                         .font(Aero.body())
                         .foregroundStyle(Aero.text)
-                    // Phase 4: the live bubble's activity orb — same honest
-                    // mapping as the composer zone above.
+                    // Phase 4 + PHASE 8.1: the live bubble's activity orb —
+                    // the honest mapping the caller computed from the REAL
+                    // stream phase (searching/working/composing/…).
                     ThinkingOrbView(
-                        state: message.content.isEmpty ? .breathing : .composing,
+                        state: orbState ?? (message.content.isEmpty ? .breathing : .composing),
                         size: .inline
                     )
                 } else {
-                    BlocksView(blocks: finalizedBlocks)
+                    BlocksView(blocks: finalizedBlocks, citations: citationLinks)
                     if !message.content.isEmpty {
                         actionRow
                     }
@@ -1268,6 +1330,20 @@ private struct MessageBubble: View, Equatable {
             return [.paragraph(spans: [.text("…")], sourceStart: 0)]
         }
         return Self.cachedBlocks(for: message)
+    }
+
+    /// PHASE 8.1: ordinal → URL for the answer's `[N]` citation chips. Built
+    /// only from the turn's real sources (done payload / persisted rows);
+    /// markers with no matching source stay plain text. http(s) only —
+    /// model output is never trusted as a URL (same rule as InlineMarkdown).
+    private var citationLinks: [Int: String] {
+        var links: [Int: String] = [:]
+        for source in message.sources ?? [] where source.ordinal > 0 {
+            let lower = source.url.lowercased()
+            guard lower.hasPrefix("https://") || lower.hasPrefix("http://") else { continue }
+            links[source.ordinal] = source.url
+        }
+        return links
     }
 
     // MARK: Per-message parse cache (deep-perf pass 80-b, STEP 5 upgrade)

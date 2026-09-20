@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { messageToJson } from '@/lib/serializers'
-import { resolveModelRoute } from '@/lib/models'
+import { resolveModelRoute, OPENROUTER_MODELS } from '@/lib/models'
 import { orCompleteChat, orStreamChat } from '@/lib/openrouter'
 import {
   SYSTEM_PROMPT,
@@ -36,9 +36,7 @@ import {
   type VisionImageFailure,
 } from '@/lib/vision'
 import {
-  runWebSearch,
   evaluateWebSearchGate,
-  buildSearchEvidenceBlock,
   buildHistoryEvidenceBlock,
   shouldInjectHistoryEvidence,
   parseCitedOrdinals,
@@ -46,9 +44,17 @@ import {
   normalizeCitationBrackets,
   searchFailureNote,
   SEARCH_HISTORY_TURNS,
-  type SearchOutcome,
   type WebSource,
 } from '@/lib/websearch'
+import {
+  planSearch,
+} from '@/lib/search/planner'
+import {
+  runResearch,
+  buildResearchEvidenceBlock,
+  RESEARCH_BUDGET,
+} from '@/lib/search/research'
+import { NOOP_EMIT, type ClarifyOption, type ResearchSource, type SearchEventEmitter } from '@/lib/search/types'
 
 export const dynamic = 'force-dynamic'
 
@@ -276,15 +282,46 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
   const allDocsFailed =
     currentTurnDocs.length > 0 && docContext.readableCount === 0 && imageAttachments.length === 0
 
-  // ---- PHASE 8 web search gate ------------------------------------------------
-  // Backend-owned tool routing (§1/§21): the SDK chat endpoint has no native
-  // function calling, so THIS route decides when a turn needs external
-  // information — from the CURRENT user text only (§11: attachments never
-  // trigger a search). Structural loop protection (§18): the gate runs once,
-  // at most one bounded search executes, and there is no model-driven tool
-  // loop at any point.
+  // ---- PHASE 8.1 web search gate + intent planner -----------------------------
+  // Backend-owned tool routing (§1/§21). The gate is the CHEAP deterministic
+  // signal (avoids an LLM roundtrip on every ordinary chat turn); when it
+  // fires — or when the previous turn asked a clarification and this is the
+  // short answer to it — the PLANNER classifies intent (§5): broad vs sector
+  // vs geo vs source-specific, ambiguity detection, time window, depth.
+  // "what is today's news?" with no topic now CLARIFIES (§6) instead of
+  // silently picking arbitrary sectors (§35).
   const webGate =
     content.trim().length > 0 ? evaluateWebSearchGate(content) : { trigger: null as 'explicit' | 'recency' | null }
+
+  let previousClarifyOptions: ClarifyOption[] | null = null
+  if (content.trim().length > 0) {
+    const lastClarify = await db.message.findFirst({
+      where: { conversationId: id, role: 'assistant', clarifyOptions: { not: null } },
+      orderBy: { createdAt: 'desc' },
+      select: { clarifyOptions: true },
+    })
+    if (lastClarify?.clarifyOptions) {
+      try {
+        const parsed = JSON.parse(lastClarify.clarifyOptions) as { options?: unknown }
+        if (Array.isArray(parsed.options)) {
+          previousClarifyOptions = parsed.options
+            .filter(
+              (o): o is ClarifyOption =>
+                typeof o === 'object' && o !== null && typeof (o as ClarifyOption).id === 'string' && typeof (o as ClarifyOption).label === 'string'
+            )
+            .slice(0, 8)
+        }
+      } catch {
+        // malformed persisted options — treat as absent
+      }
+    }
+  }
+  // A short reply right after a clarification is resolved by the planner's
+  // DETERMINISTIC chip matcher — no LLM needed for the chip path.
+  const clarifyFollowUp =
+    previousClarifyOptions !== null && content.trim().length > 0 && content.length <= 60
+  const plannerRuns = webGate.trigger !== null || clarifyFollowUp
+
   let historyWebSources: {
     title: string
     url: string
@@ -315,8 +352,11 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       )
     includeHistoryEvidence = shouldInjectHistoryEvidence(content, historyWebSources.length > 0)
   }
+  const historyLines = history
+    .slice(-8)
+    .map((m) => `${m.role.toLowerCase() === 'assistant' ? 'assistant' : 'user'}: ${historyRowText(m).slice(0, 220)}`)
   console.log(
-    `WEBSEARCH-GATE conv=${id} trigger=${webGate.trigger ?? 'none'} historySources=${historyWebSources.length} historyInject=${includeHistoryEvidence}`
+    `WEBSEARCH-GATE conv=${id} trigger=${webGate.trigger ?? 'none'} planner=${plannerRuns} clarifyFollowUp=${clarifyFollowUp} historySources=${historyWebSources.length} historyInject=${includeHistoryEvidence}`
   )
 
   let visionPrepared: PreparedVisionImage[] = []
@@ -341,19 +381,66 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
   }
 
   /**
-   * PHASE 8 — run the search phase. Executed separately from assembly so the
-   * streaming path can emit REAL status events around it (§14) while the
-   * non-streaming path runs it inline. Never runs on short-circuit turns
-   * (all-images-failed / all-docs-failed) — no tool work for a doomed turn.
+   * PHASE 8.1 — the search turn, in one bounded execution. `emit === null`
+   * (non-streaming path) runs the identical pipeline silently.
    */
-  const executeSearchPhase = async (): Promise<SearchOutcome | null> => {
-    if (allImagesFailed || allDocsFailed) return null
-    if (webGate.trigger === null) return null
-    const outcome = await runWebSearch(content)
+  type TurnSearch =
+    | { kind: 'none' }
+    | { kind: 'clarify'; question: string; options: ClarifyOption[] }
+    | {
+        kind: 'research'
+        outcome: Awaited<ReturnType<typeof runResearch>>
+        evidenceBlock: string | null
+        maxOrdinal: number
+        historySources: WebSource[]
+      }
+
+  const executeSearchPhase = async (emit: SearchEventEmitter | null): Promise<TurnSearch> => {
+    if (allImagesFailed || allDocsFailed) return { kind: 'none' }
+    if (!plannerRuns) return { kind: 'none' }
+
+    const plan = await planSearch({
+      userText: content,
+      historyLines,
+      previousClarifyOptions,
+    })
     console.log(
-      `WEBSEARCH-EXEC conv=${id} trigger=${outcome?.trigger} query="${outcome?.query}" ok=${outcome?.ok} results=${outcome?.sources.length} fetchFailures=${outcome?.fetchFailures.length} kind=${outcome?.failure?.kind ?? '-'}`
+      `SEARCH-PLAN conv=${id} intent=${plan.intent} needs=${plan.needsSearch} ambiguous=${plan.ambiguity.isAmbiguous} queries=[${plan.queries.join(' | ')}] range=${plan.timeRange} depth=${plan.depth} stop=${plan.stopSignal}`
     )
-    return outcome
+
+    // §6/§35 — ambiguous broad request: clarify with native quick choices.
+    // No search runs; the assistant message IS the clarification question.
+    if (plan.ambiguity.isAmbiguous && plan.ambiguity.prompt) {
+      return { kind: 'clarify', question: plan.ambiguity.prompt.question, options: plan.ambiguity.prompt.options }
+    }
+
+    // §19 — stop/reuse/no-search turns answer from what already exists.
+    if (!plan.needsSearch || plan.stopSignal) return { kind: 'none' }
+
+    emit?.('search', { type: 'started', intent: plan.intent, depth: plan.depth, label: plan.queries[0] ?? '' })
+
+    const outcome = await runResearch({
+      queries: plan.queries,
+      intent: plan.intent,
+      timeRange: plan.timeRange,
+      region: plan.region,
+      sourceHint: plan.sourceHint,
+      officialOnly: plan.officialOnly,
+      depth: plan.depth,
+      emit: emit ?? NOOP_EMIT,
+      deadlineAt: Date.now() + RESEARCH_BUDGET[plan.depth].wallClockMs + 2_000,
+    })
+    console.log(
+      `RESEARCH conv=${id} intent=${plan.intent} queries=${outcome.queriesRun.length} sources=${outcome.sources.length} retrieved=${outcome.sources.filter((s) => s.status === 'retrieved').length} engines=${outcome.enginesUsed.join('+') || 'none'} ok=${outcome.ok} kind=${outcome.failure?.kind ?? '-'}`
+    )
+
+    if (!outcome.ok || outcome.sources.length === 0) {
+      emit?.('search', { type: 'failed', reason: outcome.failure?.kind ?? 'no_results' })
+      return { kind: 'research', outcome, evidenceBlock: null, maxOrdinal: 0, historySources: [] }
+    }
+
+    const { block, maxOrdinal } = buildResearchEvidenceBlock(outcome.sources, outcome.queriesRun)
+    return { kind: 'research', outcome, evidenceBlock: block, maxOrdinal, historySources: [] }
   }
 
   /**
@@ -364,15 +451,19 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
    * so the CURRENT user message is always the final controlling content.
    */
   const buildModelMessages = async (
-    outcome: SearchOutcome | null
-  ): Promise<{ messages: ChatMessageInput[] | VisionChatMessage[]; systemPrompt: string }> => {
-    const freshBlock = outcome?.ok ? buildSearchEvidenceBlock(outcome) : null
-    const freshCount = outcome?.ok ? outcome.sources.length : 0
+    turn: TurnSearch
+  ): Promise<{ messages: ChatMessageInput[] | VisionChatMessage[]; systemPrompt: string; historySources: WebSource[] }> => {
+    const researchOk = turn.kind === 'research' && turn.outcome.ok && turn.evidenceBlock !== null
+    const freshBlock = researchOk ? turn.evidenceBlock : null
+    const freshCount = researchOk ? turn.maxOrdinal : 0
     const historyBlock = includeHistoryEvidence
       ? buildHistoryEvidenceBlock(historyWebSources, freshCount + 1)
       : null
-    const historyCount = historyBlock ? historyWebSources.length : 0
-    const webSearchUsed = freshCount > 0 || historyCount > 0 || outcome?.failure != null
+    const historySources = historyBlock?.sources ?? []
+    const historyCount = historySources.length
+    const searchFailed =
+      turn.kind === 'research' && (!turn.outcome.ok || turn.outcome.failure != null)
+    const webSearchUsed = turn.kind === 'research' || historyCount > 0
 
     // PHASE 8.1 — failed searches get a SYSTEM-LEVEL disclosure requirement on
     // top of the grounding contract: in the wild the evidence-note alone was
@@ -380,18 +471,29 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     // answer looked grounded without ever saying the search never ran.
     const systemPrompt = webSearchUsed
       ? `${baseSystemPrompt}\n\n${SEARCH_GROUNDING_PROMPT}${
-          outcome?.failure && webGate.trigger !== null
-            ? `\n\n${SEARCH_FAILURE_DISCLOSURE_PROMPT}`
-            : ''
+          searchFailed ? `\n\n${SEARCH_FAILURE_DISCLOSURE_PROMPT}` : ''
         }`
       : baseSystemPrompt
 
     const evidenceBlocks: string[] = []
     if (docContext.block) evidenceBlocks.push(docContext.block)
     if (historyBlock?.block) evidenceBlocks.push(historyBlock.block)
-    if (outcome?.failure && webGate.trigger !== null) {
+    if (searchFailed) {
+      const note =
+        turn.kind === 'research'
+          ? turn.outcome.failure?.message ?? 'The search could not be completed.'
+          : 'The search could not be completed.'
       evidenceBlocks.push(
-        `(System note about this turn's search: ${searchFailureNote(outcome.failure)} Do not present any internal knowledge as search results; if you answer from your own knowledge, say clearly that the search did not provide results. The user's request below still stands.)`
+        `(System note about this turn's search: ${searchFailureNote(
+          // Map the research failure kind onto the user-facing failure classes.
+          turn.kind === 'research' && turn.outcome.failure
+            ? turn.outcome.failure.kind === 'timeout'
+              ? ({ kind: 'timeout', message: turn.outcome.failure.message } as const)
+              : turn.outcome.failure.kind === 'no_results'
+                ? ({ kind: 'no_results', message: turn.outcome.failure.message } as const)
+                : ({ kind: 'provider_error', message: turn.outcome.failure.message } as const)
+            : ({ kind: 'provider_error', message: note } as const)
+        )} Do not present any internal knowledge as search results; if you answer from your own knowledge, say clearly that the search did not provide results. The user's request below still stands.)`
       )
     }
     if (freshBlock) evidenceBlocks.push(freshBlock)
@@ -452,7 +554,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
         ...visionPrepared.map((p) => ({ type: 'image_url' as const, image_url: { url: p.dataUrl } })),
       ]
       visionContext.push({ role: 'user', content: visionUserParts })
-      return { messages: visionContext, systemPrompt }
+      return { messages: visionContext, systemPrompt, historySources }
     }
 
     // Text-only context. PHASE 7: extracted document context (current turn
@@ -493,36 +595,86 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
         finalUserMessage,
       ],
       systemPrompt,
+      historySources,
     }
   }
 
-  /** PHASE 8 — persist exactly the sources the answer actually cited (§7). */
-  const persistCitedSources = async (
+  /**
+   * PHASE 8.1 — citation-marker hygiene: strip markers whose sources did not
+   * survive persistence (failed retrievals etc.) so every visible [N] opens a
+   * real source (§15). Returns the sanitized text.
+   */
+  const sanitizeAgainstPersisted = (text: string, turn: TurnSearch, historySources: WebSource[]): string => {
+    const freshCount = turn.kind === 'research' && turn.outcome.ok ? turn.maxOrdinal : 0
+    const totalOrdinals = freshCount + historySources.length
+    if (totalOrdinals === 0) return text
+    const allowed = new Set<number>()
+    if (turn.kind === 'research' && turn.outcome.ok) {
+      for (const s of turn.outcome.sources) {
+        if (s.status === 'retrieved' || s.status === 'snippet_only') allowed.add(s.ordinal)
+      }
+    }
+    // History ordinals are kept only when actually cited (they persist below).
+    for (const n of parseCitedOrdinals(text, totalOrdinals)) {
+      if (n > freshCount) allowed.add(n)
+    }
+    return sanitizeCitationMarkers(text, totalOrdinals, allowed)
+  }
+
+  /**
+   * PHASE 8.1 — persist the turn's source evidence (§11). ALL discovered
+   * sources that carry real metadata are stored with their honest retrieval
+   * status; `used` is set exactly for the ordinals the answer cited. The
+   * citation mapping predates synthesis (evidence is numbered BEFORE the
+   * model writes), and persistence only ever reflects provider metadata —
+   * nothing here can be fabricated by the model.
+   */
+  const persistTurnSources = async (
     messageId: string,
     answerText: string,
-    outcome: SearchOutcome | null,
+    turn: TurnSearch,
     historySources: WebSource[]
   ): Promise<void> => {
-    const freshSources = outcome?.ok ? outcome.sources : []
-    const maxOrdinal = freshSources.length + historySources.length
+    const fresh: ResearchSource[] =
+      turn.kind === 'research' && turn.outcome.ok ? turn.outcome.sources : []
+    const maxOrdinal = fresh.length + historySources.length
     if (maxOrdinal === 0) return
     const cited = parseCitedOrdinals(answerText, maxOrdinal)
-    const byOrdinal = new Map<number, WebSource>()
-    for (const s of freshSources) byOrdinal.set(s.ordinal, s)
-    for (const s of historySources) byOrdinal.set(s.ordinal, s)
-    const rows = cited
-      .map((n) => byOrdinal.get(n))
-      .filter((s): s is WebSource => !!s)
-      .map((s) => ({
-        messageId,
-        ordinal: s.ordinal,
-        title: s.title.slice(0, 500),
-        url: s.url,
-        domain: s.domain.slice(0, 200),
-        snippet: s.snippet.slice(0, 600),
-        ...(s.publishedDate ? { publishedDate: s.publishedDate.slice(0, 100) } : {}),
-        query: s.query.slice(0, 300),
-      }))
+    const citedSet = new Set(cited)
+
+    const rows = [
+      ...fresh
+        .filter((s) => s.status === 'retrieved' || s.status === 'snippet_only')
+        .map((s) => ({
+          messageId,
+          ordinal: s.ordinal,
+          title: s.title.slice(0, 500),
+          url: s.url,
+          domain: s.domain.slice(0, 200),
+          snippet: (s.snippet || '').slice(0, 600),
+          ...(s.publishedDate ? { publishedDate: s.publishedDate.slice(0, 100) } : {}),
+          query: s.query.slice(0, 300),
+          status: s.status,
+          used: citedSet.has(s.ordinal),
+          rank: s.searchRank,
+        })),
+      ...historySources
+        .filter((s) => citedSet.has(s.ordinal))
+        .map((s) => ({
+          messageId,
+          ordinal: s.ordinal,
+          title: s.title.slice(0, 500),
+          url: s.url,
+          domain: s.domain.slice(0, 200),
+          snippet: (s.snippet || '').slice(0, 600),
+          ...(s.publishedDate ? { publishedDate: s.publishedDate.slice(0, 100) } : {}),
+          query: s.query.slice(0, 300),
+          // Honest: this turn did not re-read the page; it rides as earlier evidence.
+          status: 'snippet_only',
+          used: true,
+          rank: null,
+        })),
+    ]
     if (rows.length > 0) {
       await db.messageSource.createMany({ data: rows })
     }
@@ -537,6 +689,48 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       return 'The image could not be processed — try a JPG, PNG or WebP version.'
     }
     return 'Image understanding is unavailable right now. Please try again.'
+  }
+
+  const openRouterAvailable = (): boolean =>
+    (process.env.OPENROUTER_API_KEYS ?? '').trim().length > 0
+
+  /**
+   * PHASE 8.1 — synthesis with graceful degradation (§22). The model is the
+   * reasoning layer (§2): when the primary provider is down at ACCOUNT level
+   * (the proven 429 window), a search turn must still synthesize its real
+   * evidence — the same messages retry over the OpenRouter free pool. Vision
+   * turns never fall back (free text models cannot read images).
+   */
+  const synthesize = async (
+    modelMessages: ChatMessageInput[] | VisionChatMessage[],
+    onDelta?: (d: string) => void
+  ): Promise<string> => {
+    if (useVision) {
+      return onDelta
+        ? (await streamVisionChat(modelMessages as VisionChatMessage[], onDelta)).text
+        : (await completeVisionChat(modelMessages as VisionChatMessage[])).text
+    }
+    const msgs = modelMessages as ChatMessageInput[]
+    try {
+      if (openRouterModels) {
+        return onDelta
+          ? await orStreamChat(msgs, openRouterModels, onDelta)
+          : await orCompleteChat(msgs, openRouterModels).then((r) => r.text)
+      }
+      return onDelta
+        ? await streamChat(msgs, onDelta, providerModel)
+        : await completeChat(msgs, providerModel)
+    } catch (e) {
+      if (!openRouterModels && openRouterAvailable()) {
+        console.log(
+          `SYNTHESIS-FALLBACK conv=${id} primary failed (${(e instanceof Error ? e.message : String(e)).slice(0, 80)}) → OpenRouter free chain`
+        )
+        return onDelta
+          ? await orStreamChat(msgs, OPENROUTER_MODELS['gs-free'], onDelta)
+          : await orCompleteChat(msgs, OPENROUTER_MODELS['gs-free']).then((r) => r.text)
+      }
+      throw e
+    }
   }
 
   // Catalogue telemetry — count a use when this is the first message.
@@ -569,24 +763,28 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       )
     }
     try {
-      const outcome = await executeSearchPhase()
-      const historySources = includeHistoryEvidence
-        ? buildHistoryEvidenceBlock(historyWebSources, (outcome?.ok ? outcome.sources.length : 0) + 1).sources
-        : []
-      const { messages: modelMessages } = await buildModelMessages(outcome)
-      const text = useVision
-        ? (await completeVisionChat(modelMessages as VisionChatMessage[])).text
-        : openRouterModels
-          ? await orCompleteChat(modelMessages as ChatMessageInput[], openRouterModels).then((r) => r.text)
-          : await completeChat(modelMessages as ChatMessageInput[], providerModel)
-      const finalText =
-        outcome?.ok || historySources.length > 0
-          ? sanitizeCitationMarkers(normalizeCitationBrackets(text), outcome?.ok ? outcome.sources.length + historySources.length : 0)
-          : normalizeCitationBrackets(text)
+      const turn = await executeSearchPhase(null)
+
+      // §6 — clarification turn: the question IS the answer.
+      if (turn.kind === 'clarify') {
+        const saved = await db.message.create({
+          data: {
+            conversationId: id,
+            role: 'assistant',
+            content: turn.question,
+            clarifyOptions: JSON.stringify({ question: turn.question, options: turn.options }),
+          },
+        })
+        return NextResponse.json(messageToJson(saved))
+      }
+
+      const { messages: modelMessages, historySources } = await buildModelMessages(turn)
+      const text = await synthesize(modelMessages)
+      const finalText = sanitizeAgainstPersisted(normalizeCitationBrackets(text), turn, historySources)
       const assistantMessage = await db.message.create({
         data: { conversationId: id, role: 'assistant', content: finalText },
       })
-      await persistCitedSources(assistantMessage.id, finalText, outcome, historySources)
+      await persistTurnSources(assistantMessage.id, finalText, turn, historySources)
       const saved = await db.message.findUnique({
         where: { id: assistantMessage.id },
         include: { sources: { orderBy: { ordinal: 'asc' } } },
@@ -604,68 +802,165 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     }
   }
 
-  // Streaming: text/event-stream — `status` events (PHASE 8 search phases,
-  // ignored by older clients), then `delta` events, then a final `done` (or `error`).
+  // Streaming: text/event-stream — `status` events (search phases, understood
+  // by older clients), structured `search`/`source`/`clarify` events (the
+  // PHASE 8.1 research trace; older clients ignore unknown events), then
+  // `delta` events, then a final `done` (or `error`).
+  //
+  // PHASE 8.1 ARCHITECTURE — the TURN IS DECOUPLED FROM THE CONNECTION.
+  // The public origin's outer proxy caps a response at ~30s (measured live:
+  // a 54s research turn was cut mid-deltas while our own gateway has no
+  // such limit). A search turn (plan + search + retrieval + synthesis)
+  // legitimately exceeds that, so the turn now runs in a DETACHED promise
+  // that always runs to completion and always persists the answer — the
+  // ReadableStream is only a live VIEW of its event queue. If the view dies
+  // (proxy cap, network blip, app backgrounding), the client simply re-fetches
+  // the conversation and finds the finished, fully-sourced answer. Keep-alive
+  // comment pings ride the stream during silent phases for intermediate
+  // proxies with IDLE timeouts.
+  const eventQueue: { event: string; data: string }[] = []
+  let wakeup: (() => void) | null = null
+  // Indirection: `wakeup` is assigned inside the nextEvent closure, so the
+  // call sites below must read it at call time (TS narrows the bare variable).
+  const fireWakeup = () => {
+    const w = wakeup
+    if (w) w()
+  }
+  let turnSettled = false
+  const push = (event: string, data: string) => {
+    eventQueue.push({ event, data })
+    fireWakeup()
+  }
+  const nextEvent = async (): Promise<{ event: string; data: string } | null> => {
+    if (eventQueue.length > 0) return eventQueue.shift()!
+    return new Promise<{ event: string; data: string } | null>((resolve) => {
+      wakeup = () => {
+        wakeup = null
+        resolve(eventQueue.shift() ?? null)
+      }
+    })
+  }
+  const emit: SearchEventEmitter = (event, payload) => push(event, JSON.stringify(payload))
+
+  // The detached turn is fired (not awaited) — its lifetime is independent
+  // of the Response/ReadableStream below.
+  void (async () => {
+    if (allImagesFailed) {
+      push(
+        'error',
+        `None of the attached images could be opened. ${visionFailures
+          .map(visionFailureMessage)
+          .join(' ')}`
+      )
+      return
+    }
+    if (allDocsFailed) {
+      push('error', docContext.failures.map(documentFailureMessage).join(' '))
+      return
+    }
+    try {
+      // §14 — real search activity gets real state events. SEARCHING is
+      // only ever emitted for an actual search turn, WORKING only while
+      // pages are actually being retrieved (emitted by runResearch).
+      let turn: TurnSearch = { kind: 'none' }
+      if (plannerRuns) {
+        turn = await executeSearchPhase(emit)
+
+        // §6 — clarification turn: emit the native quick choices and end
+        // the turn; the question is the assistant message.
+        if (turn.kind === 'clarify') {
+          emit('clarify', { question: turn.question, options: turn.options })
+          const saved = await db.message.create({
+            data: {
+              conversationId: id,
+              role: 'assistant',
+              content: turn.question,
+              clarifyOptions: JSON.stringify({ question: turn.question, options: turn.options }),
+            },
+          })
+          push('done', JSON.stringify(messageToJson(saved)))
+          return
+        }
+      }
+
+      const researchOk = turn.kind === 'research' && turn.outcome.ok && turn.evidenceBlock !== null
+      // Old-client status vocabulary preserved exactly: searching was sent
+      // inside executeSearchPhase (only when a search really runs);
+      // composing/search_failed only follow a real search phase. Plain
+      // text turns emit NO status — deltas carry their progress.
+      if (turn.kind === 'research') {
+        push('status', researchOk ? 'composing' : 'search_failed')
+      }
+
+      const { messages: modelMessages, historySources } = await buildModelMessages(turn)
+      const full = await synthesize(modelMessages, (d) => push('delta', d))
+      const finalText = sanitizeAgainstPersisted(normalizeCitationBrackets(full), turn, historySources)
+      const saved = await db.message.create({
+        data: { conversationId: id, role: 'assistant', content: finalText },
+      })
+      await persistTurnSources(saved.id, finalText, turn, historySources)
+      const savedWithSources = await db.message.findUnique({
+        where: { id: saved.id },
+        include: { sources: { orderBy: { ordinal: 'asc' } } },
+      })
+      // §12 — the collapsed trace summary the clients render after done.
+      if (turn.kind === 'research' && turn.outcome.ok) {
+        const totalOrdinals = turn.maxOrdinal + historySources.length
+        emit('search', {
+          type: 'completed',
+          queries: turn.outcome.queriesRun.length,
+          sources: turn.outcome.sources.length,
+          retrieved: turn.outcome.sources.filter((s) => s.status === 'retrieved').length,
+          usedCitations: parseCitedOrdinals(finalText, totalOrdinals),
+        })
+      }
+      push('done', JSON.stringify(messageToJson(savedWithSources ?? saved)))
+    } catch (e) {
+      const raw = String(e instanceof Error ? e.message : e)
+      push('error', useVision ? visionErrorMessage(raw) : raw)
+    } finally {
+      turnSettled = true
+      fireWakeup()
+    }
+  })()
+
   return new Response(
     new ReadableStream({
       async start(controller) {
         const enc = new TextEncoder()
-        const send = (event: string, data: string) =>
-          controller.enqueue(enc.encode(`data: ${JSON.stringify({ event, data })}\n\n`))
-        if (allImagesFailed) {
-          send(
-            'error',
-            `None of the attached images could be opened. ${visionFailures
-              .map(visionFailureMessage)
-              .join(' ')}`
-          )
-          controller.close()
-          return
+        let clientGone = false
+        const write = (chunk: string) => {
+          if (clientGone) return
+          try {
+            controller.enqueue(enc.encode(chunk))
+          } catch {
+            clientGone = true // view is dead — the detached turn continues
+          }
         }
-        if (allDocsFailed) {
-          send('error', docContext.failures.map(documentFailureMessage).join(' '))
-          controller.close()
-          return
+        // Keep-alive during silent phases (planner, retrieval, first token).
+        const ping = setInterval(() => write(': ping\n\n'), 4_000)
+        try {
+          for (;;) {
+            const ev = await nextEvent()
+            if (ev) write(`data: ${JSON.stringify({ event: ev.event, data: ev.data })}\n\n`)
+            if (ev && (ev.event === 'done' || ev.event === 'error')) break
+            if (!ev && turnSettled) break
+            if (clientGone) break
+          }
+        } catch {
+          clientGone = true
+        } finally {
+          clearInterval(ping)
         }
         try {
-          // §14 — real search activity gets real state events. The gate has
-          // already been evaluated; SEARCHING is only ever emitted for an
-          // actual search turn, never for ordinary text generation.
-          let outcome: SearchOutcome | null = null
-          if (webGate.trigger !== null) {
-            send('status', 'searching')
-            outcome = await executeSearchPhase()
-            send('status', outcome?.ok ? 'composing' : 'search_failed')
-          }
-          const historySources = includeHistoryEvidence
-            ? buildHistoryEvidenceBlock(historyWebSources, (outcome?.ok ? outcome.sources.length : 0) + 1).sources
-            : []
-          const { messages: modelMessages } = await buildModelMessages(outcome)
-          const full = useVision
-            ? (await streamVisionChat(modelMessages as VisionChatMessage[], (d) => send('delta', d))).text
-            : openRouterModels
-              ? await orStreamChat(modelMessages as ChatMessageInput[], openRouterModels, (d) => send('delta', d))
-              : await streamChat(modelMessages as ChatMessageInput[], (d) => send('delta', d), providerModel)
-          const finalText =
-            outcome?.ok || historySources.length > 0
-              ? sanitizeCitationMarkers(normalizeCitationBrackets(full), outcome?.ok ? outcome.sources.length + historySources.length : 0)
-              : normalizeCitationBrackets(full)
-          const saved = await db.message.create({
-            data: { conversationId: id, role: 'assistant', content: finalText },
-          })
-          await persistCitedSources(saved.id, finalText, outcome, historySources)
-          const savedWithSources = await db.message.findUnique({
-            where: { id: saved.id },
-            include: { sources: { orderBy: { ordinal: 'asc' } } },
-          })
-          send('done', JSON.stringify(messageToJson(savedWithSources ?? saved)))
           controller.close()
-        } catch (e) {
-          const raw = String(e instanceof Error ? e.message : e)
-          send('error', useVision ? visionErrorMessage(raw) : raw)
-          controller.close()
+        } catch {
+          // already closed by the runtime on client disconnect
         }
       },
+      // Client disconnect (proxy cap / abort / navigation): the detached
+      // turn is NOT cancelled — it finishes and persists server-side.
+      cancel() {},
     }),
     {
       headers: {

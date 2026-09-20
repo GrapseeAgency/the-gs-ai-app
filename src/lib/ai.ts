@@ -190,6 +190,24 @@ const CONNECT_TIMEOUT_MS = 15_000
 const COMPLETION_TIMEOUT_MS = 60_000
 const MAX_ATTEMPTS = 2
 
+/**
+ * PHASE 8.1 — account-level throttle circuit breaker. The 2026-09-20 window
+ * proved the primary provider can 429 for HOURS; without a breaker every turn
+ * pays the full doomed-retry latency (~30s) before any OpenRouter fallback
+ * fires. When a 429 is seen, all primary calls short-circuit for 10 minutes.
+ * The breaker is per-process state — restarts simply re-probe.
+ */
+let zaiThrottledUntil = 0
+
+export function zaiThrottleActive(): boolean {
+  return Date.now() < zaiThrottledUntil
+}
+
+function markZaiThrottled(): void {
+  zaiThrottledUntil = Date.now() + 10 * 60_000
+  console.log('[ZAI-BREAKER] 429 observed — primary provider calls short-circuited for 10 minutes')
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
@@ -219,6 +237,7 @@ export async function streamChat(
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     let forwarded = false
     try {
+      if (zaiThrottleActive()) throw new Error('z-ai throttled (circuit open)')
       const zai = await ZAI.create()
       const body: Record<string, unknown> = {
         messages: toSdkMessages(messages),
@@ -252,6 +271,7 @@ export async function streamChat(
       return full
     } catch (e) {
       lastError = errMessage(e)
+      if (/429|Too many requests/i.test(lastError)) markZaiThrottled()
       // PHASE 8.1 — mapped model rejected by the provider (invalid/unknown):
       // drop the model key and retry modelless immediately.
       if (activeModel && /status\s+(400|404)\b/.test(lastError)) {
@@ -296,6 +316,7 @@ export async function completeChatWithMeta(
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
+      if (zaiThrottleActive()) throw new Error('z-ai throttled (circuit open)')
       const zai = await ZAI.create()
       const body: Record<string, unknown> = {
         messages: toSdkMessages(messages),
@@ -316,6 +337,7 @@ export async function completeChatWithMeta(
       }
     } catch (e) {
       lastError = errMessage(e)
+      if (/429|Too many requests/i.test(lastError)) markZaiThrottled()
       // PHASE 8.1 — mapped model rejected by the provider: retry modelless.
       if (activeModel && /status\s+(400|404)\b/.test(lastError)) {
         activeModel = null

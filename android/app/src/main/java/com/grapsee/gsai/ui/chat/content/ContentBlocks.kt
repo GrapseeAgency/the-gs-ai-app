@@ -30,6 +30,15 @@ sealed interface InlineSpan {
 
     /** Inline math source — rendered by MathText.kt, literal fallback on failure. */
     data class MathSpan(val latex: String) : InlineSpan
+
+    /**
+     * PHASE 8.1: a citation marker [N] (or a defensive fullwidth variant) found
+     * in complete form. The PARSER is source-blind — it emits the bare number;
+     * the RENDERER resolves N against the turn's REAL sources and either draws
+     * a tappable superscript chip or falls back to literal "[N]" text. An
+     * unresolved marker therefore renders exactly as it did before Phase 8.1.
+     */
+    data class CitationSpan(val number: Int) : InlineSpan
 }
 
 enum class TableAlign { LEFT, CENTER, RIGHT }

@@ -11,6 +11,7 @@ import com.grapsee.gsai.data.remote.AttachmentDto
 import com.grapsee.gsai.data.remote.ConversationDto
 import com.grapsee.gsai.data.remote.GsApiJson
 import com.grapsee.gsai.data.remote.MessageDto
+import com.grapsee.gsai.data.remote.MessageSourceDto
 import com.grapsee.gsai.data.remote.UpdateConversationRequest
 import kotlinx.serialization.encodeToString
 import kotlinx.coroutines.CancellationException
@@ -294,6 +295,14 @@ class ChatRepository(
      * Lite offline path below, so the on-device thread keeps its honest local
      * state (files attached; the offline reply simply cannot read them either).
      *
+     * PHASE 8.1 (additive): the search-chain SSE events ([onStatus],
+     * [onSearchEvent], [onSourceEvent], [onClarify]) and the terminal persisted
+     * message ([onDone]) are forwarded raw to the stream controller — this
+     * layer adds no interpretation. The one exception is persistence: the done
+     * message's real sources[] and clarifyOptions are written to the Room
+     * columns (v6 schema) alongside the answer text, so a reloaded thread
+     * re-renders source cards, citation chips and clarify quick-choices.
+     *
      * Offline contract (backend unreachable at any step):
      * - conversation creation fabricates a local id and the row appears in recents,
      * - the user turn is always persisted (with its attachments JSON),
@@ -306,6 +315,11 @@ class ChatRepository(
         modelId: String? = null,
         attachments: List<AttachmentDraft> = emptyList(),
         onConversationResolved: (String) -> Unit = {},
+        onStatus: (String) -> Unit = {},
+        onSearchEvent: (String) -> Unit = {},
+        onSourceEvent: (String) -> Unit = {},
+        onClarify: (String) -> Unit = {},
+        onDone: (MessageDto?) -> Unit = {},
         onDelta: (String) -> Unit
     ): String {
         activeJob = currentCoroutineContext()[Job]
@@ -334,6 +348,9 @@ class ChatRepository(
 
         val accumulated = StringBuilder()
         var assistantId = UUID.randomUUID().toString()
+        // PHASE 8.1: the terminal persisted message — its sources/clarifyOptions
+        // travel into the Room columns at finalize time.
+        var doneMessage: MessageDto? = null
         try {
             api.sendMessageStream(
                 conversationId = activeId,
@@ -344,9 +361,15 @@ class ChatRepository(
                     accumulated.append(delta)
                     onDelta(delta)
                 },
+                onStatus = onStatus,
+                onSearchEvent = onSearchEvent,
+                onSourceEvent = onSourceEvent,
+                onClarifyEvent = onClarify,
                 onDone = { done ->
+                    doneMessage = done
                     val doneId = done?.id
                     if (!doneId.isNullOrBlank()) assistantId = doneId
+                    onDone(done)
                 }
             )
         } catch (ce: CancellationException) {
@@ -369,7 +392,13 @@ class ChatRepository(
             persistAssistant(activeId, assistantId, accumulated)
             return activeId
         }
-        persistAssistant(activeId, assistantId, accumulated)
+        persistAssistant(
+            activeId,
+            assistantId,
+            accumulated,
+            sources = doneMessage?.sources.orEmpty(),
+            clarifyOptions = doneMessage?.clarifyOptions
+        )
         return activeId
     }
 
@@ -496,14 +525,22 @@ class ChatRepository(
         activeJob = null
     }
 
-    private suspend fun persistAssistant(conversationId: String, id: String, accumulated: StringBuilder) {
+    private suspend fun persistAssistant(
+        conversationId: String,
+        id: String,
+        accumulated: StringBuilder,
+        sources: List<MessageSourceDto> = emptyList(),
+        clarifyOptions: String? = null
+    ) {
         db.messageDao().upsert(
             MessageEntity(
                 id = id,
                 conversationId = conversationId,
                 role = ROLE_ASSISTANT,
                 content = accumulated.toString(),
-                createdAt = nowIso()
+                createdAt = nowIso(),
+                sources = sourcesJson(sources),
+                clarifyOptions = clarifyOptions
             )
         )
         // Bump the conversation so the Room-sourced list reorders with this turn.
@@ -538,7 +575,9 @@ class ChatRepository(
         role = role,
         content = content,
         createdAt = createdAt,
-        attachments = attachmentsJson(attachments)
+        attachments = attachmentsJson(attachments),
+        sources = sourcesJson(sources),
+        clarifyOptions = clarifyOptions
     )
 
     companion object {
@@ -553,6 +592,14 @@ class ChatRepository(
         /** Tolerant decode — a corrupt column degrades to "no attachments", never a crash. */
         fun decodeAttachments(json: String): List<AttachmentDto> =
             runCatching { GsApiJson.decodeFromString<List<AttachmentDto>>(json) }.getOrDefault(emptyList())
+
+        /** PHASE 8.1 sources JSON codec for the Room column — same discipline as
+         *  attachments: tolerant encode/decode, a corrupt column is "no sources". */
+        fun sourcesJson(dtos: List<MessageSourceDto>): String =
+            runCatching { GsApiJson.encodeToString(dtos) }.getOrDefault("[]")
+
+        fun decodeSources(json: String): List<MessageSourceDto> =
+            runCatching { GsApiJson.decodeFromString<List<MessageSourceDto>>(json) }.getOrDefault(emptyList())
 
         /** Ready composer drafts → wire records for the locally persisted user turn. */
         fun attachmentsJsonOf(drafts: List<AttachmentDraft>): String =

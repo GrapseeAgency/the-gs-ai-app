@@ -11,33 +11,37 @@ import SwiftUI
 
 struct BlocksView: View {
     let blocks: [Block]
+    /// PHASE 8.1: ordinal → source URL for the answer's `[N]` citation
+    /// chips (built from the turn's real sources by the caller). Markers
+    /// with no entry stay literal text — the parser never fabricates sources.
+    var citations: [Int: String] = [:]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             ForEach(Array(blocks.enumerated()), id: \.offset) { index, block in
-                BlockView(block: block, isLast: index == blocks.count - 1)
+                BlockView(block: block, isLast: index == blocks.count - 1, citations: citations)
             }
         }
     }
 }
 
 @ViewBuilder
-private func BlockView(block: Block, isLast: Bool) -> some View {
+private func BlockView(block: Block, isLast: Bool, citations: [Int: String]) -> some View {
     switch block {
     case .paragraph(let spans, _):
-        ParagraphView(spans: spans, showCaret: false)
+        ParagraphView(spans: spans, showCaret: false, citations: citations)
     case .heading(let level, let spans, _):
-        HeadingView(level: level, spans: spans, isFirst: false)
+        HeadingView(level: level, spans: spans, isFirst: false, citations: citations)
     case .bulletList(let items, _):
-        BulletListView(items: items)
+        BulletListView(items: items, citations: citations)
     case .orderedList(let start, let items, _):
-        OrderedListView(start: start, items: items)
+        OrderedListView(start: start, items: items, citations: citations)
     case .blockQuote(let inner, _):
-        BlockQuoteView(blocks: inner)
+        BlockQuoteView(blocks: inner, citations: citations)
     case .codeBlock(let language, let code, let open, _):
         CodeBlockCardView(language: language, code: code, open: open)
     case .table(let headers, let aligns, let rows, _):
-        TableBlockView(headers: headers, aligns: aligns, rows: rows)
+        TableBlockView(headers: headers, aligns: aligns, rows: rows, citations: citations)
     case .divider:
         DividerBlockView()
     case .mathBlock(let latex, _):
@@ -47,7 +51,7 @@ private func BlockView(block: Block, isLast: Bool) -> some View {
     case .image(let url, let alt, _):
         ImageBlockView(url: url, alt: alt)
     case .collapsible(let summary, let inner, _):
-        CollapsibleBlockView(summary: summary, blocks: inner)
+        CollapsibleBlockView(summary: summary, blocks: inner, citations: citations)
     case .citations(let citations, _):
         CitationsBlockView(citations: citations)
     case .toolResult(let entry, _):
@@ -62,6 +66,9 @@ private struct SpanTheme {
     let linkColor: Color
     let textColor: Color
     let baseSize: CGFloat
+    /// PHASE 8.1: ordinal → source URL. A plain-text `[N]` whose ordinal is
+    /// here becomes a tappable superscript chip; everything else stays text.
+    var citations: [Int: String] = [:]
 }
 
 private func attributed(from spans: [InlineSpan], theme: SpanTheme) -> AttributedString {
@@ -74,7 +81,7 @@ private func append(spans: [InlineSpan], into result: inout AttributedString, th
     for span in spans {
         switch span {
         case .text(let text):
-            result.append(AttributedString(text))
+            appendText(text, into: &result, theme: theme)
         case .bold(let children):
             var inner = attributed(from: children, theme: theme)
             inner.inlinePresentationIntent = .stronglyEmphasized
@@ -112,11 +119,54 @@ private func append(spans: [InlineSpan], into result: inout AttributedString, th
     }
 }
 
+// MARK: - Citation chips (PHASE 8.1)
+
+private let citationMarkerRegex = try! NSRegularExpression(pattern: "\\[(\\d{1,3})\\]")
+
+/// Splits a plain-text run on `[N]` markers: matched ordinals become tappable
+/// superscript chips linking the real source URL; unmatched markers stay
+/// literal text (the protocol's strip rule, applied in the renderer).
+private func appendText(_ text: String, into result: inout AttributedString, theme: SpanTheme) {
+    guard !theme.citations.isEmpty, text.contains("[") else {
+        result.append(AttributedString(text))
+        return
+    }
+    let ns = text as NSString
+    var index = 0
+    while index < ns.length {
+        let range = NSRange(location: index, length: ns.length - index)
+        guard let match = citationMarkerRegex.firstMatch(in: text, range: range) else {
+            result.append(AttributedString(ns.substring(from: index)))
+            return
+        }
+        if match.range.location > index {
+            result.append(AttributedString(ns.substring(with: NSRange(location: index, length: match.range.location - index))))
+        }
+        if let ordinal = Int(ns.substring(with: match.range(at: 1))),
+           let urlString = theme.citations[ordinal],
+           let url = URL(string: urlString) {
+            // Superscript chip: the bare number, shrunk, raised, tinted —
+            // a real Text link (system open path, same as every inline link).
+            var chip = AttributedString("\(ordinal)")
+            chip.link = url
+            chip.font = .system(size: theme.baseSize * 0.72, weight: .semibold)
+            chip.baselineOffset = theme.baseSize * 0.3
+            chip.foregroundColor = theme.linkColor
+            chip.backgroundColor = theme.monoBackground
+            result.append(chip)
+        } else {
+            result.append(AttributedString(ns.substring(with: match.range)))
+        }
+        index = match.range.location + match.range.length
+    }
+}
+
 // MARK: - Paragraph & heading
 
 private struct ParagraphView: View {
     let spans: [InlineSpan]
     var showCaret: Bool = false
+    var citations: [Int: String] = [:]
 
     var body: some View {
         if !spans.isEmpty {
@@ -124,7 +174,8 @@ private struct ParagraphView: View {
                 monoBackground: Aero.container,
                 linkColor: Aero.accentDeep,
                 textColor: Aero.text,
-                baseSize: 15
+                baseSize: 15,
+                citations: citations
             )
             Text(attributed(from: spans, theme: theme))
                 .font(Aero.body())
@@ -138,13 +189,15 @@ private struct HeadingView: View {
     let level: Int
     let spans: [InlineSpan]
     var isFirst: Bool = false
+    var citations: [Int: String] = [:]
 
     var body: some View {
         let theme = SpanTheme(
             monoBackground: Aero.container,
             linkColor: Aero.accentDeep,
             textColor: Aero.text,
-            baseSize: 15
+            baseSize: 15,
+            citations: citations
         )
         VStack(alignment: .leading, spacing: 0) {
             if !isFirst && level <= 3 {
@@ -174,11 +227,12 @@ private struct HeadingView: View {
 
 private struct BulletListView: View {
     let items: [ListItem]
+    var citations: [Int: String] = [:]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-                ListItemRowView(marker: "\u{2022}", markerColor: Aero.accent, item: item)
+                ListItemRowView(marker: "\u{2022}", markerColor: Aero.accent, item: item, citations: citations)
             }
         }
     }
@@ -187,12 +241,13 @@ private struct BulletListView: View {
 private struct OrderedListView: View {
     let start: Int
     let items: [ListItem]
+    var citations: [Int: String] = [:]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             ForEach(Array(items.enumerated()), id: \.offset) { index, item in
                 let number = item.number ?? (start + index)
-                ListItemRowView(marker: "\(number).", markerColor: Aero.textTertiary, item: item)
+                ListItemRowView(marker: "\(number).", markerColor: Aero.textTertiary, item: item, citations: citations)
             }
         }
     }
@@ -202,6 +257,7 @@ private struct ListItemRowView: View {
     let marker: String
     let markerColor: Color
     let item: ListItem
+    var citations: [Int: String] = [:]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -209,12 +265,12 @@ private struct ListItemRowView: View {
                 Text(marker)
                     .font(Aero.body())
                     .foregroundStyle(markerColor)
-                ParagraphView(spans: item.spans)
+                ParagraphView(spans: item.spans, citations: citations)
             }
             if !item.children.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(Array(item.children.enumerated()), id: \.offset) { _, child in
-                        NestedChildView(block: child)
+                        NestedChildView(block: child, citations: citations)
                     }
                 }
                 .padding(.leading, 16)
@@ -224,18 +280,18 @@ private struct ListItemRowView: View {
 }
 
 @ViewBuilder
-private func NestedChildView(block: Block) -> some View {
+private func NestedChildView(block: Block, citations: [Int: String]) -> some View {
     switch block {
     case .paragraph(let spans, _):
-        ParagraphView(spans: spans)
+        ParagraphView(spans: spans, citations: citations)
     case .bulletList(let items, _):
-        BulletListView(items: items)
+        BulletListView(items: items, citations: citations)
     case .orderedList(let start, let items, _):
-        OrderedListView(start: start, items: items)
+        OrderedListView(start: start, items: items, citations: citations)
     case .blockQuote(let inner, _):
-        BlockQuoteView(blocks: inner)
+        BlockQuoteView(blocks: inner, citations: citations)
     default:
-        BlockView(block: block, isLast: false)
+        BlockView(block: block, isLast: false, citations: citations)
     }
 }
 
@@ -243,6 +299,7 @@ private func NestedChildView(block: Block) -> some View {
 
 private struct BlockQuoteView: View {
     let blocks: [Block]
+    var citations: [Int: String] = [:]
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -251,7 +308,7 @@ private struct BlockQuoteView: View {
                 .frame(width: 3)
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(Array(blocks.enumerated()), id: \.offset) { _, inner in
-                    NestedChildView(block: inner)
+                    NestedChildView(block: inner, citations: citations)
                 }
             }
         }
@@ -344,6 +401,7 @@ private struct TableBlockView: View {
     let headers: [[InlineSpan]]
     let aligns: [TableAlign]
     let rows: [[[InlineSpan]]]
+    var citations: [Int: String] = [:]
 
     /// Available width mirrors the transcript's reading column (16pt padding
     /// each side, content clamped to the Step-2 640pt column) — deterministic,
@@ -360,7 +418,8 @@ private struct TableBlockView: View {
             monoBackground: Aero.container,
             linkColor: Aero.accentDeep,
             textColor: Aero.text,
-            baseSize: 13
+            baseSize: 13,
+            citations: citations
         )
         Group {
             if CGFloat(columns) * cellWidth <= availableWidth {
@@ -574,6 +633,7 @@ private struct ImageBlockView: View {
 private struct CollapsibleBlockView: View {
     let summary: String
     let blocks: [Block]
+    var citations: [Int: String] = [:]
     @State private var expanded = false
 
     var body: some View {
@@ -601,7 +661,7 @@ private struct CollapsibleBlockView: View {
             if expanded {
                 VStack(alignment: .leading, spacing: 8) {
                     ForEach(Array(blocks.enumerated()), id: \.offset) { _, inner in
-                        BlockView(block: inner, isLast: false)
+                        BlockView(block: inner, isLast: false, citations: citations)
                     }
                 }
                 .padding(.leading, 24)

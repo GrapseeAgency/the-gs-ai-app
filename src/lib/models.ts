@@ -64,6 +64,10 @@ const OPENROUTER_MODELS: Record<string, string[]> = {
   'gs-free-big': ['nvidia/nemotron-3-ultra-550b-a55b:free', 'openrouter/free'],
 }
 
+// Exported for the PHASE 8.1 search planner (planner reuses the free chain
+// so intent planning never depends on a single LLM provider).
+export { OPENROUTER_MODELS };
+
 /** Resolve a catalogue id to an OpenRouter model chain, or null if not one. */
 export function resolveOpenRouterModel(gsModelId: string | null | undefined): string[] | null {
   if (!gsModelId) return null

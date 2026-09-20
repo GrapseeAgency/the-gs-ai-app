@@ -51,7 +51,16 @@ data class MessageEntity(
      *  column — attachment records are opaque wire data to Room. The default
      *  matches the migration so pre-attachments rows decode to "none". */
     @ColumnInfo(defaultValue = "[]")
-    val attachments: String = "[]"
+    val attachments: String = "[]",
+    /** PHASE 8.1: JSON array of MessageSourceDto — the turn's REAL persisted
+     *  web-search sources (cited ordinals). Opaque wire data to Room, same
+     *  discipline as attachments: default matches the migration so every
+     *  pre-search row reads back as "no sources". */
+    @ColumnInfo(defaultValue = "[]")
+    val sources: String = "[]",
+    /** PHASE 8.1: clarify quick-choices — the raw clarify payload JSON string
+     *  {"question":…,"options":[…]}. Nullable: absent on every ordinary turn. */
+    val clarifyOptions: String? = null
 )
 
 /** Library — content saved from the chat surface ("Save to Library"). */
@@ -228,7 +237,7 @@ fun ftsMatchQuery(raw: String): String? {
         ConversationFtsEntity::class,
         MessageFtsEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -298,10 +307,24 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v5 → v6: PHASE 8.1 search sources + clarify options — two JSON
+         *  columns of opaque wire data, mirroring the attachments pattern.
+         *  Purely additive: sources is NOT NULL with a '[]' default,
+         *  clarifyOptions is nullable; every message written by earlier builds
+         *  reads back exactly as before and no chat history is ever rebuilt.
+         *  (The messages_fts shadow is untouched — it indexes `content` only,
+         *  exactly as it did when the attachments column was added in v5.) */
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE messages ADD COLUMN sources TEXT NOT NULL DEFAULT '[]'")
+                db.execSQL("ALTER TABLE messages ADD COLUMN clarifyOptions TEXT")
+            }
+        }
+
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "gsai-chat.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
-                // The full 1→5 migration chain is registered, so this fallback
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                // The full 1→6 migration chain is registered, so this fallback
                 // must be unreachable. Destructive fallback is the one thing a
                 // chat app must never silently do to user history — if a future
                 // schema change ships without its migration, fail loudly here

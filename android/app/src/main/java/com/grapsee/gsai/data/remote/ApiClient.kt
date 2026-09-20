@@ -97,6 +97,17 @@ class ApiClient(
      * PHASE 5: [attachments] carries the server attachment ids (uploaded via
      * /api/v1/uploads first). explicitNulls=false keeps null OFF the wire, so a
      * plain-text send serializes byte-identically to the pre-attachments contract.
+     *
+     * PHASE 8.1 (docs/search-event-protocol.md v1, additive): the search chain
+     * events are forwarded raw and the client stays silent on unknown event
+     * names — the exact tolerance the protocol promises old clients:
+     *  - [onStatus] — payload is the plain status string
+     *    (searching | working | composing | search_failed),
+     *  - [onSearchEvent] / [onSourceEvent] / [onClarifyEvent] — the payload is
+     *    a JSON-encoded object STRING (double-encoded, like `done`); parsing is
+     *    the stream layer's job, this walker never interprets it.
+     * All new callbacks default to no-op so every existing call site keeps its
+     * exact meaning.
      */
     suspend fun sendMessageStream(
         conversationId: String,
@@ -104,7 +115,11 @@ class ApiClient(
         modelId: String? = null,
         attachments: List<String>? = null,
         onDelta: (String) -> Unit,
-        onDone: (MessageDto?) -> Unit
+        onDone: (MessageDto?) -> Unit,
+        onStatus: (String) -> Unit = {},
+        onSearchEvent: (String) -> Unit = {},
+        onSourceEvent: (String) -> Unit = {},
+        onClarifyEvent: (String) -> Unit = {}
     ) {
         val response = client.post("$root/conversations/$conversationId/messages") {
             contentType(ContentType.Application.Json)
@@ -127,6 +142,12 @@ class ApiClient(
             val event = runCatching { GsApiJson.decodeFromString<SseEvent>(payload) }.getOrNull() ?: continue
             when (event.event) {
                 "delta" -> onDelta(event.data.orEmpty())
+                "status" -> onStatus(event.data.orEmpty())
+                // PHASE 8.1: search-chain payloads are double-encoded JSON strings —
+                // forward untouched; an empty payload is ignored, never forwarded.
+                "search" -> if (!event.data.isNullOrBlank()) onSearchEvent(event.data)
+                "source" -> if (!event.data.isNullOrBlank()) onSourceEvent(event.data)
+                "clarify" -> if (!event.data.isNullOrBlank()) onClarifyEvent(event.data)
                 "done" -> {
                     val message = event.data?.let { data ->
                         runCatching { GsApiJson.decodeFromString<MessageDto>(data) }.getOrNull()

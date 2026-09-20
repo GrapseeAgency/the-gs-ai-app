@@ -37,6 +37,177 @@ final class StreamAccumulator: @unchecked Sendable {
     var isEmpty: Bool { snapshot().isEmpty }
 }
 
+// MARK: - Search trace state (PHASE 8.1 — docs/search-event-protocol.md)
+
+/**
+ * The REAL search phase of the live turn, driven ONLY by wire events
+ * (`status`, `search`, `source`). Nothing may fabricate a phase:
+ * `.searching` exists only after a genuine search-start signal,
+ * `.working` only while page retrieval is actually in flight,
+ * `.composing` on synthesis start. `.idle` = no search signal this turn.
+ */
+enum ChatSearchPhase: Equatable {
+    case idle
+    case searching
+    case working
+    case composing
+    case failed
+}
+
+/**
+ * One search-trace step, built only from a received `search`/`source` event
+ * (plus the synthesis start from `status`). The protocol's honest-state rule
+ * is binding: no timers, no fabricated steps — if the backend never sent it,
+ * it never appears.
+ */
+struct SearchTraceStep: Identifiable, Equatable {
+
+    enum Kind: Equatable {
+        case started(label: String?)
+        case query(round: Int, text: String, engines: [String])
+        case results(round: Int, found: Int, query: String, engines: [String])
+        case discovered(ordinal: Int, title: String, domain: String)
+        case reading(ordinal: Int)
+        case sourceCompleted(ordinal: Int, chars: Int?)
+        case sourceFailed(ordinal: Int, reason: String)
+        case sourceSkipped(ordinal: Int, reason: String)
+        case roundSummary(round: Int, verified: Int, failed: Int)
+        case searchFailed(reason: String)
+        case completedSummary(queries: Int, sources: Int, retrieved: Int)
+        case composing
+    }
+
+    let id = UUID()
+    let kind: Kind
+
+    /// The one-line summary the trace collapses to after `done`, computed
+    /// ONLY from the steps that actually arrived (nil = no search ran).
+    static func collapsedSummary(_ steps: [SearchTraceStep]) -> String? {
+        guard !steps.isEmpty else { return nil }
+        for step in steps.reversed() {
+            if case .completedSummary(let queries, let sources, let retrieved) = step.kind {
+                return "Searched \(plural(queries, "query")) \u{00B7} \(plural(sources, "source")) \u{00B7} \(plural(retrieved, "page")) read"
+            }
+            if case .searchFailed(let reason) = step.kind {
+                let clean = reason.replacingOccurrences(of: "_", with: " ")
+                return clean.isEmpty ? "Search failed" : "Search failed \u{2014} \(clean)"
+            }
+        }
+        let queries = steps.reduce(0) { count, step in
+            if case .query = step.kind { return count + 1 }
+            return count
+        }
+        let read = steps.reduce(0) { count, step in
+            if case .sourceCompleted = step.kind { return count + 1 }
+            return count
+        }
+        if queries > 0 {
+            var line = "Searched \(plural(queries, "query"))"
+            if read > 0 { line += " \u{00B7} \(plural(read, "source")) read" }
+            return line
+        }
+        return "Searched"
+    }
+
+    private static func plural(_ n: Int, _ word: String) -> String {
+        n == 1 ? "1 \(word)" : "\(n) \(word)s"
+    }
+}
+
+/**
+ * Lock-guarded SSE sink for the search-trace events of one stream — the
+ * state twin of `StreamAccumulator`. `status`/`search`/`source`/`clarify`
+ * frames append here off-main with no main-actor hop; the ~30Hz flush loop
+ * drains it in arrival order on the main actor (and finalize drains the
+ * tail before closing), so trace order on screen is exactly wire order.
+ * `@unchecked Sendable`: every access is serialized by the lock.
+ */
+final class SearchEventSink: @unchecked Sendable {
+
+    private let lock = NSLock()
+    private var events: [SseEvent] = []
+
+    func append(_ event: SseEvent) {
+        lock.lock()
+        events.append(event)
+        lock.unlock()
+    }
+
+    func drain() -> [SseEvent] {
+        lock.lock()
+        defer { lock.unlock() }
+        let out = events
+        events = []
+        return out
+    }
+}
+
+// MARK: - Wire payload decodes (PHASE 8.1)
+
+/// Tolerant decode of the double-encoded `search` event payload — every
+/// field beyond the discriminator is optional, so an unknown/renamed field
+/// degrades instead of failing the whole event.
+private struct SearchEventPayload: Decodable {
+    var type: String = ""
+    var intent: String?
+    var depth: String?
+    var label: String?
+    var round: Int?
+    var query: String?
+    var engines: [String]?
+    var found: Int?
+    var sourcesVerified: Int?
+    var sourcesFailed: Int?
+    var verified: Bool?
+    var reason: String?
+    var queries: Int?
+    var sources: Int?
+    var retrieved: Int?
+    var usedCitations: [Int]?
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        type = try c.decodeIfPresent(String.self, forKey: .type) ?? ""
+        intent = try c.decodeIfPresent(String.self, forKey: .intent)
+        depth = try c.decodeIfPresent(String.self, forKey: .depth)
+        label = try c.decodeIfPresent(String.self, forKey: .label)
+        round = try c.decodeIfPresent(Int.self, forKey: .round)
+        query = try c.decodeIfPresent(String.self, forKey: .query)
+        engines = try c.decodeIfPresent([String].self, forKey: .engines)
+        found = try c.decodeIfPresent(Int.self, forKey: .found)
+        sourcesVerified = try c.decodeIfPresent(Int.self, forKey: .sourcesVerified)
+        sourcesFailed = try c.decodeIfPresent(Int.self, forKey: .sourcesFailed)
+        verified = try c.decodeIfPresent(Bool.self, forKey: .verified)
+        reason = try c.decodeIfPresent(String.self, forKey: .reason)
+        queries = try c.decodeIfPresent(Int.self, forKey: .queries)
+        sources = try c.decodeIfPresent(Int.self, forKey: .sources)
+        retrieved = try c.decodeIfPresent(Int.self, forKey: .retrieved)
+        usedCitations = try c.decodeIfPresent([Int].self, forKey: .usedCitations)
+    }
+}
+
+/// Tolerant decode of the double-encoded `source` event payload.
+private struct SourceEventPayload: Decodable {
+    var type: String = ""
+    var ordinal: Int?
+    var chars: Int?
+    var publishedDate: String?
+    var reason: String?
+    var status: String?
+    var source: MessageSource?
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        type = try c.decodeIfPresent(String.self, forKey: .type) ?? ""
+        ordinal = try c.decodeIfPresent(Int.self, forKey: .ordinal)
+        chars = try c.decodeIfPresent(Int.self, forKey: .chars)
+        publishedDate = try c.decodeIfPresent(String.self, forKey: .publishedDate)
+        reason = try c.decodeIfPresent(String.self, forKey: .reason)
+        status = try c.decodeIfPresent(String.self, forKey: .status)
+        source = try c.decodeIfPresent(MessageSource.self, forKey: .source)
+    }
+}
+
 @MainActor
 final class ChatViewModel: ObservableObject {
 
@@ -52,6 +223,17 @@ final class ChatViewModel: ObservableObject {
         /// ATTACHMENTS.md §7) — rendered as read-only chips above the text.
         /// Assistant turns carry none today; nil = none (tolerant decode).
         var attachments: [Attachment]? = nil
+        /// PHASE 8.1: search sources riding the turn — live ones from
+        /// `source` events while streaming, the done payload's persisted
+        /// rows after finalize, remote history rows on reload. nil = none.
+        var sources: [MessageSource]? = nil
+        /// PHASE 8.1: on clarify turns the persisted clarify payload (JSON
+        /// string, protocol shape) so the quick-choice chips re-render.
+        var clarifyOptions: String? = nil
+        /// PHASE 8.1: the one-line search-trace summary the card collapses
+        /// to after the turn closes ("Searched 2 queries · 5 sources · 4
+        /// read"). Computed only from steps that really arrived.
+        var traceSummary: String? = nil
     }
 
     // MARK: - Published state
@@ -67,6 +249,19 @@ final class ChatViewModel: ObservableObject {
     /// pages locally (never the network); the view restores the scroll anchor.
     @Published private(set) var hasOlder = false
 
+    // PHASE 8.1 — search trace, fed ONLY by real SSE events (honest states).
+
+    /// Every trace step that actually arrived this turn, in wire order.
+    @Published private(set) var traceSteps: [SearchTraceStep] = []
+    /// Live source cards built from `source` events (upserted by ordinal);
+    /// after finalize the turn renders the done payload's persisted rows.
+    @Published private(set) var liveSources: [MessageSource] = []
+    /// The clarify prompt while the clarify turn streams; on finalize it
+    /// moves onto the message (clarifyOptions) and clears here.
+    @Published private(set) var clarifyPrompt: ClarifyPrompt?
+    /// The honest orb phase of the live turn (searching/working/…).
+    @Published private(set) var searchPhase: ChatSearchPhase = .idle
+
     // MARK: - Private state
 
     private var streamTask: Task<Void, Never>?
@@ -78,6 +273,10 @@ final class ChatViewModel: ObservableObject {
     /// gone — one mutation per flush, committed to the store once at finalize.
     private var streamBuffer = StreamAccumulator()
     private var flushTask: Task<Void, Never>?
+
+    /// PHASE 8.1: search-trace events of the current stream queue here
+    /// off-main and drain in wire order inside the flush loop / finalize.
+    private var streamSink = SearchEventSink()
 
     /// Page size of the newest-window history load (Android's HISTORY_PAGE).
     private let historyPageSize = 60
@@ -115,6 +314,16 @@ final class ChatViewModel: ObservableObject {
         // the sent message server-side, so retry/regenerate stays text-only.
         lastSentText = text.isEmpty ? nil : text
         beginStreaming(text: text, appendUserMessage: true, attachments: attachments.isEmpty ? nil : attachments)
+    }
+
+    /// PHASE 8.1 clarify quick-choice: the tapped label travels as a normal
+    /// user message through the exact pipeline a typed send uses — the
+    /// composer draft is untouched (the chip's text never lands in the field).
+    func sendClarifyChoice(_ label: String) {
+        let text = label.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, !isStreaming else { return }
+        lastSentText = text
+        beginStreaming(text: text, appendUserMessage: true)
     }
 
     /// Resends the last user text after a failure (also backs regenerate).
@@ -247,6 +456,13 @@ final class ChatViewModel: ObservableObject {
 
     private func beginStreaming(text: String, appendUserMessage: Bool, attachments: [Attachment]? = nil) {
         errorMessage = nil
+        // PHASE 8.1: every turn starts with a clean honest trace — no state
+        // leaks from the previous turn, nothing exists until an event says so.
+        traceSteps = []
+        liveSources = []
+        clarifyPrompt = nil
+        searchPhase = .idle
+        streamSink = SearchEventSink()
         if appendUserMessage {
             messages.append(ChatMessage(
                 role: "user",
@@ -290,6 +506,9 @@ final class ChatViewModel: ObservableObject {
                         Task { @MainActor in
                             self.finalize(with: message)
                         }
+                    },
+                    onEvent: { [sink = self.streamSink] event in
+                        sink.append(event) // lock-guarded — drained in the flush loop
                     }
                 )
                 // Stream closed without an explicit `done` event — wrap up.
@@ -354,6 +573,7 @@ final class ChatViewModel: ObservableObject {
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 33_000_000)
                 guard let self, self.isStreaming else { break }
+                self.drainSearchEvents()
                 self.flushStreamingText()
             }
         }
@@ -371,12 +591,173 @@ final class ChatViewModel: ObservableObject {
         messages[index].content = text
     }
 
+    // MARK: - Search event ingest (PHASE 8.1)
+
+    /**
+     * Drains the queued search-trace events in wire order and folds them
+     * into the honest published state. Runs inside the ~30Hz flush loop and
+     * once more in every finalize path, so the trace never loses a tail
+     * event between the last flush tick and the turn closing.
+     */
+    private func drainSearchEvents() {
+        for event in streamSink.drain() {
+            ingest(event)
+        }
+    }
+
+    private func ingest(_ event: SseEvent) {
+        let data = event.data ?? ""
+        switch event.event {
+        case "status":
+            applyStatus(data)
+        case "search":
+            guard let payload = try? JSONDecoder().decode(SearchEventPayload.self, from: Data(data.utf8)) else { return }
+            applySearchEvent(payload)
+        case "source":
+            guard let payload = try? JSONDecoder().decode(SourceEventPayload.self, from: Data(data.utf8)) else { return }
+            applySourceEvent(payload)
+        case "clarify":
+            guard let prompt = ClarifyPrompt(jsonString: data) else { return }
+            clarifyPrompt = prompt
+        default:
+            break
+        }
+    }
+
+    /// `status` payloads: `searching` | `working` | `composing` | `search_failed`.
+    /// The trace's `composing` line also comes from here — it is a real
+    /// synthesis signal, not a guess. Phases only move forward; a late
+    /// status event never regresses the orb backwards.
+    private func applyStatus(_ payload: String) {
+        switch payload {
+        case "searching":
+            promotePhase(.searching)
+        case "working":
+            promotePhase(.working)
+        case "composing":
+            promotePhase(.composing)
+            if !traceSteps.isEmpty, !traceSteps.contains(where: { $0.kind == .composing }) {
+                traceSteps.append(SearchTraceStep(kind: .composing))
+            }
+        case "search_failed":
+            searchPhase = .failed
+        default:
+            break
+        }
+    }
+
+    private func applySearchEvent(_ payload: SearchEventPayload) {
+        switch payload.type {
+        case "started":
+            traceSteps.append(SearchTraceStep(kind: .started(label: payload.label ?? payload.intent)))
+            promotePhase(.searching)
+        case "query":
+            traceSteps.append(SearchTraceStep(kind: .query(
+                round: payload.round ?? 0,
+                text: payload.query ?? "",
+                engines: payload.engines ?? [])))
+            promotePhase(.searching)
+        case "results":
+            traceSteps.append(SearchTraceStep(kind: .results(
+                round: payload.round ?? 0,
+                found: payload.found ?? 0,
+                query: payload.query ?? "",
+                engines: payload.engines ?? [])))
+        case "round":
+            traceSteps.append(SearchTraceStep(kind: .roundSummary(
+                round: payload.round ?? 0,
+                verified: payload.sourcesVerified ?? 0,
+                failed: payload.sourcesFailed ?? 0)))
+        case "failed":
+            traceSteps.append(SearchTraceStep(kind: .searchFailed(reason: payload.reason ?? "")))
+            searchPhase = .failed
+        case "completed":
+            traceSteps.append(SearchTraceStep(kind: .completedSummary(
+                queries: payload.queries ?? 0,
+                sources: payload.sources ?? 0,
+                retrieved: payload.retrieved ?? 0)))
+        default:
+            break // unknown search sub-types stay invisible, never invented
+        }
+    }
+
+    private func applySourceEvent(_ payload: SourceEventPayload) {
+        switch payload.type {
+        case "discovered":
+            guard let source = payload.source else { return }
+            upsertLiveSource(source)
+            traceSteps.append(SearchTraceStep(kind: .discovered(
+                ordinal: source.ordinal,
+                title: source.title,
+                domain: source.domain)))
+        case "opening", "reading":
+            let ordinal = payload.ordinal ?? 0
+            upsertLiveSource(MessageSource(ordinal: ordinal, status: "reading"))
+            traceSteps.append(SearchTraceStep(kind: .reading(ordinal: ordinal)))
+            promotePhase(.working) // page retrieval is genuinely in flight
+        case "completed":
+            let ordinal = payload.ordinal ?? 0
+            upsertLiveSource(MessageSource(
+                ordinal: ordinal,
+                status: payload.status ?? "retrieved",
+                publishedDate: payload.publishedDate))
+            traceSteps.append(SearchTraceStep(kind: .sourceCompleted(
+                ordinal: ordinal,
+                chars: payload.chars)))
+        case "failed":
+            let ordinal = payload.ordinal ?? 0
+            upsertLiveSource(MessageSource(ordinal: ordinal, status: payload.status ?? "failed"))
+            traceSteps.append(SearchTraceStep(kind: .sourceFailed(
+                ordinal: ordinal,
+                reason: payload.reason ?? "")))
+        case "skipped":
+            let ordinal = payload.ordinal ?? 0
+            upsertLiveSource(MessageSource(ordinal: ordinal, status: payload.status ?? "skipped"))
+            traceSteps.append(SearchTraceStep(kind: .sourceSkipped(
+                ordinal: ordinal,
+                reason: payload.reason ?? "")))
+        default:
+            break
+        }
+    }
+
+    /// One card per ordinal — later events on the same source refine it in
+    /// place (discovered → reading → retrieved/failed), never duplicate it.
+    /// An `opening`/`reading` that arrives before its `discovered` still
+    /// gets an honest placeholder card (ordinal known, metadata unknown).
+    private func upsertLiveSource(_ update: MessageSource) {
+        if let index = liveSources.firstIndex(where: { $0.ordinal == update.ordinal }) {
+            var existing = liveSources[index]
+            existing.status = update.status ?? existing.status
+            existing.publishedDate = update.publishedDate ?? existing.publishedDate
+            if !update.title.isEmpty { existing.title = update.title }
+            if !update.url.isEmpty { existing.url = update.url }
+            if !update.domain.isEmpty { existing.domain = update.domain }
+            if !update.snippet.isEmpty { existing.snippet = update.snippet }
+            liveSources[index] = existing
+        } else {
+            liveSources.append(update)
+        }
+    }
+
+    /// Monotonic phase promotion — `idle < searching < working < composing`.
+    /// `.failed` is set directly (a failed search is a real, terminal phase
+    /// for the search leg; the turn itself keeps flowing honestly).
+    private func promotePhase(_ next: ChatSearchPhase) {
+        let ranks: [ChatSearchPhase: Int] = [.idle: 0, .searching: 1, .working: 2, .composing: 3]
+        if (ranks[next] ?? 0) > (ranks[searchPhase] ?? 0) {
+            searchPhase = next
+        }
+    }
+
     private func finalize(with message: Message?) {
         defer {
             isStreaming = false
             streamTask = nil
+            searchPhase = .idle // done → the orb honestly goes idle
         }
         stopFlushLoop()
+        drainSearchEvents() // the tail events land before the trace closes
         guard let message, !message.content.isEmpty else {
             finalizeLocal()
             return
@@ -384,7 +765,20 @@ final class ChatViewModel: ObservableObject {
         guard let index = messages.indices.last, messages[index].isStreaming else { return }
         messages[index].content = message.content
         messages[index].isStreaming = false
+        // PHASE 8.1: the done payload's persisted sources are the truth for
+        // citation chips and cards; the live event rows back them up only if
+        // the server sent none (older backend). Clarify backfills the same way.
+        if let persisted = message.sources, !persisted.isEmpty {
+            messages[index].sources = persisted
+        } else if !liveSources.isEmpty {
+            messages[index].sources = liveSources
+        }
+        messages[index].clarifyOptions = message.clarifyOptions ?? clarifyPrompt?.jsonString
+        messages[index].traceSummary = SearchTraceStep.collapsedSummary(traceSteps)
         persistAssistant(content: message.content)
+        traceSteps = []
+        liveSources = []
+        clarifyPrompt = nil
     }
 
     /// Keeps whatever streamed so far (GS Lite reply included) and closes the
@@ -393,16 +787,28 @@ final class ChatViewModel: ObservableObject {
         defer {
             isStreaming = false
             streamTask = nil
+            searchPhase = .idle
         }
         stopFlushLoop()
+        drainSearchEvents() // stop/cancel keeps the trace that really happened
         flushStreamingText() // land the last ≤33ms of deltas before closing
         guard let index = messages.indices.last, messages[index].isStreaming else { return }
         if messages[index].content.isEmpty {
             messages.remove(at: index)
         } else {
             messages[index].isStreaming = false
+            if messages[index].sources == nil, !liveSources.isEmpty {
+                messages[index].sources = liveSources
+            }
+            if messages[index].clarifyOptions == nil {
+                messages[index].clarifyOptions = clarifyPrompt?.jsonString
+            }
+            messages[index].traceSummary = SearchTraceStep.collapsedSummary(traceSteps)
             persistAssistant(content: messages[index].content)
         }
+        traceSteps = []
+        liveSources = []
+        clarifyPrompt = nil
     }
 
     private func persistAssistant(content: String) {
@@ -538,7 +944,13 @@ final class ChatViewModel: ObservableObject {
                 let history = try await APIClient.shared.messages(conversationID: conversationID)
                 guard let self else { return }
                 self.messages = history.map {
-                    ChatMessage(role: $0.role, content: $0.content, createdAt: $0.createdAt, attachments: $0.attachments)
+                    ChatMessage(
+                        role: $0.role,
+                        content: $0.content,
+                        createdAt: $0.createdAt,
+                        attachments: $0.attachments,
+                        sources: $0.sources,
+                        clarifyOptions: $0.clarifyOptions)
                 }
                 // The remote seed carries the full thread — nothing older locally.
                 self.oldestStamp = self.messages.first?.createdAt

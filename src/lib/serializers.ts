@@ -34,6 +34,8 @@ export type MessageJson = {
   createdAt: string
   attachments?: AttachmentJson[]
   sources?: MessageSourceJson[]
+  // PHASE 8.1 — ambiguity clarification quick choices (JSON string, §6).
+  clarifyOptions?: string
 }
 
 /** PHASE 8 — canonical web-search source metadata for grounded answers. */
@@ -47,6 +49,10 @@ export type MessageSourceJson = {
   publishedDate?: string
   query: string
   retrievedAt: string
+  // PHASE 8.1 source-evidence object (§11):
+  status?: string
+  used?: boolean
+  rank?: number
 }
 
 export type AssistantJson = {
@@ -118,6 +124,7 @@ export function messageToJson(
     ...(m.sources && m.sources.length > 0
       ? { sources: m.sources.map(sourceToJson) }
       : {}),
+    ...(m.clarifyOptions ? { clarifyOptions: m.clarifyOptions } : {}),
   }
 }
 
@@ -132,5 +139,8 @@ export function sourceToJson(s: MessageSource): MessageSourceJson {
     ...(s.publishedDate ? { publishedDate: s.publishedDate } : {}),
     query: s.query,
     retrievedAt: s.retrievedAt.toISOString(),
+    ...(s.status ? { status: s.status } : {}),
+    ...(s.rank !== null ? { rank: s.rank } : {}),
+    used: s.used,
   }
 }

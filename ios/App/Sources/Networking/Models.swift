@@ -90,6 +90,136 @@ struct Attachment: Codable, Identifiable, Equatable, Hashable {
     }
 }
 
+// MARK: - Search sources + clarify (PHASE 8.1 — docs/search-event-protocol.md)
+
+/// One persisted search source on an assistant message (the protocol's
+/// MessageJson `sources[]` addition). `ordinal` IS the citation number the
+/// answer's `[N]` markers refer to. Tolerant decode follows the house
+/// pattern: a missing/malformed field degrades to a default instead of
+/// failing the whole message decode — older servers carry no sources at all.
+struct MessageSource: Codable, Equatable, Hashable {
+    let id: String
+    let ordinal: Int
+    var title: String
+    var url: String
+    var domain: String
+    var snippet: String
+    var publishedDate: String?
+    var query: String?
+    var retrievedAt: String?
+    /// discovered | retrieved | snippet_only | failed | skipped | used
+    var status: String?
+    /// true = cited in the final answer (server-computed; never guessed)
+    var used: Bool?
+    var rank: Int?
+
+    init(
+        id: String = "",
+        ordinal: Int,
+        title: String = "",
+        url: String = "",
+        domain: String = "",
+        snippet: String = "",
+        publishedDate: String? = nil,
+        query: String? = nil,
+        retrievedAt: String? = nil,
+        status: String? = nil,
+        used: Bool? = nil,
+        rank: Int? = nil
+    ) {
+        self.id = id
+        self.ordinal = ordinal
+        self.title = title
+        self.url = url
+        self.domain = domain
+        self.snippet = snippet
+        self.publishedDate = publishedDate
+        self.query = query
+        self.retrievedAt = retrievedAt
+        self.status = status
+        self.used = used
+        self.rank = rank
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, ordinal, title, url, domain, snippet
+        case publishedDate, query, retrievedAt, status, used, rank
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(String.self, forKey: .id) ?? ""
+        ordinal = try container.decodeIfPresent(Int.self, forKey: .ordinal) ?? 0
+        title = try container.decodeIfPresent(String.self, forKey: .title) ?? ""
+        url = try container.decodeIfPresent(String.self, forKey: .url) ?? ""
+        domain = try container.decodeIfPresent(String.self, forKey: .domain) ?? ""
+        snippet = try container.decodeIfPresent(String.self, forKey: .snippet) ?? ""
+        publishedDate = try container.decodeIfPresent(String.self, forKey: .publishedDate)
+        query = try container.decodeIfPresent(String.self, forKey: .query)
+        retrievedAt = try container.decodeIfPresent(String.self, forKey: .retrievedAt)
+        status = try container.decodeIfPresent(String.self, forKey: .status)
+        used = try container.decodeIfPresent(Bool.self, forKey: .used)
+        rank = try container.decodeIfPresent(Int.self, forKey: .rank)
+    }
+}
+
+/// One quick-choice of a clarify turn (`{"id","label"}`).
+struct ClarifyOption: Codable, Identifiable, Equatable, Hashable {
+    let id: String
+    let label: String
+
+    init(id: String, label: String) {
+        self.id = id
+        self.label = label
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(String.self, forKey: .id)
+            ?? (try container.decodeIfPresent(String.self, forKey: .label) ?? "")
+        label = try container.decodeIfPresent(String.self, forKey: .label)
+            ?? (try container.decodeIfPresent(String.self, forKey: .id) ?? "")
+    }
+}
+
+/// The clarify payload (`{"question","options":[…]}`) — arrives inside the
+/// `clarify` SSE event and travels on the persisted Message as the
+/// `clarifyOptions` JSON string, so reloads re-render the chips.
+struct ClarifyPrompt: Equatable, Hashable {
+    let question: String
+    let options: [ClarifyOption]
+
+    init(question: String, options: [ClarifyOption]) {
+        self.question = question
+        self.options = options
+    }
+
+    /// Tolerant read of the double-encoded payload: nil when the string is
+    /// not a clarify object or the question is empty.
+    init?(jsonString: String) {
+        guard let data = jsonString.data(using: .utf8) else { return nil }
+        struct Payload: Decodable {
+            var question: String?
+            var options: [ClarifyOption]?
+        }
+        guard let payload = try? JSONDecoder().decode(Payload.self, from: data),
+              let question = payload.question, !question.isEmpty else { return nil }
+        self.question = question
+        self.options = payload.options ?? []
+    }
+
+    /// The persisted `clarifyOptions` string (same JSON shape the events and
+    /// the server carry, so a backfilled prompt round-trips unchanged).
+    var jsonString: String {
+        struct Payload: Encodable {
+            var question: String
+            var options: [ClarifyOption]
+        }
+        let payload = Payload(question: question, options: options)
+        return (try? JSONEncoder().encode(payload)).flatMap { String(data: $0, encoding: .utf8) } ?? ""
+    }
+}
+
 // MARK: - Message (`#/components/schemas/Message`)
 
 struct Message: Codable, Identifiable, Equatable, Hashable {
@@ -101,6 +231,14 @@ struct Message: Codable, Identifiable, Equatable, Hashable {
     /// PHASE 5: up to 6 attachments on user turns; assistant messages carry
     /// none today. Absent on the wire (older servers) decodes to nil.
     var attachments: [Attachment]?
+    /// PHASE 8.1: the search sources persisted with the assistant turn
+    /// (cited ordinals only, server-side). Absent on the wire (older
+    /// servers, non-search turns) decodes to nil.
+    var sources: [MessageSource]?
+    /// PHASE 8.1: on clarify turns the persisted message carries the clarify
+    /// payload as a JSON string (same shape the `clarify` event sends), so a
+    /// reloaded thread re-renders the quick-choice chips.
+    var clarifyOptions: String?
 
     init(
         id: String,
@@ -108,7 +246,9 @@ struct Message: Codable, Identifiable, Equatable, Hashable {
         role: String,
         content: String,
         createdAt: String,
-        attachments: [Attachment]? = nil
+        attachments: [Attachment]? = nil,
+        sources: [MessageSource]? = nil,
+        clarifyOptions: String? = nil
     ) {
         self.id = id
         self.conversationId = conversationId
@@ -116,6 +256,8 @@ struct Message: Codable, Identifiable, Equatable, Hashable {
         self.content = content
         self.createdAt = createdAt
         self.attachments = attachments
+        self.sources = sources
+        self.clarifyOptions = clarifyOptions
     }
 
     init(from decoder: Decoder) throws {
@@ -126,6 +268,8 @@ struct Message: Codable, Identifiable, Equatable, Hashable {
         content = try container.decodeIfPresent(String.self, forKey: .content) ?? ""
         createdAt = try container.decodeIfPresent(String.self, forKey: .createdAt) ?? ""
         attachments = try container.decodeIfPresent([Attachment].self, forKey: .attachments)
+        sources = try container.decodeIfPresent([MessageSource].self, forKey: .sources)
+        clarifyOptions = try container.decodeIfPresent(String.self, forKey: .clarifyOptions)
     }
 }
 

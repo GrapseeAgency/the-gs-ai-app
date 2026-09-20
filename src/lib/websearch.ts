@@ -95,7 +95,9 @@ export type SearchOutcome = {
  * searches — the veto only protects against continuation, never against a
  * literal request.
  */
-const SUPPRESSION_PATTERNS: RegExp[] = [
+// Exported for the PHASE 8.1 search planner (deterministic stop-signal
+// detection runs before and behind the LLM planner).
+export const SUPPRESSION_PATTERNS: RegExp[] = [
   /\bstop\s+(searching|googling|looking)\b/i,
   /\bdon'?t\s+(search|google|look\s*(it|this|that)?\s*up|bother)\b/i,
   /\bdo\s+not\s+(search|google|look\s*(it|this|that)?\s*up)\b/i,
@@ -760,11 +762,19 @@ export function normalizeCitationBrackets(text: string): string {
  * Remove citation markers that point nowhere (model wrote [7] of 5 sources)
  * from the PERSISTED text, so reloaded conversations never show dead markers.
  * Valid markers are left untouched — they resolve against stored sources.
+ *
+ * PHASE 8.1 — `allowed` (optional) narrows validity to the ordinals that were
+ * actually persisted (retrieved/snippet_only fresh sources + cited history
+ * sources). A model citation of a FAILED source (found live: it cited an
+ * article whose fetch 403'd) must not survive into the visible answer (§15:
+ * every citation connects to a real source).
  */
-export function sanitizeCitationMarkers(text: string, maxOrdinal: number): string {
+export function sanitizeCitationMarkers(text: string, maxOrdinal: number, allowed?: Set<number>): string {
   return text.replace(CITATION_MARKER, (whole, digits: string) => {
     const n = Number.parseInt(digits, 10)
-    return n >= 1 && n <= maxOrdinal ? whole : ''
+    if (!(n >= 1 && n <= maxOrdinal)) return ''
+    if (allowed && !allowed.has(n)) return ''
+    return whole
   })
 }
 
