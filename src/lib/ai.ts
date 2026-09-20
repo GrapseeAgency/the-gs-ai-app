@@ -201,23 +201,33 @@ function errMessage(e: unknown): string {
 /**
  * Streaming chat completion. Calls `onDelta` for every token/chunk received
  * and resolves with the complete assistant text.
+ *
+ * PHASE 8.1 — `providerModel` (from the gs-* catalogue mapping) is sent when
+ * present. If the provider rejects it as invalid/unknown (HTTP 400/404), the
+ * loop retries modelless (the exact pre-8.1 behavior) — a bad mapping can
+ * degrade to the default model, never break chat. Account-level 429s are
+ * NOT retried modelless (same quota pool either way).
  */
 export async function streamChat(
   messages: ChatMessageInput[],
-  onDelta: (t: string) => Promise<void> | void
+  onDelta: (t: string) => Promise<void> | void,
+  providerModel?: string | null
 ): Promise<string> {
   let lastError = 'Upstream unavailable'
+  let activeModel = typeof providerModel === 'string' && providerModel.length > 0 ? providerModel : null
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     let forwarded = false
     try {
       const zai = await ZAI.create()
+      const body: Record<string, unknown> = {
+        messages: toSdkMessages(messages),
+        stream: true,
+        thinking: { type: 'disabled' },
+      }
+      if (activeModel) body.model = activeModel
       const response: unknown = await Promise.race([
-        zai.chat.completions.create({
-          messages: toSdkMessages(messages),
-          stream: true,
-          thinking: { type: 'disabled' },
-        }),
+        zai.chat.completions.create(body as never),
         new Promise((_, reject) =>
           setTimeout(() => reject(new Error('Upstream connect timeout')), CONNECT_TIMEOUT_MS)
         ),
@@ -242,6 +252,12 @@ export async function streamChat(
       return full
     } catch (e) {
       lastError = errMessage(e)
+      // PHASE 8.1 — mapped model rejected by the provider (invalid/unknown):
+      // drop the model key and retry modelless immediately.
+      if (activeModel && /status\s+(400|404)\b/.test(lastError)) {
+        activeModel = null
+        continue
+      }
       // Mid-stream failure after output was already forwarded: restarting
       // would duplicate text on the client — surface the error instead.
       if (forwarded) throw new Error(lastError)
@@ -252,34 +268,43 @@ export async function streamChat(
 }
 
 /** Non-streaming chat completion. Resolves with the assistant text. */
-export async function completeChat(messages: ChatMessageInput[]): Promise<string> {
-  return (await completeChatWithMeta(messages)).text
+export async function completeChat(
+  messages: ChatMessageInput[],
+  providerModel?: string | null
+): Promise<string> {
+  return (await completeChatWithMeta(messages, providerModel)).text
 }
 
 /**
- * PHASE 6 — non-streaming vision completion via the provider's real vision
- * endpoint. Resolves with the assistant text and the serving model id.
+ * PHASE 6 — non-streaming completion with serving-model metadata. Resolves
+ * with the assistant text and the serving model id.
  *
- * MODEL SELECTION (§4/§12, proven empirically): the `model` key is OMITTED,
- * exactly like the SDK's own vision CLI — the vision endpoint then serves its
- * compatible default (observed live as `glm-5v-turbo` in the response `model`
- * field). Omitting keeps the pipeline resilient to gateway-side model
- * upgrades; the serving model is logged per request for forensics.
+ * MODEL SELECTION: the `model` key is OMITTED by default, exactly like the
+ * SDK's own vision CLI — the endpoint then serves its compatible default
+ * (observed live as `glm-5v-turbo` on the vision path). PHASE 8.1 adds the
+ * optional `providerModel` for the TEXT path (gs-* catalogue mapping): sent
+ * when present; on an invalid/unknown-model rejection (HTTP 400/404) the loop
+ * retries modelless, so a wrong mapping degrades to the default, never breaks
+ * chat. Account-level 429s are NOT retried modelless.
  */
 export async function completeChatWithMeta(
-  messages: ChatMessageInput[]
+  messages: ChatMessageInput[],
+  providerModel?: string | null
 ): Promise<{ text: string; model: string | null }> {
   let lastError = 'Upstream unavailable'
+  let activeModel = typeof providerModel === 'string' && providerModel.length > 0 ? providerModel : null
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
       const zai = await ZAI.create()
+      const body: Record<string, unknown> = {
+        messages: toSdkMessages(messages),
+        stream: false,
+        thinking: { type: 'disabled' },
+      }
+      if (activeModel) body.model = activeModel
       const completion = (await Promise.race([
-        zai.chat.completions.create({
-          messages: toSdkMessages(messages),
-          stream: false,
-          thinking: { type: 'disabled' },
-        }),
+        zai.chat.completions.create(body as never),
         new Promise((_, reject) =>
           setTimeout(() => reject(new Error('Upstream completion timeout')), COMPLETION_TIMEOUT_MS)
         ),
@@ -291,6 +316,11 @@ export async function completeChatWithMeta(
       }
     } catch (e) {
       lastError = errMessage(e)
+      // PHASE 8.1 — mapped model rejected by the provider: retry modelless.
+      if (activeModel && /status\s+(400|404)\b/.test(lastError)) {
+        activeModel = null
+        continue
+      }
       if (attempt < MAX_ATTEMPTS) await sleep(400 * attempt)
     }
   }

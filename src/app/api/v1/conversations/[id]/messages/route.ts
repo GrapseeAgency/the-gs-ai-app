@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { messageToJson } from '@/lib/serializers'
+import { resolveProviderModel } from '@/lib/models'
 import {
   SYSTEM_PROMPT,
   VISION_GROUNDING_PROMPT,
@@ -168,10 +169,17 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
   }
 
   const stream = body?.stream === true
+
   const requestedModelId =
     typeof body?.modelId === 'string' && body.modelId.trim().length > 0
       ? body.modelId.trim()
       : null
+  // PHASE 8.1 — make the in-app model selector REAL: map the EFFECTIVE gs-*
+  // catalogue id (this request's override, else the conversation's) to a
+  // concrete provider model. Unknown/vision ids → null → the request omits
+  // `model` (provider default), and the chat layer falls back modelless if
+  // the provider rejects a mapping.
+  const providerModel = resolveProviderModel(requestedModelId ?? conversation.modelId)
   const shouldAutoTitle = conversation.title === DEFAULT_TITLE
 
   // Persist the user message + apply auto-title / model override.
@@ -566,7 +574,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       const { messages: modelMessages } = await buildModelMessages(outcome)
       const { text } = useVision
         ? await completeVisionChat(modelMessages as VisionChatMessage[])
-        : { text: await completeChat(modelMessages as ChatMessageInput[]) }
+        : { text: await completeChat(modelMessages as ChatMessageInput[], providerModel) }
       const finalText =
         outcome?.ok || historySources.length > 0
           ? sanitizeCitationMarkers(text, outcome?.ok ? outcome.sources.length + historySources.length : 0)
@@ -631,7 +639,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
           const { messages: modelMessages } = await buildModelMessages(outcome)
           const full = useVision
             ? (await streamVisionChat(modelMessages as VisionChatMessage[], (d) => send('delta', d))).text
-            : await streamChat(modelMessages as ChatMessageInput[], (d) => send('delta', d))
+            : await streamChat(modelMessages as ChatMessageInput[], (d) => send('delta', d), providerModel)
           const finalText =
             outcome?.ok || historySources.length > 0
               ? sanitizeCitationMarkers(full, outcome?.ok ? outcome.sources.length + historySources.length : 0)

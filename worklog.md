@@ -3189,3 +3189,18 @@ Stage Summary:
 - Round 4 (00:12:45 UTC): probe → 429. One probe, one line, stopped (per worklog discipline note).
 - Round 5 (00:13:00 UTC): probe → 429. One probe, one line, stopped.
 - Manual check 04:18 UTC (user request): server health OK; cron list = 0 jobs (misfiring 399318 GONE — spam ended after round 5, 00:13 UTC); probe → STILL 429 = provider quota hard-blocked 4.5+ hours ⇒ daily-cap exhaustion on provider side, nothing in our stack. Waiting for provider reset; app will simply start working when it clears.
+
+---
+Task ID: PHASE8.1-MODEL-TIERS
+Agent: Z.ai Code (main)
+Task: User demanded ("add fucking new model mate") a way to chat today; investigate whether any provider model escapes the 429, and make the gs-* model tiers real (they were cosmetic).
+
+Work Log:
+- QUOTA INVESTIGATION (10 live probes, one tiny request each): default + glm-4.6 + glm-4.5-air + glm-4.5-flash + glm-4.5 + glm-5 + glm-5-air + glm-5-flash + glm-4.6v + glm-5v-turbo → ALL return the same account-level 429. Conclusion: the quota pool is per-ACCOUNT, not per-model; no model swap can unblock chat during the window. No unauthorized external provider will be wired.
+- DEFECT FOUND (user's demand exposed it): all 8 gs-* catalogue tiers were COSMETIC — ai.ts never sent a `model` key, so every tier executed the identical default-model call.
+- FIX (backend-only, 3 files): new src/lib/models.ts maps text tiers to real provider models (gs-swift/gs-voice → glm-4.5-flash; gs-balanced/creative/coder/deep/research → glm-4.6; gs-vision intentionally UNMAPPED to protect the audited Phase 6 vision path); ai.ts streamChat/completeChat/completeChatWithMeta accept an optional providerModel, include it in the body when present, and on an invalid/unknown-model rejection (HTTP 400/404) retry once MODElESS (pre-8.1 behavior) — a wrong mapping can degrade to the default, never break chat; account-level 429s are NOT retried modelless. messages/route.ts resolves the EFFECTIVE gs-* id (per-request modelId override ?? conversation.modelId) and passes it to both text call sites (stream + non-stream). Vision call sites untouched.
+- GATES: tsc zero errors in touched files; eslint clean; mapping unit check 10/10 (incl. gs-vision→null, bogus→null). E2E of real-tier serving is quota-blocked like everything else — mapping acceptance will be verified right after the provider window opens and adjusted if the gateway rejects either model id.
+- HONEST LIMITS: mapped IDs cannot be validated during the 429 window (429 ≠ invalid-model evidence); the fallback makes this safe by construction.
+
+Stage Summary:
+- Model selector goes from cosmetic to real the moment the provider reopens; zero client impact (clients already send gs-* ids). Account-level 429 re-proven 10/10 — the ONLY remaining blocker for the user's device audit is the provider window itself.
