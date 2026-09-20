@@ -38,3 +38,37 @@ export function resolveProviderModel(gsModelId: string | null | undefined): stri
   if (!gsModelId) return null
   return PROVIDER_MODELS[gsModelId] ?? null
 }
+
+// ---------------------------------------------------------------------------
+// PHASE 8.1 — OpenRouter free tiers (user-supplied keys in .env, 2026-09-20).
+// These tiers bypass the primary provider's account-level quota entirely.
+// `openrouter/free` is the platform's meta-router: it forwards to whichever
+// free model currently has capacity (proven live: served nex-n2.5-pro while
+// qwen/glm free tiers were individually rate-limited).
+// ---------------------------------------------------------------------------
+
+const OPENROUTER_MODELS: Record<string, string> = {
+  'gs-free': 'openrouter/free',
+  'gs-free-big': 'nvidia/nemotron-3-ultra-550b-a55b:free',
+}
+
+/** Resolve a catalogue id to an OpenRouter model, or null if it is not one. */
+export function resolveOpenRouterModel(gsModelId: string | null | undefined): string | null {
+  if (!gsModelId) return null
+  return OPENROUTER_MODELS[gsModelId] ?? null
+}
+
+export type ModelRoute =
+  | { backend: 'openrouter'; model: string }
+  | { backend: 'zai'; providerModel: string | null }
+
+/**
+ * Single routing decision for the messages route: OpenRouter tiers win;
+ * everything else stays on the primary provider (z-ai) with its optional
+ * concrete model mapping.
+ */
+export function resolveModelRoute(gsModelId: string | null | undefined): ModelRoute {
+  const orModel = resolveOpenRouterModel(gsModelId)
+  if (orModel) return { backend: 'openrouter', model: orModel }
+  return { backend: 'zai', providerModel: resolveProviderModel(gsModelId) }
+}

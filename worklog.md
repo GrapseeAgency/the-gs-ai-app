@@ -3204,3 +3204,18 @@ Work Log:
 
 Stage Summary:
 - Model selector goes from cosmetic to real the moment the provider reopens; zero client impact (clients already send gs-* ids). Account-level 429 re-proven 10/10 — the ONLY remaining blocker for the user's device audit is the provider window itself.
+
+---
+Task ID: PHASE8.1-OPENROUTER-FREE
+Agent: Z.ai Code (main)
+Task: User supplied 15 OpenRouter keys (free plan) after the extended z-ai quota outage; validate all keys, enumerate free models, wire free tiers so the app can chat TODAY.
+
+Work Log:
+- KEYS VALIDATED: 13/15 OK via GET /api/v1/key (all free-tier; usage near-zero). 2 EXPIRED server-side (fingerprints ***4a53, ***6504 — 401 "API key expired"). Pool stored as OPENROUTER_API_KEYS (comma-separated) in gitignored .env; never logged in full.
+- FREE MODELS ENUMERATED: 24 models with $0 prompt+completion. Key ones: openrouter/free (meta-router, auto-picks a free model with capacity — proven live serving nex-n2.5-pro while qwen3.8/glm-5.2 free tiers were individually 429), nvidia/nemotron-3-ultra-550b-a55b:free (550B MoE, 1M ctx), thinkingmachines/inkling:free (1M ctx), google/gemma-4-31b-it:free, z-ai/glm-5.2:free.
+- WIRING (backend-only, 5 files): new src/lib/openrouter.ts — OpenAI-compatible REST via plain fetch, key-pool rotation on 401/402/408/429/5xx with a last-known-good cursor, permanent errors (400/404) surfaced not rotated, connect 15s / completion 90s timeouts, streaming via the SAME consumeSseStream as the primary provider (identical SSE wire); consumeSseStream exported from ai.ts (no duplication). models.ts: OPENROUTER_MODELS map + resolveOpenRouterModel + resolveModelRoute discriminator; catalogue adds gs-free (GS Free, 200k ctx, fast) + gs-free-big (GS Free Deep, 1M ctx, deep) — SERVER-DRIVEN, no client reinstall needed. messages/route.ts: single resolveModelRoute decision, OpenRouter branches at both text call sites (stream + non-stream); vision path untouched (Phase 6).
+- GATES: tsc zero errors in touched files (one ternary type error found+fixed); eslint clean; mapping 10/10 + route decision 6/6 (incl. gs-vision→zai/default, bogus→zai/default).
+- LIVE E2E (through the app's own API, while z-ai still 429): gs-free STREAMING → 5 delta events, real persona answer ("Hello — I'm GS, Grapsee Agency's intelligent assistant."); gs-free-big non-stream → 200, correct math (17×23=391). Public origin /api/v1/models serves the 10-model catalogue incl. both free tiers. Cleanup done (test conversations deleted).
+
+Stage Summary:
+- THE USER CAN CHAT RIGHT NOW: pick "GS Free" (or "GS Free Deep") in the model selector — no reinstall, catalogue is server-driven. Free tiers are quota-independent of the z-ai outage; 13-key rotation gives ample headroom. Primary-provider tiers (gs-balanced etc.) resume automatically when the z-ai window resets. Note: free models are weaker at [N] citation discipline than the flagship — dead markers are already sanitized; live citation QA on the free tier is a follow-up once the user has tested.

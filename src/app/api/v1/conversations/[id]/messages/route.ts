@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { messageToJson } from '@/lib/serializers'
-import { resolveProviderModel } from '@/lib/models'
+import { resolveModelRoute } from '@/lib/models'
+import { orCompleteChat, orStreamChat } from '@/lib/openrouter'
 import {
   SYSTEM_PROMPT,
   VISION_GROUNDING_PROMPT,
@@ -174,12 +175,12 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     typeof body?.modelId === 'string' && body.modelId.trim().length > 0
       ? body.modelId.trim()
       : null
-  // PHASE 8.1 — make the in-app model selector REAL: map the EFFECTIVE gs-*
-  // catalogue id (this request's override, else the conversation's) to a
-  // concrete provider model. Unknown/vision ids → null → the request omits
-  // `model` (provider default), and the chat layer falls back modelless if
-  // the provider rejects a mapping.
-  const providerModel = resolveProviderModel(requestedModelId ?? conversation.modelId)
+  // PHASE 8.1 — single routing decision: OpenRouter free tiers bypass the
+  // primary provider's account-level quota; everything else stays on z-ai
+  // (with its optional concrete model mapping + modelless fallback).
+  const modelRoute = resolveModelRoute(requestedModelId ?? conversation.modelId)
+  const providerModel = modelRoute.backend === 'zai' ? modelRoute.providerModel : null
+  const openRouterModel = modelRoute.backend === 'openrouter' ? modelRoute.model : null
   const shouldAutoTitle = conversation.title === DEFAULT_TITLE
 
   // Persist the user message + apply auto-title / model override.
@@ -572,9 +573,11 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
         ? buildHistoryEvidenceBlock(historyWebSources, (outcome?.ok ? outcome.sources.length : 0) + 1).sources
         : []
       const { messages: modelMessages } = await buildModelMessages(outcome)
-      const { text } = useVision
-        ? await completeVisionChat(modelMessages as VisionChatMessage[])
-        : { text: await completeChat(modelMessages as ChatMessageInput[], providerModel) }
+      const text = useVision
+        ? (await completeVisionChat(modelMessages as VisionChatMessage[])).text
+        : openRouterModel
+          ? await orCompleteChat(modelMessages as ChatMessageInput[], openRouterModel).then((r) => r.text)
+          : await completeChat(modelMessages as ChatMessageInput[], providerModel)
       const finalText =
         outcome?.ok || historySources.length > 0
           ? sanitizeCitationMarkers(text, outcome?.ok ? outcome.sources.length + historySources.length : 0)
@@ -639,7 +642,9 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
           const { messages: modelMessages } = await buildModelMessages(outcome)
           const full = useVision
             ? (await streamVisionChat(modelMessages as VisionChatMessage[], (d) => send('delta', d))).text
-            : await streamChat(modelMessages as ChatMessageInput[], (d) => send('delta', d), providerModel)
+            : openRouterModel
+              ? await orStreamChat(modelMessages as ChatMessageInput[], openRouterModel, (d) => send('delta', d))
+              : await streamChat(modelMessages as ChatMessageInput[], (d) => send('delta', d), providerModel)
           const finalText =
             outcome?.ok || historySources.length > 0
               ? sanitizeCitationMarkers(full, outcome?.ok ? outcome.sources.length + historySources.length : 0)

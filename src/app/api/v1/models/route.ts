@@ -28,6 +28,20 @@ const MODELS: {
     speedTier: 'fast',
   },
   {
+    id: 'gs-free',
+    displayName: 'GS Free',
+    capabilities: ['text'],
+    contextWindow: 200000,
+    speedTier: 'fast',
+  },
+  {
+    id: 'gs-free-big',
+    displayName: 'GS Free Deep',
+    capabilities: ['text', 'reasoning'],
+    contextWindow: 1000000,
+    speedTier: 'deep',
+  },
+  {
     id: 'gs-balanced',
     displayName: 'GS Balanced',
     capabilities: ['text', 'tools'],

@@ -122,7 +122,7 @@ function extractDelta(parsed: unknown): string {
  * Consume the SDK's raw SSE byte stream, forwarding each text delta to
  * `onDelta` and returning the accumulated full text.
  */
-async function consumeSseStream(
+export async function consumeSseStream(
   body: ReadableStream<Uint8Array>,
   onDelta: (t: string) => Promise<void> | void,
   onModel?: (model: string) => void
