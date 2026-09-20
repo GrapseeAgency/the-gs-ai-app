@@ -3254,3 +3254,20 @@ Work Log:
 
 Stage Summary:
 - v0.64.0 (versionCode 65) is LIVE as the single release. The model picker now physically contains GS Free + GS Free Deep; both tiers are the verified-working OpenRouter path (13-key rotation, model chains, empty-completion guard, GS identity pin). User installs over the existing app (same cert) and picks a free tier. GS Balanced etc. resume automatically when the z-ai 429 window lifts.
+
+---
+Task ID: PHASE8.1c-SEARCH-FALLBACK
+Agent: Z.ai Code (main)
+Task: User screenshot — "today's news" on the app returned the Phase 8.1 failure disclosure ("web search could not be completed… rate limiting"). "Fix that hurry up."
+
+Work Log:
+- DIAGNOSIS: the LLM layer is fine (free tier answered, honest disclosure worked as designed); the SEARCH layer is not — z-ai web_search STILL account-level 429 (re-probed live). Search was a single point of failure with no alternate provider.
+- FALLBACK SEARCH (websearch.ts, PHASE 8.1c): defaultDeps().search now wraps the primary — on ANY primary throw it serves the turn from a no-key RSS chain (Google News → Bing News), parsed into the SAME raw shape as web_search results, so normalization/SSRF/citation pipeline is untouched; original error rethrown if the chain also fails (classification stays accurate). Google attempt is double-barreled: `when:1d` (freshness) first, plain relevance second; Bing is date-sorted with apiclick links UNWRAPPED to real publisher URLs. Fallback volume bounded by construction (§8: one search/turn, only on primary failure). page_reader fallback evaluated (r.jina.ai) and REJECTED — anonymous 403 abuse wall; page-fetch failures remain graceful by design.
+- WILD-QUERY HARDENING (extractSearchQuery, recency branch): the 8.1 fix only stripped PREFIX lead-ins; the user's real message "okay mate so basically i wanna todays news would you like to tell me?" extracted as the WHOLE SENTENCE → garbage query → stale relevance junk (F1 Sep-13 story). New guarded stages: (1) trailing request tails ("would you like to tell me?" — first version had a bug: `(?:me\s+)?` demanded whitespace before sentence-final "?"; restructured to `(?:\s+(?:me|it|…)\b)?`), (2) iterative discourse markers + first-person desire frames ("okay mate so basically", "i wanna"), (3) the original 8.1 lead-in. Every strip guarded at ≥3 chars.
+- CITATION BRACKET NORMALIZATION (normalizeCitationBrackets, wired at both text call sites in the route): free models emit fullwidth 【1】/〚2〛/［3］ — invisible to the ASCII [N] parser, so sources were not persisted and client markers didn't resolve. All variants normalized to [n] before persistence.
+- GATES: tsc clean in touched files; eslint clean; websearch-eval unit layers 52 PASS / 0 new FAIL (its live-LLM E2E layer remains quota-blocked — pre-existing, unrelated); extraction vectors: wild message → "todays news", all 8.1 vectors unchanged.
+- LIVE PROOF (production path): fb-probe → query "today's news", 5 sources ALL dated Sep 19–20 (today), publisher domains resolved. FULL APP E2E on gs-free streaming: statuses searching>composing, answer = today's-news roundup citing [1]–[5] (ASCII), telemetry `WEBSEARCH-CITED cited=[1,2,3,4,5] persisted=5`. Test conversations + /tmp probes cleaned.
+- NOTE for the next release: this is backend-only — the installed 0.64.0 app benefits immediately, no rebuild (per §26 no unauthorized release change; user has not asked for one for this fix).
+
+Stage Summary:
+- Web search is outage-proofed: z-ai 429 no longer kills grounded answers — the turn degrades to no-key news RSS with real, fresh, citable sources. Wild conversational queries extract clean topics; fullwidth citations persist. The user's "today's news" scenario now returns a grounded, cited answer instead of a failure disclosure.

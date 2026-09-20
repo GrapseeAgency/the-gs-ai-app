@@ -212,16 +212,40 @@ export function extractSearchQuery(userText: string, trigger: 'explicit' | 'rece
     // PHASE 8.1 — recency turns used to send the raw message as the query,
     // so "would you like to see today's news" hit the provider verbatim and
     // wasted the turn's single query on small-talk scaffolding. Strip ONLY
-    // known conversational lead-ins (offer/request frames + delivery verbs);
-    // everything topical survives. Guard: if stripping would leave <3 chars,
-    // keep the original — never search an empty/degenerate query.
-    const stripped = q
+    // known conversational scaffolding; everything topical survives.
+    //
+    // PHASE 8.1c — wild-message hardening. Real messages wrap the topic in
+    // MORE scaffolding than a prefix: "okay mate so basically i wanna todays
+    // news would you like to tell me?" carries (1) a TRAILING request tail,
+    // (2) leading discourse markers, (3) a first-person desire frame, and
+    // (4) the classic 8.1 lead-in. Each stage is guarded: a strip that would
+    // leave <3 chars is never accepted, and degenerate results keep the
+    // previous text — never search an empty/degenerate query.
+    let work = q
+    // (1) trailing request tails: "… would you like to tell me?"
+    const tailStripped = work.replace(
+      /\s+(?:(?:would|will|do|can|could)\s+you\s+)?(?:like\s+to\s+|want\s+to\s+|mind\s+)?(?:please\s+)?(?:show|tell|get|find|give|bring|check|pull|read|list|share)(?:\s+(?:me|it|that|this|them|us)\b)?(?:\s+about(?:\s+(?:it|that|this|them|me))?\b)?(?:\s+please)?\s*[?.!…]*$/i,
+      ''
+    ).trim()
+    if (tailStripped.length >= 3) work = tailStripped
+    // (2) iterative leading frames: discourse markers + first-person desires
+    for (;;) {
+      const next = work
+        .replace(/^(?:okay|ok|hey|hi|hello|mate|so|basically|well|um+|uh+|now|and|but|please|thanks|thank\s+you)[,\s]+/i, '')
+        .replace(/^i\s+(?:wanna|want\s+to|would\s+like\s+to|'d\s+like\s+to|need\s+to|gonna)\s+/i, '')
+        .trim()
+      if (next.length < 3 || next === work) break
+      work = next
+    }
+    // (3) the original 8.1 lead-in strip (offer/request frames + delivery verbs)
+    const stripped = work
       .replace(
         /^\s*(?:please\s+)?(?:(?:would|will|do|can|could)\s+you\s+)?(?:like\s+to\s+|want\s+to\s+|mind\s+)?(?:please\s+)?(?:show|tell|get|find|give|bring|check|pull|see|look\s+up|look)\s+(?:me\s+)?(?:about\s+|the\s+)?/i,
         ''
       )
       .trim()
     if (stripped.length >= 3) q = stripped
+    else if (work.length >= 3) q = work
   }
   q = q.replace(/^["']|["'.!?…]+$/g, '').trim()
   return q.slice(0, SEARCH_MAX_QUERY_CHARS)
@@ -294,7 +318,26 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
 async function defaultDeps(): Promise<SearchDeps> {
   const zai = await ZAI.create()
   return {
-    search: (query, num) => zai.functions.invoke('web_search', { query, num }),
+    search: async (query, num) => {
+      try {
+        return await zai.functions.invoke('web_search', { query, num })
+      } catch (e) {
+        // PHASE 8.1c — provider-outage insurance. The 2026-09-20 window proved
+        // the primary search can 429 at ACCOUNT level for hours. Serve the
+        // turn from no-key news RSS instead; if that also fails, rethrow the
+        // ORIGINAL error so failure classification stays accurate.
+        const primary = e instanceof Error ? e.message : String(e)
+        console.log(`[WEBSEARCH-FALLBACK] primary failed: ${primary.slice(0, 120)}`)
+        try {
+          return await fallbackSearchRaw(query, num)
+        } catch (fallbackError) {
+          console.log(
+            `[WEBSEARCH-FALLBACK] fallback failed too: ${(fallbackError instanceof Error ? fallbackError.message : String(fallbackError)).slice(0, 120)}`
+          )
+          throw e
+        }
+      }
+    },
     readPage: (url) => zai.functions.invoke('page_reader', { url }),
     now: () => new Date(),
   }
@@ -368,6 +411,126 @@ export function htmlToPlainText(html: string): string {
     .replace(/[ \t]+/g, ' ')
     .replace(/\n\s*\n\s*/g, '\n')
     .trim()
+}
+
+// ---------------------------------------------------------------------------
+// PHASE 8.1c — RSS fallback search (provider-outage insurance).
+//
+// The primary `web_search` is a single remote dependency; during the
+// 2026-09-20 account-level 429 window it failed for hours while the rest of
+// the app (OpenRouter free tiers) kept working. This fallback runs ONLY when
+// the primary search THROWS: two no-key RSS endpoints (Google News, then
+// Bing News), parsed into the SAME raw shape as web_search results so the
+// normalization/SSRF/citation pipeline below is untouched.
+//
+// Honest limits: this is a NEWS-shaped index — recency/topical queries (the
+// dominant gate trigger) serve well; deep general-knowledge queries get
+// news-flavored results. Volume stays tiny by construction: at most one
+// search per turn (§8), and only when the primary provider fails.
+// ---------------------------------------------------------------------------
+
+const FALLBACK_UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'
+const FALLBACK_TIMEOUT_MS = 8_000
+const FALLBACK_MAX_ITEMS = 10
+
+function decodeEntities(s: string): string {
+  return s
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+}
+
+function tagContent(block: string, tag: string): string {
+  const m = block.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`, 'i'))
+  return m ? decodeEntities(m[1]).trim() : ''
+}
+
+/** Extract the real publisher URL from a Bing apiclick redirect link. */
+function unwrapBingLink(link: string): string {
+  try {
+    const u = new URL(link)
+    const target = u.searchParams.get('url')
+    if (target && /^https?:\/\//i.test(target)) return target
+  } catch {
+    // keep the original link
+  }
+  return link
+}
+
+async function fetchRss(url: string): Promise<string> {
+  const res = await fetch(url, {
+    headers: {
+      'User-Agent': FALLBACK_UA,
+      Accept: 'application/rss+xml, application/xml, text/xml, */*',
+    },
+    signal: AbortSignal.timeout(FALLBACK_TIMEOUT_MS),
+  })
+  if (!res.ok) throw new Error(`rss ${res.status}`)
+  return res.text()
+}
+
+function rssToRawItems(xml: string, source: 'bing' | 'google'): RawSearchItem[] {
+  const items: RawSearchItem[] = []
+  const blocks = xml.match(/<item[\s\S]*?<\/item>/gi) ?? []
+  for (const block of blocks) {
+    const title = tagContent(block, 'title')
+    let link = tagContent(block, 'link')
+    if (!title || !link) continue
+    let host = ''
+    if (source === 'bing') {
+      link = unwrapBingLink(link)
+      host = safeHost(link)
+    } else {
+      // Google News: publisher lives in <source url="…">Name</source>;
+      // the item link itself is a news.google.com redirect.
+      const src = block.match(/<source[^>]*url="([^"]+)"/i)
+      host = src ? safeHost(decodeEntities(src[1])) : safeHost(link)
+    }
+    const snippet = htmlToPlainText(tagContent(block, 'description')).slice(0, 300)
+    items.push({
+      url: link,
+      name: title,
+      snippet,
+      host_name: host || undefined,
+      date: tagContent(block, 'pubDate') || undefined,
+    })
+    if (items.length >= FALLBACK_MAX_ITEMS) break
+  }
+  return items
+}
+
+/**
+ * RSS fallback chain: Google News (freshness-first) → Bing News (date-sorted).
+ * Google attempt is double-barreled: `when:1d` (last 24h — the dominant
+ * recency trigger case) first, plain relevance query if that is empty, so
+ * topical non-recency queries still get results.
+ */
+async function fallbackSearchRaw(query: string, num: number): Promise<unknown[]> {
+  const errors: string[] = []
+  const googleBase = `https://news.google.com/rss/search?hl=en-US&gl=US&ceid=US:en&q=${encodeURIComponent(query)}`
+  const attempts: (() => Promise<RawSearchItem[]>)[] = [
+    () => fetchRss(`${googleBase}%20when:1d`).then((xml) => rssToRawItems(xml, 'google')),
+    () => fetchRss(googleBase).then((xml) => rssToRawItems(xml, 'google')),
+    () =>
+      fetchRss(
+        `https://www.bing.com/news/search?q=${encodeURIComponent(query)}&qft=sortbydate%3D%221%22&format=RSS&mkt=en-US`
+      ).then((xml) => rssToRawItems(xml, 'bing')),
+  ]
+  for (const attempt of attempts) {
+    try {
+      const items = await attempt()
+      if (items.length > 0) return items.slice(0, Math.max(num, 1))
+      errors.push('empty result set')
+    } catch (e) {
+      errors.push(e instanceof Error ? e.message : String(e))
+    }
+  }
+  throw new Error(`rss fallback exhausted: ${errors.join('; ')}`)
 }
 
 // ---------------------------------------------------------------------------
@@ -579,6 +742,18 @@ export function parseCitedOrdinals(text: string, maxOrdinal: number): number[] {
     if (Number.isFinite(n) && n >= 1 && n <= maxOrdinal) cited.add(n)
   }
   return [...cited].sort((a, b) => a - b)
+}
+
+/**
+ * PHASE 8.1c — free models sometimes emit fullwidth citation brackets
+ * (【1】, 〚2〛, ［3］) instead of ASCII [1]. Normalize every variant (and
+ * bracket spacing) so citation parsing, persistence, and the clients'
+ * clickable markers all resolve.
+ */
+export function normalizeCitationBrackets(text: string): string {
+  return text
+    .replace(/[【〚［]\s*(\d{1,2})\s*[】〛］]/g, '[$1]')
+    .replace(/\[\s*(\d{1,2})\s*\]/g, '[$1]')
 }
 
 /**

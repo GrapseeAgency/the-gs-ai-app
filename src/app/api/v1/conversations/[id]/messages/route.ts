@@ -43,6 +43,7 @@ import {
   shouldInjectHistoryEvidence,
   parseCitedOrdinals,
   sanitizeCitationMarkers,
+  normalizeCitationBrackets,
   searchFailureNote,
   SEARCH_HISTORY_TURNS,
   type SearchOutcome,
@@ -580,8 +581,8 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
           : await completeChat(modelMessages as ChatMessageInput[], providerModel)
       const finalText =
         outcome?.ok || historySources.length > 0
-          ? sanitizeCitationMarkers(text, outcome?.ok ? outcome.sources.length + historySources.length : 0)
-          : text
+          ? sanitizeCitationMarkers(normalizeCitationBrackets(text), outcome?.ok ? outcome.sources.length + historySources.length : 0)
+          : normalizeCitationBrackets(text)
       const assistantMessage = await db.message.create({
         data: { conversationId: id, role: 'assistant', content: finalText },
       })
@@ -647,8 +648,8 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
               : await streamChat(modelMessages as ChatMessageInput[], (d) => send('delta', d), providerModel)
           const finalText =
             outcome?.ok || historySources.length > 0
-              ? sanitizeCitationMarkers(full, outcome?.ok ? outcome.sources.length + historySources.length : 0)
-              : full
+              ? sanitizeCitationMarkers(normalizeCitationBrackets(full), outcome?.ok ? outcome.sources.length + historySources.length : 0)
+              : normalizeCitationBrackets(full)
           const saved = await db.message.create({
             data: { conversationId: id, role: 'assistant', content: finalText },
           })
