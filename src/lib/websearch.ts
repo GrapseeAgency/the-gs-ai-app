@@ -193,7 +193,9 @@ export function evaluateWebSearchGate(userText: string): WebSearchGate {
  * Extract a bounded search query from the user's words. Deterministic — no
  * extra model roundtrip on the hot path. Explicit requests get their command
  * verb stripped ("Search for the latest Android 16 documentation." →
- * "the latest Android 16 documentation"); recency turns use the question as-is.
+ * "the latest Android 16 documentation"); recency turns get conversational
+ * lead-ins stripped ("would you like to see today's news" → "today's news")
+ * with a degenerate-result guard that falls back to the original text.
  */
 export function extractSearchQuery(userText: string, trigger: 'explicit' | 'recency'): string {
   let q = userText.trim().replace(/\s+/g, ' ')
@@ -206,6 +208,20 @@ export function extractSearchQuery(userText: string, trigger: 'explicit' | 'rece
       /^\s*(please\s+)?(now\s+)?(web\s+search[:\s]+|(search|google|look\s*up)\s*(the\s+)?(web|internet)?\s*(for|up|about)?[:\s]*)/i,
       ''
     )
+  } else {
+    // PHASE 8.1 — recency turns used to send the raw message as the query,
+    // so "would you like to see today's news" hit the provider verbatim and
+    // wasted the turn's single query on small-talk scaffolding. Strip ONLY
+    // known conversational lead-ins (offer/request frames + delivery verbs);
+    // everything topical survives. Guard: if stripping would leave <3 chars,
+    // keep the original — never search an empty/degenerate query.
+    const stripped = q
+      .replace(
+        /^\s*(?:please\s+)?(?:(?:would|will|do|can|could)\s+you\s+)?(?:like\s+to\s+|want\s+to\s+|mind\s+)?(?:please\s+)?(?:show|tell|get|find|give|bring|check|pull|see|look\s+up|look)\s+(?:me\s+)?(?:about\s+|the\s+)?/i,
+        ''
+      )
+      .trim()
+    if (stripped.length >= 3) q = stripped
   }
   q = q.replace(/^["']|["'.!?…]+$/g, '').trim()
   return q.slice(0, SEARCH_MAX_QUERY_CHARS)

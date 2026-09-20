@@ -4,6 +4,7 @@ import { messageToJson } from '@/lib/serializers'
 import {
   SYSTEM_PROMPT,
   VISION_GROUNDING_PROMPT,
+  SEARCH_FAILURE_DISCLOSURE_PROMPT,
   SEARCH_GROUNDING_PROMPT,
   streamChat,
   completeChat,
@@ -363,8 +364,16 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     const historyCount = historyBlock ? historyWebSources.length : 0
     const webSearchUsed = freshCount > 0 || historyCount > 0 || outcome?.failure != null
 
+    // PHASE 8.1 — failed searches get a SYSTEM-LEVEL disclosure requirement on
+    // top of the grounding contract: in the wild the evidence-note alone was
+    // dropped by the model (the last-position user message dominated), so the
+    // answer looked grounded without ever saying the search never ran.
     const systemPrompt = webSearchUsed
-      ? `${baseSystemPrompt}\n\n${SEARCH_GROUNDING_PROMPT}`
+      ? `${baseSystemPrompt}\n\n${SEARCH_GROUNDING_PROMPT}${
+          outcome?.failure && webGate.trigger !== null
+            ? `\n\n${SEARCH_FAILURE_DISCLOSURE_PROMPT}`
+            : ''
+        }`
       : baseSystemPrompt
 
     const evidenceBlocks: string[] = []

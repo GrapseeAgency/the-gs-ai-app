@@ -218,6 +218,11 @@ async function unitLayer() {
   check('U14 strip command verb', extractSearchQuery('Search for the latest Android 16 documentation.', 'explicit') === 'the latest Android 16 documentation')
   check('U15 recency keeps question (trailing punctuation stripped)', extractSearchQuery("What's the weather today in Edinburgh?", 'recency') === "What's the weather today in Edinburgh")
   check('U16 query capped at 200 chars', extractSearchQuery('x'.repeat(500), 'recency').length === 200)
+  // PHASE 8.1 — recency lead-in stripping (found in the wild: the full
+  // small-talk frame was sent as the search query).
+  check('U16b recency lead-in stripped', extractSearchQuery("would you like to see today's news", 'recency') === "today's news")
+  check('U16c recency show-me stripped', extractSearchQuery('show me the latest AI news', 'recency') === 'latest AI news')
+  check('U16d degenerate strip falls back to original', extractSearchQuery('would you like to', 'recency') === 'would you like to')
 
   console.log('\n== UNIT: SSRF / unsafe URL validation (§9/§20) ==')
   check('U17 https public allowed', isSafePublicHttpUrl('https://example.com/page'))

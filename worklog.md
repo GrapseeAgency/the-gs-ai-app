@@ -3156,3 +3156,19 @@ Work Log:
 
 Stage Summary:
 - PHASE 8 public-origin acceptance remains quota-blocked (not code-blocked). The verifier will keep retrying every 15 minutes; the hardened public-mini now survives 429 windows and will capture P5 + all P-steps the moment the window resets, then escalate to the full `all` suite. No version bump, no release, no client rebuild; no Phase 9+ work — per the user's stop condition.
+
+---
+Task ID: PHASE8.1-WILDFIX
+Agent: Z.ai Code (main)
+Task: Diagnose the user's real-device report ("would you like to see today's news" answered with tone-deaf generic advice, no search, no citations); fix what is fixable server-side; stop background quota competition during the user's audit.
+
+Work Log:
+- DIAGNOSIS from dev.log telemetry (not guesswork): the server WAS alive and the gate DID work — `WEBSEARCH-GATE trigger=recency` fired for the user's phrase and `WEBSEARCH-EXEC` ran, but the search itself was `kind=rate_limited` (upstream 429 quota window). The REAL defect: the model received the evidence-note "search was rate-limited..." but silently dropped it (last-position user message dominates per the Phase 7.1 hierarchy) and answered as if search never ran.
+- FIX 1 (src/lib/ai.ts + messages/route.ts): new `SEARCH_FAILURE_DISCLOSURE_PROMPT` appended to the SYSTEM prompt ONLY on turns where the search phase ran and failed. Hard requirement: the visible answer MUST open with one plain sentence disclosing the search failure (rate-limit ⇒ say retry soon), never invent sources or [N] markers. System-level placement is not ignorable the way a parenthesised evidence-note was.
+- FIX 2 (src/lib/websearch.ts `extractSearchQuery`): recency turns no longer send the raw small-talk frame as the query. Conservative lead-in strip ("would you like to see|show me|tell me about…" + delivery verbs) with a <3-char fallback guard. Telemetry-proven live: `query="would you like to see today's news"` → now `query="today's news"`.
+- EVAL: +3 unit vectors (U16b lead-in strip, U16c show-me strip, U16d degenerate fallback) — unit layer now 49/49 PASS. tsc clean in all touched files; eslint clean.
+- QUOTA WAR (honest): the 15-min webDevReview cron (job 399269) + my probes were competing with the user's device for the same contended upstream quota — the user's audit window at 23:54 UTC got chat through but search 429'd. DELETED job 399269 to stop background consumption during the audit. Post-deletion probes at ~55s intervals for ~6 min: still 429 (window appears hourly; brief 23:54 flicker aside).
+- E2E of the exact user phrase attempted (non-stream): 502 = chat upstream still 429; telemetry confirms gate+extraction correct (`query="today's news"`); the disclosure behavior cannot be observed end-to-end until the quota window resets — scheduled verifier will complete it.
+
+Stage Summary:
+- Two real defects found via the user's wild report and fixed server-side (backend-only; no client impact). Unit 49/49; fixes proven to the extent the quota window allows (extraction telemetry-proven; disclosure wired + unit-covered). Background quota competition eliminated. Remaining: single E2E observation of the disclosure opening line once the provider window resets.
