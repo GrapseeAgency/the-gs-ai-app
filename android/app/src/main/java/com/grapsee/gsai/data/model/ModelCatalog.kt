@@ -28,6 +28,24 @@ object ModelCatalog {
             modes = listOf("Fast")
         ),
         ModelInfo(
+            id = "gs-free",
+            displayName = "GS Free",
+            tagline = "Free tier — works even when the main provider is at capacity",
+            capabilities = listOf("text"),
+            contextK = 200,
+            speedTier = "fast",
+            modes = listOf("Fast")
+        ),
+        ModelInfo(
+            id = "gs-free-big",
+            displayName = "GS Free Deep",
+            tagline = "Free deep reasoning — 1M-token context",
+            capabilities = listOf("text", "reasoning"),
+            contextK = 1000,
+            speedTier = "deep",
+            modes = listOf("Deep reasoning")
+        ),
+        ModelInfo(
             id = "gs-balanced",
             displayName = "GS Balanced",
             tagline = "Everyday intelligence",

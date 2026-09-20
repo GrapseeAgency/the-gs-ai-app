@@ -1,6 +1,6 @@
 {
-  "versionCode": 64,
-  "versionName": "0.63.0",
+  "versionCode": 65,
+  "versionName": "0.64.0",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "Device reachability fix: the server address previous builds carried was platform-internal only — no phone could ever connect (uploads and network chat failed with a generic network error). This build points at the publicly reachable gateway. Same design, same features; no other changes."
+  "notes": "Model picker update: GS Free and GS Free Deep now appear in the in-app model list — free tiers that keep chatting even while the main provider is at capacity. Picker now matches the server catalogue. No other changes."
 }
