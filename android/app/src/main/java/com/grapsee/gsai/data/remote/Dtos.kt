@@ -10,8 +10,9 @@ import kotlinx.serialization.json.Json
  *   server-evolved fields (rank?, status?, used?) that old clients may ignore.
  * - encodeDefaults: `stream: true` must always travel on SendMessageRequest
  *   (server default is false — omitting it would silently disable streaming).
- * - explicitNulls: null fields (title?, modelId?) are omitted instead of sent
- *   as explicit nulls, matching the optional-property semantics of openapi.yaml.
+ * - explicitNulls: null fields (title?, attachments?) are omitted instead of
+ *   sent as explicit nulls, matching the optional-property semantics of
+ *   openapi.yaml.
  */
 val GsApiJson: Json = Json {
     ignoreUnknownKeys = true
@@ -108,15 +109,13 @@ data class UploadResponseDto(
 
 @Serializable
 data class CreateConversationRequest(
-    val title: String? = null,
-    val modelId: String? = null
+    val title: String? = null
 )
 
 @Serializable
 data class SendMessageRequest(
     val content: String,
     val stream: Boolean = true,
-    val modelId: String? = null,
     /** PHASE 5: server attachment ids uploaded via /api/v1/uploads first.
      *  explicitNulls=false keeps null OFF the wire — plain-text sends stay
      *  byte-identical to the pre-attachments contract. */
@@ -134,15 +133,6 @@ data class UpdateConversationRequest(
     val archived: Boolean? = null
 )
 
-@Serializable
-data class ModelDto(
-    val id: String,
-    val displayName: String,
-    val capabilities: List<String> = emptyList(),
-    val contextWindow: Int? = null,
-    val speedTier: String? = null
-)
-
 /** One server-sent event line: `data: {"event":"delta","data":"…"}`. */
 @Serializable
 data class SseEvent(
@@ -151,7 +141,7 @@ data class SseEvent(
 )
 
 /**
- * List envelopes from openapi.yaml (ConversationList / MessageList / ModelList).
+ * List envelopes from openapi.yaml (ConversationList / MessageList).
  * Kept internal to this package; ApiClient tolerates bare arrays as a fallback.
  */
 @Serializable
@@ -162,9 +152,4 @@ internal data class ConversationListDto(
 @Serializable
 internal data class MessageListDto(
     val items: List<MessageDto> = emptyList()
-)
-
-@Serializable
-internal data class ModelListDto(
-    val models: List<ModelDto> = emptyList()
 )

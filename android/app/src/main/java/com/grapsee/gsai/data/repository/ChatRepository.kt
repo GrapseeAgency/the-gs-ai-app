@@ -53,26 +53,6 @@ class ChatRepository(
     private val _connectionState = MutableStateFlow(false)
     val connectionState: StateFlow<Boolean> = _connectionState.asStateFlow()
 
-    /** Remote model ids, fetched once per process; null = unknown/unchecked. */
-    private var remoteModelIds: Set<String>? = null
-
-    /**
-     * The preferred model id only travels when the backend's registry
-     * advertises it — otherwise the server default applies silently. The
-     * registry is fetched once and cached; any failure just means null.
-     */
-    private suspend fun resolveRemoteModelId(modelId: String?): String? {
-        if (modelId.isNullOrBlank()) return null
-        val ids = remoteModelIds ?: try {
-            api.models().map { it.id }.toSet().also { remoteModelIds = it }
-        } catch (ce: CancellationException) {
-            throw ce
-        } catch (e: Exception) {
-            null
-        }
-        return if (ids != null && modelId in ids) modelId else null
-    }
-
     private var activeJob: Job? = null
 
     fun conversations(): Flow<List<ConversationEntity>> = db.conversationDao().observeRecent()
@@ -316,7 +296,6 @@ class ChatRepository(
     suspend fun send(
         conversationId: String?,
         content: String,
-        modelId: String? = null,
         attachments: List<AttachmentDraft> = emptyList(),
         onConversationResolved: (String) -> Unit = {},
         onStatus: (String) -> Unit = {},
@@ -366,7 +345,6 @@ class ChatRepository(
             api.sendMessageStream(
                 conversationId = activeId,
                 content = content,
-                modelId = resolveRemoteModelId(modelId),
                 attachments = attachmentIds,
                 onDelta = { delta ->
                     receivedAnyEvent = true
@@ -427,19 +405,18 @@ class ChatRepository(
                 persistAssistant(activeId, assistantId, accumulated)
                 return activeId
             }
-            // (2)/(3) Nothing ever arrived: GS Lite keeps the conversation
-            // flowing, and the label now tells the truth — truly unreachable
-            // vs. the backend answering with an error (with its reason).
+            // (2)/(3) Nothing ever arrived: the offline reply keeps the
+            // conversation flowing, and the label tells the truth — truly
+            // unreachable vs. the backend answering with an error.
             val unreachable = e is UnknownHostException ||
                 e is ConnectException ||
                 e is SocketTimeoutException ||
                 e.message?.contains("unresolved", ignoreCase = true) == true ||
                 e.message?.contains("failed to connect", ignoreCase = true) == true
             val marker = if (unreachable) {
-                "— GS Lite · offline reply (backend unreachable) —\n\n"
+                "— Offline reply (backend unreachable) —\n\n"
             } else {
-                val reason = (e.message ?: "request failed").replace('\n', ' ').take(90)
-                "— GS Lite · offline reply (backend error: $reason) —\n\n"
+                "— Offline reply (backend error) —\n\n"
             }
             accumulated.append(marker)
             onDelta(marker)
@@ -528,7 +505,7 @@ class ChatRepository(
     }
 
     /**
-     * GS Lite — the on-device responder that keeps chats alive when the backend
+     * The on-device responder that keeps chats alive when the backend
      * is not reachable. Prompt-aware, varied per prompt, and streamed with the
      * same cadence as a networked answer. Never mentions servers, errors or
      * connectivity, so the app reads fully functional on a fresh install.

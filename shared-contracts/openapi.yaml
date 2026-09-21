@@ -375,7 +375,6 @@ components:
       properties:
         id: { type: string, format: uuid }
         title: { type: string }
-        modelId: { type: string }
         assistantId: { type: string }
         pinned: { type: boolean, default: false }
         archived: { type: boolean, default: false }
@@ -393,7 +392,6 @@ components:
       type: object
       properties:
         title: { type: string }
-        modelId: { type: string }
         assistantId: { type: string }
     UpdateConversationInput:
       type: object
@@ -401,7 +399,6 @@ components:
         title: { type: string, maxLength: 120 }
         pinned: { type: boolean }
         archived: { type: boolean }
-        modelId: { type: string }
     Message:
       type: object
       required: [id, conversationId, role, content, createdAt]
@@ -496,7 +493,6 @@ components:
             Required non-empty UNLESS attachments is non-empty; a message may
             consist of attachments alone.
         stream: { type: boolean, default: false }
-        modelId: { type: string }
         attachments:
           type: array
           maxItems: 6

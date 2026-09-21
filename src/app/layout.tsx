@@ -16,16 +16,16 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "GS AI — Grapsee Agency",
   description: "GS AI platform command centre — native Android & iOS clients, one streaming API contract, built by Grapsee Agency.",
-  keywords: ["Z.ai", "Next.js", "TypeScript", "Tailwind CSS", "shadcn/ui", "AI development", "React"],
+  keywords: ["GS AI", "Grapsee Agency", "AI assistant", "Android", "iOS", "chat"],
   authors: [{ name: "Grapsee Agency" }],
   icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
+    icon: "/logo.svg",
   },
   openGraph: {
     title: "GS AI",
     description: "AI-powered development with modern React stack",
-    url: "https://chat.z.ai",
-    siteName: "Z.ai",
+    url: "/",
+    siteName: "Grapsee Agency",
     type: "website",
   },
   twitter: {

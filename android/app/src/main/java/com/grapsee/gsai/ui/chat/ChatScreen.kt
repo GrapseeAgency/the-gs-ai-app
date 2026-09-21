@@ -32,7 +32,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.Arrangement
@@ -71,7 +70,6 @@ import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.CallSplit
 import androidx.compose.material.icons.outlined.CameraAlt
-import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.ContentCopy
@@ -150,7 +148,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
-import com.grapsee.gsai.data.ModelPrefs
 import com.grapsee.gsai.data.chat.ChatStreamController
 import com.grapsee.gsai.data.chat.ClarifyOption
 import com.grapsee.gsai.data.chat.ClarifyPrompt
@@ -160,12 +157,9 @@ import com.grapsee.gsai.data.chat.SearchTraceItem
 import com.grapsee.gsai.data.chat.SourceCard
 import com.grapsee.gsai.data.chat.decodeClarifyPrompt
 import com.grapsee.gsai.data.chat.decodeSourceCards
-import com.grapsee.gsai.data.model.ModelCatalog
-import com.grapsee.gsai.data.model.ModelInfo
 import com.grapsee.gsai.data.repository.ChatRepository
 import com.grapsee.gsai.di.ServiceLocator
 import androidx.activity.compose.BackHandler
-import com.grapsee.gsai.ui.components.GsChip
 import com.grapsee.gsai.ui.components.GsOfflineBanner
 import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.data.tts.TtsFocus
@@ -356,11 +350,7 @@ fun ChatScreen(
     // never re-sends.
     autoSendInitialPrompt: Boolean = false,
     // Optional voice entry point — the main agent wires this to GsRoutes.VOICE in GsNavHost.
-    onNavigateVoice: (() -> Unit)? = null,
-    // The model centre exists — the header chip's sheet links there for the
-    // full catalogue ("About models"); the send path reads the live default
-    // model state this screen already sends with.
-    onNavigateModels: (() -> Unit)? = null
+    onNavigateVoice: (() -> Unit)? = null
 ) {
     val scope = rememberCoroutineScope()
     // Critical surface state survives rotation/process death (Bundle saveable):
@@ -921,7 +911,6 @@ fun ChatScreen(
         chatStream.start(
             conversationId = activeConversationId,
             prompt = prompt,
-            modelId = ModelPrefs.defaultId(context),
             assistantMessageId = assistantId,
             attachments = readyDrafts
         )
@@ -1096,13 +1085,7 @@ fun ChatScreen(
         }
     }
 
-    // Workspace header: menu (at root) / back (pushed), quiet title, and the
-    // model control as a SECONDARY utility — a small name-only pill the
-    // ordinary user can ignore forever. Tapping opens a native bottom sheet
-    // with three plain-language tiers; the full catalogue stays behind
-    // "About models" (never a route exit away from the conversation).
-    // "No technical model metadata, no coloured indicator" — the pill is a
-    // bordered neutral chip with the tier WORD only (Fast / Everyday / Best).
+    // Workspace header: menu (at root) / back (pushed) and the quiet title.
     val menuAction = onOpenDrawer
     val newChatAction = onNewChat
     GsScreenScaffold(
@@ -1127,30 +1110,6 @@ fun ChatScreen(
             }) {
                 Icon(Icons.Outlined.Search, contentDescription = "Search in chat",
                     tint = MaterialTheme.colorScheme.onBackground)
-            }
-            // PHASE 3 model control — nearly invisible: consumer tier word
-            // only (Fast / Everyday / Best), no product/model names, no dot,
-            // no metadata. The send path still uses the real persisted model.
-            val activeModel = ModelCatalog.byId(ModelPrefs.defaultId(context))
-            var modelSheetOpen by remember { mutableStateOf(false) }
-            GsChip(
-                text = consumerTierLabel(activeModel),
-                selected = false,
-                onClick = { modelSheetOpen = true }
-            )
-            if (modelSheetOpen) {
-                ModelPickerSheet(
-                    activeId = remember(modelSheetOpen) { ModelPrefs.defaultId(context) },
-                    onDismiss = { modelSheetOpen = false },
-                    onSelect = { id ->
-                        ModelPrefs.setDefaultId(context, id)
-                        modelSheetOpen = false
-                    },
-                    onAboutModels = {
-                        modelSheetOpen = false
-                        onNavigateModels?.invoke()
-                    }
-                )
             }
             if (newChatAction != null) {
                 IconButton(onClick = newChatAction) {
@@ -2009,18 +1968,6 @@ private fun greetingFor(): String {
 }
 
 /**
- * The consumer tier word for the header chip — Fast / Everyday / Best.
- * Deliberately NOT the model's display name: the header answers "how hard is
- * GS thinking right now" in ordinary language, and nothing else.
- */
-private fun consumerTierLabel(model: ModelInfo?): String = when (model?.speedTier) {
-    "fast" -> "Fast"
-    "deep" -> "Best"
-    null -> "Auto"
-    else -> "Everyday"
-}
-
-/**
  * PHASE 3 empty state — the fresh workspace IS this: a small greeting, a few
  * quiet composer suggestions, readable empty space, and the composer already
  * waiting at the bottom. No halo, no invitation cards, no navigation. A
@@ -2346,111 +2293,3 @@ private fun dayLabel(iso: String): String? = runCatching {
         else -> date.format(DAY_LABEL_FORMAT)
     }
 }.getOrNull()
-
-/**
- * PHASE 2 model picker — a native bottom sheet, three plain-language tiers.
- * No context windows, no speed dots, no reasoning vocabulary: that material
- * lives behind "Advanced details" in the Model Centre. Selecting writes the
- * same ModelPrefs key the send path reads on the very next message, so a
- * normal user can also just keep chatting and never open this at all.
- * "About models" is the only exit into the full catalogue — a quiet link,
- * never a route the conversation pushes the user through.
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ModelPickerSheet(
-    activeId: String,
-    onDismiss: () -> Unit,
-    onSelect: (String) -> Unit,
-    onAboutModels: () -> Unit
-) {
-    // Static tiering of the catalogue — remembered once, recomposition-stable.
-    val tiers = remember {
-        listOf(
-            Triple(
-                "Fast",
-                "Quick answers when speed matters",
-                ModelCatalog.all.filter { it.speedTier == "fast" }
-            ),
-            Triple(
-                "Everyday",
-                "Smart help for daily questions",
-                ModelCatalog.all.filter { it.speedTier == "balanced" }
-            ),
-            Triple(
-                "Best for difficult questions",
-                "Takes its time, thinks deeper",
-                ModelCatalog.all.filter { it.speedTier == "deep" }
-            )
-        )
-    }
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = GsMotion.spaceL)
-                .padding(bottom = GsMotion.spaceL),
-            verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
-        ) {
-            Text(
-                "Choose a model",
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onBackground
-            )
-            Text(
-                "GS uses your choice from the next message — you can also just keep chatting.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            tiers.forEach { (tierTitle, tierSubtitle, models) ->
-                Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceXS)) {
-                    Text(
-                        tierTitle,
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    Text(
-                        tierSubtitle,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    models.forEach { model ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(MaterialTheme.shapes.medium)
-                                .clickable(onClick = { onSelect(model.id) })
-                                .padding(horizontal = GsMotion.spaceS, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    model.displayName,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onBackground
-                                )
-                                Text(
-                                    model.tagline,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            if (model.id == activeId) {
-                                Icon(
-                                    Icons.Outlined.Check,
-                                    contentDescription = "Current model",
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-            TextButton(onClick = onAboutModels) {
-                Text("About models")
-            }
-        }
-    }
-}

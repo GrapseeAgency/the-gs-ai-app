@@ -3,10 +3,10 @@ import { db } from '@/lib/db'
 import { messageToJson } from '@/lib/serializers'
 import { resolveModelRoute, OPENROUTER_MODELS } from '@/lib/models'
 import { orCompleteChat, orStreamChat } from '@/lib/openrouter'
+import { planRoute } from '@/lib/router'
 import {
   SYSTEM_PROMPT,
   VISION_GROUNDING_PROMPT,
-  SEARCH_FAILURE_DISCLOSURE_PROMPT,
   SEARCH_GROUNDING_PROMPT,
   streamChat,
   completeChat,
@@ -83,7 +83,9 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
   return NextResponse.json({ items: messages.map(messageToJson) })
 }
 
-// POST /api/v1/conversations/:id/messages — { content, stream?, modelId? }
+// POST /api/v1/conversations/:id/messages — { content, stream?, attachments? }
+// ARCHITECTURE LOCK: a client-sent modelId (legacy wire compat) is accepted
+// and IGNORED — the GS Router derives all routing server-side.
 export async function POST(req: NextRequest, { params }: RouteContext) {
   const { id } = await params
 
@@ -179,16 +181,10 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
 
   const stream = body?.stream === true
 
-  const requestedModelId =
-    typeof body?.modelId === 'string' && body.modelId.trim().length > 0
-      ? body.modelId.trim()
-      : null
-  // PHASE 8.1 — single routing decision: OpenRouter free tiers bypass the
-  // primary provider's account-level quota; everything else stays on z-ai
-  // (with its optional concrete model mapping + modelless fallback).
-  const modelRoute = resolveModelRoute(requestedModelId ?? conversation.modelId)
-  const providerModel = modelRoute.backend === 'zai' ? modelRoute.providerModel : null
-  const openRouterModels = modelRoute.backend === 'openrouter' ? modelRoute.models : null
+  // ARCHITECTURE LOCK — GS AI is ONE assistant experience. A client-sent
+  // modelId (legacy) is accepted for wire compatibility and IGNORED: routing
+  // is derived server-side by the GS Router (below). No user model preference
+  // exists, is persisted, or is honored.
   const shouldAutoTitle = conversation.title === DEFAULT_TITLE
 
   // Persist the user message + apply auto-title / model override.
@@ -201,20 +197,16 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       data: { messageId: userMessage.id, conversationId: id },
     })
   }
-  if (shouldAutoTitle || requestedModelId) {
+  // Persist the user message + apply auto-title (no model override — GS Router owns routing).
+  if (shouldAutoTitle) {
     await db.conversation.update({
       where: { id },
       data: {
-        ...(shouldAutoTitle
-          ? {
-              title: (
-                content.trim().length > 0
-                  ? content
-                  : claimedAttachments[0]?.displayName ?? DEFAULT_TITLE
-              ).slice(0, 40),
-            }
-          : {}),
-        ...(requestedModelId ? { modelId: requestedModelId } : {}),
+        title: (
+          content.trim().length > 0
+            ? content
+            : claimedAttachments[0]?.displayName ?? DEFAULT_TITLE
+        ).slice(0, 40),
       },
     })
   }
@@ -321,15 +313,33 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
   // DETERMINISTIC chip matcher — no LLM needed for the chip path.
   const clarifyFollowUp =
     previousClarifyOptions !== null && content.trim().length > 0 && content.length <= 60
-  // PHASE 8.2 §1/§8/§25 — the intent planner is the MODEL-AGNOSTIC search
-  // decision layer: it must run for historical/religious questions (evidence
-  // before memory is a HARD product rule) and for deep-tier research models
-  // (their contract includes retrieval), not only when the legacy gate fires.
-  const deepTierModel = ['gs-deep', 'gs-research', 'gs-free-big'].includes(
-    (requestedModelId ?? conversation.modelId ?? '').trim()
+  // PHASE 8.2 §1/§8/§25 + ARCHITECTURE LOCK — the GS Router is the ONE
+  // backend-owned decision per turn (capability route, internal model,
+  // retrieval depth). Deep research is inferred from the REQUEST (depth
+  // language), never from a user-visible model choice. The intent planner
+  // runs when the router says retrieval is due — the search gate, a clarify
+  // follow-up, the historical/religious evidence rule, or explicit
+  // deep-research language.
+  const routerPlan = planRoute({
+    content,
+    hasImages: useVision,
+    hasDocuments: currentTurnDocs.length > 0 || historyDocTurns.length > 0,
+    webGateTrigger: webGate.trigger,
+    clarifyFollowUp,
+    historicalReligious: detectHistoricalReligious(content),
+    historyChars: history.reduce((n, m) => n + m.content.length, 0),
+  })
+  const plannerRuns = routerPlan.plannerRuns
+  console.log(
+    `GS-ROUTER conv=${id} route=${routerPlan.route} depth=${routerPlan.depth} reason=${routerPlan.reason}`
   )
-  const plannerRuns =
-    webGate.trigger !== null || clarifyFollowUp || detectHistoricalReligious(content) || deepTierModel
+  // Internal execution route for synthesis (models.ts mapping — OpenRouter
+  // free chains bypass primary-provider quota windows; z-ai carries the
+  // optional concrete model mapping + modelless fallback). INTERNAL ONLY:
+  // none of these values are ever sent to a client.
+  const modelRoute = resolveModelRoute(routerPlan.internalModelId)
+  const providerModel = modelRoute.backend === 'zai' ? modelRoute.providerModel : null
+  const openRouterModels = modelRoute.backend === 'openrouter' ? modelRoute.models : null
 
   let historyWebSources: {
     title: string
@@ -433,22 +443,17 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     // §19 — stop/reuse/no-search turns answer from what already exists.
     if (!plan.needsSearch || plan.stopSignal) return { kind: 'none' }
 
-    // 8.2 §9/§25 — depth: the plan decides; deep-tier models (Research/Deep/
-    // Free Deep) upgrade research-y intents to DEEP retrieval. The SEARCH
-    // SERVICE is identical for every model — only the budget differs.
-    const modelId = (requestedModelId ?? conversation.modelId ?? 'gs-balanced').trim()
-    const deepTier = modelId === 'gs-deep' || modelId === 'gs-research' || modelId === 'gs-free-big'
+    // 8.2 §9/§25 + ARCHITECTURE LOCK — depth combines the planner's intent
+    // decision with the GS Router's depth decision. The SEARCH SERVICE is
+    // identical either way — only the budget differs. No model tier exists.
     const depth: 'quick' | 'deep' =
-      plan.depth === 'deep' || (deepTier && plan.intent !== 'none' && plan.intent !== 'factual')
-        ? 'deep'
-        : 'quick'
+      plan.depth === 'deep' || routerPlan.depth === 'deep' ? 'deep' : 'quick'
 
     const researchStartedAt = Date.now()
     emit?.('research', {
       type: 'started',
       intent: plan.intent,
       depth,
-      model: modelId,
       roundsPlanned: RESEARCH_BUDGET[depth].maxRounds,
     })
     emit?.('search', { type: 'started', intent: plan.intent, depth, label: plan.queries[0] ?? '' })
@@ -502,16 +507,14 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     const historyCount = historySources.length
     const searchFailed =
       turn.kind === 'research' && (!turn.outcome.ok || turn.outcome.failure != null)
-    const webSearchUsed = turn.kind === 'research' || historyCount > 0
+    // 2026-09-21 NATURAL-FLOW FIX: the grounding appendix attaches ONLY when
+    // THIS turn actually ran a research attempt — never because older turns
+    // carry sources (historyCount no longer triggers it; the injection switch
+    // in shouldInjectHistoryEvidence now requires an explicit source reference).
+    const webSearchUsed = turn.kind === 'research'
 
-    // PHASE 8.1 — failed searches get a SYSTEM-LEVEL disclosure requirement on
-    // top of the grounding contract: in the wild the evidence-note alone was
-    // dropped by the model (the last-position user message dominated), so the
-    // answer looked grounded without ever saying the search never ran.
     const systemPrompt = webSearchUsed
-      ? `${baseSystemPrompt}\n\n${SEARCH_GROUNDING_PROMPT}${
-          searchFailed ? `\n\n${SEARCH_FAILURE_DISCLOSURE_PROMPT}` : ''
-        }`
+      ? `${baseSystemPrompt}\n\n${SEARCH_GROUNDING_PROMPT}`
       : baseSystemPrompt
 
     const evidenceBlocks: string[] = []
@@ -532,7 +535,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
                 ? ({ kind: 'no_results', message: turn.outcome.failure.message } as const)
                 : ({ kind: 'provider_error', message: turn.outcome.failure.message } as const)
             : ({ kind: 'provider_error', message: note } as const)
-        )} Do not present any internal knowledge as search results; if you answer from your own knowledge, say clearly that the search did not provide results. The user's request below still stands.)`
+        )} If the question can be answered from your own knowledge, just answer it normally — mention the failed search in a few passing words only if it is relevant. Never present internal knowledge as search results and never emit [N] markers. The user's request below still stands.)`
       )
     }
     if (freshBlock) evidenceBlocks.push(freshBlock)
@@ -734,6 +737,16 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     (process.env.OPENROUTER_API_KEYS ?? '').trim().length > 0
 
   /**
+   * ARCHITECTURE LOCK §5 — infra failures degrade to ONE clean sentence.
+   * The raw provider/error text is server-log-only; the user must never see
+   * provider names, key-pool state, quota windows or retry counters.
+   */
+  const userFacingTurnError = (raw: string): string => {
+    console.error(`TURN-ERROR conv=${id}: ${raw.slice(0, 300)}`)
+    return 'GS AI is temporarily unavailable. Please try again shortly.'
+  }
+
+  /**
    * PHASE 8.1 — synthesis with graceful degradation (§22). The model is the
    * reasoning layer (§2): when the primary provider is down at ACCOUNT level
    * (the proven 429 window), a search turn must still synthesize its real
@@ -834,7 +847,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       return NextResponse.json(
         {
           code: 'upstream_error',
-          message: useVision ? visionErrorMessage(raw) : raw,
+          message: useVision ? visionErrorMessage(raw) : userFacingTurnError(raw),
         },
         { status: 502 }
       )
@@ -933,7 +946,6 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
           // 8.2 §28 synthesis.started — orb COMPOSING maps to this.
           emit('research', {
             type: 'synthesis_started',
-            model: requestedModelId ?? conversation.modelId ?? 'gs-balanced',
           })
         }
       }
@@ -974,7 +986,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       push('done', JSON.stringify(messageToJson(savedWithSources ?? saved)))
     } catch (e) {
       const raw = String(e instanceof Error ? e.message : e)
-      push('error', useVision ? visionErrorMessage(raw) : raw)
+      push('error', useVision ? visionErrorMessage(raw) : userFacingTurnError(raw))
     } finally {
       turnSettled = true
       fireWakeup()

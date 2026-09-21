@@ -2,11 +2,11 @@
  * DB-model → API-JSON mappers.
  *
  * Field names follow shared-contracts/openapi.yaml EXACTLY:
- *   Conversation: { id, title, modelId?, pinned, archived, createdAt, updatedAt }
+ *   Conversation: { id, title, assistantId?, pinned, archived, createdAt, updatedAt }
  *   Message:      { id, conversationId, role, content, createdAt }
  *
- * Nullable optional fields (modelId) are omitted when unset so the payload
- * never violates the contract's `type: string` for present keys.
+ * ARCHITECTURE LOCK: modelId is INTERNAL (GS Router) and is no longer part
+ * of any client-facing payload — clients never see or choose models.
  * Dates are serialized as ISO-8601 date-time strings.
  */
 
@@ -18,7 +18,6 @@ export type { AttachmentJson }
 export type ConversationJson = {
   id: string
   title: string
-  modelId?: string
   assistantId?: string
   pinned: boolean
   archived: boolean
@@ -100,7 +99,6 @@ export function conversationToJson(c: Conversation & { assistant?: Assistant | n
   return {
     id: c.id,
     title: c.title,
-    ...(c.modelId ? { modelId: c.modelId } : {}),
     ...(c.assistantId ? { assistantId: c.assistantId } : {}),
     pinned: c.pinned,
     archived: c.archived,

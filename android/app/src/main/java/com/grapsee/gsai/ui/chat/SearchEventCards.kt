@@ -432,7 +432,7 @@ private fun engineDisplayName(id: String): String = when (id) {
     "duckduckgo-lite" -> "DuckDuckGo"
     "wikipedia" -> "Wikipedia"
     "searxng" -> "SearXNG"
-    "z-ai" -> "Z AI"
+    "z-ai" -> "GS Web"
     "openlibrary" -> "Open Library"
     "gutenberg" -> "Gutenberg"
     "arxiv" -> "arXiv"

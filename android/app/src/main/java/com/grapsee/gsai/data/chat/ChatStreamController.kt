@@ -153,7 +153,6 @@ class ChatStreamController(private val chat: ChatRepository) {
     fun start(
         conversationId: String?,
         prompt: String,
-        modelId: String?,
         assistantMessageId: String,
         attachments: List<AttachmentDraft> = emptyList()
     ) {
@@ -174,7 +173,6 @@ class ChatStreamController(private val chat: ChatRepository) {
                 val returnedId = chat.send(
                     conversationId = conversationId,
                     content = prompt,
-                    modelId = modelId,
                     attachments = attachments,
                     onConversationResolved = { id ->
                         publishIfMine(token) { it.copy(conversationId = id) }

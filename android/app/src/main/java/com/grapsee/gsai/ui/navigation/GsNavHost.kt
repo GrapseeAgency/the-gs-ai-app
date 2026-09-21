@@ -47,8 +47,6 @@ import com.grapsee.gsai.ui.chat.ChatsScreen
 import com.grapsee.gsai.ui.create.CreateScreen
 import com.grapsee.gsai.ui.explore.ExploreScreen
 import com.grapsee.gsai.ui.library.LibraryScreen
-import com.grapsee.gsai.ui.models.ModelCentreScreen
-import com.grapsee.gsai.ui.models.ModelCompareScreen
 import com.grapsee.gsai.ui.notifications.NotificationsScreen
 import com.grapsee.gsai.ui.profile.ProfileScreen
 import com.grapsee.gsai.ui.projects.ProjectDetailScreen
@@ -231,7 +229,6 @@ fun GsNavHost(modifier: Modifier = Modifier) {
         composable(GsRoutes.PROJECTS) { ProjectsScreen(onNavigate = open) }
         composable(GsRoutes.SEARCH) { SearchScreen(onNavigate = open) }
         composable(GsRoutes.ASSISTANTS) { AssistantsScreen(onNavigate = open) }
-        composable(GsRoutes.MODELS) { ModelCentreScreen(onNavigate = open) }
         composable(GsRoutes.PROFILE) { ProfileScreen(onNavigate = open) }
 
         composable(GsRoutes.SETTINGS) { SettingsScreen(onBack = back, onNavigate = open) }
@@ -249,7 +246,6 @@ fun GsNavHost(modifier: Modifier = Modifier) {
                 }
             )
         }
-        composable(GsRoutes.MODEL_COMPARE) { ModelCompareScreen(onBack = back) }
         composable(GsRoutes.ASSISTANT_CREATE) { AssistantCreateScreen(onBack = back) }
         composable(
             route = GsRoutes.ASSISTANT_EDIT,
@@ -335,8 +331,7 @@ fun GsNavHost(modifier: Modifier = Modifier) {
                 },
                 onNewChat = { newChat() },
                 onBack = back,
-                onNavigateVoice = { navController.navigate(GsRoutes.VOICE) },
-                onNavigateModels = { navController.navigate(GsRoutes.MODELS) }
+                onNavigateVoice = { navController.navigate(GsRoutes.VOICE) }
             )
         }
 

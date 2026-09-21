@@ -12,9 +12,9 @@ import SwiftUI
  *      long-press for pin / rename / archive / delete. Genuine empty state —
  *      nothing is invented. "All chats" is the quiet overflow into the full
  *      history hub.
- *   4. MORE — one row. Explore, Create, Projects, Library, Assistants, Voice,
- *      Models and Compare models live behind it, one step away — present,
- *      but never competing with conversation at row parity.
+ *   4. MORE — one row. Explore, Create, Projects, Library, Assistants and
+ *      Voice live behind it, one step away — present, but never competing
+ *      with conversation at row parity.
  *
  * Machinery (tracked dismissal, VoiceOver containment, rename alert,
  * edge-swipe entry) is unchanged.
@@ -225,8 +225,6 @@ struct AeroDrawer: View {
                     sheetRow(title: "Library", icon: "books.vertical", isSelected: activeRoute == .library) { onRoute(.library) }
                     sheetRow(title: "Assistants", icon: "cpu", isSelected: activeRoute == .assistants) { onRoute(.assistants) }
                     sheetRow(title: "Voice", icon: "waveform", isSelected: activeRoute == .voice) { onRoute(.voice) }
-                    sheetRow(title: "Models", icon: "speedometer", isSelected: activeRoute == .models) { onRoute(.models) }
-                    sheetRow(title: "Compare models", icon: "rectangle.on.rectangle", isSelected: activeRoute == .modelCompare) { onRoute(.modelCompare) }
                 }
             }
         }

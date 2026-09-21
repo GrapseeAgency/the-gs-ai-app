@@ -69,14 +69,6 @@ struct ChatDetailView: View {
     // send gating and draft persistence all read/write through it.
     @ObservedObject private var attachments = AttachmentStore.shared
 
-    // Model control (Phase 3): the header chip is a SECONDARY utility — tier
-    // word only (Fast / Everyday / Best), no product/model name, NO colour
-    // dot. Tapping it opens the tiered "Choose a model" sheet (same shelves
-    // as the Model Centre). Re-read on appear (return from Model Centre) and
-    // after a sheet pick.
-    @State private var showingModelPicker = false
-    @State private var pillModel: ModelInfo?
-
     // PHASE 3 workspace model: the app-root instance of this screen carries
     // the shell chrome — the drawer menu replaces the back button, and "+"
     // resets to a fresh workspace via the router. Pushed instances (opened
@@ -132,25 +124,8 @@ struct ChatDetailView: View {
                     .accessibilityLabel("Open menu")
                 }
             }
-            // Phase 3: model chip BEFORE search — a bordered neutral pill with
-            // the consumer tier WORD only. No aurora dot, no model name, no
-            // metadata — a quiet secondary utility the ordinary user can
-            // ignore forever. "+" resets to a fresh workspace (root only).
+            // "+" resets to a fresh workspace (root only).
             ToolbarItemGroup(placement: .navigationBarTrailing) {
-                Button {
-                    showingModelPicker = true
-                } label: {
-                    Text(modelPillText)
-                        .font(Aero.label())
-                        .foregroundStyle(Aero.text)
-                        .lineLimit(1)
-                        .padding(.horizontal, Aero.Spacing.control)
-                        .padding(.vertical, 7)
-                        .background(Capsule().stroke(Aero.outline, lineWidth: 1))
-                }
-                .buttonStyle(KineticPressStyle())
-                .accessibilityLabel("Model \(modelPillText). Change model")
-
                 if let newChat = onNewChat {
                     Button {
                         newChat()
@@ -192,7 +167,6 @@ struct ChatDetailView: View {
         }
         .onAppear {
             GSHaptics.prepare()
-            refreshModelPill()
             if let prefill, vm.draft.isEmpty, !vm.isStreaming {
                 vm.draft = prefill
             } else {
@@ -227,9 +201,6 @@ struct ChatDetailView: View {
                     showToast(attachmentMessage(for: option))
                 },
                 remainingSlots: attachments.remainingSlots)
-        }
-        .sheet(isPresented: $showingModelPicker) {
-            modelPickerSheet
         }
         .sheet(item: $translationCard) { card in
             TranslationSheet(
@@ -657,90 +628,6 @@ struct ChatDetailView: View {
         .accessibilityElement(children: .combine)
     }
 
-    // MARK: Model control (Phase 2)
-
-    /// The chip always shows the consumer tier WORD for the REAL persisted
-    /// pick — Fast / Everyday / Best (never a model name, never metadata).
-    /// Model education stays opt-in via the sheet's "About models".
-    private var modelPillText: String {
-        let model = pillModel ?? ModelInfo.catalog.first { $0.isDefault }
-        return Self.consumerTierWord(model?.speedTier)
-    }
-
-    /// speedTier → consumer word. "Deep" reads as "Best" (matches the
-    /// picker's tier shelves); everything balanced is "Everyday".
-    static func consumerTierWord(_ speedTier: String?) -> String {
-        switch speedTier {
-        case "Fast": return "Fast"
-        case "Deep": return "Best"
-        case .some: return "Everyday"
-        case nil: return "Auto"
-        }
-    }
-
-    private var activeModelID: String {
-        pillModel?.id ?? ModelInfo.catalog.first { $0.isDefault }?.id ?? "gs-balanced"
-    }
-
-    private func refreshModelPill() {
-        let storedID = UserDefaults.standard.string(forKey: "gs.models.defaultId") ?? "gs-balanced"
-        pillModel = ModelInfo.catalog.first { $0.id == storedID }
-    }
-
-    /// Sheet pick: writes the SAME key Model Centre writes and refreshes the
-    /// chip immediately. ChatViewModel resolves the id per send
-    /// (resolvePreferredModelID runs inside beginStreaming), so the new model
-    /// governs from the next message — never a mid-stream switch.
-    private func selectModel(_ model: ModelInfo) {
-        UserDefaults.standard.set(model.id, forKey: "gs.models.defaultId")
-        refreshModelPill()
-        showingModelPicker = false
-    }
-
-    /// The consumer model sheet: the 3 tiers EXACTLY as the Model Centre
-    /// shelves them (ModelInfo.consumerTiers — shared, never duplicated),
-    /// name + tagline + checkmark on the active pick, and a quiet
-    /// "About models" footer into the Model Centre. No raw 8-name overflow,
-    /// no context/speed figures outside the Model Centre's Advanced details.
-    private var modelPickerSheet: some View {
-        AeroSheetShell(title: "Choose a model") {
-            ScrollView {
-                VStack(alignment: .leading, spacing: Aero.Spacing.l) {
-                    Text("Applies from your next message — a reply already streaming keeps the model it started with.")
-                        .font(Aero.caption())
-                        .foregroundStyle(Aero.textMuted)
-                    ForEach(ModelInfo.consumerTiers) { tier in
-                        VStack(alignment: .leading, spacing: Aero.Spacing.s) {
-                            Text(tier.title)
-                                .font(Aero.label())
-                                .foregroundStyle(Aero.textMuted)
-                            ForEach(tier.models) { model in
-                                TierModelRow(
-                                    model: model,
-                                    isActive: model.id == activeModelID,
-                                    action: { selectModel(model) })
-                            }
-                        }
-                    }
-                    Button {
-                        showingModelPicker = false
-                        router.path.append(.models)
-                    } label: {
-                        Label("About models", systemImage: "info.circle")
-                            .font(Aero.label())
-                            .foregroundStyle(Aero.textMuted)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, Aero.Spacing.s)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(KineticPressStyle())
-                    .accessibilityHint("Opens the Model Centre")
-                }
-            }
-        }
-        .presentationDetents([.medium, .large])
-    }
-
     /// The two tiles without a backend consumer stay honestly unavailable —
     /// muted in the sheet, and the toast says exactly that (no fakes).
     private func attachmentMessage(for option: String) -> String {
@@ -1046,46 +933,6 @@ struct ChatDetailView: View {
         .frame(maxWidth: .infinity)
         .frame(minHeight: UIScreen.main.bounds.height * 0.5)
         .accessibilityElement(children: .contain)
-    }
-}
-
-// MARK: - Model sheet row (Phase 2)
-
-/// One tier-sheet row — display name + tagline + checkmark on the active
-/// pick. No capability/context line: technical detail lives in the Model
-/// Centre's per-model "Advanced details" only.
-private struct TierModelRow: View {
-    let model: ModelInfo
-    let isActive: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(model.name)
-                        .font(Aero.title())
-                        .foregroundStyle(Aero.text)
-                    Text(model.tagline)
-                        .font(Aero.caption())
-                        .foregroundStyle(Aero.textMuted)
-                }
-                Spacer()
-                if isActive {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(Aero.accent)
-                }
-            }
-            .padding(12)
-            .background(
-                RoundedRectangle(cornerRadius: Aero.Radius.md)
-                    .fill(isActive ? AnyShapeStyle(Aero.accentSoft) : AnyShapeStyle(Aero.raisedSurface)))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(KineticPressStyle())
-        .accessibilityLabel("\(model.name). \(model.tagline)")
-        .accessibilityAddTraits(isActive ? [.isSelected] : [])
     }
 }
 

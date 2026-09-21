@@ -34,7 +34,9 @@ export async function GET(req: NextRequest) {
   })
 }
 
-// POST /api/v1/conversations — { title?, modelId?, assistantId? } → 201 Conversation
+// POST /api/v1/conversations — { title?, assistantId? } → 201 Conversation
+// ARCHITECTURE LOCK: client-sent modelId (legacy) is IGNORED — the backend
+// GS Router derives all routing server-side; no model preference is stored.
 export async function POST(req: NextRequest) {
   // Guardrail: 30 creations / minute / client (in-memory; Redis at scale).
   const limit = rateLimit(clientKey(req, 'convs:create'), 30, 60_000)
@@ -45,19 +47,15 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  let body: { title?: unknown; modelId?: unknown; assistantId?: unknown }
+  let body: { title?: unknown; assistantId?: unknown }
   try {
-    body = (await req.json()) as { title?: unknown; modelId?: unknown; assistantId?: unknown }
+    body = (await req.json()) as { title?: unknown; assistantId?: unknown }
   } catch {
     body = {}
   }
 
   const title =
     typeof body?.title === 'string' && body.title.trim().length > 0 ? body.title.trim() : undefined
-  const modelId =
-    typeof body?.modelId === 'string' && body.modelId.trim().length > 0
-      ? body.modelId.trim()
-      : undefined
   const assistantId =
     typeof body?.assistantId === 'string' && body.assistantId.trim().length > 0
       ? body.assistantId.trim()
@@ -76,7 +74,6 @@ export async function POST(req: NextRequest) {
   const conversation = await db.conversation.create({
     data: {
       ...(title ? { title } : {}),
-      ...(modelId ? { modelId } : {}),
       ...(assistantId ? { assistantId } : {}),
     },
   })

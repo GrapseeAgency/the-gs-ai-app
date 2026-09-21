@@ -79,15 +79,6 @@ class ApiClient(
         )
     }
 
-    suspend fun models(): List<ModelDto> {
-        val response = client.get("$root/models")
-        return decodeList(
-            response.bodyAsText(),
-            fromEnvelope = { GsApiJson.decodeFromString<ModelListDto>(it).models },
-            fromArray = { GsApiJson.decodeFromString<List<ModelDto>>(it) }
-        )
-    }
-
     /**
      * POST a user message with stream=true and walk the SSE body.
      * Wire format: `data: {"event":"delta","data":"…"}` for each chunk,
@@ -117,7 +108,6 @@ class ApiClient(
     suspend fun sendMessageStream(
         conversationId: String,
         content: String,
-        modelId: String? = null,
         attachments: List<String>? = null,
         onDelta: (String) -> Unit,
         onDone: (MessageDto?) -> Unit,
@@ -133,7 +123,6 @@ class ApiClient(
                 SendMessageRequest(
                     content = content,
                     stream = true,
-                    modelId = modelId,
                     attachments = attachments?.ifEmpty { null }
                 )
             )

@@ -64,12 +64,9 @@ import com.grapsee.gsai.ui.components.GsCard
 import com.grapsee.gsai.ui.components.GsChip
 import com.grapsee.gsai.BuildConfig
 import com.grapsee.gsai.CrashReporter
-import com.grapsee.gsai.data.ModelPrefs
 import com.grapsee.gsai.data.SettingsStore
-import com.grapsee.gsai.data.model.ModelCatalog
 import com.grapsee.gsai.di.ServiceLocator
 import com.grapsee.gsai.ui.components.GsScreenScaffold
-import com.grapsee.gsai.ui.navigation.GsRoutes
 import com.grapsee.gsai.ui.theme.GsMotion
 import com.grapsee.gsai.ui.theme.gsHaptic
 import androidx.activity.compose.BackHandler
@@ -172,31 +169,6 @@ fun SettingsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {}) {
                     checked = SettingsStore.sendDoubleTap,
                     onCheckedChange = { SettingsStore.updateSendDoubleTap(it) }
                 )
-                // THE model row — the single source of truth for the default
-                // model. It reads the same ModelPrefs the chat send path reads
-                // (the hardcoded "GS Balanced" row that contradicted it from
-                // above is gone) and hands the reader to the Model Centre to
-                // change it.
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(onClick = { onNavigate(GsRoutes.MODELS) })
-                        .padding(vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Default model",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Text(
-                        text = ModelCatalog.byId(ModelPrefs.defaultId(context))?.displayName
-                            ?: ModelCatalog.default.displayName,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
             }
 
             ExpandCard(

@@ -25,8 +25,6 @@ enum AeroRoute: Hashable {
     case assistantCreate
     case assistantEdit(String)
     case project(String)
-    case models
-    case modelCompare
     case search
     case settings
     case notifications
@@ -196,8 +194,6 @@ struct AeroDestinations: ViewModifier {
             case .assistantCreate: AssistantCreateView()
             case .assistantEdit(let id): AssistantCreateView(editID: id)
             case .project(let id): ProjectDetailView(projectID: id)
-            case .models: ModelCentreView()
-            case .modelCompare: ModelCompareView()
             case .search: SearchView()
             case .settings: SettingsView()
             case .notifications: NotificationsView()

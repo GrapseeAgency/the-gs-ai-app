@@ -39,7 +39,6 @@ import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.SmartToy
-import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -93,8 +92,8 @@ import kotlinx.coroutines.launch
  *  3. RECENT — the visual heart: live conversations, tap to open, long-press
  *     for pin / rename / archive / delete. Genuine empty state — nothing is
  *     invented. "All chats" is the quiet overflow into the full history hub.
- *  4. MORE — one row. Explore, Create, Projects, Library, Assistants, Voice,
- *     Models and Compare models live behind it, in a sheet, one step away —
+ *  4. MORE — one row. Explore, Create, Projects, Library, Assistants and
+ *     Voice live behind it, in a sheet, one step away —
  *     present, but never competing with conversation at row parity.
  *
  * Everything else the old drawer exposed is gone from the first level. The
@@ -318,8 +317,6 @@ fun GsDrawerContent(
             SheetRow("Library", Icons.Outlined.Bookmarks, selectedRoute == GsRoutes.LIBRARY) { navigateFromSheet(GsRoutes.LIBRARY) }
             SheetRow("Assistants", Icons.Outlined.SmartToy, selectedRoute == GsRoutes.ASSISTANTS) { navigateFromSheet(GsRoutes.ASSISTANTS) }
             SheetRow("Voice", Icons.Outlined.GraphicEq, selectedRoute == GsRoutes.VOICE) { navigateFromSheet(GsRoutes.VOICE) }
-            SheetRow("Models", Icons.Outlined.Speed, selectedRoute == GsRoutes.MODELS) { navigateFromSheet(GsRoutes.MODELS) }
-            SheetRow("Compare models", icon = null, selectedRoute == GsRoutes.MODEL_COMPARE) { navigateFromSheet(GsRoutes.MODEL_COMPARE) }
         }
     }
 }

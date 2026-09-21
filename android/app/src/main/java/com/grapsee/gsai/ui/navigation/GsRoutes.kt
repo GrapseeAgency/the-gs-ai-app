@@ -11,8 +11,6 @@ object GsRoutes {
     const val PROJECTS = "projects"
     const val ASSISTANTS = "assistants"
     const val SEARCH = "search"
-    const val MODELS = "models"
-    const val MODEL_COMPARE = "models/compare"
     const val PROFILE = "profile"
     const val SETTINGS = "settings"
     const val NOTIFICATIONS = "notifications"
@@ -89,7 +87,7 @@ object GsRoutes {
     /** Root-level destinations the drawer's More surface switches to. */
     val SECTION_ROUTES = setOf(
         CHATS, EXPLORE, CREATE, LIBRARY,
-        PROJECTS, ASSISTANTS, MODELS, SEARCH,
+        PROJECTS, ASSISTANTS, SEARCH,
         PROFILE, NOTIFICATIONS, SETTINGS, BILLING
     )
 

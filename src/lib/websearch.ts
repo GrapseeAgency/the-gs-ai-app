@@ -104,6 +104,15 @@ export const SUPPRESSION_PATTERNS: RegExp[] = [
   /\bno\s+(more\s+)?(searching|searches|googling)\b/i,
   /\bwithout\s+searching\b/i,
   /\bno\s+need\s+to\s+search\b/i,
+  // 2026-09-21 — META-SEARCH questions: the user talking ABOUT the assistant's
+  // searching ("why are you always search on the wekipedia") is feedback, not
+  // a request. Previously these matched the bare \bsearch\b explicit pattern
+  // and triggered yet another search — the most user-visible absurdity in the wild.
+  /\bwhy\s+(are|do|did|is)\s+(you|the\s+ai|it)\s+(always\s+|keep\s+|still\s+)?(searching|search|googl\w*)/i,
+  /\byou\s+(always|keep|only|just)\s+(search|searching|googl\w*)/i,
+  /\b(are|do|did)\s+you\s+(always\s+|even\s+|really\s+)?(search|searching|googl\w*)\b/i,
+  /\bstop\s+(using|with)\s+(only\s+)?wikipedia\b/i,
+  /\bwhy\s+(only|just|always)\s+wikipedia\b/i,
   /\bjust\s+(tell|answer|summarise|summarize|use|say)\b[^.!?]{0,60}\bwhat\s+(we|you)'?ve?\s+(already\s+)?(found|learned|got)\b/i,
   /\bwhat\s+(we|you)'?ve?\s+(already\s+)?(found|learned)\b/i,
   /\bfrom\s+(what|the\s+(sources?|evidence))\s+(we|you)'?ve?\s+(already\s+)?(found|retrieved|gathered)\b/i,
@@ -746,18 +755,28 @@ export function buildHistoryEvidenceBlock(
  * wrote something other than a bare acknowledgment — pure acknowledgments
  * ("thanks") must stay byte-identical to the pre-Phase-8 text path (§22).
  */
+const HISTORY_SOURCE_REFERENCE_RES: RegExp[] = [
+  /\b(that|the|those|your)\s+(sources?|citations?|links?|articles?|references?|search\s+results?|wikipedia\s+(?:article|page))\b/i,
+  /\b(source|citation|link|article|reference)s?\s*#?\s*\d\b/i,
+  /\b(from|in|per|according\s+to)\s+(the\s+)?(earlier|previous|prior|above)\s+(sources?|results?|search|evidence)/i,
+  /\bsame\s+(sources?|results?|links?|articles?)\b/i,
+  /\byou\s+(found|cited|mentioned|gave)\s+(that|the|earlier|before)/i,
+  /\bthe\s+(first|second|third)\s+(source|link|result|article)\b/i,
+]
+
+/**
+ * 2026-09-21 NATURAL-FLOW FIX (user directive). This used to return true for
+ * EVERY non-trivial message once the conversation contained any sources — so a
+ * brand-new question was answered under the search-grounding contract against
+ * the PREVIOUS turns' evidence ("Based on the web evidence provided in our
+ * conversation…"). History evidence is now injected ONLY when the user
+ * explicitly references earlier sources.
+ */
 export function shouldInjectHistoryEvidence(userText: string, hasHistorySources: boolean): boolean {
   if (!hasHistorySources) return false
   const text = userText.trim()
   if (text.length === 0) return false
-  if (
-    /^[!.,\s]*(thanks|thank you|thank\s*u|ok|okay|got it|cool|nice|great|perfect|alright)[!.,\s]*$/i.test(
-      text
-    )
-  ) {
-    return false
-  }
-  return true
+  return HISTORY_SOURCE_REFERENCE_RES.some((p) => p.test(text))
 }
 
 // ---------------------------------------------------------------------------

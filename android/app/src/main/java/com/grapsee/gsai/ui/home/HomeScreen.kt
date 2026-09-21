@@ -135,8 +135,8 @@ import java.util.Calendar
  *             tools/discovery; the old 5-card Tools grid is gone).
  *
  * Removed in this phase (per the consumer-first mandate): the model pill
- * ("GS Balanced · Balanced") from the top bar — a quiet brand mark replaces
- * it; the 84 dp hero orb and its halo — identity shrinks to a 44 dp mark;
+ * from the top bar — a quiet brand mark replaces it; the 84 dp hero orb and
+ * its halo — identity shrinks to a 44 dp mark;
  * the Tools/workbench card grid; the composer ENTRY bar that pretended to be
  * an input. Kept: real identity greeting, real Continue/Recents, honest
  * starters, the LiveUpdate pill (appears only when an update exists), the
@@ -331,9 +331,8 @@ private fun TopBar(
 
         Spacer(Modifier.weight(1f))
 
-        // Quiet brand mark. The model name/pill is GONE from the hero — an
-        // ordinary user should never meet "GS Balanced · Balanced" on screen
-        // one (model choice lives in chat + Model Centre, quietly).
+        // Quiet brand mark. The model name/pill is GONE from the hero —
+        // the hero identifies the product, never the model.
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp)

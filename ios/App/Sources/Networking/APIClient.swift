@@ -112,15 +112,6 @@ final class APIClient {
         return (try? decoder.decode(Conversation.self, from: data)) != nil || data.isEmpty
     }
 
-    // MARK: - Model catalogue
-
-    /// GET /api/v1/models
-    func models() async throws -> [ModelEntry] {
-        let request = try buildRequest(path: "/api/v1/models")
-        let data = try await validatedData(for: request)
-        return try decode(ModelListEnvelope.self, from: data).models
-    }
-
     // MARK: - Streaming (SSE)
 
     /// POSTs a user message with `stream: true` and consumes the
@@ -146,7 +137,6 @@ final class APIClient {
     func stream(
         message content: String,
         conversationID: String,
-        modelId: String? = nil,
         attachmentIDs: [String]? = nil,
         onDelta: @escaping (String) -> Void,
         onDone: @escaping (Message?) -> Void,
@@ -159,7 +149,6 @@ final class APIClient {
             body: try encoded(SendMessageRequest(
                 content: content,
                 stream: true,
-                modelId: modelId,
                 attachments: attachmentIDs))
         )
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")

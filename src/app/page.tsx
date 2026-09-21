@@ -34,14 +34,6 @@ const C = {
 
 const AURORA = 'linear-gradient(90deg, #2DD4A8, #4CC3FF, #9D7BFF)'
 
-type ModelInfo = {
-  id: string
-  displayName: string
-  capabilities: string[]
-  contextWindow?: number
-  speedTier?: string
-}
-
 type ConversationInfo = {
   id: string
   title: string
@@ -89,7 +81,7 @@ const ENGINE_LABELS: Record<string, string> = {
   'duckduckgo-lite': 'DuckDuckGo',
   wikipedia: 'Wikipedia',
   searxng: 'SearXNG',
-  'z-ai': 'Z AI',
+  'z-ai': 'GS Web',
   openlibrary: 'Open Library',
   gutenberg: 'Gutenberg',
   arxiv: 'arXiv',
@@ -130,19 +122,6 @@ function greet(): string {
 function fmtUses(n: number): string {
   return n >= 1000 ? `${(n / 1000).toFixed(n >= 10_000 ? 0 : 1)}k` : String(n)
 }
-
-function speedDots(tier?: string) {
-  const filled = tier === 'fast' ? 3 : tier === 'balanced' ? 2 : 1
-  return (
-    <span className="inline-flex gap-1" aria-label={`speed ${tier ?? 'unknown'}`}>
-      {[1, 2, 3].map((i) => (
-        <span
-          key={i}
-          className="h-1.5 w-1.5 rounded-full"
-          style={{ background: i <= filled ? C.accent : C.outline }}
-        />
-      ))}
-    </span>
   )
 }
 
@@ -357,7 +336,6 @@ function ClarifyChips({ clarify, onPick }: { clarify: ClarifyChoices; onPick: (l
 
 export default function Home() {
   const [health, setHealth] = useState<'checking' | 'ok' | 'down'>('checking')
-  const [models, setModels] = useState<ModelInfo[]>([])
   const [conversations, setConversations] = useState<ConversationInfo[]>([])
   const [assistants, setAssistants] = useState<AssistantInfo[]>([])
   const [category, setCategory] = useState<string>('all')
@@ -366,8 +344,6 @@ export default function Home() {
   const [activeAssistant, setActiveAssistant] = useState<{ id: string; name: string } | null>(null)
   const [historyLoading, setHistoryLoading] = useState(false)
   const [messages, setMessages] = useState<ChatMessage[]>([])
-
-  const [selectedModelId, setSelectedModelId] = useState<string>('')
   const [draft, setDraft] = useState('')
   const [streamText, setStreamText] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
@@ -392,17 +368,16 @@ export default function Home() {
 
   const loadStatus = useCallback(async () => {
     try {
-      const [h, m, c, a] = await Promise.all([
+      const [h, c, a] = await Promise.all([
         fetch('/api/health').then((r) => r.json()),
-        fetch('/api/v1/models').then((r) => r.json()),
         fetch('/api/v1/conversations?limit=8').then((r) => r.json()),
         fetch('/api/v1/assistants').then((r) => r.json()),
       ])
       setHealth(h?.status === 'ok' ? 'ok' : 'down')
-      setModels(m?.models ?? [])
       setConversations(c?.items ?? [])
       setAssistants(a?.items ?? [])
-      setSelectedModelId((prev) => prev || m?.models?.find((x: ModelInfo) => x.id === 'gs-balanced')?.id || m?.models?.[0]?.id || '')
+      // ARCHITECTURE LOCK: no model catalogue fetch — the user never sees or
+      // selects models; routing is entirely backend-side (GS Router).
     } catch {
       setHealth('down')
     }
@@ -589,7 +564,6 @@ export default function Home() {
           body: JSON.stringify({
             content: text,
             stream: true,
-            ...(selectedModelId ? { modelId: selectedModelId } : {}),
           }),
           signal: controller.signal,
         })
@@ -795,7 +769,7 @@ export default function Home() {
         abortRef.current = null
       }
     },
-    [conversationId, draft, isStreaming, loadStatus, selectedModelId]
+    [conversationId, draft, isStreaming, loadStatus]
   )
 
   // Keep the ref fresh — the deferred starter path always calls the latest send.
@@ -889,63 +863,16 @@ export default function Home() {
 
         {/* Stats */}
         <section className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <StatCard label="Models" value={String(models.length)} sub="GS catalogue" />
           <StatCard label="Conversations" value={String(conversations.length)} sub="recent" />
           <StatCard label="Assistants" value={String(assistants.length)} sub="live catalogue" />
           <StatCard label="Clients" value="2" sub="Android · iOS (Aeruo Kinetic)" />
         </section>
 
         <div className="grid gap-6 lg:grid-cols-5">
-          {/* Left: models + conversations */}
+          {/* Left: conversations */}
           <section className="space-y-6 lg:col-span-2">
             <div>
-              <SectionHeader title="Model catalogue" hint={selectedModelId ? `${selectedModelId} armed` : undefined} />
-              <div className="space-y-2">
-                {models.map((m) => {
-                  const active = m.id === selectedModelId
-                  return (
-                    <button
-                      key={m.id}
-                      onClick={() => setSelectedModelId(m.id)}
-                      aria-pressed={active}
-                      className="gs-card w-full rounded-xl border px-4 py-3 text-left"
-                      style={{
-                        background: active ? C.raised : C.container,
-                        borderColor: active ? C.accentDeep : C.outline,
-                        boxShadow: active ? '0 0 0 1px rgba(45,212,168,0.25)' : 'none',
-                      }}
-                    >
-                      <span className="flex items-center gap-3">
-                        <span
-                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold"
-                          style={{
-                            background: active ? 'rgba(45,212,168,0.14)' : C.raised,
-                            color: C.accent,
-                          }}
-                        >
-                          {m.displayName.split(' ')[1]?.[0] ?? 'G'}
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-semibold">{m.displayName}</span>
-                          <span className="block truncate text-xs" style={{ color: C.muted }}>
-                            {m.contextWindow ? `${Math.round(m.contextWindow / 1000)}K context · ` : ''}
-                            {m.capabilities?.join(' · ')}
-                          </span>
-                        </span>
-                        {speedDots(m.speedTier)}
-                      </span>
-                    </button>
-                  )
-                })}
-                {models.length === 0 && (
-                  <p className="text-sm" style={{ color: C.muted }}>
-                    Loading catalogue…
-                  </p>
-                )}
-              </div>
-            </div>
-
-            <div>
+              <div>
               <SectionHeader title="Recent conversations" hint="click to reopen" />
               <div className="gs-scroll max-h-[22rem] space-y-2 overflow-y-auto pr-1">
                 {conversations.map((c) => {
@@ -1191,19 +1118,6 @@ export default function Home() {
                   style={{ color: C.text }}
                   aria-label="Message GS AI"
                 />
-                <select
-                  value={selectedModelId}
-                  onChange={(e) => setSelectedModelId(e.target.value)}
-                  aria-label="Model for this conversation"
-                  className="max-w-[9rem] shrink-0 cursor-pointer rounded-full border bg-transparent px-2 py-1 text-[11px] outline-none"
-                  style={{ borderColor: C.outline, color: C.muted, background: C.container }}
-                >
-                  {models.map((m) => (
-                    <option key={m.id} value={m.id} style={{ background: C.container }}>
-                      {m.displayName}
-                    </option>
-                  ))}
-                </select>
                 <button
                   onClick={() => send()}
                   disabled={!draft.trim() || isStreaming}

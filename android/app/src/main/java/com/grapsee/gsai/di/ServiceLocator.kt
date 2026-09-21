@@ -45,7 +45,7 @@ private fun io.ktor.client.HttpClientConfig<*>.configure(sessionId: String) {
     }
     install(HttpRequestRetry) {
         // Only 5xx get a second chance — connect failures (no backend
-        // reachable) fall through instantly so GS Lite takes over.
+        // reachable) fall through instantly so the offline reply takes over.
         retryOnServerErrors(1)
         exponentialDelay()
     }

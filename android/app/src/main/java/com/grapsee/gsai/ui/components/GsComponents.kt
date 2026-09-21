@@ -269,9 +269,8 @@ private fun ChipLabel(
                 this.selected = selected
                 role = Role.Button
             },
-        // A chip is a pill, never a paragraph: long labels (a chat header can
-        // carry "GS Balanced · Balanced") ellipsize instead of wrapping and
-        // growing the row they sit in.
+        // A chip is a pill, never a paragraph: long labels ellipsize instead
+        // of wrapping and growing the row they sit in.
         maxLines = 1,
         overflow = TextOverflow.Ellipsis
     )
@@ -685,7 +684,7 @@ fun gsConversationTitle(raw: String?): String =
 
 /**
  * The offline banner tracks the PHONE's connectivity only. A quiet backend is
- * handled invisibly (GS Lite local replies + Room persistence), so an unreachable
+ * handled invisibly (offline local replies + Room persistence), so an unreachable
  * server never presents itself as an error state to the user. Shared by the
  * Chats hub and the chat surface — anywhere a dead connection must be honest.
  */

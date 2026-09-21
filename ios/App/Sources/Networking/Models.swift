@@ -299,17 +299,15 @@ struct Message: Codable, Identifiable, Equatable, Hashable {
 struct SendMessageRequest: Codable, Equatable {
     var content: String
     var stream: Bool
-    var modelId: String?
     /// PHASE 5: uploaded attachment ids (max 6). Synthesized encoding uses
     /// encodeIfPresent, so nil keeps text-only sends byte-compatible with the
     /// pre-attachments wire shape. `content` may be empty only when this
     /// array is non-empty (server rule).
     var attachments: [String]?
 
-    init(content: String, stream: Bool = false, modelId: String? = nil, attachments: [String]? = nil) {
+    init(content: String, stream: Bool = false, attachments: [String]? = nil) {
         self.content = content
         self.stream = stream
-        self.modelId = modelId
         self.attachments = attachments
     }
 
@@ -317,7 +315,6 @@ struct SendMessageRequest: Codable, Equatable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         content = try container.decodeIfPresent(String.self, forKey: .content) ?? ""
         stream = try container.decodeIfPresent(Bool.self, forKey: .stream) ?? false
-        modelId = try container.decodeIfPresent(String.self, forKey: .modelId)
         attachments = try container.decodeIfPresent([String].self, forKey: .attachments)
     }
 }
@@ -325,17 +322,14 @@ struct SendMessageRequest: Codable, Equatable {
 /// `#/components/schemas/CreateConversationInput`
 struct CreateConversationRequest: Codable, Equatable {
     var title: String?
-    var modelId: String?
 
-    init(title: String?, modelId: String? = nil) {
+    init(title: String?) {
         self.title = title
-        self.modelId = modelId
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         title = try container.decodeIfPresent(String.self, forKey: .title)
-        modelId = try container.decodeIfPresent(String.self, forKey: .modelId)
     }
 }
 
@@ -350,39 +344,6 @@ struct UpdateConversationRequest: Codable, Equatable {
         self.title = title
         self.pinned = pinned
         self.archived = archived
-    }
-}
-
-// MARK: - Model catalogue (`#/components/schemas/Model`)
-
-struct ModelEntry: Codable, Identifiable, Equatable, Hashable {
-    let id: String
-    var displayName: String
-    var capabilities: [String]?
-    var contextWindow: Int?
-    var speedTier: String?  // "fast" | "balanced" | "deep"
-
-    init(
-        id: String,
-        displayName: String,
-        capabilities: [String]? = nil,
-        contextWindow: Int? = nil,
-        speedTier: String? = nil
-    ) {
-        self.id = id
-        self.displayName = displayName
-        self.capabilities = capabilities
-        self.contextWindow = contextWindow
-        self.speedTier = speedTier
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = try container.decodeIfPresent(String.self, forKey: .id) ?? ""
-        displayName = try container.decodeIfPresent(String.self, forKey: .displayName) ?? "Untitled model"
-        capabilities = try container.decodeIfPresent([String].self, forKey: .capabilities)
-        contextWindow = try container.decodeIfPresent(Int.self, forKey: .contextWindow)
-        speedTier = try container.decodeIfPresent(String.self, forKey: .speedTier)
     }
 }
 
@@ -417,10 +378,6 @@ struct ConversationListEnvelope: Codable, Equatable {
 
 struct MessageListEnvelope: Codable, Equatable {
     var items: [Message]
-}
-
-struct ModelListEnvelope: Codable, Equatable {
-    var models: [ModelEntry]
 }
 
 /// `#/components/schemas/Error` — used to surface `{"code","message"}` bodies.

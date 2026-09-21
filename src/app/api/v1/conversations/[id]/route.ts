@@ -16,7 +16,9 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
   return NextResponse.json(conversationToJson(conversation))
 }
 
-// PATCH /api/v1/conversations/:id — { title?, pinned?, archived?, modelId? }
+// PATCH /api/v1/conversations/:id — { title?, pinned?, archived? }
+// ARCHITECTURE LOCK: client-sent modelId (legacy) is IGNORED — no model
+// preference is stored or honored anywhere.
 export async function PATCH(req: NextRequest, { params }: RouteContext) {
   const { id } = await params
   const existing = await db.conversation.findUnique({ where: { id } })
@@ -24,7 +26,7 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
     return NextResponse.json({ code: 'not_found', message: 'Conversation not found' }, { status: 404 })
   }
 
-  let body: { title?: unknown; pinned?: unknown; archived?: unknown; modelId?: unknown }
+  let body: { title?: unknown; pinned?: unknown; archived?: unknown }
   try {
     body = (await req.json()) as typeof body
   } catch {
@@ -38,7 +40,6 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
   if (typeof body.title === 'string' && body.title.trim()) data.title = body.title.trim().slice(0, 120)
   if (typeof body.pinned === 'boolean') data.pinned = body.pinned
   if (typeof body.archived === 'boolean') data.archived = body.archived
-  if (typeof body.modelId === 'string' && body.modelId.trim()) data.modelId = body.modelId.trim()
 
   if (Object.keys(data).length === 0) {
     return NextResponse.json(

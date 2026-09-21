@@ -140,37 +140,8 @@ struct SettingsView: View {
 
     // MARK: Chat
 
-    /// The REAL default-model row (Phase 2 honesty fix): the subtitle is the
-    /// live stored pick — the same UserDefaults key the send path reads —
-    /// never a hardcoded name. Tap opens the Model Centre.
-    private var defaultModelName: String {
-        let storedID = UserDefaults.standard.string(forKey: "gs.models.defaultId") ?? "gs-balanced"
-        return ModelInfo.catalog.first { $0.id == storedID }?.name
-            ?? ModelInfo.catalog.first { $0.isDefault }?.name
-            ?? "Default"
-    }
-
     private var chatSection: some View {
         section("Chat") {
-            NavigationLink(value: AeroRoute.models) {
-                AeroListRow(
-                    title: "Default model",
-                    subtitle: defaultModelName,
-                    leading: {
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 14))
-                            .foregroundStyle(Aero.accent)
-                            .frame(width: 34, height: 34)
-                            .background(Circle().fill(Aero.container))
-                    },
-                    trailing: {
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 12))
-                            .foregroundStyle(Aero.textMuted)
-                    }
-                )
-            }
-            .buttonStyle(KineticPressStyle())
             toggleRow("Enter to send", isOn: $settings.enterToSend)
             toggleRow("Auto-title chats", isOn: $settings.autoTitle)
         }

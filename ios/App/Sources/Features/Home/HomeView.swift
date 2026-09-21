@@ -272,10 +272,9 @@ struct HomeView: View {
         Array(store.activeConversations.prefix(3))
     }
 
-    /// One clear row: title + relative time + optional model indicator
-    /// (catalog name for the stored modelId; unknown ids are omitted, never
-    /// guessed). Tap opens the conversation; long-press offers the same
-    /// action set as the drawer rows.
+    /// One clear row: title + relative time (no model indicator — the
+    /// continue-row meta is timestamp-only). Tap opens the conversation;
+    /// long-press offers the same action set as the drawer rows.
     private func conversationRow(_ conversation: StoredConversation) -> some View {
         NavigationLink(value: AeroRoute.chat(conversation.id)) {
             HStack(spacing: Aero.Spacing.s) {
@@ -307,14 +306,9 @@ struct HomeView: View {
         }
     }
 
-    /// "2h ago · GS Balanced" — empty segments are dropped, so an
-    /// unparseable stamp or unknown model shrinks the line honestly.
+    /// "2h ago" — the continue-row meta is timestamp-only.
     private func rowMeta(_ conversation: StoredConversation) -> String {
-        var parts = [GSFormatters.relativeTime(from: conversation.updatedAt)]
-        if let model = ModelInfo.catalog.first(where: { $0.id == conversation.modelId }) {
-            parts.append(model.name)
-        }
-        return parts.filter { !$0.isEmpty }.joined(separator: " · ")
+        GSFormatters.relativeTime(from: conversation.updatedAt)
     }
 
     /// The drawer's four actions, applied against the same store — compact

@@ -1,6 +1,32 @@
 import SwiftUI
 
 /**
+ * Engine id → consumer display name. The wire carries internal engine ids
+ * (bing-news-rss, z-ai, …); the trace UI renders a neutral product-neutral
+ * label instead — raw ids are plumbing, not something a reader should have
+ * to parse. Unknown ids fall back to the raw id (never blank, never fake),
+ * so a future engine still surfaces honestly.
+ */
+enum EngineDisplayName {
+    static func label(for engineID: String) -> String {
+        switch engineID {
+        case "bing-news-rss": return "Bing News"
+        case "google-news-rss": return "Google News"
+        case "bing-web": return "Bing Web"
+        case "duckduckgo-lite": return "DuckDuckGo"
+        case "wikipedia": return "Wikipedia"
+        case "searxng": return "SearXNG"
+        case "z-ai": return "GS Web"
+        case "openlibrary": return "Open Library"
+        case "gutenberg": return "Gutenberg"
+        case "arxiv": return "arXiv"
+        case "crossref": return "Crossref"
+        default: return engineID // unknown id → raw id, never blank
+        }
+    }
+}
+
+/**
  * PHASE 8.1 — the search trace card (docs/search-event-protocol.md).
  * Renders ONLY steps that actually arrived as `search`/`source` events (plus
  * the synthesis start from `status`) — no timers, no fabricated steps, no
@@ -189,7 +215,7 @@ private struct SearchTraceRow: View {
     private var detail: String {
         switch step.kind {
         case .query(_, _, let engines):
-            return engines.isEmpty ? "" : engines.joined(separator: " · ")
+            return engines.isEmpty ? "" : engines.map { EngineDisplayName.label(for: $0) }.joined(separator: " · ")
         case .results(let round, _, _, _):
             return "Round \(round)"
         case .discovered(_, _, let domain):
@@ -258,7 +284,7 @@ struct EngineOutcomeRow: View {
             Image(systemName: outcome.ok ? "checkmark" : "xmark")
                 .font(.system(size: 9, weight: .semibold))
                 .foregroundStyle(outcome.ok ? Aero.accent : Aero.textMuted)
-            Text(outcome.id.isEmpty ? "engine" : outcome.id)
+            Text(outcome.id.isEmpty ? "engine" : EngineDisplayName.label(for: outcome.id))
                 .font(Aero.metadata())
                 .foregroundStyle(Aero.textSecondary)
                 .lineLimit(1)

@@ -96,7 +96,7 @@ private fun onboardingTransition(forward: Boolean): ContentTransform {
 fun OnboardingScreen(onFinished: () -> Unit) {
     var stepIndex by remember { mutableIntStateOf(0) }
     val interests = remember { mutableStateListOf<String>() }
-    var responseStyle by remember { mutableStateOf("Balanced") }
+    var responseStyle by remember { mutableStateOf("Standard") }
     var personality by remember { mutableStateOf("Friendly") }
     val capabilities = remember { mutableStateListOf<String>() }
     var taskAlerts by remember { mutableStateOf(true) }
@@ -291,7 +291,7 @@ private fun AiPreferencesStep(
         )
         PreferenceChipCard(
             title = "Response style",
-            options = listOf("Concise", "Balanced", "Detailed"),
+            options = listOf("Concise", "Standard", "Detailed"),
             selected = responseStyle,
             onSelect = onStyleChange
         )
