@@ -15,8 +15,8 @@ android {
         applicationId = "com.grapsee.gsai"
         minSdk = 26
         targetSdk = 35
-        versionCode = 70
-        versionName = "0.67.1"
+        versionCode = 71
+        versionName = "0.68.0"
 
         // REAL transport origin — applies to EVERY build type (v0.66.0 fix).
         // HISTORY: this was http://10.0.2.2:3000 (emulator loopback) with the
