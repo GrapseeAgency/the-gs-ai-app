@@ -319,6 +319,8 @@ class ChatRepository(
         onSearchEvent: (String) -> Unit = {},
         onSourceEvent: (String) -> Unit = {},
         onClarify: (String) -> Unit = {},
+        /** PHASE 8.2: research-level SSE events (protocol v2 §research), raw. */
+        onResearch: (String) -> Unit = {},
         onDone: (MessageDto?) -> Unit = {},
         onDelta: (String) -> Unit
     ): String {
@@ -365,6 +367,7 @@ class ChatRepository(
                 onSearchEvent = onSearchEvent,
                 onSourceEvent = onSourceEvent,
                 onClarifyEvent = onClarify,
+                onResearchEvent = onResearch,
                 onDone = { done ->
                     doneMessage = done
                     val doneId = done?.id

@@ -11,19 +11,23 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
 
 /**
- * PHASE 8.1 — search/research event models (docs/search-event-protocol.md v1, FROZEN).
+ * PHASE 8.1/8.2 — search/research event models (docs/search-event-protocol.md,
+ * v1 + v2 FROZEN).
  *
- * The backend emits `search`, `source` and `clarify` SSE events whose payloads
- * are JSON-encoded strings (double-encoded, exactly like the existing `done`
- * event). This file owns the CLIENT side of that contract:
+ * The backend emits `search`, `source`, `research` and `clarify` SSE events
+ * whose payloads are JSON-encoded strings (double-encoded, exactly like the
+ * existing `done` event). This file owns the CLIENT side of that contract:
  *
  *  - the UI models the stream controller publishes ([SearchTraceItem],
- *    [SourceCard], [ClarifyPrompt], [SearchSummary]),
+ *    [SourceCard], [ClarifyPrompt], [SearchSummary] and the PHASE 8.2
+ *    [EngineOutcome] / [EngineRoundRow] / [ResearchPhaseNote] audit models),
  *  - tolerant payload parsers ([parseSearchEventPayload],
- *    [parseSourceEventPayload], [parseClarifyPayload]) — unknown event types and
- *    unknown/missing fields degrade to null/defaults, never a crash,
+ *    [parseSourceEventPayload], [parseResearchEventPayload],
+ *    [parseClarifyPayload]) — unknown event types and unknown/missing fields
+ *    degrade to null/defaults, never a crash,
  *  - decode helpers for the persisted message JSON ([decodeSourceCards],
  *    [decodeClarifyPrompt]) so a reloaded thread re-renders source cards,
  *    citation chips and clarify quick-choices exactly as the live turn did.
@@ -104,20 +108,92 @@ data class SearchSummary(
     val usedCitations: List<Int> = emptyList()
 )
 
+/**
+ * PHASE 8.2 (protocol v2): one engine's outcome from the `search engines`
+ * event — the per-engine truth (§16/§28 search.engine). [status] is the wire
+ * value verbatim: "ok" | "failed" | "empty" (anything unknown passes through
+ * and renders honestly as such).
+ */
+@Immutable
+data class EngineOutcome(
+    val id: String,
+    val status: String,
+    val count: Int? = null,
+    val error: String? = null
+)
+
+/** One round's engine outcomes — the per-round grouping the trace card renders. */
+@Immutable
+data class EngineRoundRow(
+    val round: Int,
+    val engines: List<EngineOutcome> = emptyList()
+)
+
+/** PHASE 8.2: the optional `research completed` timing block (§28). */
+@Immutable
+data class ResearchTimings(
+    val firstSearchMs: Long? = null,
+    val firstSourceMs: Long? = null,
+    val firstTokenMs: Long? = null
+)
+
+/**
+ * PHASE 8.2: research-level notes (§28) — the fold of `research` events into
+ * the expandable "Research details" audit trail. One note per received event;
+ * nothing here is synthesized. Round summaries carry the per-round truth,
+ * the completion note carries the authoritative totals and timings.
+ */
+@Immutable
+sealed interface ResearchPhaseNote {
+    data class RoundSummary(
+        val round: Int,
+        val found: Int,
+        val discovered: Int,
+        val read: Int,
+        val failed: Int,
+        val syndicatedGroups: Int? = null,
+        val elapsedMs: Long? = null
+    ) : ResearchPhaseNote
+
+    data class SynthesisStarted(val model: String? = null) : ResearchPhaseNote
+
+    data class Completed(
+        val queries: Int,
+        val sources: Int,
+        val retrieved: Int,
+        val usedCitations: List<Int> = emptyList(),
+        val totalMs: Long? = null,
+        val timings: ResearchTimings? = null
+    ) : ResearchPhaseNote
+
+    data class Failed(val reason: String? = null, val message: String? = null) : ResearchPhaseNote
+
+    data class Cancelled(val by: String? = null) : ResearchPhaseNote
+}
+
 // ---------------------------------------------------------------------------
 // Typed search/source events
 // ---------------------------------------------------------------------------
 
-/** `search` event variants (docs/search-event-protocol.md §search). */
+/** `search` event variants (docs/search-event-protocol.md §search, v1 + v2). */
 sealed interface SearchEvent {
     data class Started(val intent: String?, val depth: String?, val label: String?) : SearchEvent
     data class Query(val round: Int, val query: String, val engines: List<String>) : SearchEvent
+
+    /** PHASE 8.2 v2: per-engine truth for one round (§16/§28 search.engine). */
+    data class Engines(
+        val round: Int,
+        val engines: List<EngineOutcome>
+    ) : SearchEvent
+
     data class Results(val round: Int, val query: String, val found: Int, val engines: List<String>) : SearchEvent
     data class Round(
         val round: Int,
         val sourcesVerified: Int,
         val sourcesFailed: Int,
-        val verified: Boolean
+        val verified: Boolean,
+        /** PHASE 8.2 v2 field: syndicated-duplicate groups collapsed this round. */
+        val syndicatedGroups: Int? = null
     ) : SearchEvent
 
     data class Failed(val reason: String?) : SearchEvent
@@ -134,6 +210,19 @@ sealed interface SourceEvent {
     data class Discovered(val source: SourceCard) : SourceEvent
     data class Opening(val ordinal: Int) : SourceEvent
     data class Reading(val ordinal: Int) : SourceEvent
+
+    /**
+     * PHASE 8.2 v2 canonical name of [Completed]. The protocol emits BOTH
+     * ("BOTH are emitted; clients must treat them idempotently") — the stream
+     * fold applies one card transition and earns ONE trace row per ordinal.
+     */
+    data class Read(
+        val ordinal: Int,
+        val chars: Int?,
+        val publishedDate: String?,
+        val status: String?
+    ) : SourceEvent
+
     data class Completed(
         val ordinal: Int,
         val chars: Int?,
@@ -141,8 +230,50 @@ sealed interface SourceEvent {
         val status: String?
     ) : SourceEvent
 
+    /** PHASE 8.2 v2 (§28 evidence.extracted) — extraction really happened. */
+    data class Evidence(
+        val ordinal: Int,
+        val chars: Int?,
+        val windowChars: Int?
+    ) : SourceEvent
+
     data class Failed(val ordinal: Int, val reason: String?, val status: String?) : SourceEvent
     data class Skipped(val ordinal: Int, val reason: String?, val status: String?) : SourceEvent
+}
+
+/** PHASE 8.2 `research` event variants (docs/search-event-protocol.md v2 §research). */
+sealed interface ResearchEvent {
+    data class Started(
+        val intent: String?,
+        val depth: String?,
+        val model: String?,
+        val roundsPlanned: Int?
+    ) : ResearchEvent
+
+    data class RoundCompleted(
+        val round: Int,
+        val found: Int,
+        val discovered: Int,
+        val read: Int,
+        val failed: Int,
+        val syndicatedGroups: Int?,
+        val elapsedMs: Long?
+    ) : ResearchEvent
+
+    data class SynthesisStarted(val model: String?) : ResearchEvent
+
+    data class Completed(
+        val queries: Int,
+        val sources: Int,
+        val retrieved: Int,
+        val usedCitations: List<Int>,
+        val totalMs: Long?,
+        val timings: ResearchTimings?
+    ) : ResearchEvent
+
+    data class Failed(val reason: String?, val message: String?) : ResearchEvent
+
+    data class Cancelled(val by: String?) : ResearchEvent
 }
 
 // ---------------------------------------------------------------------------
@@ -164,6 +295,22 @@ private fun JsonObject.strings(key: String): List<String> =
 private fun JsonObject.ints(key: String): List<Int> =
     (this[key] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.intOrNull } ?: emptyList()
 
+private fun JsonObject.long(key: String): Long? =
+    (this[key] as? JsonPrimitive)?.longOrNull
+
+/** Tolerant decode of the `engines` array — malformed entries are skipped, never a crash. */
+private fun JsonObject.engineOutcomes(key: String): List<EngineOutcome> =
+    (this[key] as? JsonArray)?.mapNotNull { element ->
+        val engine = element as? JsonObject ?: return@mapNotNull null
+        val id = engine.string("id") ?: return@mapNotNull null
+        EngineOutcome(
+            id = id,
+            status = engine.string("status") ?: "unknown",
+            count = engine.int("count"),
+            error = engine.string("error")
+        )
+    } ?: emptyList()
+
 /**
  * Parse a `search` event payload. Returns null for anything unrecognized —
  * an unknown `type` or malformed JSON simply produces no trace line (the
@@ -182,6 +329,10 @@ fun parseSearchEventPayload(payload: String): SearchEvent? = runCatching {
             query = obj.string("query") ?: return@runCatching null,
             engines = obj.strings("engines")
         )
+        "engines" -> SearchEvent.Engines(
+            round = obj.int("round") ?: 0,
+            engines = obj.engineOutcomes("engines")
+        )
         "results" -> SearchEvent.Results(
             round = obj.int("round") ?: 0,
             query = obj.string("query").orEmpty(),
@@ -192,7 +343,8 @@ fun parseSearchEventPayload(payload: String): SearchEvent? = runCatching {
             round = obj.int("round") ?: 0,
             sourcesVerified = obj.int("sourcesVerified") ?: 0,
             sourcesFailed = obj.int("sourcesFailed") ?: 0,
-            verified = obj.bool("verified") ?: true
+            verified = obj.bool("verified") ?: true,
+            syndicatedGroups = obj.int("syndicatedGroups")
         )
         "failed" -> SearchEvent.Failed(reason = obj.string("reason"))
         "completed" -> SearchEvent.Completed(
@@ -220,11 +372,22 @@ fun parseSourceEventPayload(payload: String): SourceEvent? = runCatching {
         }
         "opening" -> SourceEvent.Opening(ordinal = obj.int("ordinal") ?: return@runCatching null)
         "reading" -> SourceEvent.Reading(ordinal = obj.int("ordinal") ?: return@runCatching null)
+        "read" -> SourceEvent.Read(
+            ordinal = obj.int("ordinal") ?: return@runCatching null,
+            chars = obj.int("chars"),
+            publishedDate = obj.string("publishedDate"),
+            status = obj.string("status")
+        )
         "completed" -> SourceEvent.Completed(
             ordinal = obj.int("ordinal") ?: return@runCatching null,
             chars = obj.int("chars"),
             publishedDate = obj.string("publishedDate"),
             status = obj.string("status")
+        )
+        "evidence" -> SourceEvent.Evidence(
+            ordinal = obj.int("ordinal") ?: return@runCatching null,
+            chars = obj.int("chars"),
+            windowChars = obj.int("windowChars")
         )
         "failed" -> SourceEvent.Failed(
             ordinal = obj.int("ordinal") ?: return@runCatching null,
@@ -239,6 +402,59 @@ fun parseSourceEventPayload(payload: String): SourceEvent? = runCatching {
         else -> null
     }
 }.getOrNull()
+
+/**
+ * PHASE 8.2: parse a `research` event payload (protocol v2 §research — the
+ * research-level truth). Same tolerance as the v1 parsers: an unknown `type`
+ * or malformed JSON → null; unknown fields are ignored, never a crash.
+ */
+fun parseResearchEventPayload(payload: String): ResearchEvent? = runCatching {
+    val obj = GsApiJson.parseToJsonElement(payload).jsonObject
+    when (obj.string("type")) {
+        "started" -> ResearchEvent.Started(
+            intent = obj.string("intent"),
+            depth = obj.string("depth"),
+            model = obj.string("model"),
+            roundsPlanned = obj.int("roundsPlanned")
+        )
+        "round_completed" -> ResearchEvent.RoundCompleted(
+            round = obj.int("round") ?: 0,
+            found = obj.int("found") ?: 0,
+            discovered = obj.int("discovered") ?: 0,
+            read = obj.int("read") ?: 0,
+            failed = obj.int("failed") ?: 0,
+            syndicatedGroups = obj.int("syndicatedGroups"),
+            elapsedMs = obj.long("elapsedMs")
+        )
+        "synthesis_started" -> ResearchEvent.SynthesisStarted(model = obj.string("model"))
+        "completed" -> ResearchEvent.Completed(
+            queries = obj.int("queries") ?: 0,
+            sources = obj.int("sources") ?: 0,
+            retrieved = obj.int("retrieved") ?: 0,
+            usedCitations = obj.ints("usedCitations"),
+            totalMs = obj.long("totalMs"),
+            timings = obj.researchTimings()
+        )
+        "failed" -> ResearchEvent.Failed(
+            reason = obj.string("reason"),
+            message = obj.string("message")
+        )
+        "cancelled" -> ResearchEvent.Cancelled(by = obj.string("by"))
+        else -> null
+    }
+}.getOrNull()
+
+/** Tolerant `timings` sub-object decode — absent/malformed → null, never a crash. */
+private fun JsonObject.researchTimings(): ResearchTimings? {
+    val timings = this["timings"] as? JsonObject ?: return null
+    return runCatching {
+        ResearchTimings(
+            firstSearchMs = timings.long("firstSearchMs"),
+            firstSourceMs = timings.long("firstSourceMs"),
+            firstTokenMs = timings.long("firstTokenMs")
+        )
+    }.getOrNull()
+}
 
 /**
  * Parse the clarify payload — the same JSON travels twice: live on the

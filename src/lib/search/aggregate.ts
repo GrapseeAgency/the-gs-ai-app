@@ -13,17 +13,30 @@
  */
 
 import { ENGINE_REGISTRY, enginesForIntent, type EngineQuery } from './engines'
-import type { RawResult, SearchIntent, TimeRange } from './types'
+import type { Authority, RawResult, SearchIntent, SourceType, TimeRange } from './types'
 
 export type AggregatedResult = RawResult & {
   score: number
   engines: string[]
+  sourceType: SourceType
+  authority: Authority
+  /** 8.2 §12 — syndication group id when ≥2 results carry the same story. */
+  dupGroupId?: number
+}
+
+export type EngineOutcome = {
+  id: string
+  status: 'ok' | 'empty' | 'failed'
+  count?: number
+  error?: string
 }
 
 export type MetaSearchOutcome = {
   results: AggregatedResult[]
   enginesUsed: string[]
   enginesFailed: { engine: string; error: string }[]
+  /** 8.2 §16/§28 — per-engine truth for the visible trace. */
+  engineOutcomes: EngineOutcome[]
 }
 
 // ---------------------------------------------------------------------------
@@ -89,6 +102,48 @@ function isGovOrEdu(url: string): boolean {
   } catch {
     return false
   }
+}
+
+// ---------------------------------------------------------------------------
+// PHASE 8.2 (§3/§11) — source class + authority tiers. Assigned from URL and
+// engine-kind FACTS, never from model text.
+// ---------------------------------------------------------------------------
+
+const ACADEMIC_DOMAINS = new Set([
+  'arxiv.org', 'doi.org', 'nature.com', 'science.org', 'jstor.org', 'springer.com',
+  'link.springer.com', 'sciencedirect.com', 'tandfonline.com', 'mdpi.com', 'journals.plos.org',
+  'plos.org', 'ncbi.nlm.nih.gov', 'pubmed.ncbi.nlm.nih.gov', 'scholar.google.com',
+  'acm.org', 'dl.acm.org', 'ieee.org', 'ieeexplore.ieee.org', 'cambridge.org', 'oup.com',
+  'academic.oup.com', 'mitpress.mit.edu', 'apa.org', 'royalsocietypublishing.org',
+])
+
+function classifyAuthority(url: string, engineKind: string): Authority {
+  if (engineKind === 'academic' || domainMatches(url, ACADEMIC_DOMAINS)) return 'academic'
+  if (engineKind === 'book') return 'primary' // public-domain full text / lawful book record
+  if (isGovOrEdu(url) || domainMatches(url, FIRST_PARTY_DOMAINS)) return 'primary'
+  if (domainMatches(url, JOURNALISM_DOMAINS)) return 'reputable'
+  if (domainMatches(url, AGGREGATOR_PENALTY_DOMAINS)) return 'discovery'
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, '')
+    if (host.endsWith('wikipedia.org')) return 'reference'
+  } catch {
+    // fall through
+  }
+  return 'discovery' // unclassified sites are NOT granted authority they did not earn
+}
+
+function classifySourceType(url: string, engineKind: string, isNews: boolean): SourceType {
+  if (engineKind === 'academic') return 'academic'
+  if (engineKind === 'book') return 'book'
+  if (engineKind === 'news' || isNews) return 'news'
+  if (isGovOrEdu(url) || domainMatches(url, FIRST_PARTY_DOMAINS)) return 'primary'
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, '')
+    if (host.endsWith('wikipedia.org')) return 'reference'
+  } catch {
+    // fall through
+  }
+  return 'general'
 }
 
 // ---------------------------------------------------------------------------
@@ -206,13 +261,24 @@ export async function runMetaSearch(input: MetaSearchInput): Promise<MetaSearchO
   const settled = await Promise.allSettled(tasks)
   const enginesUsed = new Set<string>()
   const enginesFailed: { engine: string; error: string }[] = []
+  const engineStats = new Map<string, EngineOutcome>()
   const byUrl = new Map<string, AggregatedResult>()
+
+  const recordEngine = (id: string, status: EngineOutcome['status'], detail?: { count?: number; error?: string }) => {
+    const prev = engineStats.get(id)
+    if (status === 'ok') {
+      engineStats.set(id, { id, status: 'ok', count: (prev?.count ?? 0) + (detail?.count ?? 0) })
+    } else if (!prev || (prev.status !== 'ok' && status === 'empty')) {
+      engineStats.set(id, { id, status, ...(detail ?? {}) })
+    }
+  }
 
   settled.forEach((res, i) => {
     const label = taskLabels[i]
     const engineId = label.slice(0, label.indexOf(':'))
     if (res.status === 'fulfilled') {
       if (res.value.length > 0) enginesUsed.add(engineId)
+      recordEngine(engineId, res.value.length > 0 ? 'ok' : 'empty', { count: res.value.length })
       for (const r of res.value) {
         const key = normalizeUrlForDedupe(r.url)
         const existing = byUrl.get(key)
@@ -227,22 +293,34 @@ export async function runMetaSearch(input: MetaSearchInput): Promise<MetaSearchO
             existing.snippet = r.snippet
           }
         } else {
-          byUrl.set(key, { ...r, url: r.url, score: 0, engines: [r.engine] })
+          byUrl.set(key, { ...r, url: r.url, score: 0, engines: [r.engine], sourceType: 'general', authority: 'discovery' })
         }
       }
     } else {
       const err = res.reason instanceof Error ? res.reason.message : String(res.reason)
       enginesFailed.push({ engine: engineId, error: err.slice(0, 120) })
+      recordEngine(engineId, 'failed', { error: err.slice(0, 80) })
     }
   })
 
-  // ---- ranking pass (§8) -------------------------------------------------
+  // ---- ranking pass (§8 + 8.2 §11) ---------------------------------------
+  const kindOf = (engineId: string): string => ENGINE_REGISTRY[engineId as keyof typeof ENGINE_REGISTRY]?.kind ?? 'general'
   const candidates = [...byUrl.values()]
   for (const c of candidates) {
+    const kind = kindOf(c.engine)
+    c.sourceType = classifySourceType(c.url, kind, isNews)
+    c.authority = classifyAuthority(c.url, kind)
     let score = 0
     score += recencyScore(c.publishedDate, input.timeRange, isNews)
     if (isGovOrEdu(c.url) || domainMatches(c.url, FIRST_PARTY_DOMAINS)) score += 3.5
     if (domainMatches(c.url, JOURNALISM_DOMAINS)) score += 2.5
+    // 8.2 §11 — authority matters per question class: an academic question
+    // must not be answered from random blogs; a book question must surface
+    // book sources; a historical/religious question prefers primary/scholarly.
+    if (input.intent === 'academic' && c.authority === 'academic') score += 3
+    if (input.intent === 'book_source' && c.sourceType === 'book') score += 3
+    if (input.intent === 'historical_religious' && (c.authority === 'primary' || c.authority === 'academic')) score += 2.5
+    if (input.intent === 'historical_religious' && c.authority === 'reference') score += 1.5
     for (const spec of SPECIALIST_DOMAINS) {
       if (spec.match.test(boundedQueries.join(' ')) && domainMatches(c.url, spec.domains)) {
         score += 2.5
@@ -262,17 +340,41 @@ export async function runMetaSearch(input: MetaSearchInput): Promise<MetaSearchO
 
   candidates.sort((a, b) => b.score - a.score)
 
+  // 8.2 §12 — syndication detection: near-identical titles across DIFFERENT
+  // domains are the same story re-reported. Tag groups; the first (best-ranked)
+  // member is the representative. Not removed — the count is honest signal.
+  {
+    let groupId = 0
+    for (let i = 0; i < candidates.length; i++) {
+      if (candidates[i].dupGroupId !== undefined) continue
+      const aWords = [...titleWords(candidates[i].title)]
+      if (aWords.length < 4) continue
+      for (let j = i + 1; j < candidates.length; j++) {
+        if (candidates[j].dupGroupId !== undefined || candidates[j].domain === candidates[i].domain) continue
+        const bWords = [...titleWords(candidates[j].title)]
+        if (bWords.length < 4) continue
+        const shared = aWords.filter((w) => bWords.includes(w)).length
+        const union = new Set([...aWords, ...bWords]).size
+        if (union > 0 && shared / union >= 0.6) {
+          candidates[j].dupGroupId = candidates[i].dupGroupId ?? (candidates[i].dupGroupId = ++groupId)
+        }
+      }
+    }
+  }
+
   // Domain diversity: at most 2 per domain near the top (§9 — five repeats of
-  // the same wire story is not evidence, it is echo).
+  // the same wire story is not evidence, it is echo). Academic/book intents
+  // allow 4: a scholarly index legitimately returns many same-registry hits.
+  const perDomainCap = input.intent === 'academic' || input.intent === 'book_source' ? 4 : 2
   const perDomain = new Map<string, number>()
   const diverse: AggregatedResult[] = []
   for (const c of candidates) {
     const n = perDomain.get(c.domain) ?? 0
-    if (n >= 2 && diverse.length < input.limit) continue
+    if (n >= perDomainCap && diverse.length < input.limit) continue
     perDomain.set(c.domain, n + 1)
     diverse.push(c)
     if (diverse.length >= input.limit) break
   }
 
-  return { results: diverse, enginesUsed: [...enginesUsed], enginesFailed }
+  return { results: diverse, enginesUsed: [...enginesUsed], enginesFailed, engineOutcomes: [...engineStats.values()] }
 }

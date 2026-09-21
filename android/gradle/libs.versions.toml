@@ -15,6 +15,7 @@ ktor = "2.3.12"
 serializationJson = "1.7.3"
 room = "2.6.1"
 profileinstaller = "1.4.1"
+coil = "2.7.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -30,6 +31,12 @@ androidx-compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "u
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
 androidx-compose-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended" }
 androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
+
+# PHASE 8.2 (Task 8.2-a): source-tile favicon attempt — SubcomposeAsyncImage
+# loads https://icons.duckduckgo.com/ip3/<domain>.ico fully async; the existing
+# domain-monogram tile stays as the placeholder AND error fallback. The ONE
+# allowed new dependency for this task.
+coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
 hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref = "hilt" }
 hilt-android-compiler = { group = "com.google.dagger", name = "hilt-android-compiler", version.ref = "hilt" }
 androidx-hilt-navigation-compose = { group = "androidx.hilt", name = "hilt-navigation-compose", version.ref = "hiltNavigationCompose" }

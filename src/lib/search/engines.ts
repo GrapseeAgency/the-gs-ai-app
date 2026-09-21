@@ -33,7 +33,7 @@ export type EngineQuery = {
 
 export type EngineAdapter = {
   id: SearchEngineId
-  kind: 'news' | 'general' | 'reference'
+  kind: 'news' | 'general' | 'reference' | 'academic' | 'book'
   run: (q: EngineQuery) => Promise<RawResult[]>
 }
 
@@ -105,14 +105,18 @@ export function parseDate(raw: string | null | undefined): string | null {
   return Number.isNaN(d.getTime()) ? null : d.toISOString()
 }
 
-async function fetchText(url: string, accept: string): Promise<string> {
+async function fetchText(url: string, accept: string, ua: string = UA): Promise<string> {
   const res = await fetch(url, {
-    headers: { 'User-Agent': UA, Accept: accept, 'Accept-Language': 'en-US,en;q=0.9' },
+    headers: { 'User-Agent': ua, Accept: accept, 'Accept-Language': 'en-US,en;q=0.9' },
     signal: AbortSignal.timeout(ENGINE_TIMEOUT_MS),
   })
   if (!res.ok) throw new Error(`engine http ${res.status}`)
   return res.text()
 }
+
+// Wikimedia UA policy (verified live 2026-09-21): generic browser UAs from
+// datacenter/automation contexts get 403; a DESCRIPTIVE app UA is served.
+const WIKIMEDIA_UA = 'GS-AI-App/0.67 (https://grapsee.agency; contact@grapsee.agency)'
 
 // ---------------------------------------------------------------------------
 // engines
@@ -291,11 +295,22 @@ export const duckduckgoLite: EngineAdapter = {
   },
 }
 
-/** Wikipedia API — encyclopedic/factual grounding for entity questions. */
+/** Wikipedia API — encyclopedic/factual grounding for entity questions.
+ *  One bounded retry: transient 403 bursts were observed live (2026-09-21). */
 export const wikipedia: EngineAdapter = {
   id: 'wikipedia',
   kind: 'reference',
   run: async (q) => {
+    try {
+      return await wikipediaSearch(q)
+    } catch {
+      await new Promise((r) => setTimeout(r, 800))
+      return wikipediaSearch(q)
+    }
+  },
+}
+
+async function wikipediaSearch(q: EngineQuery): Promise<RawResult[]> {
     const params = new URLSearchParams({
       action: 'query',
       list: 'search',
@@ -304,7 +319,7 @@ export const wikipedia: EngineAdapter = {
       srlimit: String(Math.min(q.limit, 5)),
     })
     const json = JSON.parse(
-      await fetchText(`https://en.wikipedia.org/w/api.php?${params.toString()}`, 'application/json')
+      await fetchText(`https://en.wikipedia.org/w/api.php?${params.toString()}`, 'application/json', WIKIMEDIA_UA)
     ) as { query?: { search?: { title?: unknown; snippet?: unknown }[] } }
     const hits = json?.query?.search ?? []
     const out: RawResult[] = []
@@ -324,7 +339,6 @@ export const wikipedia: EngineAdapter = {
       if (out.length >= q.limit) break
     }
     return out
-  },
 }
 
 /**
@@ -404,6 +418,166 @@ export const searxng: EngineAdapter = {
   },
 }
 
+// ---------------------------------------------------------------------------
+// PHASE 8.2 engines — books & scholarly (§10). Lawful, key-less, metadata or
+// legally free full-text APIs only. Full-text claims are made ONLY when the
+// retrieval layer actually read the text (gutenberg plain-text files do);
+// metadata-only hits stay snippet_only and are labelled honestly.
+// ---------------------------------------------------------------------------
+
+export const openLibrary: EngineAdapter = {
+  id: 'openlibrary',
+  kind: 'book',
+  run: async (q) => {
+    // Title-match discipline mirrors gutenberg: drop content words progressively.
+    const words = q.query.split(/\s+/).filter(Boolean)
+    const attempts = [...new Set([q.query, words.slice(0, 3).join(' ')])].filter((a) => a.length >= 3)
+    for (const attempt of attempts) {
+      const out = await parseOpenLibrarySearch(attempt, q.limit)
+      if (out.length > 0) return out
+    }
+    return []
+  },
+}
+
+async function parseOpenLibrarySearch(query: string, limit: number): Promise<RawResult[]> {
+  const params = new URLSearchParams({ q: query, limit: String(Math.min(limit, 8)), fields: 'key,title,author_name,first_publish_year' })
+  const json = JSON.parse(
+    await fetchText(`https://openlibrary.org/search.json?${params.toString()}`, 'application/json')
+  ) as { docs?: { key?: unknown; title?: unknown; author_name?: unknown; first_publish_year?: unknown }[] }
+  const out: RawResult[] = []
+  for (const d of json.docs ?? []) {
+    const key = typeof d.key === 'string' ? d.key : ''
+    const title = typeof d.title === 'string' ? d.title : ''
+    if (!key.startsWith('/works/') || !title) continue
+    const authors = Array.isArray(d.author_name) ? d.author_name.filter((a): a is string => typeof a === 'string').slice(0, 2) : []
+    const year = typeof d.first_publish_year === 'number' ? d.first_publish_year : null
+    out.push({
+      url: `https://openlibrary.org${key}`,
+      title: authors.length > 0 ? `${title} — ${authors.join(', ')}` : title,
+      snippet: [authors.join(', '), year ? `first published ${year}` : ''].filter(Boolean).join(' · '),
+      domain: 'openlibrary.org',
+      publishedDate: null,
+      rank: out.length + 1,
+      engine: 'openlibrary',
+    })
+    if (out.length >= limit) break
+  }
+  return out
+}
+
+/**
+ * Project Gutenberg — PUBLIC-DOMAIN full texts. Search uses gutenberg.org's
+ * own HTML search (gutendex.com 403s datacenter IPs — observed live 2026-09-21).
+ * Gutenberg search matches TITLE/AUTHOR words only, so content-word queries
+ * ("Frankenstein creature demands Victor") return nothing — the adapter
+ * retries with progressively shorter title-like prefixes (bounded, 8.2 §33).
+ * The result IS the full text (/ebooks/{id}.txt.utf-8), so retrieval reads
+ * REAL passages.
+ */
+export const gutenberg: EngineAdapter = {
+  id: 'gutenberg',
+  kind: 'book',
+  run: async (q) => {
+    const words = q.query.split(/\s+/).filter(Boolean)
+    const attempts = [...new Set([q.query, words.slice(0, 3).join(' '), words.slice(0, 2).join(' ')])].filter((a) => a.length >= 2)
+    for (const attempt of attempts) {
+      const out = await parseGutenbergSearch(attempt, q.limit)
+      if (out.length > 0) return out
+    }
+    return []
+  },
+}
+
+async function parseGutenbergSearch(query: string, limit: number): Promise<RawResult[]> {
+  const html = await fetchText(
+    `https://www.gutenberg.org/ebooks/search/?query=${encodeURIComponent(query)}`,
+    'text/html,application/xhtml+xml,*/*;q=0.8'
+  )
+  const out: RawResult[] = []
+  for (const block of html.match(/<li class="booklink">[\s\S]*?<\/li>/gi) ?? []) {
+    const link = block.match(/<a[^>]*href="(?:https:\/\/www\.gutenberg\.org)?(\/ebooks\/\d+)"[^>]*>/i)?.[1]
+    const title = stripTags(block.match(/<span class="title">([\s\S]*?)<\/span>/i)?.[1] ?? '')
+    if (!link || !title) continue
+    const author = stripTags(block.match(/<span class="subtitle">([\s\S]*?)<\/span>/i)?.[1] ?? '')
+    out.push({
+      // §33 — the result IS the public-domain full text (gutenberg serves
+      // /ebooks/{id}.txt.utf-8), so retrieval reads REAL passages.
+      url: `https://www.gutenberg.org${link}.txt.utf-8`,
+      title: author ? `${title} — ${author}` : title,
+      snippet: 'Public-domain full text available at Project Gutenberg.',
+      domain: 'gutenberg.org',
+      publishedDate: null,
+      rank: out.length + 1,
+      engine: 'gutenberg',
+    })
+    if (out.length >= limit) break
+  }
+  return out
+}
+
+/** arXiv — scholarly preprints (Atom API, abstracts lawfully served). */
+export const arxiv: EngineAdapter = {
+  id: 'arxiv',
+  kind: 'academic',
+  run: async (q) => {
+    const xml = await fetchText(
+      `http://export.arxiv.org/api/query?search_query=all:${encodeURIComponent(q.query)}&start=0&max_results=${Math.min(q.limit, 8)}&sortBy=relevance`,
+      'application/atom+xml, application/xml, text/xml, */*'
+    )
+    const out: RawResult[] = []
+    for (const block of xml.match(/<entry[\s\S]*?<\/entry>/gi) ?? []) {
+      const title = stripTags(tagContent(block, 'title'))
+      const idLink = block.match(/<id>([\s\S]*?)<\/id>/i)?.[1]?.trim() ?? ''
+      if (!title || !/^https?:\/\//.test(idLink)) continue
+      const summary = stripTags(tagContent(block, 'summary')).slice(0, 300)
+      out.push({
+        url: idLink,
+        title,
+        snippet: summary,
+        domain: safeHost(idLink) || 'arxiv.org',
+        publishedDate: parseDate(tagContent(block, 'published')),
+        rank: out.length + 1,
+        engine: 'arxiv',
+      })
+      if (out.length >= q.limit) break
+    }
+    return out
+  },
+}
+
+/** Crossref — scholarly metadata index (journals, DOIs; lawful public API). */
+export const crossref: EngineAdapter = {
+  id: 'crossref',
+  kind: 'academic',
+  run: async (q) => {
+    const params = new URLSearchParams({ query: q.query, rows: String(Math.min(q.limit, 8)), select: 'title,URL,DOI,issued,container-title' })
+    const json = JSON.parse(
+      await fetchText(`https://api.crossref.org/works?${params.toString()}`, 'application/json')
+    ) as { message?: { items?: { title?: unknown; URL?: unknown; DOI?: unknown; issued?: { 'date-parts'?: number[][] }; 'container-title'?: unknown }[] } }
+    const out: RawResult[] = []
+    for (const it of json.message?.items ?? []) {
+      const title = Array.isArray(it.title) && typeof it.title[0] === 'string' ? it.title[0] : ''
+      const url = typeof it.URL === 'string' && /^https?:\/\//.test(it.URL) ? it.URL : typeof it.DOI === 'string' ? `https://doi.org/${it.DOI}` : ''
+      if (!title || !url) continue
+      const venue = Array.isArray(it['container-title']) && typeof it['container-title'][0] === 'string' ? it['container-title'][0] : ''
+      const parts = it.issued?.['date-parts']?.[0]
+      const publishedDate = Array.isArray(parts) && parts.length >= 3 ? new Date(Date.UTC(parts[0], parts[1] - 1, parts[2])).toISOString() : null
+      out.push({
+        url,
+        title: venue ? `${title} — ${venue}` : title,
+        snippet: venue ? `Published in ${venue}.` : '',
+        domain: safeHost(url),
+        publishedDate,
+        rank: out.length + 1,
+        engine: 'crossref',
+      })
+      if (out.length >= q.limit) break
+    }
+    return out
+  },
+}
+
 export const ENGINE_REGISTRY: Partial<Record<SearchEngineId, EngineAdapter>> = {
   'bing-news-rss': bingNewsRss,
   'google-news-rss': googleNewsRss,
@@ -412,21 +586,40 @@ export const ENGINE_REGISTRY: Partial<Record<SearchEngineId, EngineAdapter>> = {
   wikipedia,
   'z-ai': zaiWebSearch,
   searxng,
+  openlibrary: openLibrary,
+  gutenberg,
+  arxiv,
+  crossref,
 }
 
 /**
- * Engine selection per intent (§7/§8/§17). Order matters only as tie-break
+ * Engine selection per intent (8.2 §7/§10/§11). Order matters only as tie-break
  * priority — the aggregator runs the set in parallel.
  * SearXNG, when configured, leads the general set.
  */
 export function enginesForIntent(intent: string, isNews: boolean, officialOnly: boolean): SearchEngineId[] {
   const searx = process.env.SEARXNG_URL ? (['searxng'] as SearchEngineId[]) : []
+  // 8.2 §11/§23 — "official sources only": first-party-friendly engines only;
+  // no aggregator/news engines, no third-party provider search.
+  if (officialOnly) {
+    return [...searx, 'bing-web', 'wikipedia', 'duckduckgo-lite']
+  }
+  if (intent === 'academic') {
+    return [...searx, 'arxiv', 'crossref', 'wikipedia', 'bing-web', 'duckduckgo-lite']
+  }
+  if (intent === 'book_source') {
+    return [...searx, 'gutenberg', 'openlibrary', 'bing-web', 'duckduckgo-lite']
+  }
+  if (intent === 'historical_religious') {
+    // Primary/reference first (8.2 §11): encyclopedic grounding + scholarly index.
+    return [...searx, 'wikipedia', 'bing-web', 'duckduckgo-lite', 'crossref', 'z-ai']
+  }
   if (isNews) {
     return officialOnly
       ? [...searx, 'bing-web', 'duckduckgo-lite']
       : [...searx, 'bing-news-rss', 'google-news-rss', 'duckduckgo-lite', 'z-ai']
   }
-  if (intent === 'factual' || intent === 'research') {
+  if (intent === 'factual' || intent === 'research' || intent === 'comparison') {
     return [...searx, 'bing-web', 'duckduckgo-lite', 'wikipedia', 'bing-news-rss', 'z-ai']
   }
   return [...searx, 'bing-web', 'duckduckgo-lite', 'z-ai']

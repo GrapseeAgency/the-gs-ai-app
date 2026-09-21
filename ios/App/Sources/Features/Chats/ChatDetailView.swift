@@ -398,6 +398,14 @@ struct ChatDetailView: View {
                     if !message.isStreaming, let summary = message.traceSummary {
                         SearchTraceSummaryView(text: summary)
                     }
+                    // PHASE 8.2: the expandable research audit — live from
+                    // the received events, after done from the turn's
+                    // memory-only steps + persisted sources; a reloaded
+                    // thread re-derives from the sources alone. Self-hides
+                    // when the turn carries no research detail at all.
+                    ResearchDetailsView(
+                        steps: message.isStreaming ? vm.traceSteps : (message.traceSteps ?? []),
+                        sources: message.isStreaming ? vm.liveSources : (message.sources ?? []))
                 }
                 MessageBubble(
                     message: message,

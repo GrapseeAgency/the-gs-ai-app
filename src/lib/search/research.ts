@@ -16,38 +16,42 @@
  */
 
 import { runMetaSearch } from './aggregate'
+import { browserExtract, browserFallbackEnabled } from './browserExtract'
 import { retrieveAndExtract, type ExtractedArticle } from './extract'
 import { sourceIdFor } from '@/lib/websearch'
 import type { ResearchSource, SearchEventEmitter, SearchIntent, TimeRange } from './types'
 import { NOOP_EMIT } from './types'
 
 // ---------------------------------------------------------------------------
-// Budgets (§18) — every number explicit.
+// Budgets (8.2 §24) — every number explicit, structurally loop-proof.
+//   FAST: 1 round · 3 queries · 8 sources · 4 reads
+//   DEEP: 3 rounds · 8 queries · 20 candidates · 10 reads
 // ---------------------------------------------------------------------------
 
 export const RESEARCH_BUDGET = {
   quick: {
     maxRounds: 1,
-    maxQueriesPerRound: 2,
-    maxResultsDiscovered: 12,
+    maxQueriesPerRound: 3,
+    maxResultsDiscovered: 8,
     maxRetrievalSources: 4,
     maxFetches: 4,
     wallClockMs: 26_000,
     retrieveTimeoutMs: 9_000,
   },
   deep: {
-    maxRounds: 2,
-    maxQueriesPerRound: 2,
-    maxResultsDiscovered: 16,
-    maxRetrievalSources: 7,
+    maxRounds: 3,
+    maxQueriesPerRound: 3,
+    maxResultsDiscovered: 20,
+    maxRetrievalSources: 10,
     maxFetches: 10,
-    wallClockMs: 44_000,
+    wallClockMs: 90_000,
     retrieveTimeoutMs: 9_000,
   },
 } as const
 
 const RETRIEVAL_CONCURRENCY = 3
 const MIN_RETRIEVED_FOR_SUFFICIENCY = 2
+const BROWSER_FALLBACK_MAX_PAGES = 2
 
 export type ResearchInput = {
   queries: string[]
@@ -61,12 +65,21 @@ export type ResearchInput = {
   deadlineAt: number
 }
 
+export type ResearchTimings = {
+  firstSearchMs?: number
+  firstSourceMs?: number
+  firstReadMs?: number
+  totalMs?: number
+}
+
 export type ResearchOutcome = {
   ok: boolean
   sources: ResearchSource[]
   queriesRun: string[]
   enginesUsed: string[]
   rounds: number
+  timings: ResearchTimings
+  syndicatedGroups: number
   failure?: { kind: 'no_results' | 'all_failed' | 'timeout'; message: string }
 }
 
@@ -83,7 +96,12 @@ async function retrieveOne(
   source: ResearchSource,
   timeoutMs: number
 ): Promise<{ article: ExtractedArticle; finalUrl: string }> {
-  const res = await retrieveAndExtract(source.url, timeoutMs)
+  // 8.2 §33 — long sources (book full texts) get a bigger extract budget and
+  // a query-centered window so a REAL relevant passage reaches the evidence.
+  const res = await retrieveAndExtract(source.url, timeoutMs, {
+    maxTextChars: 60_000,
+    windowQuery: source.query,
+  })
   return res
 }
 
@@ -114,12 +132,15 @@ function evidenceWindow(extract: string, query: string, windowChars = 1_800): st
 export async function runResearch(input: ResearchInput): Promise<ResearchOutcome> {
   const budget = RESEARCH_BUDGET[input.depth]
   const emit = input.emit ?? NOOP_EMIT
-  const hardDeadline = Math.min(input.deadlineAt, Date.now() + budget.wallClockMs)
+  const startedAt = Date.now()
+  const hardDeadline = Math.min(input.deadlineAt, startedAt + budget.wallClockMs)
+  const timings: ResearchTimings = {}
   const queriesRun: string[] = []
   const enginesUsed = new Set<string>()
   const sources: ResearchSource[] = []
   let fetches = 0
-
+  let browserReads = 0
+  let syndicatedGroups = 0
   const outOfTime = () => Date.now() >= hardDeadline
 
   for (let round = 1; round <= budget.maxRounds; round++) {
@@ -145,6 +166,11 @@ export async function runResearch(input: ResearchInput): Promise<ResearchOutcome
       break
     }
     meta.enginesUsed.forEach((e) => enginesUsed.add(e))
+    if (timings.firstSearchMs === undefined) timings.firstSearchMs = Date.now() - startedAt
+    // 8.2 §16/§28 — per-engine truth for the visible trace (search.engine).
+    if (meta.engineOutcomes.length > 0) {
+      emit('search', { type: 'engines', round, engines: meta.engineOutcomes })
+    }
     for (const q of roundQueries) {
       emit('search', {
         type: 'results',
@@ -163,6 +189,8 @@ export async function runResearch(input: ResearchInput): Promise<ResearchOutcome
           queriesRun,
           enginesUsed: [...enginesUsed],
           rounds: round,
+          timings: { ...timings, totalMs: Date.now() - startedAt },
+          syndicatedGroups: 0,
           failure: {
             kind: 'no_results',
             message: `Search ran (${enginesUsed.size} engines responded) but returned no usable results.`,
@@ -213,7 +241,23 @@ export async function runResearch(input: ResearchInput): Promise<ResearchOutcome
       engine: r.engine,
       searchRank: r.rank,
       status: 'discovered',
+      sourceType: r.sourceType,
+      authority: r.authority,
     }))
+    // 8.2 §12 — syndication mapping: within a dupGroup the best-ranked member
+    // is the representative; the rest point at its ordinal.
+    {
+      const repOf = new Map<number, number>()
+      for (let i = 0; i < roundSources.length; i++) {
+        const gid = [...retrievalOrder, ...discoveryOnly][i].dupGroupId
+        if (gid === undefined) continue
+        const rep = repOf.get(gid)
+        if (rep === undefined) repOf.set(gid, roundSources[i].ordinal)
+        else roundSources[i].syndicatedOf = rep
+      }
+      syndicatedGroups = Math.max(syndicatedGroups, repOf.size)
+    }
+    if (timings.firstSourceMs === undefined) timings.firstSourceMs = Date.now() - startedAt
 
     for (const s of roundSources) {
       emit('source', {
@@ -244,8 +288,34 @@ export async function runResearch(input: ResearchInput): Promise<ResearchOutcome
       emit('source', { type: 'opening', ordinal: s.ordinal })
       emit('source', { type: 'reading', ordinal: s.ordinal })
       try {
-        const { article, finalUrl } = await retrieveOne(s, budget.retrieveTimeoutMs)
+        // 8.2 §13/§14 — browser fallback: SECONDARY, bounded, deep turns only.
+        // A JS-walled page the HTTP fetcher could not read may still be truly
+        // readable; max 2 per turn, 1 at a time, hard kill after 30s.
+        const attempt = async (): Promise<{ article: ExtractedArticle; finalUrl: string; viaBrowser: boolean }> => {
+          try {
+            return { ...(await retrieveOne(s, budget.retrieveTimeoutMs)), viaBrowser: false }
+          } catch (httpErr) {
+            if (
+              input.depth !== 'deep' ||
+              !browserFallbackEnabled() ||
+              browserReads >= BROWSER_FALLBACK_MAX_PAGES ||
+              outOfTime()
+            ) {
+              throw httpErr
+            }
+            browserReads += 1
+            emit('source', { type: 'reading', ordinal: s.ordinal, via: 'browser' })
+            const page = await browserExtract(s.url)
+            return {
+              article: { text: page.text, chars: page.chars, title: null, byline: null, datePublished: null },
+              finalUrl: s.url,
+              viaBrowser: true,
+            }
+          }
+        }
+        const { article, finalUrl, viaBrowser } = await attempt()
         fetches += 1
+        if (timings.firstReadMs === undefined) timings.firstReadMs = Date.now() - startedAt
         if (article.chars < 120) {
           s.status = 'snippet_only'
           s.failReason = 'page had no readable article text'
@@ -257,7 +327,16 @@ export async function runResearch(input: ResearchInput): Promise<ResearchOutcome
         s.extractedTitle = article.title ?? undefined
         s.extractedDate = article.datePublished
         s.extractedChars = article.chars
+        if (viaBrowser) s.retrievalVia = 'browser'
         if (finalUrl && finalUrl !== s.url) s.url = finalUrl
+        // protocol v2 — `read` is canonical; `completed` stays for v1 clients.
+        emit('source', {
+          type: 'read',
+          ordinal: s.ordinal,
+          chars: article.chars,
+          publishedDate: s.extractedDate ?? s.publishedDate,
+          status: 'retrieved',
+        })
         emit('source', {
           type: 'completed',
           ordinal: s.ordinal,
@@ -265,6 +344,8 @@ export async function runResearch(input: ResearchInput): Promise<ResearchOutcome
           publishedDate: s.extractedDate ?? s.publishedDate,
           status: 'retrieved',
         })
+        // 8.2 §28 evidence.extracted — extraction really happened.
+        emit('source', { type: 'evidence', ordinal: s.ordinal, chars: article.chars, windowChars: 1_800 })
         completed += 1
       } catch (e) {
         const raw = e instanceof Error ? e.message : String(e)
@@ -310,6 +391,19 @@ export async function runResearch(input: ResearchInput): Promise<ResearchOutcome
       sourcesVerified: retrievedTotal,
       sourcesFailed: sources.filter((s) => s.status === 'failed').length,
       verified: retrievedTotal > 0,
+      syndicatedGroups: roundSources.filter((s) => s.syndicatedOf !== undefined).length,
+      elapsedMs: Date.now() - startedAt,
+    })
+    // 8.2 §28 research.round.completed.
+    emit('research', {
+      type: 'round_completed',
+      round,
+      found: roundSources.length,
+      discovered: roundSources.length,
+      read: roundSources.filter((s) => s.status === 'retrieved').length,
+      failed: roundSources.filter((s) => s.status === 'failed').length,
+      syndicatedGroups: roundSources.filter((s) => s.syndicatedOf !== undefined).length,
+      elapsedMs: Date.now() - startedAt,
     })
 
     // Sufficiency (§19): enough real evidence => STOP SEARCHING, answer.
@@ -327,6 +421,8 @@ export async function runResearch(input: ResearchInput): Promise<ResearchOutcome
       queriesRun,
       enginesUsed: [...enginesUsed],
       rounds: Math.min(budget.maxRounds, Math.max(1, queriesRun.length)),
+      timings: { ...timings, totalMs: Date.now() - startedAt },
+      syndicatedGroups: 0,
       failure: {
         kind: 'no_results',
         message: enginesUsed.size > 0 ? 'No usable results were found.' : 'All search engines failed or were throttled.',
@@ -353,6 +449,8 @@ export async function runResearch(input: ResearchInput): Promise<ResearchOutcome
     queriesRun,
     enginesUsed: [...enginesUsed],
     rounds: Math.max(1, Math.min(budget.maxRounds, queriesRun.length)),
+    timings: { ...timings, totalMs: Date.now() - startedAt },
+    syndicatedGroups: sources.filter((s) => s.syndicatedOf !== undefined).length,
     failure:
       retrievedCount === 0
         ? {
@@ -374,6 +472,9 @@ export function serializeSource(s: ResearchSource): Record<string, unknown> {
     publishedDate: s.publishedDate,
     status: s.status,
     query: s.query,
+    sourceType: s.sourceType,
+    authority: s.authority,
+    ...(s.syndicatedOf !== undefined ? { syndicatedOf: s.syndicatedOf } : {}),
   }
 }
 

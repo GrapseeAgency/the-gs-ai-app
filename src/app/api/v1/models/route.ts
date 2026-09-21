@@ -94,5 +94,11 @@ const MODELS: {
 ]
 
 export async function GET() {
-  return NextResponse.json({ models: MODELS })
+  // PHASE 8.2 §25 — ONE capability contract for EVERY tier. Search is a backend
+  // capability: the selected model may differ, the SEARCH SERVICE must not.
+  const searchCapabilities = { webSearch: true, research: true, sourceOpen: true, sourceRead: true }
+  return NextResponse.json({
+    models: MODELS.map((m) => ({ ...m, searchCapabilities })),
+    searchCapabilities,
+  })
 }

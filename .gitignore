@@ -77,6 +77,9 @@ ios/GSApp.xcodeproj/
 cmdline-tools.zip
 *.zip
 
+/db/vault.db
+/db/vault.db-*
+
 # PHASE 5 attachment storage (runtime user content — never committed)
 /uploads/
 .secrets/

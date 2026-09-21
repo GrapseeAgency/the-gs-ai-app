@@ -4,7 +4,9 @@ import SwiftUI
  * PHASE 8.1 — the search trace card (docs/search-event-protocol.md).
  * Renders ONLY steps that actually arrived as `search`/`source` events (plus
  * the synthesis start from `status`) — no timers, no fabricated steps, no
- * optimistic guesses; an event that never came simply never shows.
+ * optimistic guesses; an event that never came simply never shows. PHASE
+ * 8.2 (v2) adds the per-engine status rows, the evidence line and the
+ * research-level event family to the same honest pipeline.
  *
  * Lifecycle: while the turn streams it sits ABOVE the live bubble as a
  * compact expandable card; after `done` the parent swaps it for the one-line
@@ -83,7 +85,13 @@ private struct SearchTraceRow: View {
                     .font(Aero.caption())
                     .foregroundStyle(Aero.text)
                     .fixedSize(horizontal: false, vertical: true)
-                if !detail.isEmpty {
+                if case .engines(_, let outcomes) = step.kind {
+                    // v2 per-engine truth — one sub-row per engine, ✓/✕ plus
+                    // the count it contributed or the real error text.
+                    ForEach(Array(outcomes.enumerated()), id: \.offset) { _, outcome in
+                        EngineOutcomeRow(outcome: outcome)
+                    }
+                } else if !detail.isEmpty {
                     Text(detail)
                         .font(Aero.metadata())
                         .foregroundStyle(Aero.textTertiary)
@@ -94,17 +102,27 @@ private struct SearchTraceRow: View {
         .accessibilityElement(children: .combine)
     }
 
+    private func syndicatedGroupText(_ n: Int) -> String {
+        n == 1 ? "1 syndicated group" : "\(n) syndicated groups"
+    }
+
     private var symbolName: String {
         switch step.kind {
         case .started: return "magnifyingglass"
         case .query: return "magnifyingglass"
+        case .engines: return "network"
         case .results: return "list.bullet"
         case .discovered: return "doc.text"
         case .reading: return "doc.text.magnifyingglass"
         case .sourceCompleted: return "checkmark.circle"
+        case .evidence: return "text.quote"
         case .sourceFailed: return "xmark.circle"
         case .sourceSkipped: return "minus.circle"
         case .roundSummary: return "checkmark.seal"
+        case .researchStarted: return "magnifyingglass"
+        case .researchRound: return "checkmark.seal"
+        case .researchFailed: return "exclamationmark.triangle"
+        case .researchCancelled: return "stop.circle"
         case .searchFailed: return "exclamationmark.triangle"
         case .completedSummary: return "checkmark.seal"
         case .composing: return "pencil"
@@ -113,9 +131,12 @@ private struct SearchTraceRow: View {
 
     private var iconColor: Color {
         switch step.kind {
-        case .sourceFailed, .searchFailed: return Aero.textMuted
-        case .sourceCompleted, .roundSummary, .completedSummary: return Aero.accent
-        default: return Aero.textTertiary
+        case .sourceFailed, .searchFailed, .researchFailed, .researchCancelled:
+            return Aero.textMuted
+        case .sourceCompleted, .roundSummary, .completedSummary, .researchRound:
+            return Aero.accent
+        default:
+            return Aero.textTertiary
         }
     }
 
@@ -125,6 +146,8 @@ private struct SearchTraceRow: View {
             return label?.isEmpty == false ? "Searching \u{201C}\(label!)\u{201D}" : "Search started"
         case .query(_, let text, _):
             return text.isEmpty ? "Running a query" : text
+        case .engines(let round, _):
+            return round > 0 ? "Round \(round) engines" : "Engine status"
         case .results(_, let found, _, _):
             return "\(found) \(found == 1 ? "result" : "results")"
         case .discovered(_, let title, let domain):
@@ -134,15 +157,29 @@ private struct SearchTraceRow: View {
             return "Reading source \(ordinal)"
         case .sourceCompleted(let ordinal, _):
             return "Read source \(ordinal)"
+        case .evidence(let ordinal, _, _):
+            return "Extracted evidence from source \(ordinal)"
         case .sourceFailed(let ordinal, _):
             return "Couldn't read source \(ordinal)"
         case .sourceSkipped(let ordinal, _):
             return "Skipped source \(ordinal)"
-        case .roundSummary(let round, let verified, let failed):
-            return "Round \(round) \u{2014} \(verified) verified, \(failed) failed"
+        case .roundSummary(let round, let verified, let failed, let syndicated):
+            var line = "Round \(round) \u{2014} \(verified) verified, \(failed) failed"
+            if let syndicated, syndicated > 0 { line += " \u{00B7} \(syndicatedGroupText(syndicated))" }
+            return line
+        case .researchStarted:
+            return "Research started"
+        case .researchRound(let round, let found, let read, let failed, let syndicated):
+            var line = "Round \(round) \u{2014} \(found) found, \(read) read, \(failed) failed"
+            if let syndicated, syndicated > 0 { line += " \u{00B7} \(syndicatedGroupText(syndicated))" }
+            return line
+        case .researchFailed:
+            return "Research failed"
+        case .researchCancelled:
+            return "Research cancelled"
         case .searchFailed:
             return "Search failed"
-        case .completedSummary(_, let sources, let retrieved):
+        case .completedSummary(_, let sources, let retrieved, _):
             return "Search complete \u{2014} \(sources) \(sources == 1 ? "source" : "sources"), \(retrieved) \(retrieved == 1 ? "page" : "pages") read"
         case .composing:
             return "Composing the answer"
@@ -160,12 +197,27 @@ private struct SearchTraceRow: View {
         case .sourceCompleted(_, let chars):
             guard let chars, chars > 0 else { return "" }
             return "\(chars) characters"
+        case .evidence(_, let chars, let windowChars):
+            var parts: [String] = []
+            if let chars, chars > 0 { parts.append("\(chars) characters") }
+            if let windowChars, windowChars > 0 { parts.append("\(windowChars)-character window") }
+            return parts.joined(separator: " · ")
         case .sourceFailed(_, let reason):
             return reason.replacingOccurrences(of: "_", with: " ")
         case .sourceSkipped(_, let reason):
             return reason.replacingOccurrences(of: "_", with: " ")
-        case .searchFailed(let reason):
+        case .researchStarted(let depth, let roundsPlanned):
+            var parts: [String] = []
+            if let depth, !depth.isEmpty { parts.append(depth) }
+            if let roundsPlanned, roundsPlanned > 0 {
+                parts.append(roundsPlanned == 1 ? "1 round planned" : "\(roundsPlanned) rounds planned")
+            }
+            return parts.joined(separator: " · ")
+        case .researchFailed(let reason):
             return reason.replacingOccurrences(of: "_", with: " ")
+        case .researchCancelled(let by):
+            guard let by, !by.isEmpty else { return "" }
+            return "by \(by)"
         default:
             return ""
         }
@@ -190,5 +242,37 @@ struct SearchTraceSummaryView: View {
                 .lineLimit(1)
         }
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// One per-engine outcome line (v2 `search:engines`) — ✓ with the result
+/// count the engine contributed, or ✕ with the real error text. Shared by
+/// the live trace rows and the research-details audit. Monochrome tokens
+/// only: success/failure read through glyphs and copy, not hue.
+struct EngineOutcomeRow: View {
+
+    let outcome: SearchEngineOutcome
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: outcome.ok ? "checkmark" : "xmark")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(outcome.ok ? Aero.accent : Aero.textMuted)
+            Text(outcome.id.isEmpty ? "engine" : outcome.id)
+                .font(Aero.metadata())
+                .foregroundStyle(Aero.textSecondary)
+                .lineLimit(1)
+            if outcome.ok, let count = outcome.count {
+                Text(count == 1 ? "1 result" : "\(count) results")
+                    .font(Aero.metadata())
+                    .foregroundStyle(Aero.textTertiary)
+                    .lineLimit(1)
+            } else if let error = outcome.error, !error.isEmpty {
+                Text(error.replacingOccurrences(of: "_", with: " "))
+                    .font(Aero.metadata())
+                    .foregroundStyle(Aero.textTertiary)
+                    .lineLimit(1)
+            }
+        }
     }
 }

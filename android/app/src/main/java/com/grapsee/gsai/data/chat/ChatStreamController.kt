@@ -41,6 +41,12 @@ import kotlinx.coroutines.flow.update
  * request). Every event application below is a pure StreamState transform;
  * nothing here invents state the wire did not carry.
  *
+ * PHASE 8.2 (protocol v2, additive): the research-level events are folded into
+ * [StreamState.engineRows] (per-round engine outcomes),
+ * [StreamState.researchPhaseNotes] (round summaries + synthesis marker +
+ * completion timings) and [StreamState.usedCitations] — the expandable
+ * "Research details" audit trail. Same discipline: received events only.
+ *
  * Threading: [Dispatchers.Main.immediate] — the stream text publishes into
  * Compose-observable state read by the UI, so deltas must land on Main, and
  * `immediate` avoids a needless frame hop when already there (e.g. the Stop
@@ -83,6 +89,13 @@ class ChatStreamController(private val chat: ChatRepository) {
      *    1:1 by the persisted sources of the message (the authoritative list).
      *  - [clarify] is the parsed clarify payload (live event or persisted
      *    clarifyOptions on the done message).
+     *
+     * PHASE 8.2 additions (all derived ONLY from received events):
+     *  - [engineRows] is the per-round per-engine truth from `search engines`
+     *    events (§16/§28 search.engine);
+     *  - [researchPhaseNotes] is the `research` event fold — round summaries,
+     *    the synthesis marker and the completion totals/timings;
+     *  - [usedCitations] mirrors `research completed`.usedCitations.
      */
     data class StreamState(
         val conversationId: String?,
@@ -100,7 +113,14 @@ class ChatStreamController(private val chat: ChatRepository) {
         /** PHASE 8.1: clarify quick-choices for an ambiguous request. */
         val clarify: ClarifyPrompt? = null,
         /** PHASE 8.1: terminal `search completed` counts (null = never completed). */
-        val searchSummary: SearchSummary? = null
+        val searchSummary: SearchSummary? = null,
+        /** PHASE 8.2: per-round engine outcomes from `search engines` events. */
+        val engineRows: List<EngineRoundRow> = emptyList(),
+        /** PHASE 8.2: research-level notes (round summaries, synthesis marker,
+         *  completion timings) — the expandable "Research details" audit trail. */
+        val researchPhaseNotes: List<ResearchPhaseNote> = emptyList(),
+        /** PHASE 8.2: citations the answer actually used (`research completed`). */
+        val usedCitations: List<Int> = emptyList()
     )
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -171,6 +191,11 @@ class ChatStreamController(private val chat: ChatRepository) {
                     onSourceEvent = { payload ->
                         parseSourceEventPayload(payload)?.let { event ->
                             publishIfMine(token) { search.applySource(it, event) }
+                        }
+                    },
+                    onResearch = { payload ->
+                        parseResearchEventPayload(payload)?.let { event ->
+                            publishIfMine(token) { search.applyResearch(it, event) }
                         }
                     },
                     onClarify = { payload ->
@@ -276,11 +301,27 @@ class ChatStreamController(private val chat: ChatRepository) {
  *  - composing/failed trace lines are de-duplicated (the wire may repeat the
  *    status); query/results/round/per-source lines are distinct events and
  *    each earns its own line.
+ *
+ * PHASE 8.2 decisions: `source read` + `source completed` are ONE wire fact
+ * emitted twice — the Read row is earned ONCE per ordinal ([readLogged]);
+ * `research synthesis_started` drives the same COMPOSING transition as the
+ * `composing` status (idempotent — they arrive alongside each other);
+ * `research completed` never duplicates the Completed row the legacy
+ * `search completed` already earned. Research round summaries and the
+ * completion note carry NO trace rows — they live in the expandable
+ * "Research details" audit trail ([ChatStreamController.StreamState.researchPhaseNotes]).
  */
 private class SearchStreamAccumulator {
 
     /** Ordinals with a retrieval genuinely in flight (opening/reading seen). */
     private val inFlight = HashSet<Int>()
+
+    /**
+     * PHASE 8.2: ordinals that already earned a "Read …" trace row. The v2
+     * wire emits BOTH `read` (canonical) and `completed` (v1 alias) per
+     * ordinal — the row is earned once; the card transition is idempotent.
+     */
+    private val readLogged = HashSet<Int>()
 
     fun applyStatus(state: ChatStreamController.StreamState, status: String): ChatStreamController.StreamState =
         when (status) {
@@ -329,6 +370,10 @@ private class SearchStreamAccumulator {
                 round = event.round
             )
         )
+        is SearchEvent.Engines -> state.copy(
+            // Per-engine truth (§16/§28): folded into the details rows, no trace line.
+            engineRows = upsertEngineRow(state.engineRows, event.round, event.engines)
+        )
         is SearchEvent.Results ->
             if (event.found <= 0) state
             else state.copy(
@@ -339,11 +384,20 @@ private class SearchStreamAccumulator {
                 )
             )
         is SearchEvent.Round -> {
-            if (event.sourcesVerified <= 0 && event.sourcesFailed <= 0) return state
+            if (event.sourcesVerified <= 0 && event.sourcesFailed <= 0 &&
+                (event.syndicatedGroups ?: 0) <= 0
+            ) return state
             val text = buildString {
                 append(event.sourcesVerified)
                 append(" sources verified")
                 if (event.sourcesFailed > 0) append(", ${event.sourcesFailed} failed")
+                // PHASE 8.2: the round's syndicated-duplicate groups (v2 wire
+                // field) — the round summary line carries them like the
+                // research-level round_completed note does.
+                event.syndicatedGroups?.takeIf { it > 0 }?.let {
+                    append(", $it syndicated ")
+                    append(if (it == 1) "group" else "groups")
+                }
             }
             state.copy(
                 traceItems = state.traceItems + SearchTraceItem(
@@ -406,19 +460,14 @@ private class SearchStreamAccumulator {
                 }
             )
         }
-        is SourceEvent.Completed -> {
-            inFlight.remove(event.ordinal)
-            state.copy(
-                searchPhase = if (inFlight.isEmpty()) "searching" else "working",
-                sources = updateCard(state.sources, event.ordinal) { card ->
-                    card.copy(
-                        status = event.status ?: "retrieved",
-                        publishedDate = event.publishedDate ?: card.publishedDate
-                    )
-                },
-                traceItems = state.traceItems + readLine(state, event.ordinal, "Read")
-            )
-        }
+        is SourceEvent.Completed -> applyRead(state, event.ordinal, event.publishedDate, event.status)
+        // PHASE 8.2: `read` is the v2 canonical twin of `completed` — the SAME
+        // state transition, applied idempotently (one card update, one row).
+        is SourceEvent.Read -> applyRead(state, event.ordinal, event.publishedDate, event.status)
+        // PHASE 8.2: evidence.extracted is extraction truth for an already-read
+        // source — it mutates no card status and earns no row; nothing in the
+        // trace vocabulary represents it beyond "it happened".
+        is SourceEvent.Evidence -> state
         is SourceEvent.Failed -> {
             inFlight.remove(event.ordinal)
             state.copy(
@@ -445,17 +494,154 @@ private class SearchStreamAccumulator {
         }
     }
 
+    /**
+     * The shared `read` / `completed` state transition (PHASE 8.2 idempotency):
+     * one card update (naturally idempotent) and — via [readLogged] — exactly
+     * one "Read …" trace row per ordinal, no matter which twin events arrive.
+     */
+    private fun applyRead(
+        state: ChatStreamController.StreamState,
+        ordinal: Int,
+        publishedDate: String?,
+        status: String?
+    ): ChatStreamController.StreamState {
+        inFlight.remove(ordinal)
+        val settled = state.copy(
+            searchPhase = if (inFlight.isEmpty()) "searching" else "working",
+            sources = updateCard(state.sources, ordinal) { card ->
+                card.copy(
+                    status = status ?: "retrieved",
+                    publishedDate = publishedDate ?: card.publishedDate
+                )
+            }
+        )
+        if (!readLogged.add(ordinal)) return settled
+        return settled.copy(traceItems = settled.traceItems + readLine(settled, ordinal))
+    }
+
+    // Block body (same reason as [applySearch]).
+    fun applyResearch(
+        state: ChatStreamController.StreamState,
+        event: ResearchEvent
+    ): ChatStreamController.StreamState {
+        return when (event) {
+        is ResearchEvent.Started ->
+            // research:started confirms real research activity; the search chain
+            // (search:started / status searching) already owns the trace line —
+            // this only guards the honest orb phase if it somehow ran ahead.
+            state.copy(searchPhase = state.searchPhase ?: "searching")
+        is ResearchEvent.RoundCompleted -> state.copy(
+            // Round truth for the details audit trail — no trace row (the
+            // per-round `search round` event owns the visible line).
+            researchPhaseNotes = state.researchPhaseNotes + ResearchPhaseNote.RoundSummary(
+                round = event.round,
+                found = event.found,
+                discovered = event.discovered,
+                read = event.read,
+                failed = event.failed,
+                syndicatedGroups = event.syndicatedGroups,
+                elapsedMs = event.elapsedMs
+            )
+        )
+        is ResearchEvent.SynthesisStarted -> {
+            // §28 synthesis.started — the honest COMPOSING driver. It arrives
+            // alongside the `composing` wire status, so BOTH paths share the
+            // same idempotent transition: one phase write, one trace row.
+            val lines = if (state.traceItems.any { it.kind == SearchTraceItem.Kind.Composing }) {
+                state.traceItems
+            } else {
+                state.traceItems + SearchTraceItem(SearchTraceItem.Kind.Composing, "Composing the answer")
+            }
+            state.copy(
+                searchPhase = "composing",
+                traceItems = lines,
+                researchPhaseNotes = state.researchPhaseNotes +
+                    ResearchPhaseNote.SynthesisStarted(model = event.model)
+            )
+        }
+        is ResearchEvent.Completed -> {
+            // research:completed is the research-level truth (v2). The legacy
+            // search:completed may already have earned the Completed trace row —
+            // never duplicate it. The SearchSummary is (over)written with the
+            // authoritative research counts so the collapsed one-liner keeps
+            // its exact shape, and usedCitations lands in its own field.
+            val lines = if (state.traceItems.any { it.kind == SearchTraceItem.Kind.Completed }) {
+                state.traceItems
+            } else {
+                state.traceItems + SearchTraceItem(
+                    SearchTraceItem.Kind.Completed,
+                    "${event.sources} sources · ${event.retrieved} read"
+                )
+            }
+            state.copy(
+                searchSummary = SearchSummary(
+                    queries = event.queries,
+                    sources = event.sources,
+                    retrieved = event.retrieved,
+                    usedCitations = event.usedCitations
+                ),
+                usedCitations = event.usedCitations,
+                traceItems = lines,
+                researchPhaseNotes = state.researchPhaseNotes + ResearchPhaseNote.Completed(
+                    queries = event.queries,
+                    sources = event.sources,
+                    retrieved = event.retrieved,
+                    usedCitations = event.usedCitations,
+                    totalMs = event.totalMs,
+                    timings = event.timings
+                )
+            )
+        }
+        is ResearchEvent.Failed -> {
+            // Same de-dup discipline as every failed line: the wire may repeat
+            // the failure, the row appears once.
+            val lines = if (state.traceItems.any { it.kind == SearchTraceItem.Kind.SearchFailed }) {
+                state.traceItems
+            } else {
+                state.traceItems + SearchTraceItem(
+                    SearchTraceItem.Kind.SearchFailed,
+                    "Research failed" + (event.reason?.let { " — $it" } ?: "")
+                )
+            }
+            state.copy(
+                searchPhase = "search_failed",
+                traceItems = lines,
+                researchPhaseNotes = state.researchPhaseNotes + ResearchPhaseNote.Failed(
+                    reason = event.reason,
+                    message = event.message
+                )
+            )
+        }
+        is ResearchEvent.Cancelled -> state.copy(
+            // Cancellation is carried by the controller's Cancelled phase; the
+            // note lands in the details audit trail only.
+            researchPhaseNotes = state.researchPhaseNotes +
+                ResearchPhaseNote.Cancelled(by = event.by)
+        )
+        }
+    }
+
     /** "Read <domain> — <title>" — the title comes from the discovered card (real wire data). */
     private fun readLine(
         state: ChatStreamController.StreamState,
-        ordinal: Int,
-        verb: String
+        ordinal: Int
     ): SearchTraceItem {
         val card = state.sources.firstOrNull { it.ordinal == ordinal }
         val title = card?.title?.takeIf { it.isNotBlank() && it != card.domain }
         val text = "Read ${card?.domain ?: "source $ordinal"}" + (title?.let { " — $it" } ?: "")
         return SearchTraceItem(SearchTraceItem.Kind.Read, text)
     }
+
+    /**
+     * One `engines` event per round carries that round's FULL engine truth —
+     * a repeat replaces the round's row instead of appending to it.
+     */
+    private fun upsertEngineRow(
+        rows: List<EngineRoundRow>,
+        round: Int,
+        engines: List<EngineOutcome>
+    ): List<EngineRoundRow> =
+        (rows.filter { it.round != round } + EngineRoundRow(round, engines)).sortedBy { it.round }
 
     private fun domainOf(state: ChatStreamController.StreamState, ordinal: Int): String =
         state.sources.firstOrNull { it.ordinal == ordinal }?.domain ?: "source $ordinal"

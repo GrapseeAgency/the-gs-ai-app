@@ -15,8 +15,8 @@ android {
         applicationId = "com.grapsee.gsai"
         minSdk = 26
         targetSdk = 35
-        versionCode = 68
-        versionName = "0.66.0"
+        versionCode = 69
+        versionName = "0.67.0"
 
         // REAL transport origin — applies to EVERY build type (v0.66.0 fix).
         // HISTORY: this was http://10.0.2.2:3000 (emulator loopback) with the
@@ -96,6 +96,12 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.androidx.navigation.compose)
+
+    // PHASE 8.2 (Task 8.2-a): source-tile favicon attempt. Coil's
+    // SubcomposeAsyncImage fetches icons.duckduckgo.com/ip3/<domain>.ico
+    // asynchronously (never the main thread); the monogram tile remains the
+    // placeholder AND error fallback. The ONE new dependency of this task.
+    implementation(libs.coil.compose)
 
     implementation(libs.hilt.android)
     implementation(libs.androidx.hilt.navigation.compose)

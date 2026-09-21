@@ -135,7 +135,10 @@ final class APIClient {
     ///   `onEvent` (the payload stays the wire's string — for the new events
     ///   it is a JSON-encoded object, double-encoded exactly like `done`);
     ///   decoding and state live in ChatViewModel, the stream consumer.
-    ///   Old behavior is untouched: unknown event names stay ignored.
+    /// PHASE 8.2 (v2) — the research-level events ride the same RAW lane:
+    ///   `research` (started / round_completed / synthesis_started /
+    ///   completed / failed / cancelled) joins the routed set. Old behavior
+    ///   is untouched: unknown event names stay ignored.
     ///
     /// Cancellation: cancelling the surrounding `Task` throws
     /// `CancellationError` (or `URLError.cancelled`) and tears the
@@ -194,9 +197,10 @@ final class APIClient {
                 let failure = APIError.server(event.data ?? "The assistant hit an unexpected error.")
                 onError(failure)
                 throw failure
-            case "status", "search", "source", "clarify":
-                // PHASE 8.1: search-trace events reach the consumer raw —
-                // payload decoding + honest-state mapping live in ChatViewModel.
+            case "status", "search", "source", "clarify", "research":
+                // PHASE 8.1/8.2: trace + research events reach the consumer
+                // raw — payload decoding + honest-state mapping live in
+                // ChatViewModel.
                 onEvent(event)
             default:
                 continue // unknown event types are ignored for forward-compat

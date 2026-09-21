@@ -2,9 +2,11 @@ import SwiftUI
 
 /**
  * PHASE 8.1 — compact source cards (docs/search-event-protocol.md). One row
- * per real source: monochrome monogram tile (domain initial), title (max 2
- * lines), domain, optional date, ordinal badge. The ordinal IS the citation
- * number the answer's `[N]` chips refer to.
+ * per real source: favicon tile with the monogram fallback (PHASE 8.2 — the
+ * real favicon is fetched client-side from the DDG icon service, the
+ * monogram covers loading/failure), title (max 2 lines), domain, optional
+ * date, ordinal badge. The ordinal IS the citation number the answer's
+ * `[N]` chips refer to.
  *
  * Honest-state rules: cards render ONLY real sources — live ones as `source`
  * events arrive, the done payload's persisted rows after finalize. A tap
@@ -70,12 +72,7 @@ private struct SourceCardRow: View {
             }
         } label: {
             HStack(spacing: 10) {
-                Text(monogram)
-                    .font(Aero.label())
-                    .foregroundStyle(Aero.text)
-                    .frame(width: 30, height: 30)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(Aero.container))
-                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Aero.outline, lineWidth: 1))
+                SourceFaviconView(domain: source.domain, monogram: monogram)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(headline)
                         .font(Aero.bodyMedium())
@@ -176,5 +173,60 @@ private struct SourceCardRow: View {
         if !source.domain.isEmpty { parts.append(source.domain) }
         if let dateLabel { parts.append(dateLabel) }
         return parts.joined(separator: ", ")
+    }
+}
+
+/// PHASE 8.2 — the source tile: the REAL favicon (the protocol's DDG icon
+/// URL derived client-side from the server-sent domain) over the 8.1
+/// monogram fallback. AsyncImage fetches off the main thread; while loading
+/// and on failure the exact monogram tile shows, so layout never jumps and
+/// a dead icon degrades silently. All chrome stays on semantic tokens — the
+/// icon itself is content, the same identity the web client shows.
+private struct SourceFaviconView: View {
+
+    let domain: String
+    let monogram: String
+
+    /// `https://icons.duckduckgo.com/ip3/<domain>.ico` — built from the
+    /// domain field only (server truth; never model text, never a URL host
+    /// re-parse). Anything that doesn't look like a bare hostname falls
+    /// back to the monogram.
+    private var iconURL: URL? {
+        let host = domain.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !host.isEmpty,
+              !host.contains("/"), !host.contains("?"), !host.contains("#"),
+              !host.contains(" ") else { return nil }
+        return URL(string: "https://icons.duckduckgo.com/ip3/\(host).ico")
+    }
+
+    var body: some View {
+        ZStack {
+            if let iconURL {
+                AsyncImage(url: iconURL) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFit()
+                            .padding(5)
+                    case .empty, .failure:
+                        monogramTile // placeholder + fallback: the same tile
+                    @unknown default:
+                        monogramTile
+                    }
+                }
+            } else {
+                monogramTile
+            }
+        }
+        .frame(width: 30, height: 30)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Aero.container))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Aero.outline, lineWidth: 1))
+    }
+
+    private var monogramTile: some View {
+        Text(monogram)
+            .font(Aero.label())
+            .foregroundStyle(Aero.text)
     }
 }

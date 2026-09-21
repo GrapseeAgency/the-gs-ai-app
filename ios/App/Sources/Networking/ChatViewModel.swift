@@ -37,7 +37,7 @@ final class StreamAccumulator: @unchecked Sendable {
     var isEmpty: Bool { snapshot().isEmpty }
 }
 
-// MARK: - Search trace state (PHASE 8.1 — docs/search-event-protocol.md)
+// MARK: - Search/research trace state (PHASE 8.1 + 8.2 v2 — docs/search-event-protocol.md)
 
 /**
  * The REAL search phase of the live turn, driven ONLY by wire events
@@ -55,25 +55,72 @@ enum ChatSearchPhase: Equatable {
 }
 
 /**
- * One search-trace step, built only from a received `search`/`source` event
- * (plus the synthesis start from `status`). The protocol's honest-state rule
- * is binding: no timers, no fabricated steps — if the backend never sent it,
- * it never appears.
+ * One engine's outcome from the v2 `search` payload subtype `engines`
+ * (per-engine truth). Tolerant decode: any missing field degrades to its
+ * default instead of failing the surrounding payload decode.
+ */
+struct SearchEngineOutcome: Decodable, Equatable {
+    var id: String
+    /// `ok` | `failed` | … — anything non-`ok` renders as a failure glyph.
+    var status: String
+    var count: Int?
+    var error: String?
+
+    init(id: String = "", status: String = "", count: Int? = nil, error: String? = nil) {
+        self.id = id
+        self.status = status
+        self.count = count
+        self.error = error
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(String.self, forKey: .id) ?? ""
+        status = try c.decodeIfPresent(String.self, forKey: .status) ?? ""
+        count = try c.decodeIfPresent(Int.self, forKey: .count)
+        error = try c.decodeIfPresent(String.self, forKey: .error)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, status, count, error
+    }
+
+    var ok: Bool { status.lowercased() == "ok" }
+}
+
+/**
+ * One search-trace step, built only from a received `search`/`source`/
+ * `research` event (plus the synthesis start from `status`). The protocol's
+ * honest-state rule is binding: no timers, no fabricated steps — if the
+ * backend never sent it, it never appears.
  */
 struct SearchTraceStep: Identifiable, Equatable {
 
     enum Kind: Equatable {
         case started(label: String?)
         case query(round: Int, text: String, engines: [String])
+        /// v2 per-engine truth (`search` payload subtype `engines`).
+        case engines(round: Int, outcomes: [SearchEngineOutcome])
         case results(round: Int, found: Int, query: String, engines: [String])
         case discovered(ordinal: Int, title: String, domain: String)
         case reading(ordinal: Int)
         case sourceCompleted(ordinal: Int, chars: Int?)
+        /// v2 (`source` payload subtype `evidence`) — extraction really
+        /// happened: `windowChars` is the evidence window actually mined.
+        case evidence(ordinal: Int, chars: Int?, windowChars: Int?)
         case sourceFailed(ordinal: Int, reason: String)
         case sourceSkipped(ordinal: Int, reason: String)
-        case roundSummary(round: Int, verified: Int, failed: Int)
+        /// v2 round summary gains the syndicated-group count.
+        case roundSummary(round: Int, verified: Int, failed: Int, syndicated: Int?)
+        // v2 `research` event family — research-level truth (§28).
+        case researchStarted(depth: String?, roundsPlanned: Int?)
+        case researchRound(round: Int, found: Int, read: Int, failed: Int, syndicated: Int?)
+        case researchFailed(reason: String)
+        case researchCancelled(by: String?)
         case searchFailed(reason: String)
-        case completedSummary(queries: Int, sources: Int, retrieved: Int)
+        /// v2: carries the bound citations (`usedCitations`) when the wire
+        /// sent them.
+        case completedSummary(queries: Int, sources: Int, retrieved: Int, citations: [Int]?)
         case composing
     }
 
@@ -85,12 +132,16 @@ struct SearchTraceStep: Identifiable, Equatable {
     static func collapsedSummary(_ steps: [SearchTraceStep]) -> String? {
         guard !steps.isEmpty else { return nil }
         for step in steps.reversed() {
-            if case .completedSummary(let queries, let sources, let retrieved) = step.kind {
+            if case .completedSummary(let queries, let sources, let retrieved, _) = step.kind {
                 return "Searched \(plural(queries, "query")) \u{00B7} \(plural(sources, "source")) \u{00B7} \(plural(retrieved, "page")) read"
             }
             if case .searchFailed(let reason) = step.kind {
                 let clean = reason.replacingOccurrences(of: "_", with: " ")
                 return clean.isEmpty ? "Search failed" : "Search failed \u{2014} \(clean)"
+            }
+            if case .researchFailed(let reason) = step.kind {
+                let clean = reason.replacingOccurrences(of: "_", with: " ")
+                return clean.isEmpty ? "Research failed" : "Research failed \u{2014} \(clean)"
             }
         }
         let queries = steps.reduce(0) { count, step in
@@ -115,12 +166,13 @@ struct SearchTraceStep: Identifiable, Equatable {
 }
 
 /**
- * Lock-guarded SSE sink for the search-trace events of one stream — the
- * state twin of `StreamAccumulator`. `status`/`search`/`source`/`clarify`
- * frames append here off-main with no main-actor hop; the ~30Hz flush loop
- * drains it in arrival order on the main actor (and finalize drains the
- * tail before closing), so trace order on screen is exactly wire order.
- * `@unchecked Sendable`: every access is serialized by the lock.
+ * Lock-guarded SSE sink for the search/research-trace events of one stream —
+ * the state twin of `StreamAccumulator`. `status`/`search`/`source`/
+ * `clarify`/`research` frames append here off-main with no main-actor hop;
+ * the ~30Hz flush loop drains it in arrival order on the main actor (and
+ * finalize drains the tail before closing), so trace order on screen is
+ * exactly wire order. `@unchecked Sendable`: every access is serialized by
+ * the lock.
  */
 final class SearchEventSink: @unchecked Sendable {
 
@@ -142,7 +194,7 @@ final class SearchEventSink: @unchecked Sendable {
     }
 }
 
-// MARK: - Wire payload decodes (PHASE 8.1)
+// MARK: - Wire payload decodes (PHASE 8.1 + 8.2 v2)
 
 /// Tolerant decode of the double-encoded `search` event payload — every
 /// field beyond the discriminator is optional, so an unknown/renamed field
@@ -155,10 +207,14 @@ private struct SearchEventPayload: Decodable {
     var round: Int?
     var query: String?
     var engines: [String]?
+    /// v2 `engines` subtype: per-engine outcome objects. The same wire key
+    /// carries name arrays on query/results — the decode is polymorphic.
+    var engineOutcomes: [SearchEngineOutcome]?
     var found: Int?
     var sourcesVerified: Int?
     var sourcesFailed: Int?
     var verified: Bool?
+    var syndicatedGroups: Int?
     var reason: String?
     var queries: Int?
     var sources: Int?
@@ -173,11 +229,21 @@ private struct SearchEventPayload: Decodable {
         label = try c.decodeIfPresent(String.self, forKey: .label)
         round = try c.decodeIfPresent(Int.self, forKey: .round)
         query = try c.decodeIfPresent(String.self, forKey: .query)
-        engines = try c.decodeIfPresent([String].self, forKey: .engines)
+        // `engines` is polymorphic on the wire: per-engine objects on the
+        // engines subtype, plain id strings on query/results. Try the object
+        // shape first, fall back to the names shape; anything else degrades
+        // to nil (tolerant — never fails the whole event).
+        if let outcomes = try? c.decodeIfPresent([SearchEngineOutcome].self, forKey: .engines),
+           !outcomes.isEmpty {
+            engineOutcomes = outcomes
+        } else {
+            engines = try? c.decodeIfPresent([String].self, forKey: .engines)
+        }
         found = try c.decodeIfPresent(Int.self, forKey: .found)
         sourcesVerified = try c.decodeIfPresent(Int.self, forKey: .sourcesVerified)
         sourcesFailed = try c.decodeIfPresent(Int.self, forKey: .sourcesFailed)
         verified = try c.decodeIfPresent(Bool.self, forKey: .verified)
+        syndicatedGroups = try c.decodeIfPresent(Int.self, forKey: .syndicatedGroups)
         reason = try c.decodeIfPresent(String.self, forKey: .reason)
         queries = try c.decodeIfPresent(Int.self, forKey: .queries)
         sources = try c.decodeIfPresent(Int.self, forKey: .sources)
@@ -186,11 +252,14 @@ private struct SearchEventPayload: Decodable {
     }
 }
 
-/// Tolerant decode of the double-encoded `source` event payload.
+/// Tolerant decode of the double-encoded `source` event payload. The v2
+/// subtypes `read` (canonical twin of v1 `completed`) and `evidence` ride
+/// the same fields.
 private struct SourceEventPayload: Decodable {
     var type: String = ""
     var ordinal: Int?
     var chars: Int?
+    var windowChars: Int?
     var publishedDate: String?
     var reason: String?
     var status: String?
@@ -201,10 +270,51 @@ private struct SourceEventPayload: Decodable {
         type = try c.decodeIfPresent(String.self, forKey: .type) ?? ""
         ordinal = try c.decodeIfPresent(Int.self, forKey: .ordinal)
         chars = try c.decodeIfPresent(Int.self, forKey: .chars)
+        windowChars = try c.decodeIfPresent(Int.self, forKey: .windowChars)
         publishedDate = try c.decodeIfPresent(String.self, forKey: .publishedDate)
         reason = try c.decodeIfPresent(String.self, forKey: .reason)
         status = try c.decodeIfPresent(String.self, forKey: .status)
         source = try c.decodeIfPresent(MessageSource.self, forKey: .source)
+    }
+}
+
+/// Tolerant decode of the double-encoded `research` event payload (PHASE 8.2
+/// v2 — research-level truth). Unknown fields are ignored by construction;
+/// an unknown `type` falls through `applyResearchEvent`'s default arm.
+private struct ResearchEventPayload: Decodable {
+    var type: String = ""
+    var depth: String?
+    var roundsPlanned: Int?
+    var round: Int?
+    var found: Int?
+    var read: Int?
+    var failed: Int?
+    var syndicatedGroups: Int?
+    var queries: Int?
+    var sources: Int?
+    var retrieved: Int?
+    var usedCitations: [Int]?
+    var reason: String?
+    var message: String?
+    var by: String?
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        type = try c.decodeIfPresent(String.self, forKey: .type) ?? ""
+        depth = try c.decodeIfPresent(String.self, forKey: .depth)
+        roundsPlanned = try c.decodeIfPresent(Int.self, forKey: .roundsPlanned)
+        round = try c.decodeIfPresent(Int.self, forKey: .round)
+        found = try c.decodeIfPresent(Int.self, forKey: .found)
+        read = try c.decodeIfPresent(Int.self, forKey: .read)
+        failed = try c.decodeIfPresent(Int.self, forKey: .failed)
+        syndicatedGroups = try c.decodeIfPresent(Int.self, forKey: .syndicatedGroups)
+        queries = try c.decodeIfPresent(Int.self, forKey: .queries)
+        sources = try c.decodeIfPresent(Int.self, forKey: .sources)
+        retrieved = try c.decodeIfPresent(Int.self, forKey: .retrieved)
+        usedCitations = try c.decodeIfPresent([Int].self, forKey: .usedCitations)
+        reason = try c.decodeIfPresent(String.self, forKey: .reason)
+        message = try c.decodeIfPresent(String.self, forKey: .message)
+        by = try c.decodeIfPresent(String.self, forKey: .by)
     }
 }
 
@@ -234,6 +344,12 @@ final class ChatViewModel: ObservableObject {
         /// to after the turn closes ("Searched 2 queries · 5 sources · 4
         /// read"). Computed only from steps that really arrived.
         var traceSummary: String? = nil
+        /// PHASE 8.2: the turn's full trace steps — MEMORY ONLY (attached at
+        /// finalize, never persisted to the local store). The research-
+        /// details audit reads them until the conversation leaves memory;
+        /// a reloaded thread re-derives the audit from persisted `sources[]`
+        /// per the protocol's research-details rule. nil after reload.
+        var traceSteps: [SearchTraceStep]? = nil
     }
 
     // MARK: - Published state
@@ -591,7 +707,7 @@ final class ChatViewModel: ObservableObject {
         messages[index].content = text
     }
 
-    // MARK: - Search event ingest (PHASE 8.1)
+    // MARK: - Search event ingest (PHASE 8.1 + 8.2 v2)
 
     /**
      * Drains the queued search-trace events in wire order and folds them
@@ -619,6 +735,11 @@ final class ChatViewModel: ObservableObject {
         case "clarify":
             guard let prompt = ClarifyPrompt(jsonString: data) else { return }
             clarifyPrompt = prompt
+        case "research":
+            // PHASE 8.2 v2: research-level truth rides the same honest
+            // pipeline — decode tolerantly, append only what really came.
+            guard let payload = try? JSONDecoder().decode(ResearchEventPayload.self, from: Data(data.utf8)) else { return }
+            applyResearchEvent(payload)
         default:
             break
         }
@@ -657,6 +778,11 @@ final class ChatViewModel: ObservableObject {
                 text: payload.query ?? "",
                 engines: payload.engines ?? [])))
             promotePhase(.searching)
+        case "engines":
+            // v2 per-engine truth — one honest row group per engine report.
+            let outcomes = payload.engineOutcomes ?? []
+            guard !outcomes.isEmpty else { return }
+            appendUniqueStep(.engines(round: payload.round ?? 0, outcomes: outcomes))
         case "results":
             traceSteps.append(SearchTraceStep(kind: .results(
                 round: payload.round ?? 0,
@@ -664,18 +790,22 @@ final class ChatViewModel: ObservableObject {
                 query: payload.query ?? "",
                 engines: payload.engines ?? [])))
         case "round":
-            traceSteps.append(SearchTraceStep(kind: .roundSummary(
+            appendUniqueStep(.roundSummary(
                 round: payload.round ?? 0,
                 verified: payload.sourcesVerified ?? 0,
-                failed: payload.sourcesFailed ?? 0)))
+                failed: payload.sourcesFailed ?? 0,
+                syndicated: payload.syndicatedGroups))
         case "failed":
-            traceSteps.append(SearchTraceStep(kind: .searchFailed(reason: payload.reason ?? "")))
+            appendUniqueStep(.searchFailed(reason: payload.reason ?? ""))
             searchPhase = .failed
         case "completed":
-            traceSteps.append(SearchTraceStep(kind: .completedSummary(
+            // Legacy summary — the v2 research:completed carries the same
+            // shape; exact duplicates collapse to one honest line.
+            appendUniqueStep(.completedSummary(
                 queries: payload.queries ?? 0,
                 sources: payload.sources ?? 0,
-                retrieved: payload.retrieved ?? 0)))
+                retrieved: payload.retrieved ?? 0,
+                citations: payload.usedCitations))
         default:
             break // unknown search sub-types stay invisible, never invented
         }
@@ -695,15 +825,25 @@ final class ChatViewModel: ObservableObject {
             upsertLiveSource(MessageSource(ordinal: ordinal, status: "reading"))
             traceSteps.append(SearchTraceStep(kind: .reading(ordinal: ordinal)))
             promotePhase(.working) // page retrieval is genuinely in flight
-        case "completed":
+        case "completed", "read":
+            // v2: `read` is the canonical name of v1 `completed` — BOTH are
+            // emitted. The card upsert is idempotent by ordinal and the
+            // trace keeps ONE honest line per real read (exact-duplicate
+            // drop), per the protocol's idempotency rule.
             let ordinal = payload.ordinal ?? 0
             upsertLiveSource(MessageSource(
                 ordinal: ordinal,
                 status: payload.status ?? "retrieved",
                 publishedDate: payload.publishedDate))
-            traceSteps.append(SearchTraceStep(kind: .sourceCompleted(
-                ordinal: ordinal,
-                chars: payload.chars)))
+            appendUniqueStep(.sourceCompleted(ordinal: ordinal, chars: payload.chars))
+        case "evidence":
+            // v2 (evidence.extracted): extraction really happened. Evidence
+            // processing is genuine retrieval work — the honest orb maps it.
+            traceSteps.append(SearchTraceStep(kind: .evidence(
+                ordinal: payload.ordinal ?? 0,
+                chars: payload.chars,
+                windowChars: payload.windowChars)))
+            promotePhase(.working)
         case "failed":
             let ordinal = payload.ordinal ?? 0
             upsertLiveSource(MessageSource(ordinal: ordinal, status: payload.status ?? "failed"))
@@ -719,6 +859,53 @@ final class ChatViewModel: ObservableObject {
         default:
             break
         }
+    }
+
+    /// PHASE 8.2 v2 — research-level truth rides the same trace, so the
+    /// audit reads top-to-bottom exactly as the turn happened.
+    private func applyResearchEvent(_ payload: ResearchEventPayload) {
+        switch payload.type {
+        case "started":
+            appendUniqueStep(.researchStarted(
+                depth: payload.depth,
+                roundsPlanned: payload.roundsPlanned))
+            promotePhase(.searching) // the retrieval legs start now
+        case "round_completed":
+            appendUniqueStep(.researchRound(
+                round: payload.round ?? 0,
+                found: payload.found ?? 0,
+                read: payload.read ?? 0,
+                failed: payload.failed ?? 0,
+                syndicated: payload.syndicatedGroups))
+        case "synthesis_started":
+            promotePhase(.composing)
+            if !traceSteps.isEmpty, !traceSteps.contains(where: { $0.kind == .composing }) {
+                traceSteps.append(SearchTraceStep(kind: .composing))
+            }
+        case "completed":
+            appendUniqueStep(.completedSummary(
+                queries: payload.queries ?? 0,
+                sources: payload.sources ?? 0,
+                retrieved: payload.retrieved ?? 0,
+                citations: payload.usedCitations))
+        case "failed":
+            appendUniqueStep(.researchFailed(reason: payload.reason ?? payload.message ?? ""))
+            searchPhase = .failed
+        case "cancelled":
+            traceSteps.append(SearchTraceStep(kind: .researchCancelled(by: payload.by)))
+        default:
+            break // unknown research sub-types stay invisible, never invented
+        }
+    }
+
+    /// Appends a trace step unless an identical step already arrived this
+    /// turn — the v2 idempotency pairs (`source` `read`/`completed`, the
+    /// legacy `search:completed` + v2 `research:completed`) and re-sent
+    /// events collapse to ONE honest line. Compares structural Kind equality
+    /// (the step's UUID identity is deliberately excluded).
+    private func appendUniqueStep(_ kind: SearchTraceStep.Kind) {
+        guard !traceSteps.contains(where: { $0.kind == kind }) else { return }
+        traceSteps.append(SearchTraceStep(kind: kind))
     }
 
     /// One card per ordinal — later events on the same source refine it in
@@ -775,6 +962,10 @@ final class ChatViewModel: ObservableObject {
         }
         messages[index].clarifyOptions = message.clarifyOptions ?? clarifyPrompt?.jsonString
         messages[index].traceSummary = SearchTraceStep.collapsedSummary(traceSteps)
+        // PHASE 8.2: the full step list rides the turn memory-only — the
+        // research-details audit reads it until the conversation leaves
+        // memory; reloads re-derive from the persisted sources instead.
+        messages[index].traceSteps = traceSteps
         persistAssistant(content: message.content)
         traceSteps = []
         liveSources = []
@@ -804,6 +995,7 @@ final class ChatViewModel: ObservableObject {
                 messages[index].clarifyOptions = clarifyPrompt?.jsonString
             }
             messages[index].traceSummary = SearchTraceStep.collapsedSummary(traceSteps)
+            messages[index].traceSteps = traceSteps // memory-only, never stored
             persistAssistant(content: messages[index].content)
         }
         traceSteps = []

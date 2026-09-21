@@ -154,6 +154,8 @@ import com.grapsee.gsai.data.ModelPrefs
 import com.grapsee.gsai.data.chat.ChatStreamController
 import com.grapsee.gsai.data.chat.ClarifyOption
 import com.grapsee.gsai.data.chat.ClarifyPrompt
+import com.grapsee.gsai.data.chat.EngineRoundRow
+import com.grapsee.gsai.data.chat.ResearchPhaseNote
 import com.grapsee.gsai.data.chat.SearchTraceItem
 import com.grapsee.gsai.data.chat.SourceCard
 import com.grapsee.gsai.data.chat.decodeClarifyPrompt
@@ -213,7 +215,13 @@ private data class ChatUiMessage(
     val sources: List<SourceCard> = emptyList(),
     val clarify: ClarifyPrompt? = null,
     val traceItems: List<SearchTraceItem> = emptyList(),
-    val traceSummary: String? = null
+    val traceSummary: String? = null,
+    /** PHASE 8.2: research-level trace detail — same IN-MEMORY ONLY discipline:
+     *  engine rows, research notes and used citations exist exactly as long as
+     *  the received events do; a reload re-derives nothing (honest empty). */
+    val engineRows: List<EngineRoundRow> = emptyList(),
+    val researchNotes: List<ResearchPhaseNote> = emptyList(),
+    val usedCitations: List<Int> = emptyList()
 )
 
 /**
@@ -232,10 +240,41 @@ private fun traceSummaryOf(state: ChatStreamController.StreamState): String? {
         val parts = mutableListOf("Searched ${summary.queries} ${if (summary.queries == 1) "query" else "queries"}")
         if (summary.sources > 0) parts += "${summary.sources} sources"
         if (summary.retrieved > 0) parts += "${summary.retrieved} read"
+        // PHASE 8.2: the collapsed line also carries the research-level truth.
+        appendResearchSummaryParts(state, countedRead = summary.retrieved, parts)
         return parts.joinToString(" · ")
     }
     val queryCount = state.traceItems.count { it.kind == SearchTraceItem.Kind.Query }
-    return if (queryCount > 0) "Searched $queryCount ${if (queryCount == 1) "query" else "queries"}" else null
+    if (queryCount > 0) {
+        val parts = mutableListOf("Searched $queryCount ${if (queryCount == 1) "query" else "queries"}")
+        appendResearchSummaryParts(state, countedRead = 0, parts)
+        return parts.joinToString(" · ")
+    }
+    return null
+}
+
+/**
+ * PHASE 8.2: appends the research-level summary parts — engine count,
+ * read/failed counts and the syndication note — ONLY from received events.
+ * [countedRead] suppresses a duplicate "read" when the completed counts
+ * already carried exactly that number.
+ */
+private fun appendResearchSummaryParts(
+    state: ChatStreamController.StreamState,
+    countedRead: Int,
+    parts: MutableList<String>
+) {
+    val engines = state.engineRows.sumOf { it.engines.size }
+    if (engines > 0) parts += "$engines ${if (engines == 1) "engine" else "engines"}"
+    val rounds = state.researchPhaseNotes.filterIsInstance<ResearchPhaseNote.RoundSummary>()
+    val read = rounds.sumOf { it.read }
+    if (read > countedRead) parts += "$read read"
+    val failed = rounds.sumOf { it.failed }
+    if (failed > 0) parts += "$failed failed"
+    val syndicated = rounds.sumOf { it.syndicatedGroups ?: 0 }
+    if (syndicated > 0) {
+        parts += "$syndicated syndicated ${if (syndicated == 1) "group" else "groups"}"
+    }
 }
 
 /**
@@ -753,7 +792,12 @@ fun ChatScreen(
                 sources = state.sources,
                 clarify = state.clarify,
                 traceItems = state.traceItems,
-                traceSummary = traceSummaryOf(state)
+                traceSummary = traceSummaryOf(state),
+                // PHASE 8.2: the research detail commits with the turn (memory
+                // only — a reload honestly shows just the summary + sources).
+                engineRows = state.engineRows,
+                researchNotes = state.researchPhaseNotes,
+                usedCitations = state.usedCitations
             )
             view.announceForAccessibility(announcement)
         }
@@ -1688,6 +1732,11 @@ private fun AssistantMessage(
     val turnSources = if (message.isStreaming) liveState?.sources.orEmpty() else message.sources
     val turnClarify = if (message.isStreaming) null else message.clarify
     val turnTraceItems = liveState?.traceItems ?: message.traceItems
+    // PHASE 8.2: the research-level detail rides the same live-vs-committed
+    // seam as the trace items.
+    val turnEngineRows = liveState?.engineRows ?: message.engineRows
+    val turnResearchNotes = liveState?.researchPhaseNotes ?: message.researchNotes
+    val turnUsedCitations = liveState?.usedCitations ?: message.usedCitations
     // Reload-time collapsed summary: the trace detail is memory-only, so a
     // reloaded turn honestly derives its one-liner from what persisted.
     val turnTraceSummary = message.traceSummary
@@ -1718,12 +1767,17 @@ private fun AssistantMessage(
             // (protocol honest-state rule). Rendered only when a real search
             // happened; plain turns show nothing here.
             if (message.isStreaming) {
-                if (turnTraceItems.isNotEmpty()) {
+                if (turnTraceItems.isNotEmpty() || turnEngineRows.isNotEmpty() ||
+                    turnResearchNotes.isNotEmpty()
+                ) {
                     SearchTraceCard(
                         items = turnTraceItems,
                         summary = null,
                         expandable = true,
-                        defaultExpanded = true
+                        defaultExpanded = true,
+                        engineRows = turnEngineRows,
+                        researchNotes = turnResearchNotes,
+                        usedCitations = turnUsedCitations
                     )
                     Spacer(Modifier.height(8.dp))
                 }
@@ -1733,8 +1787,15 @@ private fun AssistantMessage(
                     SearchTraceCard(
                         items = turnTraceItems,
                         summary = turnTraceSummary,
-                        expandable = turnTraceItems.isNotEmpty(),
-                        defaultExpanded = false
+                        // PHASE 8.2: research detail keeps the card re-expandable
+                        // after done, exactly while it is still in memory.
+                        expandable = turnTraceItems.isNotEmpty() ||
+                            turnEngineRows.isNotEmpty() ||
+                            turnResearchNotes.isNotEmpty(),
+                        defaultExpanded = false,
+                        engineRows = turnEngineRows,
+                        researchNotes = turnResearchNotes,
+                        usedCitations = turnUsedCitations
                     )
                     Spacer(Modifier.height(8.dp))
                 }

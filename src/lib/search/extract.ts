@@ -78,8 +78,15 @@ function stripChrome(html: string): string {
 /**
  * Main-article extraction. Falls back through: <article> → <main> /
  * [role=main] → whole-page paragraphs with a density floor.
+ *
+ * PHASE 8.2 §33 — long documents (public-domain book full texts) may request
+ * a larger cap; the kept window centers on the QUERY terms so a real relevant
+ * passage — not the document head — reaches the evidence block.
  */
-export function extractArticle(html: string): ExtractedArticle {
+export function extractArticle(
+  html: string,
+  opts?: { maxTextChars?: number; windowQuery?: string }
+): ExtractedArticle {
   const title =
     metaContent(html, /og:title|twitter:title/) ??
     (html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] ? stripTags(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)![1]) : null) ??
@@ -125,11 +132,33 @@ export function extractArticle(html: string): ExtractedArticle {
     text = stripTags(cleaned)
   }
 
-  text = text.slice(0, EXTRACT_MAX_TEXT_CHARS)
+  const maxChars = Math.max(EXTRACT_MAX_TEXT_CHARS, opts?.maxTextChars ?? EXTRACT_MAX_TEXT_CHARS)
+  if (text.length > maxChars) {
+    const qWords = (opts?.windowQuery ?? '').toLowerCase().match(/[a-z0-9]{4,}/g) ?? []
+    let kept: string | null = null
+    if (qWords.length > 0) {
+      let bestIdx = -1
+      let bestHits = 0
+      for (let i = 0; i < Math.min(text.length - 500, 400_000); i += 2_000) {
+        const chunk = text.slice(i, i + 2_500).toLowerCase()
+        const hits = qWords.reduce((n, w) => n + (chunk.includes(w) ? 1 : 0), 0)
+        if (hits > bestHits) {
+          bestHits = hits
+          bestIdx = i
+        }
+      }
+      if (bestHits > 0 && bestIdx > 0) {
+        const start = Math.max(0, bestIdx - 400)
+        kept = `…${text.slice(start, start + maxChars)}`
+      }
+    }
+    text = kept ?? text.slice(0, maxChars)
+  }
+  text = text.slice(0, maxChars)
   // Cut at a word boundary so the evidence block never ends mid-word.
-  if (text.length === EXTRACT_MAX_TEXT_CHARS) {
+  if (text.length === maxChars) {
     const lastSpace = text.lastIndexOf(' ')
-    if (lastSpace > EXTRACT_MAX_TEXT_CHARS * 0.8) text = text.slice(0, lastSpace)
+    if (lastSpace > maxChars * 0.8) text = text.slice(0, lastSpace)
   }
 
   return {
@@ -183,7 +212,8 @@ export async function resolveGoogleNewsLink(url: string, timeoutMs = 6_000): Pro
  */
 export async function retrieveAndExtract(
   url: string,
-  timeoutMs = 10_000
+  timeoutMs = 10_000,
+  opts?: { maxTextChars?: number; windowQuery?: string }
 ): Promise<{ finalUrl: string; article: ExtractedArticle; elapsedMs: number }> {
   let target = url
   if (/news\.google\.com\/rss\/articles\//i.test(url)) {
@@ -193,6 +223,6 @@ export async function retrieveAndExtract(
     }
   }
   const page = await fetchPage(target, { timeoutMs })
-  const article = extractArticle(page.body)
+  const article = extractArticle(page.body, opts)
   return { finalUrl: page.finalUrl, article, elapsedMs: page.elapsedMs }
 }

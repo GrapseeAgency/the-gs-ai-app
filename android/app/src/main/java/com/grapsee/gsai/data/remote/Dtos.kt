@@ -51,7 +51,16 @@ data class MessageSourceDto(
     val retrievedAt: String = "",
     val status: String? = null,
     val used: Boolean? = null,
-    val rank: Int? = null
+    val rank: Int? = null,
+    /** PHASE 8.2 (protocol v2 MessageJson): news | general | reference |
+     *  academic | book | primary. Defaulted + ignored when absent, so a source
+     *  record from any server generation still decodes. */
+    val sourceType: String? = null,
+    /** PHASE 8.2 (protocol v2): primary | academic | reputable | reference | discovery. */
+    val authority: String? = null,
+    /** PHASE 8.2 (protocol v2): ordinal of the representative source this
+     *  record is syndicated duplicate of (null = original). */
+    val syndicatedOf: Int? = null
 )
 
 @Serializable

@@ -90,7 +90,7 @@ struct Attachment: Codable, Identifiable, Equatable, Hashable {
     }
 }
 
-// MARK: - Search sources + clarify (PHASE 8.1 — docs/search-event-protocol.md)
+// MARK: - Search sources + clarify (PHASE 8.1 + 8.2 v2 — docs/search-event-protocol.md)
 
 /// One persisted search source on an assistant message (the protocol's
 /// MessageJson `sources[]` addition). `ordinal` IS the citation number the
@@ -112,6 +112,16 @@ struct MessageSource: Codable, Equatable, Hashable {
     /// true = cited in the final answer (server-computed; never guessed)
     var used: Bool?
     var rank: Int?
+    /// PHASE 8.2 (v2 protocol): news | general | reference | academic | book |
+    /// primary. Absent on older servers decodes to nil.
+    var sourceType: String?
+    /// PHASE 8.2 (v2 protocol): primary | academic | reputable | reference |
+    /// discovery. Absent on older servers decodes to nil.
+    var authority: String?
+    /// PHASE 8.2 (v2 protocol): when this source syndicates another's
+    /// coverage, the ordinal of the representative source it duplicates
+    /// (null = original). Absent on older servers decodes to nil.
+    var syndicatedOf: Int?
 
     init(
         id: String = "",
@@ -125,7 +135,10 @@ struct MessageSource: Codable, Equatable, Hashable {
         retrievedAt: String? = nil,
         status: String? = nil,
         used: Bool? = nil,
-        rank: Int? = nil
+        rank: Int? = nil,
+        sourceType: String? = nil,
+        authority: String? = nil,
+        syndicatedOf: Int? = nil
     ) {
         self.id = id
         self.ordinal = ordinal
@@ -139,11 +152,15 @@ struct MessageSource: Codable, Equatable, Hashable {
         self.status = status
         self.used = used
         self.rank = rank
+        self.sourceType = sourceType
+        self.authority = authority
+        self.syndicatedOf = syndicatedOf
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, ordinal, title, url, domain, snippet
         case publishedDate, query, retrievedAt, status, used, rank
+        case sourceType, authority, syndicatedOf
     }
 
     init(from decoder: Decoder) throws {
@@ -160,6 +177,9 @@ struct MessageSource: Codable, Equatable, Hashable {
         status = try container.decodeIfPresent(String.self, forKey: .status)
         used = try container.decodeIfPresent(Bool.self, forKey: .used)
         rank = try container.decodeIfPresent(Int.self, forKey: .rank)
+        sourceType = try container.decodeIfPresent(String.self, forKey: .sourceType)
+        authority = try container.decodeIfPresent(String.self, forKey: .authority)
+        syndicatedOf = try container.decodeIfPresent(Int.self, forKey: .syndicatedOf)
     }
 }
 

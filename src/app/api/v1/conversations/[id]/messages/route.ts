@@ -47,6 +47,7 @@ import {
   type WebSource,
 } from '@/lib/websearch'
 import {
+  detectHistoricalReligious,
   planSearch,
 } from '@/lib/search/planner'
 import {
@@ -320,7 +321,15 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
   // DETERMINISTIC chip matcher — no LLM needed for the chip path.
   const clarifyFollowUp =
     previousClarifyOptions !== null && content.trim().length > 0 && content.length <= 60
-  const plannerRuns = webGate.trigger !== null || clarifyFollowUp
+  // PHASE 8.2 §1/§8/§25 — the intent planner is the MODEL-AGNOSTIC search
+  // decision layer: it must run for historical/religious questions (evidence
+  // before memory is a HARD product rule) and for deep-tier research models
+  // (their contract includes retrieval), not only when the legacy gate fires.
+  const deepTierModel = ['gs-deep', 'gs-research', 'gs-free-big'].includes(
+    (requestedModelId ?? conversation.modelId ?? '').trim()
+  )
+  const plannerRuns =
+    webGate.trigger !== null || clarifyFollowUp || detectHistoricalReligious(content) || deepTierModel
 
   let historyWebSources: {
     title: string
@@ -393,6 +402,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
         evidenceBlock: string | null
         maxOrdinal: number
         historySources: WebSource[]
+        startedAt: number
       }
 
   const executeSearchPhase = async (emit: SearchEventEmitter | null): Promise<TurnSearch> => {
@@ -417,7 +427,25 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     // §19 — stop/reuse/no-search turns answer from what already exists.
     if (!plan.needsSearch || plan.stopSignal) return { kind: 'none' }
 
-    emit?.('search', { type: 'started', intent: plan.intent, depth: plan.depth, label: plan.queries[0] ?? '' })
+    // 8.2 §9/§25 — depth: the plan decides; deep-tier models (Research/Deep/
+    // Free Deep) upgrade research-y intents to DEEP retrieval. The SEARCH
+    // SERVICE is identical for every model — only the budget differs.
+    const modelId = (requestedModelId ?? conversation.modelId ?? 'gs-balanced').trim()
+    const deepTier = modelId === 'gs-deep' || modelId === 'gs-research' || modelId === 'gs-free-big'
+    const depth: 'quick' | 'deep' =
+      plan.depth === 'deep' || (deepTier && plan.intent !== 'none' && plan.intent !== 'factual')
+        ? 'deep'
+        : 'quick'
+
+    const researchStartedAt = Date.now()
+    emit?.('research', {
+      type: 'started',
+      intent: plan.intent,
+      depth,
+      model: modelId,
+      roundsPlanned: RESEARCH_BUDGET[depth].maxRounds,
+    })
+    emit?.('search', { type: 'started', intent: plan.intent, depth, label: plan.queries[0] ?? '' })
 
     const outcome = await runResearch({
       queries: plan.queries,
@@ -426,9 +454,9 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       region: plan.region,
       sourceHint: plan.sourceHint,
       officialOnly: plan.officialOnly,
-      depth: plan.depth,
+      depth,
       emit: emit ?? NOOP_EMIT,
-      deadlineAt: Date.now() + RESEARCH_BUDGET[plan.depth].wallClockMs + 2_000,
+      deadlineAt: Date.now() + RESEARCH_BUDGET[depth].wallClockMs + 2_000,
     })
     console.log(
       `RESEARCH conv=${id} intent=${plan.intent} queries=${outcome.queriesRun.length} sources=${outcome.sources.length} retrieved=${outcome.sources.filter((s) => s.status === 'retrieved').length} engines=${outcome.enginesUsed.join('+') || 'none'} ok=${outcome.ok} kind=${outcome.failure?.kind ?? '-'}`
@@ -436,11 +464,16 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
 
     if (!outcome.ok || outcome.sources.length === 0) {
       emit?.('search', { type: 'failed', reason: outcome.failure?.kind ?? 'no_results' })
-      return { kind: 'research', outcome, evidenceBlock: null, maxOrdinal: 0, historySources: [] }
+      emit?.('research', {
+        type: 'failed',
+        reason: outcome.failure?.kind ?? 'no_results',
+        message: outcome.failure?.message,
+      })
+      return { kind: 'research', outcome, evidenceBlock: null, maxOrdinal: 0, historySources: [], startedAt: researchStartedAt }
     }
 
     const { block, maxOrdinal } = buildResearchEvidenceBlock(outcome.sources, outcome.queriesRun)
-    return { kind: 'research', outcome, evidenceBlock: block, maxOrdinal, historySources: [] }
+    return { kind: 'research', outcome, evidenceBlock: block, maxOrdinal, historySources: [], startedAt: researchStartedAt }
   }
 
   /**
@@ -890,6 +923,13 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       // text turns emit NO status — deltas carry their progress.
       if (turn.kind === 'research') {
         push('status', researchOk ? 'composing' : 'search_failed')
+        if (researchOk) {
+          // 8.2 §28 synthesis.started — orb COMPOSING maps to this.
+          emit('research', {
+            type: 'synthesis_started',
+            model: requestedModelId ?? conversation.modelId ?? 'gs-balanced',
+          })
+        }
       }
 
       const { messages: modelMessages, historySources } = await buildModelMessages(turn)
@@ -906,12 +946,23 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       // §12 — the collapsed trace summary the clients render after done.
       if (turn.kind === 'research' && turn.outcome.ok) {
         const totalOrdinals = turn.maxOrdinal + historySources.length
+        const usedCitations = parseCitedOrdinals(finalText, totalOrdinals)
         emit('search', {
           type: 'completed',
           queries: turn.outcome.queriesRun.length,
           sources: turn.outcome.sources.length,
           retrieved: turn.outcome.sources.filter((s) => s.status === 'retrieved').length,
-          usedCitations: parseCitedOrdinals(finalText, totalOrdinals),
+          usedCitations,
+        })
+        // 8.2 §28 — citation.bound + research.completed + performance metrics.
+        emit('research', {
+          type: 'completed',
+          queries: turn.outcome.queriesRun.length,
+          sources: turn.outcome.sources.length,
+          retrieved: turn.outcome.sources.filter((s) => s.status === 'retrieved').length,
+          usedCitations,
+          totalMs: Date.now() - turn.startedAt,
+          timings: turn.outcome.timings,
         })
       }
       push('done', JSON.stringify(messageToJson(savedWithSources ?? saved)))

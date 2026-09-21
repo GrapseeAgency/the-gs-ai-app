@@ -78,6 +78,23 @@ export function detectStopSignal(text: string): boolean {
   return isSuppressed(text) && !/\b(?:search|google|look)\b[^.!?]{0,40}\b(?:instead|again|now|official|more)\b/i.test(text)
 }
 
+/** 8.2 §23 — "use only official sources" must survive even when the LLM is down. */
+export function detectOfficialOnly(text: string): boolean {
+  return /\bofficial sources? only\b|\bonly (?:use )?official\b|\bofficial (?:docs?|documentation) only\b|\brestrict (?:the )?search to official\b/i.test(text)
+}
+
+/**
+ * 8.2 §8 — historical/religious factual questions must SEARCH before answering
+ * (evidence first, memory second). Deterministic backstop so this product rule
+ * holds even when both LLM planners are unavailable.
+ */
+const HISTORICAL_RELIGIOUS_RE =
+  /\b(?:who|what) (?:was|were|is|are) the first\b|\borigin of\b|\bhistory of\b|\baccording to (?:the )?(?:quran|qur'an|bible|torah|hadith|gospel)\b|\b(?:early|first) (?:muslims?|christians?|caliph|caliphate|church)\b|\bwho (?:founded|established)\b/i
+
+export function detectHistoricalReligious(text: string): boolean {
+  return HISTORICAL_RELIGIOUS_RE.test(text)
+}
+
 const CATEGORY_WORDS: Record<string, string> = {
   world: 'world|global|international',
   technology: 'tech|technology|ai|gadgets?|software|cyber',
@@ -116,7 +133,7 @@ const PLANNER_SYSTEM = `You are the search-intent planner of an AI chat product.
 Schema:
 {
  "needsSearch": boolean,
- "intent": "broad_news"|"sector_news"|"entity_news"|"geo_news"|"time_window_news"|"source_specific"|"factual"|"research"|"none",
+ "intent": "broad_news"|"sector_news"|"entity_news"|"geo_news"|"time_window_news"|"source_specific"|"factual"|"research"|"academic"|"book_source"|"historical_religious"|"comparison"|"none",
  "ambiguous": boolean,
  "clarifyQuestion": string|null,
  "queries": string[],
@@ -133,10 +150,15 @@ Rules:
 - If a region is present ("What happened in Bangladesh today?"), intent=geo_news, region="BD" (ISO code), queries include the region.
 - If a source is named ("Search Reuters for X"), intent=source_specific, sourceHint=domain (e.g. "reuters.com").
 - Documentation/first-party questions ("latest Android documentation") => intent=factual, officialOnly=true.
-- Deeper multi-part research ("compare X and Y", "explain the situation with X") => depth="deep", intent="research".
+- Scholarly/scientific literature questions ("studies on X", "papers about X", "what does research say about X") => intent=academic, queries 2 (one broad, one precise).
+- Questions about a BOOK or its contents ("in Frankenstein, ...", "what does the Quran/Bible say about X", "according to <book>") => intent=book_source, queries include the book title, depth="deep" when the user wants passages/quotes.
+- Historical or religious factual questions ("who was the first Muslim?", "origin of X tradition", "what happened in ... century") => intent=historical_religious, needsSearch=true: the answer must be grounded in sources, not memory. queries 2.
+- Comparisons ("how does X compare with Y", "X vs Y documentation") => intent=comparison, queries cover BOTH sides.
+- Deeper multi-part research ("explain the situation with X") => depth="deep", intent="research".
 - Facts that need current data (weather, scores, prices, releases) => intent=factual.
 - Ordinary chat/general knowledge => needsSearch=false, intent="none".
-- timeRange: "day" for today/now, "week" for this week, "month" for this month, "none" otherwise. queries: 1-2 short search-engine queries, English, no conversational words.
+- timeRange: "day" for today/now, "week" for this week, "month" for this month, "none" otherwise. queries: 1-4 short search-engine queries, English, no conversational words.
+- If the user says "use only official sources" or names an official documentation site, set officialOnly=true (deterministic layers also enforce this).
 - If the user explicitly tells you to stop searching and summarise, set needsSearch=false (the orchestrator also enforces this deterministically).
 - If earlier evidence in this conversation already answers the message, set needsSearch=false and add "reuseEvidence": true at top level.`
 
@@ -164,14 +186,18 @@ function asStringArray(v: unknown, max: number): string[] {
 
 function normalizePlan(raw: Record<string, unknown>, fallbackQuery: string): SearchPlan {
   const intent = (
-    ['broad_news', 'sector_news', 'entity_news', 'geo_news', 'time_window_news', 'source_specific', 'factual', 'research', 'none'] as SearchIntent[]
+    [
+      'broad_news', 'sector_news', 'entity_news', 'geo_news', 'time_window_news',
+      'source_specific', 'factual', 'research', 'none',
+      'academic', 'book_source', 'historical_religious', 'comparison',
+    ] as SearchIntent[]
   ).includes(raw.intent as SearchIntent)
     ? (raw.intent as SearchIntent)
     : 'none'
   const timeRange: TimeRange = (['day', 'week', 'month', 'none'] as TimeRange[]).includes(raw.timeRange as TimeRange)
     ? (raw.timeRange as TimeRange)
     : 'none'
-  const queries = asStringArray(raw.queries, 2)
+  const queries = asStringArray(raw.queries, 4)
     // Strip directive scaffolding the model sometimes echoes back into the
     // query ("again for official sources…" → "official sources…").
     .map((q) =>
@@ -311,6 +337,18 @@ export async function planSearch(input: PlanInput): Promise<SearchPlan> {
     if (detectStopSignal(text)) {
       return { ...plan, needsSearch: false, stopSignal: true, queries: [] }
     }
+    if (detectOfficialOnly(text)) plan.officialOnly = true
+    // 8.2 §8 — HARD RULE: historical/religious factual questions ALWAYS search
+    // before answering (evidence first, memory second) — no planner wording
+    // like "in the sources" may silently downgrade this to memory-only.
+    if (detectHistoricalReligious(text) && !plan.ambiguity.isAmbiguous) {
+      plan.needsSearch = true
+      plan.intent = 'historical_religious'
+      plan.reuseEvidence = false
+      if (plan.queries.length === 0) {
+        plan.queries = [text.replace(/\s+/g, ' ').replace(/[?!.]+$/, '').trim().slice(0, 120)].filter((q) => q.length >= 3)
+      }
+    }
     if (plan.needsSearch && plan.queries.length === 0) {
       plan.needsSearch = fallbackQuery.length >= 3
       if (plan.needsSearch) plan.queries = [fallbackQuery]
@@ -330,6 +368,19 @@ export async function planSearch(input: PlanInput): Promise<SearchPlan> {
       queries: [],
       timeRange: 'day',
       depth: 'quick',
+    }
+  }
+  // 8.2 §8 — evidence-first historical/religious questions survive planner outages.
+  if (detectHistoricalReligious(text)) {
+    const q = (fallbackQuery || text.replace(/\s+/g, ' ').replace(/[?!.]+$/, '').trim().slice(0, 120)).trim()
+    return {
+      needsSearch: q.length >= 3,
+      intent: 'historical_religious',
+      ambiguity: { isAmbiguous: false, prompt: null },
+      queries: [q].filter((x) => x.length >= 3),
+      timeRange: 'none',
+      depth: 'quick',
+      officialOnly: detectOfficialOnly(text),
     }
   }
   if (gate.trigger === null) {

@@ -106,8 +106,13 @@ class ApiClient(
      *  - [onSearchEvent] / [onSourceEvent] / [onClarifyEvent] — the payload is
      *    a JSON-encoded object STRING (double-encoded, like `done`); parsing is
      *    the stream layer's job, this walker never interprets it.
-     * All new callbacks default to no-op so every existing call site keeps its
-     * exact meaning.
+     *
+     * PHASE 8.2 (docs/search-event-protocol.md v2, additive): the new
+     * `research` event name is routed the same way to [onResearchEvent]. The
+     * v2 `search`/`source` payload subtypes (`engines` / `read` / `evidence`)
+     * need no walker change — they arrive on the existing event names and are
+     * the stream layer's parsing job. All new callbacks default to no-op so
+     * every existing call site keeps its exact meaning.
      */
     suspend fun sendMessageStream(
         conversationId: String,
@@ -119,7 +124,8 @@ class ApiClient(
         onStatus: (String) -> Unit = {},
         onSearchEvent: (String) -> Unit = {},
         onSourceEvent: (String) -> Unit = {},
-        onClarifyEvent: (String) -> Unit = {}
+        onClarifyEvent: (String) -> Unit = {},
+        onResearchEvent: (String) -> Unit = {}
     ) {
         val response = client.post("$root/conversations/$conversationId/messages") {
             contentType(ContentType.Application.Json)
@@ -148,6 +154,9 @@ class ApiClient(
                 "search" -> if (!event.data.isNullOrBlank()) onSearchEvent(event.data)
                 "source" -> if (!event.data.isNullOrBlank()) onSourceEvent(event.data)
                 "clarify" -> if (!event.data.isNullOrBlank()) onClarifyEvent(event.data)
+                // PHASE 8.2: research-level events (§research) — same double-encoded
+                // payload shape, same empty-payload tolerance.
+                "research" -> if (!event.data.isNullOrBlank()) onResearchEvent(event.data)
                 "done" -> {
                     val message = event.data?.let { data ->
                         runCatching { GsApiJson.decodeFromString<MessageDto>(data) }.getOrNull()

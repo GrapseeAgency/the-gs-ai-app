@@ -81,6 +81,21 @@ type SourceCard = {
 
 type TraceStep = { id: string; icon: string; text: string; tone?: 'ok' | 'fail' | 'live' }
 
+// PHASE 8.2 §16 — engine display names for the per-engine trace rows.
+const ENGINE_LABELS: Record<string, string> = {
+  'bing-news-rss': 'Bing News',
+  'google-news-rss': 'Google News',
+  'bing-web': 'Bing Web',
+  'duckduckgo-lite': 'DuckDuckGo',
+  wikipedia: 'Wikipedia',
+  searxng: 'SearXNG',
+  'z-ai': 'Z AI',
+  openlibrary: 'Open Library',
+  gutenberg: 'Gutenberg',
+  arxiv: 'arXiv',
+  crossref: 'Crossref',
+}
+
 type ClarifyChoices = { question: string; options: { id: string; label: string }[] }
 
 type ChatMessage = {
@@ -609,14 +624,38 @@ export default function Home() {
                 const p = JSON.parse(event.data)
                 if (p.type === 'started') {
                   pushStep('◎', `Searching — “${p.label ?? ''}”`)
+                } else if (p.type === 'engines') {
+                  // 8.2 §16 — per-engine truth (✓ ok · ✕ failed · – empty).
+                  for (const e of Array.isArray(p.engines) ? p.engines : []) {
+                    const name = ENGINE_LABELS[e.id] ?? e.id
+                    if (e.status === 'ok') pushStep('✓', `${name} — ${e.count ?? 0} results`, 'ok')
+                    else if (e.status === 'failed') pushStep('✕', `${name} — ${e.error ?? 'failed'}`, 'fail')
+                    else pushStep('–', `${name} — no results`, undefined)
+                  }
                 } else if (p.type === 'results') {
                   pushStep('✓', `Found ${p.found} results${Array.isArray(p.engines) && p.engines.length ? ` · ${p.engines.join(', ')}` : ''}`, 'ok')
                 } else if (p.type === 'round') {
-                  pushStep('✓', `${p.sourcesVerified} source${p.sourcesVerified === 1 ? '' : 's'} verified`, 'ok')
+                  pushStep('✓', `${p.sourcesVerified} source${p.sourcesVerified === 1 ? '' : 's'} verified${p.syndicatedGroups ? ` · ${p.syndicatedGroups} syndicated group${p.syndicatedGroups === 1 ? '' : 's'}` : ''}`, 'ok')
                 } else if (p.type === 'failed') {
                   pushStep('✕', `Search failed — ${p.reason ?? 'unknown'}`, 'fail')
                 } else if (p.type === 'completed') {
                   traceSummary = `Searched ${p.queries} ${p.queries === 1 ? 'query' : 'queries'} · read ${p.retrieved} of ${p.sources} sources`
+                }
+              } else if (event.event === 'research') {
+                // 8.2 §28 — research-level truth (protocol v2).
+                const p = JSON.parse(event.data)
+                if (p.type === 'round_completed') {
+                  pushStep('✓', `Round ${p.round}: ${p.read ?? 0} read · ${p.failed ?? 0} failed${p.syndicatedGroups ? ` · ${p.syndicatedGroups} syndicated` : ''}`, 'ok')
+                } else if (p.type === 'synthesis_started') {
+                  pushStep('✎', 'Composing grounded answer…', 'live')
+                } else if (p.type === 'completed') {
+                  const secs = p.totalMs ? ` · ${(p.totalMs / 1000).toFixed(1)}s` : ''
+                  traceSummary = `Searched ${p.queries} ${p.queries === 1 ? 'query' : 'queries'} · read ${p.retrieved} of ${p.sources} sources${secs}`
+                } else if (p.type === 'failed') {
+                  const last = traceSteps[traceSteps.length - 1]
+                  if (!last || !last.text.startsWith('Search failed')) {
+                    pushStep('✕', `Research failed — ${p.reason ?? 'unknown'}`, 'fail')
+                  }
                 }
               } else if (event.event === 'source') {
                 const p = JSON.parse(event.data)
@@ -627,14 +666,19 @@ export default function Home() {
                 } else if (p.type === 'opening' || p.type === 'reading') {
                   const s = sourceByOrdinal.get(ordinal)
                   pushStep('↗', `Reading ${s?.domain ?? `source ${ordinal}`}…`, 'live')
-                } else if (p.type === 'completed') {
+                } else if (p.type === 'completed' || p.type === 'read') {
+                  // protocol v2 — `read` is canonical, `completed` the v1 alias;
+                  // both arrive, the transition is idempotent (one step only).
                   const s = sourceByOrdinal.get(ordinal)
+                  const alreadyRead = s?.status === 'retrieved'
                   if (s) {
                     s.status = 'retrieved'
                     if (p.publishedDate) s.publishedDate = p.publishedDate
                     setLiveSources([...sourceByOrdinal.values()].sort((a, b) => a.ordinal - b.ordinal))
                   }
-                  pushStep('✓', `Read ${s?.domain ?? `source ${ordinal}`} — ${(s?.title ?? '').slice(0, 70)}`, 'ok')
+                  if (!alreadyRead) {
+                    pushStep('✓', `Read ${s?.domain ?? `source ${ordinal}`} — ${(s?.title ?? '').slice(0, 70)}`, 'ok')
+                  }
                 } else if (p.type === 'failed') {
                   const s = sourceByOrdinal.get(ordinal)
                   pushStep('✕', `${s?.domain ?? `source ${ordinal}`} — ${p.reason ?? 'failed'}`, 'fail')
