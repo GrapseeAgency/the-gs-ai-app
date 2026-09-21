@@ -3557,3 +3557,21 @@ Stage Summary:
 - Round-2 delta: search:round.syndicatedGroups now parsed and shown on the round summary line (the one brief item round 1 missed); readLine's dead parameter removed; everything else verified as round 1 wrote it.
 - Static verification: PASS (per-file balance + symbol/arity/import/exhaustiveness audits as listed). Compile evidence remains CI's job; nothing was built locally (per directive).
 - Left as-is (deliberate): collapsed post-failure summary still reads "Search failed" regardless of research/search origin (the trace row itself carries "Research failed — …"; summary text unchanged from 8.1 behavior to keep the collapsed line's shape stable); research detail stays memory-only per the protocol (reload honestly shows summary + sources); version bump/release deferred until 8.2 lands end-to-end; worktree left uncommitted for the main agent (parallel 8.2-b iOS work shares this tree).
+
+---
+Task ID: PHASE8.2-COMPLETE (RELEASE-V0.67.0)
+Agent: Z.ai Code (main) + 8.2-a Android agent + 8.2-b iOS agent
+Task: PHASE 8.2 — model-agnostic search + deep research + full retrieval visualisation; release v0.67.0.
+
+Work Log:
+- CLIENTS (parallel agents): 8.2-a Android (838 insertions — SearchEvents/ApiClient/Dtos/ChatStreamController/SearchEventCards/ChatScreen/Coil catalog+gradle: research events, per-engine rows, expandable Research Details, Coil favicons with monogram fallback, idempotent read/completed fold); 8.2-b iOS (7 files + new ResearchDetailsView: same event parity, favicons, static gates PASS).
+- BACKEND: types/engines/aggregate/planner/research/route per the commit message; new browserExtract.ts (agent-browser `read`, deep-only, 2 pages, 30s kill); protocol v2 frozen in docs/search-event-protocol.md; /api/v1/models exposes the uniform searchCapabilities contract.
+- LIVE BUGFIXES DURING E2E: (1) plannerRuns gate only fired on the legacy web-gate — historical/religious + deep-tier turns never reached the planner (fixed: +detectHistoricalReligious +deepTierModel); (2) gutendex 403s datacenter IPs (switched to gutenberg.org HTML search); (3) gutenberg/openlibrary title-match discipline (progressive query shortening); (4) Wikimedia 403s browser-UAs from Node (policy UA -> 200); (5) academic intents were crushed by the 2-per-domain cap (raised to 4); (6) officialOnly now restricts the engine set itself.
+- E2E (public origin + localhost): A GS Free search PROVEN (4 engines, 4 reads, cited [1-4], dated reply, 13.9s); B Balanced identical; C Deep budget upgrade (10/6, 20-candidate round); D historical evidence-first (19 discovered, 3 read, source-attributed, traditions distinguished); §31 clarify discipline holds; §33 book PROVEN (Gutenberg full text, passage-level answer); E/F/G official-only + stop + again deterministic. Timings: firstSearch ~0.5-8s, firstToken early, full turns 6-25s.
+- SECURITY INCIDENT CLOSED: platform auto-commits push db/custom.db; my prisma SecretVault put the 11 keys in it and GitHub PUSH PROTECTION blocked the push ("Push cannot contain secrets"). Fixed: keys moved to gitignored db/vault.db (bun:sqlite layer, dynamic import), prisma model reverted, custom.db DROP TABLE + VACUUM (0 residual key bytes), tainted unpushed auto-commits discarded, clean history pushed. The user's "never on GitHub" rule held. DURABILITY HONESTY: all key layers are untracked -> a full container reboot wipes them; re-provision needed after reboots (disclosed to user).
+- RELEASE: versionCode 69 / 0.67.0; CI dispatch gate SUCCESS (55 tests, badging, cert parity, dex gates); tag v0.67.0 CI SUCCESS; asset attached + release notes PATCHed (200); roundtrip sha ed92b360…58453, dex re-verified (0x 10.0.2.2, origin present, Coil present); download/ mirror + manifest synced (e687128).
+
+Stage Summary:
+- v0.67.0 LIVE as the single release. ANY MODEL + REAL SEARCH + REAL RETRIEVAL + REAL EVIDENCE + VISIBLE TRACE + REAL CITATIONS = one experience; ready for the user's physical-device audit (HARD STOP per spec §40 — no further major capabilities until accepted).
+- Remaining limits (disclosed in release notes): ~30s outer proxy SSE cut (server persists; reopen to adopt), bing redirect-unwrap thinness on docs queries, openlibrary/ddg slowness, keys re-provision after platform reboots.
+- webDevReview cron (402136) active with keepalive-first duty.
