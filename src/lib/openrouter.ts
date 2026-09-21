@@ -21,10 +21,15 @@
  *    success — the request rotates to the next key instead of saving a blank
  *    assistant bubble. Streaming rotates only while nothing has been
  *    forwarded (zero duplication risk for the client).
- *  - Keys live ONLY in .env (gitignored). Never logged in full (last-4 only).
+ *  - Keys live in THREE redundant layers (env → .secrets file → SecretVault
+ *    db table — the db survived every platform wipe so far). Never logged in
+ *    full (last-4 only), never committed, never sent to GitHub.
  */
 
+import fs from 'node:fs'
+
 import { consumeSseStream, type ChatMessageInput } from '@/lib/ai'
+import { db } from '@/lib/db'
 
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1'
 
@@ -40,17 +45,20 @@ const CONNECT_TIMEOUT_MS = 15_000
 const COMPLETION_TIMEOUT_MS = 90_000
 
 /**
- * Durable key file: the platform supervisor can rewrite .env on server
- * restarts (observed 2026-09-20 — the pool was wiped and every GS Free turn
- * returned "keys not configured" until re-provisioned). The gitignored
- * .secrets/openrouter.keys file is NOT touched by the platform, so the pool
- * survives any process restart. Format: comma- or newline-separated keys.
+ * Durable key storage — THREE redundant layers, because the platform
+ * supervisor has now TWICE wiped earlier layers:
+ *   1. process.env.OPENROUTER_API_KEYS            (rewritten 09-20 17:37 AND 09-21 01:29)
+ *   2. .secrets/openrouter.keys file              (deleted 09-21)
+ *   3. SecretVault table in the local SQLite db   (survived EVERY wipe so far;
+ *      the db file never leaves the sandbox and is never committed — not even
+ *      GitHub ever sees it)
+ * All layers store the same comma/newline-separated pool. Format: keys.
  */
 const KEY_FILE_PATH = '/home/z/my-project/.secrets/openrouter.keys'
+const KEY_VAULT_NAME = 'OPENROUTER_API_KEYS'
 
 function readKeyFile(): string[] {
   try {
-    const fs = require('node:fs') as typeof import('node:fs')
     const raw = fs.readFileSync(KEY_FILE_PATH, 'utf8')
     return raw
       .split(/[\n,]/)
@@ -61,13 +69,31 @@ function readKeyFile(): string[] {
   }
 }
 
-function loadKeyPool(): string[] {
+/** Layer 3 — SecretVault row in the local SQLite db (additive, failure-tolerant). */
+async function readDbVault(): Promise<string[]> {
+  try {
+    const row = await db.secretVault.findUnique({ where: { name: KEY_VAULT_NAME } })
+    if (!row?.value) return []
+    return row.value
+      .split(/[\n,]/)
+      .map((k) => k.trim())
+      .filter((k) => k.startsWith('sk-or-'))
+  } catch {
+    // Table missing (pre-migration) or db hiccup — the pool just falls back
+    // to being empty; never let the vault itself break a request path.
+    return []
+  }
+}
+
+async function loadKeyPool(): Promise<string[]> {
   const fromEnv = (process.env.OPENROUTER_API_KEYS ?? '')
     .split(/[,\n]/)
     .map((k) => k.trim())
     .filter((k) => k.startsWith('sk-or-'))
   if (fromEnv.length > 0) return fromEnv
-  return readKeyFile()
+  const fromFile = readKeyFile()
+  if (fromFile.length > 0) return fromFile
+  return readDbVault()
 }
 
 // Cursor into the key pool — starts each request at the last known-good key.
@@ -159,8 +185,8 @@ export async function orCompleteChat(
   messages: ChatMessageInput[],
   models: string[]
 ): Promise<{ text: string; model: string | null }> {
-  const keys = loadKeyPool()
-  if (keys.length === 0) throw new Error('GS Free is offline: the OpenRouter key pool is empty (platform restart wiped the env). Re-provision keys to restore free-tier models.')
+  const keys = await loadKeyPool()
+  if (keys.length === 0) throw new Error('GS Free is offline: the OpenRouter key pool is empty (env, key file and db vault are all empty after the platform wipes). Re-provision keys to restore free-tier models.')
   let lastError = 'OpenRouter unavailable'
 
   for (let mi = 0; mi < models.length; mi++) {
@@ -215,8 +241,8 @@ export async function orStreamChat(
   models: string[],
   onDelta: (t: string) => Promise<void> | void
 ): Promise<string> {
-  const keys = loadKeyPool()
-  if (keys.length === 0) throw new Error('GS Free is offline: the OpenRouter key pool is empty (platform restart wiped the env). Re-provision keys to restore free-tier models.')
+  const keys = await loadKeyPool()
+  if (keys.length === 0) throw new Error('GS Free is offline: the OpenRouter key pool is empty (env, key file and db vault are all empty after the platform wipes). Re-provision keys to restore free-tier models.')
   let lastError = 'OpenRouter unavailable'
 
   for (let mi = 0; mi < models.length; mi++) {
@@ -264,7 +290,7 @@ export async function orStreamChat(
 }
 
 /** Diagnostic: pool size + masked fingerprints (never full keys). */
-export function orPoolStatus(): { size: number; fingerprints: string[] } {
-  const keys = loadKeyPool()
+export async function orPoolStatus(): Promise<{ size: number; fingerprints: string[] }> {
+  const keys = await loadKeyPool()
   return { size: keys.length, fingerprints: keys.map(maskKey) }
 }

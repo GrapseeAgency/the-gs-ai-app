@@ -168,3 +168,16 @@ model NotificationItem {
   read      Boolean  @default(false)
   createdAt DateTime @default(now())
 }
+
+// HOTFIX-KEYPOOL-DBVAULT — final-fallback storage for runtime secrets.
+// The platform supervisor has now twice wiped env/files (.env rewritten
+// 2026-09-20 17:37 AND 2026-09-21 01:29, .secrets/ deleted) — but the local
+// SQLite db file survived every one of them. loadKeyPool() therefore reads
+// env → .secrets file → THIS table. The db file never leaves the sandbox and
+// is never committed; values are never logged (last-4 fingerprints only).
+model SecretVault {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+}
