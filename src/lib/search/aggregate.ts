@@ -224,7 +224,7 @@ export async function runMetaSearch(input: MetaSearchInput): Promise<MetaSearchO
     input.intent === 'time_window_news' ||
     input.intent === 'source_specific'
 
-  const engineIds = enginesForIntent(input.intent, isNews, input.officialOnly === true)
+  const engineIds = enginesForIntent(input.intent, isNews, input.officialOnly === true, input.sourceHint)
   const perQuery = Math.max(input.limit, 6)
 
   // Fan out: every (query × engine) pair runs independently; failures are

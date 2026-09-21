@@ -562,6 +562,9 @@ export default function Home() {
           body: JSON.stringify({
             content: text,
             stream: true,
+            // PHASE 8.3 §11 — real timezone-aware time capability: the client
+            // supplies its IANA zone so the backend clock answers in local time.
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           }),
           signal: controller.signal,
         })

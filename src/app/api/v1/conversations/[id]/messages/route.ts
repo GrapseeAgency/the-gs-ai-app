@@ -7,7 +7,6 @@ import { planRoute } from '@/lib/router'
 import {
   SYSTEM_PROMPT,
   VISION_GROUNDING_PROMPT,
-  SEARCH_GROUNDING_PROMPT,
   streamChat,
   completeChat,
   streamVisionChat,
@@ -16,13 +15,36 @@ import {
   type VisionChatMessage,
   type VisionContentPart,
 } from '@/lib/ai'
+import { decideCapability, validTimeZone } from '@/lib/capability'
+import {
+  recordResearchContext,
+  getResearchContexts,
+  findReferencedResearchContext,
+  buildReuseEvidenceBlock,
+  updateResearchContextCitations,
+  type ResearchContext,
+} from '@/lib/research-context'
+import {
+  TOOL_RESULT_END_MARKER,
+  buildFinalUserTurn,
+  buildResearchToolResultBlock,
+  buildResearchFailureToolResultBlock,
+  buildTimeEvidence,
+  type TimeEvidence,
+} from '@/lib/evidence'
+import {
+  detectExecutionContradiction,
+  buildCorrectionInstruction,
+  injectCorrection,
+  type ExecutionState,
+  type GuardViolation,
+} from '@/lib/synthesis-guard'
 import { clientKey, rateLimit } from '@/lib/rate-limit'
 import { MAX_ATTACHMENTS_PER_MESSAGE } from '@/lib/attachments'
 import {
   collectDocumentContext,
   documentFailureMessage,
   isDocumentAttachment,
-  assembleDocumentUserTurn,
   DOCUMENT_ONLY_DEFAULT,
   DOC_HISTORY_TURNS,
 } from '@/lib/document'
@@ -43,6 +65,7 @@ import {
   sanitizeCitationMarkers,
   normalizeCitationBrackets,
   searchFailureNote,
+  extractSearchQuery,
   SEARCH_HISTORY_TURNS,
   type WebSource,
 } from '@/lib/websearch'
@@ -55,7 +78,14 @@ import {
   buildResearchEvidenceBlock,
   RESEARCH_BUDGET,
 } from '@/lib/search/research'
-import { NOOP_EMIT, type ClarifyOption, type ResearchSource, type SearchEventEmitter } from '@/lib/search/types'
+import {
+  NOOP_EMIT,
+  type ClarifyOption,
+  type ResearchSource,
+  type SearchEventEmitter,
+  type SearchIntent,
+  type TimeRange,
+} from '@/lib/search/types'
 
 export const dynamic = 'force-dynamic'
 
@@ -98,9 +128,9 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     )
   }
 
-  let body: { content?: unknown; stream?: unknown; modelId?: unknown; attachments?: unknown }
+  let body: { content?: unknown; stream?: unknown; modelId?: unknown; attachments?: unknown; timezone?: unknown }
   try {
-    body = (await req.json()) as { content?: unknown; stream?: unknown; modelId?: unknown; attachments?: unknown }
+    body = (await req.json()) as { content?: unknown; stream?: unknown; modelId?: unknown; attachments?: unknown; timezone?: unknown }
   } catch {
     return NextResponse.json(
       { code: 'bad_request', message: 'Request body must be valid JSON' },
@@ -313,6 +343,27 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
   // DETERMINISTIC chip matcher — no LLM needed for the chip path.
   const clarifyFollowUp =
     previousClarifyOptions !== null && content.trim().length > 0 && content.length <= 60
+
+  // ---- PHASE 8.3 §2 — DETERMINISTIC CAPABILITY GATE ---------------------------
+  // The capability of this turn — chat, time, web, deep research, document,
+  // vision — is decided by CODE before ANY model runs (no planner, no
+  // synthesis). The model is never asked "do you think you should search?"
+  // and can never veto a capability the application already knows. A forced
+  // search reaches execution unconditionally; the LLM planner downstream can
+  // only refine queries.
+  const historicalReligious = content.trim().length > 0 ? detectHistoricalReligious(content) : false
+  const clientTimezone =
+    typeof body.timezone === 'string' ? body.timezone : req.headers.get('x-client-timezone')
+  const cap = decideCapability({
+    content,
+    hasImages: useVision,
+    hasDocuments: currentTurnDocs.length > 0 || historyDocTurns.length > 0,
+    historicalReligious,
+  })
+  // §14 — per-turn handshake facts for the internal forensic log.
+  const requestId = crypto.randomUUID()
+  const clientVersion = req.headers.get('x-gs-app-version') ?? 'web'
+  const backendRevision = process.env.GS_BACKEND_REVISION ?? 'dev'
   // PHASE 8.2 §1/§8/§25 + ARCHITECTURE LOCK — the GS Router is the ONE
   // backend-owned decision per turn (capability route, internal model,
   // retrieval depth). Deep research is inferred from the REQUEST (depth
@@ -324,14 +375,16 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     content,
     hasImages: useVision,
     hasDocuments: currentTurnDocs.length > 0 || historyDocTurns.length > 0,
-    webGateTrigger: webGate.trigger,
+    // A code-forced search reaches the router as an explicit gate hit so the
+    // turn routes onto the search-capable model — the planner cannot veto it.
+    webGateTrigger: cap.searchPlanned ? 'explicit' : webGate.trigger,
     clarifyFollowUp,
-    historicalReligious: detectHistoricalReligious(content),
+    historicalReligious,
     historyChars: history.reduce((n, m) => n + m.content.length, 0),
   })
   const plannerRuns = routerPlan.plannerRuns
   console.log(
-    `GS-ROUTER conv=${id} route=${routerPlan.route} depth=${routerPlan.depth} reason=${routerPlan.reason}`
+    `GS-ROUTER conv=${id} route=${routerPlan.route} depth=${routerPlan.depth} reason=${routerPlan.reason} capability=${cap.capability} trigger=${cap.trigger ?? 'none'} forced=${cap.searchPlanned}`
   )
   // Internal execution route for synthesis (models.ts mapping — OpenRouter
   // free chains bypass primary-provider quota windows; z-ai carries the
@@ -340,6 +393,33 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
   const modelRoute = resolveModelRoute(routerPlan.internalModelId)
   const providerModel = modelRoute.backend === 'zai' ? modelRoute.providerModel : null
   const openRouterModels = modelRoute.backend === 'openrouter' ? modelRoute.models : null
+
+  // ---- PHASE 8.3 §3 — INTERNAL FORENSIC LOG ----------------------------------
+  // One line per turn with the full execution facts. INTERNAL ONLY — server
+  // logs, never sent to a client.
+  const gsCapLog = (
+    finalStatus: string,
+    turn: TurnSearch | null,
+    extra?: { cited?: number[] }
+  ): void => {
+    const sourceCount =
+      turn?.kind === 'research'
+        ? turn.outcome.sources.length
+        : turn?.kind === 'reuse'
+          ? turn.sources.length
+          : 0
+    const evidenceCount =
+      turn?.kind === 'research' && turn.outcome.ok
+        ? turn.maxOrdinal
+        : turn?.kind === 'reuse'
+          ? turn.sources.length
+          : turn?.kind === 'time'
+            ? 1
+            : 0
+    console.log(
+      `GS-CAP requestId=${requestId} conv=${id} msg=${userMessage.id} clientVersion=${clientVersion} backendRevision=${backendRevision} capability=${cap.capability} trigger=${cap.trigger ?? 'none'} searchExecuted=${turn?.kind === 'research'} researchExecuted=${turn?.kind === 'research'} evidenceCount=${evidenceCount} sourceCount=${sourceCount} modelRoute=${modelRoute.backend}/${routerPlan.internalModelId} finalStatus=${finalStatus}${extra?.cited ? ` cited=[${extra.cited.join(',')}]` : ''}`
+    )
+  }
 
   let historyWebSources: {
     title: string
@@ -400,12 +480,24 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
   }
 
   /**
-   * PHASE 8.1 — the search turn, in one bounded execution. `emit === null`
-   * (non-streaming path) runs the identical pipeline silently.
+   * PHASE 8.3 — the capability turn, in one bounded execution. The capability
+   * was already decided by code (decideCapability) BEFORE anything here runs;
+   * the LLM planner only refines search queries and can never flip a forced
+   * search off, never clarify away a forced search, and never start a search
+   * on a non-search capability. `emit === null` (non-streaming path) runs the
+   * identical pipeline silently.
    */
   type TurnSearch =
-    | { kind: 'none' }
+    | { kind: 'none'; note?: string }
     | { kind: 'clarify'; question: string; options: ClarifyOption[] }
+    | { kind: 'time'; evidence: TimeEvidence }
+    | {
+        kind: 'reuse'
+        ctx: ResearchContext
+        evidenceBlock: string
+        sources: WebSource[]
+        researchId: string
+      }
     | {
         kind: 'research'
         outcome: Awaited<ReturnType<typeof runResearch>>
@@ -413,66 +505,76 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
         maxOrdinal: number
         historySources: WebSource[]
         startedAt: number
+        researchId: string | null
       }
 
-  const executeSearchPhase = async (emit: SearchEventEmitter | null): Promise<TurnSearch> => {
-    if (allImagesFailed || allDocsFailed) return { kind: 'none' }
-    if (!plannerRuns) return { kind: 'none' }
-
-    // 2026-09-21 live audit: the planner used to run in TOTAL silence (8-16s
-    // of nothing on the wire before the first visible event). The search phase
-    // HAS started the moment the planner runs — say so honestly so clients
-    // light up the searching state immediately.
-    emit?.('status', 'searching')
-
-    const plan = await planSearch({
-      userText: content,
-      historyLines,
-      previousClarifyOptions,
+  /** §9 — record every executed research as an explicit ResearchContext. */
+  const recordContext = (outcome: {
+    ok: boolean
+    queriesRun: string[]
+    sources: { ordinal: number; title: string; url: string; domain: string; snippet: string; query: string; status: string; publishedDate: string | null }[]
+  }): string => {
+    const researchId = `rc-${userMessage.id.slice(0, 8)}-${Date.now().toString(36)}`
+    recordResearchContext(id, {
+      researchId,
+      originatingMessageId: userMessage.id,
+      originatingUserRequest: content.trim(),
+      queries: outcome.queriesRun,
+      sources: outcome.sources
+        .filter((s) => s.status === 'retrieved' || s.status === 'snippet_only')
+        .map((s) => ({
+          ordinal: s.ordinal,
+          title: s.title,
+          url: s.url,
+          domain: s.domain,
+          snippet: s.snippet,
+          query: s.query,
+          status: s.status as ResearchSource['status'],
+          publishedDate: s.publishedDate,
+        })),
+      citations: [],
+      createdAt: Date.now(),
+      status: outcome.ok ? 'complete' : 'failed',
     })
-    console.log(
-      `SEARCH-PLAN conv=${id} intent=${plan.intent} needs=${plan.needsSearch} ambiguous=${plan.ambiguity.isAmbiguous} queries=[${plan.queries.join(' | ')}] range=${plan.timeRange} depth=${plan.depth} stop=${plan.stopSignal}`
-    )
+    return researchId
+  }
 
-    // §6/§35 — ambiguous broad request: clarify with native quick choices.
-    // No search runs; the assistant message IS the clarification question.
-    if (plan.ambiguity.isAmbiguous && plan.ambiguity.prompt) {
-      return { kind: 'clarify', question: plan.ambiguity.prompt.question, options: plan.ambiguity.prompt.options }
-    }
-
-    // §19 — stop/reuse/no-search turns answer from what already exists.
-    if (!plan.needsSearch || plan.stopSignal) return { kind: 'none' }
-
-    // 8.2 §9/§25 + ARCHITECTURE LOCK — depth combines the planner's intent
-    // decision with the GS Router's depth decision. The SEARCH SERVICE is
-    // identical either way — only the budget differs. No model tier exists.
-    const depth: 'quick' | 'deep' =
-      plan.depth === 'deep' || routerPlan.depth === 'deep' ? 'deep' : 'quick'
-
-    const researchStartedAt = Date.now()
+  /** Shared execution tail for every search execution (planner or code-driven). */
+  const runSearchExecution = async (
+    params: {
+      queries: string[]
+      intent: SearchIntent
+      timeRange: TimeRange
+      region?: string
+      sourceHint?: string
+      officialOnly?: boolean
+      depth: 'quick' | 'deep'
+    },
+    emit: SearchEventEmitter | null,
+    startedAt: number
+  ): Promise<TurnSearch> => {
     emit?.('research', {
       type: 'started',
-      intent: plan.intent,
-      depth,
-      roundsPlanned: RESEARCH_BUDGET[depth].maxRounds,
+      intent: params.intent,
+      depth: params.depth,
+      roundsPlanned: RESEARCH_BUDGET[params.depth].maxRounds,
     })
-    emit?.('search', { type: 'started', intent: plan.intent, depth, label: plan.queries[0] ?? '' })
-
+    emit?.('search', { type: 'started', intent: params.intent, depth: params.depth, label: params.queries[0] ?? '' })
     const outcome = await runResearch({
-      queries: plan.queries,
-      intent: plan.intent,
-      timeRange: plan.timeRange,
-      region: plan.region,
-      sourceHint: plan.sourceHint,
-      officialOnly: plan.officialOnly,
-      depth,
+      queries: params.queries,
+      intent: params.intent,
+      timeRange: params.timeRange,
+      region: params.region,
+      sourceHint: params.sourceHint,
+      officialOnly: params.officialOnly,
+      depth: params.depth,
       emit: emit ?? NOOP_EMIT,
-      deadlineAt: Date.now() + RESEARCH_BUDGET[depth].wallClockMs + 2_000,
+      deadlineAt: Date.now() + RESEARCH_BUDGET[params.depth].wallClockMs + 2_000,
     })
     console.log(
-      `RESEARCH conv=${id} intent=${plan.intent} queries=${outcome.queriesRun.length} sources=${outcome.sources.length} retrieved=${outcome.sources.filter((s) => s.status === 'retrieved').length} engines=${outcome.enginesUsed.join('+') || 'none'} ok=${outcome.ok} kind=${outcome.failure?.kind ?? '-'}`
+      `RESEARCH conv=${id} intent=${params.intent} queries=${outcome.queriesRun.length} sources=${outcome.sources.length} retrieved=${outcome.sources.filter((s) => s.status === 'retrieved').length} engines=${outcome.enginesUsed.join('+') || 'none'} ok=${outcome.ok} kind=${outcome.failure?.kind ?? '-'}`
     )
-
+    const researchId = recordContext(outcome)
     if (!outcome.ok || outcome.sources.length === 0) {
       emit?.('search', { type: 'failed', reason: outcome.failure?.kind ?? 'no_results' })
       emit?.('research', {
@@ -480,66 +582,206 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
         reason: outcome.failure?.kind ?? 'no_results',
         message: outcome.failure?.message,
       })
-      return { kind: 'research', outcome, evidenceBlock: null, maxOrdinal: 0, historySources: [], startedAt: researchStartedAt }
+      return { kind: 'research', outcome, evidenceBlock: null, maxOrdinal: 0, historySources: [], startedAt, researchId }
+    }
+    const { block, maxOrdinal } = buildResearchEvidenceBlock(outcome.sources, outcome.queriesRun)
+    return { kind: 'research', outcome, evidenceBlock: block, maxOrdinal, historySources: [], startedAt, researchId }
+  }
+
+  const executeSearchPhase = async (emit: SearchEventEmitter | null): Promise<TurnSearch> => {
+    if (allImagesFailed || allDocsFailed) return { kind: 'none' }
+
+    // §11 — TIME capability: the application clock IS the tool. No planner,
+    // no search, no model opinion about whether it "knows" the time.
+    if (cap.capability === 'TIME') {
+      console.log(`GS-TIME conv=${id} tz=${validTimeZone(clientTimezone) ?? 'UTC'}`)
+      return { kind: 'time', evidence: buildTimeEvidence(clientTimezone) }
     }
 
-    const { block, maxOrdinal } = buildResearchEvidenceBlock(outcome.sources, outcome.queriesRun)
-    return { kind: 'research', outcome, evidenceBlock: block, maxOrdinal, historySources: [], startedAt: researchStartedAt }
+    // §10 — STOP / CONTEXT RETURN: suppress NEW search execution and provide
+    // the stored ResearchContext explicitly. Code-driven — the model never
+    // infers whether it should search.
+    if (cap.reuseResearch) {
+      const ctx = findReferencedResearchContext(content, getResearchContexts(id))
+      if (ctx) {
+        const reuse = buildReuseEvidenceBlock(ctx)
+        console.log(
+          `RESEARCH-REUSE conv=${id} ctx=${ctx.researchId} sources=${reuse.sources.length} trigger=${cap.trigger} request="${content.slice(0, 60)}"`
+        )
+        return {
+          kind: 'reuse',
+          ctx,
+          evidenceBlock: reuse.block,
+          sources: reuse.sources.map((s) => ({
+            ordinal: s.ordinal,
+            id: s.url,
+            title: s.title,
+            url: s.url,
+            domain: s.domain,
+            snippet: s.snippet,
+            publishedDate: s.publishedDate,
+            retrievedAt: new Date().toISOString(),
+            query: s.query,
+          })),
+          researchId: ctx.researchId,
+        }
+      }
+      console.log(`RESEARCH-REUSE conv=${id} trigger=${cap.trigger} requested but no stored research context — plain chat`)
+      return { kind: 'none', note: 'reuse requested but no research context exists' }
+    }
+
+    if (!plannerRuns) return { kind: 'none' }
+
+    // 2026-09-21 live audit: the search phase HAS started the moment the
+    // planner runs — say so honestly so clients light up the searching state
+    // immediately.
+    emit?.('status', 'searching')
+
+    // §9 — explicit RE-search ("search again using primary sources"): the
+    // application locates the originating research execution, preserves the
+    // requested policy change and executes a FRESH search, creating a new
+    // context. Code-driven reconstruction — the model only synthesizes.
+    if (cap.trigger === 'research_again') {
+      const prior = getResearchContexts(id)
+        .slice()
+        .reverse()
+        .find((c) => c.status === 'complete' && c.sources.length > 0)
+      if (prior) {
+        const derived = extractSearchQuery(prior.originatingUserRequest, 'explicit')
+        const topic =
+          derived.length >= 3 ? derived : prior.queries[0] ?? prior.originatingUserRequest
+        const queries = cap.policy.primarySources
+          ? [topic, `${topic} primary sources`, `${topic} original text`]
+          : [topic, ...prior.queries.slice(0, 1)]
+        const againDepth: 'quick' | 'deep' = routerPlan.depth === 'deep' ? 'deep' : 'quick'
+        console.log(
+          `RESEARCH-AGAIN conv=${id} prior=${prior.researchId} topic="${topic.slice(0, 60)}" primarySources=${cap.policy.primarySources === true}`
+        )
+        return await runSearchExecution(
+          {
+            queries: queries.filter((q) => q.trim().length >= 3).slice(0, 4),
+            intent: 'research',
+            timeRange: 'none',
+            sourceHint: cap.policy.sourceHint,
+            officialOnly: cap.policy.officialOnly,
+            depth: againDepth,
+          },
+          emit,
+          Date.now()
+        )
+      }
+      console.log(`RESEARCH-AGAIN conv=${id} no prior research context — falling back to the planner`)
+    }
+
+    const plan = await planSearch({
+      userText: content,
+      historyLines,
+      previousClarifyOptions,
+    })
+    console.log(
+      `SEARCH-PLAN conv=${id} intent=${plan.intent} needs=${plan.needsSearch} ambiguous=${plan.ambiguity.isAmbiguous} queries=[${plan.queries.join(' | ')}] range=${plan.timeRange} depth=${plan.depth} stop=${plan.stopSignal} forced=${cap.searchPlanned}`
+    )
+
+    // §6/§35 — ambiguous broad request: clarify ONLY when the capability was
+    // not forced. A forced capability is a COMMAND (§2) — never a question.
+    if (plan.ambiguity.isAmbiguous && plan.ambiguity.prompt && !cap.searchPlanned) {
+      return { kind: 'clarify', question: plan.ambiguity.prompt.question, options: plan.ambiguity.prompt.options }
+    }
+
+    // §19 — stop/reuse/no-search turns answer from what already exists —
+    // unless the capability gate FORCED a search, which the planner cannot veto.
+    if ((!plan.needsSearch || plan.stopSignal) && !cap.searchPlanned) return { kind: 'none' }
+
+    // §2 — forced-capability overrides: the planner refines, code decides.
+    if (cap.searchPlanned) {
+      plan.needsSearch = true
+      plan.ambiguity = { isAmbiguous: false, prompt: null }
+      plan.stopSignal = false
+      if (cap.policy.sourceHint) plan.sourceHint = cap.policy.sourceHint
+      if (cap.policy.officialOnly) plan.officialOnly = true
+      if (cap.policy.timeRange) plan.timeRange = cap.policy.timeRange
+      if (plan.queries.length === 0) {
+        const q =
+          webGate.trigger !== null
+            ? extractSearchQuery(content, webGate.trigger)
+            : content.replace(/\s+/g, ' ').trim().slice(0, 120)
+        plan.queries = [q].filter((x) => x.length >= 3)
+      }
+      if (plan.queries.length === 0) return { kind: 'none' }
+    }
+
+    // 8.2 §9/§25 + ARCHITECTURE LOCK — depth combines the planner's intent
+    // decision with the GS Router's depth decision. The SEARCH SERVICE is
+    // identical either way — only the budget differs. No model tier exists.
+    const depth: 'quick' | 'deep' =
+      plan.depth === 'deep' || routerPlan.depth === 'deep' ? 'deep' : 'quick'
+
+    return await runSearchExecution(
+      {
+        queries: plan.queries,
+        intent: plan.intent,
+        timeRange: plan.timeRange,
+        region: plan.region,
+        sourceHint: plan.sourceHint,
+        officialOnly: plan.officialOnly,
+        depth,
+      },
+      emit,
+      Date.now()
+    )
   }
 
   /**
-   * PHASE 8 — assemble the model messages for this turn given the search
-   * outcome. Evidence ordering (Phase 7.1 hierarchy extended to web data):
-   *   [document block] → [earlier web evidence] → [fresh search evidence] →
-   *   [end marker] → [the user's words]
-   * so the CURRENT user message is always the final controlling content.
+   * PHASE 8.3 — assemble the model messages for this turn (spec §3/§4/§7).
+   *
+   * Every tool/evidence block rides as a structured TOOL RESULT terminated by
+   * the END marker, and the VERBATIM CURRENT USER REQUEST is always the final
+   * controlling content:
+   *   [document block] → [earlier web evidence] → [TOOL RESULT] →
+   *   [— END OF TOOL RESULT —] → CURRENT USER REQUEST → <the user's words>
+   * The model receives the machine-readable execution facts (capability,
+   * execution, searchExecuted) — the application state is authoritative.
    */
   const buildModelMessages = async (
     turn: TurnSearch
-  ): Promise<{ messages: ChatMessageInput[] | VisionChatMessage[]; systemPrompt: string; historySources: WebSource[] }> => {
+  ): Promise<{
+    messages: ChatMessageInput[] | VisionChatMessage[]
+    systemPrompt: string
+    historySources: WebSource[]
+    userTurnText: string
+  }> => {
     const researchOk = turn.kind === 'research' && turn.outcome.ok && turn.evidenceBlock !== null
-    const freshBlock = researchOk ? turn.evidenceBlock : null
     const freshCount = researchOk ? turn.maxOrdinal : 0
     const historyBlock = includeHistoryEvidence
       ? buildHistoryEvidenceBlock(historyWebSources, freshCount + 1)
       : null
     const historySources = historyBlock?.sources ?? []
-    const historyCount = historySources.length
-    const searchFailed =
-      turn.kind === 'research' && (!turn.outcome.ok || turn.outcome.failure != null)
-    // 2026-09-21 NATURAL-FLOW FIX: the grounding appendix attaches ONLY when
-    // THIS turn actually ran a research attempt — never because older turns
-    // carry sources (historyCount no longer triggers it; the injection switch
-    // in shouldInjectHistoryEvidence now requires an explicit source reference).
-    const webSearchUsed = turn.kind === 'research'
 
-    const systemPrompt = webSearchUsed
-      ? `${baseSystemPrompt}\n\n${SEARCH_GROUNDING_PROMPT}`
-      : baseSystemPrompt
-
-    const evidenceBlocks: string[] = []
-    if (docContext.block) evidenceBlocks.push(docContext.block)
-    if (historyBlock?.block) evidenceBlocks.push(historyBlock.block)
-    if (searchFailed) {
-      const note =
-        turn.kind === 'research'
-          ? turn.outcome.failure?.message ?? 'The search could not be completed.'
-          : 'The search could not be completed.'
-      evidenceBlocks.push(
-        `(System note about this turn's search: ${searchFailureNote(
-          // Map the research failure kind onto the user-facing failure classes.
-          turn.kind === 'research' && turn.outcome.failure
-            ? turn.outcome.failure.kind === 'timeout'
-              ? ({ kind: 'timeout', message: turn.outcome.failure.message } as const)
-              : turn.outcome.failure.kind === 'no_results'
-                ? ({ kind: 'no_results', message: turn.outcome.failure.message } as const)
-                : ({ kind: 'provider_error', message: turn.outcome.failure.message } as const)
-            : ({ kind: 'provider_error', message: note } as const)
-        )} If the question can be answered from your own knowledge, just answer it normally — mention the failed search in a few passing words only if it is relevant. Never present internal knowledge as search results and never emit [N] markers. The user's request below still stands.)`
-      )
+    // §3/§4 — ONE structured TOOL RESULT per capability turn.
+    let toolResultBlock: string | null = null
+    if (turn.kind === 'time') toolResultBlock = turn.evidence.block
+    else if (turn.kind === 'reuse') toolResultBlock = turn.evidenceBlock
+    else if (turn.kind === 'research') {
+      toolResultBlock = researchOk
+        ? buildResearchToolResultBlock(turn.outcome)
+        : buildResearchFailureToolResultBlock(turn.outcome)
     }
-    if (freshBlock) evidenceBlocks.push(freshBlock)
-    const combinedEvidence = evidenceBlocks.length > 0 ? evidenceBlocks.join('\n\n') : null
+
+    // PHASE 8.3 §1 — minimal product contract. No grounding appendices, no
+    // routing prose: execution state rides the TOOL RESULT, not the persona.
+    const systemPrompt = baseSystemPrompt
+
+    // The verbatim request (with the documented defaults for attachment-only turns).
+    const verbatimRequest =
+      content.trim().length > 0
+        ? content
+        : currentTurnDocs.length > 0
+          ? DOCUMENT_ONLY_DEFAULT
+          : useVision
+            ? 'Describe this image.'
+            : ''
+
+    const evidenceBlocks = [docContext.block, historyBlock?.block ?? null, toolResultBlock]
 
     if (useVision && !allImagesFailed) {
       const textPayload = content.trim().length > 0 ? content : 'Describe this image.'
@@ -557,13 +799,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       let imageBudget = VISION_MAX_IMAGES_PER_REQUEST - visionPrepared.length
 
       const visionContext: VisionChatMessage[] = [
-        {
-          role: 'system',
-          content:
-            systemPrompt +
-            // PHASE 6: vision grounding rides every vision turn (unchanged).
-            `\n\n${VISION_GROUNDING_PROMPT}`,
-        },
+        { role: 'system', content: `${systemPrompt}\n\n${VISION_GROUNDING_PROMPT}` },
       ]
       for (const m of history) {
         if (m.role.toLowerCase() === 'user' && selectedTurnIds.has(m.id) && imageBudget > 0) {
@@ -587,57 +823,47 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
           })
         }
       }
+      // §7 — evidence FIRST (terminated by the END marker), the user's
+      // request LAST before the images.
+      const presentEvidence = evidenceBlocks.filter((b): b is string => !!b)
       const visionUserParts: VisionContentPart[] = [
-        // §4 — document context rides the same request on mixed image+document
-        // turns. PHASE 7.1/8: evidence FIRST (documents → earlier web → fresh
-        // search), user intent LAST.
-        ...(combinedEvidence ? [{ type: 'text' as const, text: combinedEvidence }] : []),
+        ...(presentEvidence.length > 0
+          ? [{ type: 'text' as const, text: `${presentEvidence.join('\n\n')}\n\n${TOOL_RESULT_END_MARKER}` }]
+          : []),
         { type: 'text', text: finalText },
         ...visionPrepared.map((p) => ({ type: 'image_url' as const, image_url: { url: p.dataUrl } })),
       ]
       visionContext.push({ role: 'user', content: visionUserParts })
-      return { messages: visionContext, systemPrompt, historySources }
+      const reuseSources = turn.kind === 'reuse' ? turn.sources : []
+      return {
+        messages: visionContext,
+        systemPrompt,
+        historySources: reuseSources.length > 0 ? reuseSources : historySources,
+        userTurnText: finalText,
+      }
     }
 
-    // Text-only context. PHASE 7: extracted document context (current turn
-    // and/or recent document turns) is included in the live user message —
-    // history rows stay clean, so follow-ups re-collect context each turn.
-    // §7 — one documented default when a document arrives with no question.
-    //
-    // PHASE 7.1 — CONVERSATIONAL-CONTROL FIX: evidence is data, not an
-    // instruction, and it must NEVER sit between the user's words and
-    // generation. assembleDocumentUserTurn orders the final message as:
-    //   [all evidence blocks] → [end marker] → [user's words]
-    // so the CURRENT user message is the final controlling content the
-    // provider sees, whatever the evidence size. The document-only default
-    // fires ONLY for a current-turn document with no user text — never for a
-    // text-only follow-up to a historical document.
-    const assembled = assembleDocumentUserTurn({
-      content,
-      currentTurnHasDocuments: currentTurnDocs.length > 0,
-      docBlock: combinedEvidence,
-    })
-    const userTurnText = assembled.userText
-    const textWithContext = assembled.finalText
-    const finalUserMessage: ChatMessageInput =
-      attachmentsProvided && !combinedEvidence
-        ? {
-            // Defensive fallback: an attachment turn that produced no readable
-            // context and no images (never reachable through the error gates).
-            role: 'user',
-            content: `${textWithContext}${textWithContext.length > 0 ? '\n\n' : ''}[The user attached ${claimedAttachments
-              .map((a) => a.displayName)
-              .join(', ')}. Attachment contents could not be read.]`,
-          }
-        : { role: 'user', content: textWithContext }
+    // Text-only context. §7 — ONE user message:
+    //   [evidence blocks] → [END MARKER] → CURRENT USER REQUEST → <verbatim>
+    // (Plain-chat turns with no evidence keep their exact wire shape.)
+    let finalUserContent = buildFinalUserTurn({ verbatim: verbatimRequest, blocks: evidenceBlocks })
+    if (attachmentsProvided && evidenceBlocks.every((b) => !b)) {
+      // Defensive fallback: an attachment turn that produced no readable
+      // context and no images (never reachable through the error gates).
+      finalUserContent = `${finalUserContent}${finalUserContent.length > 0 ? '\n\n' : ''}[The user attached ${claimedAttachments
+        .map((a) => a.displayName)
+        .join(', ')}. Attachment contents could not be read.]`
+    }
+    const reuseSources = turn.kind === 'reuse' ? turn.sources : []
     return {
       messages: [
         { role: 'system', content: systemPrompt },
         ...history.map((m) => ({ role: m.role.toLowerCase(), content: historyRowText(m) })),
-        finalUserMessage,
+        { role: 'user', content: finalUserContent },
       ],
       systemPrompt,
-      historySources,
+      historySources: reuseSources.length > 0 ? reuseSources : historySources,
+      userTurnText: finalUserContent,
     }
   }
 
@@ -785,6 +1011,77 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     }
   }
 
+  // ---- PHASE 8.3 §5/§18 — post-generation execution-state validation ---------
+  // The orchestration layer OWNS the execution state. A draft that contradicts
+  // it ("I cannot search…") is INVALID and is regenerated with a corrected
+  // evidence-state instruction before anything reaches the user. Evidence
+  // turns are therefore BUFFERED: no byte streams until the text passes.
+
+  const executionStateFor = (turn: TurnSearch): ExecutionState => ({
+    capability: cap.capability,
+    searchExecuted: turn.kind === 'research',
+    evidenceProvided: turn.kind === 'research' && turn.outcome.ok && turn.evidenceBlock !== null,
+    timeProvided: turn.kind === 'time',
+    documentProvided: !!docContext.block,
+    reuseProvided: turn.kind === 'reuse',
+  })
+
+  /** Replace the final user turn with the corrected version (request kept last). */
+  const applyCorrection = (
+    messages: ChatMessageInput[] | VisionChatMessage[],
+    userTurnText: string,
+    correction: string
+  ): ChatMessageInput[] | VisionChatMessage[] => {
+    const correctedText = injectCorrection(userTurnText, correction)
+    const next = [...messages] as unknown as (ChatMessageInput | VisionChatMessage)[]
+    for (let i = next.length - 1; i >= 0; i--) {
+      if (next[i].role !== 'user') continue
+      const m = next[i]
+      if (typeof m.content === 'string') {
+        next[i] = { ...m, content: correctedText }
+      } else if (Array.isArray(m.content)) {
+        next[i] = { ...m, content: [...m.content, { type: 'text', text: correction }] } as VisionChatMessage
+      }
+      break
+    }
+    return next as ChatMessageInput[] | VisionChatMessage[]
+  }
+
+  const MAX_GUARD_ATTEMPTS = 3
+
+  const synthesizeValidated = async (
+    turn: TurnSearch,
+    modelMessages: ChatMessageInput[] | VisionChatMessage[],
+    userTurnText: string
+  ): Promise<{ text: string; violation: GuardViolation | null }> => {
+    const state = executionStateFor(turn)
+    let activeMessages = modelMessages
+    let activeUserTurn = userTurnText
+    let last: { text: string; violation: GuardViolation | null } = { text: '', violation: null }
+    for (let attempt = 1; attempt <= MAX_GUARD_ATTEMPTS; attempt++) {
+      const text = await synthesize(activeMessages)
+      const violation = detectExecutionContradiction(text, state)
+      last = { text, violation }
+      if (!violation) return last
+      console.log(
+        `GS-GUARD conv=${id} attempt=${attempt}/${MAX_GUARD_ATTEMPTS} violation=${violation.kind} match="${violation.match.slice(0, 70)}"`
+      )
+      if (attempt === MAX_GUARD_ATTEMPTS) break
+      const correction = buildCorrectionInstruction(state, violation, attempt)
+      activeMessages = applyCorrection(activeMessages, activeUserTurn, correction)
+      activeUserTurn = injectCorrection(activeUserTurn, correction)
+    }
+    return last
+  }
+
+  /** Flush a validated full text as delta events (buffered-synthesis path). */
+  const chunkDeltas = (text: string): string[] => {
+    const size = 140
+    const chunks: string[] = []
+    for (let i = 0; i < text.length; i += size) chunks.push(text.slice(i, i + size))
+    return chunks.length > 0 ? chunks : ['']
+  }
+
   // Catalogue telemetry — count a use when this is the first message.
   if (conversation.assistantId && history.length === 0) {
     db.assistant
@@ -827,16 +1124,29 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
             clarifyOptions: JSON.stringify({ question: turn.question, options: turn.options }),
           },
         })
+        gsCapLog('clarify', turn)
         return NextResponse.json(messageToJson(saved))
       }
 
-      const { messages: modelMessages, historySources } = await buildModelMessages(turn)
-      const text = await synthesize(modelMessages)
+      const { messages: modelMessages, historySources, userTurnText } = await buildModelMessages(turn)
+      // §5 — synthesis is validated against the authoritative execution state.
+      const { text, violation } = await synthesizeValidated(turn, modelMessages, userTurnText)
+      if (violation) {
+        console.log(`GS-GUARD conv=${id} emitted-after-retries violation=${violation.kind}`)
+      }
       const finalText = sanitizeAgainstPersisted(normalizeCitationBrackets(text), turn, historySources)
       const assistantMessage = await db.message.create({
         data: { conversationId: id, role: 'assistant', content: finalText },
       })
       await persistTurnSources(assistantMessage.id, finalText, turn, historySources)
+      if (turn.kind === 'research' && turn.researchId) {
+        updateResearchContextCitations(
+          id,
+          turn.researchId,
+          parseCitedOrdinals(finalText, turn.maxOrdinal + historySources.length)
+        )
+      }
+      gsCapLog('done', turn, { cited: parseCitedOrdinals(finalText, turn.kind === 'research' ? turn.maxOrdinal + historySources.length : historySources.length) })
       const saved = await db.message.findUnique({
         where: { id: assistantMessage.id },
         include: { sources: { orderBy: { ordinal: 'asc' } } },
@@ -844,6 +1154,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       return NextResponse.json(messageToJson(saved ?? assistantMessage))
     } catch (e) {
       const raw = e instanceof Error ? e.message : String(e)
+      gsCapLog('error', null)
       return NextResponse.json(
         {
           code: 'upstream_error',
@@ -914,25 +1225,25 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       // §14 — real search activity gets real state events. SEARCHING is
       // only ever emitted for an actual search turn, WORKING only while
       // pages are actually being retrieved (emitted by runResearch).
-      let turn: TurnSearch = { kind: 'none' }
-      if (plannerRuns) {
-        turn = await executeSearchPhase(emit)
+      // PHASE 8.3 — the phase ALWAYS runs: TIME and REUSE turns execute
+      // their capability here even though the LLM planner never runs.
+      const turn = await executeSearchPhase(emit)
 
-        // §6 — clarification turn: emit the native quick choices and end
-        // the turn; the question is the assistant message.
-        if (turn.kind === 'clarify') {
-          emit('clarify', { question: turn.question, options: turn.options })
-          const saved = await db.message.create({
-            data: {
-              conversationId: id,
-              role: 'assistant',
-              content: turn.question,
-              clarifyOptions: JSON.stringify({ question: turn.question, options: turn.options }),
-            },
-          })
-          push('done', JSON.stringify(messageToJson(saved)))
-          return
-        }
+      // §6 — clarification turn: emit the native quick choices and end
+      // the turn; the question is the assistant message.
+      if (turn.kind === 'clarify') {
+        emit('clarify', { question: turn.question, options: turn.options })
+        const saved = await db.message.create({
+          data: {
+            conversationId: id,
+            role: 'assistant',
+            content: turn.question,
+            clarifyOptions: JSON.stringify({ question: turn.question, options: turn.options }),
+          },
+        })
+        gsCapLog('clarify', turn)
+        push('done', JSON.stringify(messageToJson(saved)))
+        return
       }
 
       const researchOk = turn.kind === 'research' && turn.outcome.ok && turn.evidenceBlock !== null
@@ -950,13 +1261,32 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
         }
       }
 
-      const { messages: modelMessages, historySources } = await buildModelMessages(turn)
-      const full = await synthesize(modelMessages, (d) => push('delta', d))
+      const { messages: modelMessages, historySources, userTurnText } = await buildModelMessages(turn)
+      let full: string
+      if (turn.kind !== 'none' || docContext.block) {
+        // §5 — evidence-bearing turns are BUFFERED and validated before any
+        // byte reaches the wire: a contradictory draft can never be streamed.
+        const { text, violation } = await synthesizeValidated(turn, modelMessages, userTurnText)
+        if (violation) {
+          console.log(`GS-GUARD conv=${id} emitted-after-retries violation=${violation.kind}`)
+        }
+        full = text
+        for (const chunk of chunkDeltas(full)) push('delta', chunk)
+      } else {
+        full = await synthesize(modelMessages, (d) => push('delta', d))
+      }
       const finalText = sanitizeAgainstPersisted(normalizeCitationBrackets(full), turn, historySources)
       const saved = await db.message.create({
         data: { conversationId: id, role: 'assistant', content: finalText },
       })
       await persistTurnSources(saved.id, finalText, turn, historySources)
+      if (turn.kind === 'research' && turn.researchId) {
+        updateResearchContextCitations(
+          id,
+          turn.researchId,
+          parseCitedOrdinals(finalText, turn.maxOrdinal + historySources.length)
+        )
+      }
       const savedWithSources = await db.message.findUnique({
         where: { id: saved.id },
         include: { sources: { orderBy: { ordinal: 'asc' } } },
@@ -983,9 +1313,16 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
           timings: turn.outcome.timings,
         })
       }
+      gsCapLog('done', turn, {
+        cited: parseCitedOrdinals(
+          finalText,
+          turn.kind === 'research' ? turn.maxOrdinal + historySources.length : historySources.length
+        ),
+      })
       push('done', JSON.stringify(messageToJson(savedWithSources ?? saved)))
     } catch (e) {
       const raw = String(e instanceof Error ? e.message : e)
+      gsCapLog('error', null)
       push('error', useVision ? visionErrorMessage(raw) : userFacingTurnError(raw))
     } finally {
       turnSettled = true

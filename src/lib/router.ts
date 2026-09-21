@@ -64,8 +64,10 @@ export interface RouteRequest {
 
 // --- deterministic signal detectors -----------------------------------------
 
-/** Explicit deep-research language: the user asked for depth, not a chat. */
-const DEEP_RESEARCH_RE =
+/** Explicit deep-research language: the user asked for depth, not a chat.
+ *  Exported for the PHASE 8.3 deterministic capability gate (single source
+ *  of truth for depth-language detection). */
+export const DEEP_RESEARCH_RE =
   /\b(research|deep dive|in[\s-]depth|comprehensive|exhaustive|thorough(?:ly)?|detailed report|full report|write (?:me )?a report|deep analysis|investigat\w*|fact[\s-]check|with sources?|cite(?:d|s)? sources?)\b/i
 
 /** Coding request markers. */

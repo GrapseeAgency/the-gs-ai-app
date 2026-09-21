@@ -596,13 +596,41 @@ export const ENGINE_REGISTRY: Partial<Record<SearchEngineId, EngineAdapter>> = {
  * Engine selection per intent (8.2 §7/§10/§11). Order matters only as tie-break
  * priority — the aggregator runs the set in parallel.
  * SearXNG, when configured, leads the general set.
+ *
+ * PHASE 8.3 §13 — source-specific lookups are routed BY THE NAMED SOURCE:
+ * "what does Wikipedia say about X" is a reference question (wikipedia
+ * engine + web), "Search Reuters for X" is a news question (news engines).
+ * The old behavior ran NEWS engines for every source_specific turn, which
+ * produced the forensic J failure: a Wikipedia question answered (or failed)
+ * from google-news-rss.
  */
-export function enginesForIntent(intent: string, isNews: boolean, officialOnly: boolean): SearchEngineId[] {
+const NEWS_HINT_DOMAINS = [
+  'reuters.com', 'bbc.com', 'cnn.com', 'aljazeera.com', 'apnews.com',
+  'nytimes.com', 'theguardian.com', 'bloomberg.com',
+]
+
+export function enginesForIntent(
+  intent: string,
+  isNews: boolean,
+  officialOnly: boolean,
+  sourceHint?: string
+): SearchEngineId[] {
   const searx = process.env.SEARXNG_URL ? (['searxng'] as SearchEngineId[]) : []
   // 8.2 §11/§23 — "official sources only": first-party-friendly engines only;
   // no aggregator/news engines, no third-party provider search.
   if (officialOnly) {
     return [...searx, 'bing-web', 'wikipedia', 'duckduckgo-lite']
+  }
+  // §13 — the user NAMED a source; the engine set must be able to reach it.
+  if (intent === 'source_specific' && sourceHint) {
+    const hint = sourceHint.toLowerCase()
+    if (hint === 'wikipedia.org' || hint.endsWith('.wikipedia.org')) {
+      return [...searx, 'wikipedia', 'bing-web', 'duckduckgo-lite']
+    }
+    if (NEWS_HINT_DOMAINS.some((d) => hint === d || hint.endsWith(`.${d}`))) {
+      return [...searx, 'bing-news-rss', 'google-news-rss', 'duckduckgo-lite', 'z-ai']
+    }
+    return [...searx, 'bing-web', 'duckduckgo-lite', 'z-ai']
   }
   if (intent === 'academic') {
     return [...searx, 'arxiv', 'crossref', 'wikipedia', 'bing-web', 'duckduckgo-lite']
