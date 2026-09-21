@@ -831,8 +831,8 @@ final class ChatViewModel: ObservableObject {
             let ordinal = payload.ordinal ?? 0
             upsertLiveSource(MessageSource(
                 ordinal: ordinal,
-                status: payload.status ?? "retrieved",
-                publishedDate: payload.publishedDate))
+                publishedDate: payload.publishedDate,
+                status: payload.status ?? "retrieved"))
             appendUniqueStep(.sourceCompleted(ordinal: ordinal, chars: payload.chars))
         case "evidence":
             // v2 (evidence.extracted): extraction really happened. Evidence

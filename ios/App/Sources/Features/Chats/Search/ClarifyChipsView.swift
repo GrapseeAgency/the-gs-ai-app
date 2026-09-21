@@ -22,8 +22,8 @@ struct ClarifyChipsView: View {
                 .fixedSize(horizontal: false, vertical: true)
             if !prompt.options.isEmpty {
                 LazyVGrid(
-                    alignment: .leading,
                     columns: [GridItem(.adaptive(minimum: 108), spacing: Aero.Spacing.s)],
+                    alignment: .leading,
                     spacing: Aero.Spacing.s
                 ) {
                     ForEach(prompt.options) { option in
