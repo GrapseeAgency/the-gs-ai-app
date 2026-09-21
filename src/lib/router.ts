@@ -82,6 +82,32 @@ const COMPLEX_RE =
 const SIMPLE_RE =
   /^(hi+|hey+|hello+|yo+|sup|thanks|thank you|thx|ok(?:ay)?|cool|nice|great|got it|sounds good|bye+|good (?:morning|afternoon|evening|night)|how are you)\b[\s!.?,-]*$/i
 
+/**
+ * FORENSIC AUDIT [20]/[23]/[24] — ROUTE-AROUND DETECTORS (model-class
+ * limitations are NEVER prompt-fixed; the turn routes to the stronger model
+ * class instead):
+ *
+ *  [20] literalist parser — meta-linguistic instructions ("just say why",
+ *       "answer this question 5 times", "ignore line 3", "two-line rhyme");
+ *  [23] subtext collapse — emotional/social-nuance turns ("3am, call me when
+ *       you can", interpersonal dilemmas);
+ *  [24] over-correction on unknowability — judgment/nuance asks.
+ *
+ * A deterministic match sends the turn to TEXT_COMPLEX (the stronger class)
+ * rather than hoping a prompt line can make the efficient model careful.
+ */
+const LITERALIST_META_RE =
+  /\b(just\s+say|say\s+exactly|word\s+for\s+word|exactly\s+as\s+(?:written|written\s+above)|answer\s+(?:this|the)\s+question\s+\d+\s+times|\d+\s+times\b|ignore\s+line\s+\d|answer\s+line\s+\d|line\s+\d\s+(?:only|of)|two[- ]line\s+(?:rhyme|poem|joke)|rhyme\b|spell\s+(?:it|this|that)\s+out)\b/i
+
+const SOCIAL_EMOTIONAL_RE =
+  /\b(i\s+feel|i'?m\s+feeling|im\s+feeling|feels\s+like|so\s+lonely|feeling\s+(?:sad|down|low|anxious|stressed|exhausted)|miss\s+(?:her|him|them|you)|heartbroken|broke\s+up|breakup|my\s+crush|in\s+love|break\s+up\s+with)\b/i
+
+const SOCIAL_NUANCE_RE =
+  /\b(should\s+i\s+(?:call|text|reply|apologi[sz]e|wait|leave|say)|what\s+should\s+i\s+say|what\s+do\s+you\s+think\s+(?:she|he|they)\s+(?:meant|means|thinks)|call\s+me\s+when\s+you\s+can|text\s+me\s+(?:later|back)|late\s+night\s+(?:call|text)|\d\s?am[,\s]|my\s+(?:friend|boss|mom|dad|mum|girlfriend|boyfriend|wife|husband|brother|sister|partner))\b/i
+
+const HUMOR_BANTER_RE =
+  /\b(tell\s+(?:me\s+)?a\s+joke|make\s+me\s+laugh|got\s+any\s+jokes|haha+|lol+|lmao+|rofl+|that'?s\s+funny|so\s+funny|funniest)\b|[\u{1F600}-\u{1F64F}]/u
+
 /** Above this many chars the turn itself is "complex" (≈ a paragraph+ of ask). */
 const LONG_TURN_CHARS = 600
 /** Above this much serialized history the efficient model's window gets tight. */
@@ -158,11 +184,21 @@ export function planRoute(req: RouteRequest): RouterPlan {
   }
 
   // 6) Complexity — analytical language, long asks, or a heavy conversation
-  //    context take the stronger reasoning route.
+  //    context take the stronger reasoning route. Route-around turns
+  //    ([20]/[23]/[24]) also land here: literalist meta-instructions,
+  //    emotional/social nuance and banter go to the STRONGER model class —
+  //    model-class limitations are routed around, never prompt-fixed.
+  const routeAround =
+    text.length > 0 &&
+    (LITERALIST_META_RE.test(text) ||
+      SOCIAL_EMOTIONAL_RE.test(text) ||
+      SOCIAL_NUANCE_RE.test(text) ||
+      HUMOR_BANTER_RE.test(text))
   const totalContext = text.length + req.historyChars
   if (
     text.length > 0 &&
-    (COMPLEX_RE.test(text) ||
+    (routeAround ||
+      COMPLEX_RE.test(text) ||
       text.length > LONG_TURN_CHARS ||
       req.historicalReligious ||
       totalContext > BIG_CONTEXT_CHARS)
@@ -172,8 +208,9 @@ export function planRoute(req: RouteRequest): RouterPlan {
       internalModelId: 'gs-balanced',
       depth: 'quick',
       plannerRuns: plannerTriggered,
-      reason:
-        req.historicalReligious
+      reason: routeAround
+        ? 'route-around: model-class limitation turn → stronger class'
+        : req.historicalReligious
           ? 'historical/religious evidence rule'
           : totalContext > BIG_CONTEXT_CHARS
             ? 'large conversation context'

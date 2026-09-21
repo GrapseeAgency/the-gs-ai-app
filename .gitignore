@@ -83,3 +83,6 @@ cmdline-tools.zip
 # PHASE 5 attachment storage (runtime user content — never committed)
 /uploads/
 .secrets/
+
+# FORENSIC AUDIT [2]/[7] — out-of-project copies live outside the repo, but ignore any in-repo shadow
+/home/z/.gs-vault/

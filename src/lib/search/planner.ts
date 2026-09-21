@@ -41,6 +41,9 @@ export const NEWS_CATEGORY_OPTIONS: ClarifyOption[] = [
   { id: 'entertainment', label: 'Entertainment' },
   { id: 'health', label: 'Health' },
   { id: 'bangladesh', label: 'Bangladesh' },
+  // FORENSIC AUDIT [14] — explicit "general digest" escape hatch: a labelled,
+  // balanced set instead of inventing a random sector for an ambiguous ask.
+  { id: 'digest', label: 'Other / general digest' },
 ]
 
 const DEFAULT_NEWS_CLARIFY_QUESTION = 'What kind of news would you like today?'
@@ -108,6 +111,8 @@ const CATEGORY_WORDS: Record<string, string> = {
   entertainment: 'entertainment|movies?|music|celebrit|tv',
   health: 'health|medicine|disease|hospital',
   bangladesh: 'bangladesh|dhaka',
+  // "Other / general digest" chip: a balanced, labelled multi-sector set.
+  digest: 'other|general|digest|everything|mixed|all\\s+sectors',
 }
 
 /**

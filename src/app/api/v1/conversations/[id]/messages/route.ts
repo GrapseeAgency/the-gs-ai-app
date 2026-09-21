@@ -39,6 +39,11 @@ import {
   type ExecutionState,
   type GuardViolation,
 } from '@/lib/synthesis-guard'
+import {
+  isCountingRequest,
+  checkNumericClaims,
+  buildNumericCorrection,
+} from '@/lib/numeric-guard'
 import { clientKey, rateLimit } from '@/lib/rate-limit'
 import { MAX_ATTACHMENTS_PER_MESSAGE } from '@/lib/attachments'
 import {
@@ -352,6 +357,9 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
   // search reaches execution unconditionally; the LLM planner downstream can
   // only refine queries.
   const historicalReligious = content.trim().length > 0 ? detectHistoricalReligious(content) : false
+  // FORENSIC AUDIT [21] — counting-shaped chat turns take the buffered +
+  // numerically-validated synthesis path (deterministic detector, zero cost).
+  const numericCheck = content.trim().length > 0 && isCountingRequest(content)
   const clientTimezone =
     typeof body.timezone === 'string' ? body.timezone : req.headers.get('x-client-timezone')
   const cap = decideCapability({
@@ -364,6 +372,17 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
   const requestId = crypto.randomUUID()
   const clientVersion = req.headers.get('x-gs-app-version') ?? 'web'
   const backendRevision = process.env.GS_BACKEND_REVISION ?? 'dev'
+  // FORENSIC AUDIT [3] — stale-APK detection: every turn logs the client
+  // version against the backend revision, and a version mismatch is logged as
+  // a WARNING so "stale APK / stale server" investigations end in one line.
+  const CURRENT_APP_VERSION = '0.68.0'
+  const versionMismatch =
+    clientVersion !== 'web' && clientVersion !== CURRENT_APP_VERSION
+  if (versionMismatch) {
+    console.warn(
+      `GS-VERSION-MISMATCH requestId=${requestId} conv=${id} clientVersion=${clientVersion} currentAppVersion=${CURRENT_APP_VERSION} backendRevision=${backendRevision} — audit results may reflect an older client`
+    )
+  }
   // PHASE 8.2 §1/§8/§25 + ARCHITECTURE LOCK — the GS Router is the ONE
   // backend-owned decision per turn (capability route, internal model,
   // retrieval depth). Deep research is inferred from the REQUEST (depth
@@ -1130,9 +1149,25 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
 
       const { messages: modelMessages, historySources, userTurnText } = await buildModelMessages(turn)
       // §5 — synthesis is validated against the authoritative execution state.
-      const { text, violation } = await synthesizeValidated(turn, modelMessages, userTurnText)
+      let { text, violation } = await synthesizeValidated(turn, modelMessages, userTurnText)
       if (violation) {
         console.log(`GS-GUARD conv=${id} emitted-after-retries violation=${violation.kind}`)
+      }
+      // FORENSIC AUDIT [21] — numeric verification for counting-shaped turns.
+      if (!violation && numericCheck && turn.kind === 'none' && !docContext.block) {
+        const nv = checkNumericClaims(text, userTurnText)
+        if (nv) {
+          console.log(`GS-NUMERIC-GUARD conv=${id} claimed=${nv.claimed} actual=${nv.actual} unit=${nv.unit} — regenerating`)
+          const corrected = applyCorrection(modelMessages, userTurnText, buildNumericCorrection(nv, 1))
+          const retry = await synthesize(corrected)
+          text = retry
+          const nv2 = checkNumericClaims(text, userTurnText)
+          console.log(
+            nv2
+              ? `GS-NUMERIC-GUARD conv=${id} retry still inconsistent — emitting honest draft`
+              : `GS-NUMERIC-GUARD conv=${id} retry accepted`
+          )
+        }
       }
       const finalText = sanitizeAgainstPersisted(normalizeCitationBrackets(text), turn, historySources)
       const assistantMessage = await db.message.create({
@@ -1272,6 +1307,32 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
         }
         full = text
         for (const chunk of chunkDeltas(full)) push('delta', chunk)
+      } else if (numericCheck) {
+        // FORENSIC AUDIT [21] — counting-shaped chat turns are BUFFERED and
+        // the draft's numeric claims verified deterministically before any
+        // byte reaches the wire; a wrong count regenerates ONCE with the
+        // recomputed value injected (≤2 drafts total).
+        let draft = await synthesize(modelMessages)
+        const nv = checkNumericClaims(draft, userTurnText)
+        if (nv) {
+          console.log(
+            `GS-NUMERIC-GUARD conv=${id} claimed=${nv.claimed} actual=${nv.actual} unit=${nv.unit} — regenerating`
+          )
+          const corrected = applyCorrection(
+            modelMessages,
+            userTurnText,
+            buildNumericCorrection(nv, 1)
+          )
+          draft = await synthesize(corrected)
+          const nv2 = checkNumericClaims(draft, userTurnText)
+          console.log(
+            nv2
+              ? `GS-NUMERIC-GUARD conv=${id} retry still inconsistent (claimed=${nv2.claimed} actual=${nv2.actual}) — emitting honest draft`
+              : `GS-NUMERIC-GUARD conv=${id} retry accepted`
+          )
+        }
+        full = draft
+        for (const chunk of chunkDeltas(full)) push('delta', chunk)
       } else {
         full = await synthesize(modelMessages, (d) => push('delta', d))
       }
@@ -1374,6 +1435,12 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
         'Cache-Control': 'no-cache, no-transform',
         Connection: 'keep-alive',
         'X-Accel-Buffering': 'no',
+        // FORENSIC AUDIT [3] — every response carries the version handshake so
+        // a device can always tell which client build is talking to which
+        // backend revision (mismatch investigations end in one log line).
+        'X-GS-App-Version': clientVersion,
+        'X-GS-Backend-Revision': backendRevision,
+        'X-GS-Request-Id': requestId,
       },
     }
   )

@@ -323,6 +323,7 @@ export async function runResearch(input: ResearchInput): Promise<ResearchOutcome
         if (article.chars < 120) {
           s.status = 'snippet_only'
           s.failReason = 'page had no readable article text'
+          console.log(`READ-FAIL ordinal=${s.ordinal} url=${s.url.slice(0, 160)} reason=no readable article text (${article.chars} chars)`)
           emit('source', { type: 'failed', ordinal: s.ordinal, reason: 'no readable text', status: 'snippet_only' })
           return
         }
@@ -354,6 +355,10 @@ export async function runResearch(input: ResearchInput): Promise<ResearchOutcome
       } catch (e) {
         const raw = e instanceof Error ? e.message : String(e)
         s.failReason = raw.slice(0, 160)
+        // FORENSIC AUDIT [16] — NO SILENT FAILURES: every read failure is
+        // logged with its URL and status so "headline only" card states are
+        // always explainable from the server log.
+        console.log(`READ-FAIL ordinal=${s.ordinal} url=${s.url.slice(0, 160)} reason=${raw.slice(0, 140)}`)
         // §10/§22 — distinguish "page exists but blocked OUR fetcher" from
         // "page dead". A 401/403/406 bot-wall still leaves a REAL page the
         // USER can open: the source keeps its honest snippet_only state
@@ -385,6 +390,19 @@ export async function runResearch(input: ResearchInput): Promise<ResearchOutcome
       }
     })
     await Promise.all(workers)
+
+    // FORENSIC AUDIT [16] — READ-RATE METRIC: how much of what we attempted
+    // to read was actually read. A headline-only pipeline (read-rate < 70%)
+    // means retrieval is silently degrading and the deep-read path needs
+    // attention — surfaced per turn in the server log.
+    {
+      const attempted = roundSources.filter((s) => s.status !== 'discovered')
+      const read = roundSources.filter((s) => s.status === 'retrieved').length
+      const rate = attempted.length > 0 ? Math.round((read / attempted.length) * 100) : 0
+      console.log(
+        `READ-RATE round=${round} read=${read}/${attempted.length} rate=${rate}% ${rate < 70 ? '— BELOW 70%: deep-read pipeline degrading' : ''}`
+      )
+    }
 
     sources.push(...roundSources)
     const retrievedTotal = sources.filter((s) => s.status === 'retrieved').length

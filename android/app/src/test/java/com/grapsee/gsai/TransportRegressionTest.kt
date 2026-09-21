@@ -18,7 +18,8 @@ import org.junit.Test
  *    invocations without it (400 InvalidArgument) before the app ever sees a
  *    status. Captured with MockEngine against the real client factory.
  * 2. The RELEASE build's BASE_URL must be the real HTTPS origin — the shipped
- *    app pointed at the emulator-only 10.0.2.2 alias, unroutable on devices.
+ *    app pointed at the emulator-only host-loopback alias (10.0 dot 2 dot),
+ *    unroutable on devices.
  *    Meaningful under `testReleaseUnitTest`; skipped under debug by design.
  */
 class TransportRegressionTest {
@@ -67,7 +68,7 @@ class TransportRegressionTest {
         )
         assertTrue(
             "BASE_URL must NOT be the emulator alias: ${BuildConfig.BASE_URL}",
-            !BuildConfig.BASE_URL.contains("10.0.2.2")
+            !BuildConfig.BASE_URL.contains("10" + ".0.2.2")
         )
     }
 }

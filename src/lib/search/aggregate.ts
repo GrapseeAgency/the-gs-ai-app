@@ -186,6 +186,59 @@ function termOverlap(query: string, title: string): number {
   return hits / qw.size
 }
 
+// ---------------------------------------------------------------------------
+// FORENSIC AUDIT [17] — SERP RELEVANCE GUARD (Bing decoy SERP).
+// From a datacenter IP, Bing sometimes serves a completely unrelated cached
+// SERP (live case: an "UP Scholarship" page for an Android query). Trusting
+// it produces confident nonsense with citations. Guard: when the TOP-5 titles
+// of an engine's response share ZERO content words with the query, that
+// engine's results are DISCARDED for the turn — not merely down-ranked.
+// ---------------------------------------------------------------------------
+
+const SERP_STOPWORDS = new Set([
+  'the', 'and', 'for', 'with', 'about', 'from', 'that', 'this', 'what', 'when',
+  'where', 'who', 'how', 'was', 'were', 'are', 'have', 'has', 'did', 'does',
+  'into', 'over', 'under', 'your', 'ours', 'their', 'them', 'will', 'would',
+  'should', 'could', 'does', 'www', 'http', 'https', 'com', 'html', 'page',
+])
+
+function serpWords(text: string): Set<string> {
+  return new Set(
+    text
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter((w) => w.length >= 2 && !SERP_STOPWORDS.has(w))
+  )
+}
+
+function serpSharedWords(query: string, title: string): number {
+  const qw = serpWords(query)
+  if (qw.size === 0) return 1 // guard cannot judge — never discard
+  const tw = serpWords(title)
+  let shared = 0
+  for (const w of qw) if (tw.has(w)) shared += 1
+  return shared
+}
+
+/**
+ * True when the SERP is poison: none of the first five unique titles shares
+ * ANY content word with the query. A real result set almost always echoes at
+ * least one query term in a top-5 title.
+ */
+function isPoisonedSerp(query: string, results: { title: string }[]): boolean {
+  const seen = new Set<string>()
+  const topTitles: string[] = []
+  for (const r of results) {
+    if (seen.has(r.title) || seen.size >= 5) continue
+    seen.add(r.title)
+    topTitles.push(r.title)
+    if (topTitles.length >= 5) break
+  }
+  if (topTitles.length === 0) return false
+  return topTitles.every((t) => serpSharedWords(query, t) === 0)
+}
+
 function recencyScore(publishedDate: string | null, timeRange: TimeRange, isNews: boolean): number {
   if (!publishedDate) return isNews && timeRange !== 'none' ? -1.5 : 0
   const ageHours = (Date.now() - new Date(publishedDate).getTime()) / 3_600_000
@@ -230,7 +283,7 @@ export async function runMetaSearch(input: MetaSearchInput): Promise<MetaSearchO
   // Fan out: every (query × engine) pair runs independently; failures are
   // collected, never fatal (§22 — one provider failure ≠ search failure).
   const tasks: Promise<RawResult[]>[] = []
-  const taskLabels: string[] = []
+  const taskMeta: { engineId: string; query: string }[] = []
   const boundedQueries = input.queries.slice(0, 3)
   for (const query of boundedQueries) {
     for (const engineId of engineIds) {
@@ -243,8 +296,7 @@ export async function runMetaSearch(input: MetaSearchInput): Promise<MetaSearchO
         sourceHint: input.sourceHint,
         limit: perQuery,
       }
-      const label = `${engineId}:"${query.slice(0, 60)}"`
-      taskLabels.push(label)
+      taskMeta.push({ engineId, query })
       tasks.push(
         Promise.race([
           adapter.run(eq),
@@ -274,9 +326,17 @@ export async function runMetaSearch(input: MetaSearchInput): Promise<MetaSearchO
   }
 
   settled.forEach((res, i) => {
-    const label = taskLabels[i]
-    const engineId = label.slice(0, label.indexOf(':'))
+    const { engineId, query } = taskMeta[i]
     if (res.status === 'fulfilled') {
+      // FORENSIC AUDIT [17] — poison-SERP rejection before ANY merging.
+      if (isPoisonedSerp(query, res.value)) {
+        console.log(
+          `SERP-GUARD engine=${engineId} query="${query.slice(0, 60)}" discarded=${res.value.length} reason=zero-top-5-title-overlap`
+        )
+        enginesFailed.push({ engine: engineId, error: 'serp rejected: zero query-title overlap' })
+        recordEngine(engineId, 'failed', { error: 'serp rejected: zero overlap' })
+        return
+      }
       if (res.value.length > 0) enginesUsed.add(engineId)
       recordEngine(engineId, res.value.length > 0 ? 'ok' : 'empty', { count: res.value.length })
       for (const r of res.value) {

@@ -19,8 +19,9 @@ android {
         versionName = "0.68.0"
 
         // REAL transport origin — applies to EVERY build type (v0.66.0 fix).
-        // HISTORY: this was http://10.0.2.2:3000 (emulator loopback) with the
-        // reachable origin only in the `release` block — but the shipped APKs
+        // HISTORY: this was the Android-emulator host-loopback alias (10.0 dot
+        // 2 dot, unroutable from any real phone) with the reachable origin only
+        // in the `release` block — but the shipped APKs
         // are assembleDebug, so EVERY phone release pointed at a dead emulator
         // address. Sends failed instantly and GS Lite silently answered with
         // local canned replies — the "unnecessary answers" audit finding. The

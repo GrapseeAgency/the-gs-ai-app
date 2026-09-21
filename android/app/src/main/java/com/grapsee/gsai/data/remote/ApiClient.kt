@@ -18,6 +18,18 @@ import io.ktor.utils.io.readUTF8Line
 import kotlinx.serialization.json.Json
 
 /**
+ * FORENSIC AUDIT [5] — failure class (c) BACKEND_ERROR: the server answered with
+ * an error status. Carries the status code and the SERVER'S SANITIZED error
+ * message (the backend's userFacingTurnError text) so the repository can label
+ * the failure with the real reason instead of a fake "unreachable" claim.
+ */
+class GsBackendException(
+    val status: Int,
+    /** Sanitized server error text, or null when the body carried none. */
+    val serverMessage: String?
+) : Exception(serverMessage ?: "GS backend error (HTTP $status)")
+
+/**
  * Thin typed client for the GS AI backend contract (shared-contracts/openapi.yaml v0.1.0).
  *
  * JSON endpoints read the raw response text and decode with [GsApiJson] — String is in
@@ -127,6 +139,16 @@ class ApiClient(
                 )
             )
         }
+        // FORENSIC AUDIT [5]: a non-2xx here is BACKEND_ERROR, not "offline".
+        // Surface the server's sanitized error message instead of reading an
+        // error JSON body as if it were an SSE stream.
+        if (!response.status.isSuccess()) {
+            val body = runCatching { response.bodyAsText() }.getOrDefault("")
+            val serverMessage = runCatching {
+                GsApiJson.decodeFromString<ErrorResponseDto>(body).error
+            }.getOrNull()?.takeIf { it.isNotBlank() }
+            throw GsBackendException(status = response.status.value, serverMessage = serverMessage)
+        }
         val channel = response.bodyAsChannel()
         while (!channel.isClosedForRead) {
             val line = channel.readUTF8Line() ?: break
@@ -156,6 +178,10 @@ class ApiClient(
             }
         }
     }
+
+    /** Sanitized backend error payload ({"error": "..."}). */
+    @kotlinx.serialization.Serializable
+    private data class ErrorResponseDto(val error: String? = null)
 
     /** Contract returns `{ items: [...] }`; tolerate a bare `[...]` from minimal backends. */
     private inline fun <T> decodeList(

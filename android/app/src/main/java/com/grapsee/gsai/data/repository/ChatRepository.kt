@@ -14,6 +14,7 @@ import com.grapsee.gsai.data.remote.ApiClient
 import com.grapsee.gsai.data.remote.AttachmentDto
 import com.grapsee.gsai.data.remote.ConversationDto
 import com.grapsee.gsai.data.remote.GsApiJson
+import com.grapsee.gsai.data.remote.GsBackendException
 import com.grapsee.gsai.data.remote.MessageDto
 import com.grapsee.gsai.data.remote.MessageSourceDto
 import com.grapsee.gsai.data.remote.UpdateConversationRequest
@@ -46,6 +47,31 @@ import java.util.UUID
  * - Pin / archive / rename / delete are local-first; the server PATCH/DELETE is
  *   a best-effort echo so the UI never waits on the network.
  */
+/**
+ * FORENSIC AUDIT [5] — the three explicit send-failure classes. A single
+ * "backend unreachable" stamp used to cover all of them, including cuts on a
+ * reachable backend whose answer persisted server-side.
+ */
+private sealed class SendFailure {
+    /** (a) Stream died after deltas/events started — backend was reachable. */
+    object MidStreamCut : SendFailure()
+    /** (b) TCP connect failed — genuinely unreachable. */
+    object GenuineUnreachable : SendFailure()
+    /** (c) Server answered with an error status — carries its sanitized message. */
+    data class BackendError(val status: Int, val serverMessage: String?) : SendFailure()
+}
+
+private fun classifySendFailure(e: Exception, receivedAnyEvent: Boolean): SendFailure {
+    if (receivedAnyEvent) return SendFailure.MidStreamCut
+    if (e is GsBackendException) return SendFailure.BackendError(e.status, e.serverMessage)
+    val unreachable = e is UnknownHostException ||
+        e is ConnectException ||
+        e is SocketTimeoutException ||
+        e.message?.contains("unresolved", ignoreCase = true) == true ||
+        e.message?.contains("failed to connect", ignoreCase = true) == true
+    return if (unreachable) SendFailure.GenuineUnreachable else SendFailure.BackendError(0, null)
+}
+
 class ChatRepository(
     private val api: ApiClient,
     private val db: AppDatabase
@@ -367,65 +393,69 @@ class ChatRepository(
             persistPartialNonCancellable(activeId, assistantId, accumulated)
             throw ce
         } catch (e: Exception) {
-            // v0.67.1 HONESTY FIX — three failure classes, one false label retired.
-            // v0.66/0.67 stamped EVERY failure "backend unreachable", including
-            // mid-stream cuts on a REACHABLE backend (the ~30s outer-proxy SSE
-            // window on research turns) while the server ran the detached turn
-            // to completion and PERSISTED the answer — the user saw a fake
-            // offline reply for an answer that existed (proven live 2026-09-21).
-            //
-            // (1) Stream died mid-turn (events had arrived): the backend was
-            //     reachable — adopt its persisted answer; if it is not there
-            //     yet, say THAT. Never the "unreachable" label.
-            if (receivedAnyEvent) {
-                val recovered = runCatching { recoverLatestAssistant(activeId, assistantId, sendStartedAtMs) }.getOrNull()
-                if (recovered != null) {
-                    assistantId = recovered.id
-                    accumulated.clear()
-                    accumulated.append(recovered.content)
-                    persistAssistant(
-                        activeId,
-                        assistantId,
-                        accumulated,
-                        sources = recovered.sources,
-                        clarifyOptions = recovered.clarifyOptions
-                    )
-                    onDone(recovered)
+            // FORENSIC AUDIT [5] — THREE EXPLICIT FAILURE CLASSES, one false
+            // label retired. v0.66/0.67 stamped EVERY failure "backend
+            // unreachable", including mid-stream cuts on a REACHABLE backend
+            // (the ~30s outer-proxy SSE window on research turns) while the
+            // server ran the detached turn to completion and PERSISTED the
+            // answer — the user saw a fake offline reply for an answer that
+            // existed (proven live 2026-09-21).
+            when (val failure = classifySendFailure(e, receivedAnyEvent)) {
+                // (1) MID_STREAM_CUT — events had arrived: the backend was
+                //     reachable. Adopt its persisted answer; if it is not
+                //     there yet, say THAT. Never the "unreachable" label.
+                SendFailure.MidStreamCut -> {
+                    val recovered = runCatching { recoverLatestAssistant(activeId, assistantId, sendStartedAtMs) }.getOrNull()
+                    if (recovered != null) {
+                        assistantId = recovered.id
+                        accumulated.clear()
+                        accumulated.append(recovered.content)
+                        persistAssistant(
+                            activeId,
+                            assistantId,
+                            accumulated,
+                            sources = recovered.sources,
+                            clarifyOptions = recovered.clarifyOptions
+                        )
+                        onDone(recovered)
+                        return activeId
+                    }
+                    if (accumulated.isNotEmpty()) {
+                        val tail = "\n\n— The connection dropped mid-turn. Reopen this chat in a moment to load the finished reply."
+                        accumulated.append(tail)
+                        onDelta(tail)
+                    } else {
+                        val notice = "— The connection dropped mid-turn while GS was working. Reopen this chat in a moment to load the finished reply. —"
+                        accumulated.append(notice)
+                        onDelta(notice)
+                    }
+                    persistAssistant(activeId, assistantId, accumulated)
                     return activeId
                 }
-                if (accumulated.isNotEmpty()) {
-                    val tail = "\n\n— The connection dropped mid-turn. Reopen this chat in a moment to load the finished reply."
-                    accumulated.append(tail)
-                    onDelta(tail)
-                } else {
-                    val notice = "— The connection dropped mid-turn while GS was working. Reopen this chat in a moment to load the finished reply. —"
-                    accumulated.append(notice)
-                    onDelta(notice)
+                // (2) GENUINE_UNREACHABLE — TCP connect failed. Honest label.
+                SendFailure.GenuineUnreachable -> {
+                    val marker = "— Offline — cannot reach GS. —\n\n"
+                    accumulated.append(marker)
+                    onDelta(marker)
+                    streamLocalReply(content) { chunk ->
+                        accumulated.append(chunk)
+                        onDelta(chunk)
+                    }
+                    persistAssistant(activeId, assistantId, accumulated)
+                    return activeId
                 }
-                persistAssistant(activeId, assistantId, accumulated)
-                return activeId
+                // (3) BACKEND_ERROR — the server answered with an error
+                //     status: show the SERVER'S SANITIZED error message.
+                is SendFailure.BackendError -> {
+                    val serverText = failure.serverMessage?.takeIf { it.isNotBlank() }
+                        ?: "GS backend error (HTTP ${failure.status})"
+                    val marker = "— $serverText —\n\n"
+                    accumulated.append(marker)
+                    onDelta(marker)
+                    persistAssistant(activeId, assistantId, accumulated)
+                    return activeId
+                }
             }
-            // (2)/(3) Nothing ever arrived: the offline reply keeps the
-            // conversation flowing, and the label tells the truth — truly
-            // unreachable vs. the backend answering with an error.
-            val unreachable = e is UnknownHostException ||
-                e is ConnectException ||
-                e is SocketTimeoutException ||
-                e.message?.contains("unresolved", ignoreCase = true) == true ||
-                e.message?.contains("failed to connect", ignoreCase = true) == true
-            val marker = if (unreachable) {
-                "— Offline reply (backend unreachable) —\n\n"
-            } else {
-                "— Offline reply (backend error) —\n\n"
-            }
-            accumulated.append(marker)
-            onDelta(marker)
-            streamLocalReply(content) { chunk ->
-                accumulated.append(chunk)
-                onDelta(chunk)
-            }
-            persistAssistant(activeId, assistantId, accumulated)
-            return activeId
         }
         // Clean break without an exception (proxy closed the channel mid-turn,
         // no done event, nothing streamed): same recovery as the mid-stream

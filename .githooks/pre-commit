@@ -1,0 +1,31 @@
+#!/bin/sh
+# FORENSIC AUDIT [7](e) — PRE-COMMIT SECRET SCAN.
+# Rejects any commit whose staged content contains OpenRouter key material
+# (sk-or-...) or obvious provider key shapes. GitHub push protection blocked
+# the tracked-db key leak once already (2026-09-21); this hook moves the gate
+# to the earliest possible moment.
+
+STAGED=$(git diff --cached --unified=0)
+
+if [ -z "$STAGED" ]; then
+  exit 0
+fi
+
+# 1) OpenRouter key material (any sk-or- secret SHAPE — the bare prefix in
+#    code/docs is not a secret and is allowed).
+if echo "$STAGED" | grep -Eo 'sk-or-v1-[A-Za-z0-9_-]{16,}'; then
+  echo ""
+  echo "FATAL: staged diff contains OpenRouter key material (sk-or-v1-...)."
+  echo "       Keys must NEVER be committed (they live in .secrets/, db/vault.db,"
+  echo "       /home/z/.gs-vault/ — all gitignored). Unstage the file or use"
+  echo "       scripts/provision-keys.ts to store keys in the runtime vaults."
+  exit 1
+fi
+
+# 2) Generic provider key shapes that must never reach git either.
+if echo "$STAGED" | grep -Eo '(sk-ant-[A-Za-z0-9_-]{16,}|sk-proj-[A-Za-z0-9_-]{16,}|AIza[A-Za-z0-9_-]{30,})'; then
+  echo "FATAL: staged diff contains a provider API key shape. Refusing to commit."
+  exit 1
+fi
+
+exit 0

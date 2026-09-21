@@ -1,6 +1,7 @@
 package com.grapsee.gsai.di
 
 import android.content.Context
+import com.grapsee.gsai.BuildConfig
 import com.grapsee.gsai.data.SessionStore
 import com.grapsee.gsai.data.attachment.AttachmentStore
 import com.grapsee.gsai.data.chat.ChatStreamController
@@ -39,6 +40,10 @@ internal fun gsHttpClient(sessionId: String, engine: HttpClientEngine? = null): 
 private fun io.ktor.client.HttpClientConfig<*>.configure(sessionId: String) {
     defaultRequest {
         headers.append(GS_SESSION_HEADER, sessionId)
+        // FORENSIC AUDIT [3] — every request carries the app version so the
+        // backend can log the client build against its own revision and warn
+        // on stale-APK audits (X-GS-* handshake).
+        headers.append("x-gs-app-version", BuildConfig.VERSION_NAME)
     }
     install(ContentNegotiation) {
         json(GsApiJson)
