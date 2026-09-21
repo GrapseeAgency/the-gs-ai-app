@@ -3681,3 +3681,26 @@ Verification (static only — no gradle in sandbox):
 - Res/manifest scan: no model references; no stray ui.models/data.model.Model imports anywhere.
 
 Stage summary: Android model-selection removal re-applied exactly per the recovered Task 3-a recipe. 4 files deleted (+1 empty dir removed), 12 Kotlin files edited, all static gates green. One self-caught mid-edit over-deletion in Dtos.kt (SseEvent/ConversationListDto) repaired and re-verified. Known benign deviations: ChatScreen ends at 2295 lines (recipe noted 2298 — comment wording differs by 3 lines; content scope identical), offline-marker/comment rewording phrasing chosen where the recipe gave the target text only for the two markers. App remains compilable pending the next gradle run; no bump, no release.
+
+---
+Task ID: REVERT-RECOVERY-2 (main agent, completion)
+Agent: Z.ai Code (main)
+Task: Complete the recovery — re-apply ALL lost work on the v0.67.1 base, push to GitHub as revert protection.
+
+Work Log:
+- RESTORED BASE: git fetch origin → reset --hard d3d3d6b (v0.67.1, PHASE 8.2 complete) + preserved live DB (12:55 mirror snapshot).
+- RE-APPLIED ARCH LOCK — web/backend (main agent): src/lib/router.ts recreated verbatim (GS Router, 7-route precedence); messages route: modelId accepted+IGNORED (no write-back), GS Router drives planRoute/depth/modelRoute, research.started + synthesis_started carry NO model field, userFacingTurnError → "GS AI is temporarily unavailable. Please try again shortly." (raw provider text → server log only); conversations POST/PATCH no modelId; serializers ConversationJson.modelId removed; openapi modelId stripped from Conversation/CreateConversationInput/UpdateConversationInput/SendMessageInput; page.tsx: Model catalogue section, both selectors, selectedModelId state, modelId payload, Models StatCard, speedDots, /models fetch, 'Z AI'→'GS Web' ALL removed; /api/v1/models → NAMELESS registry ({models:[], searchCapabilities}) — the user SAW the named catalogue (screenshot) and demanded removal; layout.tsx Z.ai→GS AI branding.
+- RE-APPLIED NATURAL FLOW (ai.ts): SYSTEM_PROMPT one-line identity ("capable general assistant, not a search middleman"; never claim to have browsed/tested); SEARCH_GROUNDING_PROMPT 4 freedom-first bullets (ignore irrelevant sources, answer from own knowledge, NEVER list what sources don't contain); SEARCH_FAILURE_DISCLOSURE_PROMPT deleted.
+- RE-APPLIED websearch.ts: shouldInjectHistoryEvidence → requires EXPLICIT reference to earlier sources (6 regexes); meta-search suppression (why are you always search / you always search / stop using wikipedia / why only wikipedia).
+- RE-APPLIED research.ts: evidence block "WEB SOURCES" (natural-freedom tail), DOMAIN-DIVERSITY CAP ≤2/domain retrieved-first, maxOrdinal = max surviving ordinal.
+- RE-APPLIED ANDROID (subagent 2-b, verified): 4 files deleted, 12 edited, balance/orphan/name greps ZERO, Room schema untouched.
+- RE-APPLIED iOS (subagent 2-c, verified): 2 files deleted, 10 edited, ios_static_gates PASS (66 files), swift_structure_gate PASS, "GS Lite" only in 6 sanctioned internal comments.
+- CORRUPTION NOTE: the v0.67.1 GitHub content itself carries a mirror-corruption signature (eaten "[h"/"[m" byte sequences: "const [health"→"const ealth", "[models]"→"odels]") — page.tsx + openapi.yaml affected; all instances fixed state-agnostically via python (both corrupted/valid forms handled).
+- OPS INCIDENT: after git reset the running next-server (pid 1096, started 12:32) held the PRE-RESET db inode → Prisma "attempt to write a readonly database" (1032) despite valid file perms; direct sqlite3 write OK. Fixed by killing the stale server tree + restart (new Prisma client opens current inode). LESSON: any git operation touching db/custom.db requires a dev-server restart.
+- DATA LOSS DISCLOSURE: the mirror also rolled db/custom.db to a 12:55 snapshot — conversations created 10:07–12:14 today are GONE (incl. the user's "beautiful diagram" transcript conversation); 12:35 "yooo meet the two our midhi and munti" + all Sep 19–20 history survived. Unrecoverable (commit objects destroyed; overlay FS).
+- PROTECTION: every change committed and PUSHED to GitHub (b99af71 → ff72f6a). Future flip defense: `git fetch origin && git reset --hard origin/main && restart dev server`.
+- VERIFIED LIVE (fresh server): health 200; conversation create + message with modelId "gs-deep"/"gs-free-big" → NO modelId anywhere in responses; /api/v1/models → {"models":[],"searchCapabilities":{...}}; hydrated DOM sweep ZERO model names; S1 first-muslim → search by design + retrieved sources + cited answer; S2 beautiful-diagram in a source-bearing conversation → 0 sources, no stale-listing, free Minard answer; S3 complaint → no search, natural answer. lint PASS, tsc clean.
+
+Stage Summary:
+- GS AI is again ONE assistant experience end-to-end (web + Android + iOS + API + contract), now also on GitHub — safe from sandbox reverts. The named catalogue is unreachable from any client: current clients don't render it, legacy clients get an empty registry.
+- REMAINING (needs user go): version bump + tagged release so the phone APK (0.66.0) stops showing its bundled Model Centre — cleanup is now complete and verified, satisfying the §20 precondition; awaiting explicit user release authorization.
