@@ -122,8 +122,6 @@ function greet(): string {
 function fmtUses(n: number): string {
   return n >= 1000 ? `${(n / 1000).toFixed(n >= 10_000 ? 0 : 1)}k` : String(n)
 }
-  )
-}
 
 function domainInitial(domain: string): string {
   return (domain.replace(/^www\./, '')[0] ?? 'W').toUpperCase()
@@ -872,7 +870,6 @@ export default function Home() {
           {/* Left: conversations */}
           <section className="space-y-6 lg:col-span-2">
             <div>
-              <div>
               <SectionHeader title="Recent conversations" hint="click to reopen" />
               <div className="gs-scroll max-h-[22rem] space-y-2 overflow-y-auto pr-1">
                 {conversations.map((c) => {
