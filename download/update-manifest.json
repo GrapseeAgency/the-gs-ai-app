@@ -1,6 +1,6 @@
 {
-  "versionCode": 70,
-  "versionName": "0.67.1",
+  "versionCode": 71,
+  "versionName": "0.68.0",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "v0.67.1 honesty + reliability hotfix: explicit search commands ALWAYS search (no more 'I cannot access the internet' or false clarifies); Wikipedia-style sites that block bots are now read via policy-UA retry; religious-history questions surface tradition sources (Adam in Islam); mid-stream connection drops now RECOVER the finished server-side answer instead of showing a false 'backend unreachable' label; GS Lite labels distinguish unreachable vs backend error with the reason."
+  "notes": "v0.68.0 — ONE assistant: the Model Centre, model picker, compare screen and every model name are gone from the app (verified at binary level: zero model-selection code in the APK). GS routes itself automatically for every question. Also from 0.67.1: explicit search commands always search, no more fake 'backend unreachable' labels (the finished server answer is recovered), and Wikipedia-hostile sites are read via policy-UA retry."
 }
