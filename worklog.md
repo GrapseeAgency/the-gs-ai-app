@@ -3750,3 +3750,39 @@ Stage Summary:
 - HARD STOP respected: NO new engines, NO new features, NO model-selection UI, NO release published, system prompt SHRUNK (not expanded).
 - No release cut (per §21): v0.68.0 remains the shipped release; these are server-side changes (web + backend), device build unaffected.
 - Revert protection: work pushed to GitHub main as Grapsee-Official.
+
+---
+Task ID: FORENSIC-REPAIR-31
+Agent: Z.ai Code (main)
+Task: FORENSIC REPAIR PASS — GS-AI SEARCH/RESEARCH/CAPABILITY STACK (31-item audit)
+
+Work Log:
+- [1] purged emulator-alias literals from android sources (build.gradle.kts comment, TransportRegressionTest); grep of android/ = zero; shipped APK dex scan = zero alias, public origin present; CI dex gate pre-existed (android-release.yml:43-44)
+- [2] src/lib/keypool.ts NEW: 4-layer key pool (env → .secrets 700/600 → db/vault.db sqlite → out-of-project /home/z/.gs-vault 600) with layer-success logging + SELF-HEAL (later layer back-fills wiped earlier layers); openrouter.ts rewired; scripts/provision-keys.ts = one-paste provisioning to all layers; verified live with throwaway key: fallthrough + self-heal + perms; test key cleaned after
+- [3] messages route: X-GS-App-Version / X-GS-Backend-Revision / X-GS-Request-Id on every SSE response + GS-VERSION-MISMATCH warning; ServiceLocator now sends x-gs-app-version on EVERY request; verified live through public origin (headers captured, warning fired for stale 0.67.0 client)
+- [4] verified pre-existing: detached turn + always-persist + client refetch + 4s keep-alive pings (route.ts)
+- [5] Android: GsBackendException (ApiClient reads sanitized server error on non-2xx) + SendFailure sealed class (MidStreamCut/GenuineUnreachable/BackendError) with exact audit labels; "backend unreachable" fake label retired
+- [6] verified: iOS CI green on main (CodingKeys + arg-order fixes from prior phases)
+- [7] history scan: ZERO key shapes in git history (only code refs); tracked db clean; .githooks/pre-commit scans sk-or-v1/sha/AIza shapes, wired via core.hooksPath; live-tested rejection of a fake-key commit
+- [8]-[13] verified 8.3 wiring end-to-end live; numeric corpus: tests/no-search-corpus.ts 30/30 pass ([11])
+- [14] added "Other / general digest" chip + digest CATEGORY_WORDS (planner.ts)
+- [15] verified perDomainCap=2 (aggregate.ts) + live turns show 4-6 distinct domains
+- [16] READ-FAIL logging (url+reason) on every read failure incl. <120-char extractions; READ-RATE metric per round with <70% warning; live rates 75-100%
+- [17] SERP-GUARD in aggregate.ts: zero-top-5-title-overlap SERPs discarded per engine+query; fired TWICE in live traffic (wikipedia, bing-news-rss discarded)
+- [18] verified read path (fetcher/extract/browserExtract) is z-ai-free; z-ai = one engine among many
+- [19] verified policy-UA retry on 401/403/406 (fetcher.ts) + Wikipedia retrieval live (case L)
+- [20][23][24] route-around detectors in router.ts (LITERALIST_META_RE / SOCIAL_EMOTIONAL_RE / SOCIAL_NUANCE_RE / HUMOR_BANTER_RE) → TEXT_COMPLEX/gs-balanced; live: "tell me a joke" routed around and answered in banter mode
+- [21] src/lib/numeric-guard.ts NEW: deterministic count verification (words/chars/letters/vowels/consonants/digits/sentences/lines) against resolvable targets; wired into BOTH streaming (buffered) and non-streaming chat paths with 1 regeneration
+- [22] VOICE register clause added to SYSTEM_PROMPT (the ONLY permitted behavioural addition)
+- [25] temperature 0.2 pinned on OpenRouter wire + z-ai bodies
+- [26][30] verify-before-stating + no-fake-network-actions clauses added ([29] contract still ≤10 lines, no safety boilerplate)
+- [27][28] verified: zero self-assessment prompt instructions; no system-prompt diagnostics
+- [31] FULL MATRIX RUN through real public origin, SSE: A no-search / B real clock Asia/Dhaka / C explicit searchExecuted=true cited=[1,2,4,5] / D freshness retrieval / E "4" one-word / F historical_religious / G subjective zero contamination / H joke zero Islamic evidence + route-around / I research_again NEW search / J stop_reuse searchExecuted=false zero new calls / K zero-result explicit search → search_failed + honest "no usable results" answer (live, all engines empty) / L wikipedia source_specific + honest snippet_only states in persisted sources
+- CASE I HARD REGRESSION: 20/20 live search turns with ZERO denial contradictions (tests/case-i-regression.py)
+- GS-GUARD trips across all live traffic: 0
+- Committed 433602c and pushed to origin/main
+
+Stage Summary:
+- ALL 31 items FIXED except: [2] requires ONE operator paste of real keys (scripts/provision-keys.ts) — current key VALUES are wiped by the platform and no code can restore unknown secrets (mechanism itself verified); [20][23][24] are route-arounds (literalist/subtext/unknowability cannot be code-fixed at the model layer, only routed to the stronger class) — live routing verified
+- Matrix A-L + CASE I regression all green through the REAL public origin
+- No release published (per HARD STOP); no new engines/features/UI
