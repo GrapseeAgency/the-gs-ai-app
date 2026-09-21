@@ -25,7 +25,11 @@ import {
 } from '@/lib/websearch'
 import type { ClarifyOption, SearchIntent, SearchPlan, TimeRange } from './types'
 
-const PLANNER_TIMEOUT_MS = 12_000
+// 2026-09-21 live audit: the planner sits BEFORE any visible event, so a slow
+// planner is pure dead air on the client and pushes quick turns past the ~30s
+// outer-proxy SSE window. 8s (+4s OpenRouter) keeps the classification sharp
+// while capping the silent phase.
+const PLANNER_TIMEOUT_MS = 8_000
 
 /** §6 — the native quick-choice set for ambiguous news requests. */
 export const NEWS_CATEGORY_OPTIONS: ClarifyOption[] = [
@@ -152,7 +156,7 @@ Rules:
 - Documentation/first-party questions ("latest Android documentation") => intent=factual, officialOnly=true.
 - Scholarly/scientific literature questions ("studies on X", "papers about X", "what does research say about X") => intent=academic, queries 2 (one broad, one precise).
 - Questions about a BOOK or its contents ("in Frankenstein, ...", "what does the Quran/Bible say about X", "according to <book>") => intent=book_source, queries include the book title, depth="deep" when the user wants passages/quotes.
-- Historical or religious factual questions ("who was the first Muslim?", "origin of X tradition", "what happened in ... century") => intent=historical_religious, needsSearch=true: the answer must be grounded in sources, not memory. queries 2.
+- Historical or religious factual questions ("who was the first Muslim?", "origin of X tradition", "what happened in ... century") => intent=historical_religious, needsSearch=true: the answer must be grounded in sources, not memory. queries 2-3: one uses the question's own words, one reframes with the tradition's own terminology. When the question asks who was the FIRST person/figure of a religious tradition, one query MUST name that tradition's earliest figures so primary-tradition sources surface (e.g. for "first Muslim ever" include "Adam first prophet Islam" — Islamic theology counts Adam as the first prophet and first submitter to Allah; the Muhammad-era converts are a different, later sense of "first Muslim").
 - Comparisons ("how does X compare with Y", "X vs Y documentation") => intent=comparison, queries cover BOTH sides.
 - Deeper multi-part research ("explain the situation with X") => depth="deep", intent="research".
 - Facts that need current data (weather, scores, prices, releases) => intent=factual.
@@ -337,6 +341,30 @@ export async function planSearch(input: PlanInput): Promise<SearchPlan> {
     if (detectStopSignal(text)) {
       return { ...plan, needsSearch: false, stopSignal: true, queries: [] }
     }
+    // 8.2 §26 (2026-09-21 live-audit hardening) — an EXPLICIT user search
+    // directive is a COMMAND, not a suggestion. The LLM planner's needs=false
+    // or ambiguity verdict must NEVER override it. Proven in production:
+    // "go to the internet to search the internet … there is a pirate job
+    // available so check it out" produced needs=false (model answered
+    // "I cannot access the live internet") and, on other attempts, a false
+    // "Could you clarify…" — four failures across four conversations for the
+    // same message. Explicit gate hit => search ALWAYS runs, clarification is
+    // FORBIDDEN (clarify is only for bare broad-news requests).
+    if (gate.trigger === 'explicit') {
+      plan.needsSearch = true
+      plan.ambiguity = { isAmbiguous: false, prompt: null }
+      plan.reuseEvidence = false
+      // A planner that just echoed the raw message (>14 words) produced a
+      // useless query — re-derive the payload from the deterministic extractor.
+      const echoed = plan.queries.some((q) => q.split(/\s+/).length > 14)
+      if ((plan.queries.length === 0 || echoed) && fallbackQuery.length >= 3) {
+        plan.queries = [fallbackQuery, ...plan.queries.filter((q) => q.split(/\s+/).length <= 14)].slice(0, 3)
+      }
+      if (plan.queries.length === 0) {
+        plan.queries = [text.replace(/\s+/g, ' ').trim().slice(0, 120)].filter((q) => q.length >= 3)
+      }
+      plan.needsSearch = plan.queries.length > 0
+    }
     if (detectOfficialOnly(text)) plan.officialOnly = true
     // 8.2 §8 — HARD RULE: historical/religious factual questions ALWAYS search
     // before answering (evidence first, memory second) — no planner wording
@@ -356,7 +384,9 @@ export async function planSearch(input: PlanInput): Promise<SearchPlan> {
     return plan
   }
 
-  // Deterministic fallback (LLM fully unavailable).
+  // Deterministic fallback (LLM fully unavailable). The explicit-directive
+  // guarantee holds here too: gate.trigger === 'explicit' with a usable
+  // extracted query ALWAYS searches (same production rule as above).
   if (bareBroadNews) {
     return {
       needsSearch: false,

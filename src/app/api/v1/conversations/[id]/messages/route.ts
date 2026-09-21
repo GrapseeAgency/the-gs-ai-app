@@ -409,6 +409,12 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     if (allImagesFailed || allDocsFailed) return { kind: 'none' }
     if (!plannerRuns) return { kind: 'none' }
 
+    // 2026-09-21 live audit: the planner used to run in TOTAL silence (8-16s
+    // of nothing on the wire before the first visible event). The search phase
+    // HAS started the moment the planner runs — say so honestly so clients
+    // light up the searching state immediately.
+    emit?.('status', 'searching')
+
     const plan = await planSearch({
       userText: content,
       historyLines,

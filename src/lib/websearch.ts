@@ -210,6 +210,36 @@ export function extractSearchQuery(userText: string, trigger: 'explicit' | 'rece
       /^\s*(please\s+)?(now\s+)?(web\s+search[:\s]+|(search|google|look\s*up)\s*(the\s+)?(web|internet)?\s*(for|up|about)?[:\s]*)/i,
       ''
     )
+    // 2026-09-21 live audit: scaffolding also WRAPS the payload mid-sentence —
+    // "alright so you should go to the internet to search the internet and
+    // that will be more accurate there is a pirate job available so check it
+    // out mate" used to become the entire 43-word message as the query (the
+    // planner echoed it), which is why results were garbage. Strip the known
+    // directive phrases conservatively; every strip is guarded (a result
+    // shorter than 3 chars is never accepted).
+    let work = q
+    for (;;) {
+      const next = work
+        .replace(/^(?:okay|ok|alright|right|hey|hi|hello|mate|so|well|um+|uh+|now|and|but|please|thanks|thank\s+you)[,\s]+/i, '')
+        .replace(/^(?:you\s+)?(?:(?:can|could|would)\s+you\s+)?(?:should|must|need\s+to|have\s+to|really\s+need\s+to|can|could|would|please)\s+/i, '')
+        .replace(/^(?:(?:can|could|would)\s+you|you)\s+/i, '')
+        .replace(/\b(?:go\s+to|goto|hop\s+(?:on|onto)|jump\s+(?:on|onto)|use)\s+(?:the\s+)?(?:internet|web|net)\b\s*(?:to\s+(?:do\s+it\s*)?)?/gi, '')
+        .replace(/\bgo\s+(?:online|on\s+the\s+(?:internet|web|net))\b\s*/gi, '')
+        .replace(/\b(?:to\s+)?search\s+(?:the\s+|on\s+the\s+)?(?:internet|web|net)\b\s*(?:instead\b)?\s*(?:for|about|to)?/gi, '')
+        .replace(/\b(?:google|search|check|verify|confirm|look\s*up)\s+it\b(?!\s*(?:out|up|online)\b)\s*(?:please|mate|man|bro|buddy)?/gi, '')
+        .replace(/\b(?:google|search|look\s*up|look\s+it\s+up|check|check\s+it|verify|confirm)\s+(?:it\s+)?(?:out|up|online)?\b\s*(?:please|mate|man|bro|buddy)?/gi, '')
+        .replace(/\bthat\s+will\s+be\s+(?:more\s+)?accurate\b|\bit\s+will\s+be\s+(?:more\s+)?accurate\b/gi, '')
+        .replace(/^(?:and|so|then|but|also|because\s+of\s+that)[,\s]+/i, '')
+        .replace(/^[-–—:;,."']\s*/, '')
+        .replace(/^there\s+(?:is|are)\s+/i, '')
+        .replace(/\s*\b(?:so|and|then|but)\s*$/i, '')
+        .replace(/\s+(?:mate|man|bro|buddy|please)\s*$/i, '')
+        .replace(/\s{2,}/g, ' ')
+        .trim()
+      if (next.length < 3 || next === work) break
+      work = next
+    }
+    if (work.length >= 3 && work.length < q.length) q = work
   } else {
     // PHASE 8.1 — recency turns used to send the raw message as the query,
     // so "would you like to see today's news" hit the provider verbatim and

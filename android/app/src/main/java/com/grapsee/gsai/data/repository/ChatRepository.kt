@@ -1,5 +1,9 @@
 package com.grapsee.gsai.data.repository
 
+import java.net.ConnectException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
+
 import com.grapsee.gsai.data.attachment.AttachmentDraft
 import com.grapsee.gsai.data.attachment.AttachmentPhase
 import com.grapsee.gsai.data.local.AppDatabase
@@ -353,6 +357,11 @@ class ChatRepository(
         // PHASE 8.1: the terminal persisted message — its sources/clarifyOptions
         // travel into the Room columns at finalize time.
         var doneMessage: MessageDto? = null
+        // v0.67.1 HONESTY FIX: distinguishes "the stream never said anything"
+        // (true offline) from "the stream died mid-turn" (backend reachable,
+        // answer likely persisted server-side). Any received event flips it.
+        var receivedAnyEvent = false
+        val sendStartedAtMs = System.currentTimeMillis()
         try {
             api.sendMessageStream(
                 conversationId = activeId,
@@ -360,14 +369,15 @@ class ChatRepository(
                 modelId = resolveRemoteModelId(modelId),
                 attachments = attachmentIds,
                 onDelta = { delta ->
+                    receivedAnyEvent = true
                     accumulated.append(delta)
                     onDelta(delta)
                 },
-                onStatus = onStatus,
-                onSearchEvent = onSearchEvent,
-                onSourceEvent = onSourceEvent,
-                onClarifyEvent = onClarify,
-                onResearchEvent = onResearch,
+                onStatus = { s -> receivedAnyEvent = true; onStatus(s) },
+                onSearchEvent = { e -> receivedAnyEvent = true; onSearchEvent(e) },
+                onSourceEvent = { e -> receivedAnyEvent = true; onSourceEvent(e) },
+                onClarifyEvent = { c -> receivedAnyEvent = true; onClarify(c) },
+                onResearchEvent = { r -> receivedAnyEvent = true; onResearch(r) },
                 onDone = { done ->
                     doneMessage = done
                     val doneId = done?.id
@@ -379,28 +389,85 @@ class ChatRepository(
             persistPartialNonCancellable(activeId, assistantId, accumulated)
             throw ce
         } catch (e: Exception) {
-            // On-device landing instead of an error bubble: GS Lite keeps the
-            // conversation flowing with a streamed local reply. v0.66.0 HONESTY
-            // FIX: the reply is now LABELLED — the unlabelled fallback made an
-            // unreachable backend look like a real model answer (the shipped
-            // APKs pointed at 10.0.2.2 for their entire life, so every "answer"
-            // the auditor saw was this path, invisible). The marker makes the
-            // offline state unmistakable in the transcript itself.
-            if (accumulated.isEmpty()) {
-                val marker = "— GS Lite · offline reply (backend unreachable) —\n\n"
-                accumulated.append(marker)
-                onDelta(marker)
-                streamLocalReply(content) { chunk ->
-                    accumulated.append(chunk)
-                    onDelta(chunk)
+            // v0.67.1 HONESTY FIX — three failure classes, one false label retired.
+            // v0.66/0.67 stamped EVERY failure "backend unreachable", including
+            // mid-stream cuts on a REACHABLE backend (the ~30s outer-proxy SSE
+            // window on research turns) while the server ran the detached turn
+            // to completion and PERSISTED the answer — the user saw a fake
+            // offline reply for an answer that existed (proven live 2026-09-21).
+            //
+            // (1) Stream died mid-turn (events had arrived): the backend was
+            //     reachable — adopt its persisted answer; if it is not there
+            //     yet, say THAT. Never the "unreachable" label.
+            if (receivedAnyEvent) {
+                val recovered = runCatching { recoverLatestAssistant(activeId, assistantId, sendStartedAtMs) }.getOrNull()
+                if (recovered != null) {
+                    assistantId = recovered.id
+                    accumulated.clear()
+                    accumulated.append(recovered.content)
+                    persistAssistant(
+                        activeId,
+                        assistantId,
+                        accumulated,
+                        sources = recovered.sources,
+                        clarifyOptions = recovered.clarifyOptions
+                    )
+                    onDone(recovered)
+                    return activeId
                 }
+                if (accumulated.isNotEmpty()) {
+                    val tail = "\n\n— The connection dropped mid-turn. Reopen this chat in a moment to load the finished reply."
+                    accumulated.append(tail)
+                    onDelta(tail)
+                } else {
+                    val notice = "— The connection dropped mid-turn while GS was working. Reopen this chat in a moment to load the finished reply. —"
+                    accumulated.append(notice)
+                    onDelta(notice)
+                }
+                persistAssistant(activeId, assistantId, accumulated)
+                return activeId
+            }
+            // (2)/(3) Nothing ever arrived: GS Lite keeps the conversation
+            // flowing, and the label now tells the truth — truly unreachable
+            // vs. the backend answering with an error (with its reason).
+            val unreachable = e is UnknownHostException ||
+                e is ConnectException ||
+                e is SocketTimeoutException ||
+                e.message?.contains("unresolved", ignoreCase = true) == true ||
+                e.message?.contains("failed to connect", ignoreCase = true) == true
+            val marker = if (unreachable) {
+                "— GS Lite · offline reply (backend unreachable) —\n\n"
             } else {
-                val tail = "\n\n—I'll pick the thread back up right here."
-                accumulated.append(tail)
-                onDelta(tail)
+                val reason = (e.message ?: "request failed").replace('\n', ' ').take(90)
+                "— GS Lite · offline reply (backend error: $reason) —\n\n"
+            }
+            accumulated.append(marker)
+            onDelta(marker)
+            streamLocalReply(content) { chunk ->
+                accumulated.append(chunk)
+                onDelta(chunk)
             }
             persistAssistant(activeId, assistantId, accumulated)
             return activeId
+        }
+        // Clean break without an exception (proxy closed the channel mid-turn,
+        // no done event, nothing streamed): same recovery as the mid-stream
+        // cut — never an empty bubble, never a false offline label.
+        if (doneMessage == null && accumulated.isEmpty()) {
+            val recovered = runCatching { recoverLatestAssistant(activeId, assistantId, sendStartedAtMs) }.getOrNull()
+            if (recovered != null) {
+                assistantId = recovered.id
+                accumulated.append(recovered.content)
+                persistAssistant(
+                    activeId,
+                    assistantId,
+                    accumulated,
+                    sources = recovered.sources,
+                    clarifyOptions = recovered.clarifyOptions
+                )
+                onDone(recovered)
+                return activeId
+            }
         }
         persistAssistant(
             activeId,
@@ -567,6 +634,34 @@ class ChatRepository(
     ) {
         if (accumulated.isEmpty()) return
         withContext(NonCancellable) { persistAssistant(conversationId, id, accumulated) }
+    }
+
+    /**
+     * v0.67.1 — mid-stream loss recovery. The backend runs every turn to
+     * completion DETACHED from the SSE view and persists the answer; when the
+     * view dies (outer-proxy window, network blip), the newest server-side
+     * assistant message created during this send IS the finished reply, with
+     * its real sources. Returns null when it is not there yet (turn still
+     * running, network gone) — callers then report honestly instead of
+     * labelling the backend unreachable. [notBeforeMs] guards against
+     * adopting an OLDER assistant reply while the current turn is still
+     * running (2-minute skew tolerated for client/server clock drift).
+     */
+    private suspend fun recoverLatestAssistant(
+        conversationId: String,
+        localId: String,
+        notBeforeMs: Long
+    ): MessageDto? {
+        val candidates = api.messages(conversationId)
+            .filter { it.role.equals("assistant", ignoreCase = true) && it.content.isNotBlank() && it.id != localId }
+        if (candidates.isEmpty()) return null
+        val parsed = candidates.mapNotNull { m ->
+            val ts = runCatching { java.time.Instant.parse(m.createdAt).toEpochMilli() }.getOrNull()
+            if (ts == null) null else m to ts
+        }
+        if (parsed.isEmpty()) return null
+        val fresh = parsed.filter { it.second >= notBeforeMs - 120_000 }
+        return (fresh.ifEmpty { parsed }).maxByOrNull { it.second }?.first
     }
 
     private fun ConversationDto.toEntity() = ConversationEntity(

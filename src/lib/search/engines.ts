@@ -611,8 +611,13 @@ export function enginesForIntent(intent: string, isNews: boolean, officialOnly: 
     return [...searx, 'gutenberg', 'openlibrary', 'bing-web', 'duckduckgo-lite']
   }
   if (intent === 'historical_religious') {
-    // Primary/reference first (8.2 §11): encyclopedic grounding + scholarly index.
-    return [...searx, 'wikipedia', 'bing-web', 'duckduckgo-lite', 'crossref', 'z-ai']
+    // Primary/reference first (8.2 §11). 2026-09-21 live audit: CrossRef's
+    // bibliographical entries (doi.org landing pages) flooded the candidate
+    // pool with junk for questions like "who was the first Muslim?" — the
+    // scholarly index answers LITERATURE questions, not religious-history
+    // facts, so it stays reserved for the academic intent. z-ai promoted:
+    // its index surfaces tradition-aware answers (Islamic sites etc.).
+    return [...searx, 'z-ai', 'wikipedia', 'bing-web', 'duckduckgo-lite']
   }
   if (isNews) {
     return officialOnly

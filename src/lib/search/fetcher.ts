@@ -44,6 +44,12 @@ export class FetchPageError extends Error {
 
 const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'
+// Policy UA (2026-09-21 live audit): Wikimedia (and some other farms) 403
+// browser UAs coming from datacenter Node processes while ACCEPTING an
+// honest policy UA — the discovery path already proved this (policy UA ->
+// 200 while retrieval 403'd). fetchPage retries a blocked hop once with it.
+const POLICY_USER_AGENT =
+  'GS-AI-App/0.67 (https://grapsee.agency; contact@grapsee.agency)'
 const MAX_REDIRECTS = 4
 
 const ALLOWED_CONTENT_TYPES = [
@@ -195,6 +201,20 @@ export async function fetchPage(
         },
         signal: AbortSignal.timeout(timeoutMs),
       })
+      // Bot-wall retry: sites that 401/403/406 the browser UA from a
+      // datacenter IP often accept an honest policy UA. One bounded retry
+      // per hop — no loops, same SSRF rules.
+      if (res.status === 401 || res.status === 403 || res.status === 406) {
+        res = await fetch(url, {
+          redirect: 'manual',
+          headers: {
+            'User-Agent': POLICY_USER_AGENT,
+            Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.5',
+            'Accept-Language': 'en-US,en;q=0.9',
+          },
+          signal: AbortSignal.timeout(timeoutMs),
+        })
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       if (/timeout|abort/i.test(msg)) {

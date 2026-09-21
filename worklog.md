@@ -3575,3 +3575,27 @@ Stage Summary:
 - v0.67.0 LIVE as the single release. ANY MODEL + REAL SEARCH + REAL RETRIEVAL + REAL EVIDENCE + VISIBLE TRACE + REAL CITATIONS = one experience; ready for the user's physical-device audit (HARD STOP per spec §40 — no further major capabilities until accepted).
 - Remaining limits (disclosed in release notes): ~30s outer proxy SSE cut (server persists; reopen to adopt), bing redirect-unwrap thinness on docs queries, openlibrary/ddg slowness, keys re-provision after platform reboots.
 - webDevReview cron (402136) active with keepalive-first duty.
+
+---
+Task ID: 8.2-HOTFIX-PLANNER-FALSELABEL (v0.67.1)
+Agent: Z.ai Code (main)
+Task: User's second audit report (screenshots, 2026-09-21 06:46-06:50Z): GS Free says "I cannot access the live internet", false "GS Lite · offline reply (backend unreachable)" label, no visible retrieval on phone. Forensic root-causing from DB + dev.log, then fix, verify on the public origin, release.
+
+Work Log:
+- FORENSICS (4 conversations, same message): (a) hs136u 06:46 + 493243 06:47 — planner LLM said needs=false on an EXPLICIT "go to the internet to search the internet… check it out" → model truthfully said it cannot browse (no evidence in context); (b) mahej6 06:48 ×2 — planner said ambiguous → FALSE "Could you clarify…" on an explicit command; (c) mahej6 06:48:29 — search ran (34s) → outer-proxy ~30s SSE cut → v0.66 app fell back to GS Lite with the FALSE "backend unreachable" label while the answer was persisted at 06:49:03; (d) query extraction echo bug: the whole 43-word message became the search query (garbage results: Pirates baseball).
+- FIX 1 planner.ts: deterministic EXPLICIT-directive veto (gate.trigger==='explicit' ⇒ needsSearch=true, ambiguity cleared, reuseEvidence off; planner query echoes >14 words replaced by the deterministic extractor's payload); PLANNER_TIMEOUT 12s→8s (+4s OR lane).
+- FIX 2 websearch.ts extractSearchQuery explicit path: mid-sentence scaffolding unwrap loop (alright/so discourse markers, "you should", "go to the internet", "search the internet", "that will be more accurate", "check it out", trailing mate/so, leading punctuation; guarded ≥3 chars). User's exact message now extracts "a pirate job available".
+- FIX 3 research.ts: quick wallClock 26s→20s (planner ≤12s + research ≤20s fits the ~30s proxy window for most quick turns; deep stays 90s detached-persist).
+- FIX 4 route.ts: emit status 'searching' BEFORE the planner (kills the 8-16s dead-air on the wire).
+- FIX 5 engines.ts: historical_religious engine set drops crossref (doi.org bibliography flooded the pool, junk for religious-history facts) and promotes z-ai.
+- FIX 6 fetcher.ts: POLICY_USER_AGENT retry once per hop on 401/403/406 (Wikimedia 403s browser UAs from datacenter Node — proven by wikipedia 15-results discovery vs 0 retrievals in the same turn). After fix: en.wikipedia.org pages RETRIEVED.
+- FIX 7 research.ts evidence block: answer rule (5) — partial evidence must still be answered (attributed), bare refusal sentences never acceptable when evidence was provided.
+- FIX 8 (Android, 0.67.1) ChatRepository.kt: three failure classes replace the one false label — (1) mid-stream cut with events received → RECOVER the persisted server answer (recoverLatestAssistant, ±120s skew guard, sources+clarify restore, onDone adopt); clean-break EOF covered too; (2) true unreachable (UnknownHost/Connect/SocketTimeout) → GS Lite "backend unreachable" (honest case only); (3) backend error → "backend error: <reason>" with server message. versionCode 70 / 0.67.1.
+- E2E on public origin (GS Free unless noted): user's exact pirate message → status instantly, query "pirate job available", 5 engines per-engine truth, honest sourced answer 17s ✓; "who was the first Muslim ever in this world?" → Adam answer grounded in "Adam in Islam" [1] cited, 4 pages retrieved, 16s ✓ (this was the Khadija failure case); "what is the news today?" → clarify chips ✓ (no invented sectors); Frankenstein book question (Balanced) → Gutenberg full text read ×3, passage-grounded cited answer ✓.
+- SECURITY: db/custom.db checked for key material before commit (0 hits).
+
+Stage Summary:
+- Search decision no longer depends on a stochastic LLM verdict: explicit user search directives are deterministic law (search always runs, clarify forbidden).
+- Retrieval survives Wikimedia UA bot-walls; religious-history questions get tradition-aware sources; partial evidence still produces attributed answers.
+- The phone can no longer show a false "backend unreachable": mid-stream losses adopt the server-persisted answer (with sources) or say the connection dropped — never a fake offline state.
+- v0.67.1 (versionCode 70) tagged for CI build; user MUST update the APK — the screenshots were v0.66.0 behavior (no trace UI, false label).
