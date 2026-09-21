@@ -221,6 +221,15 @@ private struct SearchEventPayload: Decodable {
     var retrieved: Int?
     var usedCitations: [Int]?
 
+    // Swift does NOT synthesize CodingKeys when decoding is fully custom —
+    // it must be declared. `engineOutcomes` is deliberately absent: it is
+    // decoded by hand under the shared `engines` wire key.
+    private enum CodingKeys: String, CodingKey {
+        case type, intent, depth, label, round, query, engines
+        case found, sourcesVerified, sourcesFailed, verified
+        case syndicatedGroups, reason, queries, sources, retrieved, usedCitations
+    }
+
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         type = try c.decodeIfPresent(String.self, forKey: .type) ?? ""
@@ -265,6 +274,11 @@ private struct SourceEventPayload: Decodable {
     var status: String?
     var source: MessageSource?
 
+    private enum CodingKeys: String, CodingKey {
+        case type, ordinal, chars, windowChars, publishedDate
+        case reason, status, source
+    }
+
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         type = try c.decodeIfPresent(String.self, forKey: .type) ?? ""
@@ -297,6 +311,12 @@ private struct ResearchEventPayload: Decodable {
     var reason: String?
     var message: String?
     var by: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case type, depth, roundsPlanned, round, found, read, failed
+        case syndicatedGroups, queries, sources, retrieved, usedCitations
+        case reason, message, by
+    }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)

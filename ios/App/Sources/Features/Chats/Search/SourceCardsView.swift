@@ -24,7 +24,7 @@ struct SourceCardsView: View {
             Text("Sources")
                 .font(Aero.label())
                 .foregroundStyle(Aero.textMuted)
-            ForEach(ordered) { source in
+            ForEach(ordered, id: \.id) { source in
                 SourceCardRow(source: source)
             }
         }
