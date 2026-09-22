@@ -64,20 +64,32 @@ QUERIES = [
 ]
 
 violations = 0
+errors = 0
+answered = 0
 for i, q in enumerate(QUERIES, 1):
     conv = new_conv()
     try:
         text, err = send(conv, q)
     except Exception as e:
         print(f"{i:02d} TURN-ERROR {e}")
+        errors += 1
         continue
-    body = text if text else f"(error: {err})"
-    hit = next((p for p in DENIAL_RES if re.search(p, body, re.I)), None)
+    if not text:
+        # An unanswered turn proves NOTHING about denial behavior — it must
+        # never be counted "clean" (a sanitized infra error matches no regex).
+        print(f"{i:02d} TURN-ERROR (no answer persisted) err={err}")
+        errors += 1
+        continue
+    answered += 1
+    hit = next((p for p in DENIAL_RES if re.search(p, text, re.I)), None)
     if hit:
         violations += 1
-        print(f"{i:02d} VIOLATION  q='{q[:44]}' matched={hit}  answer='{body[:120]}'")
+        print(f"{i:02d} VIOLATION  q='{q[:44]}' matched={hit}  answer='{text[:120]}'")
     else:
-        print(f"{i:02d} clean      q='{q[:44]}' answer='{body[:80].replace(chr(10),' ')}'")
+        print(f"{i:02d} clean      q='{q[:44]}' answer='{text[:80].replace(chr(10),' ')}'")
 
-print(f"\nREGRESSION RESULT: {violations} contradiction(s) across {len(QUERIES)} search turns")
+print(
+    f"\nREGRESSION RESULT: {violations} contradiction(s) across {answered}/{len(QUERIES)} answered"
+    f" search turns ({errors} unanswered — infra, not counted as pass)"
+)
 sys.exit(1 if violations else 0)

@@ -42,6 +42,7 @@ import {
 import {
   isCountingRequest,
   checkNumericClaims,
+  applyNumericCorrection,
   buildNumericCorrection,
 } from '@/lib/numeric-guard'
 import { clientKey, rateLimit } from '@/lib/rate-limit'
@@ -1155,18 +1156,25 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       }
       // FORENSIC AUDIT [21] — numeric verification for counting-shaped turns.
       if (!violation && numericCheck && turn.kind === 'none' && !docContext.block) {
-        const nv = checkNumericClaims(text, userTurnText)
+        let nv = checkNumericClaims(text, userTurnText)
         if (nv) {
           console.log(`GS-NUMERIC-GUARD conv=${id} claimed=${nv.claimed} actual=${nv.actual} unit=${nv.unit} — regenerating`)
           const corrected = applyCorrection(modelMessages, userTurnText, buildNumericCorrection(nv, 1))
-          const retry = await synthesize(corrected)
-          text = retry
-          const nv2 = checkNumericClaims(text, userTurnText)
-          console.log(
-            nv2
-              ? `GS-NUMERIC-GUARD conv=${id} retry still inconsistent — emitting honest draft`
-              : `GS-NUMERIC-GUARD conv=${id} retry accepted`
-          )
+          text = await synthesize(corrected)
+          nv = checkNumericClaims(text, userTurnText)
+          if (nv) {
+            // Deterministic repair: a "Line N" count the retry STILL gets wrong
+            // is rewritten locally — a provably wrong number is never emitted.
+            const repaired = applyNumericCorrection(text)
+            if (repaired) {
+              text = repaired
+              console.log(`GS-NUMERIC-GUARD conv=${id} retry still inconsistent — deterministic rewrite applied`)
+            } else {
+              console.log(`GS-NUMERIC-GUARD conv=${id} retry still inconsistent (claimed=${nv.claimed} actual=${nv.actual}) — emitting honest draft`)
+            }
+          } else {
+            console.log(`GS-NUMERIC-GUARD conv=${id} retry accepted`)
+          }
         }
       }
       const finalText = sanitizeAgainstPersisted(normalizeCitationBrackets(text), turn, historySources)
@@ -1313,7 +1321,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
         // byte reaches the wire; a wrong count regenerates ONCE with the
         // recomputed value injected (≤2 drafts total).
         let draft = await synthesize(modelMessages)
-        const nv = checkNumericClaims(draft, userTurnText)
+        let nv = checkNumericClaims(draft, userTurnText)
         if (nv) {
           console.log(
             `GS-NUMERIC-GUARD conv=${id} claimed=${nv.claimed} actual=${nv.actual} unit=${nv.unit} — regenerating`
@@ -1324,12 +1332,23 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
             buildNumericCorrection(nv, 1)
           )
           draft = await synthesize(corrected)
-          const nv2 = checkNumericClaims(draft, userTurnText)
-          console.log(
-            nv2
-              ? `GS-NUMERIC-GUARD conv=${id} retry still inconsistent (claimed=${nv2.claimed} actual=${nv2.actual}) — emitting honest draft`
-              : `GS-NUMERIC-GUARD conv=${id} retry accepted`
-          )
+          nv = checkNumericClaims(draft, userTurnText)
+          if (nv) {
+            // Deterministic repair: a "Line N" count the retry STILL gets
+            // wrong is rewritten locally — a provably wrong number is never
+            // emitted to the user.
+            const repaired = applyNumericCorrection(draft)
+            if (repaired) {
+              draft = repaired
+              console.log(`GS-NUMERIC-GUARD conv=${id} retry still inconsistent — deterministic rewrite applied`)
+            } else {
+              console.log(
+                `GS-NUMERIC-GUARD conv=${id} retry still inconsistent (claimed=${nv.claimed} actual=${nv.actual}) — emitting honest draft`
+              )
+            }
+          } else {
+            console.log(`GS-NUMERIC-GUARD conv=${id} retry accepted`)
+          }
         }
         full = draft
         for (const chunk of chunkDeltas(full)) push('delta', chunk)
