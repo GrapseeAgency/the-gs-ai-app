@@ -3786,3 +3786,25 @@ Stage Summary:
 - ALL 31 items FIXED except: [2] requires ONE operator paste of real keys (scripts/provision-keys.ts) — current key VALUES are wiped by the platform and no code can restore unknown secrets (mechanism itself verified); [20][23][24] are route-arounds (literalist/subtext/unknowability cannot be code-fixed at the model layer, only routed to the stronger class) — live routing verified
 - Matrix A-L + CASE I regression all green through the REAL public origin
 - No release published (per HARD STOP); no new engines/features/UI
+
+---
+Task ID: VERIFICATION-PASS-31
+Agent: Z.ai Code (main)
+Task: 31-item audit verification pass — raw terminal proof demanded; no summaries
+
+Work Log:
+- Provider ground truth: all 4 keypool layers EMPTY (platform wiped keys again post-repair). Live GS-CAP proves modelRoute=zai/gs-swift|gs-balanced — every live turn runs on the z-ai (GLM) backend. Router tier 'gs-free' (OpenRouter chains) is currently UNREACHABLE dead code: no router route maps to it (models.ts chains intact, router.ts never selects them).
+- [20]/[23]/[24] route-around PROVEN live: "tell me a joke" → GS-ROUTER route=TEXT_COMPLEX reason=route-around: model-class limitation turn → stronger class, modelRoute=zai/gs-balanced. Stronger class IS reachable (glm-4.6 via z-ai), NOT via OpenRouter.
+- B1 no-search corpus: 30/30 per-line ok (deterministic capability-gate unit test, no LLM).
+- B3 umbrella 5x: all 5 correct + concise, minor paraphrase variance (2 wording pairs).
+- B4 numeric-guard: FOUND 2 REAL FAILURES on auditor's exact prompts. (1) "How many words are in this exact sentence?" → "6 words." shipped (actual 8): strip-regex ate the whole message → no resolvable target → guard returned null. (2) Rhyme counts: guard caught 13≠60 but against a FALSE target (stripped user msg), regen instruction nonsensical, retry still wrong → shipped known-wrong "13/17 characters" ("emitting honest draft" = wrong draft). FIXED in src/lib/numeric-guard.ts + route.ts: target (c) falls back to full user message when strip empties (self-referential); new target (d) Line-N claims resolve to draft's own lines; new target (e) equal-count claims ("Both lines: 20 characters") verify against draft content lines; applyNumericCorrection deterministic rewrite (Line-N substitution + per-line true counts) applied when retry still fails — provably wrong numbers are never emitted. LIVE RE-VERIFY: "8 words" correct; rhyme turn → GS-NUMERIC-GUARD ... deterministic rewrite applied → stated counts TRUE (34/27 verified by hand).
+- B5 voice: "banana" one-word ✓; "why don't you grow up?" register-matched ✓; "just say why" → route-around FIRED (TEXT_COMPLEX, gs-balanced) but glm-4.6 still answered a full sentence, NOT "why". Model-class outcome not guaranteed even on stronger class. No prompt fix permitted; left as honest partial.
+- B2 case-i: first run 8/20 answered clean, 12/20 z-ai circuit-open (429 throttle, no OpenRouter fallback possible) — test regex counted sanitized errors "clean" = FALSE PASS. Fixed test to count TURN-ERROR separately (never a pass). Retry of the 12 with 25s spacing: 11/12 clean, 1 throttle. TOTAL: 19/20 answered, 0 denial contradictions, 1 infra error.
+- C keypool self-heal PROVEN raw: throwaway key in layer (d) only → KEYPOOL layer=gs-vault count=1 → self-heal restored .secrets + vault.db (perms 600) → cleanup → layer=none count=0. Loader mechanics work; REAL key connectivity still impossible without operator keys.
+- [3] headers re-verified live: x-gs-app-version/backend-revision/request-id on SSE; GS-VERSION-MISMATCH warning fired for stale 0.0.1 client.
+- Committed 023cf53 (numeric-guard fix + honest case-i test) and pushed origin/main. Lint clean.
+
+Stage Summary:
+- VERDICT: verification DEMOTED several items from "verified" to honest partials; [21] had two real bugs now fixed+pushed with live re-verification.
+- Provider honesty: the entire matrix runs on z-ai GLM ONLY until operator re-provisions OpenRouter keys (scripts/provision-keys.ts). GS Free [8]-[31] status = UNVERIFIED on OpenRouter, mechanism-ready.
+- case-i test hole (error≠clean) fixed so future runs cannot false-pass.
