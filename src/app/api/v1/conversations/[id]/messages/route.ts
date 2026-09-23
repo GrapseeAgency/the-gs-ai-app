@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { messageToJson } from '@/lib/serializers'
-import { resolveModelRoute, OPENROUTER_MODELS } from '@/lib/models'
+import { resolveModelRoute, OPENROUTER_MODELS, type ModelRoute } from '@/lib/models'
+import { loadKeyPool } from '@/lib/keypool'
 import { orCompleteChat, orStreamChat } from '@/lib/openrouter'
 import { planRoute } from '@/lib/router'
 import {
@@ -410,9 +411,35 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
   // free chains bypass primary-provider quota windows; z-ai carries the
   // optional concrete model mapping + modelless fallback). INTERNAL ONLY:
   // none of these values are ever sent to a client.
-  const modelRoute = resolveModelRoute(routerPlan.internalModelId)
+  //
+  // GS FREE WIRING (forensic follow-up): the OpenRouter free chains were
+  // previously UNREACHABLE — no planRoute() tier maps to 'gs-free', so the
+  // backend never served a turn. They are now wired as the execution backend
+  // for exactly two routes, gated on keypool availability so an empty pool
+  // can never break a turn:
+  //   TEXT_SIMPLE (CHAT)  → 'gs-free' chain
+  //   WEB (search synthesis) → 'gs-free-big' chain
+  // Every other tier stays on the primary provider. OpenRouter failure with
+  // nothing yet streamed degrades to the primary provider (§synthesize).
+  const keypool = await loadKeyPool()
+  const freeAvailable = keypool.keys.length > 0
+  const baseRoute = resolveModelRoute(routerPlan.internalModelId)
+  const freeChain =
+    freeAvailable && (routerPlan.route === 'TEXT_SIMPLE' || routerPlan.route === 'WEB')
+      ? routerPlan.route === 'WEB'
+        ? OPENROUTER_MODELS['gs-free-big']
+        : OPENROUTER_MODELS['gs-free']
+      : null
+  const modelRoute: ModelRoute = freeChain
+    ? { backend: 'openrouter', models: freeChain }
+    : baseRoute
   const providerModel = modelRoute.backend === 'zai' ? modelRoute.providerModel : null
   const openRouterModels = modelRoute.backend === 'openrouter' ? modelRoute.models : null
+  if (freeChain) {
+    console.log(
+      `GS-FREE-ROUTE conv=${id} route=${routerPlan.route} chain=${freeChain.join('|')} keys=${keypool.keys.length}`
+    )
+  }
 
   // ---- PHASE 8.3 §3 — INTERNAL FORENSIC LOG ----------------------------------
   // One line per turn with the full execution facts. INTERNAL ONLY — server
@@ -979,9 +1006,6 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     return 'Image understanding is unavailable right now. Please try again.'
   }
 
-  const openRouterAvailable = (): boolean =>
-    (process.env.OPENROUTER_API_KEYS ?? '').trim().length > 0
-
   /**
    * ARCHITECTURE LOCK §5 — infra failures degrade to ONE clean sentence.
    * The raw provider/error text is server-log-only; the user must never see
@@ -1019,9 +1043,27 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
         ? await streamChat(msgs, onDelta, providerModel)
         : await completeChat(msgs, providerModel)
     } catch (e) {
-      if (!openRouterModels && openRouterAvailable()) {
+      const message = e instanceof Error ? e.message : String(e)
+      if (openRouterModels) {
+        // orStreamChat/orCompleteChat prefix every exhausted-chain error with
+        // 'OpenRouter ' — those failures happened BEFORE any byte reached the
+        // client, so the turn degrades to the primary provider transparently.
+        // An unprefixed error means the stream was cut MID-FLIGHT after
+        // forwarding — falling back would duplicate text, so it rethrows
+        // (client recovers via the persisted-answer refetch, audit [4]/[5]).
+        if (message.startsWith('OpenRouter ')) {
+          console.log(
+            `SYNTHESIS-FALLBACK conv=${id} OpenRouter chain exhausted (${message.slice(0, 80)}) → primary provider`
+          )
+          return onDelta
+            ? await streamChat(msgs, onDelta, providerModel)
+            : await completeChat(msgs, providerModel)
+        }
+        throw e
+      }
+      if (freeAvailable) {
         console.log(
-          `SYNTHESIS-FALLBACK conv=${id} primary failed (${(e instanceof Error ? e.message : String(e)).slice(0, 80)}) → OpenRouter free chain`
+          `SYNTHESIS-FALLBACK conv=${id} primary failed (${message.slice(0, 80)}) → OpenRouter free chain`
         )
         return onDelta
           ? await orStreamChat(msgs, OPENROUTER_MODELS['gs-free'], onDelta)
