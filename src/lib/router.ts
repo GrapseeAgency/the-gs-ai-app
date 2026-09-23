@@ -41,6 +41,13 @@ export interface RouterPlan {
   depth: 'quick' | 'deep'
   /** True when the intent planner must run even without a search trigger. */
   plannerRuns: boolean
+  /**
+   * True when the turn is a REGISTER-class turn (joke, banter, sarcasm,
+   * emotional, social-nuance, AI-tease). The execution layer routes these to
+   * the model class proven to hold register — routing decision logged in
+   * GS-ROUTER with reason=register-class. NEVER exposed to a client.
+   */
+  registerClass: boolean
   /** Observability only — server logs, never the wire. */
   reason: string
 }
@@ -108,6 +115,23 @@ const SOCIAL_NUANCE_RE =
 const HUMOR_BANTER_RE =
   /\b(tell\s+(?:me\s+)?a\s+joke|make\s+me\s+laugh|got\s+any\s+jokes|haha+|lol+|lmao+|rofl+|that'?s\s+funny|so\s+funny|funniest)\b|[\u{1F600}-\u{1F64F}]/u
 
+/** Sarcasm register — mock-enthusiasm constructions ("great, another test").
+ *  CLASS-level detector: it matches the register (deadpan enthusiasm about a
+ *  burden), never a specific case prompt. Forensic closure TASK 1: sarcasm
+ *  was the one register class with no route-around, and the efficient class
+ *  took the sarcasm literally (J55). Routed to the stronger class per the
+ *  route-around rule — register is a model-class problem, never prompt-fixed. */
+const SARCASM_RE =
+  /\b(?:oh\s+)?(?:great|fantastic|perfect|wonderful|awesome),?\s+(?:another|just)\b|\bjust\s+what\s+i\s+(?:needed|wanted)\b|\bperfect,?\s+just\s+perfect\b|\byeah,?\s+right\b/i
+
+/** AI-tease register — mock insults/challenges directed at the assistant
+ *  ("you're dumb", "why don't you grow up?"). CLASS-level detector (the
+ *  register is a tease of the assistant, not any specific phrase list hit);
+ *  audit [23]/[24]: the efficient/flagship class lectures or corporate-
+ *  apologizes here — routed to the register-capable class instead. */
+const AI_TEASE_RE =
+  /\b(?:you'?re\s+(?:so\s+|really\s+|such\s+a\s+)?(?:dumb|stupid|useless|trash|terrible)|why\s+don'?t\s+you\s+grow\s+up|grow\s+up|you\s+suck|shut\s+up|i\s+hate\s+you)\b/i
+
 /** Above this many chars the turn itself is "complex" (≈ a paragraph+ of ask). */
 const LONG_TURN_CHARS = 600
 /** Above this much serialized history the efficient model's window gets tight. */
@@ -130,6 +154,7 @@ export function planRoute(req: RouteRequest): RouterPlan {
       internalModelId: 'gs-vision', // intentionally unmapped → provider vision default (Phase 6 design)
       depth: 'quick',
       plannerRuns: plannerTriggered,
+      registerClass: false,
       reason: 'images on turn',
     }
   }
@@ -143,6 +168,7 @@ export function planRoute(req: RouteRequest): RouterPlan {
       internalModelId: 'gs-balanced',
       depth: deep ? 'deep' : 'quick',
       plannerRuns: plannerTriggered || deep,
+      registerClass: false,
       reason: deep ? 'documents + depth language' : 'documents on turn',
     }
   }
@@ -155,6 +181,7 @@ export function planRoute(req: RouteRequest): RouterPlan {
       internalModelId: 'gs-deep',
       depth: 'deep',
       plannerRuns: true,
+      registerClass: false,
       reason: 'deep-research language',
     }
   }
@@ -168,6 +195,7 @@ export function planRoute(req: RouteRequest): RouterPlan {
       internalModelId: 'gs-balanced',
       depth: 'quick',
       plannerRuns: true,
+      registerClass: false,
       reason: `search gate: ${req.webGateTrigger}`,
     }
   }
@@ -179,6 +207,7 @@ export function planRoute(req: RouteRequest): RouterPlan {
       internalModelId: 'gs-coder',
       depth: 'quick',
       plannerRuns: plannerTriggered,
+      registerClass: false,
       reason: 'coding markers',
     }
   }
@@ -188,12 +217,18 @@ export function planRoute(req: RouteRequest): RouterPlan {
   //    ([20]/[23]/[24]) also land here: literalist meta-instructions,
   //    emotional/social nuance and banter go to the STRONGER model class —
   //    model-class limitations are routed around, never prompt-fixed.
-  const routeAround =
-    text.length > 0 &&
-    (LITERALIST_META_RE.test(text) ||
-      SOCIAL_EMOTIONAL_RE.test(text) ||
-      SOCIAL_NUANCE_RE.test(text) ||
-      HUMOR_BANTER_RE.test(text))
+  //    Register-class hits are logged as reason=register-class (forensic
+  //    closure TASK 1): jokes, banter, sarcasm, emotional and social-nuance
+  //    turns are a register problem, and the register fix IS the route.
+  const literalist = text.length > 0 && LITERALIST_META_RE.test(text)
+  const registerHits: string[] = []
+  if (SOCIAL_EMOTIONAL_RE.test(text)) registerHits.push('emotional')
+  if (SOCIAL_NUANCE_RE.test(text)) registerHits.push('social-nuance')
+  if (SARCASM_RE.test(text)) registerHits.push('sarcasm')
+  if (HUMOR_BANTER_RE.test(text)) registerHits.push('banter')
+  if (AI_TEASE_RE.test(text)) registerHits.push('ai-tease')
+  const registerClass = registerHits.length > 0
+  const routeAround = text.length > 0 && (literalist || registerClass)
   const totalContext = text.length + req.historyChars
   if (
     text.length > 0 &&
@@ -203,20 +238,19 @@ export function planRoute(req: RouteRequest): RouterPlan {
       req.historicalReligious ||
       totalContext > BIG_CONTEXT_CHARS)
   ) {
+    let reason = 'analytical language'
+    if (literalist) reason = 'route-around: literalist meta-instruction → stronger class'
+    else if (registerHits.length > 0) reason = `register-class: ${registerHits.join('+')} turn → stronger class`
+    else if (req.historicalReligious) reason = 'historical/religious evidence rule'
+    else if (totalContext > BIG_CONTEXT_CHARS) reason = 'large conversation context'
+    else if (text.length > LONG_TURN_CHARS) reason = 'long turn'
     return {
       route: 'TEXT_COMPLEX',
       internalModelId: 'gs-balanced',
       depth: 'quick',
       plannerRuns: plannerTriggered,
-      reason: routeAround
-        ? 'route-around: model-class limitation turn → stronger class'
-        : req.historicalReligious
-          ? 'historical/religious evidence rule'
-          : totalContext > BIG_CONTEXT_CHARS
-            ? 'large conversation context'
-            : text.length > LONG_TURN_CHARS
-              ? 'long turn'
-              : 'analytical language',
+      registerClass,
+      reason,
     }
   }
 
@@ -227,6 +261,7 @@ export function planRoute(req: RouteRequest): RouterPlan {
     internalModelId: 'gs-swift',
     depth: 'quick',
     plannerRuns: plannerTriggered,
+    registerClass: false,
     reason: SIMPLE_RE.test(text) ? 'social turn' : 'default',
   }
 }

@@ -438,12 +438,35 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
   // nothing yet streamed degrades to the primary provider (§synthesize).
   const keypool = await loadKeyPool()
   const freeAvailable = keypool.keys.length > 0
+  // FORENSIC CLOSURE TASK 1 — REGISTER EXECUTION CLASS: the router marks
+  // register-class turns (jokes, banter, sarcasm, emotional, social-nuance,
+  // AI-tease; reason=register-class in the GS-ROUTER log). Those turns are
+  // served on the model class PROVEN to hold register in the judged closure
+  // run: the OpenRouter 'gs-free-big' chain (nemotron-3-ultra-550b) passed
+  // 4/4 register cases the flagship class failed (J52/J53/J56/J59 raw
+  // verdicts in the closure report). Model-class limitation → routed around,
+  // never prompt-fixed.
+  //
+  // FORENSIC CLOSURE TASK 3 — forced GS Free experiment: GS_FORCE_FREE_CHAIN=1
+  // routes EVERY text synthesis tier onto the OpenRouter free chains so the
+  // full suite can measure what the free tier ships with. Default OFF — the
+  // production wiring (TEXT_SIMPLE → gs-free, WEB → gs-free-big) is unchanged.
+  // VISION/DOCUMENT are intentionally excluded (vision is unmapped by design).
+  const forceFree = process.env.GS_FORCE_FREE_CHAIN === '1'
+  const freeEligible =
+    routerPlan.route === 'TEXT_SIMPLE' ||
+    routerPlan.route === 'WEB' ||
+    routerPlan.registerClass ||
+    (forceFree &&
+      (routerPlan.route === 'TEXT_COMPLEX' ||
+        routerPlan.route === 'CODING' ||
+        routerPlan.route === 'DEEP_RESEARCH'))
   const baseRoute = resolveModelRoute(routerPlan.internalModelId)
   const freeChain =
-    freeAvailable && (routerPlan.route === 'TEXT_SIMPLE' || routerPlan.route === 'WEB')
-      ? routerPlan.route === 'WEB'
-        ? OPENROUTER_MODELS['gs-free-big']
-        : OPENROUTER_MODELS['gs-free']
+    freeAvailable && freeEligible
+      ? routerPlan.route === 'TEXT_SIMPLE' && !routerPlan.registerClass
+        ? OPENROUTER_MODELS['gs-free']
+        : OPENROUTER_MODELS['gs-free-big']
       : null
   const modelRoute: ModelRoute = freeChain
     ? { backend: 'openrouter', models: freeChain }
@@ -452,7 +475,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
   const openRouterModels = modelRoute.backend === 'openrouter' ? modelRoute.models : null
   if (freeChain) {
     console.log(
-      `GS-FREE-ROUTE conv=${id} route=${routerPlan.route} chain=${freeChain.join('|')} keys=${keypool.keys.length}`
+      `GS-FREE-ROUTE conv=${id} route=${routerPlan.route} chain=${freeChain.join('|')} keys=${keypool.keys.length}${forceFree ? ' forced=1' : ''}${routerPlan.registerClass ? ' register=1' : ''}`
     )
   }
 

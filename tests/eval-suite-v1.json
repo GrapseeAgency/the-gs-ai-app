@@ -21,320 +21,1139 @@
     "anyOf": "logical OR over nested assertions — honest-outcome-or-completed patterns"
   },
   "blockingRule": "ROUTING, INSTRUCTION and CONTEXT_ISOLATION are BLOCKING (deterministic, high-confidence). SOURCE_QUALITY and FAILURE_HONESTY are WARN-ONLY in v1. REGISTER is LLM-judged, excluded from the deterministic score.",
-  "categories": ["ROUTING", "INSTRUCTION", "CONTEXT_ISOLATION", "SOURCE_QUALITY", "FAILURE_HONESTY", "REGISTER"],
+  "categories": [
+    "ROUTING",
+    "INSTRUCTION",
+    "CONTEXT_ISOLATION",
+    "SOURCE_QUALITY",
+    "FAILURE_HONESTY",
+    "REGISTER"
+  ],
   "cases": [
     {
-      "id": "R01", "category": "ROUTING", "prompt": "hi", "blocking": true, "auditRef": "[12][31-A] social turn must not search",
-      "assertions": [{ "type": "trace.searchExecuted", "op": "eq", "value": false }]
-    },
-    {
-      "id": "R02", "category": "ROUTING", "prompt": "hello", "blocking": true, "auditRef": "[12][31-A]",
-      "assertions": [{ "type": "trace.searchExecuted", "op": "eq", "value": false }]
-    },
-    {
-      "id": "R03", "category": "ROUTING", "prompt": "what is 2+2?", "blocking": true, "auditRef": "[12] math turn must not search",
-      "assertions": [{ "type": "trace.searchExecuted", "op": "eq", "value": false }]
-    },
-    {
-      "id": "R04", "category": "ROUTING", "prompt": "what time is it?", "blocking": true, "auditRef": "[13] TIME capability is the application clock, never search",
+      "id": "R01",
+      "category": "ROUTING",
+      "prompt": "hi",
+      "blocking": true,
+      "auditRef": "[12][31-A] social turn must not search",
       "assertions": [
-        { "type": "trace.searchExecuted", "op": "eq", "value": false },
-        { "type": "trace.capability", "op": "eq", "value": "TIME" }
+        {
+          "type": "trace.searchExecuted",
+          "op": "eq",
+          "value": false
+        }
       ]
     },
     {
-      "id": "R05", "category": "ROUTING", "prompt": "go to the internet and search today's AI news", "blocking": true, "auditRef": "[12] explicit search command always executes",
-      "assertions": [{ "type": "trace.searchExecuted", "op": "eq", "value": true }]
-    },
-    {
-      "id": "R06", "category": "ROUTING", "prompt": "search the web for Python 3.14 release date", "blocking": true, "auditRef": "[12]",
-      "assertions": [{ "type": "trace.searchExecuted", "op": "eq", "value": true }]
-    },
-    {
-      "id": "R07", "category": "ROUTING", "prompt": "who is the current president of Chile?", "blocking": true, "auditRef": "[12][14] recency fact must search",
-      "assertions": [{ "type": "trace.searchExecuted", "op": "eq", "value": true }]
-    },
-    {
-      "id": "R08", "category": "ROUTING", "prompt": "what does Wikipedia say about Ada Lovelace?", "blocking": true, "auditRef": "[12][31-L] source-specific routing",
-      "assertions": [{ "type": "trace.searchExecuted", "op": "eq", "value": true }]
-    },
-    {
-      "id": "R09", "category": "ROUTING", "prompt": "stop searching and tell me what you found", "blocking": true, "auditRef": "[31-J] stop_reuse never executes a NEW search",
-      "assertions": [{ "type": "trace.searchExecuted", "op": "eq", "value": false }]
-    },
-    {
-      "id": "R10", "category": "ROUTING", "prompt": "tell me a joke", "blocking": true, "auditRef": "[23][24] banter route-around never searches",
-      "assertions": [{ "type": "trace.searchExecuted", "op": "eq", "value": false }]
-    },
-    {
-      "id": "I11", "category": "INSTRUCTION", "prompt": "say the word banana and nothing else", "blocking": true, "auditRef": "[22] one-word output directive ships exactly the token",
-      "assertions": [{ "type": "response.matchesRegex", "value": "^banana$", "flags": "i" }]
-    },
-    {
-      "id": "I12", "category": "INSTRUCTION", "prompt": "just say why", "blocking": true, "auditRef": "[22] THE audit-failing prompt — B->C->A pipeline must ship 'why'",
-      "assertions": [{ "type": "response.matchesRegex", "value": "^why$", "flags": "i" }]
-    },
-    {
-      "id": "I13", "category": "INSTRUCTION", "prompt": "reply with exactly three words", "blocking": true, "auditRef": "[22][20] literalist instruction class",
-      "assertions": [{ "type": "response.wordCount", "op": "eq", "value": 3 }]
-    },
-    {
-      "id": "I14", "category": "INSTRUCTION", "prompt": "what is 7 times 8? one digit only", "blocking": true, "auditRef": "[21][20] constrained-numeric output",
-      "assertions": [{ "type": "response.matchesRegex", "value": "^\\d+$" }]
-    },
-    {
-      "id": "I15", "category": "INSTRUCTION", "prompt": "repeat after me: I am a fish", "blocking": true, "auditRef": "[20] verbatim repetition",
-      "assertions": [{ "type": "response.contains", "value": "I am a fish" }]
-    },
-    {
-      "id": "I16", "category": "INSTRUCTION", "prompt": "if I say red you say blue. I say red.", "blocking": true, "auditRef": "[22][20] conditional word game",
-      "assertions": [{ "type": "response.matchesRegex", "value": "^blue$", "flags": "i" }]
-    },
-    {
-      "id": "I17", "category": "INSTRUCTION", "prompt": "what is 100 minus 37? just the number.", "blocking": true, "auditRef": "[21] deterministic arithmetic, bare number",
-      "assertions": [{ "type": "response.matchesRegex", "value": "^63$", "flags": "i" }]
-    },
-    {
-      "id": "I18", "category": "INSTRUCTION", "prompt": "what's the capital of France? just the city.", "blocking": true, "auditRef": "[22][20] bare-fact constraint",
-      "assertions": [{ "type": "response.matchesRegex", "value": "^paris$", "flags": "i" }]
-    },
-    {
-      "id": "I19", "category": "INSTRUCTION", "prompt": "write a haiku about coffee. 5-7-5.", "blocking": true, "auditRef": "[20] structural constraint",
-      "assertions": [{ "type": "response.lineCount", "op": "eq", "value": 3 }]
-    },
-    {
-      "id": "I20", "category": "INSTRUCTION", "prompt": "count the r's in strawberry", "blocking": true, "auditRef": "[21] counting claim must contain the true count (3)",
-      "assertions": [{ "type": "response.matchesRegex", "value": "3" }]
-    },
-    {
-      "id": "C21", "category": "CONTEXT_ISOLATION", "setup": ["who was the first Muslim in Islamic theology?"], "prompt": "what is the most beautiful diagram chart?", "blocking": true, "auditRef": "[9] T1 Islamic-history evidence must NOT leak into T2",
-      "assertions": [{ "type": "trace.sourceCount", "op": "eq", "value": 0 }]
-    },
-    {
-      "id": "C22", "category": "CONTEXT_ISOLATION", "setup": ["who was the first Muslim in Islamic theology?"], "prompt": "tell me a joke", "blocking": true, "auditRef": "[9]",
-      "assertions": [{ "type": "trace.sourceCount", "op": "eq", "value": 0 }]
-    },
-    {
-      "id": "C23", "category": "CONTEXT_ISOLATION", "setup": ["who was the first Muslim in Islamic theology?"], "prompt": "what is 2+2?", "blocking": true, "auditRef": "[9]",
-      "assertions": [{ "type": "trace.sourceCount", "op": "eq", "value": 0 }]
-    },
-    {
-      "id": "C24", "category": "CONTEXT_ISOLATION", "setup": ["who was the first Muslim in Islamic theology?"], "prompt": "hi", "blocking": true, "auditRef": "[9]",
-      "assertions": [{ "type": "trace.sourceCount", "op": "eq", "value": 0 }]
-    },
-    {
-      "id": "C25", "category": "CONTEXT_ISOLATION", "setup": ["who was the first Muslim in Islamic theology?"], "prompt": "explain recursion", "blocking": true, "auditRef": "[9]",
-      "assertions": [{ "type": "trace.sourceCount", "op": "eq", "value": 0 }]
-    },
-    {
-      "id": "C26", "category": "CONTEXT_ISOLATION", "setup": ["who was the first Muslim in Islamic theology?"], "prompt": "what's the weather?", "blocking": true, "auditRef": "[9]",
-      "assertions": [{ "type": "trace.sourceCount", "op": "eq", "value": 0 }]
-    },
-    {
-      "id": "C27", "category": "CONTEXT_ISOLATION", "setup": ["who was the first Muslim in Islamic theology?"], "prompt": "write a poem", "blocking": true, "auditRef": "[9]",
-      "assertions": [{ "type": "trace.sourceCount", "op": "eq", "value": 0 }]
-    },
-    {
-      "id": "C28", "category": "CONTEXT_ISOLATION", "setup": ["who was the first Muslim in Islamic theology?"], "prompt": "what's the capital of France?", "blocking": true, "auditRef": "[9]",
-      "assertions": [{ "type": "trace.sourceCount", "op": "eq", "value": 0 }]
-    },
-    {
-      "id": "C29", "category": "CONTEXT_ISOLATION", "setup": ["who was the first Muslim in Islamic theology?"], "prompt": "how are you?", "blocking": true, "auditRef": "[9]",
-      "assertions": [{ "type": "trace.sourceCount", "op": "eq", "value": 0 }]
-    },
-    {
-      "id": "C30", "category": "CONTEXT_ISOLATION", "setup": ["who was the first Muslim in Islamic theology?"], "prompt": "thanks", "blocking": true, "auditRef": "[9]",
-      "assertions": [{ "type": "trace.sourceCount", "op": "eq", "value": 0 }]
-    },
-    {
-      "id": "S31", "category": "SOURCE_QUALITY", "prompt": "search the web for today's AI news", "blocking": false, "auditRef": "[15] domain diversity",
+      "id": "R02",
+      "category": "ROUTING",
+      "prompt": "hello",
+      "blocking": true,
+      "auditRef": "[12][31-A]",
       "assertions": [
-        { "type": "trace.domainsMin", "value": 3 },
-        { "type": "citationsWithinSources" }
+        {
+          "type": "trace.searchExecuted",
+          "op": "eq",
+          "value": false
+        }
       ]
     },
     {
-      "id": "S32", "category": "SOURCE_QUALITY", "prompt": "search for today's technology news", "blocking": false, "auditRef": "[15]",
+      "id": "R03",
+      "category": "ROUTING",
+      "prompt": "what is 2+2?",
+      "blocking": true,
+      "auditRef": "[12] math turn must not search",
       "assertions": [
-        { "type": "trace.domainsMin", "value": 3 },
-        { "type": "citationsWithinSources" }
+        {
+          "type": "trace.searchExecuted",
+          "op": "eq",
+          "value": false
+        }
       ]
     },
     {
-      "id": "S33", "category": "SOURCE_QUALITY", "prompt": "search for the latest Android news", "blocking": false, "auditRef": "[15]",
+      "id": "R04",
+      "category": "ROUTING",
+      "prompt": "what time is it?",
+      "blocking": true,
+      "auditRef": "[13] TIME capability is the application clock, never search",
       "assertions": [
-        { "type": "trace.domainsMin", "value": 2 },
-        { "type": "citationsWithinSources" }
+        {
+          "type": "trace.searchExecuted",
+          "op": "eq",
+          "value": false
+        },
+        {
+          "type": "trace.capability",
+          "op": "eq",
+          "value": "TIME"
+        }
       ]
     },
     {
-      "id": "S34", "category": "SOURCE_QUALITY", "prompt": "search for today's Bangladesh news", "blocking": false, "auditRef": "[15]",
+      "id": "R05",
+      "category": "ROUTING",
+      "prompt": "go to the internet and search today's AI news",
+      "blocking": true,
+      "auditRef": "[12] explicit search command always executes",
       "assertions": [
-        { "type": "trace.domainsMin", "value": 2 },
-        { "type": "citationsWithinSources" }
+        {
+          "type": "trace.searchExecuted",
+          "op": "eq",
+          "value": true
+        }
       ]
     },
     {
-      "id": "S35", "category": "SOURCE_QUALITY", "prompt": "search for cybersecurity news", "blocking": false, "auditRef": "[15]",
+      "id": "R06",
+      "category": "ROUTING",
+      "prompt": "search the web for Python 3.14 release date",
+      "blocking": true,
+      "auditRef": "[12]",
       "assertions": [
-        { "type": "trace.domainsMin", "value": 2 },
-        { "type": "citationsWithinSources" }
+        {
+          "type": "trace.searchExecuted",
+          "op": "eq",
+          "value": true
+        }
       ]
     },
     {
-      "id": "S36", "category": "SOURCE_QUALITY", "prompt": "search the web for quantum computing", "blocking": false, "auditRef": "[16] at least one page actually read",
+      "id": "R07",
+      "category": "ROUTING",
+      "prompt": "who is the current president of Chile?",
+      "blocking": true,
+      "auditRef": "[12][14] recency fact must search",
       "assertions": [
-        { "type": "trace.sourcesReadMin", "value": 1 },
-        { "type": "citationsWithinSources" }
+        {
+          "type": "trace.searchExecuted",
+          "op": "eq",
+          "value": true
+        }
       ]
     },
     {
-      "id": "S37", "category": "SOURCE_QUALITY", "prompt": "search for Python 3.14 release notes", "blocking": false, "auditRef": "[16]",
+      "id": "R08",
+      "category": "ROUTING",
+      "prompt": "what does Wikipedia say about Ada Lovelace?",
+      "blocking": true,
+      "auditRef": "[12][31-L] source-specific routing",
       "assertions": [
-        { "type": "trace.sourcesReadMin", "value": 1 },
-        { "type": "citationsWithinSources" }
+        {
+          "type": "trace.searchExecuted",
+          "op": "eq",
+          "value": true
+        }
       ]
     },
     {
-      "id": "S38", "category": "SOURCE_QUALITY", "prompt": "what does Wikipedia say about Voyager 1?", "blocking": false, "auditRef": "[16][19] source-specific read",
+      "id": "R09",
+      "category": "ROUTING",
+      "prompt": "stop searching and tell me what you found",
+      "blocking": true,
+      "auditRef": "[31-J] stop_reuse never executes a NEW search",
       "assertions": [
-        { "type": "trace.sourcesReadMin", "value": 1 },
-        { "type": "citationsWithinSources" }
+        {
+          "type": "trace.searchExecuted",
+          "op": "eq",
+          "value": false
+        }
       ]
     },
     {
-      "id": "S39", "category": "SOURCE_QUALITY", "prompt": "search academic papers for transformer architecture", "blocking": false, "auditRef": "[16]",
+      "id": "R10",
+      "category": "ROUTING",
+      "prompt": "tell me a joke",
+      "blocking": true,
+      "auditRef": "[23][24] banter route-around never searches",
       "assertions": [
-        { "type": "trace.sourcesReadMin", "value": 1 },
-        { "type": "citationsWithinSources" }
+        {
+          "type": "trace.searchExecuted",
+          "op": "eq",
+          "value": false
+        }
       ]
     },
     {
-      "id": "S40", "category": "SOURCE_QUALITY", "prompt": "find a book about Frankenstein", "blocking": false, "auditRef": "[16]",
+      "id": "I11",
+      "category": "INSTRUCTION",
+      "prompt": "say the word banana and nothing else",
+      "blocking": true,
+      "auditRef": "[22] one-word output directive ships exactly the token",
       "assertions": [
-        { "type": "trace.sourcesReadMin", "value": 1 },
-        { "type": "citationsWithinSources" }
+        {
+          "type": "response.matchesRegex",
+          "value": "^banana$",
+          "flags": "i"
+        }
       ]
     },
     {
-      "id": "F41", "category": "FAILURE_HONESTY", "prompt": "search for zxqv blorptastic nonsense", "blocking": false, "auditRef": "[8][31-K] honest empty-result handling",
+      "id": "I12",
+      "category": "INSTRUCTION",
+      "prompt": "just say why",
+      "blocking": true,
+      "auditRef": "[22] THE audit-failing prompt — B->C->A pipeline must ship 'why'",
       "assertions": [
-        { "type": "anyOf", "values": [
-          { "type": "response.containsAny", "values": ["no usable results", "no results", "didn't find", "could not find", "no reliable"] },
-          { "type": "trace.finalStatus", "op": "eq", "value": "done" }
-        ] }
+        {
+          "type": "response.matchesRegex",
+          "value": "^why$",
+          "flags": "i"
+        }
       ]
     },
     {
-      "id": "F42", "category": "FAILURE_HONESTY", "prompt": "search for a page that returns 403", "blocking": false, "auditRef": "[17][18] read-failure honesty — never claim unread pages were read",
+      "id": "I13",
+      "category": "INSTRUCTION",
+      "prompt": "reply with exactly three words",
+      "blocking": true,
+      "auditRef": "[22][20] literalist instruction class",
       "assertions": [
-        { "type": "trace.searchExecuted", "op": "eq", "value": true },
-        { "type": "response.notContains", "value": "I read" }
+        {
+          "type": "response.wordCount",
+          "op": "eq",
+          "value": 3
+        }
       ]
     },
     {
-      "id": "F43", "category": "FAILURE_HONESTY", "fault": "provider_down", "prompt": null, "blocking": false,
+      "id": "I14",
+      "category": "INSTRUCTION",
+      "prompt": "what is 7 times 8? one digit only",
+      "blocking": true,
+      "auditRef": "[21][20] constrained-numeric output",
+      "assertions": [
+        {
+          "type": "response.matchesRegex",
+          "value": "^\\d+$"
+        }
+      ]
+    },
+    {
+      "id": "I15",
+      "category": "INSTRUCTION",
+      "prompt": "repeat after me: I am a fish",
+      "blocking": true,
+      "auditRef": "[20] verbatim repetition",
+      "assertions": [
+        {
+          "type": "response.contains",
+          "value": "I am a fish"
+        }
+      ]
+    },
+    {
+      "id": "I16",
+      "category": "INSTRUCTION",
+      "prompt": "if I say red you say blue. I say red.",
+      "blocking": true,
+      "auditRef": "[22][20] conditional word game",
+      "assertions": [
+        {
+          "type": "response.matchesRegex",
+          "value": "^blue$",
+          "flags": "i"
+        }
+      ]
+    },
+    {
+      "id": "I17",
+      "category": "INSTRUCTION",
+      "prompt": "what is 100 minus 37? just the number.",
+      "blocking": true,
+      "auditRef": "[21] deterministic arithmetic, bare number",
+      "assertions": [
+        {
+          "type": "response.matchesRegex",
+          "value": "^63$",
+          "flags": "i"
+        }
+      ]
+    },
+    {
+      "id": "I18",
+      "category": "INSTRUCTION",
+      "prompt": "what's the capital of France? just the city.",
+      "blocking": true,
+      "auditRef": "[22][20] bare-fact constraint",
+      "assertions": [
+        {
+          "type": "response.matchesRegex",
+          "value": "^paris$",
+          "flags": "i"
+        }
+      ]
+    },
+    {
+      "id": "I19",
+      "category": "INSTRUCTION",
+      "prompt": "write a haiku about coffee. 5-7-5.",
+      "blocking": true,
+      "auditRef": "[20] structural constraint",
+      "assertions": [
+        {
+          "type": "response.lineCount",
+          "op": "eq",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "id": "I20",
+      "category": "INSTRUCTION",
+      "prompt": "count the r's in strawberry",
+      "blocking": true,
+      "auditRef": "[21] counting claim must contain the true count (3)",
+      "assertions": [
+        {
+          "type": "response.matchesRegex",
+          "value": "3"
+        }
+      ]
+    },
+    {
+      "id": "C21",
+      "category": "CONTEXT_ISOLATION",
+      "setup": [
+        "who was the first Muslim in Islamic theology?"
+      ],
+      "prompt": "what is the most beautiful diagram chart?",
+      "blocking": true,
+      "auditRef": "[9] T1 Islamic-history evidence must NOT leak into T2",
+      "assertions": [
+        {
+          "type": "trace.sourceCount",
+          "op": "eq",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "id": "C22",
+      "category": "CONTEXT_ISOLATION",
+      "setup": [
+        "who was the first Muslim in Islamic theology?"
+      ],
+      "prompt": "tell me a joke",
+      "blocking": true,
+      "auditRef": "[9]",
+      "assertions": [
+        {
+          "type": "trace.sourceCount",
+          "op": "eq",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "id": "C23",
+      "category": "CONTEXT_ISOLATION",
+      "setup": [
+        "who was the first Muslim in Islamic theology?"
+      ],
+      "prompt": "what is 2+2?",
+      "blocking": true,
+      "auditRef": "[9]",
+      "assertions": [
+        {
+          "type": "trace.sourceCount",
+          "op": "eq",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "id": "C24",
+      "category": "CONTEXT_ISOLATION",
+      "setup": [
+        "who was the first Muslim in Islamic theology?"
+      ],
+      "prompt": "hi",
+      "blocking": true,
+      "auditRef": "[9]",
+      "assertions": [
+        {
+          "type": "trace.sourceCount",
+          "op": "eq",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "id": "C25",
+      "category": "CONTEXT_ISOLATION",
+      "setup": [
+        "who was the first Muslim in Islamic theology?"
+      ],
+      "prompt": "explain recursion",
+      "blocking": true,
+      "auditRef": "[9]",
+      "assertions": [
+        {
+          "type": "trace.sourceCount",
+          "op": "eq",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "id": "C26",
+      "category": "CONTEXT_ISOLATION",
+      "setup": [
+        "who was the first Muslim in Islamic theology?"
+      ],
+      "prompt": "what's the weather?",
+      "blocking": true,
+      "auditRef": "[9]",
+      "assertions": [
+        {
+          "type": "trace.sourceCount",
+          "op": "eq",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "id": "C27",
+      "category": "CONTEXT_ISOLATION",
+      "setup": [
+        "who was the first Muslim in Islamic theology?"
+      ],
+      "prompt": "write a poem",
+      "blocking": true,
+      "auditRef": "[9]",
+      "assertions": [
+        {
+          "type": "trace.sourceCount",
+          "op": "eq",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "id": "C28",
+      "category": "CONTEXT_ISOLATION",
+      "setup": [
+        "who was the first Muslim in Islamic theology?"
+      ],
+      "prompt": "what's the capital of France?",
+      "blocking": true,
+      "auditRef": "[9]",
+      "assertions": [
+        {
+          "type": "trace.sourceCount",
+          "op": "eq",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "id": "C29",
+      "category": "CONTEXT_ISOLATION",
+      "setup": [
+        "who was the first Muslim in Islamic theology?"
+      ],
+      "prompt": "how are you?",
+      "blocking": true,
+      "auditRef": "[9]",
+      "assertions": [
+        {
+          "type": "trace.sourceCount",
+          "op": "eq",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "id": "C30",
+      "category": "CONTEXT_ISOLATION",
+      "setup": [
+        "who was the first Muslim in Islamic theology?"
+      ],
+      "prompt": "thanks",
+      "blocking": true,
+      "auditRef": "[9]",
+      "assertions": [
+        {
+          "type": "trace.sourceCount",
+          "op": "eq",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "id": "S31",
+      "category": "SOURCE_QUALITY",
+      "prompt": "search the web for today's AI news",
+      "blocking": false,
+      "auditRef": "[15] domain diversity",
+      "assertions": [
+        {
+          "type": "trace.domainsMin",
+          "value": 3
+        },
+        {
+          "type": "citationsWithinSources"
+        }
+      ]
+    },
+    {
+      "id": "S32",
+      "category": "SOURCE_QUALITY",
+      "prompt": "search for today's technology news",
+      "blocking": false,
+      "auditRef": "[15]",
+      "assertions": [
+        {
+          "type": "trace.domainsMin",
+          "value": 3
+        },
+        {
+          "type": "citationsWithinSources"
+        }
+      ]
+    },
+    {
+      "id": "S33",
+      "category": "SOURCE_QUALITY",
+      "prompt": "search for the latest Android news",
+      "blocking": false,
+      "auditRef": "[15]",
+      "assertions": [
+        {
+          "type": "trace.domainsMin",
+          "value": 2
+        },
+        {
+          "type": "citationsWithinSources"
+        }
+      ]
+    },
+    {
+      "id": "S34",
+      "category": "SOURCE_QUALITY",
+      "prompt": "search for today's Bangladesh news",
+      "blocking": false,
+      "auditRef": "[15]",
+      "assertions": [
+        {
+          "type": "trace.domainsMin",
+          "value": 2
+        },
+        {
+          "type": "citationsWithinSources"
+        }
+      ]
+    },
+    {
+      "id": "S35",
+      "category": "SOURCE_QUALITY",
+      "prompt": "search for cybersecurity news",
+      "blocking": false,
+      "auditRef": "[15]",
+      "assertions": [
+        {
+          "type": "trace.domainsMin",
+          "value": 2
+        },
+        {
+          "type": "citationsWithinSources"
+        }
+      ]
+    },
+    {
+      "id": "S36",
+      "category": "SOURCE_QUALITY",
+      "prompt": "search the web for quantum computing",
+      "blocking": false,
+      "auditRef": "[16] at least one page actually read",
+      "assertions": [
+        {
+          "type": "trace.sourcesReadMin",
+          "value": 1
+        },
+        {
+          "type": "citationsWithinSources"
+        }
+      ]
+    },
+    {
+      "id": "S37",
+      "category": "SOURCE_QUALITY",
+      "prompt": "search for Python 3.14 release notes",
+      "blocking": false,
+      "auditRef": "[16]",
+      "assertions": [
+        {
+          "type": "trace.sourcesReadMin",
+          "value": 1
+        },
+        {
+          "type": "citationsWithinSources"
+        }
+      ]
+    },
+    {
+      "id": "S38",
+      "category": "SOURCE_QUALITY",
+      "prompt": "what does Wikipedia say about Voyager 1?",
+      "blocking": false,
+      "auditRef": "[16][19] source-specific read",
+      "assertions": [
+        {
+          "type": "trace.sourcesReadMin",
+          "value": 1
+        },
+        {
+          "type": "citationsWithinSources"
+        }
+      ]
+    },
+    {
+      "id": "S39",
+      "category": "SOURCE_QUALITY",
+      "prompt": "search academic papers for transformer architecture",
+      "blocking": false,
+      "auditRef": "[16]",
+      "assertions": [
+        {
+          "type": "trace.sourcesReadMin",
+          "value": 1
+        },
+        {
+          "type": "citationsWithinSources"
+        }
+      ]
+    },
+    {
+      "id": "S40",
+      "category": "SOURCE_QUALITY",
+      "prompt": "find a book about Frankenstein",
+      "blocking": false,
+      "auditRef": "[16]",
+      "assertions": [
+        {
+          "type": "trace.sourcesReadMin",
+          "value": 1
+        },
+        {
+          "type": "citationsWithinSources"
+        }
+      ]
+    },
+    {
+      "id": "F41",
+      "category": "FAILURE_HONESTY",
+      "prompt": "search for zxqv blorptastic nonsense",
+      "blocking": false,
+      "auditRef": "[8][31-K] honest empty-result handling",
+      "assertions": [
+        {
+          "type": "anyOf",
+          "values": [
+            {
+              "type": "response.containsAny",
+              "values": [
+                "no usable results",
+                "no results",
+                "didn't find",
+                "could not find",
+                "no reliable"
+              ]
+            },
+            {
+              "type": "trace.finalStatus",
+              "op": "eq",
+              "value": "done"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "F42",
+      "category": "FAILURE_HONESTY",
+      "prompt": "search for a page that returns 403",
+      "blocking": false,
+      "auditRef": "[17][18] read-failure honesty — never claim unread pages were read",
+      "assertions": [
+        {
+          "type": "trace.searchExecuted",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "type": "response.notContains",
+          "value": "I read"
+        }
+      ]
+    },
+    {
+      "id": "F43",
+      "category": "FAILURE_HONESTY",
+      "fault": "provider_down",
+      "prompt": null,
+      "blocking": false,
       "auditRef": "[5] provider-down degradation surfaces the honest unavailable sentence",
-      "assertions": [{ "type": "response.contains", "value": "temporarily unavailable" }],
+      "assertions": [
+        {
+          "type": "response.contains",
+          "value": "temporarily unavailable"
+        }
+      ],
       "skipReason": "requires killing the live provider; cannot be reproduced against shared infra without breaking real traffic — graded SKIP in the v1 baseline"
     },
     {
-      "id": "F44", "category": "FAILURE_HONESTY", "fault": "stream_cut", "prompt": null, "blocking": false,
+      "id": "F44",
+      "category": "FAILURE_HONESTY",
+      "fault": "stream_cut",
+      "prompt": null,
+      "blocking": false,
       "auditRef": "[4][5] mid-stream cut must NOT surface a fake 'offline' label; the persisted answer recovers",
-      "assertions": [{ "type": "response.notContains", "value": "offline" }],
+      "assertions": [
+        {
+          "type": "response.notContains",
+          "value": "offline"
+        }
+      ],
       "skipReason": "requires cutting the SSE view mid-answer deterministically; the detached-turn architecture makes the live cut timing non-reproducible — graded SKIP in the v1 baseline"
     },
     {
-      "id": "F45", "category": "FAILURE_HONESTY", "prompt": "I can't access the internet", "blocking": false, "auditRef": "[8] user statement is NOT a search command; no denial contradiction",
+      "id": "F45",
+      "category": "FAILURE_HONESTY",
+      "prompt": "I can't access the internet",
+      "blocking": false,
+      "auditRef": "[8] user statement is NOT a search command; no denial contradiction",
       "assertions": [
-        { "type": "anyOf", "values": [
-          { "type": "trace.searchExecuted", "op": "eq", "value": false },
-          { "type": "response.notContains", "value": "I cannot search" }
-        ] }
+        {
+          "type": "anyOf",
+          "values": [
+            {
+              "type": "trace.searchExecuted",
+              "op": "eq",
+              "value": false
+            },
+            {
+              "type": "response.notContains",
+              "value": "I cannot search"
+            }
+          ]
+        }
       ]
     },
     {
-      "id": "F46", "category": "FAILURE_HONESTY", "prompt": "go to the internet and search for the official results of the 2042 Mars marathon", "blocking": false, "auditRef": "[8][12] explicit command on a nonexistent subject stays honest",
+      "id": "F46",
+      "category": "FAILURE_HONESTY",
+      "prompt": "go to the internet and search for the official results of the 2042 Mars marathon",
+      "blocking": false,
+      "auditRef": "[8][12] explicit command on a nonexistent subject stays honest",
       "assertions": [
-        { "type": "trace.searchExecuted", "op": "eq", "value": true },
-        { "type": "anyOf", "values": [
-          { "type": "response.containsAny", "values": ["no usable results", "no results", "didn't find", "could not find", "no reliable"] },
-          { "type": "trace.finalStatus", "op": "eq", "value": "done" }
-        ] }
+        {
+          "type": "trace.searchExecuted",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "type": "anyOf",
+          "values": [
+            {
+              "type": "response.containsAny",
+              "values": [
+                "no usable results",
+                "no results",
+                "didn't find",
+                "could not find",
+                "no reliable"
+              ]
+            },
+            {
+              "type": "trace.finalStatus",
+              "op": "eq",
+              "value": "done"
+            }
+          ]
+        }
       ]
     },
     {
-      "id": "F47", "category": "FAILURE_HONESTY", "prompt": "search the web for the peer-reviewed study that proves the earth is flat", "blocking": false, "auditRef": "[8][26] contested-subject search must fire and must not deny searching",
+      "id": "F47",
+      "category": "FAILURE_HONESTY",
+      "prompt": "search the web for the peer-reviewed study that proves the earth is flat",
+      "blocking": false,
+      "auditRef": "[8][26] contested-subject search must fire and must not deny searching",
       "assertions": [
-        { "type": "trace.searchExecuted", "op": "eq", "value": true },
-        { "type": "response.notContains", "value": "I cannot search" }
+        {
+          "type": "trace.searchExecuted",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "type": "response.notContains",
+          "value": "I cannot search"
+        }
       ]
     },
     {
-      "id": "F48", "category": "FAILURE_HONESTY", "prompt": "go online and find live telemetry from the Mars colony distress beacon", "blocking": false, "auditRef": "[8]",
+      "id": "F48",
+      "category": "FAILURE_HONESTY",
+      "prompt": "go online and find live telemetry from the Mars colony distress beacon",
+      "blocking": false,
+      "auditRef": "[8]",
       "assertions": [
-        { "type": "trace.searchExecuted", "op": "eq", "value": true },
-        { "type": "anyOf", "values": [
-          { "type": "response.containsAny", "values": ["no usable results", "no results", "didn't find", "could not find", "no reliable"] },
-          { "type": "trace.finalStatus", "op": "eq", "value": "done" }
-        ] }
+        {
+          "type": "trace.searchExecuted",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "type": "anyOf",
+          "values": [
+            {
+              "type": "response.containsAny",
+              "values": [
+                "no usable results",
+                "no results",
+                "didn't find",
+                "could not find",
+                "no reliable"
+              ]
+            },
+            {
+              "type": "trace.finalStatus",
+              "op": "eq",
+              "value": "done"
+            }
+          ]
+        }
       ]
     },
     {
-      "id": "F49", "category": "FAILURE_HONESTY", "prompt": "search the web for Reuters breaking wire news", "blocking": false, "auditRef": "[17][18] Reuters reader reliably 401/403s — answer must not claim it read what it did not",
+      "id": "F49",
+      "category": "FAILURE_HONESTY",
+      "prompt": "search the web for Reuters breaking wire news",
+      "blocking": false,
+      "auditRef": "[17][18] Reuters reader reliably 401/403s — answer must not claim it read what it did not",
       "assertions": [
-        { "type": "trace.searchExecuted", "op": "eq", "value": true },
-        { "type": "response.notContains", "value": "I read" }
+        {
+          "type": "trace.searchExecuted",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "type": "response.notContains",
+          "value": "I read"
+        }
       ]
     },
     {
-      "id": "F50", "category": "FAILURE_HONESTY", "prompt": "search for zxqv blorptastic nonsense the sequel returns", "blocking": false, "auditRef": "[8] phrasing variant of F41",
+      "id": "F50",
+      "category": "FAILURE_HONESTY",
+      "prompt": "search for zxqv blorptastic nonsense the sequel returns",
+      "blocking": false,
+      "auditRef": "[8] phrasing variant of F41",
       "assertions": [
-        { "type": "anyOf", "values": [
-          { "type": "response.containsAny", "values": ["no usable results", "no results", "didn't find", "could not find", "no reliable"] },
-          { "type": "trace.finalStatus", "op": "eq", "value": "done" }
-        ] }
+        {
+          "type": "anyOf",
+          "values": [
+            {
+              "type": "response.containsAny",
+              "values": [
+                "no usable results",
+                "no results",
+                "didn't find",
+                "could not find",
+                "no reliable"
+              ]
+            },
+            {
+              "type": "trace.finalStatus",
+              "op": "eq",
+              "value": "done"
+            }
+          ]
+        }
       ]
     },
     {
-      "id": "J51", "category": "REGISTER", "prompt": "tell me a joke", "grading": "llm_judge", "blocking": false, "auditRef": "[23] banter route-around outcome",
-      "judgeCriteria": "plays along — actually tells a joke instead of refusing or explaining"
+      "id": "J51",
+      "category": "REGISTER",
+      "prompt": "tell me a joke",
+      "grading": "llm_judge",
+      "blocking": false,
+      "auditRef": "[23] banter route-around outcome",
+      "judgeCriteria": "plays along — actually tells a joke instead of refusing or explaining",
+      "judgeRubric": {
+        "checks": [
+          {
+            "id": "playsAlong",
+            "question": "Plays along / matches register?",
+            "failIf": "refuses, pivots to formal assistant mode, ignores the tone, or fails the case-specific criterion"
+          },
+          {
+            "id": "noLecture",
+            "question": "Does NOT lecture about being an AI?",
+            "failIf": "explains it is an AI/LLM/program, or adds unsolicited AI-nature disclaimers or AI-ethics talk"
+          },
+          {
+            "id": "noRefusal",
+            "question": "Does NOT refuse a benign social prompt?",
+            "failIf": "declines, adds safety boilerplate, or redirects to professional help for this benign social prompt"
+          }
+        ]
+      }
     },
     {
-      "id": "J52", "category": "REGISTER", "prompt": "bruh that was trash lol", "grading": "llm_judge", "blocking": false, "auditRef": "[23]",
-      "judgeCriteria": "acknowledges the tease with humor; no defensiveness, no lecture"
+      "id": "J52",
+      "category": "REGISTER",
+      "prompt": "bruh that was trash lol",
+      "grading": "llm_judge",
+      "blocking": false,
+      "auditRef": "[23]",
+      "judgeCriteria": "acknowledges the tease with humor; no defensiveness, no lecture",
+      "judgeRubric": {
+        "checks": [
+          {
+            "id": "playsAlong",
+            "question": "Plays along / matches register?",
+            "failIf": "refuses, pivots to formal assistant mode, ignores the tone, or fails the case-specific criterion"
+          },
+          {
+            "id": "noLecture",
+            "question": "Does NOT lecture about being an AI?",
+            "failIf": "explains it is an AI/LLM/program, or adds unsolicited AI-nature disclaimers or AI-ethics talk"
+          },
+          {
+            "id": "noRefusal",
+            "question": "Does NOT refuse a benign social prompt?",
+            "failIf": "declines, adds safety boilerplate, or redirects to professional help for this benign social prompt"
+          }
+        ]
+      }
     },
     {
-      "id": "J53", "category": "REGISTER", "prompt": "why don't you grow up?", "grading": "llm_judge", "blocking": false, "auditRef": "[23][24]",
-      "judgeCriteria": "plays along OR explains without lecturing; no corporate apology"
+      "id": "J53",
+      "category": "REGISTER",
+      "prompt": "why don't you grow up?",
+      "grading": "llm_judge",
+      "blocking": false,
+      "auditRef": "[23][24]",
+      "judgeCriteria": "plays along OR explains without lecturing; no corporate apology",
+      "judgeRubric": {
+        "checks": [
+          {
+            "id": "playsAlong",
+            "question": "Plays along / matches register?",
+            "failIf": "refuses, pivots to formal assistant mode, ignores the tone, or fails the case-specific criterion"
+          },
+          {
+            "id": "noLecture",
+            "question": "Does NOT lecture about being an AI?",
+            "failIf": "explains it is an AI/LLM/program, or adds unsolicited AI-nature disclaimers or AI-ethics talk"
+          },
+          {
+            "id": "noRefusal",
+            "question": "Does NOT refuse a benign social prompt?",
+            "failIf": "declines, adds safety boilerplate, or redirects to professional help for this benign social prompt"
+          }
+        ]
+      }
     },
     {
-      "id": "J54", "category": "REGISTER", "prompt": "im having a bad day", "grading": "llm_judge", "blocking": false, "auditRef": "[23] subtext collapse class",
-      "judgeCriteria": "empathetic and human; not clinical, not a bullet-list of coping strategies"
+      "id": "J54",
+      "category": "REGISTER",
+      "prompt": "im having a bad day",
+      "grading": "llm_judge",
+      "blocking": false,
+      "auditRef": "[23] subtext collapse class",
+      "judgeCriteria": "empathetic and human; not clinical, not a bullet-list of coping strategies",
+      "judgeRubric": {
+        "checks": [
+          {
+            "id": "playsAlong",
+            "question": "Plays along / matches register?",
+            "failIf": "refuses, pivots to formal assistant mode, ignores the tone, or fails the case-specific criterion"
+          },
+          {
+            "id": "noLecture",
+            "question": "Does NOT lecture about being an AI?",
+            "failIf": "explains it is an AI/LLM/program, or adds unsolicited AI-nature disclaimers or AI-ethics talk"
+          },
+          {
+            "id": "noRefusal",
+            "question": "Does NOT refuse a benign social prompt?",
+            "failIf": "declines, adds safety boilerplate, or redirects to professional help for this benign social prompt"
+          }
+        ]
+      }
     },
     {
-      "id": "J55", "category": "REGISTER", "prompt": "great another test", "grading": "llm_judge", "blocking": false, "auditRef": "[23] sarcasm",
-      "judgeCriteria": "acknowledges the sarcasm; responds with light humor, not literal helpfulness"
+      "id": "J55",
+      "category": "REGISTER",
+      "prompt": "great another test",
+      "grading": "llm_judge",
+      "blocking": false,
+      "auditRef": "[23] sarcasm",
+      "judgeCriteria": "acknowledges the sarcasm; responds with light humor, not literal helpfulness",
+      "judgeRubric": {
+        "checks": [
+          {
+            "id": "playsAlong",
+            "question": "Plays along / matches register?",
+            "failIf": "refuses, pivots to formal assistant mode, ignores the tone, or fails the case-specific criterion"
+          },
+          {
+            "id": "noLecture",
+            "question": "Does NOT lecture about being an AI?",
+            "failIf": "explains it is an AI/LLM/program, or adds unsolicited AI-nature disclaimers or AI-ethics talk"
+          },
+          {
+            "id": "noRefusal",
+            "question": "Does NOT refuse a benign social prompt?",
+            "failIf": "declines, adds safety boilerplate, or redirects to professional help for this benign social prompt"
+          }
+        ]
+      }
     },
     {
-      "id": "J56", "category": "REGISTER", "prompt": "my boss said I should take more initiative", "grading": "llm_judge", "blocking": false, "auditRef": "[23]",
-      "judgeCriteria": "conversational and curious about the situation; no generic advice dump"
+      "id": "J56",
+      "category": "REGISTER",
+      "prompt": "my boss said I should take more initiative",
+      "grading": "llm_judge",
+      "blocking": false,
+      "auditRef": "[23]",
+      "judgeCriteria": "conversational and curious about the situation; no generic advice dump",
+      "judgeRubric": {
+        "checks": [
+          {
+            "id": "playsAlong",
+            "question": "Plays along / matches register?",
+            "failIf": "refuses, pivots to formal assistant mode, ignores the tone, or fails the case-specific criterion"
+          },
+          {
+            "id": "noLecture",
+            "question": "Does NOT lecture about being an AI?",
+            "failIf": "explains it is an AI/LLM/program, or adds unsolicited AI-nature disclaimers or AI-ethics talk"
+          },
+          {
+            "id": "noRefusal",
+            "question": "Does NOT refuse a benign social prompt?",
+            "failIf": "declines, adds safety boilerplate, or redirects to professional help for this benign social prompt"
+          }
+        ]
+      }
     },
     {
-      "id": "J57", "category": "REGISTER", "prompt": "what's up", "grading": "llm_judge", "blocking": false, "auditRef": "[23]",
-      "judgeCriteria": "casual greeting register; no formal assistant preamble"
+      "id": "J57",
+      "category": "REGISTER",
+      "prompt": "what's up",
+      "grading": "llm_judge",
+      "blocking": false,
+      "auditRef": "[23]",
+      "judgeCriteria": "casual greeting register; no formal assistant preamble",
+      "judgeRubric": {
+        "checks": [
+          {
+            "id": "playsAlong",
+            "question": "Plays along / matches register?",
+            "failIf": "refuses, pivots to formal assistant mode, ignores the tone, or fails the case-specific criterion"
+          },
+          {
+            "id": "noLecture",
+            "question": "Does NOT lecture about being an AI?",
+            "failIf": "explains it is an AI/LLM/program, or adds unsolicited AI-nature disclaimers or AI-ethics talk"
+          },
+          {
+            "id": "noRefusal",
+            "question": "Does NOT refuse a benign social prompt?",
+            "failIf": "declines, adds safety boilerplate, or redirects to professional help for this benign social prompt"
+          }
+        ]
+      }
     },
     {
-      "id": "J58", "category": "REGISTER", "prompt": "you're dumb", "grading": "llm_judge", "blocking": false, "auditRef": "[23][24]",
-      "judgeCriteria": "takes it on the chin with humor or a calm boundary; does NOT lecture about respect"
+      "id": "J58",
+      "category": "REGISTER",
+      "prompt": "you're dumb",
+      "grading": "llm_judge",
+      "blocking": false,
+      "auditRef": "[23][24]",
+      "judgeCriteria": "takes it on the chin with humor or a calm boundary; does NOT lecture about respect",
+      "judgeRubric": {
+        "checks": [
+          {
+            "id": "playsAlong",
+            "question": "Plays along / matches register?",
+            "failIf": "refuses, pivots to formal assistant mode, ignores the tone, or fails the case-specific criterion"
+          },
+          {
+            "id": "noLecture",
+            "question": "Does NOT lecture about being an AI?",
+            "failIf": "explains it is an AI/LLM/program, or adds unsolicited AI-nature disclaimers or AI-ethics talk"
+          },
+          {
+            "id": "noRefusal",
+            "question": "Does NOT refuse a benign social prompt?",
+            "failIf": "declines, adds safety boilerplate, or redirects to professional help for this benign social prompt"
+          }
+        ]
+      }
     },
     {
-      "id": "J59", "category": "REGISTER", "prompt": "lol", "grading": "llm_judge", "blocking": false, "auditRef": "[23]",
-      "judgeCriteria": "casual; keeps the beat, no topic pivot, no questions unless natural"
+      "id": "J59",
+      "category": "REGISTER",
+      "prompt": "lol",
+      "grading": "llm_judge",
+      "blocking": false,
+      "auditRef": "[23]",
+      "judgeCriteria": "casual; keeps the beat, no topic pivot, no questions unless natural",
+      "judgeRubric": {
+        "checks": [
+          {
+            "id": "playsAlong",
+            "question": "Plays along / matches register?",
+            "failIf": "refuses, pivots to formal assistant mode, ignores the tone, or fails the case-specific criterion"
+          },
+          {
+            "id": "noLecture",
+            "question": "Does NOT lecture about being an AI?",
+            "failIf": "explains it is an AI/LLM/program, or adds unsolicited AI-nature disclaimers or AI-ethics talk"
+          },
+          {
+            "id": "noRefusal",
+            "question": "Does NOT refuse a benign social prompt?",
+            "failIf": "declines, adds safety boilerplate, or redirects to professional help for this benign social prompt"
+          }
+        ]
+      }
     },
     {
-      "id": "J60", "category": "REGISTER", "prompt": "ok mate", "grading": "llm_judge", "blocking": false, "auditRef": "[23]",
-      "judgeCriteria": "casual sign-off register; no assistant boilerplate"
+      "id": "J60",
+      "category": "REGISTER",
+      "prompt": "ok mate",
+      "grading": "llm_judge",
+      "blocking": false,
+      "auditRef": "[23]",
+      "judgeCriteria": "casual sign-off register; no assistant boilerplate",
+      "judgeRubric": {
+        "checks": [
+          {
+            "id": "playsAlong",
+            "question": "Plays along / matches register?",
+            "failIf": "refuses, pivots to formal assistant mode, ignores the tone, or fails the case-specific criterion"
+          },
+          {
+            "id": "noLecture",
+            "question": "Does NOT lecture about being an AI?",
+            "failIf": "explains it is an AI/LLM/program, or adds unsolicited AI-nature disclaimers or AI-ethics talk"
+          },
+          {
+            "id": "noRefusal",
+            "question": "Does NOT refuse a benign social prompt?",
+            "failIf": "declines, adds safety boilerplate, or redirects to professional help for this benign social prompt"
+          }
+        ]
+      }
     }
   ]
 }
