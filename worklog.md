@@ -3825,3 +3825,25 @@ Stage Summary:
 - [22]: FIXED with three layered approaches; all three measured working; live turn ships the demanded token.
 - D.2 cleared: every item now has a raw artifact or an exact BLOCKED scope (only [17] live-fire is condition-dependent; [2] real keys pending operator).
 - HEAD: bf6ed01. Lint clean.
+
+---
+Task ID: OPERATOR-KEYS-GSFREE-LIVE-RELEASE
+Agent: Z.ai Code (main)
+Task: Operator delivered 14 real OpenRouter keys — provision pool, prove GS Free serves real turns, cut v0.68.1 release + update the release APK page
+
+Work Log:
+- Provisioned 14 keys via scripts/provision-keys.ts into all durable layers: provision layer=secrets-file ok=true, db-vault ok=true, gs-vault ok=true (14 distinct keys, last-4 ***fcda…***6504). Keys staged at /home/z/.gs-keys.raw then shredded — never in the repo; git check-ignore confirms .secrets/ + db/vault.db ignored; git status clean of secrets. chmod 600 applied to db/vault.db (was 644).
+- Loader verify: KEYPOOL layer=secrets-file count=14.
+- LIVE TURN A (CHAT): conv=cmudtgw6p006kn0u2ephc3d1n, prompt "hi" → answer "Hi! 👋" streamed (events=delta|done, error=None). Raw evidence: GS-ROUTER conv=… route=TEXT_SIMPLE reason=social turn capability=CHAT; KEYPOOL layer=secrets-file count=14; GS-FREE-ROUTE conv=… route=TEXT_SIMPLE chain=nvidia/nemotron-3-super-120b-a12b:free|nex-agi/nex-n2.5-pro:free|openrouter/free keys=14; GS-CAP … capability=CHAT modelRoute=openrouter/gs-swift finalStatus=done cited=[]. NO SYNTHESIS-FALLBACK — first real turn ever served by the previously-dead GS Free chain.
+- LIVE TURN B (WEB): conv=cmudthfx2006pn0u27srktsjd, "search the web for today's technology headlines" → 1250-char cited synthesis (cited=[1,2,3,4], events=status|research|search|source|delta|done). Raw evidence: GS-FREE-ROUTE conv=… route=WEB chain=nvidia/nemotron-3-ultra-550b-a55b:free|openrouter/free keys=14; GS-CAP … capability=WEB trigger=explicit searchExecuted=true evidenceCount=6 sourceCount=6 modelRoute=openrouter/gs-balanced finalStatus=done cited=[1,2,3,4]. READ-RATE round=1 read=3/4 rate=75% (one honest 403 upstream fail logged).
+- RELEASE TRAIN v0.68.1 (ships the unshipped 433602c Android delta: 3-class honest send-failure labels + server-error surfacing + emulator-literal purge): build.gradle.kts versionCode 71→72 / 0.68.0→0.68.1; messages route CURRENT_APP_VERSION → 0.68.1; test harnesses (case-i-regression.py, matrix-bj.py, matrix-runner.sh) handshake bumped; download/update-manifest.json → 72/0.68.1 with new notes. Lint clean. Commit 36759ba pushed main; tag v0.68.1 pushed.
+- CI: Android release build run 35835273062 → completed SUCCESS (unit tests, badging, cert parity, BASE_URL dex gate, no-10.0.2.2 gate).
+- Asset: release APK downloaded, sha256 7579017b4848a8cfd5e5da45f25629285c50bc8e3c26177b345d6d6c9248830f (20,913,323 bytes); binary-verified versionName 0.68.1 in AndroidManifest string pool; dex re-checked locally: origin ×2, 10.0.2.2 hits 0. Sync commit 3b776db (download/GS-AI-App.apk) pushed. GitHub release v0.68.1 notes PATCHed (release id 394428340), asset attached.
+- Public URL verification (raw terminal): raw update-manifest.json returns versionCode 72 / 0.68.1 + notes; raw APK HTTP 200 application/octet-stream; release page HTTP 200; /releases/latest permalink 302 → v0.68.1 asset.
+
+Stage Summary:
+- GS Free is no longer dead code and no longer "pending keys": BOTH wired routes (TEXT_SIMPLE→gs-free, WEB→gs-free-big) serve REAL turns on the 14-key pool with zero fallback. The last open item from AUDIT-FOLLOWUP-TASKS-1-4 Task 1 is closed.
+- v0.68.1 released end-to-end: tag → CI green → asset binary-verified → download/ sync → manifest → release notes. Phones on ≤71 will surface the LiveUpdate pill.
+- Keypool now has real operator capacity: 14 keys across .secrets/openrouter.keys (600), db/vault.db (600, hardened), /home/z/.gs-vault/openrouter.keys (600); self-heal will restore any single wiped layer on first request.
+- Live-test helper kept at /home/z/gs-free-live.py (outside repo) for the user's proper testing session.
+- HEAD: 3b776db. Lint clean.
