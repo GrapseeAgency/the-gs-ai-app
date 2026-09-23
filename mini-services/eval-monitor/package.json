@@ -1,0 +1,13 @@
+{
+  "name": "gs-eval-monitor",
+  "version": "1.0.0",
+  "description": "EVAL LAYER 5 — hourly production monitor: samples 5% of live turns, grades them with the Layer-4 deterministic graders, writes eval_scores, alerts on WoW regressions >5pp",
+  "module": "index.ts",
+  "type": "module",
+  "scripts": {
+    "dev": "bun --hot index.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}

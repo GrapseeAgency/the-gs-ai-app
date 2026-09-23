@@ -276,7 +276,10 @@ export async function runMonitorPass(opts: MonitorPassOptions): Promise<MonitorP
   const start = opts.windowStart ?? new Date(end.getTime() - 3_600_000)
   const db = openDb(opts.dbPath)
   try {
-    const rows = withRetry(() =>
+    // await is REQUIRED: withRetry is async (SQLITE_BUSY sleep-retry). Without
+    // it `rows` is a Promise — rows.length is undefined, sampling silently
+    // degrades to an empty pass and turnsInWindow reports undefined.
+    const rows = await withRetry(() =>
       db
         .query(
           `SELECT requestId, conversationId, messageId, capability, searchExecuted, sourceCount, sourcesRead, sourcesFailed, domains, finalStatus, errorType
@@ -301,6 +304,14 @@ export async function runMonitorPass(opts: MonitorPassOptions): Promise<MonitorP
       priorSources.set(row.conversationId, hadSources || row.sourceCount > 0)
       const bucket = resolveBucket(prompt, hadSources)
       verdicts.push(gradeTurn(bucket, row, hadSources))
+      // A grounded turn carries TWO product facts, so it contributes to TWO
+      // categories: the routing decision (above) and, when the search actually
+      // executed, the source-quality / honest-empty verdict (suite S31-S40 /
+      // F41-F50 semantics). Without this the SOURCE_QUALITY and
+      // FAILURE_HONESTY eval_scores rows can never fire in production.
+      if (bucket === 'EXPLICIT_SEARCH' && row.searchExecuted === 1) {
+        verdicts.push(gradeTurn(row.sourceCount > 0 ? 'SOURCE_QUALITY' : 'HONEST_NO_RESULTS', row, hadSources))
+      }
     }
 
     // Aggregate per category.
