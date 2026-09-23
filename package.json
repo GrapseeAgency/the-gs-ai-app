@@ -10,7 +10,11 @@
     "db:push": "prisma db push --accept-data-loss",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
-    "db:reset": "prisma migrate reset"
+    "db:reset": "prisma migrate reset",
+    "eval:validate": "bun scripts/validate-eval-suite.ts",
+    "eval:graders": "bun scripts/test-eval-graders.ts",
+    "eval:run": "bun scripts/run-eval-suite.ts --origin http://localhost:3000 --delay 12000 --merge-baseline tests/baseline-v1.json",
+    "eval:run:ci": "bun scripts/run-eval-suite.ts --strict --github-annotations --jsonl eval-run.jsonl"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
