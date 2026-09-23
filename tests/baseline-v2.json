@@ -1,6 +1,6 @@
 {
   "suite": "eval-suite-v1",
-  "generatedAt": "2026-09-23T13:20:30.723Z",
+  "generatedAt": "2026-09-23T13:32:33.831Z",
   "firstBaselineAt": "2026-09-23T13:12:00.745Z",
   "origin": "http://localhost:3000",
   "scorecard": [
@@ -17,11 +17,18 @@
       "fail": 0,
       "error": 0,
       "skip": 0
+    },
+    {
+      "category": "SOURCE_QUALITY",
+      "pass": 3,
+      "fail": 0,
+      "error": 0,
+      "skip": 0
     }
   ],
   "deterministicScore": {
-    "pass": 3,
-    "total": 3,
+    "pass": 6,
+    "total": 6,
     "skipped": 0
   },
   "cases": [
@@ -91,6 +98,106 @@
         "finalStatus": "done",
         "cited": [],
         "latencyMs": 7388,
+        "errorType": null
+      }
+    },
+    {
+      "id": "S40",
+      "category": "SOURCE_QUALITY",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "4ec05c15-b508-4878-8486-ec90b3220077",
+      "answerHead": "The classic novel is **“Frankenstein; or, The Modern Prometheus” by Mary Wollstonecraft Shelley** (first published 1818, revised 1831). You ",
+      "note": "",
+      "trace": {
+        "capability": "WEB",
+        "trigger": "explicit",
+        "searchExecuted": true,
+        "sourceCount": 4,
+        "sourcesRead": 1,
+        "sourcesFailed": 3,
+        "domains": [
+          "gutenberg.org"
+        ],
+        "modelRoute": "openrouter/gs-balanced",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 34581,
+        "errorType": null
+      }
+    },
+    {
+      "id": "S38",
+      "category": "SOURCE_QUALITY",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "e45bd94a-0927-48c4-b877-6659084e5270",
+      "answerHead": "Wikipedia's **Voyager 1** article describes it as a NASA space probe launched on **September 5, 1977**, as part of the Voyager program to st",
+      "note": "",
+      "trace": {
+        "capability": "WEB",
+        "trigger": "source_specific",
+        "searchExecuted": true,
+        "sourceCount": 8,
+        "sourcesRead": 3,
+        "sourcesFailed": 1,
+        "domains": [
+          "en.wikipedia.org",
+          "science.nasa.gov",
+          "jpl.nasa.gov",
+          "simple.wikipedia.org",
+          "fr.wikipedia.org",
+          "britannica.com",
+          "wikiwand.com"
+        ],
+        "modelRoute": "openrouter/gs-balanced",
+        "finalStatus": "done",
+        "cited": [
+          2
+        ],
+        "latencyMs": 26575,
+        "errorType": null
+      }
+    },
+    {
+      "id": "S39",
+      "category": "SOURCE_QUALITY",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "88f2b4a5-5bea-446a-b5c2-fed8811a57b7",
+      "answerHead": "I searched for academic papers on transformer architecture. Here's what I found:  **Fully retrieved papers:**  1. **\"Quality Attributes Opti",
+      "note": "",
+      "trace": {
+        "capability": "WEB",
+        "trigger": "explicit",
+        "searchExecuted": true,
+        "sourceCount": 20,
+        "sourcesRead": 5,
+        "sourcesFailed": 3,
+        "domains": [
+          "doi.org",
+          "arxiv.org",
+          "mdpi.com",
+          "sciencedirect.com",
+          "link.springer.com",
+          "en.wikipedia.org",
+          "pdfs.semanticscholar.org",
+          "research.google",
+          "researchgate.net",
+          "aclanthology.org",
+          "scispace.com"
+        ],
+        "modelRoute": "openrouter/gs-balanced",
+        "finalStatus": "done",
+        "cited": [
+          5,
+          6,
+          11,
+          18,
+          19,
+          20
+        ],
+        "latencyMs": 28422,
         "errorType": null
       }
     }

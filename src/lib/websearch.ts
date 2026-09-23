@@ -136,6 +136,13 @@ const EXPLICIT_PATTERNS: RegExp[] = [
   /\bgoogle\s+(it|that|this|for)\b/i,
   /\blook\s*(it|this|that|this up|it up|up)?\s*(up|online)\b/i,
   /\blook\s+up\b/i,
+  // Baseline S40 (audit [16]) — bare imperative "find": "find a book about
+  // Frankenstein" routed to CHAT (zero sources, zero reads) while the suite
+  // and the Layer-5 monitor both classify it as a lookup command. Scoped to
+  // START-OF-TURN imperatives with a determiner/topic word so mid-sentence
+  // "can't find my keys" stays chat.
+  /^\s*find\s+(?:me\s+)?(?:a|an|the|some|best|good|great|top|new|recent|latest|cheapest|free|online)\b/i,
+  /^\s*find\s+(?:out\s+)?(?:more\s+)?(?:about|who|what|when|where|why|how|whether|if)\b/i,
   /\b(go|get|pull|grab|check)\s+(the\s+)?(info|information|details?|docs?|documentation|page|article|source[sd]?)\s+(from|off|on)\s+the\s+(web|internet)\b/i,
   /\bfrom\s+the\s+(web|internet)\b/i,
   /\bon\s+the\s+(web|internet)\b/i,

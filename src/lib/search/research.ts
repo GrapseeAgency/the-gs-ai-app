@@ -18,9 +18,27 @@
 import { runMetaSearch } from './aggregate'
 import { browserExtract, browserFallbackEnabled } from './browserExtract'
 import { retrieveAndExtract, type ExtractedArticle } from './extract'
+import { FetchPageError } from './fetcher'
 import { sourceIdFor } from '@/lib/websearch'
 import type { ResearchSource, SearchEventEmitter, SearchIntent, TimeRange } from './types'
 import { NOOP_EMIT } from './types'
+
+/**
+ * Baseline S39 hardening — EVERY read failure is logged in a fixed machine-
+ * greppable schema: url + http status + retrieval method + failure category
+ * (task prescription: 403-bot-wall / 404 / 5xx / timeout / parse-fail / dns /
+ * network). "No silent failures" (audit [16]) with a stable vocabulary so
+ * production read-rate regressions are diagnosable from the log alone.
+ */
+function classifyReadFailure(raw: string): string {
+  if (/\bstatus 4(01|03|06)\b/.test(raw)) return '403-bot-wall'
+  if (/\bstatus 404\b/.test(raw)) return '404'
+  if (/\bstatus 5\d\d\b/.test(raw)) return '5xx'
+  if (/timed out|timeout|abort/i.test(raw)) return 'timeout'
+  if (/resolves to private|blocked private host|dns lookup failed|no dns records/i.test(raw)) return 'dns'
+  if (/no readable article text|content-type/i.test(raw)) return 'parse-fail'
+  return 'network'
+}
 
 // ---------------------------------------------------------------------------
 // Budgets (8.2 §24) — every number explicit, structurally loop-proof.
@@ -297,7 +315,21 @@ export async function runResearch(input: ResearchInput): Promise<ResearchOutcome
         // readable; max 2 per turn, 1 at a time, hard kill after 30s.
         const attempt = async (): Promise<{ article: ExtractedArticle; finalUrl: string; viaBrowser: boolean }> => {
           try {
-            return { ...(await retrieveOne(s, budget.retrieveTimeoutMs)), viaBrowser: false }
+            let r: { article: ExtractedArticle; finalUrl: string }
+            try {
+              r = await retrieveOne(s, budget.retrieveTimeoutMs)
+            } catch (firstErr) {
+              // Baseline S39 hardening — a TIMEOUT gets exactly ONE retry, then
+              // the failure is recorded honestly (never laundered, never a
+              // silent pass). Bounded: no retry past the wall-clock budget.
+              if (firstErr instanceof FetchPageError && firstErr.kind === 'timeout' && !outOfTime()) {
+                console.log(`READ-RETRY ordinal=${s.ordinal} url=${s.url.slice(0, 160)} method=direct-http category=timeout — first attempt timed out, retrying once`)
+                r = await retrieveOne(s, budget.retrieveTimeoutMs)
+              } else {
+                throw firstErr
+              }
+            }
+            return { ...r, viaBrowser: false }
           } catch (httpErr) {
             if (
               input.depth !== 'deep' ||
@@ -323,7 +355,7 @@ export async function runResearch(input: ResearchInput): Promise<ResearchOutcome
         if (article.chars < 120) {
           s.status = 'snippet_only'
           s.failReason = 'page had no readable article text'
-          console.log(`READ-FAIL ordinal=${s.ordinal} url=${s.url.slice(0, 160)} reason=no readable article text (${article.chars} chars)`)
+          console.log(`READ-FAIL ordinal=${s.ordinal} url=${s.url.slice(0, 160)} method=direct-http category=parse-fail reason=no readable article text (${article.chars} chars)`)
           emit('source', { type: 'failed', ordinal: s.ordinal, reason: 'no readable text', status: 'snippet_only' })
           return
         }
@@ -356,16 +388,17 @@ export async function runResearch(input: ResearchInput): Promise<ResearchOutcome
         const raw = e instanceof Error ? e.message : String(e)
         s.failReason = raw.slice(0, 160)
         // FORENSIC AUDIT [16] — NO SILENT FAILURES: every read failure is
-        // logged with its URL and status so "headline only" card states are
-        // always explainable from the server log.
-        console.log(`READ-FAIL ordinal=${s.ordinal} url=${s.url.slice(0, 160)} reason=${raw.slice(0, 140)}`)
+        // logged with URL + retrieval method + failure category so "headline
+        // only" card states are always explainable from the server log.
+        const category = classifyReadFailure(raw)
+        console.log(`READ-FAIL ordinal=${s.ordinal} url=${s.url.slice(0, 160)} method=direct-http category=${category} reason=${raw.slice(0, 140)}`)
         // §10/§22 — distinguish "page exists but blocked OUR fetcher" from
         // "page dead". A 401/403/406 bot-wall still leaves a REAL page the
         // USER can open: the source keeps its honest snippet_only state
         // (card says "headline only — not retrieved", link works), the model
         // was already told to treat the snippet as unread. Truly dead pages
         // (404/5xx/timeout/DNS) stay failed and are never persisted.
-        if (/\bstatus 4(01|03|06)\b/.test(raw)) {
+        if (category === '403-bot-wall') {
           s.status = 'snippet_only'
           emit('source', {
             type: 'failed',
