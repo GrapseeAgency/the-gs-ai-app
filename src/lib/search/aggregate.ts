@@ -226,7 +226,8 @@ function serpSharedWords(query: string, title: string): number {
  * ANY content word with the query. A real result set almost always echoes at
  * least one query term in a top-5 title.
  */
-function isPoisonedSerp(query: string, results: { title: string }[]): boolean {
+/** Exported for the forensic verification harness ([17] deterministic repro). */
+export function isPoisonedSerp(query: string, results: { title: string }[]): boolean {
   const seen = new Set<string>()
   const topTitles: string[] = []
   for (const r of results) {
