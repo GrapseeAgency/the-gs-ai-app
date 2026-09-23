@@ -125,6 +125,27 @@ const WEATHER_RE =
   /\bweather\b|\bforecast\b|\btemperature\b|\brain(?:ing|fall)?\s+(?:today|tomorrow|now|right\s+now|in\b)|\bis\s+it\s+(?:raining|sunny|snowing|hot|cold)\s*(?:there|today|now|outside)?\b/i
 
 /**
+ * Baseline C26 (audit [9] class) — BARE, anchorless weather register questions.
+ * "what's the weather?" has NO location to retrieve against: the forced search
+ * burned 8 sources on worldwide stories and the answer still had to ask
+ * "which location you're asking about" (baseline evidence, 19.4s wasted).
+ * Time words are not location anchors — without a place there is nothing to
+ * ground. These are CHAT turns (the answer asks for the location), not WEB.
+ * End-anchored + tightly scoped so "weather in Tokyo" / "rain in Dhaka" /
+ * "today's weather" still search via the normal triggers.
+ */
+const WEATHER_BARE_RES: RegExp[] = [
+  /^(?:(?:ok(?:ay)?|so|um|well|hey)[,\s]+)?(?:what(?:'s|s|\s+is)|how(?:'s|s|\s+is))\s+(?:the\s+)?(?:weather|temperature|forecast)(?:\s+(?:like|outside|there|here|today|now|tonight|right\s+now))?\s*[?.!]*$/i,
+  /^(?:(?:ok(?:ay)?|so|um|well|hey)[,\s]+)?is\s+it\s+(?:raining|snowing|sunny|cloudy|windy|hot|cold)(?:\s+(?:outside|there|here|today|now|right\s+now))?\s*[?.!]*$/i,
+  /^(?:(?:ok(?:ay)?|so|um|well|hey)[,\s]+)?(?:the\s+)?(?:weather|temperature|forecast)\s*[?.!]*$/i,
+]
+
+/** Deterministic: a bare anchorless weather register question — never grounds. */
+export function isBareWeatherRegister(text: string): boolean {
+  return WEATHER_BARE_RES.some((re) => re.test(text.trim()))
+}
+
+/**
  * §13 — the user NAMES an information source and asks what IT says. The
  * source name maps to a domain hint; retrieval is FORCED (the model must not
  * answer a "what does Wikipedia say about X" question from memory).
@@ -310,8 +331,11 @@ export function decideCapability(input: CapabilityInput): CapabilityDecision {
     })
   }
 
-  // 4) WEATHER — forced freshness retrieval with a day window.
-  if (text.length > 0 && WEATHER_RE.test(text)) {
+  // 4) WEATHER — forced freshness retrieval with a day window. A BARE,
+  // anchorless register question ("what's the weather?") is NOT a grounding
+  // request (baseline C26: no location → worldwide story pile → still asks
+  // "which location?") — those stay CHAT; anchored weather turns search.
+  if (text.length > 0 && WEATHER_RE.test(text) && !isBareWeatherRegister(text)) {
     return base({
       capability: 'WEB',
       trigger: 'weather',

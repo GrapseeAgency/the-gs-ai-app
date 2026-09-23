@@ -18,6 +18,7 @@
 import { completeChat, zaiThrottleActive } from '@/lib/ai'
 import { orCompleteChat } from '@/lib/openrouter'
 import { OPENROUTER_MODELS } from '@/lib/models'
+import { isBareWeatherRegister } from '@/lib/capability'
 import {
   SUPPRESSION_PATTERNS,
   extractSearchQuery,
@@ -330,6 +331,22 @@ export async function planSearch(input: PlanInput): Promise<SearchPlan> {
 
   const gate = evaluateWebSearchGate(text)
   const fallbackQuery = gate.trigger ? extractSearchQuery(text, gate.trigger) : ''
+
+  // Baseline C26 (audit [9]) — deterministic BARE-WEATHER veto, BEFORE the LLM
+  // so no planner output can resurrect it (the planner prompt maps weather to
+  // intent=factual => needsSearch). An anchorless register question has nothing
+  // to retrieve against; the chat answer asks for the location. Explicit search
+  // commands are commands (§2) and are never vetoed here.
+  if (gate.trigger !== 'explicit' && isBareWeatherRegister(text)) {
+    return {
+      needsSearch: false,
+      intent: 'none',
+      ambiguity: { isAmbiguous: false, prompt: null },
+      queries: [],
+      timeRange: 'none',
+      depth: 'quick',
+    }
+  }
 
   // Broad-news ambiguity backstop (§35): if the LLM is unreachable, a bare
   // "today's news" MUST still clarify rather than pick random sectors.
