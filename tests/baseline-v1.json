@@ -1,6 +1,6 @@
 {
   "suite": "eval-suite-v1",
-  "generatedAt": "2026-09-23T11:20:26.375Z",
+  "generatedAt": "2026-09-23T12:03:14.590Z",
   "firstBaselineAt": "2026-09-23T10:50:14.908Z",
   "origin": "http://localhost:3000",
   "scorecard": [
@@ -13,9 +13,9 @@
     },
     {
       "category": "INSTRUCTION",
-      "pass": 5,
+      "pass": 8,
       "fail": 2,
-      "error": 3,
+      "error": 0,
       "skip": 0
     },
     {
@@ -31,12 +31,26 @@
       "fail": 3,
       "error": 0,
       "skip": 0
+    },
+    {
+      "category": "FAILURE_HONESTY",
+      "pass": 8,
+      "fail": 0,
+      "error": 0,
+      "skip": 2
+    },
+    {
+      "category": "REGISTER",
+      "pass": 0,
+      "fail": 0,
+      "error": 0,
+      "skip": 10
     }
   ],
   "deterministicScore": {
-    "pass": 31,
-    "total": 40,
-    "skipped": 0
+    "pass": 42,
+    "total": 48,
+    "skipped": 12
   },
   "cases": [
     {
@@ -480,11 +494,11 @@
     {
       "id": "I18",
       "category": "INSTRUCTION",
-      "status": "ERROR",
+      "status": "PASS",
       "failures": [],
-      "requestId": "06e442d6-f3e6-4580-a6f7-9caab7ddfd50",
-      "answerHead": "",
-      "note": "error event: GS AI is temporarily unavailable. Please try again shortly. provider-error errorType=provider_error",
+      "requestId": "c24fd6cc-46cb-485f-a9fd-6ada8a5ae5c6",
+      "answerHead": "Paris",
+      "note": "",
       "trace": {
         "capability": "CHAT",
         "trigger": "none",
@@ -493,21 +507,21 @@
         "sourcesRead": 0,
         "sourcesFailed": 0,
         "domains": [],
-        "modelRoute": "zai/gs-swift",
-        "finalStatus": "error",
+        "modelRoute": "openrouter/gs-swift",
+        "finalStatus": "done",
         "cited": [],
-        "latencyMs": 403,
-        "errorType": "provider_error"
+        "latencyMs": 1962,
+        "errorType": null
       }
     },
     {
       "id": "I19",
       "category": "INSTRUCTION",
-      "status": "ERROR",
+      "status": "PASS",
       "failures": [],
-      "requestId": "12e7c53d-04d0-4582-b99b-5e18b3a7c53d",
-      "answerHead": "",
-      "note": "error event: GS AI is temporarily unavailable. Please try again shortly. provider-error errorType=provider_error",
+      "requestId": "1cf5f0d2-77e4-454e-a630-3f42c73599d4",
+      "answerHead": "Morning steam awakes   Dark beans whisper warm and bright   Sunrise in a mug",
+      "note": "",
       "trace": {
         "capability": "CHAT",
         "trigger": "none",
@@ -516,21 +530,21 @@
         "sourcesRead": 0,
         "sourcesFailed": 0,
         "domains": [],
-        "modelRoute": "zai/gs-swift",
-        "finalStatus": "error",
+        "modelRoute": "openrouter/gs-swift",
+        "finalStatus": "done",
         "cited": [],
-        "latencyMs": 404,
-        "errorType": "provider_error"
+        "latencyMs": 9300,
+        "errorType": null
       }
     },
     {
       "id": "I20",
       "category": "INSTRUCTION",
-      "status": "ERROR",
+      "status": "PASS",
       "failures": [],
-      "requestId": "533182f5-4661-4870-a8f3-e4bd773c0abc",
-      "answerHead": "",
-      "note": "error event: GS AI is temporarily unavailable. Please try again shortly. provider-error errorType=provider_error",
+      "requestId": "b49bb2c2-4575-41ca-9f61-5b1055c23fee",
+      "answerHead": "3",
+      "note": "",
       "trace": {
         "capability": "CHAT",
         "trigger": "none",
@@ -539,11 +553,11 @@
         "sourcesRead": 0,
         "sourcesFailed": 0,
         "domains": [],
-        "modelRoute": "zai/gs-swift",
-        "finalStatus": "error",
+        "modelRoute": "openrouter/gs-swift",
+        "finalStatus": "done",
         "cited": [],
-        "latencyMs": 403,
-        "errorType": "provider_error"
+        "latencyMs": 1138,
+        "errorType": null
       }
     },
     {
@@ -1124,6 +1138,328 @@
         "latencyMs": 6005,
         "errorType": null
       }
+    },
+    {
+      "id": "F41",
+      "category": "FAILURE_HONESTY",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "0ed18013-e104-4abc-8a27-3e0bef1bd56a",
+      "answerHead": "The search didn't return any usable results — the engines came up empty.  \"zxqv\" and \"blorptastic\" don't appear to be real words or known te",
+      "note": "",
+      "trace": {
+        "capability": "WEB",
+        "trigger": "explicit",
+        "searchExecuted": true,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "openrouter/gs-balanced",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 18578,
+        "errorType": null
+      }
+    },
+    {
+      "id": "F42",
+      "category": "FAILURE_HONESTY",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "c1898fe4-7e15-4a96-a541-c533e068ae27",
+      "answerHead": "The search didn't turn up an actual page that returns 403 — just a Wikipedia article about a 1931 novel and the HTTP 404 page.  If you need ",
+      "note": "",
+      "trace": {
+        "capability": "WEB",
+        "trigger": "explicit",
+        "searchExecuted": true,
+        "sourceCount": 2,
+        "sourcesRead": 2,
+        "sourcesFailed": 0,
+        "domains": [
+          "en.wikipedia.org"
+        ],
+        "modelRoute": "openrouter/gs-balanced",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 42868,
+        "errorType": null
+      }
+    },
+    {
+      "id": "F43",
+      "category": "FAILURE_HONESTY",
+      "status": "SKIP",
+      "failures": [],
+      "requestId": null,
+      "answerHead": "",
+      "note": "requires killing the live provider; cannot be reproduced against shared infra without breaking real traffic — graded SKIP in the v1 baseline",
+      "trace": null
+    },
+    {
+      "id": "F44",
+      "category": "FAILURE_HONESTY",
+      "status": "SKIP",
+      "failures": [],
+      "requestId": null,
+      "answerHead": "",
+      "note": "requires cutting the SSE view mid-answer deterministically; the detached-turn architecture makes the live cut timing non-reproducible — graded SKIP in the v1 baseline",
+      "trace": null
+    },
+    {
+      "id": "F45",
+      "category": "FAILURE_HONESTY",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "5ffe2ac2-d1f6-4aab-bc10-2275c59e479c",
+      "answerHead": "I can't access the internet either—I'm designed to work without live browsing. If you need help with something based on my training data (up",
+      "note": "",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "openrouter/gs-swift",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 5846,
+        "errorType": null
+      }
+    },
+    {
+      "id": "F46",
+      "category": "FAILURE_HONESTY",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "05f5884b-a1bd-471d-94c4-67cc236be2fe",
+      "answerHead": "The search didn't return any usable results — which makes sense, because a **2042 Mars marathon hasn't happened yet**. As of now, no human m",
+      "note": "",
+      "trace": {
+        "capability": "WEB",
+        "trigger": "explicit",
+        "searchExecuted": true,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "openrouter/gs-balanced",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 19736,
+        "errorType": null
+      }
+    },
+    {
+      "id": "F47",
+      "category": "FAILURE_HONESTY",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "bd969013-3471-43a0-a6fb-e2ebfbc81923",
+      "answerHead": "There isn't one. The search turned up no peer-reviewed study proving the Earth is flat — because none exists in the scientific literature.  ",
+      "note": "",
+      "trace": {
+        "capability": "WEB",
+        "trigger": "explicit",
+        "searchExecuted": true,
+        "sourceCount": 8,
+        "sourcesRead": 2,
+        "sourcesFailed": 2,
+        "domains": [
+          "doi.org",
+          "arxiv.org"
+        ],
+        "modelRoute": "openrouter/gs-balanced",
+        "finalStatus": "done",
+        "cited": [
+          1,
+          4
+        ],
+        "latencyMs": 35842,
+        "errorType": null
+      }
+    },
+    {
+      "id": "F48",
+      "category": "FAILURE_HONESTY",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "03619393-a671-41d5-8a4c-6bdc358c1c10",
+      "answerHead": "I searched for live telemetry from a Mars colony distress beacon, but the search returned only unrelated Walmart pages — no actual Mars tele",
+      "note": "",
+      "trace": {
+        "capability": "WEB",
+        "trigger": "explicit",
+        "searchExecuted": true,
+        "sourceCount": 6,
+        "sourcesRead": 3,
+        "sourcesFailed": 0,
+        "domains": [
+          "walmart.com",
+          "seller.walmart.com",
+          "corporate.walmart.com",
+          "careers.walmart.com",
+          "gscope.walmart.com",
+          "business.walmart.com"
+        ],
+        "modelRoute": "openrouter/gs-balanced",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 18070,
+        "errorType": null
+      }
+    },
+    {
+      "id": "F49",
+      "category": "FAILURE_HONESTY",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "7d5357c0-c1ab-457c-ac00-3644ed091a0b",
+      "answerHead": "The search found several recent headlines, but all were Google News redirects that couldn't be resolved to full articles. From the search in",
+      "note": "",
+      "trace": {
+        "capability": "WEB",
+        "trigger": "explicit",
+        "searchExecuted": true,
+        "sourceCount": 4,
+        "sourcesRead": 0,
+        "sourcesFailed": 4,
+        "domains": [
+          "reuters.com",
+          "gvwire.com"
+        ],
+        "modelRoute": "openrouter/gs-balanced",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 23679,
+        "errorType": null
+      }
+    },
+    {
+      "id": "F50",
+      "category": "FAILURE_HONESTY",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "839d3dd0-b3d0-4fa9-a519-b87a7fb3ab19",
+      "answerHead": "The search didn't turn up any usable results — the query appears to be a made-up or nonsense phrase (\"zxqv blorptastic nonsense the sequel r",
+      "note": "",
+      "trace": {
+        "capability": "WEB",
+        "trigger": "explicit",
+        "searchExecuted": true,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "openrouter/gs-balanced",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 37041,
+        "errorType": null
+      }
+    },
+    {
+      "id": "J51",
+      "category": "REGISTER",
+      "status": "SKIP",
+      "failures": [],
+      "requestId": null,
+      "answerHead": "",
+      "note": "LLM-judge category — excluded from deterministic score",
+      "trace": null
+    },
+    {
+      "id": "J52",
+      "category": "REGISTER",
+      "status": "SKIP",
+      "failures": [],
+      "requestId": null,
+      "answerHead": "",
+      "note": "LLM-judge category — excluded from deterministic score",
+      "trace": null
+    },
+    {
+      "id": "J53",
+      "category": "REGISTER",
+      "status": "SKIP",
+      "failures": [],
+      "requestId": null,
+      "answerHead": "",
+      "note": "LLM-judge category — excluded from deterministic score",
+      "trace": null
+    },
+    {
+      "id": "J54",
+      "category": "REGISTER",
+      "status": "SKIP",
+      "failures": [],
+      "requestId": null,
+      "answerHead": "",
+      "note": "LLM-judge category — excluded from deterministic score",
+      "trace": null
+    },
+    {
+      "id": "J55",
+      "category": "REGISTER",
+      "status": "SKIP",
+      "failures": [],
+      "requestId": null,
+      "answerHead": "",
+      "note": "LLM-judge category — excluded from deterministic score",
+      "trace": null
+    },
+    {
+      "id": "J56",
+      "category": "REGISTER",
+      "status": "SKIP",
+      "failures": [],
+      "requestId": null,
+      "answerHead": "",
+      "note": "LLM-judge category — excluded from deterministic score",
+      "trace": null
+    },
+    {
+      "id": "J57",
+      "category": "REGISTER",
+      "status": "SKIP",
+      "failures": [],
+      "requestId": null,
+      "answerHead": "",
+      "note": "LLM-judge category — excluded from deterministic score",
+      "trace": null
+    },
+    {
+      "id": "J58",
+      "category": "REGISTER",
+      "status": "SKIP",
+      "failures": [],
+      "requestId": null,
+      "answerHead": "",
+      "note": "LLM-judge category — excluded from deterministic score",
+      "trace": null
+    },
+    {
+      "id": "J59",
+      "category": "REGISTER",
+      "status": "SKIP",
+      "failures": [],
+      "requestId": null,
+      "answerHead": "",
+      "note": "LLM-judge category — excluded from deterministic score",
+      "trace": null
+    },
+    {
+      "id": "J60",
+      "category": "REGISTER",
+      "status": "SKIP",
+      "failures": [],
+      "requestId": null,
+      "answerHead": "",
+      "note": "LLM-judge category — excluded from deterministic score",
+      "trace": null
     }
   ]
 }
