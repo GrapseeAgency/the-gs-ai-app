@@ -168,3 +168,36 @@ model NotificationItem {
   read      Boolean  @default(false)
   createdAt DateTime @default(now())
 }
+
+// ---- EVAL INFRASTRUCTURE LAYER 1 — structured trace store (Phase 1) ----
+// One row per turn, written by the messages route at the GS-CAP terminal
+// points. This is the foundation for the eval suite, the CI gate and the
+// production monitor: graders read these rows, never the console logs.
+// SQLite has no primitive list fields — `domains`/`cited` ride as JSON strings.
+model TurnTrace {
+  id               String   @id @default(cuid())
+  requestId        String
+  conversationId   String
+  messageId        String
+  timestamp        DateTime @default(now())
+  clientVersion    String
+  backendRevision  String
+  capability       String // CHAT | WEB | DEEP_RESEARCH | TIME | VISION | DOCUMENT
+  trigger          String // explicit | recency | source_specific | none | stop_reuse | ...
+  searchExecuted   Boolean
+  researchExecuted Boolean
+  evidenceCount    Int
+  sourceCount      Int
+  sourcesRead      Int // status === 'retrieved' among the turn's fresh sources
+  sourcesFailed    Int // status === 'failed' among the turn's fresh sources
+  domains          String // JSON string[] — distinct domains returned
+  modelRoute       String // INTERNAL ONLY — never sent to a client
+  finalStatus      String // done | error | clarify
+  cited            String // JSON number[] — cited source ordinals
+  latencyMs        Int
+  errorType        String? // provider_429 | ssrf_block | parse_fail | provider_error | null
+
+  @@index([conversationId])
+  @@index([timestamp])
+  @@map("turns")
+}

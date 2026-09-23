@@ -17,6 +17,7 @@ import {
   type VisionContentPart,
 } from '@/lib/ai'
 import { decideCapability, validTimeZone } from '@/lib/capability'
+import { classifyErrorType, writeTurnTrace } from '@/lib/trace'
 import {
   recordResearchContext,
   getResearchContexts,
@@ -383,6 +384,9 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
   })
   // §14 — per-turn handshake facts for the internal forensic log.
   const requestId = crypto.randomUUID()
+  // EVAL LAYER 1 — turn latency starts at the capability decision (everything
+  // before this line is request parsing; everything after is the turn).
+  const turnStartedAt = Date.now()
   const clientVersion = req.headers.get('x-gs-app-version') ?? 'web'
   const backendRevision = process.env.GS_BACKEND_REVISION ?? 'dev'
   // FORENSIC AUDIT [3] — stale-APK detection: every turn logs the client
@@ -458,7 +462,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
   const gsCapLog = (
     finalStatus: string,
     turn: TurnSearch | null,
-    extra?: { cited?: number[] }
+    extra?: { cited?: number[]; error?: string }
   ): void => {
     const sourceCount =
       turn?.kind === 'research'
@@ -477,6 +481,37 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     console.log(
       `GS-CAP requestId=${requestId} conv=${id} msg=${userMessage.id} clientVersion=${clientVersion} backendRevision=${backendRevision} capability=${cap.capability} trigger=${cap.trigger ?? 'none'} searchExecuted=${turn?.kind === 'research'} researchExecuted=${turn?.kind === 'research'} evidenceCount=${evidenceCount} sourceCount=${sourceCount} modelRoute=${modelRoute.backend}/${routerPlan.internalModelId} finalStatus=${finalStatus}${extra?.cited ? ` cited=[${extra.cited.join(',')}]` : ''}`
     )
+    // EVAL LAYER 1 — structured trace row for this turn. Queryable by the
+    // eval suite (Layer 4) and the production monitor (Layer 5); graders read
+    // this row, never the console. Fire-and-forget — never breaks the turn.
+    const freshSources = turn?.kind === 'research' ? turn.outcome.sources : []
+    const reuseSources = turn?.kind === 'reuse' ? turn.sources : []
+    void writeTurnTrace({
+      requestId,
+      conversationId: id,
+      messageId: userMessage.id,
+      clientVersion,
+      backendRevision,
+      capability: cap.capability,
+      trigger: cap.trigger ?? 'none',
+      searchExecuted: turn?.kind === 'research',
+      researchExecuted: turn?.kind === 'research',
+      evidenceCount,
+      sourceCount,
+      sourcesRead: freshSources.filter((s) => s.status === 'retrieved').length,
+      sourcesFailed: freshSources.filter((s) => s.status === 'failed').length,
+      domains: Array.from(
+        new Set([...freshSources, ...reuseSources].map((s) => s.domain).filter((d) => d.length > 0))
+      ),
+      modelRoute: `${modelRoute.backend}/${routerPlan.internalModelId}`,
+      finalStatus,
+      cited: extra?.cited ?? [],
+      latencyMs: Date.now() - turnStartedAt,
+      errorType:
+        finalStatus === 'done' || finalStatus === 'clarify'
+          ? null
+          : classifyErrorType(extra?.error ?? null),
+    })
   }
 
   let historyWebSources: {
@@ -1165,6 +1200,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
   // Non-streaming: single JSON reply.
   if (!stream) {
     if (allImagesFailed) {
+      gsCapLog('error', null, { error: 'all image attachments unreadable' })
       return NextResponse.json(
         {
           code: 'unsupported_media',
@@ -1176,6 +1212,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       )
     }
     if (allDocsFailed) {
+      gsCapLog('error', null, { error: 'all document attachments unreadable' })
       return NextResponse.json(
         {
           code: 'document_unreadable',
@@ -1275,7 +1312,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       return NextResponse.json(messageToJson(saved ?? assistantMessage))
     } catch (e) {
       const raw = e instanceof Error ? e.message : String(e)
-      gsCapLog('error', null)
+      gsCapLog('error', null, { error: raw })
       return NextResponse.json(
         {
           code: 'upstream_error',
@@ -1330,6 +1367,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
   // of the Response/ReadableStream below.
   void (async () => {
     if (allImagesFailed) {
+      gsCapLog('error', null, { error: 'all image attachments unreadable' })
       push(
         'error',
         `None of the attached images could be opened. ${visionFailures
@@ -1339,6 +1377,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       return
     }
     if (allDocsFailed) {
+      gsCapLog('error', null, { error: 'all document attachments unreadable' })
       push('error', docContext.failures.map(documentFailureMessage).join(' '))
       return
     }
@@ -1499,7 +1538,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       push('done', JSON.stringify(messageToJson(savedWithSources ?? saved)))
     } catch (e) {
       const raw = String(e instanceof Error ? e.message : e)
-      gsCapLog('error', null)
+      gsCapLog('error', null, { error: raw })
       push('error', useVision ? visionErrorMessage(raw) : userFacingTurnError(raw))
     } finally {
       turnSettled = true
