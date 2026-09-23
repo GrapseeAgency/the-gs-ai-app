@@ -15,8 +15,8 @@ android {
         applicationId = "com.grapsee.gsai"
         minSdk = 26
         targetSdk = 35
-        versionCode = 72
-        versionName = "0.68.1"
+        versionCode = 73
+        versionName = "0.68.2"
 
         // REAL transport origin — applies to EVERY build type (v0.66.0 fix).
         // HISTORY: this was the Android-emulator host-loopback alias (10.0 dot

@@ -16,14 +16,14 @@ DENIAL_RES = [
 def new_conv():
     req = urllib.request.Request(f"{ORIGIN}/api/v1/conversations",
         data=json.dumps({"title": "case-i-regression"}).encode(),
-        headers={"Content-Type": "application/json", "x-gs-app-version": "0.68.1"}, method="POST")
+        headers={"Content-Type": "application/json", "x-gs-app-version": "0.68.2"}, method="POST")
     with urllib.request.urlopen(req, timeout=30) as r:
         return json.load(r)["id"]
 
 def send(conv, msg):
     req = urllib.request.Request(f"{ORIGIN}/api/v1/conversations/{conv}/messages",
         data=json.dumps({"content": msg, "stream": True, "timezone": "Asia/Dhaka"}).encode(),
-        headers={"Content-Type": "application/json", "x-gs-app-version": "0.68.1"}, method="POST")
+        headers={"Content-Type": "application/json", "x-gs-app-version": "0.68.2"}, method="POST")
     deltas, err = [], None
     with urllib.request.urlopen(req, timeout=180) as r:
         for raw in r:

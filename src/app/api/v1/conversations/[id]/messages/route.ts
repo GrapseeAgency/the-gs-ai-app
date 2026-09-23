@@ -18,6 +18,7 @@ import {
 } from '@/lib/ai'
 import { decideCapability, validTimeZone } from '@/lib/capability'
 import { classifyErrorType, writeTurnTrace } from '@/lib/trace'
+import { getBackendRevision } from '@/lib/revision'
 import {
   recordResearchContext,
   getResearchContexts,
@@ -388,11 +389,14 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
   // before this line is request parsing; everything after is the turn).
   const turnStartedAt = Date.now()
   const clientVersion = req.headers.get('x-gs-app-version') ?? 'web'
-  const backendRevision = process.env.GS_BACKEND_REVISION ?? 'dev'
+  // TASK 4 (device acceptance): the revision must be REAL (env override > live
+  // git rev) so trace rows prove which backend served the phone — 'dev' only
+  // when git is unavailable.
+  const backendRevision = await getBackendRevision()
   // FORENSIC AUDIT [3] — stale-APK detection: every turn logs the client
   // version against the backend revision, and a version mismatch is logged as
   // a WARNING so "stale APK / stale server" investigations end in one line.
-  const CURRENT_APP_VERSION = '0.68.1'
+  const CURRENT_APP_VERSION = '0.68.2'
   const versionMismatch =
     clientVersion !== 'web' && clientVersion !== CURRENT_APP_VERSION
   if (versionMismatch) {

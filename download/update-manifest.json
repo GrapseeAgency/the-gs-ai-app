@@ -1,6 +1,6 @@
 {
-  "versionCode": 72,
-  "versionName": "0.68.1",
+  "versionCode": 73,
+  "versionName": "0.68.2",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "v0.68.1 — honest failures + GS Free live: send failures now show their real class (network / server / throttled) and surface the server's own error text instead of a generic label; emulator-loopback literals purged from the build. Server-side: GS Free routing is LIVE — ordinary chat and web-search synthesis are served by the OpenRouter free model pool behind a 14-key self-healing vault, with transparent fallback to the primary provider. One assistant, zero model pickers — routing stays automatic. Still from 0.68.0: the Model Centre, model picker and every model name are gone from the app (binary-verified); explicit search commands always search."
+  "notes": "v0.68.2 — evaluation-closure release (no UI changes): register-class routing (jokes, banter, sarcasm, emotional and tease turns are served by the model class proven to hold register), GS Free chain measured against the full 60-case eval suite (deterministic contract 48/48 on the free tier), backend now stamps every turn with a real revision and exposes GET /api/v1/diagnostics for device acceptance. Still from 0.68.1: honest send-failure labels, GS Free live behind the self-healing key vault, one assistant with zero model pickers."
 }

@@ -67,7 +67,7 @@ const MERGE_BASELINE = argv.includes('--merge-baseline') ? argOf('--merge-baseli
 const JSONL = argv.includes('--jsonl') ? argOf('--jsonl', '') : null
 const STRICT = argv.includes('--strict')
 const ANNOTATE = argv.includes('--github-annotations')
-const APP_VERSION = '0.68.1'
+const APP_VERSION = '0.68.2'
 
 const BLOCKING_CATS = new Set(['ROUTING', 'INSTRUCTION', 'CONTEXT_ISOLATION'])
 

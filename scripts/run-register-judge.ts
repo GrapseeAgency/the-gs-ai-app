@@ -59,7 +59,7 @@ const IDS = argv.includes('--ids') ? argOf('--ids', '').split(',').map((s) => s.
 const MERGE_BASELINE = argv.includes('--merge-baseline') ? argOf('--merge-baseline', '') : null
 const JSONL = argv.includes('--jsonl') ? argOf('--jsonl', '') : null
 const JUDGE_MODEL = argOf('--judge-model', 'glm-4.6')
-const APP_VERSION = '0.68.1'
+const APP_VERSION = '0.68.2'
 
 initTurnClient({ origin: ORIGIN, appVersion: APP_VERSION })
 
