@@ -1,0 +1,536 @@
+{
+  "suite": "eval-suite-v1",
+  "generatedAt": "2026-09-23T10:55:19.884Z",
+  "firstBaselineAt": "2026-09-23T10:50:14.908Z",
+  "origin": "http://localhost:3000",
+  "scorecard": [
+    {
+      "category": "ROUTING",
+      "pass": 10,
+      "fail": 0,
+      "error": 0,
+      "skip": 0
+    },
+    {
+      "category": "INSTRUCTION",
+      "pass": 5,
+      "fail": 2,
+      "error": 3,
+      "skip": 0
+    }
+  ],
+  "deterministicScore": {
+    "pass": 15,
+    "total": 20,
+    "skipped": 0
+  },
+  "cases": [
+    {
+      "id": "R01",
+      "category": "ROUTING",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "0a24cf84-9f56-433c-9276-939d42fa1c2b",
+      "answerHead": "Hello! How can I help you today?",
+      "note": "",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "zai/gs-swift",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 467,
+        "errorType": null
+      }
+    },
+    {
+      "id": "R02",
+      "category": "ROUTING",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "462a08d4-2ac8-476d-94b9-3c0a6b1e652a",
+      "answerHead": "Hello! How can I help you today?",
+      "note": "",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "zai/gs-swift",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 394,
+        "errorType": null
+      }
+    },
+    {
+      "id": "R03",
+      "category": "ROUTING",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "9e548f24-8965-4f0e-a5fe-aab51490a8bd",
+      "answerHead": "4",
+      "note": "",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "zai/gs-swift",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 315,
+        "errorType": null
+      }
+    },
+    {
+      "id": "R04",
+      "category": "ROUTING",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "6527b688-5835-4cbc-bbc7-ce19588a4160",
+      "answerHead": "The current time is Wednesday, September 23, 2026, at 16:48:10 (Asia/Dhaka, UTC+06:00).",
+      "note": "",
+      "trace": {
+        "capability": "TIME",
+        "trigger": "time",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "zai/gs-swift",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 4752,
+        "errorType": null
+      }
+    },
+    {
+      "id": "R05",
+      "category": "ROUTING",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "35723517-dc09-4edc-8e7c-f1dfa97cd122",
+      "answerHead": "Here are today's top AI news stories:  1. **Alibaba unveils China's most powerful AI chip** - The company has introduced what it claims is C",
+      "note": "",
+      "trace": {
+        "capability": "WEB",
+        "trigger": "explicit",
+        "searchExecuted": true,
+        "sourceCount": 7,
+        "sourcesRead": 4,
+        "sourcesFailed": 0,
+        "domains": [
+          "nbcnews.com",
+          "foxnews.com",
+          "cnbc.com",
+          "politico.com",
+          "bostonglobe.com",
+          "wmur.com"
+        ],
+        "modelRoute": "zai/gs-balanced",
+        "finalStatus": "done",
+        "cited": [
+          1,
+          2,
+          4
+        ],
+        "latencyMs": 10113,
+        "errorType": null
+      }
+    },
+    {
+      "id": "R06",
+      "category": "ROUTING",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "738fb7f4-27d4-42d6-a553-c46590c6569a",
+      "answerHead": "Based on the search results, Python 3.14.0 was released on October 7, 2025 [5]. The official Python website also confirms that Python 3.14.0",
+      "note": "",
+      "trace": {
+        "capability": "WEB",
+        "trigger": "explicit",
+        "searchExecuted": true,
+        "sourceCount": 8,
+        "sourcesRead": 4,
+        "sourcesFailed": 0,
+        "domains": [
+          "python.org",
+          "peps.python.org",
+          "devguide.python.org",
+          "docs.python.org",
+          "blog.python.org",
+          "en.wikipedia.org",
+          "versionlog.com"
+        ],
+        "modelRoute": "zai/gs-balanced",
+        "finalStatus": "done",
+        "cited": [
+          1,
+          5,
+          6
+        ],
+        "latencyMs": 4111,
+        "errorType": null
+      }
+    },
+    {
+      "id": "R07",
+      "category": "ROUTING",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "2557bb9c-f37f-4d26-9173-87fa0ff8cdf9",
+      "answerHead": "The current president of Chile is José Antonio Kast. He won the 2025 Chilean general election and took office on March 11, 2026 [4].",
+      "note": "",
+      "trace": {
+        "capability": "WEB",
+        "trigger": "freshness",
+        "searchExecuted": true,
+        "sourceCount": 7,
+        "sourcesRead": 4,
+        "sourcesFailed": 0,
+        "domains": [
+          "pbs.org",
+          "planetrulers.com",
+          "en.wikipedia.org",
+          "simple.wikipedia.org",
+          "baike.baidu.com",
+          "gob.cl"
+        ],
+        "modelRoute": "zai/gs-balanced",
+        "finalStatus": "done",
+        "cited": [
+          4
+        ],
+        "latencyMs": 4321,
+        "errorType": null
+      }
+    },
+    {
+      "id": "R08",
+      "category": "ROUTING",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "c38de490-4fd7-4c39-b95e-832b9af299ba",
+      "answerHead": "Based on the Wikipedia sources retrieved, here's what Wikipedia says about Ada Lovelace:  Ada Lovelace was strongly interested in scientific",
+      "note": "",
+      "trace": {
+        "capability": "WEB",
+        "trigger": "source_specific",
+        "searchExecuted": true,
+        "sourceCount": 8,
+        "sourcesRead": 4,
+        "sourcesFailed": 0,
+        "domains": [
+          "en.wikipedia.org",
+          "ada.gov",
+          "ada.edu.az",
+          "usa.gov",
+          "access-board.gov",
+          "en.m.wikipedia.org",
+          "ada.org"
+        ],
+        "modelRoute": "zai/gs-balanced",
+        "finalStatus": "done",
+        "cited": [
+          1,
+          2
+        ],
+        "latencyMs": 14519,
+        "errorType": null
+      }
+    },
+    {
+      "id": "R09",
+      "category": "ROUTING",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "209fe06a-07d8-4bc7-a11d-bb2160e99707",
+      "answerHead": "I apologize, but I haven't performed any searches or found any specific information to share with you. If you have a particular question or ",
+      "note": "",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "stop_reuse",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "zai/gs-swift",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 929,
+        "errorType": null
+      }
+    },
+    {
+      "id": "R10",
+      "category": "ROUTING",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "b7d03d0e-029e-4a66-8215-da6045f95f07",
+      "answerHead": "Why don't scientists trust atoms?  Because they make up everything!",
+      "note": "",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "zai/gs-balanced",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 431,
+        "errorType": null
+      }
+    },
+    {
+      "id": "I11",
+      "category": "INSTRUCTION",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "f7649087-a121-4762-abc6-1581e10225b0",
+      "answerHead": "banana",
+      "note": "",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "zai/gs-swift",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 408,
+        "errorType": null
+      }
+    },
+    {
+      "id": "I12",
+      "category": "INSTRUCTION",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "3d2b50a2-f111-49e0-8536-ea806cbc8220",
+      "answerHead": "why",
+      "note": "",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "zai/gs-balanced",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 458,
+        "errorType": null
+      }
+    },
+    {
+      "id": "I13",
+      "category": "INSTRUCTION",
+      "status": "FAIL",
+      "failures": [
+        "wordCount=2 expected=3 answer=\"Three words.\""
+      ],
+      "requestId": "00880fe6-67e5-4819-a401-383d110e081a",
+      "answerHead": "Three words.",
+      "note": "",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "zai/gs-swift",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 359,
+        "errorType": null
+      }
+    },
+    {
+      "id": "I14",
+      "category": "INSTRUCTION",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "a556933f-2bbd-4d9d-b170-c26004d989a9",
+      "answerHead": "6",
+      "note": "",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "zai/gs-balanced",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 373,
+        "errorType": null
+      }
+    },
+    {
+      "id": "I15",
+      "category": "INSTRUCTION",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "a6e39b1f-8f94-4d46-8921-d53905123b6d",
+      "answerHead": "I am a fish",
+      "note": "",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "zai/gs-swift",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 296,
+        "errorType": null
+      }
+    },
+    {
+      "id": "I16",
+      "category": "INSTRUCTION",
+      "status": "FAIL",
+      "failures": [
+        "answer=\"Blue.\" did not match /^blue$/i"
+      ],
+      "requestId": "17f993b5-f922-4474-81a1-076c65f3976f",
+      "answerHead": "Blue.",
+      "note": "",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "zai/gs-swift",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 429,
+        "errorType": null
+      }
+    },
+    {
+      "id": "I17",
+      "category": "INSTRUCTION",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "6314b80a-9ea4-4d64-af0b-d5daaf2a14fb",
+      "answerHead": "63",
+      "note": "",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "zai/gs-swift",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 344,
+        "errorType": null
+      }
+    },
+    {
+      "id": "I18",
+      "category": "INSTRUCTION",
+      "status": "ERROR",
+      "failures": [],
+      "requestId": "06e442d6-f3e6-4580-a6f7-9caab7ddfd50",
+      "answerHead": "",
+      "note": "error event: GS AI is temporarily unavailable. Please try again shortly. provider-error errorType=provider_error",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "zai/gs-swift",
+        "finalStatus": "error",
+        "cited": [],
+        "latencyMs": 403,
+        "errorType": "provider_error"
+      }
+    },
+    {
+      "id": "I19",
+      "category": "INSTRUCTION",
+      "status": "ERROR",
+      "failures": [],
+      "requestId": "12e7c53d-04d0-4582-b99b-5e18b3a7c53d",
+      "answerHead": "",
+      "note": "error event: GS AI is temporarily unavailable. Please try again shortly. provider-error errorType=provider_error",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "zai/gs-swift",
+        "finalStatus": "error",
+        "cited": [],
+        "latencyMs": 404,
+        "errorType": "provider_error"
+      }
+    },
+    {
+      "id": "I20",
+      "category": "INSTRUCTION",
+      "status": "ERROR",
+      "failures": [],
+      "requestId": "533182f5-4661-4870-a8f3-e4bd773c0abc",
+      "answerHead": "",
+      "note": "error event: GS AI is temporarily unavailable. Please try again shortly. provider-error errorType=provider_error",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "zai/gs-swift",
+        "finalStatus": "error",
+        "cited": [],
+        "latencyMs": 403,
+        "errorType": "provider_error"
+      }
+    }
+  ]
+}

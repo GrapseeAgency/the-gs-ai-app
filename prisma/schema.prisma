@@ -201,3 +201,30 @@ model TurnTrace {
   @@index([timestamp])
   @@map("turns")
 }
+
+// EVALUATION INFRASTRUCTURE — Layer 5 production monitoring (Phase 5).
+// The hourly monitor samples a slice of live turns from `turns`, grades them
+// with the SAME deterministic graders as the eval suite (src/lib/eval-grader
+// semantics), and writes one row per (window, category). `passRate` is the
+// honest production number; `wowDelta` compares against the same category's
+// rate 7 days ago and `alerted` marks any drop > 5 percentage points.
+model EvalScore {
+  id            String   @id @default(cuid())
+  windowStart   DateTime // UTC hour window this batch covers
+  windowEnd     DateTime
+  category      String   // ROUTING | CONTEXT_ISOLATION | SOURCE_QUALITY | FAILURE_HONESTY (monitor-gradable subsets)
+  sampledTurns  Int      // turns sampled into this batch
+  gradedTurns   Int      // turns that produced a verdict (excluded: ungradeable)
+  passCount     Int
+  failCount     Int
+  passRate      Float    // passCount / gradedTurns, 0..1
+  wowDelta      Float?   // passRate - passRate(same category, 7 days earlier), percentage points
+  alerted       Boolean  @default(false) // true when wowDelta < -0.05
+  alertNote     String?  // human-readable alert text persisted with the row
+  sampleDetail  String   // JSON — per-turn {requestId, verdict, failures[]} for auditability
+  createdAt     DateTime @default(now())
+
+  @@unique([windowStart, category])
+  @@index([windowStart])
+  @@map("eval_scores")
+}

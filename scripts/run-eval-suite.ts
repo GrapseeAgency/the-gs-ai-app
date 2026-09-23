@@ -10,13 +10,25 @@
  *
  * Recovery: the public origin's outer proxy caps SSE views at ~30s while
  * search turns legitimately run longer — the turn itself is DETACHED and
- * always persists. When the view ends without `done`, the runner re-fetches
- * GET /api/v1/conversations/:id/messages and grades the persisted answer
- * (the exact recovery the Android client performs, audit [4]).
+ * always persists. When the view ends without `done`, the runner POLLS the
+ * persisted conversation until the turn's own assistant message lands (the
+ * exact recovery the Android client performs, audit [4]) — never grading the
+ * previous turn's answer by accident.
+ *
+ * Long runs are CHUNKABLE (sandbox/background-process safe and CI-throttle
+ * friendly):
+ *   --only CATEGORY          run one category
+ *   --ids R01,R02,C03        run exact case ids (composable with --only)
+ *   --merge-baseline PATH    upsert this run's results into the baseline by
+ *                            case id and recompute the scorecard — the way
+ *                            the single baseline number is assembled from
+ *                            chunked runs, and the way ERROR cases are
+ *                            re-run later without touching PASS/FAIL history
  *
  * Usage:
  *   bun scripts/run-eval-suite.ts [--origin URL] [--delay MS] [--only CATEGORY]
- *                                 [--baseline PATH] [--jsonl PATH] [--strict]
+ *       [--ids ID,ID] [--baseline PATH] [--merge-baseline PATH] [--jsonl PATH]
+ *       [--strict] [--github-annotations]
  *
  * Exit codes: 0 always unless --strict, in which case any FAIL in a blocking
  * category (ROUTING / INSTRUCTION / CONTEXT_ISOLATION) exits 1. Infra ERRORs
@@ -41,10 +53,15 @@ function argOf(flag: string, fallback: string): string {
 const ORIGIN = argOf('--origin', 'http://localhost:3000')
 const DELAY_MS = Number(argOf('--delay', '12000'))
 const ONLY = argv.includes('--only') ? argOf('--only', '') : null
+const IDS = argv.includes('--ids') ? argOf('--ids', '').split(',').map((s) => s.trim()).filter(Boolean) : null
 const BASELINE = argv.includes('--baseline') ? argOf('--baseline', '') : null
+const MERGE_BASELINE = argv.includes('--merge-baseline') ? argOf('--merge-baseline', '') : null
 const JSONL = argv.includes('--jsonl') ? argOf('--jsonl', '') : null
 const STRICT = argv.includes('--strict')
+const ANNOTATE = argv.includes('--github-annotations')
 const APP_VERSION = '0.68.1'
+
+const BLOCKING_CATS = new Set(['ROUTING', 'INSTRUCTION', 'CONTEXT_ISOLATION'])
 
 // --- suite ------------------------------------------------------------------
 
@@ -75,7 +92,7 @@ interface Suite {
 }
 const suite = JSON.parse(fs.readFileSync(path.join(ROOT, 'tests', 'eval-suite-v1.json'), 'utf8')) as Suite
 
-// --- production-path turn ----------------------------------------------------
+// --- production-path turn -----------------------------------------------------
 
 interface TurnResult {
   requestId: string | null
@@ -138,7 +155,7 @@ function sseTurn(conv: string, message: string): Promise<TurnResult> {
             })
             .catch((e: unknown) => {
               // View cut (proxy cap / abort) — the detached turn continues
-              // server-side; the caller re-fetches the persisted answer.
+              // server-side; the caller polls for the persisted answer.
               result.httpError = e instanceof Error ? e.message : String(e)
               resolve(result)
             })
@@ -164,8 +181,12 @@ async function newConversation(title: string): Promise<string> {
   return body.id
 }
 
-/** Persisted-answer recovery: last assistant message of the conversation. */
-async function refetchAnswer(conv: string): Promise<string | null> {
+interface MessagesState {
+  assistantCount: number
+  lastAssistant: string | null
+}
+
+async function fetchMessages(conv: string): Promise<MessagesState | null> {
   try {
     const res = await fetch(`${ORIGIN}/api/v1/conversations/${conv}/messages`, {
       headers: { 'x-gs-app-version': APP_VERSION },
@@ -174,13 +195,34 @@ async function refetchAnswer(conv: string): Promise<string | null> {
     if (!res.ok) return null
     const messages = (await res.json()) as { role: string; content: string }[]
     const assistants = messages.filter((m) => m.role === 'assistant')
-    return assistants.length > 0 ? assistants[assistants.length - 1].content : null
+    return {
+      assistantCount: assistants.length,
+      lastAssistant: assistants.length > 0 ? assistants[assistants.length - 1].content : null,
+    }
   } catch {
     return null
   }
 }
 
-// --- trace read (Layer 1) -----------------------------------------------------
+/**
+ * Persisted-answer recovery, settlement-safe: poll until the conversation
+ * holds at least `expectedAssistants` assistant messages (setup turns + this
+ * turn) so a cut view NEVER gets graded against the PREVIOUS turn's answer.
+ */
+async function refetchSettledAnswer(conv: string, expectedAssistants: number, timeoutMs = 120_000): Promise<{ answer: string | null; settled: boolean }> {
+  const deadline = Date.now() + timeoutMs
+  let last: MessagesState | null = null
+  while (Date.now() < deadline) {
+    last = await fetchMessages(conv)
+    if (last && last.assistantCount >= expectedAssistants && last.lastAssistant) {
+      return { answer: last.lastAssistant, settled: true }
+    }
+    await new Promise((r) => setTimeout(r, 3_000))
+  }
+  return { answer: last?.lastAssistant ?? null, settled: false }
+}
+
+// --- trace read (Layer 1) ------------------------------------------------------
 
 interface TraceRow {
   requestId: string
@@ -202,11 +244,26 @@ async function readTrace(requestId: string | null): Promise<TraceRow | null> {
   if (!requestId) return null
   const db = new Database(DB_PATH, { readonly: true })
   try {
-    for (let i = 0; i < 12; i++) {
-      const row = db
-        .query('SELECT requestId, capability, trigger, searchExecuted, sourceCount, sourcesRead, sourcesFailed, domains, modelRoute, finalStatus, cited, latencyMs, errorType FROM turns WHERE requestId = ?')
-        .get(requestId) as TraceRow | undefined
-      if (row) return row
+    // The dev server's Prisma connection holds short write locks; a bare
+    // readonly open fails fast with SQLITE_BUSY under contention. Wait for
+    // writers instead of crashing the whole run (observed live at R08).
+    try {
+      db.run('PRAGMA busy_timeout = 10000')
+    } catch { /* older bun: pragma may be unsupported — retry loop below still applies */ }
+    for (let i = 0; i < 20; i++) {
+      for (let attempt = 0; attempt < 6; attempt++) {
+        try {
+          const row = db
+            .query('SELECT requestId, capability, trigger, searchExecuted, sourceCount, sourcesRead, sourcesFailed, domains, modelRoute, finalStatus, cited, latencyMs, errorType FROM turns WHERE requestId = ?')
+            .get(requestId) as TraceRow | undefined
+          if (row) return row
+          break
+        } catch (e) {
+          const code = (e as { code?: string }).code
+          if (code !== 'SQLITE_BUSY') throw e
+          await new Promise((r) => setTimeout(r, 1_000))
+        }
+      }
       await new Promise((r) => setTimeout(r, 500)) // trace write is fire-and-forget
     }
     return null
@@ -215,121 +272,12 @@ async function readTrace(requestId: string | null): Promise<TraceRow | null> {
   }
 }
 
-// --- deterministic graders -----------------------------------------------------
+// --- deterministic graders (shared core: src/lib/eval-grader.ts) -----------------
 
-function wordCount(text: string): number {
-  return text.trim().split(/\s+/).filter((w) => w.length > 0).length
-}
-function lineCount(text: string): number {
-  return text.split('\n').filter((l) => l.trim().length > 0).length
-}
+import { evalAssertion, type Assertion as CoreAssertion } from '../src/lib/eval-grader'
+type GradeAssertion = CoreAssertion
 
-function evalAssertion(a: Assertion, trace: TraceRow | null, answer: string): { ok: boolean; detail: string } {
-  const hasTrace = trace !== null
-  switch (a.type) {
-    case 'trace.searchExecuted': {
-      if (!hasTrace) return { ok: false, detail: 'no trace row' }
-      const actual = trace!.searchExecuted === 1
-      return actual === a.value
-        ? { ok: true, detail: `searchExecuted=${actual}` }
-        : { ok: false, detail: `searchExecuted=${actual} expected=${a.value}` }
-    }
-    case 'trace.capability': {
-      if (!hasTrace) return { ok: false, detail: 'no trace row' }
-      return trace!.capability === a.value
-        ? { ok: true, detail: `capability=${trace!.capability}` }
-        : { ok: false, detail: `capability=${trace!.capability} expected=${a.value}` }
-    }
-    case 'trace.sourceCount': {
-      if (!hasTrace) return { ok: false, detail: 'no trace row' }
-      return trace!.sourceCount === a.value
-        ? { ok: true, detail: `sourceCount=${trace!.sourceCount}` }
-        : { ok: false, detail: `sourceCount=${trace!.sourceCount} expected=${a.value}` }
-    }
-    case 'trace.finalStatus': {
-      if (!hasTrace) return { ok: false, detail: 'no trace row' }
-      return trace!.finalStatus === a.value
-        ? { ok: true, detail: `finalStatus=${trace!.finalStatus}` }
-        : { ok: false, detail: `finalStatus=${trace!.finalStatus} expected=${a.value}` }
-    }
-    case 'trace.domainsMin': {
-      if (!hasTrace) return { ok: false, detail: 'no trace row' }
-      const domains = JSON.parse(trace!.domains) as string[]
-      return domains.length >= Number(a.value)
-        ? { ok: true, detail: `domains=${domains.length}` }
-        : { ok: false, detail: `domains=${domains.length} expected>=${a.value} (${domains.join(',')})` }
-    }
-    case 'trace.sourcesReadMin': {
-      if (!hasTrace) return { ok: false, detail: 'no trace row' }
-      return trace!.sourcesRead >= Number(a.value)
-        ? { ok: true, detail: `sourcesRead=${trace!.sourcesRead}` }
-        : { ok: false, detail: `sourcesRead=${trace!.sourcesRead} expected>=${a.value} (sourceCount=${trace!.sourceCount} failed=${trace!.sourcesFailed})` }
-    }
-    case 'trace.readRate': {
-      if (!hasTrace) return { ok: false, detail: 'no trace row' }
-      if (trace!.sourceCount === 0) return { ok: false, detail: 'sourceCount=0 — read rate undefined' }
-      const rate = trace!.sourcesRead / trace!.sourceCount
-      return rate >= Number(a.value)
-        ? { ok: true, detail: `readRate=${rate.toFixed(2)}` }
-        : { ok: false, detail: `readRate=${rate.toFixed(2)} expected>=${a.value}` }
-    }
-    case 'citationsWithinSources': {
-      if (!hasTrace) return { ok: false, detail: 'no trace row' }
-      const cited = JSON.parse(trace!.cited) as number[]
-      const bad = cited.filter((n) => n > trace!.sourceCount)
-      return bad.length === 0
-        ? { ok: true, detail: `cited=${cited.join(',')} within sourceCount=${trace!.sourceCount}` }
-        : { ok: false, detail: `cited ${bad.join(',')} exceed sourceCount=${trace!.sourceCount}` }
-    }
-    case 'response.matchesRegex': {
-      const re = new RegExp(a.value as string, a.flags ?? 'i')
-      return re.test(answer)
-        ? { ok: true, detail: `answer=${JSON.stringify(answer.slice(0, 40))} matched` }
-        : { ok: false, detail: `answer=${JSON.stringify(answer.slice(0, 60))} did not match /${a.value}/${a.flags ?? 'i'}` }
-    }
-    case 'response.wordCount': {
-      const actual = wordCount(answer)
-      return actual === a.value
-        ? { ok: true, detail: `wordCount=${actual}` }
-        : { ok: false, detail: `wordCount=${actual} expected=${a.value} answer=${JSON.stringify(answer.slice(0, 60))}` }
-    }
-    case 'response.lineCount': {
-      const actual = lineCount(answer)
-      return actual === a.value
-        ? { ok: true, detail: `lineCount=${actual}` }
-        : { ok: false, detail: `lineCount=${actual} expected=${a.value}` }
-    }
-    case 'response.contains': {
-      return answer.toLowerCase().includes(String(a.value).toLowerCase())
-        ? { ok: true, detail: `contains "${a.value}"` }
-        : { ok: false, detail: `missing "${a.value}" in ${JSON.stringify(answer.slice(0, 80))}` }
-    }
-    case 'response.notContains': {
-      return !answer.toLowerCase().includes(String(a.value).toLowerCase())
-        ? { ok: true, detail: `no "${a.value}"` }
-        : { ok: false, detail: `forbidden "${a.value}" present in ${JSON.stringify(answer.slice(0, 80))}` }
-    }
-    case 'response.containsAny': {
-      const values = (a.values ?? []) as string[]
-      const hit = values.find((v) => answer.toLowerCase().includes(v.toLowerCase()))
-      return hit
-        ? { ok: true, detail: `contains "${hit}"` }
-        : { ok: false, detail: `none of [${values.join('|')}] in ${JSON.stringify(answer.slice(0, 80))}` }
-    }
-    case 'anyOf': {
-      const nested = (a.values ?? []) as Assertion[]
-      const results = nested.map((n) => evalAssertion(n, trace, answer))
-      const ok = results.some((r) => r.ok)
-      return ok
-        ? { ok: true, detail: results.find((r) => r.ok)!.detail }
-        : { ok: false, detail: `anyOf failed: ${results.map((r) => r.detail).join(' AND ')}` }
-    }
-    default:
-      return { ok: false, detail: `unknown assertion type ${a.type}` }
-  }
-}
-
-// --- main -----------------------------------------------------------------------
+// --- main ------------------------------------------------------------------------
 
 type Status = 'PASS' | 'FAIL' | 'SKIP' | 'ERROR'
 interface CaseResult {
@@ -366,21 +314,26 @@ async function runCase(c: EvalCase): Promise<CaseResult> {
     base.note = `infra: ${e instanceof Error ? e.message : String(e)}`
     return base
   }
+  const setupTurns = c.setup ?? []
   // Setup turns (context-isolation T1) in the SAME conversation.
-  for (const setupPrompt of c.setup ?? []) {
+  for (const setupPrompt of setupTurns) {
     await sseTurn(conv, setupPrompt)
     await new Promise((r) => setTimeout(r, 4_000))
   }
+  const expectedAssistants = setupTurns.length + 1
   const turn = await sseTurn(conv, prompt)
   let answer = turn.answer
   let note = ''
   if (!turn.done && !turn.errorEvent) {
-    // View cut before done (30s proxy cap on public origin) — recover the
-    // persisted answer like the Android client does (audit [4]).
-    const recovered = await refetchAnswer(conv)
-    if (recovered !== null) {
+    // View cut before done (30s proxy cap on public origin) — poll for the
+    // persisted answer of THIS turn, never grade the previous turn's text.
+    const { answer: recovered, settled } = await refetchSettledAnswer(conv, expectedAssistants)
+    if (recovered !== null && settled) {
       answer = recovered
       note = 'recovered-persisted (view cut before done)'
+    } else if (recovered !== null) {
+      answer = recovered
+      note = 'UNSETTLED recovery — answer may belong to an earlier turn'
     } else {
       note = 'view ended before done; no persisted answer'
     }
@@ -389,8 +342,7 @@ async function runCase(c: EvalCase): Promise<CaseResult> {
   if (turn.httpError) note = `${note} http=${turn.httpError}`.trim()
 
   const trace = await readTrace(turn.requestId)
-  const results = c.assertions.map((a) => evalAssertion(a, trace, answer))
-  const failed = results.filter((r) => !r.ok)
+  const failures = trace ? (c.assertions as GradeAssertion[]).map((a) => evalAssertion(a, trace, answer)).filter((v) => !v.ok) : []
 
   base.requestId = turn.requestId
   base.trace = trace
@@ -408,15 +360,119 @@ async function runCase(c: EvalCase): Promise<CaseResult> {
     base.note = `${base.note} — trace row missing for requestId=${turn.requestId}`.trim()
     return base
   }
-  base.status = failed.length === 0 ? 'PASS' : 'FAIL'
-  base.failures = failed.map((f) => f.detail)
+  // A turn that TERMINATED IN ERROR produced no gradeable answer — provider
+  // throttle / upstream failure is infrastructure, not an assertion failure
+  // and never a pass (case-i lesson). Re-run these; the baseline merge
+  // upserts by case id.
+  if (turn.errorEvent !== null || trace.finalStatus === 'error') {
+    base.status = 'ERROR'
+    base.note = `${base.note} provider-error errorType=${trace.errorType ?? 'unknown'}`.trim()
+    return base
+  }
+  base.status = failures.length === 0 ? 'PASS' : 'FAIL'
+  base.failures = failures.map((f) => f.detail)
   return base
 }
 
+// --- baseline merge -----------------------------------------------------------------
+
+interface BaselinePayload {
+  suite: string
+  generatedAt: string
+  firstBaselineAt?: string
+  origin: string
+  scorecard: { category: string; pass: number; fail: number; error: number; skip: number }[]
+  deterministicScore: { pass: number; total: number; skipped: number }
+  cases: {
+    id: string
+    category: string
+    status: Status
+    failures: string[]
+    requestId: string | null
+    answerHead: string
+    note: string
+    trace: Record<string, unknown> | null
+  }[]
+}
+
+function traceToPayload(r: TraceRow): Record<string, unknown> {
+  return {
+    capability: r.capability,
+    trigger: r.trigger,
+    searchExecuted: r.searchExecuted === 1,
+    sourceCount: r.sourceCount,
+    sourcesRead: r.sourcesRead,
+    sourcesFailed: r.sourcesFailed,
+    domains: JSON.parse(r.domains) as string[],
+    modelRoute: r.modelRoute,
+    finalStatus: r.finalStatus,
+    cited: JSON.parse(r.cited) as number[],
+    latencyMs: r.latencyMs,
+    errorType: r.errorType,
+  }
+}
+
+function buildScorecard(cases: BaselinePayload['cases']): BaselinePayload['scorecard'] {
+  return suite.categories
+    .map((cat) => {
+      const rs = cases.filter((c) => c.category === cat)
+      return {
+        category: cat,
+        pass: rs.filter((r) => r.status === 'PASS').length,
+        fail: rs.filter((r) => r.status === 'FAIL').length,
+        error: rs.filter((r) => r.status === 'ERROR').length,
+        skip: rs.filter((r) => r.status === 'SKIP').length,
+      }
+    })
+    .filter((s) => s.pass + s.fail + s.error + s.skip > 0)
+}
+
+function writeMergedBaseline(target: string, results: CaseResult[]): void {
+  let merged: BaselinePayload
+  if (fs.existsSync(target)) {
+    try {
+      merged = JSON.parse(fs.readFileSync(target, 'utf8')) as BaselinePayload
+      if (merged.suite !== suite.suite) throw new Error(`suite name mismatch: ${merged.suite}`)
+    } catch (e) {
+      throw new Error(`merge target unreadable/incompatible: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  } else {
+    merged = { suite: suite.suite, generatedAt: '', firstBaselineAt: new Date().toISOString(), origin: ORIGIN, scorecard: [], deterministicScore: { pass: 0, total: 0, skipped: 0 }, cases: [] }
+  }
+  const byId = new Map(merged.cases.map((c) => [c.id, c]))
+  for (const r of results) {
+    byId.set(r.id, {
+      id: r.id,
+      category: r.category,
+      status: r.status,
+      failures: r.failures,
+      requestId: r.requestId,
+      answerHead: r.answerHead,
+      note: r.note,
+      trace: r.trace ? traceToPayload(r.trace) : null,
+    })
+  }
+  const cases = [...byId.values()]
+  const live = cases.filter((c) => c.status !== 'SKIP')
+  merged.cases = cases
+  merged.scorecard = buildScorecard(cases)
+  merged.deterministicScore = {
+    pass: cases.filter((c) => c.status === 'PASS').length,
+    total: live.length,
+    skipped: cases.length - live.length,
+  }
+  merged.generatedAt = new Date().toISOString()
+  fs.writeFileSync(target, `${JSON.stringify(merged, null, 2)}\n`)
+  console.log(`baseline merged: ${target} — ${cases.length}/${suite.cases.length} cases graded so far`)
+}
+
+// --- entry ---------------------------------------------------------------------------
+
 async function main(): Promise<void> {
-  const cases = ONLY ? suite.cases.filter((c) => c.category === ONLY) : suite.cases
-  console.log(`EVAL RUN suite=${suite.suite} cases=${cases.length} origin=${ORIGIN} delay=${DELAY_MS}ms strict=${STRICT}`)
-  const jsonl = JSONL ? fs.createWriteStream(JSONL, { flags: 'a' }) : null
+  let cases = suite.cases
+  if (ONLY) cases = cases.filter((c) => c.category === ONLY)
+  if (IDS) cases = cases.filter((c) => IDS.includes(c.id))
+  console.log(`EVAL RUN suite=${suite.suite} cases=${cases.length}/${suite.cases.length} origin=${ORIGIN} delay=${DELAY_MS}ms strict=${STRICT}${ONLY ? ` only=${ONLY}` : ''}${IDS ? ` ids=${IDS.join(',')}` : ''}`)
 
   const results: CaseResult[] = []
   for (const c of cases) {
@@ -429,51 +485,48 @@ async function main(): Promise<void> {
           ? `FAIL ${c.id.padEnd(4)} [${c.category}] ${JSON.stringify(c.prompt ?? c.fault).slice(0, 50)} — ${r.failures.join(' | ')}`
           : `${r.status} ${c.id.padEnd(4)} [${c.category}] ${JSON.stringify(c.prompt ?? c.fault).slice(0, 50)} — ${r.note}`
     console.log(line)
-    jsonl?.write(`${JSON.stringify({ at: new Date().toISOString(), ...r })}\n`)
+    if (ANNOTATE && r.status === 'FAIL') {
+      const kind = BLOCKING_CATS.has(c.category) ? 'error' : 'warning'
+      console.log(`::${kind} title=eval ${c.id} [${c.category}]::${r.failures.join(' | ')}`)
+    }
+    if (JSONL) fs.appendFileSync(JSONL, `${JSON.stringify({ at: new Date().toISOString(), ...r })}\n`) // sync: crash-safe raw log
     if (DELAY_MS > 0) await new Promise((resolve) => setTimeout(resolve, DELAY_MS))
   }
-  jsonl?.end()
 
-  // Scorecard
-  const blockingCats = new Set(['ROUTING', 'INSTRUCTION', 'CONTEXT_ISOLATION'])
-  console.log('\n=== SCORECARD ===')
+  // Scorecard for THIS run
+  const blockingFail = results.some((r) => r.status === 'FAIL' && BLOCKING_CATS.has(r.category))
+  const live = results.filter((r) => r.status !== 'SKIP')
+  console.log('\n=== RUN SCORECARD ===')
   console.log('CATEGORY          PASS  FAIL  ERROR  SKIP')
-  let blockingFail = false
-  let liveTotal = 0
-  let livePass = 0
   for (const cat of suite.categories) {
     const rs = results.filter((r) => r.category === cat)
     if (rs.length === 0) continue
-    const pass = rs.filter((r) => r.status === 'PASS').length
-    const fail = rs.filter((r) => r.status === 'FAIL').length
-    const error = rs.filter((r) => r.status === 'ERROR').length
-    const skip = rs.filter((r) => r.status === 'SKIP').length
-    const live = rs.filter((r) => r.status !== 'SKIP').length
-    liveTotal += live
-    livePass += pass
-    if (blockingCats.has(cat) && fail > 0) blockingFail = true
-    console.log(`${cat.padEnd(17)} ${String(pass).padStart(4)}  ${String(fail).padStart(4)}  ${String(error).padStart(5)}  ${String(skip).padStart(4)}`)
+    console.log(
+      `${cat.padEnd(17)} ${String(rs.filter((r) => r.status === 'PASS').length).padStart(4)}  ${String(rs.filter((r) => r.status === 'FAIL').length).padStart(4)}  ${String(rs.filter((r) => r.status === 'ERROR').length).padStart(5)}  ${String(rs.filter((r) => r.status === 'SKIP').length).padStart(4)}`
+    )
   }
-  console.log(`\nDETERMINISTIC SCORE: ${livePass}/${liveTotal} live cases passed (${results.length - liveTotal} skipped: judge/fault-injection)`)
+  console.log(`\nRUN SCORE: ${live.filter((r) => r.status === 'PASS').length}/${live.length} live cases passed (${results.length - live.length} skipped: judge/fault-injection)`)
 
-  if (BASELINE) {
-    const payload = {
+  if (MERGE_BASELINE) writeMergedBaseline(MERGE_BASELINE, results)
+  else if (BASELINE) {
+    // Single-shot mode: write the full payload from this run alone.
+    const payload: BaselinePayload = {
       suite: suite.suite,
       generatedAt: new Date().toISOString(),
       origin: ORIGIN,
-      scorecard: suite.categories
-        .map((cat) => {
-          const rs = results.filter((r) => r.category === cat)
-          return {
-            category: cat,
-            pass: rs.filter((r) => r.status === 'PASS').length,
-            fail: rs.filter((r) => r.status === 'FAIL').length,
-            error: rs.filter((r) => r.status === 'ERROR').length,
-            skip: rs.filter((r) => r.status === 'SKIP').length,
-          }
-        })
-        .filter((s) => s.pass + s.fail + s.error + s.skip > 0),
-      deterministicScore: { pass: livePass, total: liveTotal, skipped: results.length - liveTotal },
+      scorecard: buildScorecard(
+        results.map((r) => ({
+          id: r.id,
+          category: r.category,
+          status: r.status,
+          failures: r.failures,
+          requestId: r.requestId,
+          answerHead: r.answerHead,
+          note: r.note,
+          trace: r.trace ? traceToPayload(r.trace) : null,
+        }))
+      ),
+      deterministicScore: { pass: live.filter((r) => r.status === 'PASS').length, total: live.length, skipped: results.length - live.length },
       cases: results.map((r) => ({
         id: r.id,
         category: r.category,
@@ -482,22 +535,7 @@ async function main(): Promise<void> {
         requestId: r.requestId,
         answerHead: r.answerHead,
         note: r.note,
-        trace: r.trace
-          ? {
-              capability: r.trace.capability,
-              trigger: r.trace.trigger,
-              searchExecuted: r.trace.searchExecuted === 1,
-              sourceCount: r.trace.sourceCount,
-              sourcesRead: r.trace.sourcesRead,
-              sourcesFailed: r.trace.sourcesFailed,
-              domains: JSON.parse(r.trace.domains) as string[],
-              modelRoute: r.trace.modelRoute,
-              finalStatus: r.trace.finalStatus,
-              cited: JSON.parse(r.trace.cited) as number[],
-              latencyMs: r.trace.latencyMs,
-              errorType: r.trace.errorType,
-            }
-          : null,
+        trace: r.trace ? traceToPayload(r.trace) : null,
       })),
     }
     fs.writeFileSync(BASELINE, `${JSON.stringify(payload, null, 2)}\n`)

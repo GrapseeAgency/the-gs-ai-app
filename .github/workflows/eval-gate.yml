@@ -1,0 +1,131 @@
+name: Eval gate
+
+# EVALUATION INFRASTRUCTURE — LAYER 4 ENFORCEMENT (Phase 4).
+#
+# Two jobs, two different jobs' worth of honesty:
+#
+#  1. suite-guard (every PR touching src/** or prisma/**) — HERMETIC. No
+#     network, no providers, no database. Proves the eval suite is
+#     well-formed, the deterministic graders behave per contract, and the
+#     committed baseline still matches the suite. This is the gate that can
+#     never flake.
+#
+#  2. eval-live (scheduled + dispatch + PRs, with pre-flight) — runs the
+#     60-case suite through the REAL production path of the deployed origin.
+#     BLOCKS (exit 1) on failures in the high-confidence deterministic
+#     categories: ROUTING / INSTRUCTION / CONTEXT_ISOLATION. WARNs only on
+#     SOURCE_QUALITY / FAILURE_HONESTY (external-page-dependent, known to
+#     flake for reasons outside the product). REGISTER is llm-judge, excluded.
+#
+#     If the origin is unreachable (sandbox paused / preview expired), the
+#     live job is NEUTRAL (skips with a notice) — a dead environment must not
+#     fake a green or a red gate.
+
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'prisma/**'
+      - 'tests/eval-suite-v1.json'
+      - 'tests/baseline-v1.json'
+      - 'scripts/run-eval-suite.ts'
+      - 'scripts/validate-eval-suite.ts'
+      - 'scripts/test-eval-graders.ts'
+      - '.github/workflows/eval-gate.yml'
+  schedule:
+    - cron: '30 2 * * *' # 02:30 UTC daily — live regression sweep
+  workflow_dispatch:
+    inputs:
+      origin:
+        description: 'Deployed origin to evaluate (empty = repo variable)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eval-gate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  ORIGIN_URL: ${{ github.event.inputs.origin || vars.EVAL_ORIGIN_URL || 'https://preview-chat-c945696f-6447-4dfa-b510-971d8b9eb5bf.space-z.ai' }}
+
+jobs:
+  suite-guard:
+    name: Suite + graders + baseline (hermetic)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Validate eval suite structure
+        run: bun scripts/validate-eval-suite.ts
+
+      - name: Grader contract tests (deterministic fixtures)
+        run: bun scripts/test-eval-graders.ts
+
+      - name: Baseline must exist and be committed
+        run: |
+          test -f tests/baseline-v1.json || { echo "FATAL: tests/baseline-v1.json missing — the baseline IS the starting number; the gate cannot run without it"; exit 1; }
+          git ls-files --error-unmatch tests/baseline-v1.json || { echo "FATAL: baseline not tracked in git"; exit 1; }
+
+  eval-live:
+    name: Live 60-case suite (block on ROUTING/INSTRUCTION/ISOLATION)
+    runs-on: ubuntu-latest
+    needs: suite-guard
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Pre-flight — origin must be alive
+        id: preflight
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$ORIGIN_URL/api/health" || echo 000)
+          echo "health=$code"
+          if [ "$code" != "200" ]; then
+            echo "::notice::origin $ORIGIN_URL not reachable (HTTP $code) — live eval is NEUTRAL this run; the gate neither passes nor blocks on a dead environment"
+            echo "reachable=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "reachable=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run eval suite against production path
+        if: steps.preflight.outputs.reachable == 'true'
+        run: |
+          set -o pipefail
+          bun scripts/run-eval-suite.ts \
+            --origin "$ORIGIN_URL" \
+            --delay 9000 \
+            --strict \
+            --github-annotations \
+            --jsonl eval-run.jsonl 2>&1 | tee eval-run.log
+          status=${PIPESTATUS[0]}
+          echo "runner-exit=$status" >> "$GITHUB_OUTPUT" || true
+          exit $status
+
+      - name: Warn-only categories (SOURCE_QUALITY / FAILURE_HONESTY)
+        if: steps.preflight.outputs.reachable == 'true' && failure()
+        run: |
+          # Reaching here means the runner exited 1 on a BLOCKING category.
+          # Non-blocking failures were already emitted as ::warning annotations
+          # by the runner itself (--github-annotations); nothing else to do.
+          echo "Blocking-category failure — see annotations above."
+
+      - name: Upload raw run
+        if: steps.preflight.outputs.reachable == 'true' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-run-${{ github.run_id }}
+          path: |
+            eval-run.log
+            eval-run.jsonl
+          retention-days: 30
