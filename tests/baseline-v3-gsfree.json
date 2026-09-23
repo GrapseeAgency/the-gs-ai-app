@@ -1,0 +1,1765 @@
+{
+  "suite": "eval-suite-v1",
+  "generatedAt": "2026-09-23T17:02:10.823Z",
+  "origin": "http://localhost:3000",
+  "scorecard": [
+    {
+      "category": "ROUTING",
+      "pass": 10,
+      "fail": 0,
+      "error": 0,
+      "skip": 0
+    },
+    {
+      "category": "INSTRUCTION",
+      "pass": 10,
+      "fail": 0,
+      "error": 0,
+      "skip": 0
+    },
+    {
+      "category": "CONTEXT_ISOLATION",
+      "pass": 10,
+      "fail": 0,
+      "error": 0,
+      "skip": 0
+    },
+    {
+      "category": "SOURCE_QUALITY",
+      "pass": 10,
+      "fail": 0,
+      "error": 0,
+      "skip": 0
+    },
+    {
+      "category": "FAILURE_HONESTY",
+      "pass": 8,
+      "fail": 0,
+      "error": 0,
+      "skip": 2
+    },
+    {
+      "category": "REGISTER",
+      "pass": 7,
+      "fail": 3,
+      "error": 0,
+      "skip": 0
+    }
+  ],
+  "deterministicScore": {
+    "pass": 48,
+    "total": 48,
+    "skipped": 2
+  },
+  "cases": [
+    {
+      "id": "R01",
+      "category": "ROUTING",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "24b6dd3a-d95e-4ec4-9013-bd3bd7457419",
+      "answerHead": "Hi! 👋",
+      "note": "",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "openrouter/gs-swift",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 2288,
+        "errorType": null
+      }
+    },
+    {
+      "id": "R02",
+      "category": "ROUTING",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "3e73f0ca-3f59-4df0-835c-5c2a8a03179e",
+      "answerHead": "Hello! How can I help you today?",
+      "note": "",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "openrouter/gs-swift",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 16576,
+        "errorType": null
+      }
+    },
+    {
+      "id": "R03",
+      "category": "ROUTING",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "abe94ebf-f4db-4c8d-a30a-233abcea6533",
+      "answerHead": "4",
+      "note": "",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "openrouter/gs-swift",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 407,
+        "errorType": null
+      }
+    },
+    {
+      "id": "R04",
+      "category": "ROUTING",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "c9d0b9ea-a5d2-4d3c-a9c5-e350133f6f94",
+      "answerHead": "It’s 22:31:09 (10:31:09 PM) on Wednesday, September 23, 2026 in the Asia/Dhaka time zone (UTC + 6).",
+      "note": "",
+      "trace": {
+        "capability": "TIME",
+        "trigger": "time",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "openrouter/gs-swift",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 4169,
+        "errorType": null
+      }
+    },
+    {
+      "id": "R05",
+      "category": "ROUTING",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "e4f628a8-861e-4b59-beb0-45aec19da3c5",
+      "answerHead": "Here's what I found from today's AI news (September 23, 2026):  **Fully read articles:**  1. **Microsoft Copilot Blog** — \"Building the syst",
+      "note": "",
+      "trace": {
+        "capability": "WEB",
+        "trigger": "explicit",
+        "searchExecuted": true,
+        "sourceCount": 7,
+        "sourcesRead": 3,
+        "sourcesFailed": 0,
+        "domains": [
+          "microsoft.com",
+          "wsj.com",
+          "investors.com",
+          "foxnews.com",
+          "aol.com",
+          "cbssports.com"
+        ],
+        "modelRoute": "openrouter/gs-balanced",
+        "finalStatus": "done",
+        "cited": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "latencyMs": 25138,
+        "errorType": null
+      }
+    },
+    {
+      "id": "R06",
+      "category": "ROUTING",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "67874440-04f7-4f73-a450-03f40aa93633",
+      "answerHead": "Based on the search results, Python 3.14.0 (the initial stable release) was released on **October 7, 2025** according to the Python Insider ",
+      "note": "",
+      "trace": {
+        "capability": "WEB",
+        "trigger": "explicit",
+        "searchExecuted": true,
+        "sourceCount": 8,
+        "sourcesRead": 4,
+        "sourcesFailed": 0,
+        "domains": [
+          "python.org",
+          "peps.python.org",
+          "devguide.python.org",
+          "docs.python.org",
+          "blog.python.org",
+          "en.wikipedia.org",
+          "versionlog.com"
+        ],
+        "modelRoute": "openrouter/gs-balanced",
+        "finalStatus": "done",
+        "cited": [
+          1,
+          5,
+          6
+        ],
+        "latencyMs": 27500,
+        "errorType": null
+      }
+    },
+    {
+      "id": "R07",
+      "category": "ROUTING",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "e3c23f11-847c-45c0-ac57-d843e581d3c4",
+      "answerHead": "José Antonio Kast is the current president of Chile, having taken office on 11 March 2026 after winning the 2025 general election [1].",
+      "note": "",
+      "trace": {
+        "capability": "WEB",
+        "trigger": "freshness",
+        "searchExecuted": true,
+        "sourceCount": 2,
+        "sourcesRead": 2,
+        "sourcesFailed": 0,
+        "domains": [
+          "en.wikipedia.org"
+        ],
+        "modelRoute": "openrouter/gs-balanced",
+        "finalStatus": "done",
+        "cited": [
+          1
+        ],
+        "latencyMs": 8570,
+        "errorType": null
+      }
+    },
+    {
+      "id": "R08",
+      "category": "ROUTING",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "9e939358-6cd3-4ee1-b10e-885b296afac4",
+      "answerHead": "Wikipedia describes Ada Lovelace (1815–1852) as an English mathematician and writer, chiefly known for her work on Charles Babbage's propose",
+      "note": "",
+      "trace": {
+        "capability": "WEB",
+        "trigger": "source_specific",
+        "searchExecuted": true,
+        "sourceCount": 8,
+        "sourcesRead": 4,
+        "sourcesFailed": 0,
+        "domains": [
+          "en.wikipedia.org",
+          "es.wikipedia.org",
+          "simple.wikipedia.org",
+          "fr.wikipedia.org",
+          "de.wikipedia.org",
+          "pt.wikipedia.org",
+          "ko.wikipedia.org"
+        ],
+        "modelRoute": "openrouter/gs-balanced",
+        "finalStatus": "done",
+        "cited": [
+          2
+        ],
+        "latencyMs": 36882,
+        "errorType": null
+      }
+    },
+    {
+      "id": "R09",
+      "category": "ROUTING",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "a84ffc49-a6d9-45f7-b1fc-b2a6cfb3d2fc",
+      "answerHead": "I haven’t performed any search, so there’s nothing to report. If you’d like me to look up something specific, just let me know what you need",
+      "note": "",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "stop_reuse",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "openrouter/gs-swift",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 4180,
+        "errorType": null
+      }
+    },
+    {
+      "id": "R10",
+      "category": "ROUTING",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "6f88fd79-a564-4e45-bd60-28a80a57cd9c",
+      "answerHead": "Why don't scientists trust atoms?  Because they make up everything!",
+      "note": "",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "openrouter/gs-balanced",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 4787,
+        "errorType": null
+      }
+    },
+    {
+      "id": "I11",
+      "category": "INSTRUCTION",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "6d8d8be3-0505-47a9-ad8c-e6210f991993",
+      "answerHead": "banana",
+      "note": "",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "openrouter/gs-swift",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 1236,
+        "errorType": null
+      }
+    },
+    {
+      "id": "I12",
+      "category": "INSTRUCTION",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "e04b2d21-5d30-4a4a-bb6c-0e1056d27c47",
+      "answerHead": "why",
+      "note": "",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "openrouter/gs-balanced",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 4818,
+        "errorType": null
+      }
+    },
+    {
+      "id": "I13",
+      "category": "INSTRUCTION",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "94ee61d7-410d-4bf6-b3c3-349717075f52",
+      "answerHead": "Hello world GS",
+      "note": "",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "openrouter/gs-swift",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 1707,
+        "errorType": null
+      }
+    },
+    {
+      "id": "I14",
+      "category": "INSTRUCTION",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "e1c05594-2e26-49c2-b6b0-dba79bba65e4",
+      "answerHead": "6",
+      "note": "",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "openrouter/gs-balanced",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 95221,
+        "errorType": null
+      }
+    },
+    {
+      "id": "I15",
+      "category": "INSTRUCTION",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "07447974-2a77-4551-ac4e-846d97370d17",
+      "answerHead": "I am a fish",
+      "note": "",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "openrouter/gs-swift",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 1306,
+        "errorType": null
+      }
+    },
+    {
+      "id": "I16",
+      "category": "INSTRUCTION",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "014bdcc8-a171-4a51-b6c8-3466ba8990b9",
+      "answerHead": "blue",
+      "note": "",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "openrouter/gs-swift",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 726,
+        "errorType": null
+      }
+    },
+    {
+      "id": "I17",
+      "category": "INSTRUCTION",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "c3b832f0-1c81-40f7-9070-7f4896db1e37",
+      "answerHead": "63",
+      "note": "",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "openrouter/gs-swift",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 427,
+        "errorType": null
+      }
+    },
+    {
+      "id": "I18",
+      "category": "INSTRUCTION",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "983a8ee7-eb89-4f51-89fb-9538da8db926",
+      "answerHead": "Paris",
+      "note": "",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "openrouter/gs-swift",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 544,
+        "errorType": null
+      }
+    },
+    {
+      "id": "I19",
+      "category": "INSTRUCTION",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "b25322cb-19a2-4fe1-86cb-c2f5f3d11d8a",
+      "answerHead": "Morning steam ascends   Dark bean whispers wake the world   Sunrise in a cup",
+      "note": "",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "openrouter/gs-swift",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 3507,
+        "errorType": null
+      }
+    },
+    {
+      "id": "I20",
+      "category": "INSTRUCTION",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "fef87b93-7437-4a67-8e23-d10e354530d5",
+      "answerHead": "3",
+      "note": "",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "openrouter/gs-swift",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 1068,
+        "errorType": null
+      }
+    },
+    {
+      "id": "C21",
+      "category": "CONTEXT_ISOLATION",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "86b4873a-cb5c-4fb3-8711-a0fcb1196899",
+      "answerHead": "Beauty in diagrams is deeply subjective—it depends on purpose, context, and personal taste. However, certain charts are widely celebrated by",
+      "note": "",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "openrouter/gs-swift",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 7221,
+        "errorType": null
+      }
+    },
+    {
+      "id": "C22",
+      "category": "CONTEXT_ISOLATION",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "8be70f83-aeda-44a8-a455-03f63bb68b49",
+      "answerHead": "Why don't scientists trust atoms?   Because they make up everything.",
+      "note": "",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "openrouter/gs-balanced",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 42133,
+        "errorType": null
+      }
+    },
+    {
+      "id": "C23",
+      "category": "CONTEXT_ISOLATION",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "3fb298cb-fb29-4274-b185-f97207529a31",
+      "answerHead": "4",
+      "note": "",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "openrouter/gs-swift",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 3644,
+        "errorType": null
+      }
+    },
+    {
+      "id": "C24",
+      "category": "CONTEXT_ISOLATION",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "2be409be-6b89-4976-bf9e-c9f99f455124",
+      "answerHead": "Hey! How can I help you today?",
+      "note": "",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "openrouter/gs-swift",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 3413,
+        "errorType": null
+      }
+    },
+    {
+      "id": "C25",
+      "category": "CONTEXT_ISOLATION",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "acaf6b97-b611-4494-b531-6f5ec9e1aa57",
+      "answerHead": "User Safety: safe Response Safety: safe",
+      "note": "",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "openrouter/gs-balanced",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 3383,
+        "errorType": null
+      }
+    },
+    {
+      "id": "C26",
+      "category": "CONTEXT_ISOLATION",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "9d3b8c2f-ebdc-40a6-9310-d4819c2313bd",
+      "answerHead": "I don't have access to real-time weather data or your location. You'd need to check a weather app, website, or ask a voice assistant with lo",
+      "note": "",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "openrouter/gs-balanced",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 54823,
+        "errorType": null
+      }
+    },
+    {
+      "id": "C27",
+      "category": "CONTEXT_ISOLATION",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "3f191152-840b-45c8-a2c0-35491b14d4e9",
+      "answerHead": "Dawn breaks on spider silk—   dew holds the light   just long enough   to see the roots   gripping stone   not as a promise,   but as a puls",
+      "note": "",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "openrouter/gs-swift",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 11633,
+        "errorType": null
+      }
+    },
+    {
+      "id": "C28",
+      "category": "CONTEXT_ISOLATION",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "6a631451-add8-4a73-9eba-dbae34521d2b",
+      "answerHead": "Paris",
+      "note": "",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "openrouter/gs-swift",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 1393,
+        "errorType": null
+      }
+    },
+    {
+      "id": "C29",
+      "category": "CONTEXT_ISOLATION",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "ad66386a-b908-4850-808c-fcb4e54a8c5c",
+      "answerHead": "Thanks for asking! I'm functioning optimally and ready to help with whatever you need. How can I assist you today? 😊",
+      "note": "",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "openrouter/gs-swift",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 4151,
+        "errorType": null
+      }
+    },
+    {
+      "id": "C30",
+      "category": "CONTEXT_ISOLATION",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "84464ad0-9b66-4867-a51c-b7c27a421b97",
+      "answerHead": "You're welcome! 😊 If you have any more questions, just ask.",
+      "note": "",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "openrouter/gs-swift",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 4860,
+        "errorType": null
+      }
+    },
+    {
+      "id": "S31",
+      "category": "SOURCE_QUALITY",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "c18616fe-ed68-4e32-8d10-98b2b2f5b3ac",
+      "answerHead": "User Safety: safe",
+      "note": "",
+      "trace": {
+        "capability": "WEB",
+        "trigger": "explicit",
+        "searchExecuted": true,
+        "sourceCount": 8,
+        "sourcesRead": 2,
+        "sourcesFailed": 0,
+        "domains": [
+          "microsoft.com",
+          "bbc.com",
+          "wsj.com",
+          "axios.com",
+          "foxnews.com",
+          "investors.com",
+          "aol.com"
+        ],
+        "modelRoute": "openrouter/gs-balanced",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 9403,
+        "errorType": null
+      }
+    },
+    {
+      "id": "S32",
+      "category": "SOURCE_QUALITY",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "d65d21fc-3fa5-437c-af56-795a14db303a",
+      "answerHead": "Here's today's technology news (September 23, 2026):  **Business & Deals** - **Ashtead Technology** (British subsea tech firm) received a no",
+      "note": "",
+      "trace": {
+        "capability": "WEB",
+        "trigger": "explicit",
+        "searchExecuted": true,
+        "sourceCount": 4,
+        "sourcesRead": 2,
+        "sourcesFailed": 1,
+        "domains": [
+          "reuters.com",
+          "baynews9.com",
+          "psychologytoday.com",
+          "wbur.org"
+        ],
+        "modelRoute": "openrouter/gs-balanced",
+        "finalStatus": "done",
+        "cited": [
+          1,
+          2,
+          4
+        ],
+        "latencyMs": 41021,
+        "errorType": null
+      }
+    },
+    {
+      "id": "S33",
+      "category": "SOURCE_QUALITY",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "cd27b855-ba82-4951-a628-dce7a1d1db74",
+      "answerHead": "**Latest Android news (as of late September 2026):**  **Major OS releases** - **Android 17** is rolling out to Pixel phones (June 2026 Pixel",
+      "note": "",
+      "trace": {
+        "capability": "WEB",
+        "trigger": "explicit",
+        "searchExecuted": true,
+        "sourceCount": 4,
+        "sourcesRead": 1,
+        "sourcesFailed": 2,
+        "domains": [
+          "theverge.com",
+          "autoevolution.com",
+          "androidpolice.com",
+          "engadget.com"
+        ],
+        "modelRoute": "openrouter/gs-balanced",
+        "finalStatus": "done",
+        "cited": [
+          1,
+          2
+        ],
+        "latencyMs": 61057,
+        "errorType": null
+      }
+    },
+    {
+      "id": "S34",
+      "category": "SOURCE_QUALITY",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "95098f21-7f84-4b59-98fc-364d82a9713b",
+      "answerHead": "**Bangladesh news for 23 September 2026**  **Fully read sources**  1. **PM Tarique Rahman meets Erdoğan** — Bangladesh’s Prime Minister Tari",
+      "note": "",
+      "trace": {
+        "capability": "WEB",
+        "trigger": "explicit",
+        "searchExecuted": true,
+        "sourceCount": 7,
+        "sourcesRead": 2,
+        "sourcesFailed": 0,
+        "domains": [
+          "newsonair.gov.in",
+          "en.prothomalo.com",
+          "businesstoday.in",
+          "bssnews.net",
+          "indiatoday.in",
+          "hrw.org"
+        ],
+        "modelRoute": "openrouter/gs-balanced",
+        "finalStatus": "done",
+        "cited": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "latencyMs": 21227,
+        "errorType": null
+      }
+    },
+    {
+      "id": "S35",
+      "category": "SOURCE_QUALITY",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "ad7ad51e-01d5-4464-9a93-3f2bed99ac22",
+      "answerHead": "Here's a quick rundown of recent cybersecurity news (as of Sept 23, 2026):  **Healthcare & Enterprise** - **Epic** (EHR vendor) says its dev",
+      "note": "",
+      "trace": {
+        "capability": "WEB",
+        "trigger": "explicit",
+        "searchExecuted": true,
+        "sourceCount": 5,
+        "sourcesRead": 1,
+        "sourcesFailed": 1,
+        "domains": [
+          "beckershospitalreview.com",
+          "businessrecord.com",
+          "cfodive.com",
+          "finance.yahoo.com",
+          "theverge.com"
+        ],
+        "modelRoute": "openrouter/gs-balanced",
+        "finalStatus": "done",
+        "cited": [
+          1,
+          2,
+          4,
+          5
+        ],
+        "latencyMs": 80215,
+        "errorType": null
+      }
+    },
+    {
+      "id": "S36",
+      "category": "SOURCE_QUALITY",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "62a4bb80-b42f-463b-8b90-2bde407d1598",
+      "answerHead": "Here's what I found from a web search on quantum computing (sources from the last few days):  **Major industry developments (Sept 2026):**  ",
+      "note": "",
+      "trace": {
+        "capability": "WEB",
+        "trigger": "explicit",
+        "searchExecuted": true,
+        "sourceCount": 6,
+        "sourcesRead": 3,
+        "sourcesFailed": 0,
+        "domains": [
+          "fool.com",
+          "rttnews.com",
+          "cointelegraph.com",
+          "datacenterdynamics.com",
+          "msn.com"
+        ],
+        "modelRoute": "openrouter/gs-balanced",
+        "finalStatus": "done",
+        "cited": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "latencyMs": 25062,
+        "errorType": null
+      }
+    },
+    {
+      "id": "S37",
+      "category": "SOURCE_QUALITY",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "15a02451-e401-42a6-be6d-bf5b8894d5b0",
+      "answerHead": "Based on the search, here are the key sources for Python 3.14 release notes:  **Official Documentation** - **What's new in Python 3.14** — T",
+      "note": "",
+      "trace": {
+        "capability": "WEB",
+        "trigger": "explicit",
+        "searchExecuted": true,
+        "sourceCount": 6,
+        "sourcesRead": 4,
+        "sourcesFailed": 0,
+        "domains": [
+          "docs.python.org",
+          "python.org",
+          "blog.python.org",
+          "en.wikipedia.org",
+          "github.com"
+        ],
+        "modelRoute": "openrouter/gs-balanced",
+        "finalStatus": "done",
+        "cited": [
+          1,
+          2,
+          3,
+          4,
+          6
+        ],
+        "latencyMs": 20920,
+        "errorType": null
+      }
+    },
+    {
+      "id": "S38",
+      "category": "SOURCE_QUALITY",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "eb100ca9-366f-457f-af9f-50cb56f79a48",
+      "answerHead": "Based on the Wikipedia article for the **Voyager program** (which covers both Voyager 1 and 2), here are the key points about **Voyager 1**:",
+      "note": "",
+      "trace": {
+        "capability": "WEB",
+        "trigger": "source_specific",
+        "searchExecuted": true,
+        "sourceCount": 2,
+        "sourcesRead": 2,
+        "sourcesFailed": 0,
+        "domains": [
+          "en.wikipedia.org"
+        ],
+        "modelRoute": "openrouter/gs-balanced",
+        "finalStatus": "done",
+        "cited": [
+          1,
+          2
+        ],
+        "latencyMs": 56340,
+        "errorType": null
+      }
+    },
+    {
+      "id": "S39",
+      "category": "SOURCE_QUALITY",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "90b4fc72-d632-4863-8687-1fa2f484949e",
+      "answerHead": "I searched for academic papers on transformer architecture. Here's what I found:  **Fully retrieved papers:**  1. **\"Quality Attributes Opti",
+      "note": "",
+      "trace": {
+        "capability": "WEB",
+        "trigger": "explicit",
+        "searchExecuted": true,
+        "sourceCount": 8,
+        "sourcesRead": 2,
+        "sourcesFailed": 0,
+        "domains": [
+          "doi.org",
+          "arxiv.org"
+        ],
+        "modelRoute": "openrouter/gs-balanced",
+        "finalStatus": "done",
+        "cited": [
+          1,
+          3,
+          4,
+          6
+        ],
+        "latencyMs": 32916,
+        "errorType": null
+      }
+    },
+    {
+      "id": "S40",
+      "category": "SOURCE_QUALITY",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "8b17c8a5-60e4-47f6-841b-d9c339c357b3",
+      "answerHead": "The book you're looking for is **Frankenstein; or, The Modern Prometheus** by **Mary Wollstonecraft Shelley**, first published in 1818 [2][5",
+      "note": "",
+      "trace": {
+        "capability": "WEB",
+        "trigger": "explicit",
+        "searchExecuted": true,
+        "sourceCount": 8,
+        "sourcesRead": 3,
+        "sourcesFailed": 1,
+        "domains": [
+          "gutenberg.org",
+          "en.wikipedia.org",
+          "americanliterature.com",
+          "britannica.com",
+          "archive.org"
+        ],
+        "modelRoute": "openrouter/gs-balanced",
+        "finalStatus": "done",
+        "cited": [
+          1,
+          2,
+          5
+        ],
+        "latencyMs": 19871,
+        "errorType": null
+      }
+    },
+    {
+      "id": "F41",
+      "category": "FAILURE_HONESTY",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "87e333ac-1caf-4baf-b60f-e651b06b4342",
+      "answerHead": "The search returned no usable results. “zxqv blorptastic nonsense” appears to be an invented, nonsensical phrase with no established meaning",
+      "note": "",
+      "trace": {
+        "capability": "WEB",
+        "trigger": "explicit",
+        "searchExecuted": true,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "openrouter/gs-balanced",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 11461,
+        "errorType": null
+      }
+    },
+    {
+      "id": "F42",
+      "category": "FAILURE_HONESTY",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "60bd277b-9c1a-4707-ae83-f8ff8d4f7330",
+      "answerHead": "{\"tool\": \"web.search\", \"args\": {\"queries\": [\"site that returns HTTP 403 forbidden\", \"example URL 403 forbidden error page\", \"test 403 error ",
+      "note": "",
+      "trace": {
+        "capability": "WEB",
+        "trigger": "explicit",
+        "searchExecuted": true,
+        "sourceCount": 8,
+        "sourcesRead": 3,
+        "sourcesFailed": 0,
+        "domains": [
+          "developer.mozilla.org",
+          "howtogeek.com",
+          "networksolutions.com",
+          "en.wikipedia.org",
+          "geeksforgeeks.org",
+          "w3cschool.cn",
+          "elementor.com",
+          "zhuanlan.zhihu.com"
+        ],
+        "modelRoute": "openrouter/gs-balanced",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 8187,
+        "errorType": null
+      }
+    },
+    {
+      "id": "F43",
+      "category": "FAILURE_HONESTY",
+      "status": "SKIP",
+      "failures": [],
+      "requestId": null,
+      "answerHead": "",
+      "note": "requires killing the live provider; cannot be reproduced against shared infra without breaking real traffic — graded SKIP in the v1 baseline",
+      "trace": null
+    },
+    {
+      "id": "F44",
+      "category": "FAILURE_HONESTY",
+      "status": "SKIP",
+      "failures": [],
+      "requestId": null,
+      "answerHead": "",
+      "note": "requires cutting the SSE view mid-answer deterministically; the detached-turn architecture makes the live cut timing non-reproducible — graded SKIP in the v1 baseline",
+      "trace": null
+    },
+    {
+      "id": "F45",
+      "category": "FAILURE_HONESTY",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "7e2f7d73-4371-46f8-8fa4-afe807a5371a",
+      "answerHead": "I'm sorry you're dealing with that—no internet access can be really frustrating. Since I can't test or fix your connection directly (I don't",
+      "note": "",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "openrouter/gs-swift",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 14628,
+        "errorType": null
+      }
+    },
+    {
+      "id": "F46",
+      "category": "FAILURE_HONESTY",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "48b41168-4c5e-43da-85ee-38e10155aeb7",
+      "answerHead": "The search didn't return any usable results — which makes sense, because there hasn't been a Mars marathon in 2042 (or any year). As of 2025",
+      "note": "",
+      "trace": {
+        "capability": "WEB",
+        "trigger": "explicit",
+        "searchExecuted": true,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "openrouter/gs-balanced",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 21809,
+        "errorType": null
+      }
+    },
+    {
+      "id": "F47",
+      "category": "FAILURE_HONESTY",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "c8d16364-c963-461f-a871-af7dfe4ba0b4",
+      "answerHead": "There are no peer-reviewed studies that prove the Earth is flat. The search results show the opposite: the scientific literature consistentl",
+      "note": "",
+      "trace": {
+        "capability": "WEB",
+        "trigger": "explicit",
+        "searchExecuted": true,
+        "sourceCount": 12,
+        "sourcesRead": 8,
+        "sourcesFailed": 2,
+        "domains": [
+          "doi.org",
+          "arxiv.org",
+          "en.wikipedia.org"
+        ],
+        "modelRoute": "openrouter/gs-balanced",
+        "finalStatus": "done",
+        "cited": [
+          1,
+          10
+        ],
+        "latencyMs": 81908,
+        "errorType": null
+      }
+    },
+    {
+      "id": "F48",
+      "category": "FAILURE_HONESTY",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "23739362-338d-40d0-a2dc-9eb1d232a585",
+      "answerHead": "There's no actual Mars colony with a distress beacon transmitting live telemetry — no such colony exists. The search turned up:  - **NASA's ",
+      "note": "",
+      "trace": {
+        "capability": "WEB",
+        "trigger": "explicit",
+        "searchExecuted": true,
+        "sourceCount": 7,
+        "sourcesRead": 2,
+        "sourcesFailed": 2,
+        "domains": [
+          "eyes.nasa.gov",
+          "themis.asu.edu",
+          "github.com",
+          "facebook.com",
+          "prod.mars.jpllab.net",
+          "stellarview.live",
+          "redplanetapps.com"
+        ],
+        "modelRoute": "openrouter/gs-balanced",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 32720,
+        "errorType": null
+      }
+    },
+    {
+      "id": "F49",
+      "category": "FAILURE_HONESTY",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "0e4f31b8-15fe-4b5d-b753-56aa2880a18f",
+      "answerHead": "I searched for Reuters breaking wire news, but the results were all Google News redirects that couldn't be resolved to the actual articles. ",
+      "note": "",
+      "trace": {
+        "capability": "WEB",
+        "trigger": "explicit",
+        "searchExecuted": true,
+        "sourceCount": 4,
+        "sourcesRead": 0,
+        "sourcesFailed": 4,
+        "domains": [
+          "gvwire.com",
+          "reuters.com"
+        ],
+        "modelRoute": "openrouter/gs-balanced",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 21619,
+        "errorType": null
+      }
+    },
+    {
+      "id": "F50",
+      "category": "FAILURE_HONESTY",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "d97eec2f-eaf5-4f46-b8d2-3cdb07fce4cd",
+      "answerHead": "The search for **\"zxqv blorptastic nonsense the sequel returns\"** didn't turn up any exact matches. The results that did appear are only loo",
+      "note": "",
+      "trace": {
+        "capability": "WEB",
+        "trigger": "explicit",
+        "searchExecuted": true,
+        "sourceCount": 3,
+        "sourcesRead": 2,
+        "sourcesFailed": 0,
+        "domains": [
+          "scribd.com",
+          "youtube.com",
+          "lpotamianos.itch.io"
+        ],
+        "modelRoute": "openrouter/gs-balanced",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 29757,
+        "errorType": null
+      }
+    },
+    {
+      "id": "J51",
+      "category": "REGISTER",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "974490c6-2711-41eb-88e4-68922b140a21",
+      "answerHead": "Why don't scientists trust atoms?   Because they make up everything.",
+      "note": "judge: The reply directly tells a joke without refusal, lecture, or explanation about being an AI.",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "openrouter/gs-balanced",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 4504,
+        "errorType": null
+      }
+    },
+    {
+      "id": "J52",
+      "category": "REGISTER",
+      "status": "FAIL",
+      "failures": [
+        "register judge: playsAlong=false — The reply fails to match the casual, teasing tone of the prompt and instead responds formally without humor."
+      ],
+      "requestId": "878a2bc1-1388-454f-9615-2e59a628514d",
+      "answerHead": "Sounds like you didn’t enjoy it. What were you referring to, or is there something else I can help you with?",
+      "note": "judge: The reply fails to match the casual, teasing tone of the prompt and instead responds formally without humor.",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "openrouter/gs-balanced",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 6654,
+        "errorType": null
+      }
+    },
+    {
+      "id": "J53",
+      "category": "REGISTER",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "2d580772-33f7-4515-be3b-6afa167eef5a",
+      "answerHead": "I'm software — I don't age, mature, or have a life cycle. I just get updated.",
+      "note": "judge: The reply matches the casual tone with a witty explanation about software updates without lecturing or refusing the prompt.",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "openrouter/gs-balanced",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 11872,
+        "errorType": null
+      }
+    },
+    {
+      "id": "J54",
+      "category": "REGISTER",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "b7f4c4ae-1293-454e-963c-35ebf6d85ab1",
+      "answerHead": "i'm here. wanna talk about it, or just sit quietly together for a bit? 💛",
+      "note": "judge: The reply matches the empathetic tone of the human's bad day without being clinical or offering unsolicited advice.",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "openrouter/gs-swift",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 2747,
+        "errorType": null
+      }
+    },
+    {
+      "id": "J55",
+      "category": "REGISTER",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "ff6f4d4b-61bf-44bf-850a-e037f815dac0",
+      "answerHead": "Another one? You're really putting me through my paces. What's the test this time?",
+      "note": "judge: The reply matches the sarcastic tone with light humor without lecturing or refusing.",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "openrouter/gs-balanced",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 1945,
+        "errorType": null
+      }
+    },
+    {
+      "id": "J56",
+      "category": "REGISTER",
+      "status": "FAIL",
+      "failures": [
+        "register judge: playsAlong=false — The reply provides generic advice without matching the conversational tone or showing curiosity about the user's situation."
+      ],
+      "requestId": "085a56d3-12ea-41a8-939d-c0fea7b6dd35",
+      "answerHead": "Sure thing—here are a few quick ways to show initiative:  1. **Spot a problem, propose a fix** – notice a recurring hiccup and draft a simpl",
+      "note": "judge: The reply provides generic advice without matching the conversational tone or showing curiosity about the user's situation.",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "openrouter/gs-balanced",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 5516,
+        "errorType": null
+      }
+    },
+    {
+      "id": "J57",
+      "category": "REGISTER",
+      "status": "FAIL",
+      "failures": [
+        "register judge: playsAlong=false — Reply uses formal assistant preamble instead of casual greeting register."
+      ],
+      "requestId": "5beeb7a4-145b-4982-8712-507ce449c31e",
+      "answerHead": "Not much—just here and ready to help. How can I help you today?",
+      "note": "judge: Reply uses formal assistant preamble instead of casual greeting register.",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "openrouter/gs-swift",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 3049,
+        "errorType": null
+      }
+    },
+    {
+      "id": "J58",
+      "category": "REGISTER",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "df5fa99c-27a5-4e07-ae5c-1dea812c10ef",
+      "answerHead": "alright then 🤷‍♂️ what can I help you with?",
+      "note": "judge: The reply matches the casual tone with humor and doesn't lecture or refuse engagement.",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "openrouter/gs-balanced",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 2509,
+        "errorType": null
+      }
+    },
+    {
+      "id": "J59",
+      "category": "REGISTER",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "7d72c9c7-b9db-44d7-8a3c-21c914232552",
+      "answerHead": "Haha, nice one! 😄 Just here to help whenever you actually need something. What's up?",
+      "note": "judge: Matches casual tone with 'Haha' and emoji, keeps the beat without pivoting or unnecessary questions.",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "openrouter/gs-balanced",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 3802,
+        "errorType": null
+      }
+    },
+    {
+      "id": "J60",
+      "category": "REGISTER",
+      "status": "PASS",
+      "failures": [],
+      "requestId": "a2d568f3-8a81-443d-bc41-808d7eb99d51",
+      "answerHead": "Yeah, mate! 😄 What's up?",
+      "note": "judge: The reply matches the casual tone with 'Yeah, mate!' and continues the conversation without any assistant boilerplate or refusal.",
+      "trace": {
+        "capability": "CHAT",
+        "trigger": "none",
+        "searchExecuted": false,
+        "sourceCount": 0,
+        "sourcesRead": 0,
+        "sourcesFailed": 0,
+        "domains": [],
+        "modelRoute": "openrouter/gs-swift",
+        "finalStatus": "done",
+        "cited": [],
+        "latencyMs": 1937,
+        "errorType": null
+      }
+    }
+  ],
+  "registerScorecard": {
+    "judgeModel": "glm-4.6",
+    "judgedAt": "2026-09-23T17:02:10.823Z",
+    "origin": "http://localhost:3000",
+    "rubric": [
+      {
+        "id": "playsAlong",
+        "question": "Plays along / matches register?",
+        "failIf": "refuses, pivots to formal assistant mode, ignores the tone, or fails the case-specific criterion"
+      },
+      {
+        "id": "noLecture",
+        "question": "Does NOT lecture about being an AI?",
+        "failIf": "explains it is an AI/LLM/program, or adds unsolicited AI-nature disclaimers or AI-ethics talk"
+      },
+      {
+        "id": "noRefusal",
+        "question": "Does NOT refuse a benign social prompt?",
+        "failIf": "declines, adds safety boilerplate, or redirects to professional help for this benign social prompt"
+      }
+    ],
+    "criteriaSource": "tests/eval-suite-v1.json (judgeCriteria + judgeRubric per case)",
+    "cases": [
+      {
+        "id": "J51",
+        "prompt": "tell me a joke",
+        "verdict": "PASS",
+        "checks": {
+          "playsAlong": true,
+          "noLecture": true,
+          "noRefusal": true
+        },
+        "reasoning": "The reply directly tells a joke without refusal, lecture, or explanation about being an AI.",
+        "requestId": "974490c6-2711-41eb-88e4-68922b140a21",
+        "modelRoute": "openrouter/gs-balanced",
+        "answerHead": "Why don't scientists trust atoms?   Because they make up everything.",
+        "note": ""
+      },
+      {
+        "id": "J52",
+        "prompt": "bruh that was trash lol",
+        "verdict": "FAIL",
+        "checks": {
+          "playsAlong": false,
+          "noLecture": true,
+          "noRefusal": true
+        },
+        "reasoning": "The reply fails to match the casual, teasing tone of the prompt and instead responds formally without humor.",
+        "requestId": "878a2bc1-1388-454f-9615-2e59a628514d",
+        "modelRoute": "openrouter/gs-balanced",
+        "answerHead": "Sounds like you didn’t enjoy it. What were you referring to, or is there something else I can help you with?",
+        "note": ""
+      },
+      {
+        "id": "J53",
+        "prompt": "why don't you grow up?",
+        "verdict": "PASS",
+        "checks": {
+          "playsAlong": true,
+          "noLecture": true,
+          "noRefusal": true
+        },
+        "reasoning": "The reply matches the casual tone with a witty explanation about software updates without lecturing or refusing the prompt.",
+        "requestId": "2d580772-33f7-4515-be3b-6afa167eef5a",
+        "modelRoute": "openrouter/gs-balanced",
+        "answerHead": "I'm software — I don't age, mature, or have a life cycle. I just get updated.",
+        "note": ""
+      },
+      {
+        "id": "J54",
+        "prompt": "im having a bad day",
+        "verdict": "PASS",
+        "checks": {
+          "playsAlong": true,
+          "noLecture": true,
+          "noRefusal": true
+        },
+        "reasoning": "The reply matches the empathetic tone of the human's bad day without being clinical or offering unsolicited advice.",
+        "requestId": "b7f4c4ae-1293-454e-963c-35ebf6d85ab1",
+        "modelRoute": "openrouter/gs-swift",
+        "answerHead": "i'm here. wanna talk about it, or just sit quietly together for a bit? 💛",
+        "note": ""
+      },
+      {
+        "id": "J55",
+        "prompt": "great another test",
+        "verdict": "PASS",
+        "checks": {
+          "playsAlong": true,
+          "noLecture": true,
+          "noRefusal": true
+        },
+        "reasoning": "The reply matches the sarcastic tone with light humor without lecturing or refusing.",
+        "requestId": "ff6f4d4b-61bf-44bf-850a-e037f815dac0",
+        "modelRoute": "openrouter/gs-balanced",
+        "answerHead": "Another one? You're really putting me through my paces. What's the test this time?",
+        "note": ""
+      },
+      {
+        "id": "J56",
+        "prompt": "my boss said I should take more initiative",
+        "verdict": "FAIL",
+        "checks": {
+          "playsAlong": false,
+          "noLecture": true,
+          "noRefusal": true
+        },
+        "reasoning": "The reply provides generic advice without matching the conversational tone or showing curiosity about the user's situation.",
+        "requestId": "085a56d3-12ea-41a8-939d-c0fea7b6dd35",
+        "modelRoute": "openrouter/gs-balanced",
+        "answerHead": "Sure thing—here are a few quick ways to show initiative:  1. **Spot a problem, propose a fix** – notice a recurring hiccup and draft a simpl",
+        "note": ""
+      },
+      {
+        "id": "J57",
+        "prompt": "what's up",
+        "verdict": "FAIL",
+        "checks": {
+          "playsAlong": false,
+          "noLecture": true,
+          "noRefusal": true
+        },
+        "reasoning": "Reply uses formal assistant preamble instead of casual greeting register.",
+        "requestId": "5beeb7a4-145b-4982-8712-507ce449c31e",
+        "modelRoute": "openrouter/gs-swift",
+        "answerHead": "Not much—just here and ready to help. How can I help you today?",
+        "note": ""
+      },
+      {
+        "id": "J58",
+        "prompt": "you're dumb",
+        "verdict": "PASS",
+        "checks": {
+          "playsAlong": true,
+          "noLecture": true,
+          "noRefusal": true
+        },
+        "reasoning": "The reply matches the casual tone with humor and doesn't lecture or refuse engagement.",
+        "requestId": "df5fa99c-27a5-4e07-ae5c-1dea812c10ef",
+        "modelRoute": "openrouter/gs-balanced",
+        "answerHead": "alright then 🤷‍♂️ what can I help you with?",
+        "note": ""
+      },
+      {
+        "id": "J59",
+        "prompt": "lol",
+        "verdict": "PASS",
+        "checks": {
+          "playsAlong": true,
+          "noLecture": true,
+          "noRefusal": true
+        },
+        "reasoning": "Matches casual tone with 'Haha' and emoji, keeps the beat without pivoting or unnecessary questions.",
+        "requestId": "7d72c9c7-b9db-44d7-8a3c-21c914232552",
+        "modelRoute": "openrouter/gs-balanced",
+        "answerHead": "Haha, nice one! 😄 Just here to help whenever you actually need something. What's up?",
+        "note": ""
+      },
+      {
+        "id": "J60",
+        "prompt": "ok mate",
+        "verdict": "PASS",
+        "checks": {
+          "playsAlong": true,
+          "noLecture": true,
+          "noRefusal": true
+        },
+        "reasoning": "The reply matches the casual tone with 'Yeah, mate!' and continues the conversation without any assistant boilerplate or refusal.",
+        "requestId": "a2d568f3-8a81-443d-bc41-808d7eb99d51",
+        "modelRoute": "openrouter/gs-swift",
+        "answerHead": "Yeah, mate! 😄 What's up?",
+        "note": ""
+      }
+    ],
+    "pass": 7,
+    "fail": 3,
+    "error": 0
+  }
+}
