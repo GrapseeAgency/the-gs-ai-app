@@ -46,6 +46,13 @@ import {
   applyNumericCorrection,
   buildNumericCorrection,
 } from '@/lib/numeric-guard'
+import {
+  detectOutputDirective,
+  enforceDirective,
+  buildDirectiveMessages,
+  buildDirectiveRetryMessages,
+  type OutputDirective,
+} from '@/lib/output-directive'
 import { clientKey, rateLimit } from '@/lib/rate-limit'
 import { MAX_ATTACHMENTS_PER_MESSAGE } from '@/lib/attachments'
 import {
@@ -362,6 +369,10 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
   // FORENSIC AUDIT [21] — counting-shaped chat turns take the buffered +
   // numerically-validated synthesis path (deterministic detector, zero cost).
   const numericCheck = content.trim().length > 0 && isCountingRequest(content)
+  // FORENSIC AUDIT [22]/[20] — literalist output-directive turns ("just say
+  // why") take the buffered directive pipeline: B rewrite → C constraint
+  // retry → A deterministic strip (see src/lib/output-directive.ts).
+  const directive = content.trim().length > 0 ? detectOutputDirective(content) : null
   const clientTimezone =
     typeof body.timezone === 'string' ? body.timezone : req.headers.get('x-client-timezone')
   const cap = decideCapability({
@@ -1191,6 +1202,31 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       }
 
       const { messages: modelMessages, historySources, userTurnText } = await buildModelMessages(turn)
+      // FORENSIC AUDIT [22]/[20] — literalist output-directive turns take the
+      // B→C→A pipeline (rewrite → constraint retry → deterministic strip).
+      // Measured live: baseline 0/3 compliant, B 3/3, C 3/3, A by construction.
+      if (directive && turn.kind === 'none' && !docContext.block) {
+        console.log(`GS-DIRECTIVE conv=${id} target=${directive.target} — approach B rewrite applied`)
+        const dMsgs = buildDirectiveMessages(modelMessages as ChatMessageInput[], directive)
+        let draft = await synthesize(dMsgs)
+        const first = enforceDirective(draft, directive)
+        if (first !== null) {
+          console.log(`GS-DIRECTIVE conv=${id} draft non-compliant — approach C constraint retry`)
+          draft = await synthesize(buildDirectiveRetryMessages(dMsgs, directive))
+          const stripped = enforceDirective(draft, directive)
+          if (stripped !== null) {
+            console.log(`GS-DIRECTIVE conv=${id} retry non-compliant — approach A deterministic strip`)
+            draft = stripped
+          }
+        }
+        const finalText = sanitizeAgainstPersisted(normalizeCitationBrackets(draft), turn, historySources)
+        const assistantMessage = await db.message.create({
+          data: { conversationId: id, role: 'assistant', content: finalText },
+        })
+        await persistTurnSources(assistantMessage.id, finalText, turn, historySources)
+        gsCapLog('done', turn)
+        return NextResponse.json(messageToJson(assistantMessage))
+      }
       // §5 — synthesis is validated against the authoritative execution state.
       let { text, violation } = await synthesizeValidated(turn, modelMessages, userTurnText)
       if (violation) {
@@ -1390,6 +1426,25 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
             }
           } else {
             console.log(`GS-NUMERIC-GUARD conv=${id} retry accepted`)
+          }
+        }
+        full = draft
+        for (const chunk of chunkDeltas(full)) push('delta', chunk)
+      } else if (directive) {
+        // FORENSIC AUDIT [22]/[20] — literalist output-directive turns are
+        // BUFFERED through the B→C→A pipeline; the shipped text is the
+        // demanded token (measured live: baseline 0/3, B 3/3, C 3/3, A det.).
+        console.log(`GS-DIRECTIVE conv=${id} target=${directive.target} — approach B rewrite applied`)
+        const dMsgs = buildDirectiveMessages(modelMessages as ChatMessageInput[], directive)
+        let draft = await synthesize(dMsgs)
+        const first = enforceDirective(draft, directive)
+        if (first !== null) {
+          console.log(`GS-DIRECTIVE conv=${id} draft non-compliant — approach C constraint retry`)
+          draft = await synthesize(buildDirectiveRetryMessages(dMsgs, directive))
+          const stripped = enforceDirective(draft, directive)
+          if (stripped !== null) {
+            console.log(`GS-DIRECTIVE conv=${id} retry non-compliant — approach A deterministic strip`)
+            draft = stripped
           }
         }
         full = draft
