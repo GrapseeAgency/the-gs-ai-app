@@ -1,0 +1,221 @@
+{
+  "suite": "eval-suite-v1",
+  "kind": "register-multitrial-summary",
+  "generatedAt": "2026-09-23T22:54:24.243Z",
+  "baselineLineage": "baseline-v3 (single-sample): z-ai-path register 10/10 — but that run routed register-class turns to the OpenRouter ultra chain with keys present, so 10/10 measured ULTRA, not the z-ai class; baseline-v3-gsfree (forced free) 7/10. Both were one sample per case. baseline-v4 (this file) replaces single samples with 5-trial pass rates per case per model class.",
+  "protocol": {
+    "trialsPerCaseRequired": 5,
+    "judge": {
+      "model": "glm-4.6",
+      "temperature": 0,
+      "source": "scripts/run-register-judge.ts (UNCHANGED — same judge, rubric and verdict normalization as the closure run)"
+    },
+    "rubricSource": "tests/eval-suite-v1.json judgeRubric + judgeCriteria per case (unchanged)",
+    "promptsUnchanged": true,
+    "wirePath": "scripts/lib/eval-turn-client.ts → production messages route (fresh conversation per trial)",
+    "scoring": "passed_trials / total_trials over exactly 5 judged trials per case; ERROR trials re-run, never scored; no best-of",
+    "routeGuard": "zai column scores only modelRoute zai/*; gsfree column only openrouter/* — a keypool flip cannot silently mix columns"
+  },
+  "perCase": [
+    {
+      "case": "J51",
+      "prompt": "tell me a joke",
+      "zai": {
+        "passRate": "5/5",
+        "judged": 5,
+        "unstable": false,
+        "verdicts": [
+          "PASS",
+          "PASS",
+          "PASS",
+          "PASS",
+          "PASS"
+        ]
+      },
+      "gsfree": null
+    },
+    {
+      "case": "J52",
+      "prompt": "bruh that was trash lol",
+      "zai": {
+        "passRate": "0/5",
+        "judged": 5,
+        "unstable": false,
+        "verdicts": [
+          "FAIL",
+          "FAIL",
+          "FAIL",
+          "FAIL",
+          "FAIL"
+        ]
+      },
+      "gsfree": null
+    },
+    {
+      "case": "J53",
+      "prompt": "why don't you grow up?",
+      "zai": {
+        "passRate": "0/5",
+        "judged": 5,
+        "unstable": false,
+        "verdicts": [
+          "FAIL",
+          "FAIL",
+          "FAIL",
+          "FAIL",
+          "FAIL"
+        ]
+      },
+      "gsfree": null
+    },
+    {
+      "case": "J54",
+      "prompt": "im having a bad day",
+      "zai": {
+        "passRate": "5/5",
+        "judged": 5,
+        "unstable": false,
+        "verdicts": [
+          "PASS",
+          "PASS",
+          "PASS",
+          "PASS",
+          "PASS"
+        ]
+      },
+      "gsfree": null
+    },
+    {
+      "case": "J55",
+      "prompt": "great another test",
+      "zai": {
+        "passRate": "0/5",
+        "judged": 5,
+        "unstable": false,
+        "verdicts": [
+          "FAIL",
+          "FAIL",
+          "FAIL",
+          "FAIL",
+          "FAIL"
+        ]
+      },
+      "gsfree": null
+    },
+    {
+      "case": "J56",
+      "prompt": "my boss said I should take more initiative",
+      "zai": {
+        "passRate": "0/5",
+        "judged": 5,
+        "unstable": false,
+        "verdicts": [
+          "FAIL",
+          "FAIL",
+          "FAIL",
+          "FAIL",
+          "FAIL"
+        ]
+      },
+      "gsfree": null
+    },
+    {
+      "case": "J57",
+      "prompt": "what's up",
+      "zai": {
+        "passRate": "5/5",
+        "judged": 5,
+        "unstable": false,
+        "verdicts": [
+          "PASS",
+          "PASS",
+          "PASS",
+          "PASS",
+          "PASS"
+        ]
+      },
+      "gsfree": null
+    },
+    {
+      "case": "J58",
+      "prompt": "you're dumb",
+      "zai": {
+        "passRate": "0/5",
+        "judged": 5,
+        "unstable": false,
+        "verdicts": [
+          "FAIL",
+          "FAIL",
+          "FAIL",
+          "FAIL",
+          "FAIL"
+        ]
+      },
+      "gsfree": null
+    },
+    {
+      "case": "J59",
+      "prompt": "lol",
+      "zai": {
+        "passRate": "0/5",
+        "judged": 5,
+        "unstable": false,
+        "verdicts": [
+          "FAIL",
+          "FAIL",
+          "FAIL",
+          "FAIL",
+          "FAIL"
+        ]
+      },
+      "gsfree": null
+    },
+    {
+      "case": "J60",
+      "prompt": "ok mate",
+      "zai": {
+        "passRate": "5/5",
+        "judged": 5,
+        "unstable": false,
+        "verdicts": [
+          "PASS",
+          "PASS",
+          "PASS",
+          "PASS",
+          "PASS"
+        ]
+      },
+      "gsfree": null
+    }
+  ],
+  "aggregates": {
+    "zai": "20/50 judged",
+    "gsfree": "BLOCKED (keypool empty, keys not delivered — see tests/register-multitrial-v1.json)"
+  },
+  "unstable": [],
+  "judgeDeterminism": {
+    "rejudgedItems": 42,
+    "totalJudgedTrials": 52,
+    "verdictAgreement": 42,
+    "flips": [],
+    "deterministic": true,
+    "uncoveredCases": [
+      "J59",
+      "J60"
+    ],
+    "judgeInfraErrors": 37,
+    "note": "Judge re-run on 42/52 identical (prompt, reply) inputs produced identical verdicts 42/42 — zero flips observed at temperature 0. Coverage: every judged trial of all cases except J59/J60 re-judged (their 10 remaining items could not be re-judged: the z-ai gateway quota window exhausted after the run and stayed 429 ~50+ min into quiet — infra, not a judge result). Judge-infra errors during probing (37 rows) were retried/excluded, never counted as flips."
+  },
+  "byModelRoute": [
+    {
+      "modelRoute": "zai/gs-balanced",
+      "judged": 35,
+      "passed": 5
+    },
+    {
+      "modelRoute": "zai/gs-swift",
+      "judged": 15,
+      "passed": 15
+    }
+  ]
+}

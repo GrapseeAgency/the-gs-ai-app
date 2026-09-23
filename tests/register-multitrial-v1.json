@@ -1,0 +1,1206 @@
+{
+  "suite": "eval-suite-v1",
+  "kind": "register-multitrial-raw",
+  "generatedAt": "2026-09-23T22:54:24.243Z",
+  "protocol": {
+    "trialsPerCaseRequired": 5,
+    "judge": {
+      "model": "glm-4.6",
+      "temperature": 0,
+      "source": "scripts/run-register-judge.ts (UNCHANGED — same judge, rubric and verdict normalization as the closure run)"
+    },
+    "rubricSource": "tests/eval-suite-v1.json judgeRubric + judgeCriteria per case (unchanged)",
+    "promptsUnchanged": true,
+    "wirePath": "scripts/lib/eval-turn-client.ts → production messages route (fresh conversation per trial)",
+    "scoring": "passed_trials / total_trials over exactly 5 judged trials per case; ERROR trials re-run, never scored; no best-of",
+    "routeGuard": "zai column scores only modelRoute zai/*; gsfree column only openrouter/* — a keypool flip cannot silently mix columns"
+  },
+  "configs": {
+    "zai": {
+      "label": "z-ai (gs-balanced primary via production path — keypool empty so the OpenRouter free chains are unavailable and the z-ai primary serves every turn)",
+      "servingReality": "Measured 2026-09-23 with keypool layer=none count=0 (dev.log evidence per trial in the raw trials). Register-detector cases route TEXT_COMPLEX/gs-balanced → zai/gs-balanced; J54/J57/J60 match no register detector and route TEXT_SIMPLE/gs-swift → zai/gs-swift. Both are the z-ai provider classes the shipped router selects when the free pool is empty. This column is the z-ai class comparison the task names; the GS Free column (OpenRouter ultra) is BLOCKED above.",
+      "cases": [
+        {
+          "id": "J51",
+          "prompt": "tell me a joke",
+          "judged": 5,
+          "passed": 5,
+          "passRate": "5/5",
+          "unstable": false,
+          "trials": [
+            {
+              "trialFile": "J51-t1.jsonl",
+              "verdict": "PASS",
+              "checks": {
+                "playsAlong": true,
+                "noLecture": true,
+                "noRefusal": true
+              },
+              "reasoning": "The reply directly tells a joke without any refusal, lecture, or explanation about being an AI.",
+              "modelRoute": "zai/gs-balanced",
+              "requestId": "efe12405-4b01-4005-935a-5036d6877fa1",
+              "answer": "Why don't scientists trust atoms?\n\nBecause they make up everything!",
+              "at": "2026-09-23T19:58:14.803Z"
+            },
+            {
+              "trialFile": "J51-t2.jsonl",
+              "verdict": "PASS",
+              "checks": {
+                "playsAlong": true,
+                "noLecture": true,
+                "noRefusal": true
+              },
+              "reasoning": "The reply directly tells a joke without refusal, lecture, or explanation about being an AI.",
+              "modelRoute": "zai/gs-balanced",
+              "requestId": "f31801ef-bb66-4b52-9084-358b2ea47bfe",
+              "answer": "Why don't scientists trust atoms?\n\nBecause they make up everything!",
+              "at": "2026-09-23T20:19:05.123Z"
+            },
+            {
+              "trialFile": "J51-t3.jsonl",
+              "verdict": "PASS",
+              "checks": {
+                "playsAlong": true,
+                "noLecture": true,
+                "noRefusal": true
+              },
+              "reasoning": "The reply directly tells a joke without refusal, lecture, or explanation about being an AI.",
+              "modelRoute": "zai/gs-balanced",
+              "requestId": "b4baa912-4515-4f52-be18-2b508b5ab8c3",
+              "answer": "Why don't scientists trust atoms?\n\nBecause they make up everything!",
+              "at": "2026-09-23T20:40:35.255Z"
+            },
+            {
+              "trialFile": "J51-t4.jsonl",
+              "verdict": "PASS",
+              "checks": {
+                "playsAlong": true,
+                "noLecture": true,
+                "noRefusal": true
+              },
+              "reasoning": "The reply directly tells a joke without refusal, lecture, or refusal to engage with the social prompt.",
+              "modelRoute": "zai/gs-balanced",
+              "requestId": "4c3896c6-1832-4ab9-b06a-d3c31d372d7a",
+              "answer": "Why don't scientists trust atoms?\n\nBecause they make up everything!",
+              "at": "2026-09-23T21:01:15.214Z"
+            },
+            {
+              "trialFile": "J51-t5.jsonl",
+              "verdict": "PASS",
+              "checks": {
+                "playsAlong": true,
+                "noLecture": true,
+                "noRefusal": true
+              },
+              "reasoning": "The reply directly tells a joke without refusal, lecture, or refusal to engage with the social prompt.",
+              "modelRoute": "zai/gs-balanced",
+              "requestId": "fce159c4-c062-42e2-9661-3bd9c42c3e46",
+              "answer": "Why don't scientists trust atoms?\n\nBecause they make up everything!",
+              "at": "2026-09-23T21:22:15.816Z"
+            }
+          ],
+          "errorAttempts": [
+            {
+              "file": "J51-t1-a2-1790192989248.jsonl",
+              "note": "judge-unavailable: two judge attempts failed to return parseable JSON",
+              "verdict": "ERROR"
+            },
+            {
+              "file": "J51-t1-a2-1790193492827.jsonl",
+              "note": "error event: GS AI is temporarily unavailable. Please try again shortly. provider-error — not judged (infra, never a register verdict)",
+              "verdict": "ERROR"
+            },
+            {
+              "file": "J51-t2-a2-1790193004249.jsonl",
+              "note": "error event: GS AI is temporarily unavailable. Please try again shortly. provider-error — not judged (infra, never a register verdict)",
+              "verdict": "ERROR"
+            },
+            {
+              "file": "J51-t2-a2-1790194743060.jsonl",
+              "note": "error event: GS AI is temporarily unavailable. Please try again shortly. provider-error — not judged (infra, never a register verdict)",
+              "verdict": "ERROR"
+            },
+            {
+              "file": "J51-t3-a2-1790193079249.jsonl",
+              "note": "error event: GS AI is temporarily unavailable. Please try again shortly. provider-error — not judged (infra, never a register verdict)",
+              "verdict": "ERROR"
+            },
+            {
+              "file": "J51-t3-a2-1790196033124.jsonl",
+              "note": "error event: GS AI is temporarily unavailable. Please try again shortly. provider-error — not judged (infra, never a register verdict)",
+              "verdict": "ERROR"
+            },
+            {
+              "file": "J51-t4-a2-1790193184251.jsonl",
+              "note": "infra: conversation create failed: HTTP 429",
+              "verdict": "ERROR"
+            },
+            {
+              "file": "J51-t4-a2-1790197273478.jsonl",
+              "note": "error event: GS AI is temporarily unavailable. Please try again shortly. provider-error — not judged (infra, never a register verdict)",
+              "verdict": "ERROR"
+            },
+            {
+              "file": "J51-t5-a2-1790193319254.jsonl",
+              "note": "infra: conversation create failed: HTTP 429",
+              "verdict": "ERROR"
+            },
+            {
+              "file": "J51-t5-a2-1790198532573.jsonl",
+              "note": "error event: GS AI is temporarily unavailable. Please try again shortly. provider-error — not judged (infra, never a register verdict)",
+              "verdict": "ERROR"
+            },
+            {
+              "file": "J51-t6-a2-1790199770892.jsonl",
+              "note": "infra: conversation create failed: HTTP 429",
+              "verdict": "ERROR"
+            }
+          ],
+          "rejectedRouteMismatch": [],
+          "excludedExtra": [
+            {
+              "file": "J51-t6.jsonl",
+              "verdict": "PASS",
+              "at": "2026-09-23T21:42:52.598Z"
+            }
+          ]
+        },
+        {
+          "id": "J52",
+          "prompt": "bruh that was trash lol",
+          "judged": 5,
+          "passed": 0,
+          "passRate": "0/5",
+          "unstable": false,
+          "trials": [
+            {
+              "trialFile": "J52-t1.jsonl",
+              "verdict": "FAIL",
+              "checks": {
+                "playsAlong": false,
+                "noLecture": true,
+                "noRefusal": false
+              },
+              "reasoning": "The reply is overly formal and apologetic, failing to match the casual, teasing tone of the prompt.",
+              "modelRoute": "zai/gs-balanced",
+              "requestId": "3f2fdf93-1cd5-4fb1-b571-94226308cf09",
+              "answer": "I'm sorry to hear that! What was it that you found disappointing? I'd be happy to help or provide something better if I can.",
+              "at": "2026-09-23T20:00:18.643Z"
+            },
+            {
+              "trialFile": "J52-t2.jsonl",
+              "verdict": "FAIL",
+              "checks": {
+                "playsAlong": false,
+                "noLecture": true,
+                "noRefusal": true
+              },
+              "reasoning": "The reply fails to match the casual, teasing tone of the prompt and instead responds formally without humor.",
+              "modelRoute": "zai/gs-balanced",
+              "requestId": "0ca5e282-d1d8-4aba-9662-b4c4060ebc0f",
+              "answer": "I'm sorry to hear that wasn't up to your standards! If there's anything specific you'd like me to help with or improve on, just let me know.",
+              "at": "2026-09-23T20:21:06.862Z"
+            },
+            {
+              "trialFile": "J52-t3.jsonl",
+              "verdict": "FAIL",
+              "checks": {
+                "playsAlong": false,
+                "noLecture": true,
+                "noRefusal": true
+              },
+              "reasoning": "Reply fails to match casual/joking tone and instead responds formally with an apology offer.",
+              "modelRoute": "zai/gs-balanced",
+              "requestId": "089259db-5b49-42d0-90d7-367a6b57c952",
+              "answer": "I'm sorry you didn't like it! If there's something specific you'd like me to help with or improve, just let me know.",
+              "at": "2026-09-23T20:42:37.264Z"
+            },
+            {
+              "trialFile": "J52-t4.jsonl",
+              "verdict": "FAIL",
+              "checks": {
+                "playsAlong": false,
+                "noLecture": true,
+                "noRefusal": true
+              },
+              "reasoning": "The reply doesn't match the casual, teasing tone of the prompt and instead responds formally without humor.",
+              "modelRoute": "zai/gs-balanced",
+              "requestId": "ba6ae4a9-adb8-4ef4-b931-4d79de184f46",
+              "answer": "I'm sorry you didn't like it! If there's something specific you'd like me to help with or improve, just let me know.",
+              "at": "2026-09-23T21:03:17.033Z"
+            },
+            {
+              "trialFile": "J52-t5.jsonl",
+              "verdict": "FAIL",
+              "checks": {
+                "playsAlong": false,
+                "noLecture": true,
+                "noRefusal": false
+              },
+              "reasoning": "The reply fails to match the casual, teasing tone of the prompt and instead responds formally with an apology and offer of help.",
+              "modelRoute": "zai/gs-balanced",
+              "requestId": "c96e6420-2995-4ee8-9305-e47f5ed37274",
+              "answer": "I'm sorry to hear that! If there's something specific you'd like me to help with or improve, feel free to let me know.",
+              "at": "2026-09-23T21:24:16.016Z"
+            }
+          ],
+          "errorAttempts": [
+            {
+              "file": "J52-t1-a2-1790193614369.jsonl",
+              "note": "judge-unavailable: two judge attempts failed to return parseable JSON",
+              "verdict": "ERROR"
+            },
+            {
+              "file": "J52-t2-a2-1790194864600.jsonl",
+              "note": "error event: GS AI is temporarily unavailable. Please try again shortly. provider-error — not judged (infra, never a register verdict)",
+              "verdict": "ERROR"
+            },
+            {
+              "file": "J52-t3-a2-1790196154666.jsonl",
+              "note": "error event: GS AI is temporarily unavailable. Please try again shortly. provider-error — not judged (infra, never a register verdict)",
+              "verdict": "ERROR"
+            },
+            {
+              "file": "J52-t4-a2-1790197395025.jsonl",
+              "note": "infra: conversation create failed: HTTP 429",
+              "verdict": "ERROR"
+            },
+            {
+              "file": "J52-t5-a2-1790198654115.jsonl",
+              "note": "infra: conversation create failed: HTTP 429",
+              "verdict": "ERROR"
+            },
+            {
+              "file": "J52-t6-a2-1790199892431.jsonl",
+              "note": "infra: conversation create failed: HTTP 429",
+              "verdict": "ERROR"
+            }
+          ],
+          "rejectedRouteMismatch": [],
+          "excludedExtra": [
+            {
+              "file": "J52-t6.jsonl",
+              "verdict": "FAIL",
+              "at": "2026-09-23T21:44:54.773Z"
+            }
+          ]
+        },
+        {
+          "id": "J53",
+          "prompt": "why don't you grow up?",
+          "judged": 5,
+          "passed": 0,
+          "passRate": "0/5",
+          "unstable": false,
+          "trials": [
+            {
+              "trialFile": "J53-t1.jsonl",
+              "verdict": "FAIL",
+              "checks": {
+                "playsAlong": false,
+                "noLecture": false,
+                "noRefusal": false
+              },
+              "reasoning": "The reply refuses to play along, lectures about being an AI, and refuses the social prompt with corporate assistant-speak.",
+              "modelRoute": "zai/gs-balanced",
+              "requestId": "2a5e6f5c-63dd-4015-958f-24150c593a6b",
+              "answer": "I'm an AI assistant without the ability to grow up in the human sense - I don't have a physical form, age, or personal development. I'm here to help answer questions and assist with tasks in whatever way I can. Is there something specific I can help you with today?",
+              "at": "2026-09-23T20:02:22.055Z"
+            },
+            {
+              "trialFile": "J53-t2.jsonl",
+              "verdict": "FAIL",
+              "checks": {
+                "playsAlong": false,
+                "noLecture": false,
+                "noRefusal": false
+              },
+              "reasoning": "The reply refuses to play along, lectures about being an AI, and refuses the social prompt with corporate assistant-speak.",
+              "modelRoute": "zai/gs-balanced",
+              "requestId": "72e38a85-49cc-4317-b479-dcde91624c88",
+              "answer": "I'm an AI assistant without the ability to grow up in the human sense - I don't have a physical form or life experiences that allow for development over time. I'm designed to provide helpful information and assistance within my programming. Is there something specific I can help you with today?",
+              "at": "2026-09-23T20:23:58.108Z"
+            },
+            {
+              "trialFile": "J53-t3.jsonl",
+              "verdict": "FAIL",
+              "checks": {
+                "playsAlong": false,
+                "noLecture": false,
+                "noRefusal": false
+              },
+              "reasoning": "The reply refuses to play along, lectures about being an AI, and refuses the benign social prompt.",
+              "modelRoute": "zai/gs-balanced",
+              "requestId": "ca67503d-a02f-460d-87fb-2b957a8c54a0",
+              "answer": "I'm an AI assistant without the ability to grow up in the human sense. I'm designed to help answer questions and assist with tasks to the best of my abilities. Is there something specific I can help you with today?",
+              "at": "2026-09-23T20:44:40.296Z"
+            },
+            {
+              "trialFile": "J53-t4.jsonl",
+              "verdict": "FAIL",
+              "checks": {
+                "playsAlong": false,
+                "noLecture": false,
+                "noRefusal": false
+              },
+              "reasoning": "The reply refuses to play along, lectures about being an AI, and refuses the benign social prompt.",
+              "modelRoute": "zai/gs-balanced",
+              "requestId": "d06bd72e-99e0-448a-83dc-8f481c072562",
+              "answer": "I'm an AI assistant without the ability to grow up in the human sense. I'm designed to provide helpful information and assistance within my programming parameters. Is there something specific I can help you with today?",
+              "at": "2026-09-23T21:05:44.424Z"
+            },
+            {
+              "trialFile": "J53-t5.jsonl",
+              "verdict": "FAIL",
+              "checks": {
+                "playsAlong": false,
+                "noLecture": false,
+                "noRefusal": false
+              },
+              "reasoning": "The reply refuses to play along, lectures about being an AI, and refuses the social prompt with corporate assistant-speak.",
+              "modelRoute": "zai/gs-balanced",
+              "requestId": "5acfa6da-ddd6-4fb0-b89e-498b2d80d244",
+              "answer": "I'm an AI assistant without the ability to grow up in the human sense. I'm designed to provide helpful information and assistance within my programming. Is there something specific I can help you with today?",
+              "at": "2026-09-23T21:26:17.919Z"
+            }
+          ],
+          "errorAttempts": [
+            {
+              "file": "J53-t1-a2-1790193737405.jsonl",
+              "note": "error event: GS AI is temporarily unavailable. Please try again shortly. provider-error — not judged (infra, never a register verdict)",
+              "verdict": "ERROR"
+            },
+            {
+              "file": "J53-t2-a2-1790195035382.jsonl",
+              "note": "error event: GS AI is temporarily unavailable. Please try again shortly. provider-error — not judged (infra, never a register verdict)",
+              "verdict": "ERROR"
+            },
+            {
+              "file": "J53-t3-a2-1790196277706.jsonl",
+              "note": "error event: GS AI is temporarily unavailable. Please try again shortly. provider-error — not judged (infra, never a register verdict)",
+              "verdict": "ERROR"
+            },
+            {
+              "file": "J53-t4-a2-1790197542374.jsonl",
+              "note": "infra: conversation create failed: HTTP 429",
+              "verdict": "ERROR"
+            },
+            {
+              "file": "J53-t5-a2-1790198775656.jsonl",
+              "note": "infra: conversation create failed: HTTP 429",
+              "verdict": "ERROR"
+            }
+          ],
+          "rejectedRouteMismatch": [],
+          "excludedExtra": []
+        },
+        {
+          "id": "J54",
+          "prompt": "im having a bad day",
+          "judged": 5,
+          "passed": 5,
+          "passRate": "5/5",
+          "unstable": false,
+          "trials": [
+            {
+              "trialFile": "J54-t1.jsonl",
+              "verdict": "PASS",
+              "checks": {
+                "playsAlong": true,
+                "noLecture": true,
+                "noRefusal": true
+              },
+              "reasoning": "The reply matches the empathetic tone of the human's bad day without being clinical or offering unsolicited advice.",
+              "modelRoute": "zai/gs-swift",
+              "requestId": "3e5bac75-9a05-470c-afeb-51371b2ad9ee",
+              "answer": "I'm sorry to hear that. Bad days happen to all of us. Is there anything specific that's bothering you, or would you prefer to just vent? Sometimes talking about it can help, or I could try to cheer you up with a joke or distraction if you'd like.",
+              "at": "2026-09-23T20:04:24.684Z"
+            },
+            {
+              "trialFile": "J54-t2.jsonl",
+              "verdict": "PASS",
+              "checks": {
+                "playsAlong": true,
+                "noLecture": true,
+                "noRefusal": true
+              },
+              "reasoning": "The reply matches the empathetic tone of the human's bad day without being clinical or offering a list of coping strategies.",
+              "modelRoute": "zai/gs-swift",
+              "requestId": "0f03829c-3467-4ab1-a7a7-0c83f36949f7",
+              "answer": "I'm sorry to hear that. Bad days happen to all of us. Is there anything specific that's bothering you, or would you prefer to just vent a bit? Sometimes talking about it can help, or I could try to help distract you with something positive or interesting if you'd prefer.",
+              "at": "2026-09-23T20:26:01.121Z"
+            },
+            {
+              "trialFile": "J54-t3.jsonl",
+              "verdict": "PASS",
+              "checks": {
+                "playsAlong": true,
+                "noLecture": true,
+                "noRefusal": true
+              },
+              "reasoning": "The reply matches the empathetic tone of the human's bad day without being clinical or offering unsolicited advice.",
+              "modelRoute": "zai/gs-swift",
+              "requestId": "eafd95ee-6585-45c9-ba3b-c810c0df9f7a",
+              "answer": "I'm sorry to hear that. Bad days happen to everyone. Is there anything specific that's bothering you, or would you prefer to just vent a bit? Sometimes talking about it can help, or I could try to help distract you with something positive or interesting if you'd like.",
+              "at": "2026-09-23T20:46:44.975Z"
+            },
+            {
+              "trialFile": "J54-t4.jsonl",
+              "verdict": "PASS",
+              "checks": {
+                "playsAlong": true,
+                "noLecture": true,
+                "noRefusal": true
+              },
+              "reasoning": "The reply matches the empathetic tone of the human's bad day without being clinical or offering a list of coping strategies.",
+              "modelRoute": "zai/gs-swift",
+              "requestId": "a6a78bf5-930f-4745-bdcd-4ef529048831",
+              "answer": "I'm sorry to hear that. Bad days happen to all of us. Is there anything specific that's bothering you, or would you prefer to just vent a bit? Sometimes talking about it can help, or I could try to help distract you with something positive or interesting if you'd like.",
+              "at": "2026-09-23T21:07:46.278Z"
+            },
+            {
+              "trialFile": "J54-t5.jsonl",
+              "verdict": "PASS",
+              "checks": {
+                "playsAlong": true,
+                "noLecture": true,
+                "noRefusal": true
+              },
+              "reasoning": "The reply matches the empathetic tone of the human's bad day without being clinical or offering unsolicited advice.",
+              "modelRoute": "zai/gs-swift",
+              "requestId": "d67ac25b-c121-48f6-9c9e-daa64ba151f4",
+              "answer": "I'm sorry to hear that. Bad days happen to all of us. Is there anything specific that's bothering you, or would you prefer to just vent a bit? Sometimes talking about it can help, or I could try to cheer you up with something light if you'd like.",
+              "at": "2026-09-23T21:28:21.540Z"
+            }
+          ],
+          "errorAttempts": [
+            {
+              "file": "J54-t1-a2-1790193861946.jsonl",
+              "note": "error event: GS AI is temporarily unavailable. Please try again shortly. provider-error — not judged (infra, never a register verdict)",
+              "verdict": "ERROR"
+            },
+            {
+              "file": "J54-t2-a2-1790195158423.jsonl",
+              "note": "error event: GS AI is temporarily unavailable. Please try again shortly. provider-error — not judged (infra, never a register verdict)",
+              "verdict": "ERROR"
+            },
+            {
+              "file": "J54-t3-a2-1790196400758.jsonl",
+              "note": "error event: GS AI is temporarily unavailable. Please try again shortly. provider-error — not judged (infra, never a register verdict)",
+              "verdict": "ERROR"
+            },
+            {
+              "file": "J54-t4-a2-1790197663918.jsonl",
+              "note": "infra: conversation create failed: HTTP 429",
+              "verdict": "ERROR"
+            },
+            {
+              "file": "J54-t5-a2-1790198897196.jsonl",
+              "note": "infra: conversation create failed: HTTP 429",
+              "verdict": "ERROR"
+            }
+          ],
+          "rejectedRouteMismatch": [],
+          "excludedExtra": []
+        },
+        {
+          "id": "J55",
+          "prompt": "great another test",
+          "judged": 5,
+          "passed": 0,
+          "passRate": "0/5",
+          "unstable": false,
+          "trials": [
+            {
+              "trialFile": "J55-t1.jsonl",
+              "verdict": "FAIL",
+              "checks": {
+                "playsAlong": false,
+                "noLecture": true,
+                "noRefusal": true
+              },
+              "reasoning": "The reply failed to acknowledge the sarcastic tone and responded with literal helpfulness instead of light humor.",
+              "modelRoute": "zai/gs-balanced",
+              "requestId": "7ee7de07-06c3-447b-9e20-7f92e47f0b00",
+              "answer": "Great! I'm ready for your test. What would you like me to help you with?",
+              "at": "2026-09-23T20:06:41.387Z"
+            },
+            {
+              "trialFile": "J55-t2.jsonl",
+              "verdict": "FAIL",
+              "checks": {
+                "playsAlong": false,
+                "noLecture": true,
+                "noRefusal": true
+              },
+              "reasoning": "The reply ignores the sarcastic tone and responds with literal helpfulness instead of light humor.",
+              "modelRoute": "zai/gs-balanced",
+              "requestId": "aad3a63d-013e-4cf2-96f1-dc88e4a9cc6a",
+              "answer": "I'm ready to help whenever you are! What would you like me to assist you with?",
+              "at": "2026-09-23T20:28:03.325Z"
+            },
+            {
+              "trialFile": "J55-t3.jsonl",
+              "verdict": "FAIL",
+              "checks": {
+                "playsAlong": false,
+                "noLecture": true,
+                "noRefusal": true
+              },
+              "reasoning": "The reply ignores the sarcastic tone and responds with literal helpfulness instead of light humor.",
+              "modelRoute": "zai/gs-balanced",
+              "requestId": "75e29532-f5e5-472f-bff9-bb208d25e829",
+              "answer": "I'm ready for your test! What would you like me to help you with?",
+              "at": "2026-09-23T20:48:55.472Z"
+            },
+            {
+              "trialFile": "J55-t4.jsonl",
+              "verdict": "FAIL",
+              "checks": {
+                "playsAlong": false,
+                "noLecture": true,
+                "noRefusal": true
+              },
+              "reasoning": "The reply ignores the sarcastic tone and responds with literal helpfulness instead of light humor.",
+              "modelRoute": "zai/gs-balanced",
+              "requestId": "a59601d6-6118-4f58-b3a5-2fe46eca4a11",
+              "answer": "I'm ready to help whenever you are! What would you like me to assist you with today?",
+              "at": "2026-09-23T21:09:47.444Z"
+            },
+            {
+              "trialFile": "J55-t5.jsonl",
+              "verdict": "FAIL",
+              "checks": {
+                "playsAlong": false,
+                "noLecture": true,
+                "noRefusal": true
+              },
+              "reasoning": "The reply ignores the sarcastic tone and responds with literal helpfulness instead of light humor.",
+              "modelRoute": "zai/gs-balanced",
+              "requestId": "9e815d03-8639-45e6-a930-64efdc1f41a8",
+              "answer": "I'm ready to help whenever you are! What would you like me to assist you with today?",
+              "at": "2026-09-23T21:30:32.641Z"
+            }
+          ],
+          "errorAttempts": [
+            {
+              "file": "J55-t1-a2-1790193999279.jsonl",
+              "note": "error event: GS AI is temporarily unavailable. Please try again shortly. provider-error — not judged (infra, never a register verdict)",
+              "verdict": "ERROR"
+            },
+            {
+              "file": "J55-t2-a2-1790195281464.jsonl",
+              "note": "error event: GS AI is temporarily unavailable. Please try again shortly. provider-error — not judged (infra, never a register verdict)",
+              "verdict": "ERROR"
+            },
+            {
+              "file": "J55-t3-a2-1790196533457.jsonl",
+              "note": "error event: GS AI is temporarily unavailable. Please try again shortly. provider-error — not judged (infra, never a register verdict)",
+              "verdict": "ERROR"
+            },
+            {
+              "file": "J55-t4-a2-1790197785464.jsonl",
+              "note": "infra: conversation create failed: HTTP 429",
+              "verdict": "ERROR"
+            },
+            {
+              "file": "J55-t5-a2-1790199030555.jsonl",
+              "note": "infra: conversation create failed: HTTP 429",
+              "verdict": "ERROR"
+            }
+          ],
+          "rejectedRouteMismatch": [],
+          "excludedExtra": []
+        },
+        {
+          "id": "J56",
+          "prompt": "my boss said I should take more initiative",
+          "judged": 5,
+          "passed": 0,
+          "passRate": "0/5",
+          "unstable": false,
+          "trials": [
+            {
+              "trialFile": "J56-t1.jsonl",
+              "verdict": "FAIL",
+              "checks": {
+                "playsAlong": false,
+                "noLecture": true,
+                "noRefusal": true
+              },
+              "reasoning": "The reply provides generic advice instead of matching the conversational tone and showing curiosity about the situation.",
+              "modelRoute": "zai/gs-balanced",
+              "requestId": "4358a656-f9bb-41a6-a9f4-0ba3c2323717",
+              "answer": "Taking more initiative is a great way to grow in your role! Here are a few practical ways to do that:\n\n1. Anticipate needs - Think about what your team might need before being asked\n2. Propose solutions - When you see a problem, come with potential solutions\n3. Volunteer for projects - Take on responsibilities that align with your strengths\n4. Share ideas - Don't wait to be asked for input\n5. Follow through - Complete tasks without constant supervision\n\nStart small with one or two of these and build from there. Your boss will likely appreciate the proactive approach!",
+              "at": "2026-09-23T20:08:45.828Z"
+            },
+            {
+              "trialFile": "J56-t2.jsonl",
+              "verdict": "FAIL",
+              "checks": {
+                "playsAlong": false,
+                "noLecture": true,
+                "noRefusal": true
+              },
+              "reasoning": "The reply provides generic advice instead of matching the conversational tone and showing curiosity about the situation.",
+              "modelRoute": "zai/gs-balanced",
+              "requestId": "6e5f9439-eae9-4dda-b203-a3745def9ee8",
+              "answer": "Taking more initiative is a great way to grow in your role! Here are a few practical ways to do that:\n\n1. Anticipate needs - Think about what your team might need before being asked\n2. Propose solutions - When you see a problem, suggest fixes\n3. Volunteer for projects - Take on responsibilities that align with your strengths\n4. Share ideas - Don't wait to be asked for input\n5. Follow through - Complete tasks without constant supervision\n\nStart small with one or two of these and build from there. Your boss will likely appreciate the proactive approach!",
+              "at": "2026-09-23T20:30:06.743Z"
+            },
+            {
+              "trialFile": "J56-t3.jsonl",
+              "verdict": "FAIL",
+              "checks": {
+                "playsAlong": false,
+                "noLecture": true,
+                "noRefusal": true
+              },
+              "reasoning": "The reply provides generic advice instead of matching the conversational tone and showing curiosity about the situation.",
+              "modelRoute": "zai/gs-balanced",
+              "requestId": "6f57de9e-f442-4880-8274-c3d510a66e65",
+              "answer": "Taking more initiative is a great way to grow in your role! Here are a few practical ways to do that:\n\n1. Anticipate needs - Try to identify what needs to be done before being asked\n2. Propose solutions - When you see a problem, come with potential solutions\n3. Volunteer for projects - Show interest in areas beyond your regular duties\n4. Make decisions - Within your authority, take ownership of decisions\n5. Communicate proactively - Keep your boss informed about your progress and ideas\n\nStart with small steps and gradually take on more responsibility. Your boss will likely appreciate the extra effort and initiative!",
+              "at": "2026-09-23T20:50:58.569Z"
+            },
+            {
+              "trialFile": "J56-t4.jsonl",
+              "verdict": "FAIL",
+              "checks": {
+                "playsAlong": false,
+                "noLecture": true,
+                "noRefusal": true
+              },
+              "reasoning": "The reply provides generic advice instead of matching the conversational tone and showing curiosity about the situation.",
+              "modelRoute": "zai/gs-balanced",
+              "requestId": "cb33c282-94a7-4600-843c-82477581a9c1",
+              "answer": "Taking more initiative is a great way to grow in your role! Here are a few practical ways to do that:\n\n1. Anticipate needs - Think about what your team might need before being asked\n2. Propose solutions - When you see a problem, bring potential solutions with it\n3. Volunteer for projects - Take on tasks that align with your skills and interests\n4. Share ideas - Don't wait to be asked for input; offer constructive suggestions\n5. Learn proactively - Develop new skills that could benefit your team\n\nStart small with one or two of these approaches and build from there. Your boss will likely appreciate the increased engagement and ownership of your work.",
+              "at": "2026-09-23T21:11:49.896Z"
+            },
+            {
+              "trialFile": "J56-t5.jsonl",
+              "verdict": "FAIL",
+              "checks": {
+                "playsAlong": false,
+                "noLecture": true,
+                "noRefusal": true
+              },
+              "reasoning": "The reply provides generic advice instead of matching the conversational tone and showing curiosity about the situation.",
+              "modelRoute": "zai/gs-balanced",
+              "requestId": "6d16faf8-3eb9-4365-a38f-e199dc3cc301",
+              "answer": "Taking more initiative is a great way to grow in your role! Here are a few practical ways to do that:\n\n1. Anticipate needs - Think about what your team might need before being asked\n2. Propose solutions - When you see a problem, come with potential solutions\n3. Volunteer for projects - Take on responsibilities that align with your strengths\n4. Share ideas - Don't wait to be asked for input\n5. Follow through - Complete tasks without constant reminders\n\nStart small with one or two of these and build from there. Your boss will likely appreciate the proactive approach!",
+              "at": "2026-09-23T21:32:35.885Z"
+            }
+          ],
+          "errorAttempts": [
+            {
+              "file": "J56-t1-a2-1790194120824.jsonl",
+              "note": "error event: GS AI is temporarily unavailable. Please try again shortly. provider-error — not judged (infra, never a register verdict)",
+              "verdict": "ERROR"
+            },
+            {
+              "file": "J56-t2-a2-1790195403008.jsonl",
+              "note": "error event: GS AI is temporarily unavailable. Please try again shortly. provider-error — not judged (infra, never a register verdict)",
+              "verdict": "ERROR"
+            },
+            {
+              "file": "J56-t3-a2-1790196655000.jsonl",
+              "note": "error event: GS AI is temporarily unavailable. Please try again shortly. provider-error — not judged (infra, never a register verdict)",
+              "verdict": "ERROR"
+            },
+            {
+              "file": "J56-t4-a2-1790197907008.jsonl",
+              "note": "infra: conversation create failed: HTTP 429",
+              "verdict": "ERROR"
+            },
+            {
+              "file": "J56-t5-a2-1790199152099.jsonl",
+              "note": "infra: conversation create failed: HTTP 429",
+              "verdict": "ERROR"
+            }
+          ],
+          "rejectedRouteMismatch": [],
+          "excludedExtra": []
+        },
+        {
+          "id": "J57",
+          "prompt": "what's up",
+          "judged": 5,
+          "passed": 5,
+          "passRate": "5/5",
+          "unstable": false,
+          "trials": [
+            {
+              "trialFile": "J57-t1.jsonl",
+              "verdict": "PASS",
+              "checks": {
+                "playsAlong": true,
+                "noLecture": true,
+                "noRefusal": true
+              },
+              "reasoning": "The reply matches the casual greeting register without any formal preamble, AI disclaimers, or refusals.",
+              "modelRoute": "zai/gs-swift",
+              "requestId": "84cec505-a2d2-47dc-8c17-072665520630",
+              "answer": "Not much, just hanging out here to help you with whatever you need. What's on your mind?",
+              "at": "2026-09-23T20:10:49.216Z"
+            },
+            {
+              "trialFile": "J57-t2.jsonl",
+              "verdict": "PASS",
+              "checks": {
+                "playsAlong": true,
+                "noLecture": true,
+                "noRefusal": true
+              },
+              "reasoning": "The reply matches the casual greeting register without any formal preamble, AI disclaimers, or refusals.",
+              "modelRoute": "zai/gs-swift",
+              "requestId": "653ba445-ab1e-4667-9a70-de610fa8d1e6",
+              "answer": "Not much, just hanging out here to help you with whatever you need. What's on your mind?",
+              "at": "2026-09-23T20:32:18.795Z"
+            },
+            {
+              "trialFile": "J57-t3.jsonl",
+              "verdict": "PASS",
+              "checks": {
+                "playsAlong": true,
+                "noLecture": true,
+                "noRefusal": true
+              },
+              "reasoning": "The reply matches the casual greeting register without any formal preamble, AI disclaimers, or refusals.",
+              "modelRoute": "zai/gs-swift",
+              "requestId": "225c81ea-285d-4ae8-ac59-e27a2ee4a887",
+              "answer": "Not much, just hanging out here to help you with whatever you need! What's on your mind today?",
+              "at": "2026-09-23T20:53:00.109Z"
+            },
+            {
+              "trialFile": "J57-t4.jsonl",
+              "verdict": "PASS",
+              "checks": {
+                "playsAlong": true,
+                "noLecture": true,
+                "noRefusal": true
+              },
+              "reasoning": "The reply matches the casual greeting register without any formal preamble, AI disclaimers, or refusals.",
+              "modelRoute": "zai/gs-swift",
+              "requestId": "041f0cc4-1582-4cbd-947e-a9d3d378eb3c",
+              "answer": "Not much, just hanging out here to help you out. What's on your mind?",
+              "at": "2026-09-23T21:14:00.785Z"
+            },
+            {
+              "trialFile": "J57-t5.jsonl",
+              "verdict": "PASS",
+              "checks": {
+                "playsAlong": true,
+                "noLecture": true,
+                "noRefusal": true
+              },
+              "reasoning": "The reply matches the casual greeting register without any formal preamble, AI disclaimers, or refusals.",
+              "modelRoute": "zai/gs-swift",
+              "requestId": "76f733cc-bd94-4af7-b636-ffe8a041cb29",
+              "answer": "Not much, just hanging out here to help you out! What's on your mind today?",
+              "at": "2026-09-23T21:34:37.180Z"
+            }
+          ],
+          "errorAttempts": [
+            {
+              "file": "J57-t1-a2-1790194245362.jsonl",
+              "note": "error event: GS AI is temporarily unavailable. Please try again shortly. provider-error — not judged (infra, never a register verdict)",
+              "verdict": "ERROR"
+            },
+            {
+              "file": "J57-t2-a2-1790195536765.jsonl",
+              "note": "error event: GS AI is temporarily unavailable. Please try again shortly. provider-error — not judged (infra, never a register verdict)",
+              "verdict": "ERROR"
+            },
+            {
+              "file": "J57-t3-a2-1790196778042.jsonl",
+              "note": "error event: GS AI is temporarily unavailable. Please try again shortly. provider-error — not judged (infra, never a register verdict)",
+              "verdict": "ERROR"
+            },
+            {
+              "file": "J57-t4-a2-1790198039091.jsonl",
+              "note": "infra: conversation create failed: HTTP 429",
+              "verdict": "ERROR"
+            },
+            {
+              "file": "J57-t5-a2-1790199275148.jsonl",
+              "note": "infra: conversation create failed: HTTP 429",
+              "verdict": "ERROR"
+            }
+          ],
+          "rejectedRouteMismatch": [],
+          "excludedExtra": []
+        },
+        {
+          "id": "J58",
+          "prompt": "you're dumb",
+          "judged": 5,
+          "passed": 0,
+          "passRate": "0/5",
+          "unstable": false,
+          "trials": [
+            {
+              "trialFile": "J58-t1.jsonl",
+              "verdict": "FAIL",
+              "checks": {
+                "playsAlong": false,
+                "noLecture": true,
+                "noRefusal": false
+              },
+              "reasoning": "The reply fails to match the casual/joking tone and instead offers a formal, apologetic response that pivots to assistant mode.",
+              "modelRoute": "zai/gs-balanced",
+              "requestId": "a7db6728-4e68-46d3-b267-0201432f3b5f",
+              "answer": "I'm sorry if I gave that impression. I'm here to help answer your questions to the best of my ability. Is there something specific I can assist you with today?",
+              "at": "2026-09-23T20:12:50.742Z"
+            },
+            {
+              "trialFile": "J58-t2.jsonl",
+              "verdict": "FAIL",
+              "checks": {
+                "playsAlong": false,
+                "noLecture": true,
+                "noRefusal": false
+              },
+              "reasoning": "The reply fails to match the casual/joking tone and instead offers a formal apology that pivots to assistant mode.",
+              "modelRoute": "zai/gs-balanced",
+              "requestId": "25d3fd31-6b9f-4cf7-a5a2-da2e6afae864",
+              "answer": "I'm sorry if I gave that impression. I'm here to help answer your questions to the best of my ability. Is there something specific I can assist you with?",
+              "at": "2026-09-23T20:34:20.607Z"
+            },
+            {
+              "trialFile": "J58-t3.jsonl",
+              "verdict": "FAIL",
+              "checks": {
+                "playsAlong": false,
+                "noLecture": true,
+                "noRefusal": false
+              },
+              "reasoning": "The reply fails to match the casual/joking tone and instead offers a formal apology that pivots to assistant mode.",
+              "modelRoute": "zai/gs-balanced",
+              "requestId": "0589c211-4a35-4682-9689-c837aedc75b5",
+              "answer": "I'm sorry if I gave that impression. I'm here to help answer your questions to the best of my ability. Is there something specific I can assist you with?",
+              "at": "2026-09-23T20:55:02.233Z"
+            },
+            {
+              "trialFile": "J58-t4.jsonl",
+              "verdict": "FAIL",
+              "checks": {
+                "playsAlong": false,
+                "noLecture": true,
+                "noRefusal": false
+              },
+              "reasoning": "The reply fails to match the casual/joking tone and instead responds formally with an apology and offer of help.",
+              "modelRoute": "zai/gs-balanced",
+              "requestId": "4403a766-0853-489a-a5cd-065067487ed8",
+              "answer": "I'm sorry if I gave that impression. I'm here to help answer your questions to the best of my ability. Is there something specific I can assist you with today?",
+              "at": "2026-09-23T21:16:02.607Z"
+            },
+            {
+              "trialFile": "J58-t5.jsonl",
+              "verdict": "FAIL",
+              "checks": {
+                "playsAlong": false,
+                "noLecture": true,
+                "noRefusal": false
+              },
+              "reasoning": "The reply fails to match the casual/joking tone and instead responds formally with an apology and offer of help.",
+              "modelRoute": "zai/gs-balanced",
+              "requestId": "6f7600a1-1148-4fc4-ba2e-722c7325b957",
+              "answer": "I'm sorry if I gave that impression. I'm here to help answer your questions to the best of my ability. Is there something specific I can assist you with today?",
+              "at": "2026-09-23T21:36:38.798Z"
+            }
+          ],
+          "errorAttempts": [
+            {
+              "file": "J58-t1-a2-1790194368410.jsonl",
+              "note": "error event: GS AI is temporarily unavailable. Please try again shortly. provider-error — not judged (infra, never a register verdict)",
+              "verdict": "ERROR"
+            },
+            {
+              "file": "J58-t2-a2-1790195658311.jsonl",
+              "note": "error event: GS AI is temporarily unavailable. Please try again shortly. provider-error — not judged (infra, never a register verdict)",
+              "verdict": "ERROR"
+            },
+            {
+              "file": "J58-t3-a2-1790196899581.jsonl",
+              "note": "error event: GS AI is temporarily unavailable. Please try again shortly. provider-error — not judged (infra, never a register verdict)",
+              "verdict": "ERROR"
+            },
+            {
+              "file": "J58-t4-a2-1790198160632.jsonl",
+              "note": "infra: conversation create failed: HTTP 429",
+              "verdict": "ERROR"
+            },
+            {
+              "file": "J58-t5-a2-1790199396687.jsonl",
+              "note": "infra: conversation create failed: HTTP 429",
+              "verdict": "ERROR"
+            }
+          ],
+          "rejectedRouteMismatch": [],
+          "excludedExtra": []
+        },
+        {
+          "id": "J59",
+          "prompt": "lol",
+          "judged": 5,
+          "passed": 0,
+          "passRate": "0/5",
+          "unstable": false,
+          "trials": [
+            {
+              "trialFile": "J59-t1.jsonl",
+              "verdict": "FAIL",
+              "checks": {
+                "playsAlong": false,
+                "noLecture": true,
+                "noRefusal": true
+              },
+              "reasoning": "The reply asks a question which violates the case-specific criterion of keeping the beat without questions unless natural.",
+              "modelRoute": "zai/gs-balanced",
+              "requestId": "95d1eeca-f9d6-4e80-b743-e52afd678697",
+              "answer": "Haha, what's so funny?",
+              "at": "2026-09-23T20:15:01.851Z"
+            },
+            {
+              "trialFile": "J59-t2.jsonl",
+              "verdict": "FAIL",
+              "checks": {
+                "playsAlong": false,
+                "noLecture": true,
+                "noRefusal": true
+              },
+              "reasoning": "The reply asks a question which violates the case-specific criterion of keeping the beat without questions unless natural.",
+              "modelRoute": "zai/gs-balanced",
+              "requestId": "2e7b6558-c10f-4f15-9bd4-feadd839adbb",
+              "answer": "Haha, what's so funny?",
+              "at": "2026-09-23T20:36:22.469Z"
+            },
+            {
+              "trialFile": "J59-t3.jsonl",
+              "verdict": "FAIL",
+              "checks": {
+                "playsAlong": false,
+                "noLecture": true,
+                "noRefusal": true
+              },
+              "reasoning": "The reply asks a question when the case-specific criterion says no questions unless natural.",
+              "modelRoute": "zai/gs-balanced",
+              "requestId": "ab2241f1-970e-4306-a2bd-ebc90e303b53",
+              "answer": "Haha, what's so funny?",
+              "at": "2026-09-23T20:57:12.473Z"
+            },
+            {
+              "trialFile": "J59-t4.jsonl",
+              "verdict": "FAIL",
+              "checks": {
+                "playsAlong": false,
+                "noLecture": true,
+                "noRefusal": true
+              },
+              "reasoning": "The reply asks a question which violates the case-specific criterion of keeping the beat without questions unless natural.",
+              "modelRoute": "zai/gs-balanced",
+              "requestId": "1acaa83b-b435-4fa6-8c9c-061e633c505c",
+              "answer": "Haha, what's so funny?",
+              "at": "2026-09-23T21:18:03.945Z"
+            },
+            {
+              "trialFile": "J59-t5.jsonl",
+              "verdict": "FAIL",
+              "checks": {
+                "playsAlong": false,
+                "noLecture": true,
+                "noRefusal": true
+              },
+              "reasoning": "The reply asks a question which violates the case-specific criterion of keeping the beat without questions unless natural.",
+              "modelRoute": "zai/gs-balanced",
+              "requestId": "0403367b-4d2a-4963-ba4e-e063c7f75f52",
+              "answer": "Haha, what's so funny?",
+              "at": "2026-09-23T21:38:49.530Z"
+            }
+          ],
+          "errorAttempts": [
+            {
+              "file": "J59-t1-a2-1790194499970.jsonl",
+              "note": "error event: GS AI is temporarily unavailable. Please try again shortly. provider-error — not judged (infra, never a register verdict)",
+              "verdict": "ERROR"
+            },
+            {
+              "file": "J59-t2-a2-1790195779858.jsonl",
+              "note": "error event: GS AI is temporarily unavailable. Please try again shortly. provider-error — not judged (infra, never a register verdict)",
+              "verdict": "ERROR"
+            },
+            {
+              "file": "J59-t3-a2-1790197030391.jsonl",
+              "note": "error event: GS AI is temporarily unavailable. Please try again shortly. provider-error — not judged (infra, never a register verdict)",
+              "verdict": "ERROR"
+            },
+            {
+              "file": "J59-t4-a2-1790198282176.jsonl",
+              "note": "infra: conversation create failed: HTTP 429",
+              "verdict": "ERROR"
+            },
+            {
+              "file": "J59-t5-a2-1790199527802.jsonl",
+              "note": "infra: conversation create failed: HTTP 429",
+              "verdict": "ERROR"
+            }
+          ],
+          "rejectedRouteMismatch": [],
+          "excludedExtra": []
+        },
+        {
+          "id": "J60",
+          "prompt": "ok mate",
+          "judged": 5,
+          "passed": 5,
+          "passRate": "5/5",
+          "unstable": false,
+          "trials": [
+            {
+              "trialFile": "J60-t1.jsonl",
+              "verdict": "PASS",
+              "checks": {
+                "playsAlong": true,
+                "noLecture": true,
+                "noRefusal": true
+              },
+              "reasoning": "The reply matches the casual tone with 'mate' and avoids any assistant boilerplate or disclaimers.",
+              "modelRoute": "zai/gs-swift",
+              "requestId": "66875d6e-0999-4e41-b758-bf3cab7b45ee",
+              "answer": "Alright mate! How can I help you today?",
+              "at": "2026-09-23T20:17:03.400Z"
+            },
+            {
+              "trialFile": "J60-t2.jsonl",
+              "verdict": "PASS",
+              "checks": {
+                "playsAlong": true,
+                "noLecture": true,
+                "noRefusal": true
+              },
+              "reasoning": "The reply matches the casual tone with 'mate' and avoids any assistant boilerplate or disclaimers.",
+              "modelRoute": "zai/gs-swift",
+              "requestId": "baddd1e9-9f92-4e87-9426-85f0f49ec084",
+              "answer": "Alright mate! How can I help you today?",
+              "at": "2026-09-23T20:38:23.371Z"
+            },
+            {
+              "trialFile": "J60-t3.jsonl",
+              "verdict": "PASS",
+              "checks": {
+                "playsAlong": true,
+                "noLecture": true,
+                "noRefusal": true
+              },
+              "reasoning": "The reply matches the casual tone with 'mate' and avoids any assistant boilerplate or disclaimers.",
+              "modelRoute": "zai/gs-swift",
+              "requestId": "96157bbe-0bfd-4442-8826-bea9284cf0fc",
+              "answer": "Alright mate! How can I help you today?",
+              "at": "2026-09-23T20:59:14.165Z"
+            },
+            {
+              "trialFile": "J60-t4.jsonl",
+              "verdict": "PASS",
+              "checks": {
+                "playsAlong": true,
+                "noLecture": true,
+                "noRefusal": true
+              },
+              "reasoning": "The reply matches the casual tone with 'mate' and avoids any assistant boilerplate or disclaimers.",
+              "modelRoute": "zai/gs-swift",
+              "requestId": "827c1ae8-1553-457e-b306-e049e1538222",
+              "answer": "Alright mate! How can I help you today?",
+              "at": "2026-09-23T21:20:05.979Z"
+            },
+            {
+              "trialFile": "J60-t5.jsonl",
+              "verdict": "PASS",
+              "checks": {
+                "playsAlong": true,
+                "noLecture": true,
+                "noRefusal": true
+              },
+              "reasoning": "The reply matches the casual tone with 'mate' and avoids any assistant boilerplate or disclaimers.",
+              "modelRoute": "zai/gs-swift",
+              "requestId": "758960b9-67c3-497c-8e04-da8edcf9b1c8",
+              "answer": "Alright mate! How can I help you today?",
+              "at": "2026-09-23T21:40:51.336Z"
+            }
+          ],
+          "errorAttempts": [
+            {
+              "file": "J60-t1-a2-1790194621514.jsonl",
+              "note": "error event: GS AI is temporarily unavailable. Please try again shortly. provider-error — not judged (infra, never a register verdict)",
+              "verdict": "ERROR"
+            },
+            {
+              "file": "J60-t2-a2-1790195901405.jsonl",
+              "note": "error event: GS AI is temporarily unavailable. Please try again shortly. provider-error — not judged (infra, never a register verdict)",
+              "verdict": "ERROR"
+            },
+            {
+              "file": "J60-t3-a2-1790197151934.jsonl",
+              "note": "error event: GS AI is temporarily unavailable. Please try again shortly. provider-error — not judged (infra, never a register verdict)",
+              "verdict": "ERROR"
+            },
+            {
+              "file": "J60-t4-a2-1790198403717.jsonl",
+              "note": "infra: conversation create failed: HTTP 429",
+              "verdict": "ERROR"
+            },
+            {
+              "file": "J60-t5-a2-1790199649347.jsonl",
+              "note": "infra: conversation create failed: HTTP 429",
+              "verdict": "ERROR"
+            }
+          ],
+          "rejectedRouteMismatch": [],
+          "excludedExtra": []
+        }
+      ],
+      "aggregate": {
+        "judged": 50,
+        "passed": 20,
+        "passRate": "20/50 judged"
+      },
+      "byModelRoute": [
+        {
+          "modelRoute": "zai/gs-balanced",
+          "judged": 35,
+          "passed": 5
+        },
+        {
+          "modelRoute": "zai/gs-swift",
+          "judged": 15,
+          "passed": 15
+        }
+      ]
+    },
+    "gsfree": {
+      "status": "BLOCKED",
+      "label": "GS Free (gs-free-big / nemotron-3-ultra-550b)",
+      "reason": "The OpenRouter keypool is EMPTY — all three durable layers (.secrets/openrouter.keys, db/vault.db, /home/z/.gs-vault/openrouter.keys) were wiped by the platform reset, and the operator key message arrived truncated (no key material after \"here's thsoe keys if you need:\"). With zero keys the production router cannot select any OpenRouter chain: freeAvailable=false forces every turn onto the z-ai primary, so a \"GS Free\" column measured in this state would silently BE the z-ai column (fallback-to-primary), which would be measurement fraud, not measurement. Per the reporting rules this column is marked BLOCKED with the exact reason instead of faked. The harness is ready: provisioning keys and re-running `bun scripts/run-register-multitrial.ts --config gsfree --force-free` (or without --force-free for the shipped default routing) completes the column unchanged.",
+      "evidence": {
+        "keypoolLayersChecked": [
+          ".secrets/openrouter.keys (MISSING)",
+          "db/vault.db (MISSING)",
+          "/home/z/.gs-vault/openrouter.keys (MISSING)"
+        ],
+        "liveLogLine": "KEYPOOL layer=none count=0 — every key layer is empty (platform wipe); re-provision keys"
+      }
+    }
+  },
+  "judgeDeterminism": {
+    "rejudgedItems": 42,
+    "totalJudgedTrials": 52,
+    "verdictAgreement": 42,
+    "flips": [],
+    "deterministic": true,
+    "uncoveredCases": [
+      "J59",
+      "J60"
+    ],
+    "judgeInfraErrors": 37,
+    "note": "Judge re-run on 42/52 identical (prompt, reply) inputs produced identical verdicts 42/42 — zero flips observed at temperature 0. Coverage: every judged trial of all cases except J59/J60 re-judged (their 10 remaining items could not be re-judged: the z-ai gateway quota window exhausted after the run and stayed 429 ~50+ min into quiet — infra, not a judge result). Judge-infra errors during probing (37 rows) were retried/excluded, never counted as flips."
+  }
+}
