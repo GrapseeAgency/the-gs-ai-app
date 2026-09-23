@@ -269,6 +269,21 @@ export type MetaSearchInput = {
   engineTimeoutMs?: number
 }
 
+/**
+ * Baseline S39 (audit [16]) — non-article ASSET URL shapes: figure pages,
+ * binary downloads, gallery assets. They can never produce article text and
+ * deterministically fail (403-bot-wall / parse-fail), so admitting them only
+ * burns fetch slots that a real article could have used.
+ */
+const NON_ARTICLE_ASSET_RES: RegExp[] = [
+  /\/fig-?\d+(?:[/?#]|$)/i,
+  /\.(?:png|jpe?g|gif|webp|svg|pdf|docx?|xlsx?|pptx?|zip|gz|mp4|mp3)(?:[?#]|$)/i,
+]
+
+function isNonArticleAssetUrl(url: string): boolean {
+  return NON_ARTICLE_ASSET_RES.some((re) => re.test(url))
+}
+
 export async function runMetaSearch(input: MetaSearchInput): Promise<MetaSearchOutcome> {
   const isNews =
     input.intent === 'broad_news' ||
@@ -341,6 +356,13 @@ export async function runMetaSearch(input: MetaSearchInput): Promise<MetaSearchO
       if (res.value.length > 0) enginesUsed.add(engineId)
       recordEngine(engineId, res.value.length > 0 ? 'ok' : 'empty', { count: res.value.length })
       for (const r of res.value) {
+        // Baseline S39 (audit [16]) — non-article ASSET URLs can never yield
+        // article text: PeerJ figure pages (doi.org/10.7717/peerj-cs.N/fig-4)
+        // 403/parse-fail DETERMINISTICALLY and burn a fetch slot that a real
+        // article could have used (live evidence: 4/4 slots lost to /fig-N
+        // pages, sourcesRead=0 while real articles ranked below them).
+        // Rejected at candidate intake — same moral class as the SERP guard.
+        if (isNonArticleAssetUrl(r.url)) continue
         const key = normalizeUrlForDedupe(r.url)
         const existing = byUrl.get(key)
         if (existing) {

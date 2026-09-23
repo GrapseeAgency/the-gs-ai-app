@@ -254,21 +254,35 @@ export async function fetchPage(
     const decoder = new TextDecoder('utf-8', { fatal: false })
     let body = ''
     let bytes = 0
-    for (;;) {
-      const { done, value } = await reader.read()
-      if (done) break
-      bytes += value.byteLength
-      if (bytes > maxBytes) {
-        try {
-          await reader.cancel()
-        } catch {
-          // reader already closed — nothing to do
+    // Baseline S40 (audit [16]) — the AbortSignal covers the WHOLE fetch
+    // INCLUDING body streaming: a slow large page (gutenberg full-text .txt)
+    // aborted MID-BODY with a raw DOMException that escaped unwrapped, so
+    // callers saw "aborted due to timeout" but never the timeout KIND —
+    // the retry-once policy could not fire on the most common timeout
+    // variant. Classify stream errors like request errors.
+    try {
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        bytes += value.byteLength
+        if (bytes > maxBytes) {
+          try {
+            await reader.cancel()
+          } catch {
+            // reader already closed — nothing to do
+          }
+          // Truncation at the cap is acceptable: extraction works on prefixes.
+          body += decoder.decode(value.subarray(0, Math.max(0, value.byteLength - (bytes - maxBytes))), { stream: true })
+          break
         }
-        // Truncation at the cap is acceptable: extraction works on prefixes.
-        body += decoder.decode(value.subarray(0, Math.max(0, value.byteLength - (bytes - maxBytes))), { stream: true })
-        break
+        body += decoder.decode(value, { stream: true })
       }
-      body += decoder.decode(value, { stream: true })
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      if (/timeout|abort/i.test(msg)) {
+        throw new FetchPageError('timeout', `fetch timed out mid-body: ${host}`)
+      }
+      throw new FetchPageError('network', `stream error: ${msg.slice(0, 120)}`)
     }
 
     return {
