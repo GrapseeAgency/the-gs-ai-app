@@ -10,7 +10,7 @@ CONV_F=""    # F → H → I → J chain
 
 new_conv() {
   curl -s -X POST "$ORIGIN/api/v1/conversations" -H 'Content-Type: application/json' \
-    -H 'x-gs-app-version: 0.68.0' -d '{"title":"audit-matrix"}' | python3 -c "import json,sys; print(json.load(sys.stdin).get('id',''))"
+    -H 'x-gs-app-version: 0.68.1' -d '{"title":"audit-matrix"}' | python3 -c "import json,sys; print(json.load(sys.stdin).get('id',''))"
 }
 
 # send <convId> <label> <message>: SSE turn, prints final text.
@@ -20,7 +20,7 @@ send() {
   echo "════════ CASE $label ════════"
   echo "REQUEST: $msg"
   curl -s -N -X POST "$ORIGIN/api/v1/conversations/$conv/messages" \
-    -H 'Content-Type: application/json' -H 'x-gs-app-version: 0.68.0' \
+    -H 'Content-Type: application/json' -H 'x-gs-app-version: 0.68.1' \
     -d "$(python3 -c "import json,sys; print(json.dumps({'content': sys.argv[1], 'stream': True, 'timezone': 'Asia/Dhaka'}))" "$msg")" \
     --max-time 180 | python3 -c "
 import sys, json

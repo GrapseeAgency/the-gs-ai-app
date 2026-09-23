@@ -388,7 +388,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
   // FORENSIC AUDIT [3] — stale-APK detection: every turn logs the client
   // version against the backend revision, and a version mismatch is logged as
   // a WARNING so "stale APK / stale server" investigations end in one line.
-  const CURRENT_APP_VERSION = '0.68.0'
+  const CURRENT_APP_VERSION = '0.68.1'
   const versionMismatch =
     clientVersion !== 'web' && clientVersion !== CURRENT_APP_VERSION
   if (versionMismatch) {
