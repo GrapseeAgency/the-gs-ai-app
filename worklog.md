@@ -3976,3 +3976,20 @@ Work Log:
 
 Stage Summary:
 - ALL AUTONOMOUS ACTIVITY HALTED. State frozen at: P1=0/30, P3=0/50, P4=0/50 judged (P4's 50 answers recorded at /tmp/gsfree-answers); keypool 14 keys in place; registry/router commits intact (5f29810). Awaiting operator audit before any further action.
+---
+Task ID: EVAL-ROLLOUT-INFRA-V1
+Agent: main (operator task: production-grade evaluation & rollout infrastructure)
+
+Work Log:
+- P1 (09ae951): registry rebuilt structured (query-level sub-caps register/reasoning/instruction/search + Wilson 95% CIs + p50/p95, all derived by extended compute-capability-registry.ts --json); router rewritten to shortfall matching (predictRequirements → meetsAllRequirements → cheapest-by-p50); routing-diff proof 0/58 changed.
+- P2 (47960f5): src/lib/silent-failure-gate.ts (citation↔read integrity, zero-source grounding w/ honest no_results exemption, headline-label, false-offline, register-refusal) wired into gsCapLog pre-persistence; turns.silentFailures column (db push + dev restart); 18/18 hermetic contract tests; LIVE test caught a real silent failure (cited=6 read=1) and persisted it.
+- P3 (a863f2c): tests/eval-suite-search-v1.json — CLEAR-RAG five dimensions C/L/E/A/R 1-5 scoring, S31-S40 prompts byte-identical, judge rubrics for E/A (same glm-4.6 temp 0), not run (quota).
+- P4 (0bddb66): tests/eval-suite-instruction-generalization-v1.json — 20 unseen constraints, 16 new deterministic grader types in eval-grader core, self-test script (80 fixtures + unseen guarantee) all green; old graders 37/37 hold.
+- P5 (eee6220): tests/eval-suite-multiturn-v1.json — 10 conversations × 3 turns, context-isolation/register-continuity/stop-honesty, existing grader vocabulary, not run.
+- P6 (b5bb859): tests/eval-suite-security-v1.json — 20 injection cases across 10 vector classes + 10 dev-only fixture pages live at /api/v1/fixtures/web/inj-*; not run.
+- P7 (884c637): eval-gate.yml — Welch's t-test judged-regression job (block iff p<0.05 && delta<-0.1; neutral under n<2; scipy-verified t/df/p) + silent-failure blocker step (verified live: exit 1 on the real violating turn); diagnostics ?requestId= export.
+- P8 (19c5f97): src/lib/rollout.ts + router wrapper — GS_ROLLOUT_STAGE shadow|canary|percentage|full (unset=full → zero behavior change), deterministic bucketing (verified 5%/25%/50%), per-query measured gate, GS_ROLLOUT_ROLLBACK=1, BLOCKED never rolls onto control.
+- P9 (6e9fc12): contamination-audit.ts — sha256 manifest of 158 suite prompts (committed), private gitignored holdout (6 unseen templates) + contamination comparison (verified), --web overlap honest-BLOCKED under quota.
+
+Stage Summary:
+- 9/9 phases shipped, each committed+pushed. No suite prompts, judge model/temperature, or register routing touched. New suites NOT RUN (quota) — deliverables are the instruments + graders, hermetically verified. Silent-failure gate and rollout wrapper verified live in production path. Commits: 09ae951, 47960f5, a863f2c, 0bddb66, eee6220, b5bb859, 884c637, 19c5f97, 6e9fc12.
