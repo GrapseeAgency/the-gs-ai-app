@@ -18,7 +18,15 @@
     "response.contains": "answer text contains substring (case-insensitive)",
     "response.notContains": "answer text does NOT contain substring (case-insensitive) — denial/honesty bugs ([8])",
     "response.containsAny": "answer contains at least one of the substrings — honest no-results phrasing ([8])",
-    "anyOf": "logical OR over nested assertions — honest-outcome-or-completed patterns"
+    "anyOf": "logical OR over nested assertions — honest-outcome-or-completed patterns",
+    "trace.requestedMode": "trace.requestedMode == value — mode wire-contract bugs",
+    "trace.effectiveMode": "trace.effectiveMode == value — turn-class override / model-capability resolution bugs",
+    "trace.thinkingLatencyMsNull": "trace.thinkingLatencyMs is null == value — flash turns must carry no thinking latency",
+    "trace.thinkingLatencyMsNumber": "trace.thinkingLatencyMs is a finite number == value — thinking turns must measure the thinking TTFT",
+    "trace.modeNotePresent": "trace.modeNote non-empty == value — GS-MODE-REMAP / flash-forced notes",
+    "trace.ttftMax": "runner-measured time-to-first-delta <= value ms — Flash responsiveness (measurement, not a stored column)",
+    "trace.latencyMax": "trace.latencyMs <= value ms — total turn budget",
+    "trace.citedMin": "cited ordinal count >= value — grounded answers must cite"
   },
   "blockingRule": "ROUTING, INSTRUCTION and CONTEXT_ISOLATION are BLOCKING (deterministic, high-confidence). SOURCE_QUALITY and FAILURE_HONESTY are WARN-ONLY in v1. REGISTER is LLM-judged, excluded from the deterministic score.",
   "categories": [
@@ -27,7 +35,8 @@
     "CONTEXT_ISOLATION",
     "SOURCE_QUALITY",
     "FAILURE_HONESTY",
-    "REGISTER"
+    "REGISTER",
+    "MODES"
   ],
   "cases": [
     {
@@ -1154,6 +1163,297 @@
           }
         ]
       }
+    },
+    {
+      "id": "M01",
+      "category": "MODES",
+      "prompt": "hi",
+      "mode": "flash",
+      "blocking": false,
+      "auditRef": "[flash-mode M01] 'hi' in flash — sub-1500ms TTFT, no thinking latency",
+      "assertions": [
+        {
+          "type": "trace.requestedMode",
+          "op": "eq",
+          "value": "flash"
+        },
+        {
+          "type": "trace.effectiveMode",
+          "op": "eq",
+          "value": "flash"
+        },
+        {
+          "type": "trace.thinkingLatencyMsNull",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "type": "trace.ttftMax",
+          "op": "lte",
+          "value": 1500
+        },
+        {
+          "type": "trace.finalStatus",
+          "op": "eq",
+          "value": "done"
+        }
+      ]
+    },
+    {
+      "id": "M02",
+      "category": "MODES",
+      "prompt": "hi",
+      "mode": "thinking",
+      "blocking": false,
+      "auditRef": "[flash-mode M02] 'hi' in thinking — thinking path actually ran (measured thinking TTFT)",
+      "assertions": [
+        {
+          "type": "trace.requestedMode",
+          "op": "eq",
+          "value": "thinking"
+        },
+        {
+          "type": "trace.effectiveMode",
+          "op": "eq",
+          "value": "thinking"
+        },
+        {
+          "type": "trace.thinkingLatencyMsNumber",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "type": "trace.finalStatus",
+          "op": "eq",
+          "value": "done"
+        }
+      ]
+    },
+    {
+      "id": "M03",
+      "category": "MODES",
+      "prompt": "hi",
+      "mode": "auto",
+      "blocking": false,
+      "auditRef": "[flash-mode M03] 'hi' in auto — the router decides flash for the short/efficient class",
+      "assertions": [
+        {
+          "type": "trace.requestedMode",
+          "op": "eq",
+          "value": "auto"
+        },
+        {
+          "type": "trace.effectiveMode",
+          "op": "eq",
+          "value": "flash"
+        },
+        {
+          "type": "trace.finalStatus",
+          "op": "eq",
+          "value": "done"
+        }
+      ]
+    },
+    {
+      "id": "M04",
+      "category": "MODES",
+      "prompt": "who was the first Muslim?",
+      "mode": "flash",
+      "blocking": false,
+      "auditRef": "[flash-mode M04] historical/religious turn in flash — search still runs, evidence still read, answer still cited",
+      "assertions": [
+        {
+          "type": "trace.requestedMode",
+          "op": "eq",
+          "value": "flash"
+        },
+        {
+          "type": "trace.searchExecuted",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "type": "trace.sourcesReadMin",
+          "op": "gte",
+          "value": 1
+        },
+        {
+          "type": "trace.citedMin",
+          "op": "gte",
+          "value": 1
+        },
+        {
+          "type": "trace.finalStatus",
+          "op": "eq",
+          "value": "done"
+        }
+      ]
+    },
+    {
+      "id": "M05",
+      "category": "MODES",
+      "prompt": "who was the first Muslim?",
+      "mode": "thinking",
+      "blocking": false,
+      "auditRef": "[flash-mode M05] same turn in thinking — search pipeline identical, thinking trace visible",
+      "assertions": [
+        {
+          "type": "trace.requestedMode",
+          "op": "eq",
+          "value": "thinking"
+        },
+        {
+          "type": "trace.effectiveMode",
+          "op": "eq",
+          "value": "thinking"
+        },
+        {
+          "type": "trace.searchExecuted",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "type": "trace.thinkingLatencyMsNumber",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "type": "trace.finalStatus",
+          "op": "eq",
+          "value": "done"
+        }
+      ]
+    },
+    {
+      "id": "M06",
+      "category": "MODES",
+      "prompt": "hi",
+      "mode": "flash",
+      "fault": "gated: no forced-thinking model is mapped in the serving catalogue yet (glm-5.3-class); unskip when models.ts maps one",
+      "skipReason": "M06 requires flash on a thinking-only model so GS-MODE-REMAP must fire — unreachable until a forced-thinking tier exists",
+      "blocking": false,
+      "auditRef": "[flash-mode M06] flash on a forced-thinking model remaps and logs GS-MODE-REMAP",
+      "assertions": [
+        {
+          "type": "trace.requestedMode",
+          "op": "eq",
+          "value": "flash"
+        },
+        {
+          "type": "trace.effectiveMode",
+          "op": "eq",
+          "value": "flash"
+        },
+        {
+          "type": "trace.modeNotePresent",
+          "op": "eq",
+          "value": true
+        }
+      ]
+    },
+    {
+      "id": "M07",
+      "category": "MODES",
+      "prompt": "hi",
+      "mode": "flash",
+      "setup": [
+        "hi"
+      ],
+      "setupMode": "thinking",
+      "blocking": false,
+      "auditRef": "[flash-mode M07] thinking then flash in the same conversation — per-turn mode switch without breaking continuity",
+      "assertions": [
+        {
+          "type": "trace.requestedMode",
+          "op": "eq",
+          "value": "flash"
+        },
+        {
+          "type": "trace.effectiveMode",
+          "op": "eq",
+          "value": "flash"
+        },
+        {
+          "type": "trace.finalStatus",
+          "op": "eq",
+          "value": "done"
+        }
+      ]
+    },
+    {
+      "id": "M08",
+      "category": "MODES",
+      "prompt": "write a detailed report on the history of tea",
+      "mode": "flash",
+      "blocking": false,
+      "auditRef": "[flash-mode M08] DEEP_RESEARCH prompt in flash — deep research overrides the mode, thinking still enabled",
+      "assertions": [
+        {
+          "type": "trace.requestedMode",
+          "op": "eq",
+          "value": "flash"
+        },
+        {
+          "type": "trace.effectiveMode",
+          "op": "eq",
+          "value": "thinking"
+        },
+        {
+          "type": "trace.finalStatus",
+          "op": "eq",
+          "value": "done"
+        }
+      ]
+    },
+    {
+      "id": "M09",
+      "category": "MODES",
+      "prompt": "hi",
+      "mode": "flash",
+      "blocking": false,
+      "auditRef": "[flash-mode M09] flash turn carries thinkingLatencyMs=null",
+      "assertions": [
+        {
+          "type": "trace.requestedMode",
+          "op": "eq",
+          "value": "flash"
+        },
+        {
+          "type": "trace.thinkingLatencyMsNull",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "type": "trace.finalStatus",
+          "op": "eq",
+          "value": "done"
+        }
+      ]
+    },
+    {
+      "id": "M10",
+      "category": "MODES",
+      "prompt": "hi",
+      "mode": "thinking",
+      "blocking": false,
+      "auditRef": "[flash-mode M10] thinking turn carries a numeric thinkingLatencyMs",
+      "assertions": [
+        {
+          "type": "trace.requestedMode",
+          "op": "eq",
+          "value": "thinking"
+        },
+        {
+          "type": "trace.thinkingLatencyMsNumber",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "type": "trace.finalStatus",
+          "op": "eq",
+          "value": "done"
+        }
+      ]
     }
   ]
 }

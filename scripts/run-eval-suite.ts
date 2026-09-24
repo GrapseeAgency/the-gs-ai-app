@@ -85,6 +85,10 @@ interface EvalCase {
   category: string
   prompt?: string | null
   setup?: string[]
+  /** FLASH MODE (Phase 6) — the main turn's mode; omitted = backend default. */
+  mode?: string
+  /** FLASH MODE (Phase 6) — setup turns' mode (defaults to the case mode). */
+  setupMode?: string
   fault?: string
   blocking?: boolean
   grading?: string
@@ -147,13 +151,15 @@ async function runCase(c: EvalCase): Promise<CaseResult> {
     return base
   }
   const setupTurns = c.setup ?? []
-  // Setup turns (context-isolation T1) in the SAME conversation.
+  // Setup turns (context-isolation T1) in the SAME conversation. Their mode
+  // defaults to the case's main mode; setupMode overrides (M07's cross-mode
+  // continuity: thinking setup, flash main turn).
   for (const setupPrompt of setupTurns) {
-    await sseTurn(conv, setupPrompt)
+    await sseTurn(conv, setupPrompt, c.setupMode ?? c.mode)
     await new Promise((r) => setTimeout(r, 4_000))
   }
   const expectedAssistants = setupTurns.length + 1
-  const turn = await sseTurn(conv, prompt)
+  const turn = await sseTurn(conv, prompt, c.mode)
   let answer = turn.answer
   let note = ''
   if (!turn.done && !turn.errorEvent) {
@@ -174,6 +180,9 @@ async function runCase(c: EvalCase): Promise<CaseResult> {
   if (turn.httpError) note = `${note} http=${turn.httpError}`.trim()
 
   const trace = await readTrace(turn.requestId)
+  // FLASH MODE (Phase 6) — the runner-measured TTFT rides the row struct for
+  // the trace.ttftMax grader (it is a measurement, not a stored column).
+  if (trace) trace.ttftMs = turn.ttftMs
   const failures = trace ? (c.assertions as GradeAssertion[]).map((a) => evalAssertion(a, trace, answer)).filter((v) => !v.ok) : []
 
   base.requestId = turn.requestId
@@ -241,6 +250,11 @@ function traceToPayload(r: TraceRow): Record<string, unknown> {
     cited: JSON.parse(r.cited) as number[],
     latencyMs: r.latencyMs,
     errorType: r.errorType,
+    requestedMode: r.requestedMode,
+    effectiveMode: r.effectiveMode,
+    thinkingLatencyMs: r.thinkingLatencyMs ?? null,
+    modeNote: r.modeNote ?? null,
+    ttftMs: r.ttftMs ?? null,
   }
 }
 

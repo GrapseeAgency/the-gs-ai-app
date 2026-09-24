@@ -48,15 +48,25 @@ export interface TurnResult {
   errorEvent: string | null
   events: string[]
   httpError: string | null
+  /** FLASH MODE (Phase 6) — runner-measured ms to the first streamed delta. */
+  ttftMs: number | null
 }
 
-export function sseTurn(conv: string, message: string): Promise<TurnResult> {
+export function sseTurn(conv: string, message: string, mode?: string | null): Promise<TurnResult> {
   return new Promise((resolve) => {
-    const result: TurnResult = { requestId: null, answer: '', done: false, errorEvent: null, events: [], httpError: null }
+    const result: TurnResult = { requestId: null, answer: '', done: false, errorEvent: null, events: [], httpError: null, ttftMs: null }
+    const startedAt = Date.now()
     fetch(`${cfg.origin}/api/v1/conversations/${conv}/messages`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-gs-app-version': cfg.appVersion },
-      body: JSON.stringify({ content: message, stream: true, timezone: 'Asia/Dhaka' }),
+      body: JSON.stringify({
+        content: message,
+        stream: true,
+        timezone: 'Asia/Dhaka',
+        // FLASH MODE (Phase 6) — per-case mode; undefined omits the field
+        // (the backend default 'flash' applies).
+        ...(mode ? { mode } : {}),
+      }),
       signal: AbortSignal.timeout(240_000),
     })
       .then((res) => {
@@ -86,8 +96,11 @@ export function sseTurn(conv: string, message: string): Promise<TurnResult> {
                 try {
                   const ev = JSON.parse(trimmed.slice(5).trim()) as { event: string; data: unknown }
                   result.events.push(ev.event)
-                  if (ev.event === 'delta' && typeof ev.data === 'string') result.answer += ev.data
-                  else if (ev.event === 'done' && typeof ev.data === 'string') {
+                  if (ev.event === 'delta' && typeof ev.data === 'string') {
+                    // FLASH MODE (Phase 6) — runner-measured TTFT (first delta).
+                    if (result.ttftMs === null) result.ttftMs = Date.now() - startedAt
+                    result.answer += ev.data
+                  } else if (ev.event === 'done' && typeof ev.data === 'string') {
                     result.done = true
                     try {
                       const msg = JSON.parse(ev.data) as { content?: string }
@@ -185,6 +198,13 @@ export interface TraceRow {
   cited: string
   latencyMs: number
   errorType: string | null
+  // FLASH MODE (Phase 6) — mode columns (turns table).
+  requestedMode?: string
+  effectiveMode?: string
+  thinkingLatencyMs?: number | null
+  modeNote?: string | null
+  /** Runner-measured (not a stored column) — injected by runCase before grading. */
+  ttftMs?: number | null
 }
 
 export async function readTrace(requestId: string | null): Promise<TraceRow | null> {
@@ -201,7 +221,7 @@ export async function readTrace(requestId: string | null): Promise<TraceRow | nu
       for (let attempt = 0; attempt < 6; attempt++) {
         try {
           const row = db
-            .query('SELECT requestId, capability, trigger, searchExecuted, sourceCount, sourcesRead, sourcesFailed, domains, modelRoute, finalStatus, cited, latencyMs, errorType FROM turns WHERE requestId = ?')
+            .query('SELECT requestId, capability, trigger, searchExecuted, sourceCount, sourcesRead, sourcesFailed, domains, modelRoute, finalStatus, cited, latencyMs, errorType, requestedMode, effectiveMode, thinkingLatencyMs, modeNote FROM turns WHERE requestId = ?')
             .get(requestId) as TraceRow | undefined
           if (row) return row
           break

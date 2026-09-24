@@ -40,6 +40,15 @@ export interface TraceRow {
   cited: string
   latencyMs: number
   errorType: string | null
+  // FLASH MODE (Phase 6) — mode dimension (requestedMode/effectiveMode/
+  // thinkingLatencyMs/modeNote come from the turns table; ttftMs is the
+  // RUNNER-MEASURED time to first streamed delta — it is a measurement, not
+  // a stored column, and rides the row struct for the graders).
+  requestedMode?: string
+  effectiveMode?: string
+  thinkingLatencyMs?: number | null
+  modeNote?: string | null
+  ttftMs?: number | null
 }
 
 export interface Verdict {
@@ -117,6 +126,61 @@ export function evalAssertion(a: Assertion, trace: TraceRow | null, answer: stri
       return bad.length === 0
         ? { ok: true, detail: `cited=${cited.join(',')} within sourceCount=${trace!.sourceCount}` }
         : { ok: false, detail: `cited ${bad.join(',')} exceed sourceCount=${trace!.sourceCount}` }
+    }
+    // --- FLASH MODE graders (Phase 6) ---------------------------------------
+    case 'trace.requestedMode': {
+      if (!hasTrace) return { ok: false, detail: 'no trace row' }
+      return trace!.requestedMode === a.value
+        ? { ok: true, detail: `requestedMode=${trace!.requestedMode}` }
+        : { ok: false, detail: `requestedMode=${trace!.requestedMode} expected=${a.value}` }
+    }
+    case 'trace.effectiveMode': {
+      if (!hasTrace) return { ok: false, detail: 'no trace row' }
+      return trace!.effectiveMode === a.value
+        ? { ok: true, detail: `effectiveMode=${trace!.effectiveMode}` }
+        : { ok: false, detail: `effectiveMode=${trace!.effectiveMode} expected=${a.value}` }
+    }
+    case 'trace.thinkingLatencyMsNull': {
+      if (!hasTrace) return { ok: false, detail: 'no trace row' }
+      const isNull = trace!.thinkingLatencyMs === null || trace!.thinkingLatencyMs === undefined
+      return isNull === a.value
+        ? { ok: true, detail: `thinkingLatencyMs=${isNull ? 'null' : trace!.thinkingLatencyMs}` }
+        : { ok: false, detail: `thinkingLatencyMs=${trace!.thinkingLatencyMs} expectedNull=${a.value}` }
+    }
+    case 'trace.thinkingLatencyMsNumber': {
+      if (!hasTrace) return { ok: false, detail: 'no trace row' }
+      const isNum = typeof trace!.thinkingLatencyMs === 'number' && Number.isFinite(trace!.thinkingLatencyMs)
+      return isNum === a.value
+        ? { ok: true, detail: `thinkingLatencyMs=${String(trace!.thinkingLatencyMs)}` }
+        : { ok: false, detail: `thinkingLatencyMs=${String(trace!.thinkingLatencyMs)} expectedNumber=${a.value}` }
+    }
+    case 'trace.modeNotePresent': {
+      if (!hasTrace) return { ok: false, detail: 'no trace row' }
+      const present = typeof trace!.modeNote === 'string' && trace!.modeNote.length > 0
+      return present === a.value
+        ? { ok: true, detail: `modeNote=${String(trace!.modeNote)}` }
+        : { ok: false, detail: `modeNote=${String(trace!.modeNote)} expectedPresent=${a.value}` }
+    }
+    case 'trace.ttftMax': {
+      if (!hasTrace) return { ok: false, detail: 'no trace row' }
+      const ttft = trace!.ttftMs
+      if (typeof ttft !== 'number') return { ok: false, detail: 'no runner-measured ttftMs' }
+      return ttft <= Number(a.value)
+        ? { ok: true, detail: `ttftMs=${ttft} <= ${a.value}` }
+        : { ok: false, detail: `ttftMs=${ttft} expected<=${a.value}` }
+    }
+    case 'trace.latencyMax': {
+      if (!hasTrace) return { ok: false, detail: 'no trace row' }
+      return trace!.latencyMs <= Number(a.value)
+        ? { ok: true, detail: `latencyMs=${trace!.latencyMs} <= ${a.value}` }
+        : { ok: false, detail: `latencyMs=${trace!.latencyMs} expected<=${a.value}` }
+    }
+    case 'trace.citedMin': {
+      if (!hasTrace) return { ok: false, detail: 'no trace row' }
+      const cited = JSON.parse(trace!.cited) as number[]
+      return cited.length >= Number(a.value)
+        ? { ok: true, detail: `cited=${cited.length} >= ${a.value}` }
+        : { ok: false, detail: `cited=${cited.length} expected>=${a.value}` }
     }
     case 'response.matchesRegex': {
       const re = new RegExp(a.value as string, a.flags ?? 'i')

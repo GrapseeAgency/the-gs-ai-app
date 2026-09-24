@@ -45,6 +45,15 @@ const KNOWN_ASSERTION_TYPES = new Set([
   'trace.sourcesReadMin',
   'trace.readRate',
   'citationsWithinSources',
+  // FLASH MODE (Phase 6)
+  'trace.requestedMode',
+  'trace.effectiveMode',
+  'trace.thinkingLatencyMsNull',
+  'trace.thinkingLatencyMsNumber',
+  'trace.modeNotePresent',
+  'trace.ttftMax',
+  'trace.latencyMax',
+  'trace.citedMin',
   'response.matchesRegex',
   'response.wordCount',
   'response.lineCount',
@@ -112,6 +121,7 @@ const idPrefix: Record<string, string> = {
   SOURCE_QUALITY: 'S',
   FAILURE_HONESTY: 'F',
   REGISTER: 'J',
+  MODES: 'M', // FLASH MODE (Phase 6) — per-mode behavior cases
 }
 
 // --- assertion well-typedness (recursive for anyOf) ----------------------------
@@ -135,6 +145,14 @@ function checkAssertion(a: Assertion, caseId: string, depth: number): void {
     case 'trace.domainsMin':
     case 'trace.sourcesReadMin':
     case 'trace.readRate':
+    case 'trace.requestedMode':
+    case 'trace.effectiveMode':
+    case 'trace.thinkingLatencyMsNull':
+    case 'trace.thinkingLatencyMsNumber':
+    case 'trace.modeNotePresent':
+    case 'trace.ttftMax':
+    case 'trace.latencyMax':
+    case 'trace.citedMin':
     case 'response.wordCount':
     case 'response.lineCount': {
       if (a.value === undefined || a.value === null) fail(`${at}: missing value`)
@@ -221,7 +239,12 @@ if (fs.existsSync(BASELINE_PATH)) {
     const baselineIds = new Set(ids)
     if (ids.length !== baselineIds.size) fail('baseline contains duplicate case ids')
     for (const id of baselineIds) if (!seenIds.has(id)) fail(`baseline has unknown case id ${id}`)
-    for (const c of suite.cases) if (!baselineIds.has(c.id)) fail(`baseline missing case id ${c.id}`)
+    // FLASH MODE (Phase 6): categories added AFTER the v1 baseline snapshot
+    // are exempt from baseline completeness (their baseline is produced by
+    // their first real run — never fabricated here). The v1-era ids must
+    // still all be present.
+    const baselineEraIds = new Set(suite.cases.filter((c) => !c.auditRef?.startsWith('[flash-mode')).map((c) => c.id))
+    for (const c of suite.cases) if (baselineEraIds.has(c.id) && !baselineIds.has(c.id)) fail(`baseline missing case id ${c.id}`)
     for (const bc of baseline.cases ?? []) {
       if (!['PASS', 'FAIL', 'ERROR', 'SKIP'].includes(bc.status)) fail(`baseline case ${bc.id}: invalid status ${bc.status}`)
     }
