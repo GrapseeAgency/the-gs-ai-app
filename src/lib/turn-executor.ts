@@ -108,6 +108,7 @@ import {
   buildResearchEvidenceBlock,
   RESEARCH_BUDGET,
 } from '@/lib/search/research'
+import { runBranchingResearch } from '@/lib/research/branching'
 import {
   NOOP_EMIT,
   type ClarifyOption,
@@ -701,6 +702,31 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
   const includeHistoryEvidence = prep.includeHistoryEvidence
   const historyLines = prep.historyLines
 
+  // PHASE 5 stop condition — a cancelled run synthesizes immediately with
+  // whatever the ledger already holds (checked between search phases).
+  const runStopFlag = (runId: string): boolean => {
+    // synchronous flag cache refreshed by a background read; DB probes are
+    // only made between branches, never inside hot loops
+    return stopFlagCache.get(runId) === true
+  }
+  const stopFlagCache = new Map<string, boolean>()
+  if (prep.runId) {
+    const runId = prep.runId
+    void (async () => {
+      for (;;) {
+        await new Promise((r) => setTimeout(r, 2_000))
+        try {
+          const run = await getRun(runId)
+          if (!run) return
+          stopFlagCache.set(runId, run.status === 'cancelled')
+          if (run.status === 'cancelled') return
+        } catch {
+          return
+        }
+      }
+    })()
+  }
+
   /** §9 — record every executed research as an explicit ResearchContext. */
   const recordContext = (outcome: {
     ok: boolean
@@ -753,19 +779,48 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
       roundsPlanned: RESEARCH_BUDGET[params.depth].maxRounds,
     })
     emit?.('search', { type: 'started', intent: params.intent, depth: params.depth, label: params.queries[0] ?? '' })
-    const outcome = await runResearch({
-      queries: params.queries,
-      intent: params.intent,
-      timeRange: params.timeRange,
-      region: params.region,
-      sourceHint: params.sourceHint,
-      officialOnly: params.officialOnly,
-      depth: params.depth,
-      emit: emit ?? NOOP_EMIT,
-      deadlineAt: Date.now() + RESEARCH_BUDGET[params.depth].wallClockMs + 2_000,
-    })
+    // PHASE 5 — LEDGER-DRIVEN BRANCHING SEARCH for deep turns: the question
+    // is decomposed into sub-questions, each runs as a parallel branch, and
+    // the Research Ledger (claims/gaps/contradictions) drives EAQL follow-up
+    // queries. Quick turns keep the proven linear pipeline. GS_LEDGER_SEARCH
+    // =off reverts to linear (instant rollback). Output type is identical —
+    // evidence assembly and synthesis are untouched.
+    const useLedgerSearch =
+      params.depth === 'deep' && process.env.GS_LEDGER_SEARCH !== 'off'
+    const deadlineAt = Date.now() + RESEARCH_BUDGET[params.depth].wallClockMs + 2_000
+    const outcome = useLedgerSearch
+      ? await runBranchingResearch({
+          question: content,
+          queries: params.queries,
+          intent: params.intent,
+          timeRange: params.timeRange,
+          region: params.region,
+          sourceHint: params.sourceHint,
+          officialOnly: params.officialOnly,
+          depth: params.depth,
+          emit: emit ?? NOOP_EMIT,
+          deadlineAt,
+          ledgerKey: prep.runId ?? requestId,
+          isStopped: prep.runId
+            ? () => {
+                // stop condition: user cancelled the run → synthesize now
+                return runStopFlag(prep.runId!)
+              }
+            : undefined,
+        })
+      : await runResearch({
+          queries: params.queries,
+          intent: params.intent,
+          timeRange: params.timeRange,
+          region: params.region,
+          sourceHint: params.sourceHint,
+          officialOnly: params.officialOnly,
+          depth: params.depth,
+          emit: emit ?? NOOP_EMIT,
+          deadlineAt,
+        })
     console.log(
-      `RESEARCH conv=${id} intent=${params.intent} queries=${outcome.queriesRun.length} sources=${outcome.sources.length} retrieved=${outcome.sources.filter((s) => s.status === 'retrieved').length} engines=${outcome.enginesUsed.join('+') || 'none'} ok=${outcome.ok} kind=${outcome.failure?.kind ?? '-'}`
+      `RESEARCH conv=${id} intent=${params.intent} queries=${outcome.queriesRun.length} sources=${outcome.sources.length} retrieved=${outcome.sources.filter((s) => s.status === 'retrieved').length} engines=${outcome.enginesUsed.join('+') || 'none'} ok=${outcome.ok} kind=${outcome.failure?.kind ?? '-'}${useLedgerSearch ? ' ledger=on' : ''}`
     )
     const researchId = recordContext(outcome)
     if (!outcome.ok || outcome.sources.length === 0) {
