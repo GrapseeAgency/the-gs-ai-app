@@ -109,6 +109,7 @@ import {
   RESEARCH_BUDGET,
 } from '@/lib/search/research'
 import { runBranchingResearch } from '@/lib/research/branching'
+import { crystallizeIfNeeded } from '@/lib/context-crystallize'
 import {
   NOOP_EMIT,
   type ClarifyOption,
@@ -967,6 +968,14 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
     historySources: WebSource[]
     userTurnText: string
   }> => {
+    // PHASE 7 — CONTEXT-NOISE MITIGATION: when the working context saturates,
+    // the oldest history is crystallized into exact event snapshots (numbers
+    // byte-exact) + dual-path retrieval recovers matching nodes for this
+    // question. Short conversations are untouched (no-op).
+    const crystallization = await crystallizeIfNeeded(id, history, content)
+    const effectiveHistory =
+      crystallization.keepFromIndex > 0 ? history.slice(crystallization.keepFromIndex) : history
+
     const researchOk = turn.kind === 'research' && turn.outcome.ok && turn.evidenceBlock !== null
     const freshCount = researchOk ? turn.maxOrdinal : 0
     const historyBlock = includeHistoryEvidence
@@ -994,7 +1003,7 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
             ? 'Describe this image.'
             : ''
 
-    const evidenceBlocks = [docContext.block, historyBlock?.block ?? null, toolResultBlock]
+    const evidenceBlocks = [crystallization.block, docContext.block, historyBlock?.block ?? null, toolResultBlock]
 
     if (useVision && !allImagesFailed) {
       const textPayload = content.trim().length > 0 ? content : 'Describe this image.'
@@ -1011,7 +1020,7 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
       const visionContext: VisionChatMessage[] = [
         { role: 'system', content: `${systemPrompt}\n\n${VISION_GROUNDING_PROMPT}` },
       ]
-      for (const m of history) {
+      for (const m of effectiveHistory) {
         if (m.role.toLowerCase() === 'user' && selectedTurnIds.has(m.id) && imageBudget > 0) {
           const turnImages = m.attachments.filter((a) => a.kind === 'image')
           const parts: VisionContentPart[] = [
@@ -1061,7 +1070,7 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
     return {
       messages: [
         { role: 'system', content: systemPrompt },
-        ...history.map((m) => ({ role: m.role.toLowerCase(), content: historyRowText(m) })),
+        ...effectiveHistory.map((m) => ({ role: m.role.toLowerCase(), content: historyRowText(m) })),
         { role: 'user', content: finalUserContent },
       ],
       systemPrompt,
