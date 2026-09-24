@@ -16,6 +16,9 @@ RUN apt-get update && apt-get install -y \
 
 COPY requirements-bench.txt .
 RUN pip install --no-cache-dir -r requirements-bench.txt
+# harbor conflicts with tau2 on litellm (raw evidence: build 36033652437);
+# unused by the knowledge-suite adapters → installed dependency-free.
+RUN pip install --no-cache-dir --no-deps "harbor>=0.21.0"
 
 COPY benchmarks/ ./benchmarks/
 COPY runners/ ./runners/

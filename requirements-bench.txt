@@ -5,7 +5,13 @@
 #   lm-eval      0.4.13    EXISTS   (spec floor >=0.4.0 satisfied)
 #   crfm-helm    0.5.16    EXISTS   (spec floor >=0.5.0 satisfied)
 #   swebench     5.0.2     EXISTS   (spec floor >=3.0.0 satisfied)
-#   harbor       0.23.0    EXISTS   (spec floor >=0.21.0 satisfied)
+#   harbor       0.23.0    EXISTS   (spec floor >=0.21.0 satisfied) — BUT:
+#                harbor 0.21.0 pins litellm>=1.92.0 while tau2 1.0.1 pins
+#                litellm<1.82.7 → ResolutionImpossible (raw evidence: build
+#                run 36033652437). harbor is NOT used by any knowledge-suite
+#                adapter, so it is installed with --no-deps in its own
+#                Dockerfile layer (see Dockerfile.bench) — kept in the image,
+#                removed from the resolver's problem space.
 #   tau2-bench   HTTP 404  NOT ON PYPI (also tau2bench: 404) → installed from
 #                the official repo. NOTE: the repo's distribution NAME is
 #                "tau2" (pyproject.toml line 6, verified 2026-09-24); the
@@ -25,10 +31,10 @@
 #                Not in the spec list; required for the spec'd CLI to run.
 
 inspect-ai>=0.3.42
+inspect-evals>=0.21.0   # the inspect_evals/* tasks (gpqa_diamond, aime2024, ifbench)
 lm-eval>=0.4.0
 crfm-helm>=0.5.0
 swebench>=3.0.0
-harbor>=0.21.0
 tau2 @ git+https://github.com/sierra-research/tau2-bench
 datasets>=3.0.0
 statsmodels>=0.14.0
