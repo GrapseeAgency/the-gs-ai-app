@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-09-24T18:02:03+00:00",
+  "git_commit": "59d59a52fa01",
+  "docker_image_digest": "not-recorded",
+  "scored": [],
+  "blocked": [],
+  "incomplete": [],
+  "power": [],
+  "rules": [
+    "no score without CI (hard rule 3)",
+    "contaminated scores ranked separately (Phase 9)",
+    "underpowered comparisons cannot declare winners (stats/power)"
+  ]
+}
