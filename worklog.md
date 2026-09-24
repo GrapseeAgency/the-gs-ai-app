@@ -4073,3 +4073,20 @@ Work Log:
 Stage Summary:
 - APK: https://github.com/GrapseeAgency/the-gs-ai-app/releases/download/v0.69.0/GS-AI-App.apk (same signing cert, over-install safe).
 - Server unchanged this round; no code edits. Old client keeps working (absent mode → flash default).
+---
+Task ID: FLASHFIX-3BUGS
+Agent: main (Z.ai Code)
+Task: FIX FLASH MODE — status indicator, sheet layout, speed (3 bugs from device test).
+
+Work Log:
+- BUG1 diagnosed: Android OrbStateMapping.kt maps any pre-token turn -> BREATHING, label hardcoded "Thinking…" (OrbSpec.kt:17), rendered at ChatScreen.kt:1328-1335; iOS identical (OrbSpec.swift:20). No mode field anywhere. Server SSE never sent effectiveMode (only search-string status events).
+- BUG1 fixed: server emits `mode` event {state:streaming,effectiveMode,requested} as FIRST event of every streamed turn (turn-executor.ts, both transports; string status events untouched — all 3 clients parse status as plain string). Android: ApiClient->ChatRepository->ChatStreamController StreamState.effectiveMode + ChatScreen label only for thinking. iOS: ModeEventPayload + ChatDetailView same. Web had no thinking indicator (clean).
+- BUG1 verified raw: SSE first event flash={effectiveMode:flash}, thinking={effectiveMode:thinking}; GS-CAP flash thinkingMs=null vs thinking thinkingMs=3465.
+- BUG2: all three clients reordered sheet (Attach first, divider, Mode last) + mode chip moved INSIDE composer row left of input (opens sheet; flash silent). agent-browser verified: DOM order Attach>divider>Mode>Web, chip geometry inside composer row, appears on Thinking / gone on Flash; screenshots /tmp/verify-shots/.
+- BUG3 instrumented: GS-PERF per streamed turn (t0/prepareMs/headersMs/firstEventMs/firstWriteMs/doneMs). Measured public-origin flash "hi" x3: e2e 1.46/2.02/1.13s, server firstWrite 13-17ms warm (prepareMs 248 cold / 12-17 warm); thinking "hi": 6.3s e2e. Bottleneck = provider reasoning time (thinking) + dead-key re-probing rotation (fixed: 10min cooldown, OR-ROTATE/OR-COOLDOWN logs). Android renders per-chunk at 30Hz (code-verified); keepalives 4s benign.
+- Commits: 6255310 (bug1), c26ec6d (bug2), d721714 (bug3) — all pushed. Tag v0.70.0 -> CI run 36000733623 success, APK released.
+
+Stage Summary:
+- v0.70.0 APK: https://github.com/GrapseeAgency/the-gs-ai-app/releases/download/v0.70.0/GS-AI-App.apk (over-install safe).
+- Flash is now measurably fast (1.1-2.0s e2e) vs thinking (6.3s); "Thinking…" label only when the model truly thinks.
+- Not touched: system prompt, search pipeline, capability registry, register routing.
