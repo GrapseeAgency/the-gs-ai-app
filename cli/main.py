@@ -359,7 +359,7 @@ def _run_inspect(entry: Dict[str, Any], model: str, res: Dict[str, Any], log_lin
     env["OPENAI_BASE_URL"] = f"{endpoint()}/api/v1/openai"
     env["OPENAI_API_KEY"] = os.environ.get("GS_BENCH_API_KEY") or "not-required"  # empty secret -> placeholder
     env["INSPECT_MAX_CONNECTIONS"] = str(entry.get("_defaults", {}).get("max_connections", 4))
-    model_arg = f"openai/{model}"
+    model_arg = f"openai-api/{model}"  # explicit chat-completions provider (inspect's `openai` provider defaults to the Responses API)
 
     cmd = [
         "inspect", "eval",
