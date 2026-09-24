@@ -4044,3 +4044,18 @@ Stage Summary:
 - BLOCKED (provider, verbatim): live synthesis timing legs could not produce TTFT deltas — z-ai returned account-level 429 ("Too many requests, please try again later") on every probe during the session AND the OpenRouter keypool is wiped to zero across all four layers ("KEYPOOL layer=none count=0"). Every live turn therefore ended finalStatus=error at synthesis (honest upstream_error), thinkingMs=null on all rows (no streamed token to measure). The MODE LAYER itself is fully live-verified. Timing evidence (M01/M02 legs) lands automatically on the next quota window — the runner + trace columns are in place.
 - Provisional numbers: registry flash/thinking TTFTs are provider-doc estimates (marked provisional in-file + artifact) until scripts/measure-thinking-latency.ts completes a run.
 - Not touched (verified): SYSTEM_PROMPT (hash-pinned), search pipeline, capability gates, register routing, silent-failure gate, capability registry measurements.
+---
+Task ID: KEYS-PROVISION-1
+Agent: main (Z.ai Code)
+Task: Activate OpenRouter keypool with operator-supplied keys for real-device audit (no other work).
+
+Work Log:
+- Validated all 14 supplied keys against openrouter.ai/api/v1/key: 12 valid (http 200), 2 dead 401 (***4a53, ***6504).
+- Pruned dead keys; provisioned 12 healthy keys into all 3 durable layers (.secrets/openrouter.keys, db/vault.db vault table, /home/z/.gs-vault/openrouter.keys) via scripts/provision-keys.ts.
+- Confirmed running dev server loads pool per-request without restart: KEYPOOL layer=secrets-file count=12.
+- Live E2E: POST /api/v1/conversations + POST messages {"content":"hi"} → 200, real reply in ~1.04s; GS-CAP modelRoute=openrouter/gs-swift mode=flash effective=flash thinkingMs=null finalStatus=done.
+
+Stage Summary:
+- Pool state: 12 valid free-tier keys, all durable layers in sync, self-heal active.
+- Key 1 free daily quota was 0/50 remaining at check time; rotation across 12 keys provides headroom.
+- No other code changed; Flash Mode task remains untouched.
