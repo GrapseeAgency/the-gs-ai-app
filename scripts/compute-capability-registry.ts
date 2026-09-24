@@ -112,7 +112,7 @@ if (fs.existsSync(mtPath)) {
 
 // production latency for z-ai register trials lives in the archived multitrial
 // unit JSONLs (each row carries the full trace row) — /tmp/register-multitrial/<config>/<case>-t<n>.jsonl
-for (const dir of ['/tmp/register-multitrial/zai', '/tmp/register-multitrial/gsfree']) {
+for (const dir of ['/tmp/register-multitrial/zai', '/tmp/register-multitrial/gsfree', '/tmp/register-multitrial-v1-archived/zai', '/tmp/register-multitrial-v1-archived/gsfree']) {
   if (!fs.existsSync(dir)) continue
   for (const f of fs.readdirSync(dir)) {
     if (!f.endsWith('.jsonl')) continue

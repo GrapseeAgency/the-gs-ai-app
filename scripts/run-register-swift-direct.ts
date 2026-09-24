@@ -62,6 +62,7 @@ const BUDGET_MS = Number(argOf('--budget-ms', '420000'))
 const TRIALS = Math.max(1, Number(argOf('--trials', '5')))
 const PACING_MS = Math.max(0, Number(argOf('--pacing-ms', '15000')))
 const MAX_ATTEMPTS = Math.max(1, Number(argOf('--max-attempts', '4')))
+const ORIGIN = argOf('--origin', 'http://localhost:3000')
 const CASES = argOf('--cases', 'J52,J53,J55,J56,J58,J59').split(',').map((s) => s.trim()).filter(Boolean)
 const MAKEUP_SLOTS = 4 // t6..t9 spare slots for ERROR makeups
 
