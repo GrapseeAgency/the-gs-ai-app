@@ -34,6 +34,40 @@ const C = {
 
 const AURORA = 'linear-gradient(90deg, #2DD4A8, #4CC3FF, #9D7BFF)'
 
+/**
+ * FLASH MODE (Phase 3) — the composer's thinking-mode selector.
+ * Persistence: per conversation (ChatGPT-style), localStorage key
+ * `gs.mode.{conversationId}`; a brand-new chat uses `gs.mode.new` and the
+ * choice carries into the conversation once it is created. Default 'flash'
+ * everywhere; switching mid-conversation applies to the next turn.
+ */
+type Mode = 'flash' | 'thinking' | 'auto'
+const MODE_STORAGE_PREFIX = 'gs.mode.'
+
+function loadMode(conversationId: string | null): Mode {
+  if (typeof window === 'undefined') return 'flash'
+  const key = `${MODE_STORAGE_PREFIX}${conversationId ?? 'new'}`
+  const raw = window.localStorage.getItem(key)
+  return raw === 'thinking' || raw === 'auto' || raw === 'flash' ? raw : 'flash'
+}
+
+function storeMode(conversationId: string | null, mode: Mode): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(`${MODE_STORAGE_PREFIX}${conversationId ?? 'new'}`, mode)
+  } catch {
+    // private-mode / storage-disabled — mode just won't persist
+  }
+}
+
+const MODE_META: Record<Mode, { label: string; hint: string }> = {
+  flash: { label: 'Flash', hint: 'Instant replies' },
+  thinking: { label: 'Thinking', hint: 'Deep reasoning' },
+  auto: { label: 'Auto', hint: 'System decides' },
+}
+
+type PendingAttachment = { id: string; displayName: string; kind: string; uploading?: boolean }
+
 type ConversationInfo = {
   id: string
   title: string
@@ -349,6 +383,27 @@ export default function Home() {
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null)
   const [startingChat, setStartingChat] = useState<string | null>(null)
 
+  // FLASH MODE (Phase 3) — composer sheet state.
+  const [mode, setMode] = useState<Mode>('flash')
+  const [sheetOpen, setSheetOpen] = useState(false)
+  const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([])
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const imageInputRef = useRef<HTMLInputElement | null>(null)
+
+  // Mode persists per conversation; a new chat reads/writes the 'new' slot and
+  // the choice carries into the conversation when it is created.
+  useEffect(() => {
+    setMode(loadMode(conversationId))
+  }, [conversationId])
+
+  const changeMode = useCallback(
+    (next: Mode) => {
+      setMode(next)
+      storeMode(conversationId, next)
+    },
+    [conversationId]
+  )
+
   // PHASE 8.1 live research state — every entry originates from a real SSE event.
   const [trace, setTrace] = useState<TraceStep[]>([])
   const [liveSources, setLiveSources] = useState<SourceCard[]>([])
@@ -526,7 +581,11 @@ export default function Home() {
     async (override?: string) => {
       const text = (override ?? draft).trim()
       if (!text || isStreaming) return
+      const attachmentsUploading = pendingAttachments.some((a) => a.uploading)
+      if (attachmentsUploading) return
+      const attachmentIds = pendingAttachments.map((a) => a.id)
       setDraft('')
+      setPendingAttachments([])
       setError(null)
       setTrace([])
       setLiveSources([])
@@ -705,6 +764,9 @@ export default function Home() {
               conversationId: convId,
               content: text,
               timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+              // FLASH MODE (Phase 3) — the composer's thinking mode.
+              mode,
+              ...(attachmentIds.length > 0 ? { attachments: attachmentIds } : {}),
             }),
             signal: controller.signal,
           })
@@ -802,6 +864,9 @@ export default function Home() {
               // PHASE 8.3 §11 — real timezone-aware time capability: the client
               // supplies its IANA zone so the backend clock answers in local time.
               timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+              // FLASH MODE (Phase 3) — the composer's thinking mode.
+              mode,
+              ...(attachmentIds.length > 0 ? { attachments: attachmentIds } : {}),
             }),
             signal: controller.signal,
           })
@@ -896,7 +961,7 @@ export default function Home() {
         abortRef.current = null
       }
     },
-    [conversationId, draft, isStreaming, loadStatus]
+    [conversationId, draft, isStreaming, loadStatus, mode, pendingAttachments]
   )
 
   // Keep the ref fresh — the deferred starter path always calls the latest send.
@@ -906,6 +971,40 @@ export default function Home() {
 
   const stop = useCallback(() => {
     abortRef.current?.abort()
+  }, [])
+
+  /** FLASH MODE (Phase 3) — upload picked files through the real uploads API. */
+  const uploadFiles = useCallback(async (files: FileList | null) => {
+    if (!files || files.length === 0) return
+    for (const file of Array.from(files).slice(0, 4)) {
+      const tempId = `pending-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+      setPendingAttachments((prev) => [
+        ...prev,
+        {
+          id: tempId,
+          displayName: file.name,
+          kind: file.type.startsWith('image/') ? 'image' : 'document',
+          uploading: true,
+        },
+      ])
+      try {
+        const form = new FormData()
+        form.append('file', file)
+        const res = await fetch('/api/v1/uploads', { method: 'POST', body: form })
+        if (!res.ok) throw new Error(`upload failed (${res.status})`)
+        const saved = (await res.json()) as { id: string; kind: string; displayName?: string }
+        setPendingAttachments((prev) =>
+          prev.map((a) =>
+            a.id === tempId
+              ? { ...a, id: saved.id, kind: saved.kind, displayName: saved.displayName ?? file.name, uploading: false }
+              : a
+          )
+        )
+      } catch {
+        setPendingAttachments((prev) => prev.filter((a) => a.id !== tempId))
+        setError('The attachment could not be uploaded.')
+      }
+    }
   }, [])
 
   const copyMessage = useCallback((idx: number, text: string) => {
@@ -1223,13 +1322,69 @@ export default function Home() {
               )}
             </div>
 
-            {/* Composer */}
+            {/* Composer — FLASH MODE (Phase 3): [+] sheet, mode chip, pending attachments */}
             <div className="border-t p-4" style={{ borderColor: C.outline }}>
+              {/* Visual indicator — clean default: flash shows nothing. */}
+              {mode !== 'flash' && (
+                <div className="mb-2 flex items-center gap-2 pl-1">
+                  <span
+                    className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium"
+                    style={{
+                      borderColor: mode === 'thinking' ? C.accent : C.outline,
+                      color: mode === 'thinking' ? C.accent : C.muted,
+                      background: mode === 'thinking' ? 'rgba(45,212,168,0.08)' : 'transparent',
+                    }}
+                  >
+                    {mode === 'thinking' ? '🧠 Thinking · deep reasoning' : '⨍ Auto · system decides'}
+                  </span>
+                </div>
+              )}
+
+              {/* Pending attachments (uploaded through the sheet's Attach row). */}
+              {pendingAttachments.length > 0 && (
+                <div className="mb-2 flex flex-wrap gap-1.5 pl-1">
+                  {pendingAttachments.map((a) => (
+                    <span
+                      key={a.id}
+                      className="inline-flex max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px]"
+                      style={{ borderColor: C.outline, color: a.uploading ? C.muted : C.text, background: C.raised }}
+                    >
+                      {a.kind === 'image' ? '🖼' : '📎'} <span className="truncate">{a.displayName}</span>
+                      {a.uploading ? (
+                        <span className="animate-pulse" style={{ color: C.accent }}>···</span>
+                      ) : (
+                        <button
+                          onClick={() => setPendingAttachments((prev) => prev.filter((x) => x.id !== a.id))}
+                          aria-label={`Remove ${a.displayName}`}
+                          className="ml-0.5 transition-transform active:scale-90"
+                          style={{ color: C.muted }}
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </span>
+                  ))}
+                </div>
+              )}
+
               <div
                 className="flex items-center gap-2 rounded-full border px-4 py-2"
                 style={{ background: C.container, borderColor: C.outline }}
               >
-                <span style={{ color: C.accent }}>✦</span>
+                {/* [+] — opens the mode/attach/web sheet (popover on web). */}
+                <button
+                  onClick={() => setSheetOpen((v) => !v)}
+                  aria-expanded={sheetOpen}
+                  aria-label="Open options sheet — mode, attachments and web"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-base leading-none transition-all active:scale-90"
+                  style={{
+                    borderColor: sheetOpen || mode !== 'flash' ? C.accent : C.outline,
+                    color: sheetOpen || mode !== 'flash' ? C.accent : C.muted,
+                    background: sheetOpen ? 'rgba(45,212,168,0.08)' : 'transparent',
+                  }}
+                >
+                  +
+                </button>
                 <input
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
@@ -1253,6 +1408,134 @@ export default function Home() {
                   Send
                 </button>
               </div>
+
+              {/* The sheet — anchored popover (web/desktop; mobile renders it
+                  as a bottom sheet via the same panel). */}
+              {sheetOpen && (
+                <div className="relative z-20">
+                  <div
+                    className="mt-2 rounded-2xl border p-4 shadow-[0_18px_50px_rgba(0,0,0,0.45)]"
+                    style={{ background: C.surface, borderColor: C.outline }}
+                    role="dialog"
+                    aria-label="Composer options"
+                  >
+                    {/* Mode */}
+                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider" style={{ color: C.muted }}>
+                      Mode
+                    </p>
+                    <div className="grid gap-1.5">
+                      {(Object.keys(MODE_META) as Mode[]).map((m) => {
+                        const active = mode === m
+                        return (
+                          <button
+                            key={m}
+                            onClick={() => changeMode(m)}
+                            aria-pressed={active}
+                            className="flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-all active:scale-[0.99]"
+                            style={{
+                              borderColor: active ? C.accent : C.outline,
+                              background: active ? 'rgba(45,212,168,0.07)' : 'transparent',
+                            }}
+                          >
+                            <span
+                              className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border"
+                              style={{ borderColor: active ? C.accent : C.muted }}
+                            >
+                              {active && <span className="h-2 w-2 rounded-full" style={{ background: C.accent }} />}
+                            </span>
+                            <span className="min-w-0">
+                              <span className="block text-sm font-medium" style={{ color: C.text }}>
+                                {MODE_META[m].label}
+                              </span>
+                              <span className="block text-[11px]" style={{ color: C.muted }}>
+                                {MODE_META[m].hint}
+                                {m === 'thinking' ? ' · applies to this chat' : m === 'auto' ? ' · router decides' : ''}
+                              </span>
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
+
+                    {/* Attach */}
+                    <p className="mb-2 mt-4 text-[11px] font-semibold uppercase tracking-wider" style={{ color: C.muted }}>
+                      Attach
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={() => fileInputRef.current?.click()}
+                        className="rounded-full border px-3 py-1.5 text-xs font-medium transition-all active:scale-95"
+                        style={{ borderColor: C.outline, color: C.text }}
+                      >
+                        📎 File
+                      </button>
+                      <button
+                        onClick={() => imageInputRef.current?.click()}
+                        className="rounded-full border px-3 py-1.5 text-xs font-medium transition-all active:scale-95"
+                        style={{ borderColor: C.outline, color: C.text }}
+                      >
+                        🖼 Image
+                      </button>
+                      <label
+                        className="cursor-pointer rounded-full border px-3 py-1.5 text-xs font-medium transition-all active:scale-95 sm:hidden"
+                        style={{ borderColor: C.outline, color: C.text }}
+                      >
+                        📷 Camera
+                        <input
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          className="hidden"
+                          onChange={(e) => {
+                            void uploadFiles(e.target.files)
+                            e.target.value = ''
+                          }}
+                        />
+                      </label>
+                    </div>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => {
+                        void uploadFiles(e.target.files)
+                        e.target.value = ''
+                      }}
+                    />
+                    <input
+                      ref={imageInputRef}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => {
+                        void uploadFiles(e.target.files)
+                        e.target.value = ''
+                      }}
+                    />
+
+                    {/* Web — the deterministic backend gate owns search (§2:
+                        the model and the client can never veto a forced
+                        search), so this row is a live indicator, not a
+                        client-side toggle. */}
+                    <p className="mb-2 mt-4 text-[11px] font-semibold uppercase tracking-wider" style={{ color: C.muted }}>
+                      Web
+                    </p>
+                    <div
+                      className="flex items-center justify-between rounded-xl border px-3 py-2.5"
+                      style={{ borderColor: C.outline }}
+                    >
+                      <span className="text-sm" style={{ color: C.text }}>
+                        🌐 Search
+                      </span>
+                      <span className="text-[11px]" style={{ color: C.muted }}>
+                        Auto — the backend gate decides when to search
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </section>
         </div>
