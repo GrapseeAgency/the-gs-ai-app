@@ -1,0 +1,68 @@
+# GS BENCH — Phase 3: blocked set. BLOCKED IS A FIRST-CLASS RESULT (hard rule
+# 6): every entry states the raw, verified reason. Nothing here may be scored
+# or estimated until the blocker is removed. Re-verify each blocker quarterly.
+
+suite: blocked
+blockers_verified: "2026-09-24"
+
+benchmarks:
+  - name: hle
+    harness: inspect_ai
+    task: inspect_evals/hle
+    n_samples: 2500
+    metric: accuracy
+    status: BLOCKED
+    blocker: budget
+    raw_reason: >-
+      HLE requires frontier-model text+image generation over 2500 multimodal
+      questions; at published frontier pricing this is USD 50+ per model per
+      run against paid competitor APIs, and the OpenRouter free pool holds no
+      HLE-capable multimodal frontier model. No budget source configured.
+
+  - name: mmlu_pro
+    harness: inspect_ai
+    task: inspect_evals/mmlu_pro
+    n_samples: 12032
+    metric: accuracy
+    status: BLOCKED
+    blocker: budget
+    raw_reason: >-
+      12032 CoT generations x 14 models-equivalent pass budget exceeds the
+      free-pool daily request ceilings (12 keys x 50 req/day); a full run
+      needs paid inference.
+
+  - name: swe_bench_verified
+    harness: swebench
+    task: swe_bench_verified
+    n_samples: 500
+    metric: resolved_rate
+    status: BLOCKED
+    blocker: disk
+    raw_reason: >-
+      SWE-bench instance environments need ~120 GB (per-instance docker
+      images + conda envs); GitHub-hosted runners provide 14 GB SSD
+      (spec-verified runner spec). Also BLOCKED under hard rule 8 until the
+      Phase 8 held-out split ships: visible-test runs are inadmissible.
+
+  - name: browsecomp
+    harness: inspect_ai
+    task: inspect_evals/browse_comp
+    n_samples: 1266
+    metric: accuracy
+    status: BLOCKED
+    blocker: budget
+    raw_reason: >-
+      Agentic web search over 1266 questions; needs a browsing tool provider
+      and paid search budget. The app's search pipeline is out of scope for
+      the bench (hard rule 1 — no production-pipeline coupling).
+
+  - name: gaia
+    harness: inspect_ai
+    task: inspect_evals/gaia
+    n_samples: 165
+    metric: accuracy
+    status: BLOCKED
+    blocker: missing_credentials
+    raw_reason: >-
+      inspect_evals GAIA requires a Tavily API key for its web-search tool;
+      no Tavily key is provisioned in the repo secrets (checked 2026-09-24).

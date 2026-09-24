@@ -1,0 +1,88 @@
+# GS BENCH — Phase 3: knowledge suite (feasible set).
+# Every entry was feasibility-checked 2026-09-24 (dataset HTTP status, sample
+# count, runner budget). The dataset_revision is RESOLVED AT DOWNLOAD TIME by
+# the runner and written to data/dataset-revisions.json — never assumed here.
+# Scoring rule (hard rule 3): no score without n_samples + CI in the result.
+
+suite: knowledge
+defaults:
+  temperature: 0.2            # production synthesis default (ai.ts completeChat)
+  max_connections: 4          # stay under the app's convs:create rate limit
+  retry_on_5xx: 2
+  record_verbosity: true      # output tokens per task (Phase 11)
+
+benchmarks:
+  - name: gpqa_diamond
+    harness: inspect_ai
+    task: inspect_evals/gpqa_diamond
+    dataset:
+      id: Idavidrein/gpqa          # HTTP 200, sha 83022cefff93… at check time
+      subset: gpqa_diamond
+    dataset_revision: resolve-at-download
+    n_samples: 198
+    metric: accuracy
+    scorer: choice                 # inspect multiple_choice scorer
+    timeout_per_sample_s: 360
+    infrastructure:
+      cpu: 4
+      ram_gb: 16
+      disk_gb: 14
+    notes: >-
+      MCQ scored via inspect's multiple_choice GENERATION template through the
+      shim /chat/completions — the /completions logprobs path returns 501
+      (shim upstreams expose no per-token logprobs). Generation-based MCQ is
+      the honest path; it is recorded in the result harness_version metadata.
+
+  - name: aime
+    harness: inspect_ai
+    task: inspect_evals/aime2024
+    dataset:
+      id: HuggingFaceH4/aime_2024  # HTTP 200 verified; 30 problems per year
+      subset: test
+    dataset_revision: resolve-at-download
+    n_samples: 30
+    metric: exact_match            # integer answer, parsed from \boxed{}/final line
+    timeout_per_sample_s: 900      # thinking-mode problems need long horizons
+    infrastructure:
+      cpu: 4
+      ram_gb: 16
+      disk_gb: 14
+
+  - name: ifbench
+    harness: inspect_ai
+    task: inspect_evals/ifbench
+    dataset:
+      id: allenai/IFBench          # gated (anon API 401); runner uses HF_TOKEN
+                                   # if provided, else mirror THU-KEG/IFBench
+      subset: train
+    dataset_revision: resolve-at-download
+    n_samples: 58
+    metric: constraint_pct         # IF strict-constraint pass rate
+    timeout_per_sample_s: 240
+    infrastructure:
+      cpu: 4
+      ram_gb: 16
+      disk_gb: 14
+
+  - name: tau2_telecom
+    harness: tau2
+    task: telecom                  # tau2-bench bundled telecom domain
+    dataset:
+      id: git+sierra-research/tau2-bench   # tasks ship inside the package
+      subset: telecom
+    dataset_revision: resolve-at-download   # = tau2-bench git sha at build
+    n_samples: 50
+    metric: pass_k
+    pass_k: 1                      # pass^1 = single-attempt success rate
+    timeout_per_sample_s: 900
+    agentic: true                  # → Phase 8 hardening + exploit_rate applies
+    user_simulator: gpt-4o-mini-mini-standard   # tau2 user sim; env-configurable
+    infrastructure:
+      cpu: 4
+      ram_gb: 16
+      disk_gb: 14
+    notes: >-
+      Requires a user-simulator model (separate from the policy model under
+      test). Default simulator = openai/gpt-4o-mini via the shim passthrough
+      OpenRouter chain; if unavailable the benchmark is BLOCKED, never
+      simulated locally.

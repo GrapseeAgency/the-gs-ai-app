@@ -1,0 +1,35 @@
+{
+  "$comment": "GS BENCH — dataset revision ledger. Written/updated by the runner at dataset download time (gs-bench run resolves each dataset revision and appends it here). Fields: dataset_id -> {revision, resolved_at, source, verified_http}. The revision string is what every result file's dataset_revision field must cite. No entry may be hand-edited to a value the runner did not resolve.",
+  "entries": {
+    "Idavidrein/gpqa": {
+      "status": "verified-exists",
+      "verified_http": 200,
+      "observed_sha_at_verify_time": "83022cefff93 (truncated, 2026-09-24)",
+      "revision": "resolve-at-download",
+      "resolved_at": null,
+      "source": "https://huggingface.co/api/datasets/Idavidrein/gpqa"
+    },
+    "HuggingFaceH4/aime_2024": {
+      "status": "verified-exists",
+      "verified_http": 200,
+      "revision": "resolve-at-download",
+      "resolved_at": null,
+      "source": "https://huggingface.co/api/datasets/HuggingFaceH4/aime_2024"
+    },
+    "allenai/IFBench": {
+      "status": "gated-anon-401",
+      "verified_http": 401,
+      "revision": "resolve-at-download",
+      "resolved_at": null,
+      "fallback_mirror": "THU-KEG/IFBench",
+      "source": "https://huggingface.co/api/datasets/allenai/IFBench"
+    },
+    "git+sierra-research/tau2-bench": {
+      "status": "verified-exists",
+      "verified_http": 200,
+      "revision": "resolve-at-download",
+      "resolved_at": null,
+      "source": "https://github.com/sierra-research/tau2-bench"
+    }
+  }
+}
