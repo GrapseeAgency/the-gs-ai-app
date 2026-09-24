@@ -48,6 +48,7 @@ import {
   applyNumericCorrection,
   buildNumericCorrection,
 } from '@/lib/numeric-guard'
+import { runSilentFailureGate } from '@/lib/silent-failure-gate'
 import {
   detectOutputDirective,
   enforceDirective,
@@ -514,7 +515,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
   const gsCapLog = (
     finalStatus: string,
     turn: TurnSearch | null,
-    extra?: { cited?: number[]; error?: string }
+    extra?: { cited?: number[]; error?: string; answer?: string }
   ): void => {
     const sourceCount =
       turn?.kind === 'research'
@@ -538,6 +539,42 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     // this row, never the console. Fire-and-forget — never breaks the turn.
     const freshSources = turn?.kind === 'research' ? turn.outcome.sources : []
     const reuseSources = turn?.kind === 'reuse' ? turn.sources : []
+    // SILENT-FAILURE GATE — runs on EVERY turn before persistence. Violations
+    // are logged with the turn trace and persisted into the trace row: a
+    // silently-failed turn is never recorded as a clean one.
+    const gateSourcesRead =
+      turn?.kind === 'research'
+        ? freshSources.filter((s) => s.status === 'retrieved').length
+        : turn?.kind === 'reuse'
+          ? turn.sources.length // reuse sources were read when first persisted
+          : 0
+    const gateVerdict = runSilentFailureGate({
+      turnKind: (turn?.kind ?? 'none') as 'research' | 'reuse' | 'time' | 'clarify' | 'none',
+      finalStatus,
+      searchExecuted: turn?.kind === 'research',
+      noResults:
+        turn?.kind === 'research' &&
+        (turn.outcome.failure?.kind === 'no_results' ||
+          (!turn.outcome.ok && turn.outcome.sources.length === 0)),
+      registerClass: routerPlan.registerClass,
+      sourceCount,
+      sourcesRead: gateSourcesRead,
+      sourcesFailed: freshSources.filter((s) => s.status === 'failed').length,
+      evidenceCount,
+      citationCount: extra?.cited ? new Set(extra.cited).size : 0,
+      evidenceBlock:
+        turn?.kind === 'research'
+          ? turn.evidenceBlock
+          : turn?.kind === 'reuse'
+            ? turn.evidenceBlock
+            : null,
+      answerText: extra?.answer ?? null,
+    })
+    if (!gateVerdict.ok) {
+      console.error(
+        `GS-SILENT-FAILURE requestId=${requestId} conv=${id} msg=${userMessage.id} capability=${cap.capability} modelRoute=${modelRoute.backend}/${routerPlan.internalModelId} finalStatus=${finalStatus} violations=[${gateVerdict.violations.join(' | ')}]`
+      )
+    }
     void writeTurnTrace({
       requestId,
       conversationId: id,
@@ -563,6 +600,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
         finalStatus === 'done' || finalStatus === 'clarify'
           ? null
           : classifyErrorType(extra?.error ?? null),
+      silentFailures: gateVerdict.violations,
     })
   }
 
@@ -1332,7 +1370,10 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
           data: { conversationId: id, role: 'assistant', content: finalText },
         })
         await persistTurnSources(assistantMessage.id, finalText, turn, historySources)
-        gsCapLog('done', turn)
+        gsCapLog('done', turn, {
+          cited: parseCitedOrdinals(finalText, turn.kind === 'research' ? turn.maxOrdinal + historySources.length : historySources.length),
+          answer: finalText,
+        })
         return NextResponse.json(messageToJson(assistantMessage))
       }
       // §5 — synthesis is validated against the authoritative execution state.
@@ -1375,7 +1416,10 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
           parseCitedOrdinals(finalText, turn.maxOrdinal + historySources.length)
         )
       }
-      gsCapLog('done', turn, { cited: parseCitedOrdinals(finalText, turn.kind === 'research' ? turn.maxOrdinal + historySources.length : historySources.length) })
+      gsCapLog('done', turn, {
+        cited: parseCitedOrdinals(finalText, turn.kind === 'research' ? turn.maxOrdinal + historySources.length : historySources.length),
+        answer: finalText,
+      })
       const saved = await db.message.findUnique({
         where: { id: assistantMessage.id },
         include: { sources: { orderBy: { ordinal: 'asc' } } },
@@ -1605,6 +1649,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
           finalText,
           turn.kind === 'research' ? turn.maxOrdinal + historySources.length : historySources.length
         ),
+        answer: finalText,
       })
       push('done', JSON.stringify(messageToJson(savedWithSources ?? saved)))
     } catch (e) {

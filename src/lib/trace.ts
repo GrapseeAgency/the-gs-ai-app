@@ -45,6 +45,12 @@ export interface TurnTraceRecord {
   latencyMs: number
   /** provider_429 | ssrf_block | parse_fail | provider_error | null */
   errorType: string | null
+  /**
+   * Silent-failure-gate violations for this turn (empty = clean). A turn with
+   * violations is marked FAILED in the eval layers even when the wire carried
+   * a final answer — a silently-failed turn is never persisted as clean.
+   */
+  silentFailures: string[]
 }
 
 /**
@@ -84,6 +90,7 @@ export async function writeTurnTrace(record: TurnTraceRecord): Promise<void> {
         cited: JSON.stringify(record.cited),
         latencyMs: Math.max(0, Math.round(record.latencyMs)),
         errorType: record.errorType,
+        silentFailures: JSON.stringify(record.silentFailures),
       },
     })
   } catch (e) {

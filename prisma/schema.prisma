@@ -196,6 +196,7 @@ model TurnTrace {
   cited            String // JSON number[] — cited source ordinals
   latencyMs        Int
   errorType        String? // provider_429 | ssrf_block | parse_fail | provider_error | null
+  silentFailures   String? // JSON string[] — silent-failure-gate violations; null/[] = clean turn
 
   @@index([conversationId])
   @@index([timestamp])
