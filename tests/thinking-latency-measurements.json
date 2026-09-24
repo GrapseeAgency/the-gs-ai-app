@@ -1,0 +1,48 @@
+{
+  "measuredAt": "2026-09-24T10:43:09.813Z",
+  "protocol": {
+    "prompt": "hi",
+    "samplesPerMode": 5,
+    "metric": "ttft = time to first streamed delta (ms)"
+  },
+  "provider": "zai (z-ai-web-dev-sdk, real production SDK)",
+  "flash": {
+    "thinking": false,
+    "ttftSamples": [],
+    "totalSamples": [],
+    "error": "API request failed with status 429: {\"error\":\"Too many requests, please try again later\"}"
+  },
+  "thinking": {
+    "thinking": true,
+    "ttftSamples": [],
+    "totalSamples": [],
+    "error": "API request failed with status 429: {\"error\":\"Too many requests, please try again later\"}"
+  },
+  "p50": {
+    "flash": null,
+    "thinking": null
+  },
+  "p95": {
+    "flash": null,
+    "thinking": null
+  },
+  "openrouter": {
+    "model": "nvidia/nemotron-3-super-120b-a12b:free",
+    "flash": null,
+    "thinking": null,
+    "p50": {
+      "flash": null,
+      "thinking": null
+    },
+    "p95": {
+      "flash": null,
+      "thinking": null
+    }
+  },
+  "notes": [
+    "flash-mode error class: API request failed with status 429: {\"error\":\"Too many requests, please try again later\"}",
+    "thinking-mode error class: API request failed with status 429: {\"error\":\"Too many requests, please try again later\"}",
+    "INCOMPLETE RUN — one or both modes returned zero successful samples (provider quota/availability). Numbers in model-capabilities.ts carry the last COMPLETE run until re-measured.",
+    "OpenRouter key pool empty — free-chain measurement skipped."
+  ]
+}
