@@ -357,7 +357,7 @@ def _run_inspect(entry: Dict[str, Any], model: str, res: Dict[str, Any], log_lin
     log_lines.append(f"# harness=inspect_ai task={task}")
     env = dict(os.environ)
     env["OPENAI_BASE_URL"] = f"{endpoint()}/api/v1/openai"
-    env["OPENAI_API_KEY"] = os.environ.get("GS_BENCH_API_KEY", "not-required")
+    env["OPENAI_API_KEY"] = os.environ.get("GS_BENCH_API_KEY") or "not-required"  # empty secret -> placeholder
     env["INSPECT_MAX_CONNECTIONS"] = str(entry.get("_defaults", {}).get("max_connections", 4))
     model_arg = f"openai/{model}"
 
@@ -433,7 +433,7 @@ def _run_tau2(entry: Dict[str, Any], model: str, res: Dict[str, Any], log_lines:
     # litellm routes openai/* models to OPENAI_API_BASE — point it at the shim
     env["OPENAI_BASE_URL"] = f"{endpoint()}/api/v1/openai"
     env["OPENAI_API_BASE"] = f"{endpoint()}/api/v1/openai"
-    env["OPENAI_API_KEY"] = os.environ.get("GS_BENCH_API_KEY", "not-required")
+    env["OPENAI_API_KEY"] = os.environ.get("GS_BENCH_API_KEY") or "not-required"  # empty secret -> placeholder
     # tau2 needs a REAL user-simulator model; when its provider rejects the
     # key (e.g. free OpenRouter tier vs a paid model) the run BLOCKS with the
     # raw reason — the simulator is never silently swapped for a weaker one.
