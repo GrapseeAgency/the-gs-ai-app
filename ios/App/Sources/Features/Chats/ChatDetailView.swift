@@ -544,22 +544,9 @@ struct ChatDetailView: View {
                 }
                 .accessibilityElement(children: .combine)
             }
-            // FLASH MODE (Phase 3) — non-flash mode chip above the composer;
-            // flash (the clean default) shows nothing.
-            if vm.chatMode != "flash" {
-                HStack {
-                    Text(vm.chatMode == "thinking" ? "Thinking · deep reasoning" : "Auto · system decides")
-                        .font(Aero.caption())
-                        .foregroundStyle(Aero.text)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(Capsule().fill(Aero.container))
-                        .overlay(Capsule().stroke(Aero.outline, lineWidth: 1))
-                        .accessibilityLabel("Current mode \(vm.chatMode)")
-                    Spacer()
-                }
-                .padding(.bottom, 2)
-            }
+            // FLASH-MODE BUG 2 — the mode chip now lives INSIDE the composer
+            // row, LEFT of the input (Kimi's pattern); tapping it opens the
+            // options sheet. Flash — the silent default — shows nothing.
             if !attachments.drafts.isEmpty {
                 // PHASE 5: chips row ABOVE the field, inside the existing
                 // zone — additive only, the composer architecture is unchanged.
@@ -598,6 +585,24 @@ struct ChatDetailView: View {
                 .accessibilityLabel(attachments.remainingSlots <= 0
                     ? "Attachments full — six per message"
                     : "Add attachment")
+
+                // FLASH-MODE BUG 2: the mode chip — left of the input, opens
+                // the options sheet. Rendered only for non-flash modes.
+                if vm.chatMode != "flash" {
+                    Button {
+                        showingAttachments = true
+                    } label: {
+                        Text(vm.chatMode == "thinking" ? "🧠 Thinking ▾" : "⨍ Auto ▾")
+                            .font(Aero.caption())
+                            .foregroundStyle(Aero.text)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 7)
+                            .background(Capsule().fill(Aero.container))
+                            .overlay(Capsule().stroke(Aero.outline, lineWidth: 1))
+                    }
+                    .buttonStyle(KineticPressStyle())
+                    .accessibilityLabel("Current mode \(vm.chatMode). Open options sheet")
+                }
 
                 AeroInputBar(
                     text: $vm.draft,

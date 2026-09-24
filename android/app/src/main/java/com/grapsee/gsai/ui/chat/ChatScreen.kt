@@ -103,6 +103,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -1351,13 +1352,14 @@ fun ChatScreen(
                 drafts = attachDrafts,
                 onRemoveAttachment = { attachStore.remove(it) },
                 onRetryAttachment = { attachStore.retry(it) },
-                // FLASH MODE (Phase 3) — chip above the composer; flash (the
-                // clean default) shows nothing.
+                // FLASH-MODE BUG 2 — compact chip inside the composer row;
+                // flash (the clean default) shows nothing.
                 modeLabel = when (chatMode) {
-                    "thinking" -> "Thinking · deep reasoning"
-                    "auto" -> "Auto · system decides"
+                    "thinking" -> "Thinking ▾"
+                    "auto" -> "Auto ▾"
                     else -> null
                 },
+                onModeChipClick = { attachSheetOpen = true },
                 // Real voice entry right in the composer; hidden — never
                 // disabled-dead — when no voice route was wired, and the attach
                 // sheet keeps its own honest Voice option as the fallback path.
@@ -1577,24 +1579,13 @@ private fun ComposerRow(
     drafts: List<AttachmentDraft> = emptyList(),
     onRemoveAttachment: (String) -> Unit = {},
     onRetryAttachment: (String) -> Unit = {},
-    // FLASH MODE (Phase 3) — non-flash mode chip; null = clean default.
-    modeLabel: String? = null
+    // FLASH-MODE BUG 2 — the mode chip sits INSIDE the row, LEFT of the text
+    // input (Kimi's pattern); tapping it opens the options sheet. null = the
+    // silent flash default.
+    modeLabel: String? = null,
+    onModeChipClick: () -> Unit = {}
 ) {
     Column {
-        if (modeLabel != null) {
-            Surface(
-                shape = RoundedCornerShape(999.dp),
-                color = MaterialTheme.colorScheme.secondaryContainer,
-                modifier = Modifier.padding(start = 4.dp, bottom = 6.dp)
-            ) {
-                Text(
-                    text = modeLabel,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                )
-            }
-        }
         AttachmentChipRow(
             drafts = drafts,
             onRemove = onRemoveAttachment,
@@ -1607,6 +1598,23 @@ private fun ComposerRow(
                 contentDescription = "Attach",
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
+        }
+        // FLASH-MODE BUG 2: the mode chip — left of the input, opens the
+        // options sheet. Rendered only for non-flash modes.
+        if (modeLabel != null) {
+            Surface(
+                onClick = onModeChipClick,
+                shape = RoundedCornerShape(999.dp),
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                modifier = Modifier.padding(end = 4.dp)
+            ) {
+                Text(
+                    text = modeLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                )
+            }
         }
         GsInputBar(
             value = draftText(),
@@ -2210,7 +2218,41 @@ private fun AttachSheet(
                 .padding(bottom = GsMotion.spaceL),
             verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
         ) {
-            // --- Mode -------------------------------------------------------
+            // --- Attach (FIRST — FLASH-MODE BUG 2: ChatGPT/Kimi put attach
+            //     on top of the sheet; behavioral modes sit at the bottom). ---
+            Text(
+                text = "Attach",
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+            attachOptions.chunked(2).forEach { rowOptions ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
+                ) {
+                    rowOptions.forEach { option ->
+                        AttachTile(
+                            option = option,
+                            modifier = Modifier.weight(1f),
+                            onClick = {
+                                when {
+                                    option.isVoice -> onVoice()
+                                    !option.available -> onUnavailable(option.label)
+                                    option.label == "Gallery" -> onGallery()
+                                    option.label == "Camera" -> onCamera()
+                                    option.label == "Files" -> onFiles()
+                                }
+                            }
+                        )
+                    }
+                    if (rowOptions.size == 1) {
+                        Spacer(Modifier.weight(1f))
+                    }
+                }
+            }
+            // Divider — attach (intent) above, mode (infrastructure) below.
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            // --- Mode (LAST). -------------------------------------------------
             Text(
                 text = "Mode",
                 style = MaterialTheme.typography.headlineSmall,
@@ -2251,37 +2293,6 @@ private fun AttachSheet(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                    }
-                }
-            }
-            Spacer(Modifier.height(GsMotion.spaceS))
-            Text(
-                text = "Attach",
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.onBackground
-            )
-            attachOptions.chunked(2).forEach { rowOptions ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
-                ) {
-                    rowOptions.forEach { option ->
-                        AttachTile(
-                            option = option,
-                            modifier = Modifier.weight(1f),
-                            onClick = {
-                                when {
-                                    option.isVoice -> onVoice()
-                                    !option.available -> onUnavailable(option.label)
-                                    option.label == "Gallery" -> onGallery()
-                                    option.label == "Camera" -> onCamera()
-                                    option.label == "Files" -> onFiles()
-                                }
-                            }
-                        )
-                    }
-                    if (rowOptions.size == 1) {
-                        Spacer(Modifier.weight(1f))
                     }
                 }
             }

@@ -97,25 +97,8 @@ struct AttachmentSheetView: View {
     var body: some View {
         AeroSheetShell(title: "Options") {
             VStack(alignment: .leading, spacing: Aero.Spacing.m) {
-                // --- Mode (FLASH MODE, Phase 3) ------------------------------
-                VStack(alignment: .leading, spacing: Aero.Spacing.s) {
-                    Text("Mode")
-                        .font(Aero.label())
-                        .foregroundStyle(Aero.textMuted)
-                    Picker("Mode", selection: Binding(
-                        get: { selectedMode },
-                        set: { onModeSelected($0) }
-                    )) {
-                        Text("Flash").tag("flash")
-                        Text("Thinking").tag("thinking")
-                        Text("Auto").tag("auto")
-                    }
-                    .pickerStyle(.segmented)
-                    Text(modeHint)
-                        .font(Aero.caption())
-                        .foregroundStyle(Aero.textMuted)
-                }
-
+                // --- Attach (FIRST — FLASH-MODE BUG 2: ChatGPT/Kimi put
+                //     attach on top; behavioral modes sit at the bottom). ---
                 if atCapacity {
                     Text("Six attachments per message — remove one to add another.")
                         .font(Aero.caption())
@@ -141,6 +124,27 @@ struct AttachmentSheetView: View {
                     ForEach(tiles.filter { !$0.available }) { tile in
                         unavailableTile(tile)
                     }
+                }
+
+                Divider()
+
+                // --- Mode (LAST — FLASH-MODE BUG 2). -------------------------
+                VStack(alignment: .leading, spacing: Aero.Spacing.s) {
+                    Text("Mode")
+                        .font(Aero.label())
+                        .foregroundStyle(Aero.textMuted)
+                    Picker("Mode", selection: Binding(
+                        get: { selectedMode },
+                        set: { onModeSelected($0) }
+                    )) {
+                        Text("Flash").tag("flash")
+                        Text("Thinking").tag("thinking")
+                        Text("Auto").tag("auto")
+                    }
+                    .pickerStyle(.segmented)
+                    Text(modeHint)
+                        .font(Aero.caption())
+                        .foregroundStyle(Aero.textMuted)
                 }
                 Spacer(minLength: 0)
             }

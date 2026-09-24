@@ -1324,22 +1324,6 @@ export default function Home() {
 
             {/* Composer — FLASH MODE (Phase 3): [+] sheet, mode chip, pending attachments */}
             <div className="border-t p-4" style={{ borderColor: C.outline }}>
-              {/* Visual indicator — clean default: flash shows nothing. */}
-              {mode !== 'flash' && (
-                <div className="mb-2 flex items-center gap-2 pl-1">
-                  <span
-                    className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium"
-                    style={{
-                      borderColor: mode === 'thinking' ? C.accent : C.outline,
-                      color: mode === 'thinking' ? C.accent : C.muted,
-                      background: mode === 'thinking' ? 'rgba(45,212,168,0.08)' : 'transparent',
-                    }}
-                  >
-                    {mode === 'thinking' ? '🧠 Thinking · deep reasoning' : '⨍ Auto · system decides'}
-                  </span>
-                </div>
-              )}
-
               {/* Pending attachments (uploaded through the sheet's Attach row). */}
               {pendingAttachments.length > 0 && (
                 <div className="mb-2 flex flex-wrap gap-1.5 pl-1">
@@ -1385,6 +1369,23 @@ export default function Home() {
                 >
                   +
                 </button>
+                {/* FLASH-MODE BUG 2 — the mode chip lives INSIDE the composer
+                    row, LEFT of the input (Kimi's pattern); tapping it opens
+                    the sheet. Flash — the silent default — shows nothing. */}
+                {mode !== 'flash' && (
+                  <button
+                    onClick={() => setSheetOpen(true)}
+                    aria-label={`Mode: ${mode}. Open options sheet`}
+                    className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full border px-2.5 text-[11px] font-medium transition-all active:scale-95"
+                    style={{
+                      borderColor: mode === 'thinking' ? C.accent : C.outline,
+                      color: mode === 'thinking' ? C.accent : C.muted,
+                      background: mode === 'thinking' ? 'rgba(45,212,168,0.08)' : 'transparent',
+                    }}
+                  >
+                    {mode === 'thinking' ? '🧠 Thinking' : '⨍ Auto'} ▾
+                  </button>
+                )}
                 <input
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
@@ -1419,46 +1420,9 @@ export default function Home() {
                     role="dialog"
                     aria-label="Composer options"
                   >
-                    {/* Mode */}
+                    {/* Attach — FIRST (BUG 2: ChatGPT/Kimi put attach on top,
+                        behavioral modes at the bottom). */}
                     <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider" style={{ color: C.muted }}>
-                      Mode
-                    </p>
-                    <div className="grid gap-1.5">
-                      {(Object.keys(MODE_META) as Mode[]).map((m) => {
-                        const active = mode === m
-                        return (
-                          <button
-                            key={m}
-                            onClick={() => changeMode(m)}
-                            aria-pressed={active}
-                            className="flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-all active:scale-[0.99]"
-                            style={{
-                              borderColor: active ? C.accent : C.outline,
-                              background: active ? 'rgba(45,212,168,0.07)' : 'transparent',
-                            }}
-                          >
-                            <span
-                              className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border"
-                              style={{ borderColor: active ? C.accent : C.muted }}
-                            >
-                              {active && <span className="h-2 w-2 rounded-full" style={{ background: C.accent }} />}
-                            </span>
-                            <span className="min-w-0">
-                              <span className="block text-sm font-medium" style={{ color: C.text }}>
-                                {MODE_META[m].label}
-                              </span>
-                              <span className="block text-[11px]" style={{ color: C.muted }}>
-                                {MODE_META[m].hint}
-                                {m === 'thinking' ? ' · applies to this chat' : m === 'auto' ? ' · router decides' : ''}
-                              </span>
-                            </span>
-                          </button>
-                        )
-                      })}
-                    </div>
-
-                    {/* Attach */}
-                    <p className="mb-2 mt-4 text-[11px] font-semibold uppercase tracking-wider" style={{ color: C.muted }}>
                       Attach
                     </p>
                     <div className="flex flex-wrap gap-2">
@@ -1514,6 +1478,47 @@ export default function Home() {
                         e.target.value = ''
                       }}
                     />
+
+                    {/* Divider — attach (intent) above, mode (infrastructure) below. */}
+                    <div className="my-4 h-px" style={{ background: C.outline }} />
+
+                    {/* Mode — LAST. */}
+                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider" style={{ color: C.muted }}>
+                      Mode
+                    </p>
+                    <div className="grid gap-1.5">
+                      {(Object.keys(MODE_META) as Mode[]).map((m) => {
+                        const active = mode === m
+                        return (
+                          <button
+                            key={m}
+                            onClick={() => changeMode(m)}
+                            aria-pressed={active}
+                            className="flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-all active:scale-[0.99]"
+                            style={{
+                              borderColor: active ? C.accent : C.outline,
+                              background: active ? 'rgba(45,212,168,0.07)' : 'transparent',
+                            }}
+                          >
+                            <span
+                              className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border"
+                              style={{ borderColor: active ? C.accent : C.muted }}
+                            >
+                              {active && <span className="h-2 w-2 rounded-full" style={{ background: C.accent }} />}
+                            </span>
+                            <span className="min-w-0">
+                              <span className="block text-sm font-medium" style={{ color: C.text }}>
+                                {MODE_META[m].label}
+                              </span>
+                              <span className="block text-[11px]" style={{ color: C.muted }}>
+                                {MODE_META[m].hint}
+                                {m === 'thinking' ? ' · applies to this chat' : m === 'auto' ? ' · router decides' : ''}
+                              </span>
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
 
                     {/* Web — the deterministic backend gate owns search (§2:
                         the model and the client can never veto a forced
