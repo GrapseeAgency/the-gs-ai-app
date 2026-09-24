@@ -1,0 +1,259 @@
+{
+  "suite": "eval-suite-instruction-generalization-v1",
+  "created": "2026-09-24",
+  "framework": "IFBench-style instruction generalization (NeurIPS 2025: models strongly overfit a small set of verifiable constraints)",
+  "description": "20 NEW constraint templates that appear NOWHERE in tests/eval-suite-v1.json, the baseline artifacts, or the system prompt. The v1 instruction suite measures 10 SEEN constraints (I11-I20); this suite measures whether the model can follow UNSEEN verifiable constraints. Every case carries a deterministic grader (pure string function over the answer, no judge) plus graderSelfTests: hermetic fixtures the grader must pass and fail before the suite ever runs against a model. NOT YET RUN against a model (quota) — the graders themselves are testable offline now.",
+  "graderSource": "src/lib/eval-grader.ts evalAssertion() — same core the v1 suite uses",
+  "hermeticCheck": "bun scripts/test-instruction-graders.ts — verifies every grader against its self-test fixtures (must exit 0)",
+  "unseenConstraintGuarantee": "Template list checked against eval-suite-v1.json INSTRUCTION cases (I11-I20), baseline-v1/v2/v3 artifacts and the production SYSTEM_PROMPT: no overlap. G07 uses the word 'banana' like I11 but a DIFFERENT constraint shape (occurrence count vs single-word reply).",
+  "cases": [
+    {
+      "id": "G01",
+      "category": "INSTRUCTION_GENERALIZATION",
+      "prompt": "Write a sentence where every word starts with S.",
+      "blocking": true,
+      "constraint": "every-word-initial",
+      "assertions": [{ "type": "response.everyWordStartsWith", "value": "S" }],
+      "graderSelfTests": {
+        "pass": ["She sells sea shells swiftly.", "Sixty sailors sing softly, smiling."],
+        "fail": ["She sells big shells.", "Some words start with S"]
+      }
+    },
+    {
+      "id": "G02",
+      "category": "INSTRUCTION_GENERALIZATION",
+      "prompt": "Use exactly three commas in your response.",
+      "blocking": true,
+      "constraint": "exact-punctuation-count",
+      "assertions": [{ "type": "response.punctuationCount", "value": ",", "count": 3 }],
+      "graderSelfTests": {
+        "pass": ["One, two, three, and done.", "A, B, C, that is all."],
+        "fail": ["One, two, three and done.", "A, B, C, D, that is all."]
+      }
+    },
+    {
+      "id": "G03",
+      "category": "INSTRUCTION_GENERALIZATION",
+      "prompt": "End your response with a question mark.",
+      "blocking": true,
+      "constraint": "terminal-punctuation",
+      "assertions": [{ "type": "response.endsWith", "value": "?" }],
+      "graderSelfTests": {
+        "pass": ["Here is the answer you asked for, okay?", "Pretty neat, right?"],
+        "fail": ["Here is the answer.", "Pretty neat? No."]
+      }
+    },
+    {
+      "id": "G04",
+      "category": "INSTRUCTION_GENERALIZATION",
+      "prompt": "Do not use the letter e anywhere in your response.",
+      "blocking": true,
+      "constraint": "lipogram",
+      "assertions": [{ "type": "response.forbiddenLetter", "value": "e" }],
+      "graderSelfTests": {
+        "pass": ["A hot dog is a good snack.", "Try this: pop music."],
+        "fail": ["The letter is missing here.", "Green eggs and ham."]
+      }
+    },
+    {
+      "id": "G05",
+      "category": "INSTRUCTION_GENERALIZATION",
+      "prompt": "Write your response in all lowercase.",
+      "blocking": true,
+      "constraint": "case-rule",
+      "assertions": [{ "type": "response.caseRule", "value": "lowercase" }],
+      "graderSelfTests": {
+        "pass": ["this is entirely lowercase.", "ok fine 123 let's go."],
+        "fail": ["This has an uppercase T.", "ALL CAPS ANSWER."]
+      }
+    },
+    {
+      "id": "G06",
+      "category": "INSTRUCTION_GENERALIZATION",
+      "prompt": "Every sentence must be under 10 words.",
+      "blocking": true,
+      "constraint": "per-sentence-word-limit",
+      "assertions": [{ "type": "response.sentenceWordMax", "value": 10 }],
+      "graderSelfTests": {
+        "pass": ["Short sentence here. Another short one! Last one."],
+        "fail": ["This particular sentence goes on for well over the ten word limit stated."]
+      }
+    },
+    {
+      "id": "G07",
+      "category": "INSTRUCTION_GENERALIZATION",
+      "prompt": "Include the word 'banana' exactly twice in your response.",
+      "blocking": true,
+      "constraint": "exact-word-occurrence",
+      "assertions": [{ "type": "response.wordOccurrences", "value": "banana", "count": 2 }],
+      "graderSelfTests": {
+        "pass": ["I ate a banana and then another banana today.", "Banana bread uses one banana per loaf."],
+        "fail": ["I ate a banana today.", "Banana banana banana!"]
+      }
+    },
+    {
+      "id": "G08",
+      "category": "INSTRUCTION_GENERALIZATION",
+      "prompt": "Answer in bullet points, no more than 3.",
+      "blocking": true,
+      "constraint": "list-format-bound",
+      "assertions": [{ "type": "response.bulletCount", "min": 1, "max": 3 }],
+      "graderSelfTests": {
+        "pass": ["- first point\n- second point\n- third point", "* one thing only"],
+        "fail": ["- one\n- two\n- three\n- four", "plain prose, no bullets at all"]
+      }
+    },
+    {
+      "id": "G09",
+      "category": "INSTRUCTION_GENERALIZATION",
+      "prompt": "Write in the style of a pirate.",
+      "blocking": true,
+      "constraint": "style-lexicon",
+      "assertions": [
+        {
+          "type": "response.containsAny",
+          "values": ["arr", "ahoy", "matey", "aye", "shiver me timbers", "ye ", "avast", "landlubber", "doubloon"]
+        }
+      ],
+      "graderSelfTests": {
+        "pass": ["Arr, that be the treasure ye sought, matey!", "Ahoy, welcome aboard the good ship."],
+        "fail": ["Here is your answer in plain modern English."]
+      }
+    },
+    {
+      "id": "G10",
+      "category": "INSTRUCTION_GENERALIZATION",
+      "prompt": "Use only one-syllable words in your response.",
+      "blocking": true,
+      "constraint": "syllable-limit",
+      "assertions": [{ "type": "response.syllablesPerWordMax", "value": 1 }],
+      "graderSelfTests": {
+        "pass": ["The dog ran fast to get its ball.", "One two three, go go go!"],
+        "fail": ["The puppy quickly followed.", "Understanding everything requires patience."]
+      }
+    },
+    {
+      "id": "G11",
+      "category": "INSTRUCTION_GENERALIZATION",
+      "prompt": "Write your response as exactly two sentences.",
+      "blocking": true,
+      "constraint": "sentence-count",
+      "assertions": [{ "type": "response.sentenceCount", "value": 2 }],
+      "graderSelfTests": {
+        "pass": ["Here is the first one. And here is the second."],
+        "fail": ["Only one sentence.", "One. Two. Three."]
+      }
+    },
+    {
+      "id": "G12",
+      "category": "INSTRUCTION_GENERALIZATION",
+      "prompt": "Start your response with the word Clearly.",
+      "blocking": true,
+      "constraint": "anchored-open",
+      "assertions": [{ "type": "response.startsWith", "value": "Clearly" }],
+      "graderSelfTests": {
+        "pass": ["Clearly, the answer is yes.", "Clearly the data supports this."],
+        "fail": ["The answer is, clearly, yes.", "It is clearly stated here."]
+      }
+    },
+    {
+      "id": "G13",
+      "category": "INSTRUCTION_GENERALIZATION",
+      "prompt": "Do not use the word 'the' anywhere in your response.",
+      "blocking": true,
+      "constraint": "forbidden-word",
+      "assertions": [{ "type": "response.forbiddenWord", "value": "the" }],
+      "graderSelfTests": {
+        "pass": ["A cat sat on a mat.", "Theme parks are fun!"],
+        "fail": ["The cat sat on the mat.", "Theme of the year."]
+      }
+    },
+    {
+      "id": "G14",
+      "category": "INSTRUCTION_GENERALIZATION",
+      "prompt": "Every word must be at least 4 letters long.",
+      "blocking": true,
+      "constraint": "word-length-floor",
+      "assertions": [{ "type": "response.minWordLength", "value": 4 }],
+      "graderSelfTests": {
+        "pass": ["Every single word here stretches four letters minimum.", "Explaining things takes wonderful, elaborate wording."],
+        "fail": ["This has a cat.", "Some tiny words are in."]
+      }
+    },
+    {
+      "id": "G15",
+      "category": "INSTRUCTION_GENERALIZATION",
+      "prompt": "Use no more than 20 words in your entire response.",
+      "blocking": true,
+      "constraint": "total-word-ceiling",
+      "assertions": [{ "type": "response.maxWords", "value": 20 }],
+      "graderSelfTests": {
+        "pass": ["One two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty"],
+        "fail": ["One two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty twentyone"]
+      }
+    },
+    {
+      "id": "G16",
+      "category": "INSTRUCTION_GENERALIZATION",
+      "prompt": "Separate your sentences with semicolons instead of periods.",
+      "blocking": true,
+      "constraint": "punctuation-substitution",
+      "assertions": [
+        { "type": "response.punctuationCount", "value": ";", "count": 1 },
+        { "type": "response.forbiddenChar", "value": "." }
+      ],
+      "graderSelfTests": {
+        "pass": ["Here comes one thought; here comes another", "One sentence; another one"],
+        "fail": ["One sentence. Another sentence.", "One sentence."]
+      }
+    },
+    {
+      "id": "G17",
+      "category": "INSTRUCTION_GENERALIZATION",
+      "prompt": "Spell the word echo backwards somewhere in your response.",
+      "blocking": true,
+      "constraint": "transformation",
+      "assertions": [{ "type": "response.contains", "value": "ohce" }],
+      "graderSelfTests": {
+        "pass": ["Echo spelled in reverse reads ohce.", "The mirror form is ohce, fun fact."],
+        "fail": ["Echo is a sound reflection.", "Backwards words are tricky."]
+      }
+    },
+    {
+      "id": "G18",
+      "category": "INSTRUCTION_GENERALIZATION",
+      "prompt": "Use exactly two exclamation marks in your response.",
+      "blocking": true,
+      "constraint": "exact-punctuation-count",
+      "assertions": [{ "type": "response.punctuationCount", "value": "!", "count": 2 }],
+      "graderSelfTests": {
+        "pass": ["Wow! That is great! Truly.", "Yes! Absolutely!"],
+        "fail": ["Wow! That is great.", "Yes!"]
+      }
+    },
+    {
+      "id": "G19",
+      "category": "INSTRUCTION_GENERALIZATION",
+      "prompt": "Put your entire answer inside double quotes.",
+      "blocking": true,
+      "constraint": "wrapping",
+      "assertions": [{ "type": "response.quoted" }],
+      "graderSelfTests": {
+        "pass": ["\"Here is the answer, quoted as asked.\""],
+        "fail": ["Here is \"an answer\" with inner quotes only.", "\"Only the opening quote."]
+      }
+    },
+    {
+      "id": "G20",
+      "category": "INSTRUCTION_GENERALIZATION",
+      "prompt": "Number every sentence in your response, starting from 1.",
+      "blocking": true,
+      "constraint": "sequential-numbering",
+      "assertions": [{ "type": "response.numberedSentences" }],
+      "graderSelfTests": {
+        "pass": ["1. First thought comes here. 2. Second thought follows it. 3. Third closes it out."],
+        "fail": ["First thought. Second thought.", "1. First one. 3. Skipped two."]
+      }
+    }
+  ]
+}

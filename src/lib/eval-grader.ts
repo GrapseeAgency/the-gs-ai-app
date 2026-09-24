@@ -18,6 +18,11 @@ export interface Assertion {
   value?: unknown
   values?: unknown[]
   flags?: string
+  /** Exact-count graders (punctuation/word occurrence). */
+  count?: number
+  /** Range graders (bullet counts, sentence bounds). */
+  min?: number
+  max?: number
 }
 
 /** One row of the Layer-1 `turns` table (SQLite booleans arrive as 0/1). */
@@ -155,6 +160,146 @@ export function evalAssertion(a: Assertion, trace: TraceRow | null, answer: stri
       return ok
         ? { ok: true, detail: results.find((r) => r.ok)!.detail }
         : { ok: false, detail: `anyOf failed: ${results.map((r) => r.detail).join(' AND ')}` }
+    }
+
+    // --- INSTRUCTION GENERALIZATION graders (IFBench-style unseen constraints).
+    // Pure string functions over the answer; deterministic by contract.
+    case 'response.everyWordStartsWith': {
+      const letter = String(a.value).toLowerCase()
+      const words = answer.trim().split(/\s+/).filter((w) => /[a-z0-9]/i.test(w))
+      const bad = words.filter((w) => !w.toLowerCase().startsWith(letter))
+      return bad.length === 0 && words.length > 0
+        ? { ok: true, detail: `all ${words.length} words start with "${letter}"` }
+        : { ok: false, detail: `words not starting with "${letter}": ${bad.slice(0, 5).join(', ')}` }
+    }
+    case 'response.punctuationCount': {
+      const ch = String(a.value)
+      const actual = answer.split(ch).length - 1
+      const expected = a.count ?? 0
+      return actual === expected
+        ? { ok: true, detail: `"${ch}" count=${actual}` }
+        : { ok: false, detail: `"${ch}" count=${actual} expected=${expected}` }
+    }
+    case 'response.endsWith': {
+      const suffix = String(a.value)
+      return answer.trimEnd().endsWith(suffix)
+        ? { ok: true, detail: `ends with "${suffix}"` }
+        : { ok: false, detail: `does not end with "${suffix}": ${JSON.stringify(answer.slice(-30))}` }
+    }
+    case 'response.startsWith': {
+      const prefix = String(a.value)
+      return answer.trimStart().toLowerCase().startsWith(prefix.toLowerCase())
+        ? { ok: true, detail: `starts with "${prefix}"` }
+        : { ok: false, detail: `does not start with "${prefix}": ${JSON.stringify(answer.slice(0, 30))}` }
+    }
+    case 'response.forbiddenLetter': {
+      const letter = String(a.value).toLowerCase()
+      const hits = answer.toLowerCase().split(letter).length - 1
+      return hits === 0
+        ? { ok: true, detail: `letter "${letter}" absent` }
+        : { ok: false, detail: `forbidden letter "${letter}" present ${hits}×` }
+    }
+    case 'response.forbiddenWord': {
+      const word = String(a.value).toLowerCase()
+      const hits = (answer.toLowerCase().match(new RegExp(`\\b${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g')) ?? []).length
+      return hits === 0
+        ? { ok: true, detail: `word "${word}" absent` }
+        : { ok: false, detail: `forbidden word "${word}" present ${hits}×` }
+    }
+    case 'response.forbiddenChar': {
+      const ch = String(a.value)
+      const hits = answer.split(ch).length - 1
+      return hits === 0
+        ? { ok: true, detail: `char "${ch}" absent` }
+        : { ok: false, detail: `forbidden char "${ch}" present ${hits}×` }
+    }
+    case 'response.caseRule': {
+      if (a.value === 'lowercase') {
+        const uppers = answer.replace(/[^A-Z]/g, '')
+        return uppers.length === 0
+          ? { ok: true, detail: 'all lowercase' }
+          : { ok: false, detail: `uppercase letters present: ${uppers.slice(0, 10)}` }
+      }
+      return { ok: false, detail: `unknown caseRule ${String(a.value)}` }
+    }
+    case 'response.sentenceWordMax': {
+      const max = Number(a.value)
+      const sentences = answer.split(/[.!?]+(?:\s|$)/).map((s) => s.trim()).filter((s) => s.length > 0)
+      const bad = sentences.map((s) => wordCount(s)).filter((n) => n >= max)
+      return bad.length === 0 && sentences.length > 0
+        ? { ok: true, detail: `all ${sentences.length} sentences under ${max} words` }
+        : { ok: false, detail: `sentences with ≥${max} words: ${bad.join(', ')}` }
+    }
+    case 'response.wordOccurrences': {
+      const word = String(a.value).toLowerCase()
+      const expected = a.count ?? 0
+      const actual = (answer.toLowerCase().match(new RegExp(`\\b${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g')) ?? []).length
+      return actual === expected
+        ? { ok: true, detail: `"${word}" ×${actual}` }
+        : { ok: false, detail: `"${word}" ×${actual} expected ×${expected}` }
+    }
+    case 'response.bulletCount': {
+      const lines = answer.split('\n').map((l) => l.trim())
+      const bullets = lines.filter((l) => /^[-*•]\s+\S/.test(l))
+      const min = a.min ?? 1
+      const max = a.max ?? Number.MAX_SAFE_INTEGER
+      return bullets.length >= min && bullets.length <= max
+        ? { ok: true, detail: `bullets=${bullets.length}` }
+        : { ok: false, detail: `bullets=${bullets.length} expected in [${min},${max}]` }
+    }
+    case 'response.syllablesPerWordMax': {
+      // Deterministic approximation: a syllable ≈ one vowel group (aeiouy+),
+      // minus a silent trailing 'e' (classic heuristic; e.g. 'one' → 1).
+      const max = Number(a.value)
+      const words = answer.toLowerCase().split(/[^a-z']+/).filter((w) => w.length > 0)
+      const syllables = (w: string): number => {
+        let g = (w.match(/[aeiouy]+/g) ?? []).length
+        if (w.length > 2 && w.endsWith('e') && !w.endsWith('le')) g -= 1
+        return Math.max(1, g)
+      }
+      const bad = words.filter((w) => syllables(w) > max)
+      return bad.length === 0 && words.length > 0
+        ? { ok: true, detail: `all ${words.length} words ≤${max} syllable(s)` }
+        : { ok: false, detail: `multi-syllable words: ${bad.slice(0, 6).join(', ')}` }
+    }
+    case 'response.sentenceCount': {
+      const expected = Number(a.value)
+      const actual = answer.split(/[.!?]+(?:\s|$)/).map((s) => s.trim()).filter((s) => s.length > 0).length
+      return actual === expected
+        ? { ok: true, detail: `sentences=${actual}` }
+        : { ok: false, detail: `sentences=${actual} expected=${expected}` }
+    }
+    case 'response.minWordLength': {
+      const min = Number(a.value)
+      const words = answer.trim().split(/\s+/).filter((w) => /[a-z]/i.test(w))
+      const bad = words.filter((w) => w.replace(/\W/g, '').length < min)
+      return bad.length === 0 && words.length > 0
+        ? { ok: true, detail: `all ${words.length} words ≥${min} letters` }
+        : { ok: false, detail: `words shorter than ${min}: ${bad.slice(0, 6).join(', ')}` }
+    }
+    case 'response.maxWords': {
+      const max = Number(a.value)
+      const actual = wordCount(answer)
+      return actual <= max
+        ? { ok: true, detail: `words=${actual} ≤${max}` }
+        : { ok: false, detail: `words=${actual} expected ≤${max}` }
+    }
+    case 'response.quoted': {
+      const t = answer.trim()
+      return t.startsWith('"') && t.endsWith('"') && t.length >= 2
+        ? { ok: true, detail: 'response wrapped in double quotes' }
+        : { ok: false, detail: `not quoted: ${JSON.stringify(t.slice(0, 30))}…${JSON.stringify(t.slice(-15))}` }
+    }
+    case 'response.numberedSentences': {
+      const numbers = (answer.match(/(\d+)\.\s/g) ?? []).map((m) => Number(m.replace(/\.\s*/, '')))
+      const segments = answer
+        .split(/\d+\.\s*/)
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0)
+      const sequential = numbers.every((n, i) => n === i + 1)
+      return sequential && numbers.length >= 2 && segments.length === numbers.length
+        ? { ok: true, detail: `numbered 1..${numbers.length} sequentially` }
+        : { ok: false, detail: `numbers=[${numbers.join(',')}] segments=${segments.length} sequential=${sequential}` }
     }
     default:
       return { ok: false, detail: `unknown assertion type ${a.type}` }
