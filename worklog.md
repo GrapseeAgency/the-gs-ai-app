@@ -4090,3 +4090,26 @@ Stage Summary:
 - v0.70.0 APK: https://github.com/GrapseeAgency/the-gs-ai-app/releases/download/v0.70.0/GS-AI-App.apk (over-install safe).
 - Flash is now measurably fast (1.1-2.0s e2e) vs thinking (6.3s); "Thinking…" label only when the model truly thinks.
 - Not touched: system prompt, search pipeline, capability registry, register routing.
+
+---
+Task ID: BENCH-INFRA-1
+Agent: main (Z.ai Code)
+Task: BUILD THE GS AI BENCHMARK INFRASTRUCTURE (12 phases: shim, docker, configs, CLI, stats, workflow, storage, hardening, contamination, escape-verify, cost, first run).
+
+Work Log:
+- Phase 1 DONE (83f7d18): OpenAI shim — /api/v1/openai/chat/completions + /completions (501 logprobs, honest) + /models + /responses (added later, run-8 evidence); bypasses router; gs-ai→glm-4.6 flash-off, gs-ai-flash→glm-4.5-flash, gs-ai-thinking→glm-4.6 effort=high, vendor/* passthrough. curl-verified live: served=glm-4-plus 488ms.
+- Phase 2 DONE (94a5806): Dockerfile.bench (python:3.12-slim after harbor required >=3.12) + requirements-bench.txt with VERIFIED PyPI records (tau2 not on PyPI -> git+; dist name is "tau2" not "tau2-bench"; evalci latest 0.1.0 so spec's >=0.1.2 impossible).
+- Phase 3 DONE (3dafa08): benchmarks/knowledge.yaml (gpqa_diamond 198 / aime 30 / ifbench 58 / tau2_telecom 50, revisions resolve-at-download) + blocked.yaml (hle/mmlu_pro/swe_bench/browsecomp/gaia with verified raw reasons) + data/dataset-revisions.json ledger.
+- Phase 5 DONE (69421ef): stats/ ci.py (wilson/bootstrap/CR0-clustered, paired permutation w/ evalci-when-present), power.py (required_n, q=N/N* resolution, mde_for_n), regression.py (welch + block gate p<0.05 AND delta<-0.05). Real arithmetic: Wilson 180/198=[.861,.942]; GPQA-198 at baseline .90 is UNDERPOWERED for +5pt (q=0.455, MDE≈10pt).
+- Phase 4 DONE (77a6d59): cli/main.py run/aggregate/compare/contamination-check; unified schema with provenance (git, dataset rev, harness ver, docker digest, infra); BLOCKED is first-class; smoke-tested.
+- Phase 6+10 DONE (f7d6306): benchmark.yml (build→escape-gate→12-job matrix→aggregate→bot commit) + runners/sandbox_escape.py fail-closed (verdict BLOCKED w/ raw reason on hosted runners: no nested VM; escape_rate=None NOT 0).
+- Phase 7 DONE (6d87d98): Prisma BenchmarkRun (benchmark_runs, provenance + failed/errored/skipped rollout columns + exploit/contamination) + scripts/record-benchmark-run.ts; 1 real BLOCKED row inserted+verified.
+- Phase 8 DONE (in 77a6d59): runners/hardening.py — held-out-only scoring, hardened env (git stripped, pytest plugins off, fixture-net flag), ABC checklist, exploit_rate = visible−heldout (None=NOT MEASURED).
+- Phase 9 DONE (2ac9d90): runners/contamination.py paraphrase test; LIVE smoke: 4 real GPQA questions via shim (mirror lmarena-ai/PPE-GPQA-Best-of-K, override recorded), 0 errors, verdict pipeline produced CONTAMINATED flag at n=4 (smoke of PIPELINE, not a finding; CI [0.15,0.85]).
+- Phase 11 DONE (5d3bab0): runners/cost_tracker.py — per-TASK cost+verbosity, BudgetExceededError hard stop (verified: $11.28 > $0.10 abort), unknown model rates rejected (no fabricated rates).
+- Phase 12 IN PROGRESS: repo secrets GS_ENDPOINT + OPENROUTER_API_KEY set via REST+pynacl. Workflow iterations (all raw-evidence-driven): run5 build fail harbor py-version → 3.12-slim; run6 tau2 name "(unavailable)" → tau2 @ git; run6 conflict litellm (harbor vs tau2) → harbor --no-deps layer + CORE/extras split; run7 eval cache fail (no requirements.txt match) → cache-dependency-path; run8 OPENAI_API_KEY blanked by empty secret → `or "not-required"`; run8b inspect POSTS /responses (404) → shim Responses adapter + openai-api provider; run9 model arg needs 3-part openai-api/openai/<model>. Run 9 (36043125749): build+escape ✅, ifbench-gs-ai ✅(job), gpqa/aime gs-ai RUNNING with live shim traffic (21+ calls, 12-44s latency each, served=glm-4-plus), competitor jobs fail on free-key 402 (expected, BLOCKED results record raw).
+
+Stage Summary:
+- Infra LIVE end-to-end: sandbox → shim → real model calls from GitHub Actions; blocked/failed/scored separated in scorecard; power section refuses winners on underpowered n.
+- Honest blockers so far: competitors need funded OpenRouter (402 raw), tau2 needs funded user-sim, GPQA/IFBench official datasets gated (HF_TOKEN absent; mirror smoke only), SandboxEscapeBench needs EC2/Vagrant (hosted runners cannot host nested VM).
+- Scorecard bot now commits to bench-scores branch (main collision fixed).
