@@ -370,3 +370,49 @@ model KnowledgeNode {
   @@index([conversationId])
   @@map("knowledge_nodes")
 }
+
+// ---- BENCHMARK INFRASTRUCTURE (Phase 7) -------------------------------------
+// One row per (run_id) result file produced by gs-bench. Mirror of the
+// unified result schema (cli/main.py make_result). Provenance columns
+// (gitCommit, datasetRevision, harnessVersion, dockerImageDigest,
+// infrastructure) implement hard rule 4; failed/errored/skipped counts are
+// the rollout-card columns — headline scores are reported WITH them because
+// reporting-rule choices alone swing scores by up to 20.9 points.
+// SQLite: no JSONB/JSON primitive — `infrastructure` rides as a JSON string;
+// no TIMESTAMPTZ — startedAt/completedAt are DateTime (ISO-8601 in UTC).
+model BenchmarkRun {
+  runId             String   @id // uuid from the result file
+  model             String
+  benchmark         String
+  benchmarkVersion  String? // benchmark config revision (suite file + commit)
+  datasetRevision   String? // pinned sha/commit resolved at download time
+  harness           String // inspect_ai | tau2 | swebench | ...
+  harnessVersion    String?
+  dockerImageDigest String?
+  infrastructure    String   @default("{}") // JSON {cpu, ram_gb, timeout_s}
+  startedAt         DateTime?
+  completedAt       DateTime?
+  nSamples          Int?
+  metric            String?
+  score             Float?
+  scoreStderr       Float?
+  scoreCiLo         Float?
+  scoreCiHi         Float?
+  gitCommit         String?
+  rawLogUrl         String?
+  costUsd           Float?
+  failedCount       Int      @default(0)
+  erroredCount      Int      @default(0)
+  skippedCount      Int      @default(0)
+  // Phase 8/9 columns: exploit gap (visible - heldout) and contamination
+  // flag (CONTAMINATED | NOT-FLAGGED | NOT-MEASURED | INDETERMINATE).
+  exploitRate       Float?
+  contaminationFlag String?
+  contaminationScore Float?
+  status            String   @default("done") // done | BLOCKED | INCOMPLETE-CI
+  rawReason         String? // raw blocker/error text when status != done
+  createdAt         DateTime @default(now())
+
+  @@index([model, benchmark, completedAt(sort: Desc)])
+  @@map("benchmark_runs")
+}
