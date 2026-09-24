@@ -100,7 +100,7 @@ def harness_version(name: str) -> str:
         "inspect_ai": "inspect-ai",
         "lm_eval": "lm-eval",
         "swebench": "swebench",
-        "tau2": "tau2-bench",
+        "tau2": "tau2",
         "helm": "crfm-helm",
     }
     pkg = mapping.get(name, name)
@@ -430,16 +430,27 @@ def _run_tau2(entry: Dict[str, Any], model: str, res: Dict[str, Any], log_lines:
     """
     log_lines.append(f"# harness=tau2 task={entry['task']}")
     env = dict(os.environ)
+    # litellm routes openai/* models to OPENAI_API_BASE — point it at the shim
     env["OPENAI_BASE_URL"] = f"{endpoint()}/api/v1/openai"
+    env["OPENAI_API_BASE"] = f"{endpoint()}/api/v1/openai"
     env["OPENAI_API_KEY"] = os.environ.get("GS_BENCH_API_KEY", "not-required")
-    env["TAU2_USER_SIMULATOR"] = entry.get("user_simulator", "gpt-4o-mini-mini-standard")
+    # tau2 needs a REAL user-simulator model; when its provider rejects the
+    # key (e.g. free OpenRouter tier vs a paid model) the run BLOCKS with the
+    # raw reason — the simulator is never silently swapped for a weaker one.
+    user_llm = os.environ.get("TAU2_USER_LLM", "openai/gpt-4o-mini")
+    # Verified against `tau2 run --help` (tau2==1.0.1): agent/user take
+    # component types; models ride --agent-llm/--user-llm in litellm naming.
     cmd = [
         "tau2", "run",
         "--domain", "telecom",
-        "--agent", f"openai/{model}",
-        "--user", "openai/gpt-4o-mini-mini-standard",
+        "--task-set-name", "telecom",
+        "--agent", "llm_agent",
+        "--agent-llm", f"openai/{model}",
+        "--user", "user_simulator",
+        "--user-llm", user_llm,
         "--num-trials", "1",
-        "--output-dir", str(out_dir / "tau2-logs"),
+        "--max-concurrency", "1",
+        "--save-to", str(out_dir / "tau2-logs"),
     ]
     log_lines.append(f"# cmd: {' '.join(cmd)}")
     t0 = time.time()

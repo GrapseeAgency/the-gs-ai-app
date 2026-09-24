@@ -7,8 +7,11 @@
 #   swebench     5.0.2     EXISTS   (spec floor >=3.0.0 satisfied)
 #   harbor       0.23.0    EXISTS   (spec floor >=0.21.0 satisfied)
 #   tau2-bench   HTTP 404  NOT ON PYPI (also tau2bench: 404) → installed from
-#                the official repo (github.com/sierra-research/tau2-bench,
-#                HTTP 200 verified). Documented deviation, not a guess.
+#                the official repo. NOTE: the repo's distribution NAME is
+#                "tau2" (pyproject.toml line 6, verified 2026-09-24); the
+#                direct reference must use that name or pip fails with
+#                "(unavailable)" (raw evidence: failed builds 36031728363,
+#                36032367867).
 #   datasets     5.0.1     EXISTS
 #   statsmodels  0.15.0    EXISTS
 #   scipy        1.18.1    EXISTS
@@ -26,7 +29,7 @@ lm-eval>=0.4.0
 crfm-helm>=0.5.0
 swebench>=3.0.0
 harbor>=0.21.0
-tau2-bench @ git+https://github.com/sierra-research/tau2-bench
+tau2 @ git+https://github.com/sierra-research/tau2-bench
 datasets>=3.0.0
 statsmodels>=0.14.0
 scipy>=1.14.0

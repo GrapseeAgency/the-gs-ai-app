@@ -76,7 +76,11 @@ benchmarks:
     pass_k: 1                      # pass^1 = single-attempt success rate
     timeout_per_sample_s: 900
     agentic: true                  # → Phase 8 hardening + exploit_rate applies
-    user_simulator: gpt-4o-mini-mini-standard   # tau2 user sim; env-configurable
+    user_simulator: openai/gpt-4o-mini        # real model id; override with TAU2_USER_LLM
+    runtime_blocker_note: >-
+      tau2 REQUIRES a funded user-simulator model (default gpt-4o-mini is paid on
+      OpenRouter). On free-pool keys this benchmark BLOCKS with the raw 402 —
+      the simulator is never swapped for a weaker model to force a score.
     infrastructure:
       cpu: 4
       ram_gb: 16
