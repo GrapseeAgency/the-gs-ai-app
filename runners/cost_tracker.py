@@ -56,7 +56,7 @@ class CostTracker:
         if model not in MODEL_RATES:
             raise KeyError(f"no rate configured for model '{model}' — refusing to guess (no fabrication)")
         rate = MODEL_RATES[model]
-        cost = (input_tokens / 1e6) * rate.input + (output_tokens / 1e6) * rate.output
+        cost = (input_tokens / 1e6) * rate.input_per_1m + (output_tokens / 1e6) * rate.output_per_1m
         self.spent += cost
         self.tasks.append(
             {
@@ -67,18 +67,16 @@ class CostTracker:
                 "verbosity_out_tokens": output_tokens,
             }
         )
-        if self.spent > self.budget:
-            raise BudgetExceededError(f"Spent ${self.spent:.4f} > budget ${self.budget:.4f}")
+        if self.spent > self.budget_usd:
+            raise BudgetExceededError(f"Spent ${self.spent:.4f} > budget ${self.budget_usd:.4f}")
         return cost, self.spent
 
     def record_task(self, calls: List[Tuple[int, int]], model: str | None = None) -> Tuple[float, float]:
         """Record one benchmark TASK (possibly many calls)."""
-        model = model or self.model
-        total_in = sum(c[0] for c in calls)
-        total_out = sum(c[1] for c in calls)
+        used_model = model or self.model
         cost = 0.0
         for i, o in calls:
-            c, _ = self.record(model, i, o)
+            c, _ = self.record(used_model, i, o)
             cost += c
         return cost, self.spent
 
