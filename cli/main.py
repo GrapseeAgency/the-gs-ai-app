@@ -131,12 +131,14 @@ def make_result(
     benchmark: str,
     entry: Dict[str, Any],
     harness_name: str,
+    scaffold: str = "baseline",
 ) -> Dict[str, Any]:
     """A unified-schema skeleton with provenance fields pre-filled."""
     return {
         "schema_version": UNIFIED_SCHEMA_VERSION,
         "run_id": str(uuid.uuid4()),
         "model": model,
+        "scaffold": scaffold,
         "benchmark": benchmark,
         "dataset_revision": resolve_dataset_revision(entry),
         "harness": harness_name,
@@ -185,7 +187,8 @@ def finish_result(res: Dict[str, Any], status: str, raw_log_path: Optional[Path]
     res["completed_at"] = now_iso()
     if raw_log_path is not None:
         res["raw_log_url"] = raw_log_path.name
-    (out_dir / f"{res['benchmark']}__{sanitize(res['model'])}__{res['run_id'][:8]}.result.json").write_text(
+    scaffold_tag = sanitize(res.get("scaffold", "baseline"))
+    (out_dir / f"{res['benchmark']}__{sanitize(res['model'])}__{scaffold_tag}__{res['run_id'][:8]}.result.json").write_text(
         json.dumps(res, indent=2)
     )
     return res
@@ -195,8 +198,8 @@ def sanitize(s: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]", "_", s)
 
 
-def blocked_result(model: str, entry: Dict[str, Any], reason: str, out_dir: Path, res: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    res = res or make_result(model, entry.get("name", "?"), entry, entry.get("harness", "unknown"))
+def blocked_result(model: str, entry: Dict[str, Any], reason: str, out_dir: Path, res: Optional[Dict[str, Any]] = None, scaffold: str = "baseline") -> Dict[str, Any]:
+    res = res or make_result(model, entry.get("name", "?"), entry, entry.get("harness", "unknown"), scaffold=scaffold)
     res["status"] = "BLOCKED"
     res["blocker"] = entry.get("blocker")
     res["raw_reason"] = reason
@@ -265,25 +268,28 @@ def cmd_run(args: argparse.Namespace) -> int:
     for entry in targets:
         name = entry["name"]
         if entry.get("status") == "BLOCKED":
-            blocked_result(model, entry, entry.get("raw_reason", "blocked.yaml"), out_dir)
+            blocked_result(model, entry, entry.get("raw_reason", "blocked.yaml"), out_dir, scaffold=args.scaffold)
             continue
         log_path = out_dir / f"{name}__{sanitize(model)}__{int(time.time())}.rawlog.txt"
 
         # ---- Blockers that depend on runtime env -------------------------
         missing = _runtime_blockers(entry)
         if missing:
-            blocked_result(model, entry, missing, out_dir)
+            blocked_result(model, entry, missing, out_dir, scaffold=args.scaffold)
             exit_code = 1
             continue
 
         harness = entry.get("harness", "inspect_ai")
-        res = make_result(model, name, entry, harness)
-        log_lines: List[str] = [f"# gs-bench run {name} model={model} started={res['started_at']}"]
+        res = make_result(model, name, entry, harness, scaffold=args.scaffold)
+        log_lines: List[str] = [f"# gs-bench run {name} model={model} scaffold={args.scaffold} started={res['started_at']}"]
+        # Rule 2 (same model, scaffold moves): the scaffold rides the shim model
+        # id (`gs-ai@<profile>`); the RESULT records model + scaffold separately.
+        shim_model = model if args.scaffold == "baseline" else f"{model}@{args.scaffold}"
         try:
             if harness == "inspect_ai":
-                _run_inspect(entry, model, res, log_lines, out_dir)
+                _run_inspect(entry, shim_model, res, log_lines, out_dir)
             elif harness == "tau2":
-                _run_tau2(entry, model, res, log_lines, out_dir)
+                _run_tau2(entry, shim_model, res, log_lines, out_dir)
             else:
                 raise RuntimeError(f"no adapter wired for harness '{harness}'")
         except Exception as e:  # noqa: BLE001 — hard rule 6: record raw reason
@@ -293,7 +299,7 @@ def cmd_run(args: argparse.Namespace) -> int:
             print(f"BLOCKED {name} model={model}: {e}", file=sys.stderr)
         log_path.write_text("\n".join(log_lines) + "\n")
         res = finish_result(res, res.get("status", "running"), log_path, out_dir)
-        print(json.dumps({k: res[k] for k in ("benchmark", "model", "status", "score", "score_ci_lo", "score_ci_hi", "n_samples")}, indent=None))
+        print(json.dumps({k: res[k] for k in ("benchmark", "model", "scaffold", "status", "score", "score_ci_lo", "score_ci_hi", "n_samples") if k in res}, indent=None))
     return exit_code
 
 
@@ -354,7 +360,7 @@ def _run_inspect(entry: Dict[str, Any], model: str, res: Dict[str, Any], log_lin
     then parse the eval log JSON for per-sample scores.
     """
     task = entry["task"]
-    log_lines.append(f"# harness=inspect_ai task={task}")
+    log_lines.append(f"# harness=inspect_ai task={task} model_arg={model}")
     env = dict(os.environ)
     env["OPENAI_BASE_URL"] = f"{endpoint()}/api/v1/openai"
     env["OPENAI_API_KEY"] = os.environ.get("GS_BENCH_API_KEY") or "not-required"  # empty secret -> placeholder
@@ -516,6 +522,7 @@ def cmd_aggregate(args: argparse.Namespace) -> int:
         power.append({
             "benchmark": r["benchmark"],
             "model": r["model"],
+            "scaffold": r.get("scaffold", "baseline"),
             "n_samples": r.get("n_samples"),
             **resolution(baseline, 0.05, r.get("n_samples") or 0),
         })
@@ -525,7 +532,7 @@ def cmd_aggregate(args: argparse.Namespace) -> int:
         "generated_at": now_iso(),
         "git_commit": git_commit(),
         "docker_image_digest": docker_digest(),
-        "scored": sorted(scored, key=lambda r: (r["benchmark"], r["model"])),
+        "scored": sorted(scored, key=lambda r: (r["benchmark"], r["model"], r.get("scaffold", "baseline"))),
         "blocked": blocked,
         "incomplete": incomplete,
         "power": power,
@@ -639,6 +646,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     pr = sub.add_parser("run", help="run a benchmark or suite for one model")
     pr.add_argument("--model", required=True)
+    pr.add_argument("--scaffold", default="baseline", choices=["baseline", "aci", "verification", "context", "router"], help="scaffold lever under test (rule 1: one lever per dispatch)")
     pr.add_argument("--suite")
     pr.add_argument("--benchmark")
     pr.add_argument("--output", default="./results")

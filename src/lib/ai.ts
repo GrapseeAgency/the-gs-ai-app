@@ -323,7 +323,10 @@ export async function completeChat(
 export async function completeChatWithMeta(
   messages: ChatMessageInput[],
   providerModel?: string | null,
-  thinking?: ThinkingCallConfig
+  thinking?: ThinkingCallConfig,
+  // BENCH SCAFFOLD — optional sampling temperature (default 0.2 unchanged).
+  // Additive-only: every existing caller keeps the exact previous behavior.
+  temperature?: number
 ): Promise<{ text: string; model: string | null }> {
   let lastError = 'Upstream unavailable'
   let activeModel = typeof providerModel === 'string' && providerModel.length > 0 ? providerModel : null
@@ -337,7 +340,7 @@ export async function completeChatWithMeta(
         stream: false,
         ...zaiThinkingBody(thinking ?? null),
         // FORENSIC AUDIT [25] — consistency lever (see streamChat).
-        temperature: 0.2,
+        temperature: typeof temperature === 'number' && Number.isFinite(temperature) ? temperature : 0.2,
       }
       if (activeModel) body.model = activeModel
       const completion = (await Promise.race([

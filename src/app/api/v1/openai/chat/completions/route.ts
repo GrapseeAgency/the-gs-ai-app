@@ -38,6 +38,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { completeChatWithMeta } from '@/lib/ai'
 import { orCompleteChat } from '@/lib/openrouter'
+import { parseScaffoldModel, runScaffoldCompletion } from '@/lib/bench/scaffold'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300
@@ -102,8 +103,21 @@ type ResolvedModel =
  * (that is the production router entry) — the shim pins explicit targets so a
  * future routing change can never silently invalidate a benchmark run.
  */
-export function resolveShimModel(model: string | undefined): ResolvedModel | null {
-  const m = (model ?? 'gs-ai').trim()
+export function resolveShimModel(
+  model: string | undefined
+): (ResolvedModel & { profile: 'baseline' | 'aci' | 'verification' | 'context' | 'router' }) | null {
+  // BENCH SCAFFOLD — `gs-ai@<profile>` selects a scaffold variant; the bare id
+  // (and `@baseline`) keeps the byte-identical raw-synthesis path so every
+  // historical run remains comparable (rule 2: same model, only scaffold moves).
+  const parsed = parseScaffoldModel(model)
+  if (!parsed) return null
+  const m = parsed.base
+  const profile = parsed.profile
+  const resolved = resolveShimBaseModel(m)
+  return resolved ? { ...resolved, profile } : null
+}
+
+function resolveShimBaseModel(m: string): Omit<ResolvedModel, 'profile'> | null {
   switch (m) {
     case 'gs-ai':
       return { backend: 'zai', providerModel: 'glm-4.6', thinking: { mode: 'flash' } }
@@ -119,6 +133,10 @@ export function resolveShimModel(model: string | undefined): ResolvedModel | nul
       if (m.includes('/')) return { backend: 'openrouter', models: [m] }
       return null
   }
+}
+
+function profileOf(model: string | undefined): 'baseline' | 'aci' | 'verification' | 'context' | 'router' {
+  return parseScaffoldModel(model)?.profile ?? 'baseline'
 }
 
 function openAiError(status: number, code: string, message: string) {
@@ -148,7 +166,18 @@ export async function POST(req: NextRequest) {
     return openAiError(
       404,
       'model_not_found',
-      `Unknown model '${body.model}'. Serving: gs-ai, gs-ai-flash, gs-ai-thinking, or any vendor/model id for OpenRouter passthrough.`
+      `Unknown model '${body.model}'. Serving: gs-ai, gs-ai-flash, gs-ai-thinking, any vendor/model id for OpenRouter passthrough, and gs-ai@<baseline|aci|verification|context|router> scaffold variants.`
+    )
+  }
+  const profile = profileOf(body.model)
+  if (profile !== 'baseline' && resolved.backend !== 'zai') {
+    // The scaffold levers pin the generator to the gs-ai tier by design (rule 2).
+    // A vendor passthrough with a profile would silently measure a different
+    // generator — refuse instead (rule 5: no silent substitutions).
+    return openAiError(
+      400,
+      'invalid_request_error',
+      `Scaffold profile '${profile}' is only valid on gs-ai tier models (generator is pinned); got '${body.model}'.`
     )
   }
 
@@ -156,8 +185,31 @@ export async function POST(req: NextRequest) {
   try {
     let text = ''
     let servedModel: string | null = null
+    let scaffoldTelemetry: Record<string, unknown> | null = null
 
-    if (resolved.backend === 'zai') {
+    if (profile !== 'baseline') {
+      // BENCH SCAFFOLD — lever path. The scaffold layer owns generator/verifier/
+      // planner role calls and returns per-call telemetry (rule 4).
+      const outcome = await runScaffoldCompletion(parsed.messages, profile)
+      text = outcome.text
+      servedModel = outcome.servedModel
+      scaffoldTelemetry = {
+        profile: outcome.profile,
+        generator_calls: outcome.generatorCalls,
+        verifier_calls: outcome.verifierCalls,
+        planner_calls: outcome.plannerCalls,
+        summarizer_calls: outcome.summarizerCalls,
+        tool_calls: outcome.toolCallsByName,
+        tool_arg_errors: outcome.toolArgErrors,
+        offloads: outcome.offloads,
+        iterations: outcome.iterations,
+        verifier_verdicts: outcome.verifierVerdicts,
+        regenerations: outcome.regenerations,
+        unverified: outcome.unverified,
+        scaffold_latency_ms: outcome.latencyMs,
+        notes: outcome.notes.slice(0, 12),
+      }
+    } else if (resolved.backend === 'zai') {
       const meta = await completeChatWithMeta(parsed.messages, resolved.providerModel, resolved.thinking)
       text = meta.text
       servedModel = meta.model
@@ -171,40 +223,44 @@ export async function POST(req: NextRequest) {
     const created = Math.floor(Date.now() / 1000)
     const latencyMs = Date.now() - startedAt
     console.log(
-      `BENCH-SHIM kind=chat_completions requested=${body.model ?? 'gs-ai'} served=${servedModel ?? 'unknown'} latencyMs=${latencyMs} chars=${text.length}`
+      `BENCH-SHIM kind=chat_completions requested=${body.model ?? 'gs-ai'} profile=${profile} served=${servedModel ?? 'unknown'} latencyMs=${latencyMs} chars=${text.length}`
     )
 
     const promptTokens = Math.ceil(parsed.messages.reduce((n, m) => n + m.content.length, 0) / 4)
     const completionTokens = Math.ceil(text.length / 4)
-    return NextResponse.json(
-      {
-        id,
-        object: 'chat.completion',
-        created,
-        model: servedModel ?? body.model ?? 'gs-ai',
-        system_fingerprint: 'gs-bench-shim-v1',
-        choices: [
-          {
-            index: 0,
-            message: { role: 'assistant', content: text },
-            finish_reason: 'stop',
-            logprobs: null,
-          },
-        ],
-        usage: {
-          // Char-based ESTIMATE; the shim's upstreams do not expose token
-          // counts on every path. Not used for scoring.
-          prompt_tokens: promptTokens,
-          completion_tokens: completionTokens,
-          total_tokens: promptTokens + completionTokens,
+    const payload: Record<string, unknown> = {
+      id,
+      object: 'chat.completion',
+      created,
+      model: servedModel ?? body.model ?? 'gs-ai',
+      system_fingerprint: profile === 'baseline' ? 'gs-bench-shim-v1' : `gs-bench-shim-v1;profile=${profile}`,
+      choices: [
+        {
+          index: 0,
+          message: { role: 'assistant', content: text },
+          finish_reason: 'stop',
+          logprobs: null,
         },
+      ],
+      usage: {
+        // Char-based ESTIMATE; the shim's upstreams do not expose token
+        // counts on every path. Not used for scoring.
+        prompt_tokens: promptTokens,
+        completion_tokens: completionTokens,
+        total_tokens: promptTokens + completionTokens,
       },
-      { headers: { 'x-gs-bench': 'openai-shim' } }
-    )
+    }
+    if (scaffoldTelemetry) payload.gs_scaffold = scaffoldTelemetry
+    return NextResponse.json(payload, {
+      headers: {
+        'x-gs-bench': 'openai-shim',
+        ...(profile !== 'baseline' ? { 'x-gs-scaffold': profile } : {}),
+      },
+    })
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e)
     console.error(
-      `BENCH-SHIM-ERROR kind=chat_completions requested=${body.model ?? 'gs-ai'}: ${message.slice(0, 300)}`
+      `BENCH-SHIM-ERROR kind=chat_completions requested=${body.model ?? 'gs-ai'} profile=${profile}: ${message.slice(0, 300)}`
     )
     return openAiError(502, 'upstream_error', message.slice(0, 500))
   }
