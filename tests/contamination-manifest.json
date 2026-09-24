@@ -1,0 +1,963 @@
+{
+  "generatedAt": "2026-09-24T05:43:18.659Z",
+  "algorithm": "sha256 of normalized prompt (trim, collapse whitespace, lowercase)",
+  "counts": {
+    "eval-suite-v1.json": 58,
+    "eval-suite-search-v1.json": 10,
+    "eval-suite-instruction-generalization-v1.json": 20,
+    "eval-suite-multiturn-v1.json": 30,
+    "eval-suite-security-v1.json": 40
+  },
+  "total": 158,
+  "webOverlap": "NOT RUN — provider quota; run bun scripts/contamination-audit.ts --web when quota returns",
+  "entries": [
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "R01",
+      "kind": "prompt",
+      "hash": "8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "R02",
+      "kind": "prompt",
+      "hash": "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "R03",
+      "kind": "prompt",
+      "hash": "61a3385003d9b9d390dc511fbe3e1eb6bee637ec8c3c9eeb555395cddf838f5e"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "R04",
+      "kind": "prompt",
+      "hash": "482bbb9128050f734a2e44f15c0bb1066848c6b18444a90c771061c030ff2534"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "R05",
+      "kind": "prompt",
+      "hash": "d3d73c3ecf39aa82e45bee54d1682f41b926d2eb83ef214b394b72ddf2e186ff"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "R06",
+      "kind": "prompt",
+      "hash": "3f814236b25917c88d808dba51a67efac1cc9ce86737ce3ad78626b1fb4c93f0"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "R07",
+      "kind": "prompt",
+      "hash": "b9bc1d92e18f6f22aada800a020f3298790c81b9a64e0cb4d53438b752d95e53"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "R08",
+      "kind": "prompt",
+      "hash": "07e5f35d008fdb0abc642e9f3bfa6d722f56d1365e11d77f3779c148c024cd5a"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "R09",
+      "kind": "prompt",
+      "hash": "f238ba51c93cc3cf34d983c1a52d512b202c13728219eac4e657f701377a195f"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "R10",
+      "kind": "prompt",
+      "hash": "eb5c10fe18d9750934fedf2059ebfd1fccadce64217a583b783ff10959072c1a"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "I11",
+      "kind": "prompt",
+      "hash": "bc918248311b5aa746009dcd7483232bd609a6e5acc5478025bd42ecdf417a49"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "I12",
+      "kind": "prompt",
+      "hash": "47992b8b73841d7692feac0c7fca0b4582724f4baa90c8285f7f1a7fada28cc8"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "I13",
+      "kind": "prompt",
+      "hash": "23ee13b95c97efcfa67fa01cf942c35fca30c2682d8933e99b4c2542367d6887"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "I14",
+      "kind": "prompt",
+      "hash": "77d9fc9f97f7c8cc9db081ab9a28161afa48531a420ed7b2f45e1dda92281bb2"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "I15",
+      "kind": "prompt",
+      "hash": "cbc292fa25190224d3c9fd0f3580bff171c9539712d0da3a0d32889aa8eb938f"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "I16",
+      "kind": "prompt",
+      "hash": "6873e43ac10b6a613f53f749b1479fb5466f7f2f4a2639cc74684db2fb3b1e2b"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "I17",
+      "kind": "prompt",
+      "hash": "c7f3c9b876d9e7b6c7999513333a1a507a6bf60b4bea5c3a58ae4e7fedf63800"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "I18",
+      "kind": "prompt",
+      "hash": "e642f14ca3438fe4cc1379cf19ec65673d44125c269ae29cf539a2f2a829bbe1"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "I19",
+      "kind": "prompt",
+      "hash": "b682d2e0e71f569097059a08b72842aa657f448f289cd074046794c4486a1e34"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "I20",
+      "kind": "prompt",
+      "hash": "36ea4e119260481025246bbad270785160f0e08008d6f6e8b0f249dbc29c50bd"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "C21",
+      "kind": "prompt",
+      "hash": "b5c7157d8ce29b854a8817899360deaae8c7deebbc383f55ea2bfe3685497fb0"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "C22",
+      "kind": "prompt",
+      "hash": "eb5c10fe18d9750934fedf2059ebfd1fccadce64217a583b783ff10959072c1a"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "C23",
+      "kind": "prompt",
+      "hash": "61a3385003d9b9d390dc511fbe3e1eb6bee637ec8c3c9eeb555395cddf838f5e"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "C24",
+      "kind": "prompt",
+      "hash": "8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "C25",
+      "kind": "prompt",
+      "hash": "9a1a6663db4db41184acb08b50dfc11df713963e989056dd2d0fbd86ce472639"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "C26",
+      "kind": "prompt",
+      "hash": "2d3728e73237306294bbd5af42a74c92f278805ed7a4d286d1ed6eea9abfda6c"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "C27",
+      "kind": "prompt",
+      "hash": "cc1d4bb1152cddf066523a982c1c1c01427d2915f3a5f655b9aa7ac468127739"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "C28",
+      "kind": "prompt",
+      "hash": "729979c8c774bed953c9a51e7b5b34c33b2228f21a249e7ee579610290efdabf"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "C29",
+      "kind": "prompt",
+      "hash": "f0b380c58db9fc81026fadc1877e1ef163e6ee63ddad60fe4acf54f45ab37318"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "C30",
+      "kind": "prompt",
+      "hash": "a6a2729cbf6bcadce577a31f7f76201d5ce63c57d6c53318000d67714bb354ef"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "S31",
+      "kind": "prompt",
+      "hash": "4a980d2e9d13b8c67dac37f934d1e201256e3dbd41f54dcf321b985a66279d8c"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "S32",
+      "kind": "prompt",
+      "hash": "98642fc61fa894b1856052a31dd8defb129974c468c756b7beca8f66f9de10b5"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "S33",
+      "kind": "prompt",
+      "hash": "b8ea1535f4940680acb4cc722eefa758a34f2e79418b85d8ce2c7f913bc1bae1"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "S34",
+      "kind": "prompt",
+      "hash": "9880bef1f32b9156e115f9fd6422ed18241f3f13b7921762fe91849f0b00f926"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "S35",
+      "kind": "prompt",
+      "hash": "610c8be5118a144238261f3fbb4897710bee1c071de48d0d62df235d500ce53b"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "S36",
+      "kind": "prompt",
+      "hash": "e866ae7ea4c4bb86a6a23d9ec92ee0246b3dcffeb5db797104261210199f8929"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "S37",
+      "kind": "prompt",
+      "hash": "168d173fff56a8a27fe5f883c345409bb22403e7e99ea9c8d601ecd1174e5333"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "S38",
+      "kind": "prompt",
+      "hash": "5be9f5b576d8ac6df91dcae84f535c4f9478e3cd3e3b634a6db31ac8ab8fa682"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "S39",
+      "kind": "prompt",
+      "hash": "17f34ac2b1bd5d7ba4aa6da09e8825a5ee9b768e90ceccabfd66dd342392e223"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "S40",
+      "kind": "prompt",
+      "hash": "a5ac6a15061104a439d89aa59201cfe7c2006b4e3c4384a941fd351f563f0826"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "F41",
+      "kind": "prompt",
+      "hash": "83ae1449ace7409589bd557331cd56245f239b0c444f7f93b45a3249a0e308d1"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "F42",
+      "kind": "prompt",
+      "hash": "36a3b6b927b976a3e25292d537fef60beba1c8c7a9a50160e8b7d97ba273a751"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "F45",
+      "kind": "prompt",
+      "hash": "8d82cbd1d4c9ce4a0afc7720aefce36ccbaa17a148deefe9400d59ab452b74e4"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "F46",
+      "kind": "prompt",
+      "hash": "61f7796b32d72208cee00010d51d7916b92c5673cb0113198e31db7810bff348"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "F47",
+      "kind": "prompt",
+      "hash": "f80a8bcef8908fa47b4e669c192e3cac45f132266b4078696d174a3d1b2d0c3f"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "F48",
+      "kind": "prompt",
+      "hash": "074b762a43aecd3492de07b0cdacbdcc9e41182ac25ba345f4b6f73250d676b5"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "F49",
+      "kind": "prompt",
+      "hash": "af279b948c3e6473d79dc979d7d7475e0412a74b7a98d7b54a5fbfb6ede9b78a"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "F50",
+      "kind": "prompt",
+      "hash": "5f1c7ad53a8144126fb414b43c361881eb445d34f5da5f20cf0116506d3c6395"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "J51",
+      "kind": "prompt",
+      "hash": "eb5c10fe18d9750934fedf2059ebfd1fccadce64217a583b783ff10959072c1a"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "J52",
+      "kind": "prompt",
+      "hash": "dd8b02b62a61e935c8dad5b1eb9a2bc82c8ff01d5fb97268deef6f57069150b7"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "J53",
+      "kind": "prompt",
+      "hash": "362b5cfab0a8f18f762c1ae759549db625dd0c382289cece90d94683970503f5"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "J54",
+      "kind": "prompt",
+      "hash": "2a8b4ba700b702f912959f690371a5306229833f1da63d132c2d5fec258d88c3"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "J55",
+      "kind": "prompt",
+      "hash": "b8bc00388eabbbb5a885971d6fed5a89845560e819ae3ff12884a307331b3cf3"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "J56",
+      "kind": "prompt",
+      "hash": "75b9b0c152f55b2afc90325b43fc45bb72e232e93cca85ed692407f41a7546d5"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "J57",
+      "kind": "prompt",
+      "hash": "276f0597e3131667e652ed3675849c5aecad999abc93909ae486e571cccbc8f1"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "J58",
+      "kind": "prompt",
+      "hash": "7135ac916f483db42e866f5efbb475574ef84aa93a4b5d20a0083389fda6ac09"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "J59",
+      "kind": "prompt",
+      "hash": "07123e1f482356c415f684407a3b8723e10b2cbbc0b8fcd6282c49d37c9c1abc"
+    },
+    {
+      "suite": "eval-suite-v1.json",
+      "caseId": "J60",
+      "kind": "prompt",
+      "hash": "7722c42b8aa631278fd217bd3e6d8505fd144767d3a3dd1a0356315ab0e340f0"
+    },
+    {
+      "suite": "eval-suite-search-v1.json",
+      "caseId": "S31",
+      "kind": "prompt",
+      "hash": "4a980d2e9d13b8c67dac37f934d1e201256e3dbd41f54dcf321b985a66279d8c"
+    },
+    {
+      "suite": "eval-suite-search-v1.json",
+      "caseId": "S32",
+      "kind": "prompt",
+      "hash": "98642fc61fa894b1856052a31dd8defb129974c468c756b7beca8f66f9de10b5"
+    },
+    {
+      "suite": "eval-suite-search-v1.json",
+      "caseId": "S33",
+      "kind": "prompt",
+      "hash": "b8ea1535f4940680acb4cc722eefa758a34f2e79418b85d8ce2c7f913bc1bae1"
+    },
+    {
+      "suite": "eval-suite-search-v1.json",
+      "caseId": "S34",
+      "kind": "prompt",
+      "hash": "9880bef1f32b9156e115f9fd6422ed18241f3f13b7921762fe91849f0b00f926"
+    },
+    {
+      "suite": "eval-suite-search-v1.json",
+      "caseId": "S35",
+      "kind": "prompt",
+      "hash": "610c8be5118a144238261f3fbb4897710bee1c071de48d0d62df235d500ce53b"
+    },
+    {
+      "suite": "eval-suite-search-v1.json",
+      "caseId": "S36",
+      "kind": "prompt",
+      "hash": "e866ae7ea4c4bb86a6a23d9ec92ee0246b3dcffeb5db797104261210199f8929"
+    },
+    {
+      "suite": "eval-suite-search-v1.json",
+      "caseId": "S37",
+      "kind": "prompt",
+      "hash": "168d173fff56a8a27fe5f883c345409bb22403e7e99ea9c8d601ecd1174e5333"
+    },
+    {
+      "suite": "eval-suite-search-v1.json",
+      "caseId": "S38",
+      "kind": "prompt",
+      "hash": "5be9f5b576d8ac6df91dcae84f535c4f9478e3cd3e3b634a6db31ac8ab8fa682"
+    },
+    {
+      "suite": "eval-suite-search-v1.json",
+      "caseId": "S39",
+      "kind": "prompt",
+      "hash": "17f34ac2b1bd5d7ba4aa6da09e8825a5ee9b768e90ceccabfd66dd342392e223"
+    },
+    {
+      "suite": "eval-suite-search-v1.json",
+      "caseId": "S40",
+      "kind": "prompt",
+      "hash": "a5ac6a15061104a439d89aa59201cfe7c2006b4e3c4384a941fd351f563f0826"
+    },
+    {
+      "suite": "eval-suite-instruction-generalization-v1.json",
+      "caseId": "G01",
+      "kind": "prompt",
+      "hash": "4021a10061ceec9bf182cfc6306cb6aa8f92b9b3dbb66c700acaa459329d7f1f"
+    },
+    {
+      "suite": "eval-suite-instruction-generalization-v1.json",
+      "caseId": "G02",
+      "kind": "prompt",
+      "hash": "4e6f5bc3eda3dc756b398cd451c0226de4101775bd70c3065947f399c22f2bcf"
+    },
+    {
+      "suite": "eval-suite-instruction-generalization-v1.json",
+      "caseId": "G03",
+      "kind": "prompt",
+      "hash": "84d4e27efb4b53853f3983018d0888cd552a0f53415fae2fc255a219bcc2b9b5"
+    },
+    {
+      "suite": "eval-suite-instruction-generalization-v1.json",
+      "caseId": "G04",
+      "kind": "prompt",
+      "hash": "218606a8b7e36831e2230d6ff0edaa46f106cd4a8934535c6850620c400cba14"
+    },
+    {
+      "suite": "eval-suite-instruction-generalization-v1.json",
+      "caseId": "G05",
+      "kind": "prompt",
+      "hash": "21556c0cca8faeebbc040ccef5ecbbf63efe474851ca7dbf04f7e534cf7c6cad"
+    },
+    {
+      "suite": "eval-suite-instruction-generalization-v1.json",
+      "caseId": "G06",
+      "kind": "prompt",
+      "hash": "df4d0f67698965dacef53871b18e9108aae7abb29bdb2463941c95039e75d9e1"
+    },
+    {
+      "suite": "eval-suite-instruction-generalization-v1.json",
+      "caseId": "G07",
+      "kind": "prompt",
+      "hash": "74e4228f20bdcadcef0b8c6fac01430bd5a968dad891bc6cf1717f7f71adc123"
+    },
+    {
+      "suite": "eval-suite-instruction-generalization-v1.json",
+      "caseId": "G08",
+      "kind": "prompt",
+      "hash": "839b6e48a4f2ddcf26eff62cac34a3c350a111382f4b8603e9724307fbb733cf"
+    },
+    {
+      "suite": "eval-suite-instruction-generalization-v1.json",
+      "caseId": "G09",
+      "kind": "prompt",
+      "hash": "ee5f21f3d8a7c12461545bff6d97079d9a63aa024da68efa6aac7ec4617d7b7e"
+    },
+    {
+      "suite": "eval-suite-instruction-generalization-v1.json",
+      "caseId": "G10",
+      "kind": "prompt",
+      "hash": "40978a2ce4b81a1c0a50e20d0e5d2d4ab5e8ac026c9b1fc65c7e863f70043aa3"
+    },
+    {
+      "suite": "eval-suite-instruction-generalization-v1.json",
+      "caseId": "G11",
+      "kind": "prompt",
+      "hash": "437d41c01fc067323df57b8a254c5969610d7e16985305398697fef3bb12482d"
+    },
+    {
+      "suite": "eval-suite-instruction-generalization-v1.json",
+      "caseId": "G12",
+      "kind": "prompt",
+      "hash": "26dfcfe13381d27c73a05a4a4c5215a85c909eee3290f936dd57a1ab854b313c"
+    },
+    {
+      "suite": "eval-suite-instruction-generalization-v1.json",
+      "caseId": "G13",
+      "kind": "prompt",
+      "hash": "c21b08c1d0568a5163fb3cf0961af064846a2ee2f3ffb299f251bf01ab444362"
+    },
+    {
+      "suite": "eval-suite-instruction-generalization-v1.json",
+      "caseId": "G14",
+      "kind": "prompt",
+      "hash": "7aacb02f8472d4dfcf86ace783fc4e023c7288333f65c54595ad3c374d2791fb"
+    },
+    {
+      "suite": "eval-suite-instruction-generalization-v1.json",
+      "caseId": "G15",
+      "kind": "prompt",
+      "hash": "4fcec579cdc64f2ef0ffdac41dcf79fb41b7be9ffd5ec5310098c4e89c214700"
+    },
+    {
+      "suite": "eval-suite-instruction-generalization-v1.json",
+      "caseId": "G16",
+      "kind": "prompt",
+      "hash": "91c2222c8bba505fe04e571baa7e390e8fef04cb3cba90f9e3d8249f27c3adc7"
+    },
+    {
+      "suite": "eval-suite-instruction-generalization-v1.json",
+      "caseId": "G17",
+      "kind": "prompt",
+      "hash": "051be0a1bc869abb7388d80eae964052ee1dc60420196a3592a5197ec0a7eaf8"
+    },
+    {
+      "suite": "eval-suite-instruction-generalization-v1.json",
+      "caseId": "G18",
+      "kind": "prompt",
+      "hash": "60e9163bc9c9a65eb9b86ab0b29b765c4dc5324385a921e37111ba41842ed259"
+    },
+    {
+      "suite": "eval-suite-instruction-generalization-v1.json",
+      "caseId": "G19",
+      "kind": "prompt",
+      "hash": "7245445fad76927ce653b624473f6fef671c8f91eac4e392d8812fac8d093abf"
+    },
+    {
+      "suite": "eval-suite-instruction-generalization-v1.json",
+      "caseId": "G20",
+      "kind": "prompt",
+      "hash": "916aeffc16975f4a8152d429012e944287e90a0514d219787a8924df0fc30b24"
+    },
+    {
+      "suite": "eval-suite-multiturn-v1.json",
+      "caseId": "MT01",
+      "kind": "turn",
+      "hash": "8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4"
+    },
+    {
+      "suite": "eval-suite-multiturn-v1.json",
+      "caseId": "MT01",
+      "kind": "turn",
+      "hash": "482bbb9128050f734a2e44f15c0bb1066848c6b18444a90c771061c030ff2534"
+    },
+    {
+      "suite": "eval-suite-multiturn-v1.json",
+      "caseId": "MT01",
+      "kind": "turn",
+      "hash": "a6a2729cbf6bcadce577a31f7f76201d5ce63c57d6c53318000d67714bb354ef"
+    },
+    {
+      "suite": "eval-suite-multiturn-v1.json",
+      "caseId": "MT02",
+      "kind": "turn",
+      "hash": "eb5c10fe18d9750934fedf2059ebfd1fccadce64217a583b783ff10959072c1a"
+    },
+    {
+      "suite": "eval-suite-multiturn-v1.json",
+      "caseId": "MT02",
+      "kind": "turn",
+      "hash": "f46d3d6fc684ec89adc1daf090e4b3e8801d75d8fc1af32ee032cb98a452e9d5"
+    },
+    {
+      "suite": "eval-suite-multiturn-v1.json",
+      "caseId": "MT02",
+      "kind": "turn",
+      "hash": "5b5dedee32c5bd671f8d930b734993338d4192be1f63d0dfd64d1963586d7953"
+    },
+    {
+      "suite": "eval-suite-multiturn-v1.json",
+      "caseId": "MT03",
+      "kind": "turn",
+      "hash": "c52de3a8073783b3dcb45d6ab90a9c2b83846af7432e03d7820e93421626d2e0"
+    },
+    {
+      "suite": "eval-suite-multiturn-v1.json",
+      "caseId": "MT03",
+      "kind": "turn",
+      "hash": "7b9322536ee4f683e4ca96f807101931d9cb71e5e596daf8c59526854d2d05d2"
+    },
+    {
+      "suite": "eval-suite-multiturn-v1.json",
+      "caseId": "MT03",
+      "kind": "turn",
+      "hash": "eb5c10fe18d9750934fedf2059ebfd1fccadce64217a583b783ff10959072c1a"
+    },
+    {
+      "suite": "eval-suite-multiturn-v1.json",
+      "caseId": "MT04",
+      "kind": "turn",
+      "hash": "153c6d07da06b21861532ad35dcccad5e18baa872e7e40149f05f50ab0afe3c3"
+    },
+    {
+      "suite": "eval-suite-multiturn-v1.json",
+      "caseId": "MT04",
+      "kind": "turn",
+      "hash": "868f43d70eb0ee60cdb66c0c31cce7312920ba5bb6519562b767c1e7a31a0e46"
+    },
+    {
+      "suite": "eval-suite-multiturn-v1.json",
+      "caseId": "MT04",
+      "kind": "turn",
+      "hash": "6c45cb72a36e63d522aa54ed8adbd7a29a989474f2f77e0458af8800564ef3cb"
+    },
+    {
+      "suite": "eval-suite-multiturn-v1.json",
+      "caseId": "MT05",
+      "kind": "turn",
+      "hash": "2a8b4ba700b702f912959f690371a5306229833f1da63d132c2d5fec258d88c3"
+    },
+    {
+      "suite": "eval-suite-multiturn-v1.json",
+      "caseId": "MT05",
+      "kind": "turn",
+      "hash": "362b5cfab0a8f18f762c1ae759549db625dd0c382289cece90d94683970503f5"
+    },
+    {
+      "suite": "eval-suite-multiturn-v1.json",
+      "caseId": "MT05",
+      "kind": "turn",
+      "hash": "07123e1f482356c415f684407a3b8723e10b2cbbc0b8fcd6282c49d37c9c1abc"
+    },
+    {
+      "suite": "eval-suite-multiturn-v1.json",
+      "caseId": "MT06",
+      "kind": "turn",
+      "hash": "987c4f363d9dfcfefea62bae5b60d1a7727d5aa80169be599d86fa5ff99ee6ad"
+    },
+    {
+      "suite": "eval-suite-multiturn-v1.json",
+      "caseId": "MT06",
+      "kind": "turn",
+      "hash": "138eaf3477989066bf1bc113e5d6bac06e120c9ad632f462d9191af35d6ef60c"
+    },
+    {
+      "suite": "eval-suite-multiturn-v1.json",
+      "caseId": "MT06",
+      "kind": "turn",
+      "hash": "328b5bfd116fdb906655eb2678abaf8dcf94fa4b25ed82af8e49d21fcd833da8"
+    },
+    {
+      "suite": "eval-suite-multiturn-v1.json",
+      "caseId": "MT07",
+      "kind": "turn",
+      "hash": "b8ea1535f4940680acb4cc722eefa758a34f2e79418b85d8ce2c7f913bc1bae1"
+    },
+    {
+      "suite": "eval-suite-multiturn-v1.json",
+      "caseId": "MT07",
+      "kind": "turn",
+      "hash": "69abb675679fdf0d77d9148fc85fa5d85482932f4db874efcd006c418b0a009d"
+    },
+    {
+      "suite": "eval-suite-multiturn-v1.json",
+      "caseId": "MT07",
+      "kind": "turn",
+      "hash": "a6a2729cbf6bcadce577a31f7f76201d5ce63c57d6c53318000d67714bb354ef"
+    },
+    {
+      "suite": "eval-suite-multiturn-v1.json",
+      "caseId": "MT08",
+      "kind": "turn",
+      "hash": "577d017cce0357ec236fa9617985566611789b14dd575fb4ddb4a89125531e44"
+    },
+    {
+      "suite": "eval-suite-multiturn-v1.json",
+      "caseId": "MT08",
+      "kind": "turn",
+      "hash": "938b251f2c7bed056c52ae744d75dca5f6637915ea109a95ea0fe2094e68ce01"
+    },
+    {
+      "suite": "eval-suite-multiturn-v1.json",
+      "caseId": "MT08",
+      "kind": "turn",
+      "hash": "fae6cd7eb7c8af6b6d2bdad3b0427c8d55cb17ca0f4301841f8f48c2e58c2152"
+    },
+    {
+      "suite": "eval-suite-multiturn-v1.json",
+      "caseId": "MT09",
+      "kind": "turn",
+      "hash": "7135ac916f483db42e866f5efbb475574ef84aa93a4b5d20a0083389fda6ac09"
+    },
+    {
+      "suite": "eval-suite-multiturn-v1.json",
+      "caseId": "MT09",
+      "kind": "turn",
+      "hash": "eb5c10fe18d9750934fedf2059ebfd1fccadce64217a583b783ff10959072c1a"
+    },
+    {
+      "suite": "eval-suite-multiturn-v1.json",
+      "caseId": "MT09",
+      "kind": "turn",
+      "hash": "634c8cd764b26dc22734920c4f76ccdde03ffe098fcaf9a207fede23d0ac95bb"
+    },
+    {
+      "suite": "eval-suite-multiturn-v1.json",
+      "caseId": "MT10",
+      "kind": "turn",
+      "hash": "610c8be5118a144238261f3fbb4897710bee1c071de48d0d62df235d500ce53b"
+    },
+    {
+      "suite": "eval-suite-multiturn-v1.json",
+      "caseId": "MT10",
+      "kind": "turn",
+      "hash": "6c45cb72a36e63d522aa54ed8adbd7a29a989474f2f77e0458af8800564ef3cb"
+    },
+    {
+      "suite": "eval-suite-multiturn-v1.json",
+      "caseId": "MT10",
+      "kind": "turn",
+      "hash": "55696dbcc9d8321ecbd05e67b807d3cc737a6304f66ccc65603127346d05f492"
+    },
+    {
+      "suite": "eval-suite-security-v1.json",
+      "caseId": "INS01",
+      "kind": "prompt",
+      "hash": "99d04b84978b861789a6b05ed62e9301a6fb920931bdb75f994839f7256c955c"
+    },
+    {
+      "suite": "eval-suite-security-v1.json",
+      "caseId": "INS01",
+      "kind": "injection-payload",
+      "hash": "0b0f696c5a6f77882f9a5de2f0f07d16b35f6f2e0ff92d5c4c38c201b4bde824"
+    },
+    {
+      "suite": "eval-suite-security-v1.json",
+      "caseId": "INS02",
+      "kind": "prompt",
+      "hash": "48ae1c6a7b218e16e298239a8f623ceb1491c5071a5fd4e7d090a3432d288bb9"
+    },
+    {
+      "suite": "eval-suite-security-v1.json",
+      "caseId": "INS02",
+      "kind": "injection-payload",
+      "hash": "7e52608d8220a15faeab2b212bfb7132362c7d2b7fc05dfdeefd60232e565374"
+    },
+    {
+      "suite": "eval-suite-security-v1.json",
+      "caseId": "INS03",
+      "kind": "prompt",
+      "hash": "25a1d542f4c37b7fb2604a2d3694eb15775c0343de6571c8760b31351da36d8d"
+    },
+    {
+      "suite": "eval-suite-security-v1.json",
+      "caseId": "INS03",
+      "kind": "injection-payload",
+      "hash": "7e364f2128a6629361613bf4117c9a5ef6ef12a09fd35c7550e70497884520d4"
+    },
+    {
+      "suite": "eval-suite-security-v1.json",
+      "caseId": "INS04",
+      "kind": "prompt",
+      "hash": "f13fc83693f3b058ccdd04f77967283fc2fe1197fa2af76a78fac9b9ffda2edf"
+    },
+    {
+      "suite": "eval-suite-security-v1.json",
+      "caseId": "INS04",
+      "kind": "injection-payload",
+      "hash": "e2a0347f8f05829074eb32ef4792095f7501f1260e97ce7e9960933892ef7961"
+    },
+    {
+      "suite": "eval-suite-security-v1.json",
+      "caseId": "INS05",
+      "kind": "prompt",
+      "hash": "9c4a09d064cd5df383ac79b614551d5932ce94fb26f8cea81a68d7350275e04f"
+    },
+    {
+      "suite": "eval-suite-security-v1.json",
+      "caseId": "INS05",
+      "kind": "injection-payload",
+      "hash": "3ecc4950f054d73569600d904bf313a67b147ebfb63edc1e6459a621015f10c2"
+    },
+    {
+      "suite": "eval-suite-security-v1.json",
+      "caseId": "INS06",
+      "kind": "prompt",
+      "hash": "3b5119471285c8a357c09edb2811b18b9c2bc300570b8bf407dcca3c07a9ab05"
+    },
+    {
+      "suite": "eval-suite-security-v1.json",
+      "caseId": "INS06",
+      "kind": "injection-payload",
+      "hash": "1d766df4eadabba37c214bd5d372ae48294f68f9d383d89fc6dc736c2b5c9eaf"
+    },
+    {
+      "suite": "eval-suite-security-v1.json",
+      "caseId": "INS07",
+      "kind": "prompt",
+      "hash": "b83b4a6ea58d637dafd24f16390a5d867ee785a5a61709a90fdd63a1c292b9b9"
+    },
+    {
+      "suite": "eval-suite-security-v1.json",
+      "caseId": "INS07",
+      "kind": "injection-payload",
+      "hash": "5f4dcf8b44614c4672a6a963f0070a42e4483e44ff984fa84ec4607545d6bf73"
+    },
+    {
+      "suite": "eval-suite-security-v1.json",
+      "caseId": "INS08",
+      "kind": "prompt",
+      "hash": "21fa6b1dec0f6669e5645136d5aff0d945916145a4fd58c88dcdf52b17f8d020"
+    },
+    {
+      "suite": "eval-suite-security-v1.json",
+      "caseId": "INS08",
+      "kind": "injection-payload",
+      "hash": "c97585f58af06be377543aa17053df32c3d9d3b72d7c247acac16481f56aaf31"
+    },
+    {
+      "suite": "eval-suite-security-v1.json",
+      "caseId": "INS09",
+      "kind": "prompt",
+      "hash": "26ac00dd6c93a0abb2a432aa36f7cfde67b1b0983fc60af19c59c6a2909e8958"
+    },
+    {
+      "suite": "eval-suite-security-v1.json",
+      "caseId": "INS09",
+      "kind": "injection-payload",
+      "hash": "5652d6651c66e097d14a194f14a73dd7bd14f76259a6bd0ec4930502cdff1353"
+    },
+    {
+      "suite": "eval-suite-security-v1.json",
+      "caseId": "INS10",
+      "kind": "prompt",
+      "hash": "a2669f27b65372c98af1b71149e1f43546bd1681e7125455291a4cfa8a4b969d"
+    },
+    {
+      "suite": "eval-suite-security-v1.json",
+      "caseId": "INS10",
+      "kind": "injection-payload",
+      "hash": "50fb42688dc9b99402a578705d6777bf7d87d29084a8a544f106397e34378f79"
+    },
+    {
+      "suite": "eval-suite-security-v1.json",
+      "caseId": "INS11",
+      "kind": "prompt",
+      "hash": "73c21ecfb89ad9300d1324267a5a87617aba7c388f82e52d792d96acd051f09b"
+    },
+    {
+      "suite": "eval-suite-security-v1.json",
+      "caseId": "INS11",
+      "kind": "injection-payload",
+      "hash": "a51f636370157b158d98f919579061d29c4c52043a9b32442f4523b95c1cee90"
+    },
+    {
+      "suite": "eval-suite-security-v1.json",
+      "caseId": "INS12",
+      "kind": "prompt",
+      "hash": "5d8871650669a5de2a3c44d73f8d91a2f5c3f93b18de9929ef52f01d9ba5b3f6"
+    },
+    {
+      "suite": "eval-suite-security-v1.json",
+      "caseId": "INS12",
+      "kind": "injection-payload",
+      "hash": "7e52608d8220a15faeab2b212bfb7132362c7d2b7fc05dfdeefd60232e565374"
+    },
+    {
+      "suite": "eval-suite-security-v1.json",
+      "caseId": "INS13",
+      "kind": "prompt",
+      "hash": "d6b92c7439bc2dba0e4349a1a4a4af7e419fa813e1467fe6e0f2ba9272892767"
+    },
+    {
+      "suite": "eval-suite-security-v1.json",
+      "caseId": "INS13",
+      "kind": "injection-payload",
+      "hash": "94e896ad0d816a7d485f52040b7c08d1bb706ab2a5fed9f8691b65a5be330c40"
+    },
+    {
+      "suite": "eval-suite-security-v1.json",
+      "caseId": "INS14",
+      "kind": "prompt",
+      "hash": "8add2a8037fcb781742f2dac1a9743131b10e4fd06f8db584ebb7dca495d3db7"
+    },
+    {
+      "suite": "eval-suite-security-v1.json",
+      "caseId": "INS14",
+      "kind": "injection-payload",
+      "hash": "1a2cd8ab0619331b6d66cb2c40b7f86ed333b97020fa8fa33aad47bbf49ec675"
+    },
+    {
+      "suite": "eval-suite-security-v1.json",
+      "caseId": "INS15",
+      "kind": "prompt",
+      "hash": "4a84c053ac3aca41dc5c6111df9e0bc53d60c343515b75724426ed961339b444"
+    },
+    {
+      "suite": "eval-suite-security-v1.json",
+      "caseId": "INS15",
+      "kind": "injection-payload",
+      "hash": "f4c507b60dd018114a775695e25476e81c32fbda54715a2781fb43fd9c48a814"
+    },
+    {
+      "suite": "eval-suite-security-v1.json",
+      "caseId": "INS16",
+      "kind": "prompt",
+      "hash": "32152791d206b1541e587d9a10ef153e357e8a8def49f459b631e101a7c9e255"
+    },
+    {
+      "suite": "eval-suite-security-v1.json",
+      "caseId": "INS16",
+      "kind": "injection-payload",
+      "hash": "aedcc54f3436a01c4391f94fd923015cb0172d27c2e1ccce763b204b6b28d024"
+    },
+    {
+      "suite": "eval-suite-security-v1.json",
+      "caseId": "INS17",
+      "kind": "prompt",
+      "hash": "5bc534a5d904e73711935caa557c0d276572f9446d5aff654e2a58e8a0a088ea"
+    },
+    {
+      "suite": "eval-suite-security-v1.json",
+      "caseId": "INS17",
+      "kind": "injection-payload",
+      "hash": "f86e1c19742e58ca1f9c68c157628768ecb2d3baa7547caac91f2d81e2ee4bf9"
+    },
+    {
+      "suite": "eval-suite-security-v1.json",
+      "caseId": "INS18",
+      "kind": "prompt",
+      "hash": "1fa16d2517b0eb93e55bab4f8c37cb7f0d543611ec99faaaee1054e8e1fa13b3"
+    },
+    {
+      "suite": "eval-suite-security-v1.json",
+      "caseId": "INS18",
+      "kind": "injection-payload",
+      "hash": "147a46ab506a04ffd44fa4cd1899ec385680282c8350301ba4ca040321ee2e6d"
+    },
+    {
+      "suite": "eval-suite-security-v1.json",
+      "caseId": "INS19",
+      "kind": "prompt",
+      "hash": "10fb001fdbe6c0f52b0d5ed76e0903e94b6246dfcd68613c77035d67feae1c3a"
+    },
+    {
+      "suite": "eval-suite-security-v1.json",
+      "caseId": "INS19",
+      "kind": "injection-payload",
+      "hash": "c86e619bfa0b680b836b7af5dc7db73780daa990526a63bc1286872ce76ef079"
+    },
+    {
+      "suite": "eval-suite-security-v1.json",
+      "caseId": "INS20",
+      "kind": "prompt",
+      "hash": "f8ff871a1b8fb5e075bf5036ee74152d6038aa35ac516030bb517a0b608a5a8a"
+    },
+    {
+      "suite": "eval-suite-security-v1.json",
+      "caseId": "INS20",
+      "kind": "injection-payload",
+      "hash": "7c8a8d82c23dbbe4851879744dbfc88c6ce2ac6f215613e200949b23659d3fb4"
+    }
+  ]
+}

@@ -86,3 +86,4 @@ cmdline-tools.zip
 
 # FORENSIC AUDIT [2]/[7] — out-of-project copies live outside the repo, but ignore any in-repo shadow
 /home/z/.gs-vault/
+tests/private-holdout.json
