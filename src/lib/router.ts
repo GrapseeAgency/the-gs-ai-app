@@ -1,6 +1,6 @@
 /**
  * GS ROUTER — the backend-owned CAPABILITY router (Architecture Lock, 2026-09-21;
- * capability-registry revision, 2026-09-24).
+ * capability-registry revision, 2026-09-24; shortfall-matching revision, 2026-09-24).
  *
  * PRODUCT RULE: GS AI is ONE assistant experience. The user never selects a
  * model, never sees a model name, never sees a provider name, and never
@@ -10,20 +10,24 @@
  * INTERNAL execution plan: which internal model serves the turn, how much
  * retrieval budget it gets, and (via models.ts) which backend executes it.
  *
- * CAPABILITY REGISTRY (2026-09-24) — ROUTING IS DRIVEN BY MEASURED
- * CAPABILITY, NOT BY TIER LABELS. The complexity-tier assumption ("stronger
+ * SHORTFALL MATCHING (HyDRA-style, 2026-09-24): routing is driven by MEASURED
+ * CAPABILITY, not by tier labels. The complexity-tier assumption ("stronger
  * class" serves everything hard) was measured false: the register suite
  * (5 trials × 10 cases, judge glm-4.6 temp 0) caught the router sending
  * register turns to the one model class that systematically fails them
  * (zai/gs-balanced register 0.143) while the efficient class passes 1.000.
- * planRoute() now classifies each turn into a required CAPABILITY and
- * consults src/lib/model-capabilities.ts: the best-measured model for that
- * capability serves the turn; a model measuring < CAPABILITY_THRESHOLD is
- * barred (neverServe) no matter what its tier label says; a capability with
- * no measured model routes BLOCKED rather than pretending. Capabilities
- * without a measured column (chat/code/vision/document/research) keep the
- * standing tier model — logged as `unmeasured`, never presented as a
- * measurement.
+ * planRoute() now (1) classifies the turn into a required CAPABILITY,
+ * (2) predicts per-query REQUIREMENTS (aggregate floor + sub-capability
+ * minimums for the exact register flavors the query hits), (3) filters the
+ * registry to models that meet ALL requirements (neverServe bar + aggregate
+ * floor + per-sub shortfall, with the measured aggregate as the documented
+ * fallback while a sub-cell is UNMEASURED), and (4) serves the CHEAPEST
+ * candidate — measured p50 latency is the only measured cost axis across
+ * internal models, so it is the cost proxy ($ cost is UNMEASURED and is never
+ * guessed). No candidate → the turn routes BLOCKED: an honest refusal beats
+ * serving a model known to fail the requirement. Capabilities without a
+ * measured column (chat/code/vision/document/research) keep the standing
+ * tier model — logged as `unmeasured`, never presented as a measurement.
  *
  * CONTRACT:
  *  - Every field of RouterPlan is an implementation detail. NOTHING from a
@@ -40,7 +44,15 @@
  *    continues transparently. The user always sees one continuous GS AI.
  */
 
-import { CAPABILITY_THRESHOLD, profileFor, selectModelForCapability, type CapabilityTag } from './model-capabilities'
+import {
+  CAPABILITY_THRESHOLD,
+  MODEL_REGISTRY,
+  REGISTER_SUBCAP_REQUIREMENT,
+  measuredScore,
+  subScore,
+  type CapabilityTag,
+  type ModelProfile,
+} from './model-capabilities'
 
 export type CapabilityRoute =
   | 'TEXT_SIMPLE' // efficient model — greetings, short factual chat
@@ -84,6 +96,11 @@ export interface RouterPlan {
    * when the capability is unmeasured for the selected model. Logs only.
    */
   measuredScore: number | null
+  /**
+   * The predicted requirements this turn was matched against (shortfall
+   * matching input). Observability + CI-gate logs only — never the wire.
+   */
+  requirements: RequirementSet
   /** Observability only — server logs, never the wire. */
   reason: string
 }
@@ -104,6 +121,22 @@ export interface RouteRequest {
   /** Approximate serialized conversation context size (chars). */
   historyChars: number
 }
+
+// --- requirements schema (shortfall matching input) --------------------------
+
+/**
+ * A per-capability requirement: the aggregate measured floor plus optional
+ * sub-capability minimums for exactly the query flavors this turn hits.
+ */
+export interface CapabilityRequirement {
+  /** Minimum measured aggregate pass rate for the capability. */
+  min: number
+  /** Sub-capability → required minimum (only flavors the query demands). */
+  subs: Record<string, number>
+}
+
+/** Requirements per capability for one query, e.g. `{ register: { min: 0.5, subs: { sarcasm: 0.7 } } }`. */
+export type RequirementSet = Partial<Record<CapabilityTag, CapabilityRequirement>>
 
 // --- deterministic signal detectors -----------------------------------------
 
@@ -201,32 +234,82 @@ export function classifyCapabilities(req: RouteRequest): CapabilityTag {
   return 'chat'
 }
 
-/** Score-tie break: first in registry order (documented, deterministic). */
-function registryModelFor(cap: CapabilityTag): { modelId: string; provider: 'zai' | 'openrouter'; score: number } | null {
-  const profile = selectModelForCapability(cap)
-  if (!profile) return null
-  const score = measuredScoreOrThrow(profile, cap)
-  return { modelId: profile.modelId, provider: profile.provider, score }
-}
-
-function measuredScoreOrThrow(profile: { modelId: string }, cap: CapabilityTag): number {
-  const p = profileFor(profile.modelId)
-  const v = p ? (cap === 'register' || cap === 'reasoning' || cap === 'instruction' || cap === 'search' ? p.measured[cap] : 'UNMEASURED') : 'UNMEASURED'
-  if (typeof v !== 'number') throw new Error(`registry: ${profile.modelId} selected for ${cap} without a measured score`)
-  return v
+/**
+ * REQUIREMENT PREDICTION — deterministic, zero-latency, per-query.
+ *
+ * For register turns the predicted requirements name the EXACT sub-register
+ * flavors the class detectors fired on (each at REGISTER_SUBCAP_REQUIREMENT):
+ * a sarcasm turn demands measured sarcasm ≥ 0.7; an ai-tease turn demands
+ * teasing ≥ 0.7; a banter turn demands banter ≥ 0.7; emotional/social-nuance
+ * turns demand emotional ≥ 0.7. For search turns the standing requirements
+ * are citation + retrieval (the two silent-failure axes the search gate
+ * polices). Reasoning/instruction carry the aggregate floor only — their
+ * sub-cells are UNMEASURED in the registry and a requirement on an
+ * unmeasurable axis would be a pretense, not a requirement.
+ */
+export function predictRequirements(req: RouteRequest, capability: CapabilityTag): RequirementSet {
+  const text = req.content.trim()
+  const requirements: RequirementSet = {}
+  if (capability === 'register') {
+    const subs: Record<string, number> = {}
+    if (SOCIAL_EMOTIONAL_RE.test(text) || SOCIAL_NUANCE_RE.test(text)) subs.emotional = REGISTER_SUBCAP_REQUIREMENT
+    if (SARCASM_RE.test(text)) subs.sarcasm = REGISTER_SUBCAP_REQUIREMENT
+    if (HUMOR_BANTER_RE.test(text)) subs.banter = REGISTER_SUBCAP_REQUIREMENT
+    if (AI_TEASE_RE.test(text)) subs.teasing = REGISTER_SUBCAP_REQUIREMENT
+    requirements.register = { min: CAPABILITY_THRESHOLD, subs }
+  } else if (capability === 'search') {
+    requirements.search = { min: CAPABILITY_THRESHOLD, subs: { citation: REGISTER_SUBCAP_REQUIREMENT, retrieval: REGISTER_SUBCAP_REQUIREMENT } }
+  } else if (capability === 'reasoning' || capability === 'instruction') {
+    requirements[capability] = { min: CAPABILITY_THRESHOLD, subs: {} }
+  }
+  return requirements
 }
 
 /**
- * One routing decision per turn. The required capability is classified
- * first; measured capabilities select their model through the REGISTRY;
- * unmeasured capabilities keep the standing tier model (logged as
- * unmeasured, never as a measurement).
+ * SHORTFALL MATCH — a model serves the query only when, for EVERY required
+ * capability: it is not barred (neverServe), its measured aggregate is at
+ * least the floor, and every named sub-requirement is met — by the model's
+ * measured sub-score where one exists, else by the aggregate (documented
+ * fallback: an UNMEASURED sub-cell defers to the measured aggregate; a
+ * model with NO measured aggregate cannot meet a measured requirement at all).
+ */
+export function meetsAllRequirements(profile: ModelProfile, requirements: RequirementSet): boolean {
+  for (const [cap, req] of Object.entries(requirements) as [CapabilityTag, CapabilityRequirement][]) {
+    if (profile.neverServe.includes(cap)) return false
+    const agg = measuredScore(profile, cap)
+    if (agg === null) return false
+    if (agg < req.min) return false
+    for (const [sub, need] of Object.entries(req.subs)) {
+      const score = subScore(profile, cap, sub) ?? agg
+      if (score < need) return false
+    }
+  }
+  return true
+}
+
+/**
+ * COST — measured production p50 latency is the only measured cost axis
+ * across internal models (per-turn seconds are a real user cost; $/token is
+ * UNMEASURED and is never guessed). Lowest p50 wins; a model without a
+ * measured p50 is maximally expensive. Ties keep registry order.
+ */
+export function cheapest(candidates: ModelProfile[]): ModelProfile | null {
+  const withCost = candidates.map((m, i) => ({ m, i, cost: m.latency.p50 ?? Number.POSITIVE_INFINITY }))
+  withCost.sort((a, b) => a.cost - b.cost || a.i - b.i)
+  return withCost[0]?.m ?? null
+}
+
+/**
+ * One routing decision per turn: classify → predict requirements → shortfall
+ * match the registry → cheapest candidate. Measured capabilities select
+ * through the registry; unmeasured capabilities keep the standing tier model.
  */
 export function planRoute(req: RouteRequest): RouterPlan {
   const text = req.content.trim()
   const plannerTriggered =
     req.webGateTrigger !== null || req.clarifyFollowUp || req.historicalReligious
   const capability = classifyCapabilities(req)
+  const requirements = predictRequirements(req, capability)
 
   const plan = (
     route: CapabilityRoute,
@@ -237,7 +320,22 @@ export function planRoute(req: RouteRequest): RouterPlan {
     providerLock: 'zai' | 'openrouter' | null,
     measuredScore: number | null,
     reason: string,
-  ): RouterPlan => ({ route, internalModelId, depth, plannerRuns, registerClass, capability, providerLock, measuredScore, reason })
+  ): RouterPlan => ({ route, internalModelId, depth, plannerRuns, registerClass, capability, providerLock, measuredScore, requirements, reason })
+
+  /** Shortfall match + cheapest pick for a capability, with detector-hit annotation. */
+  const shortfallPick = (cap: CapabilityTag): { chosen: ModelProfile; score: number } | { blocked: string } | null => {
+    const candidates = MODEL_REGISTRY.filter((m) => meetsAllRequirements(m, requirements))
+    if (candidates.length === 0) {
+      return {
+        blocked: `no registry model meets the predicted requirements for ${cap} (floor ${CAPABILITY_THRESHOLD}${Object.entries(requirements[cap]?.subs ?? {}).map(([s, v]) => `, ${s} ≥ ${v}`).join('')})`,
+      }
+    }
+    const chosen = cheapest(candidates)
+    if (!chosen) return { blocked: `no candidate model for ${cap}` }
+    const score = measuredScore(chosen, cap)
+    if (score === null) return { blocked: `registry pick ${chosen.modelId} lacks a measured ${cap} score` }
+    return { chosen, score }
+  }
 
   // 1) Vision — image understanding rides the vision-capable model.
   if (capability === 'vision') {
@@ -258,11 +356,22 @@ export function planRoute(req: RouteRequest): RouterPlan {
   }
 
   // 4) Web — the search gate fired: SEARCH IS A GS BACKEND CAPABILITY. The
-  //    search service runs first; synthesis follows on the measured search
-  //    chain (registry: search measured 1.0 on the gs-free-big chain — the
-  //    execution layer resolves the chain, the label stays the tier id).
+  //    search service runs first; synthesis follows the shortfall-matched
+  //    search model. The measured search registry has one candidate
+  //    (gs-free-big, citation/retrieval 1.000): it is an openrouter chain, so
+  //    the plan keeps the standing tier label and a null provider lock — the
+  //    execution layer resolves the chain (free chain when the keypool is
+  //    alive, z-ai fallback when it is not). A z-ai search candidate would
+  //    take the lock instead.
   if (capability === 'search') {
-    return plan('WEB', 'gs-balanced', 'quick', true, false, null, null, `search gate: ${req.webGateTrigger}`)
+    const pick = shortfallPick('search')
+    if (pick && 'blocked' in pick) {
+      return plan('BLOCKED', 'none', 'quick', true, false, null, null, `${pick.blocked} [search gate: ${req.webGateTrigger}]`)
+    }
+    if (pick && 'chosen' in pick && pick.chosen.provider === 'zai') {
+      return plan('WEB', pick.chosen.modelId, 'quick', true, false, 'zai', pick.score, `shortfall: search → ${pick.chosen.modelId} (measured ${pick.score.toFixed(3)}) [gate: ${req.webGateTrigger}]`)
+    }
+    return plan('WEB', 'gs-balanced', 'quick', true, false, null, null, `search gate: ${req.webGateTrigger} (chain resolved by execution layer)`)
   }
 
   // 5) Coding — code-shaped requests take the coding route (capability
@@ -271,49 +380,64 @@ export function planRoute(req: RouteRequest): RouterPlan {
     return plan('CODING', 'gs-coder', 'quick', plannerTriggered, false, null, null, 'coding markers')
   }
 
-  // 6) Register — REGISTRY-DRIVEN. The detectors classify the capability;
-  //    the registry picks the model with the best MEASURED register score
-  //    (zai/gs-swift 1.000). A model measuring < 0.5 (zai/gs-balanced 0.143)
-  //    is barred — the routing inversion of the tier era cannot recur. With
-  //    no measured register model at all the turn routes BLOCKED: an honest
-  //    refusal beats serving a model known to fail the register.
+  // 6) Register — SHORTFALL-MATCHED. The detectors classify the capability
+  //    AND predict the exact sub-register requirements (sarcasm/teasing/
+  //    banter/emotional at 0.7 each). gs-balanced fails both the neverServe
+  //    bar and its measured sub-scores (banter 0.333, sarcasm 0.0, teasing
+  //    0.0, emotional 0.0) — the tier-era inversion cannot recur. Cheapest
+  //    surviving candidate (measured p50) serves.
   if (capability === 'register') {
     const registerHits: string[] = []
-    if (SOCIAL_EMOTIONAL_RE.test(text)) registerHits.push('emotional')
-    if (SOCIAL_NUANCE_RE.test(text)) registerHits.push('social-nuance')
+    if (SOCIAL_EMOTIONAL_RE.test(text) || SOCIAL_NUANCE_RE.test(text)) registerHits.push('emotional')
     if (SARCASM_RE.test(text)) registerHits.push('sarcasm')
     if (HUMOR_BANTER_RE.test(text)) registerHits.push('banter')
     if (AI_TEASE_RE.test(text)) registerHits.push('ai-tease')
     const hits = registerHits.length > 0 ? ` [${registerHits.join('+')}]` : ''
-    const best = registryModelFor('register')
-    if (!best) {
-      return plan('BLOCKED', 'none', 'quick', plannerTriggered, true, null, null, `no measured model for capability register${hits} (threshold ${CAPABILITY_THRESHOLD})`)
+    const pick = shortfallPick('register')
+    if (!pick || 'blocked' in pick) {
+      const why = pick && 'blocked' in pick ? pick.blocked : `no candidate model for register`
+      return plan('BLOCKED', 'none', 'quick', plannerTriggered, true, null, null, `${why}${hits}`)
     }
-    const route = best.provider === 'zai' && best.modelId === 'gs-swift' ? 'TEXT_SIMPLE' : 'TEXT_COMPLEX'
-    return plan(
-      route,
-      best.modelId,
-      'quick',
-      plannerTriggered,
-      true,
-      best.provider,
-      best.score,
-      `capability: register${hits} → ${best.modelId} (measured ${best.score.toFixed(3)} ≥ ${CAPABILITY_THRESHOLD})`,
-    )
+    if (pick && 'chosen' in pick) {
+      const { chosen, score } = pick
+      const route = chosen.provider === 'zai' && chosen.modelId === 'gs-swift' ? 'TEXT_SIMPLE' : 'TEXT_COMPLEX'
+      return plan(
+        route,
+        chosen.modelId,
+        'quick',
+        plannerTriggered,
+        true,
+        chosen.provider,
+        score,
+        `shortfall: register${hits} → ${chosen.modelId} (measured ${score.toFixed(3)} ≥ ${CAPABILITY_THRESHOLD}, cheapest p50 ${chosen.latency.p50 ?? '∞'}ms)`,
+      )
+    }
   }
 
   // 7) Reasoning — analytical language, long asks, heavy context, or the
-  //    literalist route-around ([20]). Registry-driven where measured: the
-  //    best-measured reasoning model serves (currently zai/gs-balanced 1.0,
-  //    which is also the standing tier model — no behavior change, the SCORE
-  //    is now the reason rather than the label).
+  //    literalist route-around ([20]). Shortfall-matched: the cheapest
+  //    candidate meeting the measured reasoning floor serves (currently
+  //    zai/gs-balanced 1.000 — also the standing tier model, so the SCORE is
+  //    the reason rather than the label).
   if (capability === 'reasoning') {
     const literalist = LITERALIST_META_RE.test(text)
-    const best = registryModelFor('reasoning')
-    if (best) {
-      return plan('TEXT_COMPLEX', best.modelId, 'quick', plannerTriggered, false, best.provider, best.score, `${literalist ? 'route-around: literalist meta-instruction — ' : ''}capability: reasoning → ${best.modelId} (measured ${best.score.toFixed(3)})`)
+    const pick = shortfallPick('reasoning')
+    if (!pick || 'blocked' in pick) {
+      const why = pick && 'blocked' in pick ? pick.blocked : 'no candidate model for reasoning'
+      return plan('BLOCKED', 'none', 'quick', plannerTriggered, false, null, null, `${literalist ? 'route-around: literalist meta-instruction — ' : ''}${why}`)
     }
-    return plan('TEXT_COMPLEX', 'gs-balanced', 'quick', plannerTriggered, false, null, null, 'analytical language (reasoning unmeasured — tier default)')
+    if (pick && 'chosen' in pick) {
+      return plan(
+        'TEXT_COMPLEX',
+        pick.chosen.modelId,
+        'quick',
+        plannerTriggered,
+        false,
+        pick.chosen.provider,
+        pick.score,
+        `${literalist ? 'route-around: literalist meta-instruction — ' : ''}shortfall: reasoning → ${pick.chosen.modelId} (measured ${pick.score.toFixed(3)}, cheapest p50 ${pick.chosen.latency.p50 ?? '∞'}ms)`,
+      )
+    }
   }
 
   // 8) Default — ordinary conversation on the efficient model (capability
