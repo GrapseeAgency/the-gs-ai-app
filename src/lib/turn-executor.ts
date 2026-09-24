@@ -486,13 +486,21 @@ export async function prepareTurn(
     )
   }
 
-  // FLASH MODE (Phase 2) — resolve the requested mode against the SELECTED
-  // model's thinking profile. The mode only sets the model's thinking config
-  // (and remaps forced-thinking models for Flash); capability routing above
+  // FLASH MODE (Phase 2/4) — resolve the requested mode against the SELECTED
+  // model's thinking profile WITH the turn-class overrides: TIME always
+  // flash, DEEP_RESEARCH always thinking, auto resolved by the router class
+  // (flash on TEXT_SIMPLE, thinking elsewhere), vision/no-thinking models
+  // flash-forced, forced-thinking models remapped for Flash (GS-MODE-REMAP).
+  // The mode only sets the model's thinking config — capability routing above
   // is untouched. Register and thinking are orthogonal — a register-class
   // turn with mode=thinking still thinks (the config applies identically).
   const requestedMode = parseThinkingMode(args.mode)
-  const thinking = resolveThinkingConfig(requestedMode, routerPlan.internalModelId)
+  const thinking = resolveThinkingConfig(
+    requestedMode,
+    routerPlan.internalModelId,
+    routerPlan.route,
+    cap.capability
+  )
   if (thinking.remapNote) {
     console.log(`GS-MODE-REMAP conv=${id} ${thinking.remapNote}`)
   }

@@ -561,26 +561,43 @@ export interface ResolvedThinking {
 
 /**
  * Resolve the client's requested mode against the SELECTED MODEL's thinking
- * profile (task Phase 2 pseudocode, verbatim semantics):
+ * profile, with the PHASE 4 turn-class overrides built in:
  *  - flash    → thinking disabled; on a FORCED-thinking model (GLM-5.3-class)
  *               the request remaps to the nearest flash-capable tier
  *               (GS-MODE-REMAP).
- *  - thinking → thinking enabled + the profile's default effort.
- *  - auto     → config null — provider default; the existing router logic
- *               decides, no change there.
- * The mode NEVER overrides model selection (capability routing still picks
- * the model; the mode only sets its thinking config).
+ *  - thinking → thinking enabled + the profile's default effort; on a model
+ *               with NO thinking path (vision endpoint, toggle-less free
+ *               models) Flash is FORCED with a note.
+ *  - auto     → the router decides deterministically: flash on the efficient
+ *               TEXT_SIMPLE class, thinking everywhere else (never null).
+ * Turn classes override explicit picks: TIME turns are always flash, and
+ * DEEP_RESEARCH always thinks — the user opting into research already
+ * committed to depth. The mode NEVER overrides MODEL selection (capability
+ * routing still picks the model; the mode only sets its thinking config and,
+ * for forced-thinking models, the concrete provider model id).
  */
-export function resolveThinkingConfig(mode: ThinkingMode, internalModelId: string): ResolvedThinking {
-  const profile = profileFor(internalModelId)
-  const providerModel = profile?.providerModel ?? internalModelId
+export function resolveThinkingConfig(
+  mode: ThinkingMode,
+  internalModelId: string,
+  route: string,
+  capability: string
+): ResolvedThinking {
   const t = thinkingProfileFor(internalModelId)
+  const wanted = effectiveModeFor(mode, route, capability)
 
-  if (mode === 'auto') {
-    return { effective: 'flash', config: null, providerModelOverride: null, remapNote: null }
+  // Model cannot think (vision endpoint, toggle-less free models): Flash forced.
+  if (wanted === 'thinking' && !t.supportsThinking) {
+    return {
+      effective: 'flash',
+      config: { mode: 'flash' },
+      providerModelOverride: null,
+      remapNote: `${internalModelId} has no thinking path — flash forced`,
+    }
   }
 
-  if (mode === 'flash') {
+  if (wanted === 'flash') {
+    const profile = profileFor(internalModelId)
+    const providerModel = profile?.providerModel ?? internalModelId
     if (!t.thinkingCanBeDisabled) {
       const remap = remapToFlashCapable(providerModel)
       if (remap) {
@@ -597,7 +614,7 @@ export function resolveThinkingConfig(mode: ThinkingMode, internalModelId: strin
     return { effective: 'flash', config: { mode: 'flash' }, providerModelOverride: null, remapNote: null }
   }
 
-  // mode === 'thinking'
+  // wanted === 'thinking'
   return {
     effective: 'thinking',
     config: { mode: 'thinking', ...(t.supportsReasoningEffort ? { effort: t.defaultEffort } : {}) },
