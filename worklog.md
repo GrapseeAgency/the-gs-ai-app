@@ -4128,3 +4128,23 @@ Work Log:
 Stage Summary:
 - UNRESOLVED (next session): (1) poll run 9 → download scorecard → record rows via scripts/record-benchmark-run.ts; (2) GPQA/AIME may partially finish with errored counts due to z-ai daily quota — report failed/errored/skipped per rollout-card rule; (3) to unblock competitors + tau2: fund an OpenRouter key; (4) to unblock Phase 10 measurement: EC2 creds or Vagrant-capable runner; (5) optional: provision HF_TOKEN for gated official datasets (Idavidrein/gpqa, allenai/IFBench).
 - Where everything lives: cli/ runners/ stats/ benchmarks/ data/ Dockerfile.bench requirements-bench*.txt .github/workflows/benchmark.yml scripts/record-benchmark-run.ts prisma BenchmarkRun.
+
+---
+Task ID: SCAFFOLD-BENCH-A..F
+Agent: main (Z.ai Code)
+Task: BENCHMARK THE SCAFFOLD, NOT THE MODEL + C++ NATIVE ENGINE (Actions-only execution; sandbox writes code and dispatches).
+
+Work Log:
+- REDIRECT honored: no local benchmark execution. GitHub Actions runs benchmarks; run 9 (36043125749, head e1bc2c4) IS the Phase A baseline — ifbench gs-ai SCORED, gpqa/aime running real shim traffic (112+ calls, ~48s each, breaker cooling cyclically), tau2 failed fast (raw: "tau2 not importable: No module named 'websockets'").
+- SCAFFOLD LAYER (commit 5d598db): src/lib/bench/scaffold.ts — profiles baseline|aci|verification|context|router, selectable via shim model id `gs-ai@<profile>`; baseline path byte-identical (past runs stay valid); vendor@profile 400 guard (generator pinned, rule 2/5).
+  - LEVER 1 aci: poka-yoke tools web_search+calculator (typed/enumerated args validated BEFORE execution, structured TOOL_ERROR with code/field/expected/got/hint), per-tool output summarization, 8000-char offload + agent-aware hints, tolerant JSON tool-call recovery. LIVE-VERIFIED: model emitted trailing-junk `}}}` + wrong arithmetic 9810; after recovery+calculator fix the scaffold returned 5210 (the lever demonstrably catches a real error class).
+  - LEVER 2 verification: separate-model verifier glm-4.5-flash (≠ generator glm-4.6) at temperature 0 (ai.ts gained additive optional temperature param, default 0.2 unchanged), max 2 regens, honest unverified label. LIVE-VERIFIED PASS flow (24 legs on 3 spiders).
+  - LEVER 3 context: episodic memory — summarize when >5 messages, keep last 2 verbatim (single-turn = honest no-op).
+  - LEVER 4 router: planner glm-4.6 thinking-high → executor glm-4.6 flash. Smoke deferred: z-ai breaker open under run-9 load (sacred — not bypassed).
+  - Telemetry: tool-results/bench-scaffold-<date>.jsonl + BENCH-SCAFFOLD log lines (rule 4).
+- CLI/workflow (same commit): --scaffold flag; scaffold in result schema + filenames; aggregate keys (benchmark, model, scaffold); workflow gains `scaffold` choice input; COMPETITOR COLUMNS DROPPED (402s are unfunded keys, not results); artifact upload `if: always()` (BLOCKED rawlogs now survive); artifacts named results-<bench>-<model>-<scaffold>; requirements-bench.txt + websockets>=12.0 (run-9 tau2 raw evidence).
+- PHASE F (commit a8ea7d2): native/ C++ engine — C ABI (vtable-by-value contract; pointer-vs-value mismatch caused a real SEGV at 0x11, now pinned by tests), plugin registry (cactus 100 > llamacpp 50 > mock 10), agent loop with tolerant parse + validate-before-dispatch, 8k context shaping with agent-aware hints, Cactus (primary, dlopen, honest BACKEND_UNAVAILABLE) + llama.cpp (fallback, load path only) adapters, Kotlin JNI + Swift bridges (source only; CMake/XCFramework wiring deferred until a backend .so exists). ASan-clean (fixed double-dlerror UB + args-substring truncation bug); 14/14 smoke checks. ENGINE-OVERHEAD.json: registry_select 88ns, vtable dispatch 24ns, 2-step agent loop 0.9µs, 12k shaping 365ns — CORE OVERHEAD ONLY; TTFT/tok-s/battery/offline = NOT MEASURED until device run (rule 5).
+
+Stage Summary:
+- Scaffold layer live on the serving shim; one-lever-per-dispatch enforced by workflow input; baseline = run 9 (in flight).
+- Next: run 9 completes → fetch scorecard+artifacts → tests/baseline-scaffold-v1.json + power analysis → dispatch scaffold=aci → delta+CI → keep/revert → verification → context → router.

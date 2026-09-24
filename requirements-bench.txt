@@ -10,9 +10,18 @@
 # (requirements-bench-extras.txt) and are irrelevant to the knowledge suite.
 
 inspect-ai>=0.3.42
-inspect-evals>=0.21.0   # the inspect_evals/* tasks (gpqa_diamond, aime2024, ifbench)
+inspect-evals>=0.21.0   # the inspect_evals/* tasks (gpqa_diamond, aime2024)
 tau2 @ git+https://github.com/sierra-research/tau2-bench
 websockets>=12.0        # tau2 imports it at module load (raw: run 36043125749 tau2 job "No module named 'websockets'")
+# IFBench: NOT shipped by inspect-evals (raw: run 36043125749 "No inspect tasks were found";
+# wheel-verified absent from 0.21.0 AND from main). Official verifiers, git-pinned:
+ifbench @ git+https://github.com/allenai/IFBench@1c40f0c10d9b5c5c2f10a175a28007ebb64f7f4d
+absl-py
+langdetect
+nltk
+immutabledict
+emoji
+syllapy>=0.8.0
 datasets>=3.0.0
 numpy>=1.26.0
 scipy>=1.14.0

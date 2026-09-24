@@ -50,19 +50,24 @@ benchmarks:
 
   - name: ifbench
     harness: inspect_ai
-    task: inspect_evals/ifbench
+    task: bench_tasks/ifbench_open.py   # custom task: IFBench is NOT in inspect-evals (raw: run 36043125749 "No inspect tasks were found"; wheel-verified absent in 0.21.0 and on main)
     dataset:
-      id: allenai/IFBench          # gated (anon API 401); runner uses HF_TOKEN
-                                   # if provided, else mirror THU-KEG/IFBench
-      subset: train
-    dataset_revision: resolve-at-download
-    n_samples: 58
-    metric: constraint_pct         # IF strict-constraint pass rate
+      id: allenai/IFBench_test          # PUBLIC official test prompts (allenai/IFBench is gated for anon; HF API evidence)
+      split: train
+    dataset_revision: resolve-at-download   # HF sha written to data/dataset-revisions.json by the task
+    n_samples: 300                      # honest correction: 58 was the count of new CONSTRAINT TYPES in the paper; the official test data holds 300 prompts (datasets-server size evidence)
+    metric: accuracy                    # strict: prompt passes iff EVERY constraint holds (official evaluation_lib port)
+    scorer: ifbench_strict_scorer
     timeout_per_sample_s: 240
     infrastructure:
       cpu: 4
       ram_gb: 16
       disk_gb: 14
+    notes: >-
+      Strict constraint pass rate via the official allenai/IFBench verifier
+      (git-pinned 1c40f0c) ported into bench_tasks/ifbench_open.py. The
+      benchmark previously reported BLOCKED with raw reason "No inspect tasks
+      were found" (run 36043125749).
 
   - name: tau2_telecom
     harness: tau2

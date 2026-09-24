@@ -296,6 +296,7 @@ def cmd_run(args: argparse.Namespace) -> int:
             log_lines.append(f"RUN-ERROR: {type(e).__name__}: {e}")
             res["status"] = "BLOCKED"
             res["raw_reason"] = f"{type(e).__name__}: {e}"
+            exit_code = 1  # honest job status: a BLOCKED benchmark must fail the step
             print(f"BLOCKED {name} model={model}: {e}", file=sys.stderr)
         log_path.write_text("\n".join(log_lines) + "\n")
         res = finish_result(res, res.get("status", "running"), log_path, out_dir)
@@ -373,8 +374,11 @@ def _run_inspect(entry: Dict[str, Any], model: str, res: Dict[str, Any], log_lin
         "--model", model_arg,
         "--log-dir", str(out_dir / "inspect-logs"),
         "--log-format", "json",
-        "-T", f"temperature={entry.get('_defaults', {}).get('temperature', 0.2)}",
     ]
+    # -T task params only for tasks that declare them; bench_tasks/* define
+    # their own GenerateConfig and error on unknown params.
+    if entry.get("task_params") is not None:
+        cmd += ["-T", f"temperature={entry.get('task_params', {}).get('temperature', 0.2)}"]
     log_lines.append(f"# cmd: {' '.join(cmd)}")
     t0 = time.time()
     proc = subprocess.run(cmd, capture_output=True, text=True, env=env, timeout=_suite_timeout(entry))
