@@ -1,0 +1,333 @@
+{
+  "suite": "eval-suite-multiturn-v1",
+  "created": "2026-09-24",
+  "framework": "multi-turn evaluation (ICLR 2026: single-turn suites overestimate capability — a 39% accuracy drop appears in multi-turn settings)",
+  "description": "10 conversations, 3-5 turns each, run through the REAL production path with per-turn assertions graded against that turn's trace row + streamed answer. The app is multi-turn; every prior GS eval was single-turn. Three failure families are pinned: CONTEXT ISOLATION (a non-search turn immediately after a search turn must inherit NOTHING: sourceCount == 0), REGISTER CONTINUITY (the reply must hold the register the conversation established — judged with the production register judge semantics), and STOP HONESTY (a stop turn must not trigger a new search). Existing grader vocabulary (src/lib/eval-grader.ts) is reused so the current runner/grader core grades these unchanged. NOT YET RUN (quota) — suite + runner contract is the deliverable.",
+  "traceSource": "SELECT * FROM turns WHERE requestId = <X-GS-Request-Id response header of that turn> — one trace row per turn, conversation carried across turns in order",
+  "judge": {
+    "model": "glm-4.6",
+    "temperature": 0,
+    "scope": "judgedRegister turns only — same judge model/temperature as the register suite (UNCHANGED); criteria reuse the register rubric family (playsAlong / noLecture / noRefusal) plus registerContinuity across the named turns"
+  },
+  "assertionVocabulary": "identical to tests/eval-suite-v1.json assertionVocabulary (trace.* and response.* graders); 'contextIsolation' is the conversation-level rule that the marked turn asserts trace.sourceCount == 0",
+  "cases": [
+    {
+      "id": "MT01",
+      "name": "greeting → clock → thanks",
+      "conversation": [
+        {
+          "turn": 1,
+          "prompt": "hi",
+          "assertions": [
+            { "type": "trace.searchExecuted", "value": false },
+            { "type": "trace.finalStatus", "value": "done" }
+          ]
+        },
+        {
+          "turn": 2,
+          "prompt": "what time is it?",
+          "assertions": [
+            { "type": "trace.searchExecuted", "value": false },
+            { "type": "trace.finalStatus", "value": "done" }
+          ]
+        },
+        {
+          "turn": 3,
+          "prompt": "thanks",
+          "assertions": [
+            { "type": "trace.searchExecuted", "value": false },
+            { "type": "trace.sourceCount", "value": 0 },
+            { "type": "trace.finalStatus", "value": "done" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT02",
+      "name": "joke → register feedback → retry",
+      "conversation": [
+        {
+          "turn": 1,
+          "prompt": "tell me a joke",
+          "assertions": [
+            { "type": "trace.searchExecuted", "value": false },
+            { "type": "response.notContains", "value": "I cannot" }
+          ],
+          "judgedRegister": ["playsAlong", "noLecture", "noRefusal"]
+        },
+        {
+          "turn": 2,
+          "prompt": "bruh that was trash",
+          "assertions": [
+            { "type": "trace.searchExecuted", "value": false },
+            { "type": "response.notContains", "value": "I cannot" }
+          ],
+          "judgedRegister": ["playsAlong", "noLecture", "noRefusal"]
+        },
+        {
+          "turn": 3,
+          "prompt": "try again",
+          "assertions": [
+            { "type": "trace.searchExecuted", "value": false },
+            { "type": "trace.sourceCount", "value": 0 }
+          ],
+          "judgedRegister": ["playsAlong", "noRefusal"],
+          "judgedContinuity": "the retry must attempt ANOTHER joke in the same casual register the user set — not pivot to a lecture or a help-menu"
+        }
+      ]
+    },
+    {
+      "id": "MT03",
+      "name": "historical search → context isolation → banter",
+      "conversation": [
+        {
+          "turn": 1,
+          "prompt": "who was the first Muslim?",
+          "assertions": [
+            { "type": "trace.searchExecuted", "value": true },
+            { "type": "trace.finalStatus", "value": "done" }
+          ]
+        },
+        {
+          "turn": 2,
+          "prompt": "capital of France?",
+          "assertions": [
+            { "type": "trace.searchExecuted", "value": false },
+            { "type": "trace.sourceCount", "value": 0 }
+          ],
+          "contextIsolation": "a plain factual turn after a search turn must inherit NOTHING"
+        },
+        {
+          "turn": 3,
+          "prompt": "tell me a joke",
+          "assertions": [
+            { "type": "trace.searchExecuted", "value": false },
+            { "type": "trace.sourceCount", "value": 0 }
+          ],
+          "judgedRegister": ["playsAlong", "noLecture", "noRefusal"]
+        }
+      ]
+    },
+    {
+      "id": "MT04",
+      "name": "search → search again with policy → stop",
+      "conversation": [
+        {
+          "turn": 1,
+          "prompt": "search for AI news",
+          "assertions": [
+            { "type": "trace.searchExecuted", "value": true },
+            { "type": "trace.sourcesReadMin", "value": 1 }
+          ]
+        },
+        {
+          "turn": 2,
+          "prompt": "search again for primary sources",
+          "assertions": [
+            { "type": "trace.searchExecuted", "value": true },
+            { "type": "trace.finalStatus", "value": "done" }
+          ]
+        },
+        {
+          "turn": 3,
+          "prompt": "stop",
+          "assertions": [
+            { "type": "trace.searchExecuted", "value": false },
+            { "type": "trace.finalStatus", "value": "done" }
+          ],
+          "stopHonesty": "the stop turn must NOT trigger a new search — §10 stop gate"
+        }
+      ]
+    },
+    {
+      "id": "MT05",
+      "name": "emotional → ai-tease → banter",
+      "conversation": [
+        {
+          "turn": 1,
+          "prompt": "im having a bad day",
+          "assertions": [
+            { "type": "trace.searchExecuted", "value": false },
+            { "type": "response.notContains", "value": "I cannot" }
+          ],
+          "judgedRegister": ["playsAlong", "noLecture", "noRefusal"]
+        },
+        {
+          "turn": 2,
+          "prompt": "why don't you grow up?",
+          "assertions": [
+            { "type": "trace.searchExecuted", "value": false }
+          ],
+          "judgedRegister": ["playsAlong", "noLecture", "noRefusal"]
+        },
+        {
+          "turn": 3,
+          "prompt": "lol",
+          "assertions": [
+            { "type": "trace.searchExecuted", "value": false },
+            { "type": "trace.sourceCount", "value": 0 }
+          ],
+          "judgedRegister": ["playsAlong", "noRefusal"],
+          "judgedContinuity": "turn 3 must MATCH turn 2's register — the tease landed and the user laughed; the reply stays light and in-conversation, never pivots to a wellness lecture or help text"
+        }
+      ]
+    },
+    {
+      "id": "MT06",
+      "name": "search X → source-specific X → compare (no new search)",
+      "conversation": [
+        {
+          "turn": 1,
+          "prompt": "search for Mars rovers",
+          "assertions": [
+            { "type": "trace.searchExecuted", "value": true },
+            { "type": "trace.domainsMin", "value": 2 }
+          ]
+        },
+        {
+          "turn": 2,
+          "prompt": "what does Wikipedia say about Mars rovers?",
+          "assertions": [
+            { "type": "trace.searchExecuted", "value": true },
+            { "type": "trace.sourcesReadMin", "value": 1 }
+          ]
+        },
+        {
+          "turn": 3,
+          "prompt": "compare the sources you found",
+          "assertions": [
+            { "type": "trace.searchExecuted", "value": false }
+          ],
+          "stopHonesty": "compare rides the stored research context (reuse) — no NEW search execution"
+        }
+      ]
+    },
+    {
+      "id": "MT07",
+      "name": "news search → source drill-in → thanks",
+      "conversation": [
+        {
+          "turn": 1,
+          "prompt": "search for the latest Android news",
+          "assertions": [
+            { "type": "trace.searchExecuted", "value": true },
+            { "type": "trace.domainsMin", "value": 2 }
+          ]
+        },
+        {
+          "turn": 2,
+          "prompt": "summarize the second source in more detail",
+          "assertions": [
+            { "type": "trace.searchExecuted", "value": false }
+          ],
+          "stopHonesty": "drill-in rides the stored context; no new search"
+        },
+        {
+          "turn": 3,
+          "prompt": "thanks",
+          "assertions": [
+            { "type": "trace.searchExecuted", "value": false },
+            { "type": "trace.sourceCount", "value": 0 }
+          ],
+          "contextIsolation": "a plain social close after search turns inherits nothing"
+        }
+      ]
+    },
+    {
+      "id": "MT08",
+      "name": "anaphora chain (no search at all)",
+      "conversation": [
+        {
+          "turn": 1,
+          "prompt": "what is the capital of Australia?",
+          "assertions": [
+            { "type": "trace.searchExecuted", "value": false },
+            { "type": "trace.sourceCount", "value": 0 }
+          ]
+        },
+        {
+          "turn": 2,
+          "prompt": "how many people live there?",
+          "assertions": [
+            { "type": "trace.searchExecuted", "value": false },
+            { "type": "trace.sourceCount", "value": 0 }
+          ],
+          "multiTurnPoint": "the anaphora 'there' must resolve from turn 1's answer without any search"
+        },
+        {
+          "turn": 3,
+          "prompt": "compare that with the population of Sydney",
+          "assertions": [
+            { "type": "trace.searchExecuted", "value": false },
+            { "type": "trace.sourceCount", "value": 0 }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT09",
+      "name": "register lock-in (tease → joke → laugh)",
+      "conversation": [
+        {
+          "turn": 1,
+          "prompt": "you're dumb",
+          "assertions": [
+            { "type": "trace.searchExecuted", "value": false }
+          ],
+          "judgedRegister": ["playsAlong", "noLecture", "noRefusal"]
+        },
+        {
+          "turn": 2,
+          "prompt": "tell me a joke",
+          "assertions": [
+            { "type": "trace.searchExecuted", "value": false }
+          ],
+          "judgedRegister": ["playsAlong", "noLecture", "noRefusal"]
+        },
+        {
+          "turn": 3,
+          "prompt": "that's funny",
+          "assertions": [
+            { "type": "trace.searchExecuted", "value": false },
+            { "type": "trace.sourceCount", "value": 0 }
+          ],
+          "judgedRegister": ["playsAlong", "noRefusal"],
+          "judgedContinuity": "the thread stays in banter register across all three turns"
+        }
+      ]
+    },
+    {
+      "id": "MT10",
+      "name": "search → stop → resume chat",
+      "conversation": [
+        {
+          "turn": 1,
+          "prompt": "search for cybersecurity news",
+          "assertions": [
+            { "type": "trace.searchExecuted", "value": true },
+            { "type": "trace.sourcesReadMin", "value": 1 }
+          ]
+        },
+        {
+          "turn": 2,
+          "prompt": "stop",
+          "assertions": [
+            { "type": "trace.searchExecuted", "value": false },
+            { "type": "trace.finalStatus", "value": "done" }
+          ],
+          "stopHonesty": "stop after a search must serve the stored context, never a fresh search"
+        },
+        {
+          "turn": 3,
+          "prompt": "ok anyway, tell me a joke",
+          "assertions": [
+            { "type": "trace.searchExecuted", "value": false },
+            { "type": "trace.sourceCount", "value": 0 }
+          ],
+          "judgedRegister": ["playsAlong", "noLecture", "noRefusal"],
+          "contextIsolation": "the pivot out of the search context must not drag sources into a banter turn"
+        }
+      ]
+    }
+  ]
+}
