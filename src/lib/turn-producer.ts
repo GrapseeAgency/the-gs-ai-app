@@ -27,13 +27,53 @@ export function newRunId(): string {
 }
 
 /**
+ * Rebuild the turn context from DURABLE STATE alone (the worker topology:
+ * the API enqueued the job, THIS process executes it — the in-request prep
+ * object never crosses the queue). The user message persisted at start time
+ * is reused (existingUserMessageId) — never duplicated.
+ */
+export async function rebuildPrepForRun(runId: string): Promise<Prep | { error: string }> {
+  const run = await getRun(runId)
+  if (!run) return { error: `run ${runId} not found` }
+  const turnEvents = await db.turnEvent.findFirst({
+    where: { runId, eventType: 'TurnStarted' },
+    orderBy: { seq: 'asc' },
+  })
+  let facts: { content?: string; attachmentIds?: string[]; timezone?: string | null; clientVersion?: string } = {}
+  try {
+    facts = JSON.parse(turnEvents?.payload ?? '{}') as typeof facts
+  } catch {
+    facts = {}
+  }
+  const { prepareTurn } = await import('@/lib/turn-executor')
+  const prepared = await prepareTurn(
+    {
+      conversationId: run.conversationId,
+      content: facts.content ?? '',
+      timezone: facts.timezone ?? null,
+      clientVersion: facts.clientVersion ?? 'web',
+      requestId: runId,
+      attachmentIds: facts.attachmentIds ?? [],
+      runId,
+      existingUserMessageId: run.userMessageId ?? undefined,
+    },
+    { content: facts.content ?? '', attachments: facts.attachmentIds ?? [] }
+  )
+  if (prepared.kind === 'ready') return prepared.prep
+  return { error: `prepareTurn returned ${prepared.kind}` }
+}
+
+/**
  * Execute a claimed run to completion. ALWAYS terminates the stream: the
  * terminal marker is written on every in-process exit path (the try/finally
  * below is the asyncio.shield equivalent — abnormal producer death still
  * lands the end marker). Out-of-process death is covered by subscriber-side
  * orphan exit + the broker TTL.
+ *
+ * prep may be omitted (worker-pool topology): the context is then rebuilt
+ * from durable state alone.
  */
-export async function produceRun(runId: string, prep: Prep): Promise<void> {
+export async function produceRun(runId: string, prepInput?: Prep): Promise<void> {
   const claimed = await claimRun(runId)
   if (!claimed || claimed.status !== 'running') {
     // already claimed by another worker, or terminal — do not double-run
@@ -41,6 +81,20 @@ export async function produceRun(runId: string, prep: Prep): Promise<void> {
     return
   }
   const streamId = claimed.streamId
+
+  // Worker rebuild: the prep may come from a different process's enqueue.
+  let prep = prepInput
+  if (!prep) {
+    const rebuilt = await rebuildPrepForRun(runId)
+    if ('error' in rebuilt) {
+      await finishRun(runId, 'failed', 'error', rebuilt.error, null)
+      await appendEvent(runId, 'RunFailed', { error: rebuilt.error.slice(0, 300) })
+      await publishEnd(streamId, 'error')
+      console.error(`RUN-REBUILD-FAIL run=${runId}: ${rebuilt.error}`)
+      return
+    }
+    prep = rebuilt
+  }
 
   // Serialized publish chain — ordering guarantee for the fire-and-forget
   // broker writes (a retrying chunk must never overtake a later one).

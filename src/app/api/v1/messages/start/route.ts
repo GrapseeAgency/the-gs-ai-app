@@ -25,7 +25,8 @@ import { db } from '@/lib/db'
 import { clientKey, rateLimit } from '@/lib/rate-limit'
 import { MAX_ATTACHMENTS_PER_MESSAGE } from '@/lib/attachments'
 import { prepareTurn } from '@/lib/turn-executor'
-import { backgroundRunsEnabled, newRunId, newStreamId, produceRun } from '@/lib/turn-producer'
+import { backgroundRunsEnabled, newRunId, newStreamId } from '@/lib/turn-producer'
+import { enqueueRun } from '@/lib/worker-pool'
 import { createRun, getRun, isTerminalStatus, rebindStream } from '@/lib/run-store'
 import { appendEvent, resume } from '@/lib/turn-events'
 
@@ -113,7 +114,7 @@ export async function POST(req: NextRequest) {
       reconciled: folded.reconciled,
       dangling: folded.dangling?.eventType ?? null,
     })
-    void produceRun(run.id, prepared.prep).catch(() => undefined)
+    await enqueueRun(run.id)
     return NextResponse.json({
       runId: run.id,
       streamId,
@@ -199,7 +200,9 @@ export async function POST(req: NextRequest) {
     userMessageId: prepared.prep.userMessage.id,
   })
 
-  void produceRun(runId, prepared.prep).catch(() => undefined)
+  // PHASE 8 — the API ENQUEUES; the worker pool runs the turn. The request
+  // returns immediately; no turn is ever executed on the request path.
+  await enqueueRun(runId)
 
   return NextResponse.json({ streamId, runId }, { status: 200 })
 }

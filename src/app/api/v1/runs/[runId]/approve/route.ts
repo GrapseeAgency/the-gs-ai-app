@@ -11,7 +11,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getRun, rebindStream } from '@/lib/run-store'
 import { appendEvent } from '@/lib/turn-events'
-import { newStreamId, produceRun } from '@/lib/turn-producer'
+import { newStreamId } from '@/lib/turn-producer'
+import { enqueueRun } from '@/lib/worker-pool'
 import { prepareTurn } from '@/lib/turn-executor'
 
 export const dynamic = 'force-dynamic'
@@ -90,6 +91,6 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
   const streamId = newStreamId()
   await rebindStream(runId, streamId)
   await appendEvent(runId, 'TurnStarted', { resumed: true, afterApproval: pending.tool, streamId })
-  void produceRun(runId, prepared.prep).catch(() => undefined)
+  await enqueueRun(runId)
   return NextResponse.json({ runId, decision, streamId, status: 'queued' })
 }
