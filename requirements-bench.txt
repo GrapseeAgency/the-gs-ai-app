@@ -1,0 +1,39 @@
+# GS BENCH — Phase 2 requirements.
+#
+# VERIFICATION RECORD (2026-09-24, curl https://pypi.org/pypi/<pkg>/json):
+#   inspect-ai   0.3.268   EXISTS   (spec floor >=0.3.42 satisfied)
+#   lm-eval      0.4.13    EXISTS   (spec floor >=0.4.0 satisfied)
+#   crfm-helm    0.5.16    EXISTS   (spec floor >=0.5.0 satisfied)
+#   swebench     5.0.2     EXISTS   (spec floor >=3.0.0 satisfied)
+#   harbor       0.23.0    EXISTS   (spec floor >=0.21.0 satisfied)
+#   tau2-bench   HTTP 404  NOT ON PYPI (also tau2bench: 404) → installed from
+#                the official repo (github.com/sierra-research/tau2-bench,
+#                HTTP 200 verified). Documented deviation, not a guess.
+#   datasets     5.0.1     EXISTS
+#   statsmodels  0.15.0    EXISTS
+#   scipy        1.18.1    EXISTS
+#   numpy        2.5.3     EXISTS
+#   evalci       0.1.0     EXISTS — latest is 0.1.0, so the spec's
+#                "evalci>=0.1.2" can NEVER resolve; pinned >=0.1.0 instead.
+#   abeval       0.1.0     EXISTS
+#   evalstats    0.3.3     EXISTS
+#   pyyaml, requests, jsonschema, pytz — added: required by cli/ + stats/
+#                (pyyaml for benchmark configs, requests for harness calls).
+#                Not in the spec list; required for the spec'd CLI to run.
+
+inspect-ai>=0.3.42
+lm-eval>=0.4.0
+crfm-helm>=0.5.0
+swebench>=3.0.0
+harbor>=0.21.0
+tau2-bench @ git+https://github.com/sierra-research/tau2-bench
+datasets>=3.0.0
+statsmodels>=0.14.0
+scipy>=1.14.0
+numpy>=1.26.0
+evalci>=0.1.0
+abeval>=0.1.0
+evalstats>=0.1.0
+pyyaml>=6.0
+requests>=2.31.0
+jsonschema>=4.21.0

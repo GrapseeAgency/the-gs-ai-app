@@ -1,0 +1,16 @@
+# Keep the docker build context small (runner disk + upload time).
+node_modules
+.next
+.git
+db
+*.db
+android
+ios
+docs
+results
+all-results
+dev.log
+npm-debug.log*
+*.apk
+secrets
+.secrets

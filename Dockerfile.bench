@@ -1,0 +1,30 @@
+# GS BENCH — Phase 2 benchmark runner image.
+# Built ONLY by GitHub Actions (sandbox has no docker binary — scope report [6]).
+# Image: ghcr.io/grapseeagency/gs-bench:<git-sha>
+# NOTE: heavy deps (torch via lm-eval, swebench) are installed here so eval
+# jobs start instantly; GH runners have 4 vCPU / 16 GB / 14 GB SSD which fits.
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y \
+    git curl jq build-essential && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY requirements-bench.txt .
+RUN pip install --no-cache-dir -r requirements-bench.txt
+
+COPY benchmarks/ ./benchmarks/
+COPY runners/ ./runners/
+COPY stats/ ./stats/
+COPY cli/ ./cli/
+COPY data/ ./data/
+
+# Harness + benchmark metadata baked into the image so every result file can
+# cite the exact docker image digest it ran on (hard rule 4).
+ENV GS_BENCH_IMAGE=gs-bench \
+    PYTHONUNBUFFERED=1 \
+    HF_DATASETS_TRUST_REMOTE_CODE=0
+
+ENTRYPOINT ["python", "-m", "cli.main"]
