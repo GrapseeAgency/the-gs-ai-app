@@ -3964,3 +3964,15 @@ Work Log:
 
 Stage Summary:
 - z-ai bucket still dry at ~04:04 UTC (first anniversaries ~11:00 UTC per rolling-24h reconstruction); next cron turn retries P1 automatically
+---
+Task ID: REGISTER-ROUTING-FIX-V1-HALT
+Agent: main (operator-ordered)
+Task: Stop the cron driver system
+
+Work Log:
+- Operator ordered full stop at 2026-09-24 ~12:27 +08:00, pending their audit
+- Cron job 410004 'register-routing-fix-phase-driver-v2' DELETED (the only active job; no other cron jobs exist)
+- No eval chunks, probes, keypool changes, or commits performed this turn
+
+Stage Summary:
+- ALL AUTONOMOUS ACTIVITY HALTED. State frozen at: P1=0/30, P3=0/50, P4=0/50 judged (P4's 50 answers recorded at /tmp/gsfree-answers); keypool 14 keys in place; registry/router commits intact (5f29810). Awaiting operator audit before any further action.
