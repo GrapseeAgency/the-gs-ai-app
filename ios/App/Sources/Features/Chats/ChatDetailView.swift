@@ -528,11 +528,18 @@ struct ChatDetailView: View {
                 // "Working…" while attachments are with the vision/extraction
                 // pipeline, "Thinking…" before the first text token,
                 // "Composing…" while tokens flow. Never a fabricated state.
+                // FLASH-MODE BUG 1: the word "Thinking…" (and "Composing…")
+                // renders ONLY when the wire's `mode` event resolved this turn
+                // to effectiveMode="thinking" — a Flash turn shows the bare
+                // orb. Search/Working keep their honest labels in every mode.
                 HStack(spacing: Aero.Spacing.s) {
                     ThinkingOrbView(state: orbState, size: .inline)
-                    Text(orbState.label)
-                        .font(Aero.label())
-                        .foregroundStyle(Aero.textMuted)
+                    if vm.effectiveMode == "thinking" ||
+                        (orbState != .breathing && orbState != .composing) {
+                        Text(orbState.label)
+                            .font(Aero.label())
+                            .foregroundStyle(Aero.textMuted)
+                    }
                     Spacer()
                 }
                 .accessibilityElement(children: .combine)

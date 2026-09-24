@@ -759,6 +759,20 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
   const includeHistoryEvidence = prep.includeHistoryEvidence
   const historyLines = prep.historyLines
 
+  // FLASH-MODE BUG 1 (server side) — the FIRST event of every streamed turn
+  // carries the resolved effective mode: {"state":"streaming","effectiveMode":
+  // "flash"|"thinking","requested":...}. Clients render "Thinking…" ONLY for
+  // effectiveMode=thinking; flash shows a neutral indicator. The existing
+  // string-typed `status` events are untouched (all three clients parse those
+  // as plain strings); unknown events are ignored by every parser (web
+  // else-if chain, Android `when` without else, iOS switch without default).
+  if (push) {
+    push(
+      'mode',
+      JSON.stringify({ state: 'streaming', effectiveMode: prep.thinking.effective, requested: prep.requestedMode })
+    )
+  }
+
   // PHASE 5 stop condition — a cancelled run synthesizes immediately with
   // whatever the ledger already holds (checked between search phases).
   const runStopFlag = (runId: string): boolean => {

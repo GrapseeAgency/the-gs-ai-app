@@ -126,6 +126,10 @@ class ApiClient(
         onDelta: (String) -> Unit,
         onDone: (MessageDto?) -> Unit,
         onStatus: (String) -> Unit = {},
+        /** FLASH-MODE BUG 1: the first event of every turn — raw JSON payload
+         *  {"state":"streaming","effectiveMode":"flash"|"thinking",...}.
+         *  Forwarded raw; the controller parses it tolerantly. */
+        onMode: (String) -> Unit = {},
         onSearchEvent: (String) -> Unit = {},
         onSourceEvent: (String) -> Unit = {},
         onClarifyEvent: (String) -> Unit = {},
@@ -163,6 +167,10 @@ class ApiClient(
             when (event.event) {
                 "delta" -> onDelta(event.data.orEmpty())
                 "status" -> onStatus(event.data.orEmpty())
+                // FLASH-MODE BUG 1: first event of every turn carries the
+                // resolved effective mode. Ignored by pre-v0.70 parsers (no
+                // else branch here — unknown events are skipped silently).
+                "mode" -> if (!event.data.isNullOrBlank()) onMode(event.data)
                 // PHASE 8.1: search-chain payloads are double-encoded JSON strings —
                 // forward untouched; an empty payload is ignored, never forwarded.
                 "search" -> if (!event.data.isNullOrBlank()) onSearchEvent(event.data)

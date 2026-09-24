@@ -196,6 +196,14 @@ final class SearchEventSink: @unchecked Sendable {
 
 // MARK: - Wire payload decodes (PHASE 8.1 + 8.2 v2)
 
+/// FLASH-MODE BUG 1: the `mode` event payload — the first event of every
+/// turn, carrying the backend's resolved effective mode.
+private struct ModeEventPayload: Decodable {
+    var state: String?
+    var effectiveMode: String?
+    var requested: String?
+}
+
 /// Tolerant decode of the double-encoded `search` event payload — every
 /// field beyond the discriminator is optional, so an unknown/renamed field
 /// degrades instead of failing the whole event.
@@ -417,6 +425,10 @@ final class ChatViewModel: ObservableObject {
     @Published private(set) var clarifyPrompt: ClarifyPrompt?
     /// The honest orb phase of the live turn (searching/working/…).
     @Published private(set) var searchPhase: ChatSearchPhase = .idle
+    /// FLASH-MODE BUG 1: the wire's resolved effective mode for THIS turn
+    /// ("flash"|"thinking"; nil = no mode event — pre-v0.70 backend). The
+    /// word "Thinking…" renders ONLY while this is "thinking".
+    @Published private(set) var effectiveMode: String?
 
     // MARK: - Private state
 
@@ -599,6 +611,7 @@ final class ChatViewModel: ObservableObject {
         liveSources = []
         clarifyPrompt = nil
         searchPhase = .idle
+        effectiveMode = nil
         streamSink = SearchEventSink()
         if appendUserMessage {
             messages.append(ChatMessage(
@@ -746,6 +759,14 @@ final class ChatViewModel: ObservableObject {
         switch event.event {
         case "status":
             applyStatus(data)
+        case "mode":
+            // FLASH-MODE BUG 1: the first event of every turn — the backend's
+            // resolved effective mode. Tolerant parse; anything malformed or
+            // unknown is ignored and the neutral default stays.
+            if let obj = try? JSONDecoder().decode(ModeEventPayload.self, from: Data(data.utf8)),
+               obj.effectiveMode == "flash" || obj.effectiveMode == "thinking" {
+                effectiveMode = obj.effectiveMode
+            }
         case "search":
             guard let payload = try? JSONDecoder().decode(SearchEventPayload.self, from: Data(data.utf8)) else { return }
             applySearchEvent(payload)

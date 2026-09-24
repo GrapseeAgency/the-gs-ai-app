@@ -327,6 +327,8 @@ class ChatRepository(
         mode: String? = null,
         onConversationResolved: (String) -> Unit = {},
         onStatus: (String) -> Unit = {},
+        /** FLASH-MODE BUG 1: first wire event — {"effectiveMode":...} raw. */
+        onMode: (String) -> Unit = {},
         onSearchEvent: (String) -> Unit = {},
         onSourceEvent: (String) -> Unit = {},
         onClarify: (String) -> Unit = {},
@@ -381,6 +383,7 @@ class ChatRepository(
                     onDelta(delta)
                 },
                 onStatus = { s -> receivedAnyEvent = true; onStatus(s) },
+                onMode = { m -> receivedAnyEvent = true; onMode(m) },
                 onSearchEvent = { e -> receivedAnyEvent = true; onSearchEvent(e) },
                 onSourceEvent = { e -> receivedAnyEvent = true; onSourceEvent(e) },
                 onClarifyEvent = { c -> receivedAnyEvent = true; onClarify(c) },

@@ -1319,19 +1319,28 @@ fun ChatScreen(
             // "Thinking…" before the first token, "Composing…" while tokens
             // flow — never a fabricated state, never a full-width bar
             // replacing the composer, never a distraction from the answer.
+            // FLASH-MODE BUG 1: the word "Thinking…" renders ONLY when the
+            // wire's `mode` event resolved this turn to effectiveMode=
+            // "thinking" — a Flash turn shows the bare orb (neutral, no
+            // label). Search/Working states keep their honest labels in every
+            // mode: those are real pipeline phases, not mode statements.
             liveOrbState?.let { orbState ->
+                val showLabel = streamStateRaw.value?.effectiveMode == "thinking" ||
+                    (orbState != OrbState.BREATHING && orbState != OrbState.COMPOSING)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     ThinkingOrb(state = orbState, size = OrbSize.INLINE)
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = orbState.label,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    if (showLabel) {
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = orbState.label,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
             ComposerRow(

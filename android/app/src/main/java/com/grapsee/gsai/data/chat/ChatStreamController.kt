@@ -2,6 +2,7 @@ package com.grapsee.gsai.data.chat
 
 import android.os.SystemClock
 import com.grapsee.gsai.data.attachment.AttachmentDraft
+import com.grapsee.gsai.data.remote.GsApiJson
 import com.grapsee.gsai.data.repository.ChatRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -13,6 +14,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 /**
  * App-scoped owner of THE chat stream (Task 86-d, closing the 85-d deferred item).
@@ -120,7 +123,12 @@ class ChatStreamController(private val chat: ChatRepository) {
          *  completion timings) — the expandable "Research details" audit trail. */
         val researchPhaseNotes: List<ResearchPhaseNote> = emptyList(),
         /** PHASE 8.2: citations the answer actually used (`research completed`). */
-        val usedCitations: List<Int> = emptyList()
+        val usedCitations: List<Int> = emptyList(),
+        /** FLASH-MODE BUG 1: the wire's resolved effective mode for THIS turn
+         *  ("flash"|"thinking"; null = no mode event yet — pre-v0.70 backend).
+         *  Drives the honest indicator: the "Thinking…" label renders ONLY
+         *  while this is "thinking". */
+        val effectiveMode: String? = null
     )
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -183,6 +191,18 @@ class ChatStreamController(private val chat: ChatRepository) {
                     // --- PHASE 8.1 search-chain events (protocol v1) -----------
                     onStatus = { status ->
                         publishIfMine(token) { search.applyStatus(it, status) }
+                    },
+                    // FLASH-MODE BUG 1: the first event of every turn — the
+                    // backend's resolved effective mode. Parsed tolerantly; a
+                    // malformed payload never disturbs the stream.
+                    onMode = { payload ->
+                        val mode = runCatching {
+                            GsApiJson.parseToJsonElement(payload).jsonObject["effectiveMode"]
+                                ?.jsonPrimitive?.content
+                        }.getOrNull()
+                        if (mode == "flash" || mode == "thinking") {
+                            publishIfMine(token) { it.copy(effectiveMode = mode) }
+                        }
                     },
                     onSearchEvent = { payload ->
                         parseSearchEventPayload(payload)?.let { event ->
