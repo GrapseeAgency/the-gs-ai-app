@@ -323,6 +323,8 @@ class ChatRepository(
         conversationId: String?,
         content: String,
         attachments: List<AttachmentDraft> = emptyList(),
+        /** FLASH MODE (Phase 3): 'flash' | 'thinking' | 'auto'; null = backend default (flash). */
+        mode: String? = null,
         onConversationResolved: (String) -> Unit = {},
         onStatus: (String) -> Unit = {},
         onSearchEvent: (String) -> Unit = {},
@@ -372,6 +374,7 @@ class ChatRepository(
                 conversationId = activeId,
                 content = content,
                 attachments = attachmentIds,
+                mode = mode,
                 onDelta = { delta ->
                     receivedAnyEvent = true
                     accumulated.append(delta)

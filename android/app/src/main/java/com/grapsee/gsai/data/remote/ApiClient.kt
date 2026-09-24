@@ -121,6 +121,8 @@ class ApiClient(
         conversationId: String,
         content: String,
         attachments: List<String>? = null,
+        /** FLASH MODE (Phase 3): 'flash' | 'thinking' | 'auto'; null omits the field. */
+        mode: String? = null,
         onDelta: (String) -> Unit,
         onDone: (MessageDto?) -> Unit,
         onStatus: (String) -> Unit = {},
@@ -135,7 +137,8 @@ class ApiClient(
                 SendMessageRequest(
                     content = content,
                     stream = true,
-                    attachments = attachments?.ifEmpty { null }
+                    attachments = attachments?.ifEmpty { null },
+                    mode = mode
                 )
             )
         }

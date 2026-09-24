@@ -100,6 +100,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
@@ -373,6 +374,14 @@ fun ChatScreen(
     val clipboard = LocalClipboardManager.current
     val snackbarHostState = remember { SnackbarHostState() }
     var attachSheetOpen by rememberSaveable { mutableStateOf(false) }
+    // FLASH MODE (Phase 3) — the composer's thinking mode, persisted per
+    // conversation in local prefs (SettingsStore), applied to the next send.
+    // Default 'flash'; the chip above the composer shows it only when it is
+    // not the clean default.
+    var chatMode by rememberSaveable { mutableStateOf("flash") }
+    LaunchedEffect(activeConversationId) {
+        chatMode = SettingsStore.chatMode(activeConversationId)
+    }
     // PHASE 5: app-scoped attachment store — the composer's drafts, real
     // staging and real multipart uploads. Process-scoped, so in-flight uploads
     // and the live draft list survive rotation.
@@ -912,7 +921,8 @@ fun ChatScreen(
             conversationId = activeConversationId,
             prompt = prompt,
             assistantMessageId = assistantId,
-            attachments = readyDrafts
+            attachments = readyDrafts,
+            mode = chatMode
         )
         // The send consumed the drafts: ready staged copies persist on disk
         // (they were uploaded), never-uploaded leftovers are cleaned up (§4).
@@ -1332,6 +1342,13 @@ fun ChatScreen(
                 drafts = attachDrafts,
                 onRemoveAttachment = { attachStore.remove(it) },
                 onRetryAttachment = { attachStore.retry(it) },
+                // FLASH MODE (Phase 3) — chip above the composer; flash (the
+                // clean default) shows nothing.
+                modeLabel = when (chatMode) {
+                    "thinking" -> "Thinking · deep reasoning"
+                    "auto" -> "Auto · system decides"
+                    else -> null
+                },
                 // Real voice entry right in the composer; hidden — never
                 // disabled-dead — when no voice route was wired, and the attach
                 // sheet keeps its own honest Voice option as the fallback path.
@@ -1366,6 +1383,12 @@ fun ChatScreen(
     if (attachSheetOpen) {
         AttachSheet(
             onDismiss = { attachSheetOpen = false },
+            // FLASH MODE (Phase 3) — the Mode section lives in this sheet.
+            selectedMode = chatMode,
+            onModeSelected = { next ->
+                chatMode = next
+                SettingsStore.setChatMode(activeConversationId, next)
+            },
             onGallery = {
                 attachSheetOpen = false
                 if (remainingSlots == 0) {
@@ -1544,9 +1567,25 @@ private fun ComposerRow(
     // recomposition stays scoped to the row (the transcript never reacts).
     drafts: List<AttachmentDraft> = emptyList(),
     onRemoveAttachment: (String) -> Unit = {},
-    onRetryAttachment: (String) -> Unit = {}
+    onRetryAttachment: (String) -> Unit = {},
+    // FLASH MODE (Phase 3) — non-flash mode chip; null = clean default.
+    modeLabel: String? = null
 ) {
     Column {
+        if (modeLabel != null) {
+            Surface(
+                shape = RoundedCornerShape(999.dp),
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                modifier = Modifier.padding(start = 4.dp, bottom = 6.dp)
+            ) {
+                Text(
+                    text = modeLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                )
+            }
+        }
         AttachmentChipRow(
             drafts = drafts,
             onRemove = onRemoveAttachment,
@@ -2149,7 +2188,10 @@ private fun AttachSheet(
     onCamera: () -> Unit,
     onFiles: () -> Unit,
     onVoice: () -> Unit,
-    onUnavailable: (String) -> Unit
+    onUnavailable: (String) -> Unit,
+    // FLASH MODE (Phase 3) — the Mode section at the top of the sheet.
+    selectedMode: String = "flash",
+    onModeSelected: (String) -> Unit = {}
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
@@ -2159,6 +2201,51 @@ private fun AttachSheet(
                 .padding(bottom = GsMotion.spaceL),
             verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
         ) {
+            // --- Mode -------------------------------------------------------
+            Text(
+                text = "Mode",
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+            val modes = listOf(
+                Triple("flash", "Flash", "Instant replies"),
+                Triple("thinking", "Thinking", "Deep reasoning · this chat"),
+                Triple("auto", "Auto", "System decides")
+            )
+            modes.forEach { (value, label, hint) ->
+                Surface(
+                    onClick = { onModeSelected(value) },
+                    shape = RoundedCornerShape(14.dp),
+                    color = if (selectedMode == value) MaterialTheme.colorScheme.secondaryContainer
+                            else MaterialTheme.colorScheme.surfaceContainerLow
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        RadioButton(
+                            selected = selectedMode == value,
+                            onClick = { onModeSelected(value) }
+                        )
+                        Column {
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = hint,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(GsMotion.spaceS))
             Text(
                 text = "Attach",
                 style = MaterialTheme.typography.headlineSmall,

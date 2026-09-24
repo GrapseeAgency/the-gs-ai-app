@@ -154,7 +154,9 @@ class ChatStreamController(private val chat: ChatRepository) {
         conversationId: String?,
         prompt: String,
         assistantMessageId: String,
-        attachments: List<AttachmentDraft> = emptyList()
+        attachments: List<AttachmentDraft> = emptyList(),
+        /** FLASH MODE (Phase 3): the composer's thinking mode for this turn. */
+        mode: String? = null
     ) {
         if (isStreaming) cancelAndFinalize()
         val token = assistantMessageId
@@ -174,6 +176,7 @@ class ChatStreamController(private val chat: ChatRepository) {
                     conversationId = conversationId,
                     content = prompt,
                     attachments = attachments,
+                    mode = mode,
                     onConversationResolved = { id ->
                         publishIfMine(token) { it.copy(conversationId = id) }
                     },

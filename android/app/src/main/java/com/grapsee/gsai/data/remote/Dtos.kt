@@ -119,7 +119,10 @@ data class SendMessageRequest(
     /** PHASE 5: server attachment ids uploaded via /api/v1/uploads first.
      *  explicitNulls=false keeps null OFF the wire — plain-text sends stay
      *  byte-identical to the pre-attachments contract. */
-    val attachments: List<String>? = null
+    val attachments: List<String>? = null,
+    /** FLASH MODE (Phase 3): 'flash' | 'thinking' | 'auto'. Null (absent on
+     *  the wire) = the backend's default, which is now 'flash'. */
+    val mode: String? = null
 )
 
 /**

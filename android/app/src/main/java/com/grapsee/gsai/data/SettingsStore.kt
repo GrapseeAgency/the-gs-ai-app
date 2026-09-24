@@ -129,6 +129,28 @@ object SettingsStore {
         prefs?.edit()?.putFloat(key, value)?.apply()
     }
 
+    /**
+     * FLASH MODE (Phase 3) — the composer's thinking mode, persisted PER
+     * CONVERSATION (key `mode.<conversationId>`; a brand-new chat falls back
+     * to `mode.new` so the choice survives until the conversation exists).
+     * Only the three wire values are honored; anything else degrades to
+     * 'flash' (the backend default).
+     */
+    fun chatMode(conversationId: String?): String {
+        val p = prefs ?: return "flash"
+        val valid = setOf("flash", "thinking", "auto")
+        val perChat = conversationId?.let { p.getString("mode.$it", null) }
+        return when {
+            perChat != null && perChat in valid -> perChat
+            else -> p.getString("mode.new", null)?.takeIf { it in valid } ?: "flash"
+        }
+    }
+
+    fun setChatMode(conversationId: String?, mode: String) {
+        val key = if (conversationId != null) "mode.$conversationId" else "mode.new"
+        put(key, mode)
+    }
+
     // Appearance
     fun updateThemeMode(v: String) { themeMode = v; put(K.themeMode, v) }
     fun updateReduceAnimations(v: Boolean) { reduceAnimations = v; put(K.reduceAnimations, v) }
