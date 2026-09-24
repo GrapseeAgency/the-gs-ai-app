@@ -102,6 +102,7 @@ jobs:
         with:
           python-version: '3.12'
           cache: 'pip'
+          cache-dependency-path: 'requirements-bench.txt'
       - name: Install harness deps (image deps, mirrored locally for the CLI)
         run: pip install -r requirements-bench.txt
       - name: Run benchmark
