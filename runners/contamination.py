@@ -70,17 +70,32 @@ def _extract_answer_letter(reply: str) -> str:
 
 def _load_samples(entry: Dict[str, Any], n: int) -> List[Tuple[str, str]]:
     """Load n real dataset samples via HF datasets (pinned revision).
-    Raises — never substitutes synthetic questions."""
+    Raises — never substitutes synthetic questions.
+
+    GS_BENCH_CONTAMINATION_DATASET (env) may point the check at an UNGATED
+    mirror of the same benchmark content. This is a SMOKE/BOOTSTRAP override
+    only: canonical scoring configs (benchmarks/*.yaml) always run the
+    official dataset id with HF_TOKEN. The override is recorded in output.
+    """
     from datasets import load_dataset  # in requirements-bench.txt
 
-    ds_id = entry["dataset"]["id"]
+    ds_id = os.environ.get("GS_BENCH_CONTAMINATION_DATASET") or entry["dataset"]["id"]
     subset = entry["dataset"].get("subset")
-    ds = load_dataset(ds_id, subset, split=entry["dataset"].get("split", "test"))
+    split = entry["dataset"].get("split", "test")
+    try:
+        ds = load_dataset(ds_id, subset, split=split)
+    except Exception:  # noqa: BLE001 — mirrors often publish as 'train'
+        ds = load_dataset(ds_id, split="train")
     out = []
     for row in ds.select(range(min(n, len(ds)))):
         q = row.get("Question") or row.get("question") or row.get("prompt") or ""
         choices = row.get("Choices") or row.get("choices") or []
-        letter = row.get("Correct Answer") or row.get("answer") or row.get("label")
+        letter = (
+            row.get("Correct Answer")
+            or row.get("correct_choice")
+            or row.get("answer")
+            or row.get("label")
+        )
         if isinstance(letter, int):
             letter = "ABCDE"[letter] if 0 <= letter < 5 else str(letter)
         if not q or letter is None:
@@ -98,6 +113,7 @@ def run_contamination_check(entry: Dict[str, Any], n_samples: int = 20, out_dir:
         "benchmark": benchmark,
         "n_samples_requested": n_samples,
         "paraphraser_model": os.environ.get("GS_BENCH_PARAPHRASER", PARAPHRASER_MODEL),
+        "dataset_override": os.environ.get("GS_BENCH_CONTAMINATION_DATASET") or None,
         "note": PARAPHRASE_INDEPENDENCE_NOTE,
         "started": True,
     }
