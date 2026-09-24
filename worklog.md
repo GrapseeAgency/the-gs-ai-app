@@ -4059,3 +4059,17 @@ Stage Summary:
 - Pool state: 12 valid free-tier keys, all durable layers in sync, self-heal active.
 - Key 1 free daily quota was 0/50 remaining at check time; rotation across 12 keys provides headroom.
 - No other code changed; Flash Mode task remains untouched.
+---
+Task ID: RELEASE-V0.69.0
+Agent: main (Z.ai Code)
+Task: Rebuild device app via GitHub Action (operator requested; device was running old v0.68.2 APK without Flash Mode UI).
+
+Work Log:
+- Diagnosed: device clientVersion=0.68.2 = old APK; server logs showed its turns already resolve mode=flash effective=flash reasoning=disabled (server-side default fine); missing piece = new app UI, which ships via android-release.yml CI.
+- Pushed 2 pending commits to main (c61e508..5365312).
+- Tagged v0.69.0 and pushed → GitHub Action run #8 "Android release build": unit tests + assembleDebug + gates (badging/cert/BASE_URL) all passed, conclusion=success.
+- Release v0.69.0 published with GS-AI-App.apk (20.9 MB).
+
+Stage Summary:
+- APK: https://github.com/GrapseeAgency/the-gs-ai-app/releases/download/v0.69.0/GS-AI-App.apk (same signing cert, over-install safe).
+- Server unchanged this round; no code edits. Old client keeps working (absent mode → flash default).
