@@ -18,10 +18,12 @@
  * ARCHITECTURE LOCK: modelRoute stays INTERNAL ONLY and is deliberately NOT
  * returned — no plan field, model id or provider name reaches a client.
  *
- * Scoping: without ?conversationId only the version block is returned (no
- * cross-conversation content). With ?conversationId the trace rows are scoped
- * to that conversation — the same visibility GET /conversations/:id/messages
- * already grants, no new exposure class.
+ * Scoping: without ?conversationId or ?requestId only the version block is
+ * returned (no cross-conversation content). With ?conversationId the trace
+ * rows are scoped to that conversation — the same visibility
+ * GET /conversations/:id/messages already grants, no new exposure class.
+ * ?requestId scopes to one turn (CI gate export: silent-failure verdicts per
+ * eval run row). modelRoute stays INTERNAL ONLY in every mode.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -42,11 +44,13 @@ function parseLimit(raw: string | null): number {
 }
 
 // GET /api/v1/diagnostics?conversationId=<id>&limit=10
+// GET /api/v1/diagnostics?requestId=<id>            (one turn — CI gate export)
 export async function GET(req: NextRequest) {
   const url = new URL(req.url)
   const clientVersion = req.headers.get('x-gs-app-version') ?? 'web'
   const backendRevision = await getBackendRevision()
   const conversationId = url.searchParams.get('conversationId')
+  const requestId = url.searchParams.get('requestId')
   const limit = parseLimit(url.searchParams.get('limit'))
 
   const base = {
@@ -57,12 +61,12 @@ export async function GET(req: NextRequest) {
     conversationId,
   }
 
-  if (!conversationId) {
+  if (!conversationId && !requestId) {
     return NextResponse.json({ ...base, trace: [] })
   }
 
   const rows = await db.turnTrace.findMany({
-    where: { conversationId },
+    where: requestId ? { requestId } : { conversationId: conversationId! },
     orderBy: { timestamp: 'desc' },
     take: limit,
   })
@@ -97,6 +101,8 @@ export async function GET(req: NextRequest) {
     cited: JSON.parse(r.cited) as number[],
     latencyMs: r.latencyMs,
     errorType: r.errorType,
+    // silent-failure gate verdicts — QA result of the turn, never a plan field
+    silentFailures: r.silentFailures ? (JSON.parse(r.silentFailures) as string[]) : [],
     promptPreview: promptById.get(r.messageId) ?? null,
   }))
 

@@ -129,3 +129,55 @@ jobs:
             eval-run.log
             eval-run.jsonl
           retention-days: 30
+
+      - name: Silent-failure gate — block on ANY violation
+        if: steps.preflight.outputs.reachable == 'true' && always()
+        run: |
+          # 2026 fault-injection playbook: answer-level checks miss evidence and
+          # citation degradations. Every turn of this run is exported from the
+          # origin's diagnostics endpoint; any silentFailures entry blocks the
+          # gate. A run whose turns cannot be exported cannot gate green.
+          bun scripts/silent-failure-ci.ts --origin "$ORIGIN_URL" --rows eval-run.jsonl
+
+  judged-regression:
+    name: Judged categories — Welch's t-test (register / reasoning quality)
+    runs-on: ubuntu-latest
+    needs: eval-live
+    if: ${{ always() && needs.eval-live.result != 'skipped' }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Download the raw run
+        uses: actions/download-artifact@v4
+        with:
+          name: eval-run-${{ github.run_id }}
+          path: .
+
+      - name: Welch's t-test gate
+        run: |
+          # Playbook decision rule:
+          #   p < 0.05 AND delta < -0.1  -> BLOCK (significant regression)
+          #   p >= 0.05                  -> PASS  (no significant change)
+          #   delta > 0.1                -> PASS  (significant improvement)
+          # Runs with fewer than 2 trials per judged case are NEUTRAL — a
+          # single run never fakes significance. Per-trial rows for the judged
+          # categories come from the run's judged-trial sections when present
+          # (register-multitrial runs write tests/judged-run.jsonl rows of
+          # {"caseId","pass"}); without them the gate stays neutral.
+          if [ ! -f tests/judged-baseline.jsonl ]; then
+            echo "::notice::no tests/judged-baseline.jsonl — judged Welch gate is NEUTRAL (baseline trials not committed yet)"
+            exit 0
+          fi
+          if [ ! -f judged-run.jsonl ]; then
+            echo "::notice::this run produced no judged-trial rows (judged-run.jsonl) — Welch gate is NEUTRAL"
+            exit 0
+          fi
+          bun scripts/welch-t-gate.ts \
+            --baseline tests/judged-baseline.jsonl \
+            --run judged-run.jsonl \
+            --label register+reasoning-quality
