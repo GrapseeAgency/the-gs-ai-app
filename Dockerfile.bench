@@ -4,7 +4,9 @@
 # NOTE: heavy deps (torch via lm-eval, swebench) are installed here so eval
 # jobs start instantly; GH runners have 4 vCPU / 16 GB / 14 GB SSD which fits.
 
-FROM python:3.11-slim
+FROM python:3.12-slim
+# 3.12 required: harbor>=0.6 requires-python >=3.12 (verified in run
+# 36031728363 build logs: "Ignored the following versions ... Requires-Python >=3.12")
 
 WORKDIR /app
 
