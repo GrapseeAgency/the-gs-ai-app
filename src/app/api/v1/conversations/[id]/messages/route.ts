@@ -42,6 +42,11 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
 // preserved byte-for-byte as the instant-rollback default.
 export async function POST(req: NextRequest, { params }: RouteContext) {
   const { id } = await params
+  // FLASH-MODE BUG 3 — full-path latency instrumentation. T0=request arrival;
+  // prepareMs=pre-model pipeline (router/capability/gates); T2=SSE headers;
+  // T4=first event queued by the turn (mode event); firstWriteMs=first byte
+  // on the wire (T4→client); T6=terminal event. Emitted as GS-PERF lines.
+  const t0 = Date.now()
 
   // Guardrail: 20 messages / minute / client (in-memory; Redis at scale).
   const limit = rateLimit(clientKey(req, `msgs:${id}`), 20, 60_000)
@@ -114,6 +119,9 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
   const prepared = await prepareTurn(turnRequest, { content, attachments: rawAttachments })
   if (prepared.kind !== 'ready') return prepared.response
   const prep = prepared.prep
+  // BUG 3: pre-model pipeline duration (router + capability + search gate +
+  // evidence assembly) — everything BEFORE the first LLM call.
+  const prepareMs = Date.now() - t0
 
   // Non-streaming: single JSON reply.
   if (!stream) {
@@ -139,7 +147,12 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     if (w) w()
   }
   let turnSettled = false
+  // BUG 3: T4 = first event the turn queues (the mode event); firstWriteMs =
+  // first SSE data line actually written to the connection.
+  let firstEventAt: number | null = null
+  let firstWriteAt: number | null = null
   const push: TurnPush = (event, data) => {
+    if (firstEventAt === null) firstEventAt = Date.now()
     eventQueue.push({ event, data })
     fireWakeup()
   }
@@ -174,8 +187,11 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       async start(controller) {
         const enc = new TextEncoder()
         let clientGone = false
+        // BUG 3: T2 = SSE headers handed to the transport.
+        const t2 = Date.now()
         const write = (chunk: string) => {
           if (clientGone) return
+          if (firstWriteAt === null && chunk.startsWith('data:')) firstWriteAt = Date.now()
           try {
             controller.enqueue(enc.encode(chunk))
           } catch {
@@ -196,6 +212,13 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
           clientGone = true
         } finally {
           clearInterval(ping)
+          // BUG 3: T6 = the terminal event reached the view. One GS-PERF line
+          // per streamed turn — the numbers for the T0→T6 chain.
+          console.log(
+            `GS-PERF conv=${id} msg=${prep.userMessage.id} t0=0 prepareMs=${prepareMs} ` +
+              `headersMs=${t2 - t0} firstEventMs=${firstEventAt !== null ? firstEventAt - t0 : 'none'} ` +
+              `firstWriteMs=${firstWriteAt !== null ? firstWriteAt - t0 : 'none'} doneMs=${Date.now() - t0}`
+          )
         }
         try {
           controller.close()

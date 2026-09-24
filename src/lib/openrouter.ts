@@ -143,6 +143,26 @@ function shouldRotate(status: number): boolean {
   return status === 401 || status === 402 || status === 408 || status === 429 || status >= 500
 }
 
+/**
+ * FLASH-MODE BUG 3 — dead-key cooldown. A key that just answered 429/402 is
+ * almost certainly daily-quota-exhausted (50 req/day per free key); the old
+ * rotation re-probed it on EVERY turn, costing a full OpenRouter round trip
+ * (~0.5–1.5s each) before the winning key was reached — measured as the
+ * device's "flash is slow". Cooled keys are skipped for the window; if every
+ * key is cooled we try them anyway (recovery beats starvation).
+ */
+const KEY_COOLDOWN_MS = 10 * 60 * 1000
+const keyCooldownUntil = new Map<string, number>()
+function coolKey(key: string): void {
+  keyCooldownUntil.set(key, Date.now() + KEY_COOLDOWN_MS)
+}
+function keyIsCooled(key: string): boolean {
+  return (keyCooldownUntil.get(key) ?? 0) > Date.now()
+}
+function someLiveKey(keys: string[]): boolean {
+  return keys.some((k) => !keyIsCooled(k))
+}
+
 async function extractError(response: Response): Promise<string> {
   try {
     const j = (await response.json()) as OrErrorBody
@@ -167,11 +187,19 @@ export async function orCompleteChat(
     const isLastModel = mi === models.length - 1
     for (let i = 0; i < keys.length; i++) {
       const key = keys[(keyCursor + i) % keys.length]
+      if (keyIsCooled(key) && someLiveKey(keys)) {
+        console.log(`OR-COOLDOWN model=${model} key=***${key.slice(-4)} skip (quota cooldown)`)
+        continue
+      }
       try {
         const response = await postChat(key, model, messages, false, reasoning)
         if (!response.ok) {
           lastError = await extractError(response)
-          if (shouldRotate(response.status)) continue
+          if (shouldRotate(response.status)) {
+            if (response.status === 401 || response.status === 402 || response.status === 429) coolKey(key)
+            console.log(`OR-ROTATE model=${model} status=${response.status} key=***${key.slice(-4)}`)
+            continue
+          }
           // Permanent for THIS model (400/404): fall through to the next
           // model in the chain; only surface after the last one.
           lastError = `OpenRouter ${model}: ${lastError}`
@@ -224,12 +252,20 @@ export async function orStreamChat(
     const isLastModel = mi === models.length - 1
     for (let i = 0; i < keys.length; i++) {
       const key = keys[(keyCursor + i) % keys.length]
+      if (keyIsCooled(key) && someLiveKey(keys)) {
+        console.log(`OR-COOLDOWN model=${model} key=***${key.slice(-4)} skip (quota cooldown)`)
+        continue
+      }
       let forwarded = false
       try {
         const response = await postChat(key, model, messages, true, reasoning)
         if (!response.ok) {
           lastError = await extractError(response)
-          if (shouldRotate(response.status)) continue
+          if (shouldRotate(response.status)) {
+            if (response.status === 401 || response.status === 402 || response.status === 429) coolKey(key)
+            console.log(`OR-ROTATE model=${model} status=${response.status} key=***${key.slice(-4)}`)
+            continue
+          }
           lastError = `OpenRouter ${model}: ${lastError}`
           if (isLastModel) throw new Error(lastError)
           break // next model in chain
