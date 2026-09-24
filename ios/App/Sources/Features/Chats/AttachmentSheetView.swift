@@ -24,6 +24,9 @@ struct AttachmentSheetView: View {
     /// Remaining per-message slots — additions beyond the cap are DISABLED,
     /// never silently dropped (spec §6).
     var remainingSlots: Int = AttachmentRules.maxPerMessage
+    /// FLASH MODE (Phase 3) — the Mode section at the top of the sheet.
+    var selectedMode: String = "flash"
+    var onModeSelected: (String) -> Void = { _ in }
 
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var router: Router
@@ -39,18 +42,31 @@ struct AttachmentSheetView: View {
         onImageData: @escaping (Data, String, AttachmentSource) -> Void = { _, _, _ in },
         onFileURL: @escaping (URL) -> Void = { _ in },
         onUnavailable: @escaping (String) -> Void = { _ in },
-        remainingSlots: Int = AttachmentRules.maxPerMessage
+        remainingSlots: Int = AttachmentRules.maxPerMessage,
+        selectedMode: String = "flash",
+        onModeSelected: @escaping (String) -> Void = { _ in }
     ) {
         self.onImageData = onImageData
         self.onFileURL = onFileURL
         self.onUnavailable = onUnavailable
         self.remainingSlots = remainingSlots
+        self.selectedMode = selectedMode
+        self.onModeSelected = onModeSelected
     }
 
     /// Files stays documents-only (spec: images come through Gallery).
     private static let fileTypes: [UTType] = [
         .pdf, .plainText, .commaSeparatedText, .utf8PlainText, .text,
     ]
+
+    /// FLASH MODE (Phase 3) — the one-line truth under the mode picker.
+    private var modeHint: String {
+        switch selectedMode {
+        case "thinking": return "Deep reasoning — applies to this chat."
+        case "auto": return "The system decides per turn."
+        default: return "Instant replies — the clean default."
+        }
+    }
 
     private struct Tile: Identifiable {
         let id: String
@@ -79,8 +95,27 @@ struct AttachmentSheetView: View {
     ]
 
     var body: some View {
-        AeroSheetShell(title: "Attach") {
+        AeroSheetShell(title: "Options") {
             VStack(alignment: .leading, spacing: Aero.Spacing.m) {
+                // --- Mode (FLASH MODE, Phase 3) ------------------------------
+                VStack(alignment: .leading, spacing: Aero.Spacing.s) {
+                    Text("Mode")
+                        .font(Aero.label())
+                        .foregroundStyle(Aero.textMuted)
+                    Picker("Mode", selection: Binding(
+                        get: { selectedMode },
+                        set: { onModeSelected($0) }
+                    )) {
+                        Text("Flash").tag("flash")
+                        Text("Thinking").tag("thinking")
+                        Text("Auto").tag("auto")
+                    }
+                    .pickerStyle(.segmented)
+                    Text(modeHint)
+                        .font(Aero.caption())
+                        .foregroundStyle(Aero.textMuted)
+                }
+
                 if atCapacity {
                     Text("Six attachments per message — remove one to add another.")
                         .font(Aero.caption())

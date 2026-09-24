@@ -200,7 +200,10 @@ struct ChatDetailView: View {
                 onUnavailable: { option in
                     showToast(attachmentMessage(for: option))
                 },
-                remainingSlots: attachments.remainingSlots)
+                remainingSlots: attachments.remainingSlots,
+                // FLASH MODE (Phase 3) — the Mode section in the same sheet.
+                selectedMode: vm.chatMode,
+                onModeSelected: { vm.setChatMode($0) })
         }
         .sheet(item: $translationCard) { card in
             TranslationSheet(
@@ -533,6 +536,22 @@ struct ChatDetailView: View {
                     Spacer()
                 }
                 .accessibilityElement(children: .combine)
+            }
+            // FLASH MODE (Phase 3) — non-flash mode chip above the composer;
+            // flash (the clean default) shows nothing.
+            if vm.chatMode != "flash" {
+                HStack {
+                    Text(vm.chatMode == "thinking" ? "Thinking · deep reasoning" : "Auto · system decides")
+                        .font(Aero.caption())
+                        .foregroundStyle(Aero.text)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Capsule().fill(Aero.container))
+                        .overlay(Capsule().stroke(Aero.outline, lineWidth: 1))
+                        .accessibilityLabel("Current mode \(vm.chatMode)")
+                    Spacer()
+                }
+                .padding(.bottom, 2)
             }
             if !attachments.drafts.isEmpty {
                 // PHASE 5: chips row ABOVE the field, inside the existing

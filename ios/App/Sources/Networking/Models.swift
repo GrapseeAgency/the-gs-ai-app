@@ -304,11 +304,15 @@ struct SendMessageRequest: Codable, Equatable {
     /// pre-attachments wire shape. `content` may be empty only when this
     /// array is non-empty (server rule).
     var attachments: [String]?
+    /// FLASH MODE (Phase 3): 'flash' | 'thinking' | 'auto'. Nil is omitted
+    /// from the wire; the backend default is 'flash'.
+    var mode: String?
 
-    init(content: String, stream: Bool = false, attachments: [String]? = nil) {
+    init(content: String, stream: Bool = false, attachments: [String]? = nil, mode: String? = nil) {
         self.content = content
         self.stream = stream
         self.attachments = attachments
+        self.mode = mode
     }
 
     init(from decoder: Decoder) throws {
@@ -316,6 +320,7 @@ struct SendMessageRequest: Codable, Equatable {
         content = try container.decodeIfPresent(String.self, forKey: .content) ?? ""
         stream = try container.decodeIfPresent(Bool.self, forKey: .stream) ?? false
         attachments = try container.decodeIfPresent([String].self, forKey: .attachments)
+        mode = try container.decodeIfPresent(String.self, forKey: .mode)
     }
 }
 

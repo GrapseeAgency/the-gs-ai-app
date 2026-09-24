@@ -138,6 +138,8 @@ final class APIClient {
         message content: String,
         conversationID: String,
         attachmentIDs: [String]? = nil,
+        /** FLASH MODE (Phase 3): 'flash' | 'thinking' | 'auto'; nil omits the field. */
+        mode: String? = nil,
         onDelta: @escaping (String) -> Void,
         onDone: @escaping (Message?) -> Void,
         onError: @escaping (Error) -> Void = { _ in },
@@ -149,7 +151,8 @@ final class APIClient {
             body: try encoded(SendMessageRequest(
                 content: content,
                 stream: true,
-                attachments: attachmentIDs))
+                attachments: attachmentIDs,
+                mode: mode))
         )
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
 

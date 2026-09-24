@@ -380,6 +380,26 @@ final class ChatViewModel: ObservableObject {
     @Published var isLoadingHistory = false
     @Published var errorMessage: String?
     @Published var conversationID: String?
+
+    /// FLASH MODE (Phase 3) — the composer's thinking mode, persisted per
+    /// conversation in UserDefaults (gs.mode.<conversationId>, gs.mode.new
+    /// fallback for brand-new chats — same semantics as the web client).
+    /// Default 'flash'.
+    @Published var chatMode: String
+    static func loadChatMode(_ conversationID: String?) -> String {
+        let d = UserDefaults.standard
+        let valid = Set(["flash", "thinking", "auto"])
+        if let id = conversationID, let saved = d.string(forKey: "gs.mode.\(id)"), valid.contains(saved) {
+            return saved
+        }
+        if let fresh = d.string(forKey: "gs.mode.new"), valid.contains(fresh) { return fresh }
+        return "flash"
+    }
+    func setChatMode(_ mode: String) {
+        guard ["flash", "thinking", "auto"].contains(mode) else { return }
+        chatMode = mode
+        UserDefaults.standard.set(mode, forKey: "gs.mode.\(conversationID ?? "new")")
+    }
     /// Deep-perf pass #2b: the transcript is a newest-window — true while the
     /// store still holds turns above the loaded page. Scrolling up prepends
     /// pages locally (never the network); the view restores the scroll anchor.
@@ -426,6 +446,7 @@ final class ChatViewModel: ObservableObject {
 
     init(conversationID: String?) {
         self.conversationID = conversationID
+        self.chatMode = ChatViewModel.loadChatMode(conversationID)
         if let conversationID {
             loadHistory(conversationID: conversationID)
         }
@@ -449,7 +470,7 @@ final class ChatViewModel: ObservableObject {
         // Attachments-only turns are not regenerable: the ids are claimed by
         // the sent message server-side, so retry/regenerate stays text-only.
         lastSentText = text.isEmpty ? nil : text
-        beginStreaming(text: text, appendUserMessage: true, attachments: attachments.isEmpty ? nil : attachments)
+        beginStreaming(text: text, appendUserMessage: true, attachments: attachments.isEmpty ? nil : attachments, mode: chatMode)
     }
 
     /// PHASE 8.1 clarify quick-choice: the tapped label travels as a normal
@@ -459,7 +480,7 @@ final class ChatViewModel: ObservableObject {
         let text = label.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !isStreaming else { return }
         lastSentText = text
-        beginStreaming(text: text, appendUserMessage: true)
+        beginStreaming(text: text, appendUserMessage: true, mode: chatMode)
     }
 
     /// Resends the last user text after a failure (also backs regenerate).
@@ -468,7 +489,7 @@ final class ChatViewModel: ObservableObject {
         if let last = messages.last, last.role != "user" {
             messages.removeLast() // drop the failed/partial assistant row
         }
-        beginStreaming(text: text, appendUserMessage: false)
+        beginStreaming(text: text, appendUserMessage: false, mode: chatMode)
     }
 
     func regenerate() {
@@ -570,7 +591,7 @@ final class ChatViewModel: ObservableObject {
 
     // MARK: - Streaming pipeline
 
-    private func beginStreaming(text: String, appendUserMessage: Bool, attachments: [Attachment]? = nil) {
+    private func beginStreaming(text: String, appendUserMessage: Bool, attachments: [Attachment]? = nil, mode: String? = nil) {
         errorMessage = nil
         // PHASE 8.1: every turn starts with a clean honest trace — no state
         // leaks from the previous turn, nothing exists until an event says so.
@@ -613,6 +634,7 @@ final class ChatViewModel: ObservableObject {
                     message: text,
                     conversationID: conversationID,
                     attachmentIDs: attachments?.map { $0.id },
+                    mode: mode,
                     onDelta: { [buffer = self.streamBuffer] delta in
                         buffer.append(delta) // lock-guarded — no main hop per token
                     },
