@@ -657,7 +657,7 @@ function buildGsCapLog(prep: Prep): Prep['gsCapLog'] {
             ? 1
             : 0
     console.log(
-      `GS-CAP requestId=${requestId} conv=${id} msg=${userMessage.id} clientVersion=${clientVersion} backendRevision=${backendRevision} capability=${cap.capability} trigger=${cap.trigger ?? 'none'} searchExecuted=${turn?.kind === 'research'} researchExecuted=${turn?.kind === 'research'} evidenceCount=${evidenceCount} sourceCount=${sourceCount} modelRoute=${modelRoute.backend}/${routerPlan.internalModelId} finalStatus=${finalStatus}${extra?.cited ? ` cited=[${extra.cited.join(',')}]` : ''}`
+      `GS-CAP requestId=${requestId} conv=${id} msg=${userMessage.id} clientVersion=${clientVersion} backendRevision=${backendRevision} capability=${cap.capability} trigger=${cap.trigger ?? 'none'} searchExecuted=${turn?.kind === 'research'} researchExecuted=${turn?.kind === 'research'} evidenceCount=${evidenceCount} sourceCount=${sourceCount} modelRoute=${modelRoute.backend}/${routerPlan.internalModelId} mode=${prep.requestedMode} effective=${prep.thinking.effective} thinkingMs=${prep.thinkingLatencyMs !== null ? prep.thinkingLatencyMs : 'null'} finalStatus=${finalStatus}${extra?.cited ? ` cited=[${extra.cited.join(',')}]` : ''}`
     )
     const freshSources = turn?.kind === 'research' ? turn.outcome.sources : []
     const reuseSources = turn?.kind === 'reuse' ? turn.sources : []
@@ -720,6 +720,11 @@ function buildGsCapLog(prep: Prep): Prep['gsCapLog'] {
           ? null
           : classifyErrorType(extra?.error ?? null),
       silentFailures: gateVerdict.violations,
+      // FLASH MODE (Phase 5) — the mode dimension rides the trace row.
+      requestedMode: prep.requestedMode,
+      effectiveMode: prep.thinking.effective,
+      thinkingLatencyMs: prep.thinkingLatencyMs,
+      modeNote: prep.thinking.remapNote,
     })
   }
 }

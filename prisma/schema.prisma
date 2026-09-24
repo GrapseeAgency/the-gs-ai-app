@@ -197,6 +197,11 @@ model TurnTrace {
   latencyMs        Int
   errorType        String? // provider_429 | ssrf_block | parse_fail | provider_error | null
   silentFailures   String? // JSON string[] — silent-failure-gate violations; null/[] = clean turn
+  // FLASH MODE (Phase 5) — the mode dimension of the turn.
+  requestedMode    String  @default("flash") // flash | thinking | auto — as the client sent it
+  effectiveMode    String  @default("flash") // flash | thinking — after overrides + model capability
+  thinkingLatencyMs Int?   // TTFT of the thinking path (ms); null when flash or buffered
+  modeNote         String? // GS-MODE-REMAP / flash-forced note; null = clean resolution
 
   @@index([conversationId])
   @@index([timestamp])

@@ -103,6 +103,12 @@ export async function GET(req: NextRequest) {
     errorType: r.errorType,
     // silent-failure gate verdicts — QA result of the turn, never a plan field
     silentFailures: r.silentFailures ? (JSON.parse(r.silentFailures) as string[]) : [],
+    // FLASH MODE (Phase 5) — the mode dimension is device-diagnosable.
+    // modelRoute stays INTERNAL ONLY (Architecture Lock, unchanged).
+    requestedMode: r.requestedMode,
+    effectiveMode: r.effectiveMode,
+    thinkingLatencyMs: r.thinkingLatencyMs,
+    modeNote: r.modeNote,
     promptPreview: promptById.get(r.messageId) ?? null,
   }))
 

@@ -51,6 +51,15 @@ export interface TurnTraceRecord {
    * a final answer — a silently-failed turn is never persisted as clean.
    */
   silentFailures: string[]
+  // FLASH MODE (Phase 5) — the mode dimension of the turn.
+  /** flash | thinking | auto — exactly what the client sent. */
+  requestedMode: string
+  /** flash | thinking — after turn-class overrides + model capability. */
+  effectiveMode: string
+  /** TTFT of the thinking path (ms); null when flash or a buffered call. */
+  thinkingLatencyMs: number | null
+  /** GS-MODE-REMAP / flash-forced note; null = clean resolution. */
+  modeNote: string | null
 }
 
 /**
@@ -91,6 +100,13 @@ export async function writeTurnTrace(record: TurnTraceRecord): Promise<void> {
         latencyMs: Math.max(0, Math.round(record.latencyMs)),
         errorType: record.errorType,
         silentFailures: JSON.stringify(record.silentFailures),
+        requestedMode: record.requestedMode,
+        effectiveMode: record.effectiveMode,
+        thinkingLatencyMs:
+          record.thinkingLatencyMs === null || record.thinkingLatencyMs === undefined
+            ? null
+            : Math.max(0, Math.round(record.thinkingLatencyMs)),
+        modeNote: record.modeNote,
       },
     })
   } catch (e) {
