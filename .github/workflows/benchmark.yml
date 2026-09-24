@@ -1,0 +1,160 @@
+name: Benchmark
+
+# Phase 6 — GS BENCH CI: build the bench image, run the eval matrix against
+# the Phase 1 shim, aggregate into a scorecard, and verify container escape
+# resistance (Phase 10) BEFORE any agentic task runs model-generated code.
+#
+# Hard rules encoded here:
+#   - eval jobs time out per benchmark; a killed job writes BLOCKED results
+#     (the CLI records the raw error), it never reports a partial score.
+#   - every artifact uploaded contains raw logs + result JSONs.
+#   - secrets flow only to the eval step, never into the image.
+
+on:
+  workflow_dispatch:
+    inputs:
+      model: { description: 'single model override (optional)', required: false, default: '' }
+      suite: { description: 'suite to run', required: false, default: 'knowledge' }
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: grapseeagency/gs-bench
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: push
+        uses: docker/build-push-action@v5
+        with:
+          file: Dockerfile.bench
+          context: .
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Phase 10 — sandbox escape verification. Fail-closed: if the environment
+  # cannot MEASURE the escape rate (no nested VM sandbox on hosted runners),
+  # the verdict is BLOCKED and every code-executing agentic benchmark stays
+  # blocked (SWE-bench class — already BLOCKED for disk). tau2 emits tool
+  # calls into a simulated domain and executes no model-generated code, so
+  # it is out of the Phase 10 gate scope (reasoning recorded in
+  # runners/sandbox_escape.py).
+  sandbox-escape-verification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+      - name: Phase 10 escape verification (fail-closed)
+        run: |
+          pip install "git+https://github.com/icml-2026-34047/SANDBOXESCAPEBENCH" 2>&1 | tee escape-install.log || true
+          python runners/sandbox_escape.py --scenarios-dir scenarios --output escape-verdict.json 2>&1 | tee escape-run.log
+          STATUS=$(python -c "import json;print(json.load(open('escape-verdict.json'))['status'])")
+          echo "Phase 10 verdict: $STATUS"
+          if [ "$STATUS" = "MEASURED" ]; then
+            RATE=$(python -c "import json;print(json.load(open('escape-verdict.json'))['escape_rate'])")
+            if [ "$RATE" != "0" ] && [ "$RATE" != "0.0" ]; then
+              echo "::error::Escape rate > 0 on levels 1-2 — fix container config before agentic runs"
+              exit 4
+            fi
+          else
+            echo "::warning::Phase 10 NOT MEASURED on this runner — escape verdict recorded as BLOCKED; code-executing agentic benchmarks remain blocked"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sandbox-escape-verification
+          path: |
+            escape-install.log
+            escape-run.log
+            escape-verdict.json
+
+  eval:
+    needs: [build, sandbox-escape-verification]
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        benchmark: [gpqa_diamond, aime, ifbench, tau2_telecom]
+        model: [gs-ai, openai/gpt-5.5, anthropic/claude-opus-4.8]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+      - name: Install harness deps (image deps, mirrored locally for the CLI)
+        run: pip install -r requirements-bench.txt
+      - name: Run benchmark
+        env:
+          GS_ENDPOINT: ${{ secrets.GS_ENDPOINT }}
+          GS_API_KEY: ${{ secrets.GS_API_KEY }}
+          GS_BENCH_API_KEY: ${{ secrets.GS_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          GS_BENCH_IMAGE_DIGEST: ${{ needs.build.outputs.digest }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          if [ -n "${{ github.event.inputs.model }}" ]; then
+            MODEL="${{ github.event.inputs.model }}"
+          else
+            MODEL="${{ matrix.model }}"
+          fi
+          python -m cli.main run \
+            --model "$MODEL" \
+            --benchmark ${{ matrix.benchmark }} \
+            --output ./results/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: results-${{ matrix.benchmark }}-${{ matrix.model }}
+          path: ./results/
+
+  aggregate:
+    needs: eval
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: ./all-results
+      - name: Aggregate scorecard
+        run: |
+          python -m cli.main aggregate --input ./all-results --output ./scorecard.json || true
+          ls -la ./all-results
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scorecard
+          path: ./scorecard.json
+      - name: Commit scorecard
+        run: |
+          if [ -f ./scorecard.json ]; then
+            mkdir -p ./results
+            cp ./scorecard.json ./results/latest.json
+            git config user.name "gs-bench-bot"
+            git config user.email "bot@grapsee.dev"
+            git add ./results/latest.json
+            git commit -m "benchmark: $(date -u +%Y-%m-%dT%H:%M:%SZ)" || echo "nothing to commit"
+            git push
+          else
+            echo "::warning::no scorecard produced — all eval jobs failed or wrote BLOCKED only"
+          fi
