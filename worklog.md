@@ -3952,3 +3952,15 @@ Stage Summary:
 - DRIVER v2 (cron 410004) live and cycling: state-driven single chunk per turn, no probes (probes were vacuous — 'ok' rides the free chain — and burn quota). z-ai tokens trickle back one cluster at a time (rolling 24h anniversaries of yesterday's calls; bulk returns this afternoon/evening UTC). p1 0/30, p3 0/50, p4 0/50 judged as of 02:27 UTC.
 - QUOTA TIMELINE (rolling 24h window reconstruction): yesterday's eval traffic ran 11:00-22:54 UTC; the early-morning window (00:00-11:00 UTC) was nearly call-free, so NO anniversaries return until ~11:00 UTC today — the driver will find the bucket dry until then (confirmed: 0 judged rows through 03:28 UTC). Waves: deterministic-suite calls return 11:00-19:00 UTC, the ~110-call multitrial volume returns 19:58-22:54 UTC. The driver (cron 410004, every 30 min, all executions succeeding) converts tokens to judged trials as they arrive: P1 needs 60, P3 100, P4 50 = 210 total; expect completion late tonight / early tomorrow, fully autonomous.
 - PHASE 2 FINAL STATE: committed 5f29810 (registry + router + route wiring + BLOCKED guard + GS-CAPABILITY logs + routing-diff proof + relay). Registry report draft committed (tests/capability-registry-report.md). Infra commits 8dd07c6, 6c71f69, e1a3a9b.
+---
+Task ID: REGISTER-ROUTING-FIX-V1-DRIVER-043
+Agent: phase-driver (cron 410004)
+Task: P1 chunk (swift-direct register trials)
+
+Work Log:
+- State detection: P1=0/30, P3=0/50, P4=0/50 judged → P1 INCOMPLETE
+- Ran run-register-swift-direct.ts (--budget-ms 420000 --pacing-ms 20000): 22 consecutive relay-429, 0/30 judged, all units requeued
+- Exited per 3+ consecutive 429 rule; no probes, no state changes, keypool untouched (14 keys, parked-restore deferred to P3)
+
+Stage Summary:
+- z-ai bucket still dry at ~04:04 UTC (first anniversaries ~11:00 UTC per rolling-24h reconstruction); next cron turn retries P1 automatically
