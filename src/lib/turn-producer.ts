@@ -10,8 +10,10 @@
  */
 
 import { publishChunk, publishEnd, type BrokerTerminalStatus } from '@/lib/stream-broker'
-import { claimRun, finishRun, heartbeatRun, LEASE_TTL_MS } from '@/lib/run-store'
+import { claimRun, finishRun, getRun, heartbeatRun, LEASE_TTL_MS } from '@/lib/run-store'
 import { appendEvent } from '@/lib/turn-events'
+import { messageToJson } from '@/lib/serializers'
+import { db } from '@/lib/db'
 import { runTurn, type Prep } from '@/lib/turn-executor'
 
 export const backgroundRunsEnabled = (): boolean => process.env.BACKGROUND_RUNS_ENABLED === '1'
@@ -45,6 +47,33 @@ export async function produceRun(runId: string, prep: Prep): Promise<void> {
   let chain: Promise<unknown> = Promise.resolve()
   const push = (event: string, data: string) => {
     chain = chain.then(() => publishChunk(streamId, { event, data }))
+  }
+
+  // RESUME RECONCILIATION (durable execution): if a prior attempt already
+  // persisted the answer but died before marking the run complete, the
+  // dangling operation IS the completion — reconcile it by finishing the run
+  // with the EXISTING message. Re-executing would stream a fresh synthesis
+  // over an already-persisted answer; the durable guarantee is one answer
+  // exists, not two.
+  if (claimed.assistantMessageId) {
+    const existing = await db.message.findUnique({
+      where: { id: claimed.assistantMessageId },
+      include: { sources: { orderBy: { ordinal: 'asc' } } },
+    })
+    if (existing) {
+      push('delta', existing.content)
+      push('done', JSON.stringify(messageToJson(existing)))
+      await chain
+      await finishRun(runId, 'completed', 'done', null, existing.id)
+      await appendEvent(runId, 'RunCompleted', {
+        reconciled: true,
+        assistant_message_id: existing.id,
+        note: 'answer persisted by a prior attempt — run completed from durable state',
+      })
+      await publishEnd(streamId, 'completed')
+      console.log(`RUN-RECONCILED run=${runId} stream=${streamId} reused=${existing.id}`)
+      return
+    }
   }
 
   // Lease keeper — a long research turn must not lose its lease mid-flight.

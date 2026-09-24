@@ -75,23 +75,10 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     )
   }
-  const content = typeof body?.content === 'string' ? body.content : ''
-  if (content.trim().length === 0 && attachmentIds.length === 0) {
-    return NextResponse.json(
-      { code: 'bad_request', message: 'content must be a non-empty string' },
-      { status: 400 }
-    )
-  }
-  if (content.length > MAX_CONTENT_LENGTH) {
-    return NextResponse.json(
-      { code: 'bad_request', message: `content must not exceed ${MAX_CONTENT_LENGTH} characters` },
-      { status: 400 }
-    )
-  }
-  const clientVersion = req.headers.get('x-gs-app-version') ?? 'web'
-  const timezone = typeof body?.timezone === 'string' ? body.timezone : null
 
   // ---- RESUME path (durable execution): runId reused, streamId fresh ------
+  // NOTE: a resume does NOT require body content — the request facts are
+  // reconstructed from the TurnStarted event (durable state alone).
   if (typeof body?.resumeRunId === 'string' && body.resumeRunId) {
     const run = await getRun(body.resumeRunId)
     if (!run) {
@@ -113,7 +100,10 @@ export async function POST(req: NextRequest) {
     // Dangling run: reconcile happened inside resume(); re-produce on a
     // FRESH transport window (new streamId), SAME runId.
     const turnRequest = await turnRequestFromRun(run, req)
-    const prepared = await prepareTurn(turnRequest, { content: turnRequest.content, attachments: rawAttachments })
+    const prepared = await prepareTurn(turnRequest, {
+      content: turnRequest.content,
+      attachments: turnRequest.attachmentIds,
+    })
     if (prepared.kind !== 'ready') return prepared.response
     const streamId = newStreamId()
     await rebindStream(run.id, streamId)
@@ -132,6 +122,22 @@ export async function POST(req: NextRequest) {
       reconciled: folded.reconciled,
     })
   }
+
+  const content = typeof body?.content === 'string' ? body.content : ''
+  if (content.trim().length === 0 && attachmentIds.length === 0) {
+    return NextResponse.json(
+      { code: 'bad_request', message: 'content must be a non-empty string' },
+      { status: 400 }
+    )
+  }
+  if (content.length > MAX_CONTENT_LENGTH) {
+    return NextResponse.json(
+      { code: 'bad_request', message: `content must not exceed ${MAX_CONTENT_LENGTH} characters` },
+      { status: 400 }
+    )
+  }
+  const clientVersion = req.headers.get('x-gs-app-version') ?? 'web'
+  const timezone = typeof body?.timezone === 'string' ? body.timezone : null
 
   // ---- FRESH start ---------------------------------------------------------
   const conversationId = typeof body?.conversationId === 'string' ? body.conversationId : ''

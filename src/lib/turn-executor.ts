@@ -117,6 +117,8 @@ import {
   type TimeRange,
 } from '@/lib/search/types'
 import { MAX_ATTACHMENTS_PER_MESSAGE } from '@/lib/attachments'
+import { appendEvent, tracked } from '@/lib/turn-events'
+import { getRun } from '@/lib/run-store'
 
 const HISTORY_LIMIT = 20
 const MAX_CONTENT_LENGTH = 32000
@@ -1094,7 +1096,7 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
     return 'GS AI is temporarily unavailable. Please try again shortly.'
   }
 
-  const synthesize = async (
+  const synthesizeRaw = async (
     modelMessages: ChatMessageInput[] | VisionChatMessage[],
     onDelta?: (d: string) => void
   ): Promise<string> => {
@@ -1201,8 +1203,69 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
   }
 
   const emit: SearchEventEmitter | null = push
-    ? (event, payload) => push(event, JSON.stringify(payload))
+    ? (event, payload) => {
+        push(event, JSON.stringify(payload))
+        // DURABLE EXECUTION — source-level facts ride the event log when the
+        // turn is a run (SourceOpened / SourceRead from the REAL wire events).
+        if (prep.runId && event === 'source') {
+          const p = payload as { type?: string; ordinal?: number; chars?: number }
+          if (p.type === 'opening') void appendEvent(prep.runId, 'SourceOpened', { ordinal: p.ordinal })
+          if (p.type === 'read')
+            void appendEvent(prep.runId, 'SourceRead', { ordinal: p.ordinal, chars: p.chars ?? null })
+        }
+      }
     : null
+
+  // DURABLE EXECUTION — every model call, tool call, and side effect is
+  // appended to the log BEFORE and AFTER it happens (run-scoped only; the
+  // legacy inline path runs without a runId and logs nothing).
+  let llmStep = 0
+  const synthesize = async (
+    modelMessages: ChatMessageInput[] | VisionChatMessage[],
+    onDelta?: (d: string) => void
+  ): Promise<string> => {
+    if (!prep.runId) return synthesizeRaw(modelMessages, onDelta)
+    return tracked(
+      prep.runId,
+      { request: 'LLMCallRequested', completed: 'LLMCallCompleted', failed: 'LLMCallFailed' },
+      { step: ++llmStep, kind: useVision ? 'vision' : 'text' },
+      () => synthesizeRaw(modelMessages, onDelta)
+    )
+  }
+  const executeSearchLogged = async (emit: SearchEventEmitter | null): Promise<TurnSearch> => {
+    if (!prep.runId) return executeSearchPhase(emit)
+    return tracked(
+      prep.runId,
+      { request: 'SearchRequested', completed: 'SearchCompleted', failed: 'ToolCallFailed' },
+      { capability: cap.capability },
+      () => executeSearchPhase(emit)
+    )
+  }
+  /** The ONE side effect of a turn: persisting the assistant answer. */
+  const createAssistantMessage = async (data: {
+    conversationId: string
+    role: string
+    content: string
+    clarifyOptions?: string
+  }) => {
+    if (!prep.runId) return db.message.create({ data })
+    return tracked(
+      prep.runId,
+      { request: 'ToolCallRequested', completed: 'ToolCallCompleted', failed: 'ToolCallFailed' },
+      { tool: 'persist_assistant_message', userMessageId: prep.userMessage.id },
+      async () => {
+        // Idempotency across restarts: if a prior attempt already persisted
+        // this run's answer, reuse it — one answer exists, not two.
+        const run = await getRun(prep.runId!)
+        if (run?.assistantMessageId) {
+          const existing = await db.message.findUnique({ where: { id: run.assistantMessageId } })
+          if (existing) return existing
+        }
+        return db.message.create({ data })
+      },
+      { tool: 'persist_assistant_message' }
+    )
+  }
 
   const result: TurnResult = { finalStatus: 'error', userMessageId: userMessage.id }
 
@@ -1232,17 +1295,15 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
   // ---- the turn (verbatim from the route's stream body; the json body is
   // the same pipeline with push === null and response mapping) -----------
   try {
-    const turn = await executeSearchPhase(emit)
+    const turn = await executeSearchLogged(emit)
 
     if (turn.kind === 'clarify') {
       emit?.('clarify', { question: turn.question, options: turn.options })
-      const saved = await db.message.create({
-        data: {
-          conversationId: id,
-          role: 'assistant',
-          content: turn.question,
-          clarifyOptions: JSON.stringify({ question: turn.question, options: turn.options }),
-        },
+      const saved = await createAssistantMessage({
+        conversationId: id,
+        role: 'assistant',
+        content: turn.question,
+        clarifyOptions: JSON.stringify({ question: turn.question, options: turn.options }),
       })
       gsCapLog('clarify', turn)
       if (push) push('done', JSON.stringify(messageToJson(saved)))
@@ -1322,8 +1383,10 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
     }
 
     const finalText = sanitizeAgainstPersisted(normalizeCitationBrackets(full), turn, historySources)
-    const saved = await db.message.create({
-      data: { conversationId: id, role: 'assistant', content: finalText },
+    const saved = await createAssistantMessage({
+      conversationId: id,
+      role: 'assistant',
+      content: finalText,
     })
     await persistTurnSources(saved.id, finalText, turn, historySources)
     if (turn.kind === 'research' && turn.researchId) {
