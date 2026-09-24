@@ -1,0 +1,33 @@
+{
+  "metrics": [
+    {
+      "name": "registry_select_ns",
+      "value": 88.2
+    },
+    {
+      "name": "vtable_generate_dispatch_ns",
+      "value": 24.1
+    },
+    {
+      "name": "agent_loop_two_step_ns",
+      "value": 909.0
+    },
+    {
+      "name": "context_shape_12k_ns",
+      "value": 365.2
+    }
+  ],
+  "measurement_context": {
+    "host": "linux sandbox (x86-64, 2 vCPU)",
+    "compiler": "g++ 14.2.0 -std=c++17 -O2 -fno-rtti",
+    "backend": "mock (deterministic; no model)",
+    "meaning": "C++ CORE overhead only: registry select, vtable dispatch, agent-loop step cost, context shaping. NOT model inference.",
+    "not_measured": [
+      "TTFT (device+backend property)",
+      "tok/sec (device+backend property)",
+      "battery per 100 inferences (device instrumentation)",
+      "offline capability (device audit)"
+    ],
+    "rule": "hard rule 5: those stay NOT MEASURED (never 0) until a device run with a linked backend exists"
+  }
+}
