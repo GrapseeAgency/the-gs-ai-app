@@ -212,3 +212,22 @@ export async function sweepExpired(): Promise<number> {
     return 0
   }
 }
+
+/**
+ * TTL keeper for SPARSE long-idle runs (Phase 4): refreshes the key's TTL
+ * independently of the event rate — a run that thinks for minutes must not
+ * have its stream age out underneath it. Started by the producer when the
+ * run begins; cancelled when the run goes terminal. Returns the cancel fn.
+ */
+export function startStreamTtlKeeper(streamId: string, intervalMs = 60_000): () => void {
+  const key = streamKeyFor(streamId)
+  const timer = setInterval(() => {
+    void db.streamChunk
+      .updateMany({
+        where: { streamKey: key },
+        data: { expiresAt: new Date(Date.now() + STREAM_TTL_SECONDS * 1000) },
+      })
+      .catch(() => undefined)
+  }, intervalMs)
+  return () => clearInterval(timer)
+}

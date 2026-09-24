@@ -9,7 +9,7 @@
  * Request/Response object — a subscriber dying cannot cancel this code.
  */
 
-import { publishChunk, publishEnd, type BrokerTerminalStatus } from '@/lib/stream-broker'
+import { publishChunk, publishEnd, startStreamTtlKeeper, type BrokerTerminalStatus } from '@/lib/stream-broker'
 import { claimRun, finishRun, getRun, heartbeatRun, LEASE_TTL_MS } from '@/lib/run-store'
 import { appendEvent } from '@/lib/turn-events'
 import { messageToJson } from '@/lib/serializers'
@@ -78,6 +78,9 @@ export async function produceRun(runId: string, prep: Prep): Promise<void> {
 
   // Lease keeper — a long research turn must not lose its lease mid-flight.
   const keeper = setInterval(() => void heartbeatRun(runId), Math.floor(LEASE_TTL_MS / 3))
+  // PHASE 4 — TTL keeper: the stream's TTL is refreshed independently of the
+  // event rate (sparse long-idle runs), cancelled when the run goes terminal.
+  const ttlKeeper = startStreamTtlKeeper(streamId)
 
   try {
     const result = await runTurn(prep, push)
@@ -107,6 +110,7 @@ export async function produceRun(runId: string, prep: Prep): Promise<void> {
     console.error(`RUN-CRASH run=${runId} stream=${streamId} error=${raw.slice(0, 300)}`)
   } finally {
     clearInterval(keeper)
+    ttlKeeper()
   }
 }
 
