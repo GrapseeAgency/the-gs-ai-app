@@ -7,7 +7,9 @@
 suite: knowledge
 defaults:
   temperature: 0.2            # production synthesis default (ai.ts completeChat)
-  max_connections: 4          # stay under the app's convs:create rate limit
+  max_connections: 2          # scaffold-bench arms: lowered 4->2 to stay under the
+                              # z-ai throttle threshold (breaker was cycling open at 4);
+                              # IDENTICAL for every scaffold arm (rule 1 comparability)
   retry_on_5xx: 2
   record_verbosity: true      # output tokens per task (Phase 11)
 

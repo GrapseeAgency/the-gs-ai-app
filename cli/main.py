@@ -256,6 +256,13 @@ def cmd_run(args: argparse.Namespace) -> int:
         for yml in sorted(BENCH_DIR.glob("*.yaml")):
             cfg = load_yaml(yml)
             if cfg.get("suite") == args.suite:
+                suite_defaults = cfg.get("defaults", {})
+                for entry in cfg.get("benchmarks", []):
+                    # Suite-level defaults ride into every entry (raw bug: the
+                    # CLI read entry["_defaults"] which never existed, so
+                    # max_connections was silently ignored and inspect ran at
+                    # its own default concurrency — breaker cycled open).
+                    entry["_defaults"] = {**suite_defaults, **(entry.get("_defaults") or {})}
                 targets.extend(cfg.get("benchmarks", []))
         if not targets:
             print(f"ERROR: suite '{args.suite}' not found", file=sys.stderr)
