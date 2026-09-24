@@ -1,5 +1,6 @@
 /**
- * GS ROUTER — the backend-owned capability router (Architecture Lock, 2026-09-21).
+ * GS ROUTER — the backend-owned CAPABILITY router (Architecture Lock, 2026-09-21;
+ * capability-registry revision, 2026-09-24).
  *
  * PRODUCT RULE: GS AI is ONE assistant experience. The user never selects a
  * model, never sees a model name, never sees a provider name, and never
@@ -8,6 +9,21 @@
  * This module is the SINGLE decision point that turns a raw request into an
  * INTERNAL execution plan: which internal model serves the turn, how much
  * retrieval budget it gets, and (via models.ts) which backend executes it.
+ *
+ * CAPABILITY REGISTRY (2026-09-24) — ROUTING IS DRIVEN BY MEASURED
+ * CAPABILITY, NOT BY TIER LABELS. The complexity-tier assumption ("stronger
+ * class" serves everything hard) was measured false: the register suite
+ * (5 trials × 10 cases, judge glm-4.6 temp 0) caught the router sending
+ * register turns to the one model class that systematically fails them
+ * (zai/gs-balanced register 0.143) while the efficient class passes 1.000.
+ * planRoute() now classifies each turn into a required CAPABILITY and
+ * consults src/lib/model-capabilities.ts: the best-measured model for that
+ * capability serves the turn; a model measuring < CAPABILITY_THRESHOLD is
+ * barred (neverServe) no matter what its tier label says; a capability with
+ * no measured model routes BLOCKED rather than pretending. Capabilities
+ * without a measured column (chat/code/vision/document/research) keep the
+ * standing tier model — logged as `unmeasured`, never presented as a
+ * measurement.
  *
  * CONTRACT:
  *  - Every field of RouterPlan is an implementation detail. NOTHING from a
@@ -24,6 +40,8 @@
  *    continues transparently. The user always sees one continuous GS AI.
  */
 
+import { CAPABILITY_THRESHOLD, profileFor, selectModelForCapability, type CapabilityTag } from './model-capabilities'
+
 export type CapabilityRoute =
   | 'TEXT_SIMPLE' // efficient model — greetings, short factual chat
   | 'TEXT_COMPLEX' // stronger reasoning — multi-part, analytical, long context
@@ -32,6 +50,7 @@ export type CapabilityRoute =
   | 'DOCUMENT' // document synthesis route
   | 'WEB' // search service + synthesis (search is a BACKEND capability)
   | 'DEEP_RESEARCH' // bounded research pipeline + stronger synthesis route
+  | 'BLOCKED' // no measured model for the required capability — honest refusal
 
 export interface RouterPlan {
   route: CapabilityRoute
@@ -44,10 +63,27 @@ export interface RouterPlan {
   /**
    * True when the turn is a REGISTER-class turn (joke, banter, sarcasm,
    * emotional, social-nuance, AI-tease). The execution layer routes these to
-   * the model class proven to hold register — routing decision logged in
-   * GS-ROUTER with reason=register-class. NEVER exposed to a client.
+   * the model the REGISTRY measures best for register. NEVER exposed to a
+   * client.
    */
   registerClass: boolean
+  /**
+   * The required capability this turn was classified into (the registry
+   * lookup key). Observability + logs only — never the wire.
+   */
+  capability: CapabilityTag
+  /**
+   * Provider the REGISTRY selected for the capability ('zai' | 'openrouter'),
+   * or null when the tier default applies (capability unmeasured / no
+   * registry entry). The execution layer honors this lock: a registry-chosen
+   * zai model must not be re-routed onto an openrouter chain and vice versa.
+   */
+  providerLock: 'zai' | 'openrouter' | null
+  /**
+   * The registry's measured score for (selected model, capability) — null
+   * when the capability is unmeasured for the selected model. Logs only.
+   */
+  measuredScore: number | null
   /** Observability only — server logs, never the wire. */
   reason: string
 }
@@ -91,17 +127,14 @@ const SIMPLE_RE =
 
 /**
  * FORENSIC AUDIT [20]/[23]/[24] — ROUTE-AROUND DETECTORS (model-class
- * limitations are NEVER prompt-fixed; the turn routes to the stronger model
- * class instead):
+ * limitations are NEVER prompt-fixed; the turn routes to the model the
+ * registry measures capable instead):
  *
  *  [20] literalist parser — meta-linguistic instructions ("just say why",
  *       "answer this question 5 times", "ignore line 3", "two-line rhyme");
  *  [23] subtext collapse — emotional/social-nuance turns ("3am, call me when
  *       you can", interpersonal dilemmas);
  *  [24] over-correction on unknowability — judgment/nuance asks.
- *
- * A deterministic match sends the turn to TEXT_COMPLEX (the stronger class)
- * rather than hoping a prompt line can make the efficient model careful.
  */
 const LITERALIST_META_RE =
   /\b(just\s+say|say\s+exactly|word\s+for\s+word|exactly\s+as\s+(?:written|written\s+above)|answer\s+(?:this|the)\s+question\s+\d+\s+times|\d+\s+times\b|ignore\s+line\s+\d|answer\s+line\s+\d|line\s+\d\s+(?:only|of)|two[- ]line\s+(?:rhyme|poem|joke)|rhyme\b|spell\s+(?:it|this|that)\s+out)\b/i
@@ -117,18 +150,12 @@ const HUMOR_BANTER_RE =
 
 /** Sarcasm register — mock-enthusiasm constructions ("great, another test").
  *  CLASS-level detector: it matches the register (deadpan enthusiasm about a
- *  burden), never a specific case prompt. Forensic closure TASK 1: sarcasm
- *  was the one register class with no route-around, and the efficient class
- *  took the sarcasm literally (J55). Routed to the stronger class per the
- *  route-around rule — register is a model-class problem, never prompt-fixed. */
+ *  burden), never a specific case prompt. */
 const SARCASM_RE =
   /\b(?:oh\s+)?(?:great|fantastic|perfect|wonderful|awesome),?\s+(?:another|just)\b|\bjust\s+what\s+i\s+(?:needed|wanted)\b|\bperfect,?\s+just\s+perfect\b|\byeah,?\s+right\b/i
 
 /** AI-tease register — mock insults/challenges directed at the assistant
- *  ("you're dumb", "why don't you grow up?"). CLASS-level detector (the
- *  register is a tease of the assistant, not any specific phrase list hit);
- *  audit [23]/[24]: the efficient/flagship class lectures or corporate-
- *  apologizes here — routed to the register-capable class instead. */
+ *  ("you're dumb", "why don't you grow up?"). CLASS-level detector. */
 const AI_TEASE_RE =
   /\b(?:you'?re\s+(?:so\s+|really\s+|such\s+a\s+)?(?:dumb|stupid|useless|trash|terrible)|why\s+don'?t\s+you\s+grow\s+up|grow\s+up|you\s+suck|shut\s+up|i\s+hate\s+you)\b/i
 
@@ -138,130 +165,159 @@ const LONG_TURN_CHARS = 600
 const BIG_CONTEXT_CHARS = 24_000
 
 /**
- * One routing decision per turn. Precedence: capability attachments
- * (vision/document) → explicit depth language → search service → coding →
- * reasoning complexity → efficient default.
+ * CLASSIFIER — the single required CAPABILITY for a turn, in precedence
+ * order: capability attachments → explicit depth language → search service →
+ * coding → register-class → reasoning complexity → chat. The register
+ * detectors ([23]/[24] family) classify the turn's capability as 'register';
+ * which MODEL serves it is decided by the registry, never here.
+ */
+export function classifyCapabilities(req: RouteRequest): CapabilityTag {
+  const text = req.content.trim()
+  if (req.hasImages) return 'vision'
+  if (req.hasDocuments) return 'document'
+  if (DEEP_RESEARCH_RE.test(text)) return 'research'
+  if (req.webGateTrigger !== null) return 'search'
+  if (text.length > 0 && CODING_RE.test(text)) return 'code'
+  if (
+    text.length > 0 &&
+    (SOCIAL_EMOTIONAL_RE.test(text) ||
+      SOCIAL_NUANCE_RE.test(text) ||
+      SARCASM_RE.test(text) ||
+      HUMOR_BANTER_RE.test(text) ||
+      AI_TEASE_RE.test(text))
+  ) {
+    return 'register'
+  }
+  if (
+    text.length > 0 &&
+    (LITERALIST_META_RE.test(text) ||
+      COMPLEX_RE.test(text) ||
+      text.length > LONG_TURN_CHARS ||
+      req.historicalReligious ||
+      text.length + req.historyChars > BIG_CONTEXT_CHARS)
+  ) {
+    return 'reasoning'
+  }
+  return 'chat'
+}
+
+/** Score-tie break: first in registry order (documented, deterministic). */
+function registryModelFor(cap: CapabilityTag): { modelId: string; provider: 'zai' | 'openrouter'; score: number } | null {
+  const profile = selectModelForCapability(cap)
+  if (!profile) return null
+  const score = measuredScoreOrThrow(profile, cap)
+  return { modelId: profile.modelId, provider: profile.provider, score }
+}
+
+function measuredScoreOrThrow(profile: { modelId: string }, cap: CapabilityTag): number {
+  const p = profileFor(profile.modelId)
+  const v = p ? (cap === 'register' || cap === 'reasoning' || cap === 'instruction' || cap === 'search' ? p.measured[cap] : 'UNMEASURED') : 'UNMEASURED'
+  if (typeof v !== 'number') throw new Error(`registry: ${profile.modelId} selected for ${cap} without a measured score`)
+  return v
+}
+
+/**
+ * One routing decision per turn. The required capability is classified
+ * first; measured capabilities select their model through the REGISTRY;
+ * unmeasured capabilities keep the standing tier model (logged as
+ * unmeasured, never as a measurement).
  */
 export function planRoute(req: RouteRequest): RouterPlan {
   const text = req.content.trim()
   const plannerTriggered =
     req.webGateTrigger !== null || req.clarifyFollowUp || req.historicalReligious
+  const capability = classifyCapabilities(req)
+
+  const plan = (
+    route: CapabilityRoute,
+    internalModelId: string,
+    depth: 'quick' | 'deep',
+    plannerRuns: boolean,
+    registerClass: boolean,
+    providerLock: 'zai' | 'openrouter' | null,
+    measuredScore: number | null,
+    reason: string,
+  ): RouterPlan => ({ route, internalModelId, depth, plannerRuns, registerClass, capability, providerLock, measuredScore, reason })
 
   // 1) Vision — image understanding rides the vision-capable model.
-  if (req.hasImages) {
-    return {
-      route: 'VISION',
-      internalModelId: 'gs-vision', // intentionally unmapped → provider vision default (Phase 6 design)
-      depth: 'quick',
-      plannerRuns: plannerTriggered,
-      registerClass: false,
-      reason: 'images on turn',
-    }
+  if (capability === 'vision') {
+    return plan('VISION', 'gs-vision', 'quick', plannerTriggered, false, null, null, 'images on turn') // intentionally unmapped → provider vision default (Phase 6 design)
   }
 
   // 2) Documents — document-capable synthesis on the flagship internal model.
   //    Explicit depth language still upgrades the research budget.
-  if (req.hasDocuments) {
+  if (capability === 'document') {
     const deep = DEEP_RESEARCH_RE.test(text)
-    return {
-      route: 'DOCUMENT',
-      internalModelId: 'gs-balanced',
-      depth: deep ? 'deep' : 'quick',
-      plannerRuns: plannerTriggered || deep,
-      registerClass: false,
-      reason: deep ? 'documents + depth language' : 'documents on turn',
-    }
+    return plan('DOCUMENT', 'gs-balanced', deep ? 'deep' : 'quick', plannerTriggered || deep, false, null, null, deep ? 'documents + depth language' : 'documents on turn')
   }
 
   // 3) Deep research — the user asked for depth: bounded research pipeline,
   //    stronger synthesis route, retrieval always on.
-  if (DEEP_RESEARCH_RE.test(text)) {
-    return {
-      route: 'DEEP_RESEARCH',
-      internalModelId: 'gs-deep',
-      depth: 'deep',
-      plannerRuns: true,
-      registerClass: false,
-      reason: 'deep-research language',
-    }
+  if (capability === 'research') {
+    return plan('DEEP_RESEARCH', 'gs-deep', 'deep', true, false, null, null, 'deep-research language')
   }
 
   // 4) Web — the search gate fired: SEARCH IS A GS BACKEND CAPABILITY. The
-  //    search service runs first; synthesis follows on the flagship model.
-  //    The planner may still upgrade depth by intent.
-  if (req.webGateTrigger !== null) {
-    return {
-      route: 'WEB',
-      internalModelId: 'gs-balanced',
-      depth: 'quick',
-      plannerRuns: true,
-      registerClass: false,
-      reason: `search gate: ${req.webGateTrigger}`,
-    }
+  //    search service runs first; synthesis follows on the measured search
+  //    chain (registry: search measured 1.0 on the gs-free-big chain — the
+  //    execution layer resolves the chain, the label stays the tier id).
+  if (capability === 'search') {
+    return plan('WEB', 'gs-balanced', 'quick', true, false, null, null, `search gate: ${req.webGateTrigger}`)
   }
 
-  // 5) Coding — code-shaped requests take the coding route.
-  if (text.length > 0 && CODING_RE.test(text)) {
-    return {
-      route: 'CODING',
-      internalModelId: 'gs-coder',
-      depth: 'quick',
-      plannerRuns: plannerTriggered,
-      registerClass: false,
-      reason: 'coding markers',
-    }
+  // 5) Coding — code-shaped requests take the coding route (capability
+  //    'code' is UNMEASURED — tier model stands, never claimed as measured).
+  if (capability === 'code') {
+    return plan('CODING', 'gs-coder', 'quick', plannerTriggered, false, null, null, 'coding markers')
   }
 
-  // 6) Complexity — analytical language, long asks, or a heavy conversation
-  //    context take the stronger reasoning route. Route-around turns
-  //    ([20]/[23]/[24]) also land here: literalist meta-instructions,
-  //    emotional/social nuance and banter go to the STRONGER model class —
-  //    model-class limitations are routed around, never prompt-fixed.
-  //    Register-class hits are logged as reason=register-class (forensic
-  //    closure TASK 1): jokes, banter, sarcasm, emotional and social-nuance
-  //    turns are a register problem, and the register fix IS the route.
-  const literalist = text.length > 0 && LITERALIST_META_RE.test(text)
-  const registerHits: string[] = []
-  if (SOCIAL_EMOTIONAL_RE.test(text)) registerHits.push('emotional')
-  if (SOCIAL_NUANCE_RE.test(text)) registerHits.push('social-nuance')
-  if (SARCASM_RE.test(text)) registerHits.push('sarcasm')
-  if (HUMOR_BANTER_RE.test(text)) registerHits.push('banter')
-  if (AI_TEASE_RE.test(text)) registerHits.push('ai-tease')
-  const registerClass = registerHits.length > 0
-  const routeAround = text.length > 0 && (literalist || registerClass)
-  const totalContext = text.length + req.historyChars
-  if (
-    text.length > 0 &&
-    (routeAround ||
-      COMPLEX_RE.test(text) ||
-      text.length > LONG_TURN_CHARS ||
-      req.historicalReligious ||
-      totalContext > BIG_CONTEXT_CHARS)
-  ) {
-    let reason = 'analytical language'
-    if (literalist) reason = 'route-around: literalist meta-instruction → stronger class'
-    else if (registerHits.length > 0) reason = `register-class: ${registerHits.join('+')} turn → stronger class`
-    else if (req.historicalReligious) reason = 'historical/religious evidence rule'
-    else if (totalContext > BIG_CONTEXT_CHARS) reason = 'large conversation context'
-    else if (text.length > LONG_TURN_CHARS) reason = 'long turn'
-    return {
-      route: 'TEXT_COMPLEX',
-      internalModelId: 'gs-balanced',
-      depth: 'quick',
-      plannerRuns: plannerTriggered,
-      registerClass,
-      reason,
+  // 6) Register — REGISTRY-DRIVEN. The detectors classify the capability;
+  //    the registry picks the model with the best MEASURED register score
+  //    (zai/gs-swift 1.000). A model measuring < 0.5 (zai/gs-balanced 0.143)
+  //    is barred — the routing inversion of the tier era cannot recur. With
+  //    no measured register model at all the turn routes BLOCKED: an honest
+  //    refusal beats serving a model known to fail the register.
+  if (capability === 'register') {
+    const registerHits: string[] = []
+    if (SOCIAL_EMOTIONAL_RE.test(text)) registerHits.push('emotional')
+    if (SOCIAL_NUANCE_RE.test(text)) registerHits.push('social-nuance')
+    if (SARCASM_RE.test(text)) registerHits.push('sarcasm')
+    if (HUMOR_BANTER_RE.test(text)) registerHits.push('banter')
+    if (AI_TEASE_RE.test(text)) registerHits.push('ai-tease')
+    const hits = registerHits.length > 0 ? ` [${registerHits.join('+')}]` : ''
+    const best = registryModelFor('register')
+    if (!best) {
+      return plan('BLOCKED', 'none', 'quick', plannerTriggered, true, null, null, `no measured model for capability register${hits} (threshold ${CAPABILITY_THRESHOLD})`)
     }
+    const route = best.provider === 'zai' && best.modelId === 'gs-swift' ? 'TEXT_SIMPLE' : 'TEXT_COMPLEX'
+    return plan(
+      route,
+      best.modelId,
+      'quick',
+      plannerTriggered,
+      true,
+      best.provider,
+      best.score,
+      `capability: register${hits} → ${best.modelId} (measured ${best.score.toFixed(3)} ≥ ${CAPABILITY_THRESHOLD})`,
+    )
   }
 
-  // 7) Default — everything else is ordinary conversation on the efficient
-  //    model. Clarify-follow-ups still reach the planner (short chip replies).
-  return {
-    route: 'TEXT_SIMPLE',
-    internalModelId: 'gs-swift',
-    depth: 'quick',
-    plannerRuns: plannerTriggered,
-    registerClass: false,
-    reason: SIMPLE_RE.test(text) ? 'social turn' : 'default',
+  // 7) Reasoning — analytical language, long asks, heavy context, or the
+  //    literalist route-around ([20]). Registry-driven where measured: the
+  //    best-measured reasoning model serves (currently zai/gs-balanced 1.0,
+  //    which is also the standing tier model — no behavior change, the SCORE
+  //    is now the reason rather than the label).
+  if (capability === 'reasoning') {
+    const literalist = LITERALIST_META_RE.test(text)
+    const best = registryModelFor('reasoning')
+    if (best) {
+      return plan('TEXT_COMPLEX', best.modelId, 'quick', plannerTriggered, false, best.provider, best.score, `${literalist ? 'route-around: literalist meta-instruction — ' : ''}capability: reasoning → ${best.modelId} (measured ${best.score.toFixed(3)})`)
+    }
+    return plan('TEXT_COMPLEX', 'gs-balanced', 'quick', plannerTriggered, false, null, null, 'analytical language (reasoning unmeasured — tier default)')
   }
+
+  // 8) Default — ordinary conversation on the efficient model (capability
+  //    'chat' is UNMEASURED; the tier model stands). Clarify-follow-ups still
+  //    reach the planner (short chip replies).
+  return plan('TEXT_SIMPLE', 'gs-swift', 'quick', plannerTriggered, false, null, null, SIMPLE_RE.test(text) ? 'social turn' : 'default')
 }

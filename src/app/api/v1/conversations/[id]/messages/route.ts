@@ -426,6 +426,12 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
   console.log(
     `GS-ROUTER conv=${id} route=${routerPlan.route} depth=${routerPlan.depth} reason=${routerPlan.reason} capability=${cap.capability} trigger=${cap.trigger ?? 'none'} forced=${cap.searchPlanned}`
   )
+  // CAPABILITY REGISTRY OBSERVABILITY (2026-09-24) — one line per turn naming
+  // the required capability, the selected internal model and its MEASURED
+  // registry score (or `unmeasured` — never guessed). INTERNAL ONLY.
+  console.log(
+    `GS-CAPABILITY conv=${id} requiredCapability=${routerPlan.capability} model=${routerPlan.internalModelId} providerLock=${routerPlan.providerLock ?? 'none'} measured=${routerPlan.measuredScore !== null ? routerPlan.measuredScore.toFixed(3) : 'unmeasured'}`
+  )
   // Internal execution route for synthesis (models.ts mapping — OpenRouter
   // free chains bypass primary-provider quota windows; z-ai carries the
   // optional concrete model mapping + modelless fallback). INTERNAL ONLY:
@@ -440,38 +446,57 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
   //   WEB (search synthesis) → 'gs-free-big' chain
   // Every other tier stays on the primary provider. OpenRouter failure with
   // nothing yet streamed degrades to the primary provider (§synthesize).
+  //
+  // CAPABILITY-REGISTRY WIRING (2026-09-24): the router may now LOCK the
+  // provider for a capability (providerLock) — the measured register model is
+  // zai/gs-swift, and a registry-chosen zai model must NOT be flipped onto an
+  // openrouter free chain (that is exactly the class of silent substitution
+  // the registry exists to prevent). Precedence:
+  //   1. GS_FORCE_FREE_CHAIN=1 (forced experiment) overrides EVERYTHING and
+  //      pushes every text route + register turns onto the free chains.
+  //   2. providerLock='openrouter' → the registry-selected openrouter chain.
+  //   3. providerLock='zai' → primary provider, never a free chain.
+  //   4. no lock → the standing tier wiring (TEXT_SIMPLE/WEB eligibility).
   const keypool = await loadKeyPool()
   const freeAvailable = keypool.keys.length > 0
-  // FORENSIC CLOSURE TASK 1 — REGISTER EXECUTION CLASS: the router marks
-  // register-class turns (jokes, banter, sarcasm, emotional, social-nuance,
-  // AI-tease; reason=register-class in the GS-ROUTER log). Those turns are
-  // served on the model class PROVEN to hold register in the judged closure
-  // run: the OpenRouter 'gs-free-big' chain (nemotron-3-ultra-550b) passed
-  // 4/4 register cases the flagship class failed (J52/J53/J56/J59 raw
-  // verdicts in the closure report). Model-class limitation → routed around,
-  // never prompt-fixed.
+  // REGISTER EXECUTION (capability-registry era, 2026-09-24): register-class
+  // turns are served on the model the REGISTRY measures best for register —
+  // planRoute returns that model + a providerLock, and this layer honors the
+  // lock instead of re-deciding by tier. The old "register → gs-free-big"
+  // hard-wiring is gone: measured capability decides (zai/gs-swift register
+  // 1.000 vs zai/gs-balanced 0.143 — tests/register-multitrial-v1.json).
   //
   // FORENSIC CLOSURE TASK 3 — forced GS Free experiment: GS_FORCE_FREE_CHAIN=1
-  // routes EVERY text synthesis tier onto the OpenRouter free chains so the
-  // full suite can measure what the free tier ships with. Default OFF — the
-  // production wiring (TEXT_SIMPLE → gs-free, WEB → gs-free-big) is unchanged.
-  // VISION/DOCUMENT are intentionally excluded (vision is unmapped by design).
+  // routes EVERY text synthesis tier (and register turns, overriding any
+  // registry lock) onto the OpenRouter free chains so the full suite can
+  // measure what the free tier ships with. Default OFF. VISION/DOCUMENT are
+  // intentionally excluded (vision is unmapped by design).
   const forceFree = process.env.GS_FORCE_FREE_CHAIN === '1'
-  const freeEligible =
-    routerPlan.route === 'TEXT_SIMPLE' ||
-    routerPlan.route === 'WEB' ||
-    routerPlan.registerClass ||
-    (forceFree &&
-      (routerPlan.route === 'TEXT_COMPLEX' ||
-        routerPlan.route === 'CODING' ||
-        routerPlan.route === 'DEEP_RESEARCH'))
+  const lock = routerPlan.providerLock
+  const tierFreeEligible =
+    routerPlan.route === 'TEXT_SIMPLE' || routerPlan.route === 'WEB' || routerPlan.registerClass
+  const forceFreeEligible =
+    forceFree &&
+    (tierFreeEligible ||
+      routerPlan.route === 'TEXT_COMPLEX' ||
+      routerPlan.route === 'CODING' ||
+      routerPlan.route === 'DEEP_RESEARCH')
   const baseRoute = resolveModelRoute(routerPlan.internalModelId)
-  const freeChain =
-    freeAvailable && freeEligible
-      ? routerPlan.route === 'TEXT_SIMPLE' && !routerPlan.registerClass
-        ? OPENROUTER_MODELS['gs-free']
-        : OPENROUTER_MODELS['gs-free-big']
-      : null
+  const freeChain = forceFreeEligible
+    ? // forced experiment: register turns ride the big chain, plain
+      // TEXT_SIMPLE rides the small chain, everything else the big chain.
+      routerPlan.route === 'TEXT_SIMPLE' && !routerPlan.registerClass
+      ? OPENROUTER_MODELS['gs-free']
+      : OPENROUTER_MODELS['gs-free-big']
+    : lock === 'openrouter'
+      ? OPENROUTER_MODELS[routerPlan.internalModelId] ?? OPENROUTER_MODELS['gs-free-big']
+      : lock === 'zai'
+        ? null // registry chose a z-ai model — never silently substitute a free chain
+        : freeAvailable && tierFreeEligible
+          ? routerPlan.route === 'TEXT_SIMPLE' && !routerPlan.registerClass
+            ? OPENROUTER_MODELS['gs-free']
+            : OPENROUTER_MODELS['gs-free-big']
+          : null
   const modelRoute: ModelRoute = freeChain
     ? { backend: 'openrouter', models: freeChain }
     : baseRoute
@@ -479,7 +504,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
   const openRouterModels = modelRoute.backend === 'openrouter' ? modelRoute.models : null
   if (freeChain) {
     console.log(
-      `GS-FREE-ROUTE conv=${id} route=${routerPlan.route} chain=${freeChain.join('|')} keys=${keypool.keys.length}${forceFree ? ' forced=1' : ''}${routerPlan.registerClass ? ' register=1' : ''}`
+      `GS-FREE-ROUTE conv=${id} route=${routerPlan.route} chain=${freeChain.join('|')} keys=${keypool.keys.length}${forceFree ? ' forced=1' : ''}${routerPlan.registerClass ? ' register=1' : ''}${lock ? ` lock=${lock}` : ''}`
     )
   }
 
@@ -539,6 +564,25 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
           ? null
           : classifyErrorType(extra?.error ?? null),
     })
+  }
+
+  // CAPABILITY REGISTRY — BLOCKED (2026-09-24): when the router classifies a
+  // turn into a capability NO model has a measured score for, the honest
+  // behavior is to refuse the turn (503 + no_measured_model), never to serve
+  // it with an unmeasured model under a capability pretense. Unreachable
+  // while the registry holds measured entries (register/reasoning/
+  // instruction/search all have ≥1 measured model) — this is the guard for
+  // the day the registry cannot back a capability.
+  if (routerPlan.route === 'BLOCKED') {
+    gsCapLog('blocked', null, { error: routerPlan.reason })
+    console.warn(`GS-ROUTER-BLOCKED conv=${id} reason=${routerPlan.reason}`)
+    return NextResponse.json(
+      {
+        code: 'no_measured_model',
+        message: 'This turn needs a capability no serving model is measured for yet. It was refused rather than answered badly.',
+      },
+      { status: 503 }
+    )
   }
 
   let historyWebSources: {

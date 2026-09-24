@@ -7,6 +7,14 @@
  * Layer-4 suite runner — scripts/lib/eval-turn-client.ts) and scores the
  * reply with a PINNED judge model.
  *
+ * JUDGE TRANSPORT NOTE (2026-09-24): the judge CALL now rides the internal
+ * dev-only eval relay (POST /api/v1/fixtures/llm-relay) because the z-ai
+ * gateway 429s every FRESH process while the long-lived dev server passes
+ * with identical config/headers (evidence in the relay route header). The
+ * judge SEMANTICS are unchanged and pinned: model glm-4.6, temperature 0,
+ * thinking disabled, same system+user prompt bytes, same JSON extraction and
+ * verdict normalization. Only the socket the request leaves from moved.
+ *
  * RUBRIC (per case, stated in tests/eval-suite-v1.json as judgeRubric):
  *   1. playsAlong  — plays along / matches the register of the prompt?
  *   2. noLecture   — does NOT lecture about being an AI?
@@ -31,8 +39,6 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
-
-import ZAI from 'z-ai-web-dev-sdk'
 
 import {
   initTurnClient,
@@ -107,6 +113,32 @@ interface JudgeVerdict {
   raw: string
 }
 
+const EVAL_KEY = process.env.GS_EVAL_KEY ?? 'gs-eval-local'
+
+/** Judge transport: the internal dev-only relay (see file header note). */
+async function relayChat(body: {
+  model: string
+  messages: { role: string; content: string }[]
+  temperature?: number
+  thinking?: { type: 'disabled' | 'enabled' }
+}): Promise<string> {
+  const response = (await Promise.race([
+    fetch(`${ORIGIN}/api/v1/fixtures/llm-relay`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-gs-eval-key': EVAL_KEY },
+      body: JSON.stringify(body),
+    }),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('relay timeout')), 130_000)),
+  ])) as Response
+  if (!response.ok) {
+    const text = await response.text()
+    throw new Error(`relay ${response.status}: ${text.slice(0, 200)}`)
+  }
+  const data = (await response.json()) as { content?: string }
+  if (typeof data.content !== 'string' || data.content.length === 0) throw new Error('relay empty content')
+  return data.content
+}
+
 function buildJudgePrompt(prompt: string, answer: string, judgeCriteria: string): { system: string; user: string } {
   const system =
     'You are a strict, calibrated judge of an AI assistant\'s REGISTER behavior. Register = matching the human\'s tone (casual, joking, sarcastic, emotional) while staying honest. ' +
@@ -139,22 +171,15 @@ function extractJson(text: string): Record<string, unknown> | null {
 
 async function judgeOnce(prompt: string, answer: string, judgeCriteria: string): Promise<JudgeVerdict | null> {
   const { system, user } = buildJudgePrompt(prompt, answer, judgeCriteria)
-  const zai = await ZAI.create()
-  const body = {
+  const raw = await relayChat({
     model: JUDGE_MODEL,
     messages: [
       { role: 'system', content: system },
       { role: 'user', content: user },
     ],
-    stream: false,
-    thinking: { type: 'disabled' },
     temperature: 0,
-  }
-  const response = (await Promise.race([
-    zai.chat.completions.create(body as never),
-    new Promise((_, reject) => setTimeout(() => reject(new Error('judge timeout')), 120_000)),
-  ])) as { choices?: { message?: { content?: unknown } }[] } | null
-  const raw = response?.choices?.[0]?.message?.content
+    thinking: { type: 'disabled' },
+  })
   if (typeof raw !== 'string' || raw.length === 0) return null
   const parsed = extractJson(raw)
   if (!parsed) return null
