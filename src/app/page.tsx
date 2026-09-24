@@ -359,6 +359,8 @@ export default function Home() {
   const abortRef = useRef<AbortController | null>(null)
   const accRef = useRef('')
   const scrollRef = useRef<HTMLDivElement | null>(null)
+  // PHASE 2 — background-runs transport flag (from /api/health).
+  const backgroundRunsRef = useRef<boolean>(false)
   // Latest `send`, callable from deferred starter sends without stale closures.
   const sendRef = useRef<(override?: string) => void>(() => undefined)
 
@@ -374,6 +376,8 @@ export default function Home() {
       setHealth(h?.status === 'ok' ? 'ok' : 'down')
       setConversations(c?.items ?? [])
       setAssistants(a?.items ?? [])
+      // PHASE 2 — pick the resumable transport when the deployment has it on.
+      backgroundRunsRef.current = h?.backgroundRuns === true
       // ARCHITECTURE LOCK: no model catalogue fetch — the user never sees or
       // selects models; routing is entirely backend-side (GS Router).
     } catch {
@@ -556,153 +560,275 @@ export default function Home() {
         }
         if (!convId) throw new Error('Could not create conversation')
 
-        const res = await fetch(`/api/v1/conversations/${convId}/messages`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            content: text,
-            stream: true,
-            // PHASE 8.3 §11 — real timezone-aware time capability: the client
-            // supplies its IANA zone so the backend clock answers in local time.
-            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-          }),
-          signal: controller.signal,
-        })
-        if (!res.ok || !res.body) throw new Error(`Backend responded ${res.status}`)
-
-        const reader = res.body.getReader()
-        const decoder = new TextDecoder()
-        let buffer = ''
-        let acc = ''
+        // PHASE 1/2 — transport selection. When the deployment has
+        // BACKGROUND_RUNS on, the turn is started detached
+        // (POST /api/v1/messages/start → {streamId, runId}) and consumed via
+        // EventSource on /api/v1/stream/{streamId} — auto-reconnecting with
+        // Last-Event-ID — falling back to HTTP polling after 3 failed SSE
+        // attempts. Otherwise the legacy inline SSE POST is used unchanged.
+        // ALL transports share the ONE chunk consumer below, so rendering
+        // behavior is identical whichever transport serves the turn.
         let finalized = false
-        for (;;) {
-          const { done, value } = await reader.read()
-          if (done) break
-          buffer += decoder.decode(value, { stream: true })
-          const lines = buffer.split('\n')
-          buffer = lines.pop() ?? ''
-          for (const line of lines) {
-            const trimmed = line.trim()
-            if (!trimmed.startsWith('data:')) continue
-            try {
-              const event = JSON.parse(trimmed.slice(5).trim())
-              if (event.event === 'delta') {
-                acc += event.data ?? ''
-                accRef.current = acc
-                setStreamText(acc)
-              } else if (event.event === 'status') {
-                setPhase(event.data)
-                if (event.data === 'search_failed') {
-                  pushStep('✕', 'The search could not be completed', 'fail')
-                }
-              } else if (event.event === 'search') {
-                const p = JSON.parse(event.data)
-                if (p.type === 'started') {
-                  pushStep('◎', `Searching — “${p.label ?? ''}”`)
-                } else if (p.type === 'engines') {
-                  // 8.2 §16 — per-engine truth (✓ ok · ✕ failed · – empty).
-                  for (const e of Array.isArray(p.engines) ? p.engines : []) {
-                    const name = ENGINE_LABELS[e.id] ?? e.id
-                    if (e.status === 'ok') pushStep('✓', `${name} — ${e.count ?? 0} results`, 'ok')
-                    else if (e.status === 'failed') pushStep('✕', `${name} — ${e.error ?? 'failed'}`, 'fail')
-                    else pushStep('–', `${name} — no results`, undefined)
-                  }
-                } else if (p.type === 'results') {
-                  pushStep('✓', `Found ${p.found} results${Array.isArray(p.engines) && p.engines.length ? ` · ${p.engines.join(', ')}` : ''}`, 'ok')
-                } else if (p.type === 'round') {
-                  pushStep('✓', `${p.sourcesVerified} source${p.sourcesVerified === 1 ? '' : 's'} verified${p.syndicatedGroups ? ` · ${p.syndicatedGroups} syndicated group${p.syndicatedGroups === 1 ? '' : 's'}` : ''}`, 'ok')
-                } else if (p.type === 'failed') {
-                  pushStep('✕', `Search failed — ${p.reason ?? 'unknown'}`, 'fail')
-                } else if (p.type === 'completed') {
-                  traceSummary = `Searched ${p.queries} ${p.queries === 1 ? 'query' : 'queries'} · read ${p.retrieved} of ${p.sources} sources`
-                }
-              } else if (event.event === 'research') {
-                // 8.2 §28 — research-level truth (protocol v2).
-                const p = JSON.parse(event.data)
-                if (p.type === 'round_completed') {
-                  pushStep('✓', `Round ${p.round}: ${p.read ?? 0} read · ${p.failed ?? 0} failed${p.syndicatedGroups ? ` · ${p.syndicatedGroups} syndicated` : ''}`, 'ok')
-                } else if (p.type === 'synthesis_started') {
-                  pushStep('✎', 'Composing grounded answer…', 'live')
-                } else if (p.type === 'completed') {
-                  const secs = p.totalMs ? ` · ${(p.totalMs / 1000).toFixed(1)}s` : ''
-                  traceSummary = `Searched ${p.queries} ${p.queries === 1 ? 'query' : 'queries'} · read ${p.retrieved} of ${p.sources} sources${secs}`
-                } else if (p.type === 'failed') {
-                  const last = traceSteps[traceSteps.length - 1]
-                  if (!last || !last.text.startsWith('Search failed')) {
-                    pushStep('✕', `Research failed — ${p.reason ?? 'unknown'}`, 'fail')
-                  }
-                }
-              } else if (event.event === 'source') {
-                const p = JSON.parse(event.data)
-                const ordinal = p.source?.ordinal ?? p.ordinal
-                if (p.type === 'discovered' && p.source) {
-                  sourceByOrdinal.set(ordinal, p.source as SourceCard)
-                  setLiveSources([...sourceByOrdinal.values()].sort((a, b) => a.ordinal - b.ordinal))
-                } else if (p.type === 'opening' || p.type === 'reading') {
-                  const s = sourceByOrdinal.get(ordinal)
-                  pushStep('↗', `Reading ${s?.domain ?? `source ${ordinal}`}…`, 'live')
-                } else if (p.type === 'completed' || p.type === 'read') {
-                  // protocol v2 — `read` is canonical, `completed` the v1 alias;
-                  // both arrive, the transition is idempotent (one step only).
-                  const s = sourceByOrdinal.get(ordinal)
-                  const alreadyRead = s?.status === 'retrieved'
-                  if (s) {
-                    s.status = 'retrieved'
-                    if (p.publishedDate) s.publishedDate = p.publishedDate
-                    setLiveSources([...sourceByOrdinal.values()].sort((a, b) => a.ordinal - b.ordinal))
-                  }
-                  if (!alreadyRead) {
-                    pushStep('✓', `Read ${s?.domain ?? `source ${ordinal}`} — ${(s?.title ?? '').slice(0, 70)}`, 'ok')
-                  }
-                } else if (p.type === 'failed') {
-                  const s = sourceByOrdinal.get(ordinal)
-                  pushStep('✕', `${s?.domain ?? `source ${ordinal}`} — ${p.reason ?? 'failed'}`, 'fail')
-                }
-              } else if (event.event === 'clarify') {
-                const p = JSON.parse(event.data)
-                if (p?.question && Array.isArray(p.options)) {
-                  finalClarify = { question: p.question, options: p.options }
-                  setClarify(finalClarify)
-                }
-              } else if (event.event === 'done') {
-                finalized = true
-                const saved = typeof event.data === 'string' ? JSON.parse(event.data) : event.data
-                const doneSources: SourceCard[] = Array.isArray(saved?.sources)
-                  ? saved.sources.map((s: SourceCard) => ({ ...s, used: s.used ?? true }))
-                  : [...sourceByOrdinal.values()].sort((a, b) => a.ordinal - b.ordinal)
-                // PHASE 8.1 — a clarification turn persists its quick choices;
-                // attach them to the rendered message so the chips survive done.
-                let doneClarify: ClarifyChoices | null = null
-                if (typeof saved?.clarifyOptions === 'string' && saved.clarifyOptions) {
-                  try {
-                    const parsed = JSON.parse(saved.clarifyOptions) as ClarifyChoices
-                    if (parsed?.question && Array.isArray(parsed.options)) doneClarify = parsed
-                  } catch {
-                    // malformed — ignore
-                  }
-                }
-                setMessages((prev) => [
-                  ...prev,
-                  {
-                    role: 'assistant',
-                    content: saved?.content ?? acc,
-                    ...(doneSources.length > 0 ? { sources: doneSources } : {}),
-                    ...(doneClarify ? { clarifyOptions: doneClarify } : {}),
-                    ...(traceSummary ? { traceSummary } : {}),
-                  },
-                ])
-                setStreamText('')
-                setTrace([])
-                setLiveSources([])
-                setPhase(null)
-                setClarify(null)
-              } else if (event.event === 'error') {
-                throw new Error(event.data || 'Stream error')
+        let acc = ''
+        let errorMessage: string | null = null
+        const handleChunk = (eventName: string, dataRaw: string): 'continue' | 'done' | 'error' => {
+          try {
+            const event = { event: eventName, data: dataRaw }
+            if (event.event === 'delta') {
+              acc += event.data ?? ''
+              accRef.current = acc
+              setStreamText(acc)
+            } else if (event.event === 'status') {
+              setPhase(event.data)
+              if (event.data === 'search_failed') {
+                pushStep('✕', 'The search could not be completed', 'fail')
               }
-            } catch {
-              /* keep-alive or partial line — skip */
+            } else if (event.event === 'search') {
+              const p = JSON.parse(event.data)
+              if (p.type === 'started') {
+                pushStep('◎', `Searching — “${p.label ?? ''}”`)
+              } else if (p.type === 'engines') {
+                // 8.2 §16 — per-engine truth (✓ ok · ✕ failed · – empty).
+                for (const e of Array.isArray(p.engines) ? p.engines : []) {
+                  const name = ENGINE_LABELS[e.id] ?? e.id
+                  if (e.status === 'ok') pushStep('✓', `${name} — ${e.count ?? 0} results`, 'ok')
+                  else if (e.status === 'failed') pushStep('✕', `${name} — ${e.error ?? 'failed'}`, 'fail')
+                  else pushStep('–', `${name} — no results`, undefined)
+                }
+              } else if (p.type === 'results') {
+                pushStep('✓', `Found ${p.found} results${Array.isArray(p.engines) && p.engines.length ? ` · ${p.engines.join(', ')}` : ''}`, 'ok')
+              } else if (p.type === 'round') {
+                pushStep('✓', `${p.sourcesVerified} source${p.sourcesVerified === 1 ? '' : 's'} verified${p.syndicatedGroups ? ` · ${p.syndicatedGroups} syndicated group${p.syndicatedGroups === 1 ? '' : 's'}` : ''}`, 'ok')
+              } else if (p.type === 'failed') {
+                pushStep('✕', `Search failed — ${p.reason ?? 'unknown'}`, 'fail')
+              } else if (p.type === 'completed') {
+                traceSummary = `Searched ${p.queries} ${p.queries === 1 ? 'query' : 'queries'} · read ${p.retrieved} of ${p.sources} sources`
+              }
+            } else if (event.event === 'research') {
+              // 8.2 §28 — research-level truth (protocol v2).
+              const p = JSON.parse(event.data)
+              if (p.type === 'round_completed') {
+                pushStep('✓', `Round ${p.round}: ${p.read ?? 0} read · ${p.failed ?? 0} failed${p.syndicatedGroups ? ` · ${p.syndicatedGroups} syndicated` : ''}`, 'ok')
+              } else if (p.type === 'synthesis_started') {
+                pushStep('✎', 'Composing grounded answer…', 'live')
+              } else if (p.type === 'completed') {
+                const secs = p.totalMs ? ` · ${(p.totalMs / 1000).toFixed(1)}s` : ''
+                traceSummary = `Searched ${p.queries} ${p.queries === 1 ? 'query' : 'queries'} · read ${p.retrieved} of ${p.sources} sources${secs}`
+              } else if (p.type === 'failed') {
+                const last = traceSteps[traceSteps.length - 1]
+                if (!last || !last.text.startsWith('Search failed')) {
+                  pushStep('✕', `Research failed — ${p.reason ?? 'unknown'}`, 'fail')
+                }
+              }
+            } else if (event.event === 'source') {
+              const p = JSON.parse(event.data)
+              const ordinal = p.source?.ordinal ?? p.ordinal
+              if (p.type === 'discovered' && p.source) {
+                sourceByOrdinal.set(ordinal, p.source as SourceCard)
+                setLiveSources([...sourceByOrdinal.values()].sort((a, b) => a.ordinal - b.ordinal))
+              } else if (p.type === 'opening' || p.type === 'reading') {
+                const s = sourceByOrdinal.get(ordinal)
+                pushStep('↗', `Reading ${s?.domain ?? `source ${ordinal}`}…`, 'live')
+              } else if (p.type === 'completed' || p.type === 'read') {
+                // protocol v2 — `read` is canonical, `completed` the v1 alias;
+                // both arrive, the transition is idempotent (one step only).
+                const s = sourceByOrdinal.get(ordinal)
+                const alreadyRead = s?.status === 'retrieved'
+                if (s) {
+                  s.status = 'retrieved'
+                  if (p.publishedDate) s.publishedDate = p.publishedDate
+                  setLiveSources([...sourceByOrdinal.values()].sort((a, b) => a.ordinal - b.ordinal))
+                }
+                if (!alreadyRead) {
+                  pushStep('✓', `Read ${s?.domain ?? `source ${ordinal}`} — ${(s?.title ?? '').slice(0, 70)}`, 'ok')
+                }
+              } else if (p.type === 'failed') {
+                const s = sourceByOrdinal.get(ordinal)
+                pushStep('✕', `${s?.domain ?? `source ${ordinal}`} — ${p.reason ?? 'failed'}`, 'fail')
+              }
+            } else if (event.event === 'clarify') {
+              const p = JSON.parse(event.data)
+              if (p?.question && Array.isArray(p.options)) {
+                finalClarify = { question: p.question, options: p.options }
+                setClarify(finalClarify)
+              }
+            } else if (event.event === 'done') {
+              finalized = true
+              const saved = typeof event.data === 'string' ? JSON.parse(event.data) : event.data
+              const doneSources: SourceCard[] = Array.isArray(saved?.sources)
+                ? saved.sources.map((s: SourceCard) => ({ ...s, used: s.used ?? true }))
+                : [...sourceByOrdinal.values()].sort((a, b) => a.ordinal - b.ordinal)
+              // PHASE 8.1 — a clarification turn persists its quick choices;
+              // attach them to the rendered message so the chips survive done.
+              let doneClarify: ClarifyChoices | null = null
+              if (typeof saved?.clarifyOptions === 'string' && saved.clarifyOptions) {
+                try {
+                  const parsed = JSON.parse(saved.clarifyOptions) as ClarifyChoices
+                  if (parsed?.question && Array.isArray(parsed.options)) doneClarify = parsed
+                } catch {
+                  // malformed — ignore
+                }
+              }
+              setMessages((prev) => [
+                ...prev,
+                {
+                  role: 'assistant',
+                  content: saved?.content ?? acc,
+                  ...(doneSources.length > 0 ? { sources: doneSources } : {}),
+                  ...(doneClarify ? { clarifyOptions: doneClarify } : {}),
+                  ...(traceSummary ? { traceSummary } : {}),
+                },
+              ])
+              setStreamText('')
+              setTrace([])
+              setLiveSources([])
+              setPhase(null)
+              setClarify(null)
+              return 'done'
+            } else if (event.event === 'error') {
+              errorMessage = event.data || 'Stream error'
+              return 'error'
             }
+            return 'continue'
+          } catch {
+            /* keep-alive or partial line — skip */
+            return 'continue'
           }
+        }
+
+        if (backgroundRunsRef.current) {
+          // ---- BACKGROUND-RUNS TRANSPORT (PHASE 1/2) ----------------------
+          const start = await fetch('/api/v1/messages/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              conversationId: convId,
+              content: text,
+              timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            }),
+            signal: controller.signal,
+          })
+          if (!start.ok) throw new Error(`Backend responded ${start.status}`)
+          const started = (await start.json()) as { streamId: string; runId: string }
+
+          let sawFinal = false
+          let cursor = ''
+          const applyChunk = (c: { id?: string; event: string; data: string }) => {
+            if (c.id) cursor = c.id
+            const verdict = handleChunk(c.event, c.data)
+            if (verdict === 'done') sawFinal = true
+          }
+
+          await new Promise<void>((resolve) => {
+            let sseAttempts = 0
+            const MAX_SSE_ATTEMPTS = 3
+            let es: EventSource | null = null
+            let pollTimer: ReturnType<typeof setInterval> | null = null
+            let settled = false
+            const stopAll = () => {
+              if (settled) return
+              settled = true
+              es?.close()
+              if (pollTimer) clearInterval(pollTimer)
+              resolve()
+            }
+            controller.signal.addEventListener('abort', () => stopAll())
+
+            // POLLING FALLBACK — EventSource failed 3 times in a row
+            // (restrictive proxy / serverless): poll the turn endpoint
+            // instead; it is a full substitute for the subscription.
+            const startPolling = () => {
+              es?.close()
+              let polls = 0
+              pollTimer = setInterval(async () => {
+                polls++
+                try {
+                  const res = await fetch(
+                    `/api/v1/turn/${started.runId}?after=${encodeURIComponent(cursor)}`
+                  )
+                  const data = (await res.json()) as {
+                    final: string | null
+                    chunks: { id: string; event: string; data: string }[]
+                  }
+                  for (const c of Array.isArray(data.chunks) ? data.chunks : []) applyChunk(c)
+                  if (sawFinal || data.final || polls > 300) stopAll()
+                } catch {
+                  if (polls > 300) stopAll()
+                }
+              }, 2_000)
+            }
+
+            const connect = () => {
+              es = new EventSource(`/api/v1/stream/${started.streamId}`)
+              es.onmessage = (e) => {
+                sseAttempts = 0
+                if (e.lastEventId) cursor = e.lastEventId
+                try {
+                  const env = JSON.parse(e.data) as { event: string; data: string }
+                  applyChunk(env)
+                  const s = errorMessage !== null || sawFinal
+                  if (s) stopAll()
+                } catch {
+                  /* keepalive comment or partial frame — EventSource ignores */
+                }
+              }
+              es.onerror = () => {
+                sseAttempts++
+                if (sseAttempts >= MAX_SSE_ATTEMPTS) {
+                  startPolling()
+                }
+                // otherwise EventSource auto-reconnects and sends
+                // Last-Event-ID automatically — no manual logic needed.
+              }
+            }
+            connect()
+          })
+          if (controller.signal.aborted) {
+            // Stop-generation with background runs: detach the VIEW only —
+            // the run continues server-side and persists (by design).
+            const abortErr = new Error('Aborted') as Error & { name: string }
+            abortErr.name = 'AbortError'
+            throw abortErr
+          }
+          if (errorMessage !== null) throw new Error(errorMessage)
+        } else {
+          // ---- LEGACY INLINE SSE (unchanged transport) --------------------
+          const res = await fetch(`/api/v1/conversations/${convId}/messages`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              content: text,
+              stream: true,
+              // PHASE 8.3 §11 — real timezone-aware time capability: the client
+              // supplies its IANA zone so the backend clock answers in local time.
+              timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            }),
+            signal: controller.signal,
+          })
+          if (!res.ok || !res.body) throw new Error(`Backend responded ${res.status}`)
+
+          const reader = res.body.getReader()
+          const decoder = new TextDecoder()
+          let buffer = ''
+          for (;;) {
+            const { done, value } = await reader.read()
+            if (done) break
+            buffer += decoder.decode(value, { stream: true })
+            const lines = buffer.split('\n')
+            buffer = lines.pop() ?? ''
+            for (const line of lines) {
+              const trimmed = line.trim()
+              if (!trimmed.startsWith('data:')) continue
+              try {
+                const event = JSON.parse(trimmed.slice(5).trim()) as { event: string; data: string }
+                handleChunk(event.event, event.data)
+              } catch {
+                /* keep-alive or partial line — skip */
+              }
+            }
+            if (finalized || errorMessage !== null) break
+          }
+          if (errorMessage !== null) throw new Error(errorMessage)
         }
         if (!finalized && convId) {
           // PHASE 8.1 — the turn runs detached server-side (the public
