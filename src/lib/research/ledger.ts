@@ -101,7 +101,22 @@ const STOP_TERMS = new Set([
   'are', 'was', 'were', 'has', 'had', 'how', 'why', 'who', 'when', 'where', 'into', 'about',
   'compare', 'search', 'research', 'today', 'current', 'latest', 'state', 'states', 'give',
   'tell', 'need', 'many', 'much', 'does', 'did', 'will', 'would', 'could', 'should', 'each',
+  // command vocabulary — never a topic term (measured live: "do deep research"
+  // leaked 'deep' into gaps and produced queries like "deep population tokyo")
+  'deep', 'quick', 'please', 'also', 'using',
 ])
+
+/**
+ * Strip the leading COMMAND phrase from a research request — the topic is
+ * what follows. "do deep research: compare X vs Y" → "compare X vs Y".
+ * Deterministic, applied once before decomposition/gap analysis.
+ */
+export function stripCommandPrefix(q: string): string {
+  const stripped = q
+    .replace(/^\s*(?:please\s+)?(?:do\s+(?:a\s+|some\s+|the\s+)?)?(?:deep\s+|quick\s+)?(?:web\s+)?(?:research|search|look\s*up|find\s+out|dig\s+into)\b[:,-]?\s*/i, '')
+    .trim()
+  return stripped.length >= 8 ? stripped : q.trim()
+}
 
 /** Key terms of a question — the coverage vocabulary for gaps. */
 export function keyTerms(question: string): string[] {
@@ -146,16 +161,23 @@ export function claimsFromExtract(
   return claims
 }
 
-/** Numbers with units preserved EXACTLY as written (no rounding, no parsing). */
-const NUM_UNIT_RE = /(\d[\d,.,]*(?:\s?(?:km|mi|m|bn|billion|million|%|percent|years?|USD|\$|€|£))?)/gi
+/** Numbers with units preserved EXACTLY as written (no rounding, no parsing).
+ * Alternation is LONGEST-FIRST — measured live: `mi` swallowed `million`
+ * ("24 million" → "24 mi", inventing a miles figure). */
+const NUM_UNIT_RE = /(\d[\d,.,]*(?:\s?(?:billion|million|percent|years?|USD|km|mi|bn|%|\$|€|£|m\b))?)/gi
 
 /**
  * Contradiction detection: two claims asserting DIFFERENT numbers (same
  * unit class) for overlapping entity contexts. Deterministic, explicit —
  * a late-arriving contradiction is never silently dropped.
+ * Noise guards (measured live: 71 raw pairs on a 3-branch turn, most false):
+ *   - year-like integers (1900-2100) are LABELS, never quantities;
+ *   - "24 M" vs "2011" (unit vs bare) is not comparable;
+ *   - at most ONE contradiction per claim pair (first numeric mismatch).
  */
 export function detectContradictions(claims: Claim[]): Contradiction[] {
   const contradictions: Contradiction[] = []
+  const isYearLike = (s: string): boolean => /^(19|20)\d{2}$/.test(s.replace(/[^0-9]/g, ''))
   for (let i = 0; i < claims.length; i++) {
     for (let j = i + 1; j < claims.length; j++) {
       const a = claims[i]
@@ -170,8 +192,14 @@ export function detectContradictions(claims: Claim[]): Contradiction[] {
       let shared = 0
       for (const w of wordsA) if (wordsB.has(w)) shared++
       if (shared < 3) continue
+      let fired = false
       for (const na of numsA) {
+        if (fired) break
         for (const nb of numsB) {
+          if (isYearLike(na) || isYearLike(nb)) continue
+          const hasUnitA = /[a-z%$€£]/i.test(na)
+          const hasUnitB = /[a-z%$€£]/i.test(nb)
+          if (hasUnitA !== hasUnitB) continue // unit vs bare — not comparable
           const va = parseFloat(na.replace(/[^0-9.]/g, ''))
           const vb = parseFloat(nb.replace(/[^0-9.]/g, ''))
           if (!isFinite(va) || !isFinite(vb) || va === 0 || vb === 0) continue
@@ -186,6 +214,8 @@ export function detectContradictions(claims: Claim[]): Contradiction[] {
             })
             a.contradictedBy.push(b.id)
             b.contradictedBy.push(a.id)
+            fired = true
+            break
           }
         }
       }

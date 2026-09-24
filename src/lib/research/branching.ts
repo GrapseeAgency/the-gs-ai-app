@@ -22,6 +22,7 @@
 import { runResearch, RESEARCH_BUDGET, type ResearchOutcome } from '../search/research'
 import type { ResearchSource, SearchEventEmitter, SearchIntent, TimeRange } from '../search/types'
 import { NOOP_EMIT } from '../search/types'
+import { launchSubagent, waitForSubagent } from '@/lib/subagents'
 import {
   claimsFromExtract,
   decomposeQuestion,
@@ -31,6 +32,7 @@ import {
   keyTerms,
   queryForGap,
   saveLedger,
+  stripCommandPrefix,
   type Claim,
   type ResearchLedger,
 } from './ledger'
@@ -106,7 +108,7 @@ export async function runBranchingResearch(input: BranchingInput): Promise<Resea
   const startedAt = Date.now()
   const hardDeadline = Math.min(input.deadlineAt, startedAt + RESEARCH_BUDGET[input.depth].wallClockMs)
   const budget = RESEARCH_BUDGET[input.depth]
-  const question = input.question
+  const question = stripCommandPrefix(input.question)
 
   const ledger = emptyLedger(input.ledgerKey, question)
 
@@ -211,7 +213,85 @@ export async function runBranchingResearch(input: BranchingInput): Promise<Resea
     if (gapQueries.length === 0) break
     emit('ledger', { type: 'gaps_open', gaps: fresh.map((g) => g.description), queries: gapQueries })
     gapRound++
-    await runWave(gapQueries)
+
+    // PHASE 6 — ASYNC SUBAGENT DISPATCH: gap branches are LAUNCHED and the
+    // supervisor continues working (claim consolidation + contradiction
+    // detection below) while they run, then collects results bounded by the
+    // deadline. Long research never blocks the supervisor turn.
+    const launched: { taskId: string; branchId: string }[] = []
+    for (const q of gapQueries) {
+      const branchId = `br-${ledger.branches.length + 1}`
+      ledger.branches.push({ id: branchId, query: q, status: 'pending', resultSourceIds: [] })
+      const taskId = await launchSubagent({
+        runId: input.ledgerKey,
+        name: 'research_branch',
+        input: { query: q, intent: input.intent, timeRange: input.timeRange, deadlineAt: hardDeadline },
+      })
+      launched.push({ taskId, branchId })
+    }
+    emit('ledger', { type: 'subagents_launched', count: launched.length })
+
+    // supervisor work DURING the branches: pre-consolidation pass
+    const preClaims = ledger.claims.slice(0, 24)
+    ledger.contradictions = detectContradictions(preClaims)
+    await saveLedger(ledger)
+
+    for (const { taskId, branchId } of launched) {
+      const t = await waitForSubagent(taskId, hardDeadline)
+      const branch = ledger.branches.find((b) => b.id === branchId)
+      const result = (t.result ?? {}) as {
+        ok?: boolean
+        sources?: {
+          title: string
+          url: string
+          domain: string
+          snippet: string
+          status: string
+          query: string
+          extract?: string
+        }[]
+        queriesRun?: string[]
+      }
+      allQueries.push(...(result.queriesRun ?? []))
+      if (branch) {
+        branch.status = t.status === 'done' && result.ok ? 'done' : 'failed'
+        branch.resultSourceIds = (result.sources ?? []).map((s) => s.url)
+      }
+      const base = allSources.length
+      for (let i = 0; i < (result.sources ?? []).length; i++) {
+        const s = result.sources![i]
+        allSources.push({
+          ordinal: base + i + 1,
+          id: s.url,
+          title: s.title,
+          url: s.url,
+          domain: s.domain,
+          snippet: s.snippet,
+          publishedDate: null,
+          retrievedAt: new Date().toISOString(),
+          query: s.query,
+          engine: 'subagent',
+          searchRank: null,
+          status: s.status === 'retrieved' ? 'retrieved' : (s.status as ResearchSource['status']),
+          ...(s.extract ? { pageExtract: s.extract } : {}),
+        })
+      }
+      const queryTerms = keyTerms(question)
+      for (const s of result.sources ?? []) {
+        if (s.status === 'retrieved' && s.extract) {
+          ledger.claims.push(...claimsFromExtract(s.extract, s.url, queryTerms))
+        }
+      }
+      emit('ledger', {
+        type: 'branch_completed',
+        branchId,
+        query: (result.queriesRun?.[0] ?? '').slice(0, 80),
+        sources: (result.sources ?? []).length,
+        retrieved: (result.sources ?? []).filter((s) => s.status === 'retrieved').length,
+        ok: result.ok === true,
+        via: 'subagent',
+      })
+    }
     await saveLedger(ledger)
   }
 
