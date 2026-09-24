@@ -146,16 +146,18 @@ jobs:
         with:
           name: scorecard
           path: ./scorecard.json
-      - name: Commit scorecard
+      - name: Commit scorecard to bench-scores branch (avoids main collisions)
         run: |
           if [ -f ./scorecard.json ]; then
-            mkdir -p ./results
-            cp ./scorecard.json ./results/latest.json
             git config user.name "gs-bench-bot"
             git config user.email "bot@grapsee.dev"
+            git fetch origin bench-scores || true
+            git checkout -B bench-scores origin/bench-scores 2>/dev/null || git checkout -B bench-scores
+            mkdir -p results
+            cp ./scorecard.json ./results/latest.json
             git add ./results/latest.json
             git commit -m "benchmark: $(date -u +%Y-%m-%dT%H:%M:%SZ)" || echo "nothing to commit"
-            git push
+            git push origin bench-scores
           else
             echo "::warning::no scorecard produced — all eval jobs failed or wrote BLOCKED only"
           fi
