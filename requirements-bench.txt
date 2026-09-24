@@ -1,48 +1,29 @@
-# GS BENCH — Phase 2 requirements.
+# GS BENCH — CORE requirements (the knowledge-suite execution set).
+# Everything here is REQUIRED by cli/main.py adapters at eval time.
 #
-# VERIFICATION RECORD (2026-09-24, curl https://pypi.org/pypi/<pkg>/json):
-#   inspect-ai   0.3.268   EXISTS   (spec floor >=0.3.42 satisfied)
-#   lm-eval      0.4.13    EXISTS   (spec floor >=0.4.0 satisfied)
-#   crfm-helm    0.5.16    EXISTS   (spec floor >=0.5.0 satisfied)
-#   swebench     5.0.2     EXISTS   (spec floor >=3.0.0 satisfied)
-#   harbor       0.23.0    EXISTS   (spec floor >=0.21.0 satisfied) — BUT:
-#                harbor 0.21.0 pins litellm>=1.92.0 while tau2 1.0.1 pins
-#                litellm<1.82.7 → ResolutionImpossible (raw evidence: build
-#                run 36033652437). harbor is NOT used by any knowledge-suite
-#                adapter, so it is installed with --no-deps in its own
-#                Dockerfile layer (see Dockerfile.bench) — kept in the image,
-#                removed from the resolver's problem space.
-#   tau2-bench   HTTP 404  NOT ON PYPI (also tau2bench: 404) → installed from
-#                the official repo. NOTE: the repo's distribution NAME is
-#                "tau2" (pyproject.toml line 6, verified 2026-09-24); the
-#                direct reference must use that name or pip fails with
-#                "(unavailable)" (raw evidence: failed builds 36031728363,
-#                36032367867).
-#   datasets     5.0.1     EXISTS
-#   statsmodels  0.15.0    EXISTS
-#   scipy        1.18.1    EXISTS
-#   numpy        2.5.3     EXISTS
-#   evalci       0.1.0     EXISTS — latest is 0.1.0, so the spec's
-#                "evalci>=0.1.2" can NEVER resolve; pinned >=0.1.0 instead.
-#   abeval       0.1.0     EXISTS
-#   evalstats    0.3.3     EXISTS
-#   pyyaml, requests, jsonschema, pytz — added: required by cli/ + stats/
-#                (pyyaml for benchmark configs, requests for harness calls).
-#                Not in the spec list; required for the spec'd CLI to run.
+# SPLIT RATIONALE (raw evidence: failed builds 36031728363, 36032367867,
+# 36034869697): a single resolver pass over all harnesses is
+# ResolutionImpossible — harbor pins litellm>=1.92.0 vs tau2's
+# litellm<1.82.7; crfm-helm drags transformers 5.x/torch against other
+# harnesses' pins. So: CORE (this file) installs atomically for eval jobs;
+# HEAVY HARNESS EXTRAS install in separate Docker layers
+# (requirements-bench-extras.txt) and are irrelevant to the knowledge suite.
 
 inspect-ai>=0.3.42
 inspect-evals>=0.21.0   # the inspect_evals/* tasks (gpqa_diamond, aime2024, ifbench)
-lm-eval>=0.4.0
-crfm-helm>=0.5.0
-swebench>=3.0.0
 tau2 @ git+https://github.com/sierra-research/tau2-bench
 datasets>=3.0.0
-statsmodels>=0.14.0
-scipy>=1.14.0
 numpy>=1.26.0
-evalci>=0.1.0
-abeval>=0.1.0
-evalstats>=0.1.0
+scipy>=1.14.0
 pyyaml>=6.0
 requests>=2.31.0
 jsonschema>=4.21.0
+
+# ---- MOVED TO requirements-bench-extras.txt (separate docker layers) ----
+# lm-eval>=0.4.0        (not used by knowledge-suite adapters)
+# crfm-helm>=0.5.0      (not used; litellm/transformers conflicts)
+# swebench>=3.0.0       (suite BLOCKED: 120GB disk > 14GB runner)
+# harbor>=0.21.0        (not used; litellm conflict with tau2)
+# evalci/abeval/evalstats (stats layer uses local implementations; evalci is
+#                          opportunistically imported at runtime when present)
+evalci>=0.1.0

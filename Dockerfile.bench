@@ -14,7 +14,8 @@ RUN apt-get update && apt-get install -y \
     git curl jq build-essential && \
     rm -rf /var/lib/apt/lists/*
 
-COPY requirements-bench.txt .
+COPY requirements-bench.txt requirements-bench-extras.txt ./
+# CORE: the knowledge-suite execution set — one atomic resolver pass.
 RUN pip install --no-cache-dir -r requirements-bench.txt
 # harbor conflicts with tau2 on litellm (raw evidence: build 36033652437);
 # unused by the knowledge-suite adapters → installed dependency-free.

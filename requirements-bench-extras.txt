@@ -1,0 +1,11 @@
+# GS BENCH — HEAVY HARNESS EXTRAS. NOT needed by the knowledge suite.
+# Installed in SEPARATE Dockerfile layers so a resolution failure in one
+# harness never poisons the others (each layer's log is isolated evidence).
+# None of these are imported by cli/main.py today; they future-proof the
+# image for suites that are currently BLOCKED (see benchmarks/blocked.yaml).
+
+# lm-eval: loglikelihood MCQ scoring (torch-heavy). Shown here for suites
+# that need it; MCQ knowledge tasks run via inspect generation mode instead.
+# crfm-helm: scenario harness (transformers/torch heavy).
+# swebench: BLOCKED for disk (120GB needed vs 14GB runner SSD).
+# harbor: installed --no-deps separately (litellm pin conflicts with tau2).
