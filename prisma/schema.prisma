@@ -229,3 +229,139 @@ model EvalScore {
   @@index([windowStart])
   @@map("eval_scores")
 }
+
+// ---- TURN EXECUTION LAYER — detached runs (ADR-117 pattern) ----------------
+// TWO identifiers, deliberately distinct:
+//   id (runId)   — billing/correlation id. Stable across HITL interrupt +
+//                  resumption. Every turn_events row references it.
+//   streamId     — transport id. FRESH on every POST /api/v1/messages/start
+//                  (including resumption POSTs). Used as the stream-broker
+//                  key suffix (chat:run:{streamId}).
+// status: queued | running | awaiting_approval | completed | failed |
+//         killed | cancelled
+model TurnRun {
+  id                 String    @id // runId
+  streamId           String    @unique // transport id of the CURRENT subscription window
+  conversationId     String
+  userMessageId      String?
+  assistantMessageId String?
+  status             String    @default("queued")
+  finalStatus        String? // done | error | clarify — the SSE terminal contract
+  error              String?
+  attempts           Int       @default(0)
+  leaseOwner         String? // worker instance holding this run (stuck-job recovery)
+  leaseExpiresAt     DateTime?
+  // JSON map: sha256(runId+seq+tool+args) -> result digest. Stable across
+  // restarts so a retried side-effecting op is executed once.
+  idempotencyKeys    String    @default("{}")
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([status])
+  @@index([conversationId])
+  @@map("turn_runs")
+}
+
+// Stream broker store (transport-level, invisible to the SSE contract).
+// Redis is NOT available in this sandbox — the backend is SQLite with the
+// SAME protocol semantics as Redis Streams (see src/lib/stream-broker.ts):
+//   entryId "<ms>-<seq>" is the SSE id; Last-Event-ID = readAfter(cursor);
+//   payload {"d": <chunk JSON>} is one chunk relayed verbatim;
+//   payload {"end":"1","status":s} is the terminal marker,
+//     s ∈ completed | error | killed | cancelled.
+// bounded append (MAXLEN ~) + safety TTL (expiresAt) mirrored per entry.
+model StreamChunk {
+  seq       Int      @default(autoincrement()) @id
+  streamKey String // chat:run:{streamId}
+  entryId   String // "<ms>-<seq>"
+  payload   String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@unique([streamKey, entryId])
+  @@index([streamKey, seq])
+  @@index([expiresAt])
+  @@map("stream_chunks")
+}
+
+// DURABLE EXECUTION — event sourcing (durable-agents / DBOS Transact model).
+// Every model call, tool call, and approval is appended BEFORE and AFTER it
+// happens. Run state is a fold over this log; a killed run is reconciled
+// from the dangling Requested-without-Completed pair.
+model TurnEvent {
+  seq       Int      @default(autoincrement()) @id
+  runId     String
+  eventType String // TurnStarted | LLMCallRequested | LLMCallCompleted |
+  // LLMCallFailed | ToolCallRequested | ToolCallCompleted |
+  // SearchRequested | SearchCompleted | SourceOpened | SourceRead |
+  // SynthesisRequested | SynthesisCompleted | ApprovalRequested |
+  // ApprovalDecided | RunReconciled | RunCompleted | RunFailed
+  payload   String   @default("{}")
+  createdAt DateTime @default(now())
+
+  @@index([runId, seq])
+  @@map("turn_events")
+}
+
+// PHASE 3 — human-in-the-loop parking. A tool marked requires_approval
+// parks the run (no thread held, no process alive) until decided.
+model ApprovalRequest {
+  id             String    @id @default(cuid())
+  runId          String
+  tool           String
+  args           String    @default("{}")
+  idempotencyKey String
+  status         String    @default("pending") // pending | approved | denied
+  createdAt      DateTime  @default(now())
+  decidedAt      DateTime?
+
+  @@index([runId])
+  @@map("approval_requests")
+}
+
+// PHASE 5 — persistent Research Ledger (dossier pattern): verified claims,
+// contradictions, open gaps, and search branches for one run.
+model ResearchLedgerRow {
+  runId     String   @id
+  ledger    String // JSON ResearchLedger
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("research_ledgers")
+}
+
+// PHASE 6 — async subagent dispatch: the supervisor launches a task and
+// continues working; tasks maintain their own state across interactions.
+model SubagentTask {
+  id        String    @id @default(cuid())
+  runId     String // supervisor run
+  name      String
+  url       String? // remote agent server (heterogeneous deployment); null = local executor
+  graphId   String?
+  input     String    @default("{}")
+  status    String    @default("pending") // pending | running | done | failed | cancelled
+  result    String?
+  error     String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([runId])
+  @@map("subagent_tasks")
+}
+
+// PHASE 7 — Persistent Knowledge Graph (factorized memory). Fluid working
+// context crystallizes into exact event snapshots: numbers and entities are
+// preserved byte-exact, never summarized or paraphrased.
+model KnowledgeNode {
+  id             String   @id @default(cuid())
+  conversationId String
+  kind           String // claim | entity | value | snapshot
+  nodeKey        String // normalized identity for dedupe
+  text           String
+  meta           String   @default("{}") // JSON: verbatim numbers, sourceId, seq...
+  createdAt      DateTime @default(now())
+
+  @@unique([conversationId, nodeKey])
+  @@index([conversationId])
+  @@map("knowledge_nodes")
+}
