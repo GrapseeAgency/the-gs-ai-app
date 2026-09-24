@@ -121,10 +121,166 @@ export interface ModelProfile {
   canServe: CapabilityTag[]
   neverServe: CapabilityTag[]
   measuredAt: string
+  /** THINKING TIER (flash-mode task, Phase 1) — how this model thinks. */
+  thinking: ThinkingProfile
 }
 
 /** Below this measured rate a model is barred from the capability. */
 export const CAPABILITY_THRESHOLD = 0.5
+
+// ---------------------------------------------------------------------------
+// THINKING TIER (flash-mode task, Phase 1) — ADDITIVE dimension.
+//
+// MEASUREMENT STATUS (honest): scripts/measure-thinking-latency.ts ran the
+// 'hi'-x5-per-mode TTFT protocol and recorded ZERO successful samples — the
+// z-ai account is inside the documented account-level 429 window AND the
+// OpenRouter keypool was wiped to zero across all four layers (raw artifact:
+// tests/thinking-latency-measurements.json, notes[]). Every flashLatencyMs /
+// thinkingLatencyMs below is therefore PROVISIONAL (provider-doc + wire
+// estimate) until a complete run lands; the mode feature does not depend on
+// these numbers — they feed observability only. The measured capability
+// scores above are NOT touched by this task.
+// ---------------------------------------------------------------------------
+
+export interface ThinkingProfile {
+  /** Model has a thinking path at all. */
+  supportsThinking: boolean
+  /** GLM-5.3-class models do NOT allow disabled → Flash must remap. */
+  thinkingCanBeDisabled: boolean
+  /** Provider accepts reasoning_effort on the thinking path. */
+  supportsReasoningEffort: boolean
+  /** Documented effort levels (defaultEffort is used when thinking). */
+  effortLevels: string[]
+  defaultEffort: string
+  /** Provisional TTFT p50 with thinking OFF (ms) — see MEASUREMENT STATUS. */
+  flashLatencyMs: number
+  /** Provisional TTFT p50 with thinking ON (ms); null = no thinking path. */
+  thinkingLatencyMs: number | null
+}
+
+/**
+ * Thinking profiles keyed by CONCRETE provider model id. Provider-doc facts:
+ *  - z-ai (GLM): flash = { thinking: { type: 'disabled' } }; thinking =
+ *    { thinking: { type: 'enabled' }, reasoning_effort: 'high' }.
+ *    GLM-5.3 / GLM-5.3-FLASH are FORCED-thinking (cannot be disabled — Flash
+ *    must remap, GS-MODE-REMAP); GLM-4.6 is hybrid (both paths); GLM-4.5
+ *    toggles. GLM-4.7+ adds turn-level control.
+ *  - OpenRouter: the unified `reasoning` param ({ enabled }) is sent per
+ *    mode; models without a documented toggle are marked supportsThinking
+ *    =false and the resolver forces Flash (per task spec).
+ */
+const PROVIDER_MODEL_THINKING: Record<string, ThinkingProfile> = {
+  'glm-4.5-flash': {
+    supportsThinking: true, // GLM-4.5 family toggles
+    thinkingCanBeDisabled: true,
+    supportsReasoningEffort: false,
+    effortLevels: [],
+    defaultEffort: 'high',
+    flashLatencyMs: 750, // provisional
+    thinkingLatencyMs: 1900, // provisional
+  },
+  'glm-4.6': {
+    supportsThinking: true, // hybrid thinking (auto) — both paths exist
+    thinkingCanBeDisabled: true,
+    supportsReasoningEffort: true,
+    effortLevels: ['high', 'low'],
+    defaultEffort: 'high',
+    flashLatencyMs: 780, // provisional
+    thinkingLatencyMs: 2100, // provisional
+  },
+  'glm-5v-turbo': {
+    supportsThinking: false, // vision endpoint — observed thinking-disabled only
+    thinkingCanBeDisabled: true,
+    supportsReasoningEffort: false,
+    effortLevels: [],
+    defaultEffort: 'high',
+    flashLatencyMs: 900, // provisional
+    thinkingLatencyMs: null,
+  },
+  'glm-5.3': {
+    supportsThinking: true,
+    thinkingCanBeDisabled: false, // FORCED thinking — Flash must remap
+    supportsReasoningEffort: true,
+    effortLevels: ['max', 'high', 'low'],
+    defaultEffort: 'high',
+    flashLatencyMs: 800, // provisional (served via remap)
+    thinkingLatencyMs: 1700, // provisional
+  },
+  'glm-5.3-flash': {
+    supportsThinking: true,
+    thinkingCanBeDisabled: false, // also forced-thinking per Z.AI docs
+    supportsReasoningEffort: false,
+    effortLevels: [],
+    defaultEffort: 'high',
+    flashLatencyMs: 600, // provisional (served via remap)
+    thinkingLatencyMs: 1600, // provisional
+  },
+  'nvidia/nemotron-3-super-120b-a12b:free': {
+    supportsThinking: true, // nemotron-3 documents a reasoning toggle
+    thinkingCanBeDisabled: true,
+    supportsReasoningEffort: false,
+    effortLevels: [],
+    defaultEffort: 'high',
+    flashLatencyMs: 1500, // provisional
+    thinkingLatencyMs: 3200, // provisional
+  },
+  'nvidia/nemotron-3-ultra-550b-a55b:free': {
+    supportsThinking: true,
+    thinkingCanBeDisabled: true,
+    supportsReasoningEffort: false,
+    effortLevels: [],
+    defaultEffort: 'high',
+    flashLatencyMs: 2200, // provisional
+    thinkingLatencyMs: 4400, // provisional
+  },
+  'nex-agi/nex-n2.5-pro:free': {
+    supportsThinking: false, // no documented toggle → force Flash (task spec)
+    thinkingCanBeDisabled: true,
+    supportsReasoningEffort: false,
+    effortLevels: [],
+    defaultEffort: 'high',
+    flashLatencyMs: 1500, // provisional
+    thinkingLatencyMs: null,
+  },
+  'openrouter/free': {
+    supportsThinking: false, // meta-router — heterogeneous backends, no toggle contract
+    thinkingCanBeDisabled: true,
+    supportsReasoningEffort: false,
+    effortLevels: [],
+    defaultEffort: 'high',
+    flashLatencyMs: 1500, // provisional
+    thinkingLatencyMs: null,
+  },
+}
+
+/** Thinking profile for an internal model id (via its provider model), with a fail-safe flash-only default. */
+export function thinkingProfileFor(modelId: string): ThinkingProfile {
+  const profile = profileFor(modelId)
+  const key = profile?.providerModel ?? modelId
+  return (
+    PROVIDER_MODEL_THINKING[key] ?? {
+      supportsThinking: false,
+      thinkingCanBeDisabled: true,
+      supportsReasoningEffort: false,
+      effortLevels: [],
+      defaultEffort: 'high',
+      flashLatencyMs: 900,
+      thinkingLatencyMs: null,
+    }
+  )
+}
+
+/**
+ * Nearest flash-capable PROVIDER model for a model whose thinking cannot be
+ * disabled. GLM-5.3-class → the hybrid flagship (glm-4.6). null = no remap
+ * known (caller sends the disabled flag best-effort).
+ */
+export function remapToFlashCapable(providerModel: string): string | null {
+  const t = PROVIDER_MODEL_THINKING[providerModel]
+  if (!t || t.thinkingCanBeDisabled) return null
+  if (providerModel.startsWith('glm-')) return 'glm-4.6'
+  return null
+}
 
 /**
  * Register turns demand MORE than the bar: they are exactly the class the
@@ -172,6 +328,7 @@ export const MODEL_REGISTRY: ModelProfile[] = [
     canServe: ['register', 'chat'],
     neverServe: [],
     measuredAt: '2026-09-23',
+    thinking: PROVIDER_MODEL_THINKING['glm-4.5-flash'],
   },
   {
     modelId: 'gs-balanced',
@@ -211,6 +368,7 @@ export const MODEL_REGISTRY: ModelProfile[] = [
     canServe: ['chat', 'reasoning', 'instruction'],
     neverServe: ['register'],
     measuredAt: '2026-09-23',
+    thinking: PROVIDER_MODEL_THINKING['glm-4.6'],
   },
   {
     modelId: 'gs-free-big',
@@ -262,6 +420,7 @@ export const MODEL_REGISTRY: ModelProfile[] = [
     canServe: ['chat', 'register', 'reasoning', 'instruction', 'search'],
     neverServe: [],
     measuredAt: '2026-09-23',
+    thinking: PROVIDER_MODEL_THINKING['nvidia/nemotron-3-ultra-550b-a55b:free'],
   },
   {
     modelId: 'gs-free',
@@ -308,6 +467,7 @@ export const MODEL_REGISTRY: ModelProfile[] = [
     canServe: ['chat', 'register', 'reasoning', 'instruction'],
     neverServe: [],
     measuredAt: '2026-09-23',
+    thinking: PROVIDER_MODEL_THINKING['nvidia/nemotron-3-super-120b-a12b:free'],
   },
 ]
 
@@ -345,4 +505,109 @@ export function selectModelForCapability(cap: CapabilityTag): ModelProfile | nul
 /** Registry profile for an internal model id, if present. */
 export function profileFor(modelId: string): ModelProfile | null {
   return MODEL_REGISTRY.find((m) => m.modelId === modelId) ?? null
+}
+
+// ---------------------------------------------------------------------------
+// THINKING MODE RESOLUTION (flash-mode task, Phases 1/2/4)
+// ---------------------------------------------------------------------------
+
+/** Wire mode sent by clients (absent = 'flash' — backward compatible). */
+export type ThinkingMode = 'flash' | 'thinking' | 'auto'
+
+/** Strict mode parser for the wire field: absent/invalid → 'flash'. */
+export function parseThinkingMode(raw: unknown): ThinkingMode {
+  if (raw === 'thinking' || raw === 'auto' || raw === 'flash') return raw
+  return 'flash'
+}
+
+/**
+ * Resolve the REQUESTED mode into the turn's EFFECTIVE mode, before the
+ * per-model capability check. Turn-class overrides (task Phase 4):
+ *  - TIME turns are always flash (the clock is deterministic; depth is waste).
+ *  - DEEP_RESEARCH always thinks (the user opting into research committed to
+ *    depth — mode is ignored).
+ *  - 'auto' lets the router decide: flash for the efficient TEXT_SIMPLE
+ *    class, thinking for everything else.
+ *  - Everything else honors the user's pick. Register and thinking are
+ *    ORTHOGONAL — a register-class turn with mode=thinking still thinks.
+ */
+export function effectiveModeFor(
+  mode: ThinkingMode,
+  route: string,
+  capability: string
+): 'flash' | 'thinking' {
+  if (capability === 'TIME') return 'flash'
+  if (route === 'DEEP_RESEARCH' || capability === 'DEEP_RESEARCH') return 'thinking'
+  if (mode === 'thinking') return 'thinking'
+  if (mode === 'flash') return 'flash'
+  // auto — the router decides (short/efficient turns stay flash).
+  return route === 'TEXT_SIMPLE' ? 'flash' : 'thinking'
+}
+
+/** The per-turn thinking decision the provider call layers consume. */
+export interface ResolvedThinking {
+  /** 'flash' | 'thinking' — after turn-class overrides + model capability. */
+  effective: 'flash' | 'thinking'
+  /** Effort level sent on the thinking path (z-ai models that accept it). */
+  effort?: string
+  /** Non-null when a forced-thinking model was remapped for Flash. */
+  providerModelOverride: string | null
+  /** Human-readable remap/force note for the trace (null = clean). */
+  remapNote: string | null
+}
+
+/**
+ * Resolve the turn's mode into the provider-layer thinking decision — THE
+ * single function the turn executor calls (task Phase 2's resolver, with the
+ * Phase 4 turn-class overrides built in). The mode NEVER changes capability
+ * routing — only the model's thinking config (and, for forced-thinking
+ * models, the concrete provider model id). On the OpenRouter path both
+ * modes map onto the unified reasoning param; models that ignore it degrade
+ * gracefully to their own default.
+ */
+export function resolveThinkingConfig(
+  mode: ThinkingMode,
+  internalModelId: string,
+  route: string,
+  capability: string
+): ResolvedThinking {
+  const t = thinkingProfileFor(internalModelId)
+  const wanted = effectiveModeFor(mode, route, capability)
+
+  // Model cannot think (vision endpoint, toggle-less free models): flash forced.
+  if (wanted === 'thinking' && !t.supportsThinking) {
+    return {
+      effective: 'flash',
+      effort: undefined,
+      providerModelOverride: null,
+      remapNote: `${internalModelId} has no thinking path — flash forced`,
+    }
+  }
+
+  // Flash on a FORCED-thinking model: remap to the nearest flash-capable tier.
+  if (wanted === 'flash') {
+    const profile = profileFor(internalModelId)
+    const providerModel = profile?.providerModel ?? internalModelId
+    if (!t.thinkingCanBeDisabled) {
+      const remap = remapToFlashCapable(providerModel)
+      if (remap) {
+        return {
+          effective: 'flash',
+          effort: undefined,
+          providerModelOverride: remap,
+          remapNote: `${providerModel}→${remap} (forced thinking; flash requested)`,
+        }
+      }
+      // No remap known — send disabled best-effort (provider may ignore).
+      return { effective: 'flash', effort: undefined, providerModelOverride: null, remapNote: null }
+    }
+    return { effective: 'flash', effort: undefined, providerModelOverride: null, remapNote: null }
+  }
+
+  return {
+    effective: 'thinking',
+    effort: t.supportsReasoningEffort ? t.defaultEffort : undefined,
+    providerModelOverride: null,
+    remapNote: null,
+  }
 }
