@@ -4113,3 +4113,18 @@ Stage Summary:
 - Infra LIVE end-to-end: sandbox → shim → real model calls from GitHub Actions; blocked/failed/scored separated in scorecard; power section refuses winners on underpowered n.
 - Honest blockers so far: competitors need funded OpenRouter (402 raw), tau2 needs funded user-sim, GPQA/IFBench official datasets gated (HF_TOKEN absent; mirror smoke only), SandboxEscapeBench needs EC2/Vagrant (hosted runners cannot host nested VM).
 - Scorecard bot now commits to bench-scores branch (main collision fixed).
+
+---
+Task ID: BENCH-INFRA-2 (final for this session)
+Agent: main (Z.ai Code)
+Task: Phase 12 first-run status + handoff.
+
+Work Log:
+- Run 9 (36043125749) LIVE status at session end: build ✅ escape-gate ✅ (BLOCKED verdict, honest) | ifbench-gs-ai job ✅ | gpqa-gs-ai + aime-gs-ai RUNNING — 87 real shim→glm-4-plus calls completed (12-44s each) then the production z-ai circuit breaker latched open (dev.log raw: "BENCH-SHIM-ERROR ... z-ai throttled (circuit open)", POST .../chat/completions 502) under sustained bench load. Inspect retries with backoff; breaker cools and traffic resumes cyclically. NOT touched (hard rule 1).
+- Competitor + tau2 jobs write honest BLOCKED result files: free OpenRouter keys cannot fund gpt-5.5/opus-4.8 (402) nor the tau2 gpt-4o-mini user-simulator.
+- Scorecard aggregate auto-commits to branch `bench-scores` (results/latest.json) + scorecard artifact on every run; no more main collisions.
+- Fixed along the way (each with raw evidence commit): py3.12 image, tau2 dist-name, harbor litellm conflict → CORE/extras split, setup-python cache-dependency-path, blank OPENAI_API_KEY from empty secret, shim /responses endpoint, openai-api/openai/<model> 3-part name.
+
+Stage Summary:
+- UNRESOLVED (next session): (1) poll run 9 → download scorecard → record rows via scripts/record-benchmark-run.ts; (2) GPQA/AIME may partially finish with errored counts due to z-ai daily quota — report failed/errored/skipped per rollout-card rule; (3) to unblock competitors + tau2: fund an OpenRouter key; (4) to unblock Phase 10 measurement: EC2 creds or Vagrant-capable runner; (5) optional: provision HF_TOKEN for gated official datasets (Idavidrein/gpqa, allenai/IFBench).
+- Where everything lives: cli/ runners/ stats/ benchmarks/ data/ Dockerfile.bench requirements-bench*.txt .github/workflows/benchmark.yml scripts/record-benchmark-run.ts prisma BenchmarkRun.
