@@ -49,10 +49,18 @@ import {
   MODEL_REGISTRY,
   REGISTER_SUBCAP_REQUIREMENT,
   measuredScore,
+  profileFor,
   subScore,
   type CapabilityTag,
   type ModelProfile,
 } from './model-capabilities'
+import {
+  resolveRolloutState,
+  shouldServeCandidate,
+  tierControlFor,
+  trafficBucket,
+  type RolloutState,
+} from './rollout'
 
 export type CapabilityRoute =
   | 'TEXT_SIMPLE' // efficient model — greetings, short factual chat
@@ -120,6 +128,12 @@ export interface RouteRequest {
   historicalReligious: boolean
   /** Approximate serialized conversation context size (chars). */
   historyChars: number
+  /**
+   * Stable per-conversation key for rollout traffic bucketing (the request
+   * id). Optional — unkeyed traffic stays on the CONTROL route at non-full
+   * rollout stages (conservative), and is ignored at `full`.
+   */
+  trafficKey?: string
 }
 
 // --- requirements schema (shortfall matching input) --------------------------
@@ -301,10 +315,61 @@ export function cheapest(candidates: ModelProfile[]): ModelProfile | null {
 
 /**
  * One routing decision per turn: classify → predict requirements → shortfall
- * match the registry → cheapest candidate. Measured capabilities select
- * through the registry; unmeasured capabilities keep the standing tier model.
+ * match the registry → cheapest candidate, then pass the plan through the
+ * STAGED ROLLOUT (src/lib/rollout.ts). At the default stage (`full`, env
+ * unset) the rollout is a zero-cost pass-through: the candidate plan serves,
+ * exactly as shipped. At non-full stages the standing tier plan is the
+ * CONTROL: shadow scores the candidate without serving it, canary/percentage
+ * bucket traffic deterministically by the traffic key, and GS_ROLLOUT_ROLLBACK=1
+ * pulls everything back to control — no deploy needed to roll back.
  */
 export function planRoute(req: RouteRequest): RouterPlan {
+  const candidate = planCandidateRoute(req)
+  return applyRollout(candidate, req)
+}
+
+/** Rollout wrapper: candidate vs the standing tier control, per stage. */
+function applyRollout(candidate: RouterPlan, req: RouteRequest): RouterPlan {
+  const state: RolloutState = resolveRolloutState()
+  if (state.stage === 'full' && !state.rollback) return candidate // shipped behavior, zero overhead
+
+  // A BLOCKED candidate never rolls onto control: the honest refusal is the
+  // registry's answer even mid-rollout.
+  if (candidate.route === 'BLOCKED') {
+    console.log(`GS-ROLLOUT stage=${state.stage} rollback=${state.rollback} served=blocked capability=${candidate.capability} (BLOCKED candidates never roll back to control)`)
+    return candidate
+  }
+
+  const controlTier = tierControlFor(candidate.capability)
+  const controlProfile = profileFor(controlTier.internalModelId)
+  const controlScore = controlProfile ? measuredScore(controlProfile, candidate.capability) : null
+  // PER-QUERY MEASURED GATE: a candidate whose measured capability is LOWER
+  // than control's never serves, even inside a canary bucket.
+  const gateFailed =
+    candidate.measuredScore !== null && controlScore !== null && candidate.measuredScore < controlScore
+  const serveCandidate = !gateFailed && shouldServeCandidate(state, req.trafficKey ?? null)
+
+  console.log(
+    `GS-ROLLOUT stage=${state.stage} rollback=${state.rollback} served=${serveCandidate ? 'candidate' : 'control'} gate=${gateFailed ? 'failed' : 'ok'} capability=${candidate.capability} candidate=${candidate.internalModelId}@${candidate.measuredScore !== null ? candidate.measuredScore.toFixed(3) : 'unmeasured'} control=${controlTier.internalModelId}@${controlScore !== null ? controlScore.toFixed(3) : 'unmeasured'} bucket=${req.trafficKey ? trafficBucket(req.trafficKey) : 'none'}`,
+  )
+  if (serveCandidate) return candidate
+
+  return {
+    route: controlTier.route,
+    internalModelId: controlTier.internalModelId,
+    depth: candidate.depth,
+    plannerRuns: candidate.plannerRuns,
+    registerClass: candidate.registerClass,
+    capability: candidate.capability,
+    providerLock: null, // control is the standing tier default — no registry lock
+    measuredScore: controlScore,
+    requirements: candidate.requirements,
+    reason: `rollout ${state.stage}${state.rollback ? ' (ROLLBACK)' : ''}: control serves (candidate ${candidate.internalModelId} logged, not served)`,
+  }
+}
+
+/** The candidate plan: classify → requirements → shortfall match → cheapest. */
+function planCandidateRoute(req: RouteRequest): RouterPlan {
   const text = req.content.trim()
   const plannerTriggered =
     req.webGateTrigger !== null || req.clarifyFollowUp || req.historicalReligious

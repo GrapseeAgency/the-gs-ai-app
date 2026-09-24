@@ -422,6 +422,8 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     clarifyFollowUp,
     historicalReligious,
     historyChars: history.reduce((n, m) => n + m.content.length, 0),
+    // staged rollout: stable per-turn bucket key (no-op at the default `full` stage)
+    trafficKey: requestId,
   })
   const plannerRuns = routerPlan.plannerRuns
   console.log(
