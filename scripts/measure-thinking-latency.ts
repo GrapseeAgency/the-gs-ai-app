@@ -217,10 +217,12 @@ async function main() {
       console.log(`measuring OPENROUTER ${OR_MODEL} (${pool.keys.length} keys)…`)
       artifact.openrouter.flash = await measureOpenRouterMode(pool.keys, false)
       artifact.openrouter.thinking = await measureOpenRouterMode(pool.keys, true)
-      artifact.openrouter.p50.flash = percentile(artifact.openrouter.flash.ttftSamples, 50)
-      artifact.openrouter.p95.flash = percentile(artifact.openrouter.flash.ttftSamples, 95)
-      artifact.openrouter.p50.thinking = percentile(artifact.openrouter.thinking.ttftSamples, 50)
-      artifact.openrouter.p95.thinking = percentile(artifact.openrouter.thinking.ttftSamples, 95)
+      const orFlash = artifact.openrouter.flash
+      const orThinking = artifact.openrouter.thinking
+      artifact.openrouter.p50.flash = percentile(orFlash.ttftSamples, 50)
+      artifact.openrouter.p95.flash = percentile(orFlash.ttftSamples, 95)
+      artifact.openrouter.p50.thinking = percentile(orThinking.ttftSamples, 50)
+      artifact.openrouter.p95.thinking = percentile(orThinking.ttftSamples, 95)
     } else {
       artifact.notes.push('OpenRouter key pool empty — free-chain measurement skipped.')
     }

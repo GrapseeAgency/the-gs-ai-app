@@ -18,6 +18,12 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { messageToJson } from '@/lib/serializers'
 import { resolveModelRoute, OPENROUTER_MODELS, type ModelRoute } from '@/lib/models'
+import {
+  parseThinkingMode,
+  resolveThinkingConfig,
+  type ResolvedThinking,
+  type ThinkingMode,
+} from '@/lib/model-capabilities'
 import { loadKeyPool } from '@/lib/keypool'
 import { orCompleteChat, orStreamChat } from '@/lib/openrouter'
 import { planRoute } from '@/lib/router'
@@ -136,6 +142,12 @@ export type TurnRequest = {
   clientVersion: string
   requestId: string
   attachmentIds: string[]
+  /**
+   * FLASH MODE (Phase 2) — 'flash' | 'thinking' | 'auto'; absent/invalid
+   * parses to 'flash' (backward compatible: old clients just get the new
+   * default). Model-layer parameter ONLY — never changes capability routing.
+   */
+  mode?: ThinkingMode
   /** Detached mode: run-store correlation id (billing/HITL). */
   runId?: string
   /**
@@ -194,6 +206,12 @@ export type Prep = {
   providerModel: string | null
   openRouterModels: string[] | null
   freeAvailable: boolean
+  /** FLASH MODE (Phase 2) — the wire mode as the client sent it. */
+  requestedMode: ThinkingMode
+  /** The resolved per-model thinking decision (config sent to the provider). */
+  thinking: ResolvedThinking
+  /** TTFT of the thinking path, set by the executor on streaming thinking calls. */
+  thinkingLatencyMs: number | null
   historyWebSources: WebSource[]
   includeHistoryEvidence: boolean
   historyLines: string[]
@@ -468,6 +486,28 @@ export async function prepareTurn(
     )
   }
 
+  // FLASH MODE (Phase 2) — resolve the requested mode against the SELECTED
+  // model's thinking profile. The mode only sets the model's thinking config
+  // (and remaps forced-thinking models for Flash); capability routing above
+  // is untouched. Register and thinking are orthogonal — a register-class
+  // turn with mode=thinking still thinks (the config applies identically).
+  const requestedMode = parseThinkingMode(args.mode)
+  const thinking = resolveThinkingConfig(requestedMode, routerPlan.internalModelId)
+  if (thinking.remapNote) {
+    console.log(`GS-MODE-REMAP conv=${id} ${thinking.remapNote}`)
+  }
+  if (openRouterModels && thinking.config) {
+    console.log(
+      `GS-MODE conv=${id} mode=${requestedMode} effective=${thinking.effective} reasoning=${thinking.config.mode === 'thinking' ? 'enabled' : 'disabled'}`
+    )
+  } else if (thinking.config) {
+    console.log(
+      `GS-MODE conv=${id} mode=${requestedMode} effective=${thinking.effective} thinking=${thinking.config.mode === 'thinking' ? `enabled${thinking.config.effort ? `:${thinking.config.effort}` : ''}` : 'disabled'}`
+    )
+  } else {
+    console.log(`GS-MODE conv=${id} mode=${requestedMode} effective=provider-default (auto)`)
+  }
+
   // The forensic log + trace writer, attached to prep (both transports share it).
   const prep: Prep = {
     conversationId: id,
@@ -507,6 +547,9 @@ export async function prepareTurn(
     providerModel,
     openRouterModels,
     freeAvailable,
+    requestedMode,
+    thinking,
+    thinkingLatencyMs: null,
     historyWebSources: [],
     includeHistoryEvidence: false,
     historyLines: [],
@@ -1170,15 +1213,38 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
         : (await completeVisionChat(modelMessages as VisionChatMessage[])).text
     }
     const msgs = modelMessages as ChatMessageInput[]
+    // FLASH MODE (Phase 2) — the resolved thinking decision rides EVERY text
+    // call path, including provider fallbacks. The effective zai model is the
+    // remap target when a forced-thinking model was remapped for Flash.
+    const activeProviderModel = prep.thinking.providerModelOverride ?? providerModel
+    const orReasoning = prep.thinking.config
+      ? { enabled: prep.thinking.config.mode === 'thinking' }
+      : null
+    // thinkingLatencyMs — TTFT of the thinking path (measured at this layer:
+    // call start → first forwarded delta). Buffered calls never set it.
+    const thinkingOn = prep.thinking.config?.mode === 'thinking'
+    let callStartedAt = Date.now()
+    let ttftMarked = false
+    const wrappedOnDelta = onDelta
+      ? (d: string) => {
+          if (thinkingOn && !ttftMarked && prep.thinkingLatencyMs === null) {
+            ttftMarked = true
+            prep.thinkingLatencyMs = Date.now() - callStartedAt
+          }
+          return onDelta(d)
+        }
+      : undefined
     try {
       if (openRouterModels) {
-        return onDelta
-          ? await orStreamChat(msgs, openRouterModels, onDelta)
-          : await orCompleteChat(msgs, openRouterModels).then((r) => r.text)
+        callStartedAt = Date.now()
+        return wrappedOnDelta
+          ? await orStreamChat(msgs, openRouterModels, wrappedOnDelta, orReasoning)
+          : await orCompleteChat(msgs, openRouterModels, orReasoning).then((r) => r.text)
       }
-      return onDelta
-        ? await streamChat(msgs, onDelta, providerModel)
-        : await completeChat(msgs, providerModel)
+      callStartedAt = Date.now()
+      return wrappedOnDelta
+        ? await streamChat(msgs, wrappedOnDelta, activeProviderModel, prep.thinking.config)
+        : await completeChat(msgs, activeProviderModel, prep.thinking.config)
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
       if (openRouterModels) {
@@ -1186,9 +1252,10 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
           console.log(
             `SYNTHESIS-FALLBACK conv=${id} OpenRouter chain exhausted (${message.slice(0, 80)}) → primary provider`
           )
-          return onDelta
-            ? await streamChat(msgs, onDelta, providerModel)
-            : await completeChat(msgs, providerModel)
+          callStartedAt = Date.now()
+          return wrappedOnDelta
+            ? await streamChat(msgs, wrappedOnDelta, activeProviderModel, prep.thinking.config)
+            : await completeChat(msgs, activeProviderModel, prep.thinking.config)
         }
         throw e
       }
@@ -1196,9 +1263,10 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
         console.log(
           `SYNTHESIS-FALLBACK conv=${id} primary failed (${message.slice(0, 80)}) → OpenRouter free chain`
         )
-        return onDelta
-          ? await orStreamChat(msgs, OPENROUTER_MODELS['gs-free'], onDelta)
-          : await orCompleteChat(msgs, OPENROUTER_MODELS['gs-free']).then((r) => r.text)
+        callStartedAt = Date.now()
+        return wrappedOnDelta
+          ? await orStreamChat(msgs, OPENROUTER_MODELS['gs-free'], wrappedOnDelta, orReasoning)
+          : await orCompleteChat(msgs, OPENROUTER_MODELS['gs-free'], orReasoning).then((r) => r.text)
       }
       throw e
     }

@@ -546,10 +546,13 @@ export function effectiveModeFor(
 
 /** The per-turn thinking decision the provider call layers consume. */
 export interface ResolvedThinking {
-  /** 'flash' | 'thinking' — after turn-class overrides + model capability. */
+  /** 'flash' | 'thinking' — what the provider call should actually do. */
   effective: 'flash' | 'thinking'
-  /** Effort level sent on the thinking path (z-ai models that accept it). */
-  effort?: string
+  /**
+   * The thinking config to send. null = send NOTHING (provider default —
+   * the 'auto' mode: the existing router logic decides, no override here).
+   */
+  config: { mode: 'flash' | 'thinking'; effort?: string } | null
   /** Non-null when a forced-thinking model was remapped for Flash. */
   providerModelOverride: string | null
   /** Human-readable remap/force note for the trace (null = clean). */
@@ -557,56 +560,47 @@ export interface ResolvedThinking {
 }
 
 /**
- * Resolve the turn's mode into the provider-layer thinking decision — THE
- * single function the turn executor calls (task Phase 2's resolver, with the
- * Phase 4 turn-class overrides built in). The mode NEVER changes capability
- * routing — only the model's thinking config (and, for forced-thinking
- * models, the concrete provider model id). On the OpenRouter path both
- * modes map onto the unified reasoning param; models that ignore it degrade
- * gracefully to their own default.
+ * Resolve the client's requested mode against the SELECTED MODEL's thinking
+ * profile (task Phase 2 pseudocode, verbatim semantics):
+ *  - flash    → thinking disabled; on a FORCED-thinking model (GLM-5.3-class)
+ *               the request remaps to the nearest flash-capable tier
+ *               (GS-MODE-REMAP).
+ *  - thinking → thinking enabled + the profile's default effort.
+ *  - auto     → config null — provider default; the existing router logic
+ *               decides, no change there.
+ * The mode NEVER overrides model selection (capability routing still picks
+ * the model; the mode only sets its thinking config).
  */
-export function resolveThinkingConfig(
-  mode: ThinkingMode,
-  internalModelId: string,
-  route: string,
-  capability: string
-): ResolvedThinking {
+export function resolveThinkingConfig(mode: ThinkingMode, internalModelId: string): ResolvedThinking {
+  const profile = profileFor(internalModelId)
+  const providerModel = profile?.providerModel ?? internalModelId
   const t = thinkingProfileFor(internalModelId)
-  const wanted = effectiveModeFor(mode, route, capability)
 
-  // Model cannot think (vision endpoint, toggle-less free models): flash forced.
-  if (wanted === 'thinking' && !t.supportsThinking) {
-    return {
-      effective: 'flash',
-      effort: undefined,
-      providerModelOverride: null,
-      remapNote: `${internalModelId} has no thinking path — flash forced`,
-    }
+  if (mode === 'auto') {
+    return { effective: 'flash', config: null, providerModelOverride: null, remapNote: null }
   }
 
-  // Flash on a FORCED-thinking model: remap to the nearest flash-capable tier.
-  if (wanted === 'flash') {
-    const profile = profileFor(internalModelId)
-    const providerModel = profile?.providerModel ?? internalModelId
+  if (mode === 'flash') {
     if (!t.thinkingCanBeDisabled) {
       const remap = remapToFlashCapable(providerModel)
       if (remap) {
         return {
           effective: 'flash',
-          effort: undefined,
+          config: { mode: 'flash' },
           providerModelOverride: remap,
           remapNote: `${providerModel}→${remap} (forced thinking; flash requested)`,
         }
       }
-      // No remap known — send disabled best-effort (provider may ignore).
-      return { effective: 'flash', effort: undefined, providerModelOverride: null, remapNote: null }
+      // No flash-capable tier known — send the disabled flag best-effort.
+      return { effective: 'flash', config: { mode: 'flash' }, providerModelOverride: null, remapNote: null }
     }
-    return { effective: 'flash', effort: undefined, providerModelOverride: null, remapNote: null }
+    return { effective: 'flash', config: { mode: 'flash' }, providerModelOverride: null, remapNote: null }
   }
 
+  // mode === 'thinking'
   return {
     effective: 'thinking',
-    effort: t.supportsReasoningEffort ? t.defaultEffort : undefined,
+    config: { mode: 'thinking', ...(t.supportsReasoningEffort ? { effort: t.defaultEffort } : {}) },
     providerModelOverride: null,
     remapNote: null,
   }

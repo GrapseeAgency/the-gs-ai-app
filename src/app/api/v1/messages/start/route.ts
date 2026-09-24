@@ -25,6 +25,7 @@ import { db } from '@/lib/db'
 import { clientKey, rateLimit } from '@/lib/rate-limit'
 import { MAX_ATTACHMENTS_PER_MESSAGE } from '@/lib/attachments'
 import { prepareTurn } from '@/lib/turn-executor'
+import { parseThinkingMode } from '@/lib/model-capabilities'
 import { backgroundRunsEnabled, newRunId, newStreamId } from '@/lib/turn-producer'
 import { enqueueRun } from '@/lib/worker-pool'
 import { createRun, getRun, isTerminalStatus, rebindStream } from '@/lib/run-store'
@@ -39,6 +40,7 @@ type StartBody = {
   content?: unknown
   attachments?: unknown
   timezone?: unknown
+  mode?: unknown
   resumeRunId?: unknown
 }
 
@@ -139,6 +141,8 @@ export async function POST(req: NextRequest) {
   }
   const clientVersion = req.headers.get('x-gs-app-version') ?? 'web'
   const timezone = typeof body?.timezone === 'string' ? body.timezone : null
+  // FLASH MODE (Phase 2) — absent/invalid parses to 'flash' (the new default).
+  const mode = parseThinkingMode(body?.mode)
 
   // ---- FRESH start ---------------------------------------------------------
   const conversationId = typeof body?.conversationId === 'string' ? body.conversationId : ''
@@ -177,6 +181,7 @@ export async function POST(req: NextRequest) {
       clientVersion,
       requestId: runId, // correlation: the runId IS the request id (billing)
       attachmentIds,
+      mode,
       runId,
     },
     { content, attachments: rawAttachments }
@@ -197,6 +202,7 @@ export async function POST(req: NextRequest) {
     attachmentIds,
     timezone,
     clientVersion,
+    mode,
     userMessageId: prepared.prep.userMessage.id,
   })
 
@@ -221,7 +227,13 @@ async function turnRequestFromRun(
     orderBy: { seq: 'asc' },
     take: 1,
   })
-  let facts: { content?: string; attachmentIds?: string[]; timezone?: string | null; clientVersion?: string } = {}
+  let facts: {
+    content?: string
+    attachmentIds?: string[]
+    timezone?: string | null
+    clientVersion?: string
+    mode?: unknown
+  } = {}
   try {
     facts = JSON.parse(events[0]?.payload ?? '{}') as typeof facts
   } catch {
@@ -234,6 +246,7 @@ async function turnRequestFromRun(
     clientVersion: facts.clientVersion ?? req.headers.get('x-gs-app-version') ?? 'web',
     requestId: run.id, // correlation: the runId IS the request id on resume
     attachmentIds: facts.attachmentIds ?? [],
+    mode: parseThinkingMode(facts.mode), // durable mode survives resume
     runId: run.id,
     existingUserMessageId: run.userMessageId ?? undefined,
   }

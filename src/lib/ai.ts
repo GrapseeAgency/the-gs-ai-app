@@ -203,6 +203,25 @@ function errMessage(e: unknown): string {
 }
 
 /**
+ * THINKING TIER (flash-mode task, Phase 2) — per-call thinking config.
+ *  - { mode: 'flash' }               → { thinking: { type: 'disabled' } }
+ *  - { mode: 'thinking', effort? }   → { thinking: { type: 'enabled' },
+ *                                       reasoning_effort?: effort }
+ *  - null / undefined                → legacy behavior: disabled (the exact
+ *                                      pre-flash-mode wire body).
+ */
+export type ThinkingCallConfig = { mode: 'flash' | 'thinking'; effort?: string } | null
+
+function zaiThinkingBody(thinking: ThinkingCallConfig): Record<string, unknown> {
+  if (thinking?.mode === 'thinking') {
+    return thinking.effort
+      ? { thinking: { type: 'enabled' }, reasoning_effort: thinking.effort }
+      : { thinking: { type: 'enabled' } }
+  }
+  return { thinking: { type: 'disabled' } }
+}
+
+/**
  * Streaming chat completion. Calls `onDelta` for every token/chunk received
  * and resolves with the complete assistant text.
  *
@@ -211,11 +230,15 @@ function errMessage(e: unknown): string {
  * loop retries modelless (the exact pre-8.1 behavior) — a bad mapping can
  * degrade to the default model, never break chat. Account-level 429s are
  * NOT retried modelless (same quota pool either way).
+ *
+ * FLASH MODE (Phase 2) — `thinking` carries the turn's resolved mode; the
+ * provider body's `thinking` field is built from it (null = legacy disabled).
  */
 export async function streamChat(
   messages: ChatMessageInput[],
   onDelta: (t: string) => Promise<void> | void,
-  providerModel?: string | null
+  providerModel?: string | null,
+  thinking?: ThinkingCallConfig
 ): Promise<string> {
   let lastError = 'Upstream unavailable'
   let activeModel = typeof providerModel === 'string' && providerModel.length > 0 ? providerModel : null
@@ -228,7 +251,7 @@ export async function streamChat(
       const body: Record<string, unknown> = {
         messages: toSdkMessages(messages),
         stream: true,
-        thinking: { type: 'disabled' },
+        ...zaiThinkingBody(thinking ?? null),
         // FORENSIC AUDIT [25] — consistency lever (ignored if the endpoint
         // does not accept it; never breaks the request).
         temperature: 0.2,
@@ -279,9 +302,10 @@ export async function streamChat(
 /** Non-streaming chat completion. Resolves with the assistant text. */
 export async function completeChat(
   messages: ChatMessageInput[],
-  providerModel?: string | null
+  providerModel?: string | null,
+  thinking?: ThinkingCallConfig
 ): Promise<string> {
-  return (await completeChatWithMeta(messages, providerModel)).text
+  return (await completeChatWithMeta(messages, providerModel, thinking)).text
 }
 
 /**
@@ -298,7 +322,8 @@ export async function completeChat(
  */
 export async function completeChatWithMeta(
   messages: ChatMessageInput[],
-  providerModel?: string | null
+  providerModel?: string | null,
+  thinking?: ThinkingCallConfig
 ): Promise<{ text: string; model: string | null }> {
   let lastError = 'Upstream unavailable'
   let activeModel = typeof providerModel === 'string' && providerModel.length > 0 ? providerModel : null
@@ -310,7 +335,7 @@ export async function completeChatWithMeta(
       const body: Record<string, unknown> = {
         messages: toSdkMessages(messages),
         stream: false,
-        thinking: { type: 'disabled' },
+        ...zaiThinkingBody(thinking ?? null),
         // FORENSIC AUDIT [25] — consistency lever (see streamChat).
         temperature: 0.2,
       }

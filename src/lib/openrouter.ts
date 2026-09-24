@@ -86,12 +86,21 @@ function buildPinnedMessages(messages: ChatMessageInput[]): {
 
 type OrErrorBody = { error?: { message?: string; code?: number | string } }
 
+/**
+ * THINKING TIER (flash-mode task, Phase 2) — OpenRouter unified reasoning
+ * param per turn mode: flash → { enabled: false }, thinking → { enabled:
+ * true }. null = send NOTHING (the exact pre-flash-mode wire body; models
+ * without a documented toggle ignore the param, per OpenRouter docs).
+ */
+export type OrReasoningConfig = { enabled: boolean } | null
+
 /** One POST attempt with a specific key. Returns the raw Response. */
 async function postChat(
   key: string,
   model: string,
   messages: ChatMessageInput[],
-  stream: boolean
+  stream: boolean,
+  reasoning?: OrReasoningConfig
 ): Promise<Response> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), stream ? CONNECT_TIMEOUT_MS : COMPLETION_TIMEOUT_MS)
@@ -115,6 +124,9 @@ async function postChat(
         // conversation → same answer; the free-model chain is quota-rotated,
         // temperature is the deterministic lever available here).
         temperature: 0.2,
+        // FLASH MODE (Phase 2) — explicit reasoning toggle per turn mode;
+        // omitted entirely when null (legacy body preserved).
+        ...(reasoning !== undefined && reasoning !== null ? { reasoning } : {}),
       }),
     })
   } finally {
@@ -143,7 +155,8 @@ async function extractError(response: Response): Promise<string> {
 /** Non-streaming OpenRouter completion: key-pool rotation × model chain. */
 export async function orCompleteChat(
   messages: ChatMessageInput[],
-  models: string[]
+  models: string[],
+  reasoning?: OrReasoningConfig
 ): Promise<{ text: string; model: string | null }> {
   const keys = (await loadKeyPool()).keys
   if (keys.length === 0) throw new Error('GS Free is offline: the OpenRouter key pool is empty (env, key file and db vault are all empty after the platform wipes). Re-provision keys to restore free-tier models.')
@@ -155,7 +168,7 @@ export async function orCompleteChat(
     for (let i = 0; i < keys.length; i++) {
       const key = keys[(keyCursor + i) % keys.length]
       try {
-        const response = await postChat(key, model, messages, false)
+        const response = await postChat(key, model, messages, false, reasoning)
         if (!response.ok) {
           lastError = await extractError(response)
           if (shouldRotate(response.status)) continue
@@ -199,7 +212,8 @@ export async function orCompleteChat(
 export async function orStreamChat(
   messages: ChatMessageInput[],
   models: string[],
-  onDelta: (t: string) => Promise<void> | void
+  onDelta: (t: string) => Promise<void> | void,
+  reasoning?: OrReasoningConfig
 ): Promise<string> {
   const keys = (await loadKeyPool()).keys
   if (keys.length === 0) throw new Error('GS Free is offline: the OpenRouter key pool is empty (env, key file and db vault are all empty after the platform wipes). Re-provision keys to restore free-tier models.')
@@ -212,7 +226,7 @@ export async function orStreamChat(
       const key = keys[(keyCursor + i) % keys.length]
       let forwarded = false
       try {
-        const response = await postChat(key, model, messages, true)
+        const response = await postChat(key, model, messages, true, reasoning)
         if (!response.ok) {
           lastError = await extractError(response)
           if (shouldRotate(response.status)) continue

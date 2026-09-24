@@ -4,6 +4,7 @@ import { messageToJson } from '@/lib/serializers'
 import { clientKey, rateLimit } from '@/lib/rate-limit'
 import { MAX_ATTACHMENTS_PER_MESSAGE } from '@/lib/attachments'
 import { prepareTurn, runTurn, type TurnPush } from '@/lib/turn-executor'
+import { parseThinkingMode } from '@/lib/model-capabilities'
 
 export const dynamic = 'force-dynamic'
 
@@ -51,9 +52,9 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     )
   }
 
-  let body: { content?: unknown; stream?: unknown; modelId?: unknown; attachments?: unknown; timezone?: unknown }
+  let body: { content?: unknown; stream?: unknown; modelId?: unknown; attachments?: unknown; timezone?: unknown; mode?: unknown }
   try {
-    body = (await req.json()) as { content?: unknown; stream?: unknown; modelId?: unknown; attachments?: unknown; timezone?: unknown }
+    body = (await req.json()) as { content?: unknown; stream?: unknown; modelId?: unknown; attachments?: unknown; timezone?: unknown; mode?: unknown }
   } catch {
     return NextResponse.json(
       { code: 'bad_request', message: 'Request body must be valid JSON' },
@@ -105,6 +106,9 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     clientVersion,
     requestId: crypto.randomUUID(),
     attachmentIds,
+    // FLASH MODE (Phase 2) — absent/invalid parses to 'flash' (the new
+    // default; old clients keep working unchanged).
+    mode: parseThinkingMode(body?.mode),
   }
 
   const prepared = await prepareTurn(turnRequest, { content, attachments: rawAttachments })
