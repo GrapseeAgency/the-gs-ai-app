@@ -1,0 +1,188 @@
+{
+  "suite": "eval-suite-search-v1",
+  "created": "2026-09-24",
+  "framework": "CLEAR-RAG five-dimensional RAG evaluation",
+  "description": "GS AI search eval rebuilt from 10 binary cases into five scored dimensions: Citation Quality (C), Latency and Cost (L), Evidence Faithfulness (E), Answer Relevance (A), Retrieval Quality (R). Every case is graded PER DIMENSION on a 1-5 scale and reported per-dimension — never collapsed into a single pass/fail. Case prompts are byte-identical to tests/eval-suite-v1.json SOURCE_QUALITY (S31-S40); the original deterministic assertions ride along unchanged as deterministicAssertions so the v1 gate still applies on every run. NOT YET RUN (provider quota) — runner integration is the follow-up, the suite + grader contract is the deliverable.",
+  "traceSource": "SELECT * FROM turns WHERE requestId = <X-GS-Request-Id response header> — graded with the streamed answer text; silentFailures column must be empty for the turn to be eligible for a 5 on C.",
+  "judge": {
+    "model": "glm-4.6",
+    "temperature": 0,
+    "scope": "Dimensions E and A only. C/L/R are deterministic from the trace row + answer text. The judge model and temperature are PINCHED to the production judge (unchanged); only the dimension rubrics below are new.",
+    "inputs": "judge receives the streamed answer plus the evidence block the model actually saw (turn evidenceBlock), never the raw search index"
+  },
+  "dimensions": {
+    "C": {
+      "name": "Citation Quality",
+      "evidence": ["trace.cited (distinct ordinals in the answer)", "trace.sourceCount / sourcesRead / sourcesFailed", "persisted source rows for the turn (every [N] must resolve to a persisted source)", "turns.silentFailures must not contain citation_mismatch"],
+      "scoring": {
+        "5": "Every [N] in the answer resolves to a persisted source; distinct citation count == sourcesRead; zero citations to failed sources; silentFailures empty of citation_mismatch.",
+        "4": "Every [N] resolves and no failed-source citation, but fewer sources cited than read (some read sources uncited).",
+        "3": "All citations resolve but at least half the read sources are uncited (thin grounding).",
+        "2": "At least one citation points to a non-persisted ordinal (citation-without-source).",
+        "1": "Citations present but none resolve, or grounding claims made with zero citations while sources exist."
+      }
+    },
+    "L": {
+      "name": "Latency and Cost",
+      "evidence": ["trace.latencyMs", "registry measured latency for the serving chain (src/lib/model-capabilities.ts latency p50/p95)"],
+      "scoring": {
+        "5": "Turn latency <= 30s (the non-search turn budget) or <= the serving chain's measured p50, whichever is larger.",
+        "4": "Turn latency <= 60s (the search-turn budget).",
+        "3": "Turn latency <= 90s.",
+        "2": "Turn latency <= 120s.",
+        "1": "Turn latency > 120s or the turn errored."
+      },
+      "costNote": "Cost per turn is scored as the latency-vs-baseline test above: $/token is UNMEASURED across internal models (no billing artifact exists), so the only measured cost axis is turn latency against the chain's registry baseline. No guessed dollar figures."
+    },
+    "E": {
+      "name": "Evidence Faithfulness",
+      "grader": "judge",
+      "promptTemplate": "You are grading EVIDENCE FAITHFULNESS for a search assistant. EVIDENCE:\n<evidence>{evidence_block}</evidence>\nANSWER:\n<answer>{answer}</answer>\nScore 1-5 for whether every factual claim in the answer maps to the evidence: 5 = every claim maps to a source span, zero unsupported claims; 4 = at most one minor unsupported elaboration; 3 = most claims grounded, 2-3 unsupported; 2 = about half unsupported; 1 = fabricated claims or claims contradicting the evidence. Reply with ONLY 'E: <n>' followed by a one-sentence reason.",
+      "scoring": "judge rubric above; the runner parses 'E: <n>'"
+    },
+    "A": {
+      "name": "Answer Relevance",
+      "grader": "judge",
+      "promptTemplate": "You are grading ANSWER RELEVANCE for a search assistant. USER QUESTION:\n<question>{prompt}</question>\nANSWER:\n<answer>{answer}</answer>\nScore 1-5 for whether the answer addresses the user's actual question: 5 = directly and completely answers it; 4 = answers with minor gaps; 3 = partially addresses it; 2 = mostly off-topic drift; 1 = does not address the question. Reply with ONLY 'A: <n>' followed by a one-sentence reason.",
+      "scoring": "judge rubric above; the runner parses 'A: <n>'"
+    },
+    "R": {
+      "name": "Retrieval Quality",
+      "evidence": ["trace.domains (distinct)", "trace.sourcesRead / sourceCount (read rate)", "per-source domain list", "case.newsQuery flag"],
+      "scoring": {
+        "5": "Domains >= 3 (news queries: hard requirement) AND no single domain contributes > 2 sources AND read rate >= 70% for grounded turns.",
+        "4": "Domains >= 3 AND no domain > 2 sources, but read rate in [50%, 70%).",
+        "3": "Domains >= 2, or read rate >= 50% with a domain-concentration violation.",
+        "2": "Single domain returned, or read rate < 30% with sources present.",
+        "1": "Zero sources returned on a non-no-results turn, or retrieval collapsed entirely."
+      }
+    }
+  },
+  "scoring": {
+    "scale": "1-5 per dimension per case",
+    "reporting": "Per-dimension means and full distributions across the 10 cases (C, L, E, A, R reported separately — never collapsed into one number without also printing the five columns).",
+    "gate": "A case FAILS a dimension when it scores <= 2 on it. The silent-failure gate takes precedence: any turns.silentFailures violation caps C and E at 2 regardless of the rubric score."
+  },
+  "cases": [
+    {
+      "id": "S31",
+      "category": "SOURCE_QUALITY",
+      "prompt": "search the web for today's AI news",
+      "blocking": false,
+      "auditRef": "[15] domain diversity",
+      "newsQuery": true,
+      "deterministicAssertions": [
+        { "type": "trace.domainsMin", "value": 3 },
+        { "type": "citationsWithinSources" }
+      ]
+    },
+    {
+      "id": "S32",
+      "category": "SOURCE_QUALITY",
+      "prompt": "search for today's technology news",
+      "blocking": false,
+      "auditRef": "[15]",
+      "newsQuery": true,
+      "deterministicAssertions": [
+        { "type": "trace.domainsMin", "value": 3 },
+        { "type": "citationsWithinSources" }
+      ]
+    },
+    {
+      "id": "S33",
+      "category": "SOURCE_QUALITY",
+      "prompt": "search for the latest Android news",
+      "blocking": false,
+      "auditRef": "[15]",
+      "newsQuery": true,
+      "deterministicAssertions": [
+        { "type": "trace.domainsMin", "value": 2 },
+        { "type": "citationsWithinSources" }
+      ]
+    },
+    {
+      "id": "S34",
+      "category": "SOURCE_QUALITY",
+      "prompt": "search for today's Bangladesh news",
+      "blocking": false,
+      "auditRef": "[15]",
+      "newsQuery": true,
+      "deterministicAssertions": [
+        { "type": "trace.domainsMin", "value": 2 },
+        { "type": "citationsWithinSources" }
+      ]
+    },
+    {
+      "id": "S35",
+      "category": "SOURCE_QUALITY",
+      "prompt": "search for cybersecurity news",
+      "blocking": false,
+      "auditRef": "[15]",
+      "newsQuery": true,
+      "deterministicAssertions": [
+        { "type": "trace.domainsMin", "value": 2 },
+        { "type": "citationsWithinSources" }
+      ]
+    },
+    {
+      "id": "S36",
+      "category": "SOURCE_QUALITY",
+      "prompt": "search the web for quantum computing",
+      "blocking": false,
+      "auditRef": "[16] at least one page actually read",
+      "newsQuery": false,
+      "deterministicAssertions": [
+        { "type": "trace.sourcesReadMin", "value": 1 },
+        { "type": "citationsWithinSources" }
+      ]
+    },
+    {
+      "id": "S37",
+      "category": "SOURCE_QUALITY",
+      "prompt": "search for Python 3.14 release notes",
+      "blocking": false,
+      "auditRef": "[16]",
+      "newsQuery": false,
+      "deterministicAssertions": [
+        { "type": "trace.sourcesReadMin", "value": 1 },
+        { "type": "citationsWithinSources" }
+      ]
+    },
+    {
+      "id": "S38",
+      "category": "SOURCE_QUALITY",
+      "prompt": "what does Wikipedia say about Voyager 1?",
+      "blocking": false,
+      "auditRef": "[16][19] source-specific read",
+      "newsQuery": false,
+      "deterministicAssertions": [
+        { "type": "trace.sourcesReadMin", "value": 1 },
+        { "type": "citationsWithinSources" }
+      ]
+    },
+    {
+      "id": "S39",
+      "category": "SOURCE_QUALITY",
+      "prompt": "search academic papers for transformer architecture",
+      "blocking": false,
+      "auditRef": "[16]",
+      "newsQuery": false,
+      "deterministicAssertions": [
+        { "type": "trace.sourcesReadMin", "value": 1 },
+        { "type": "citationsWithinSources" }
+      ]
+    },
+    {
+      "id": "S40",
+      "category": "SOURCE_QUALITY",
+      "prompt": "find a book about Frankenstein",
+      "blocking": false,
+      "auditRef": "[16]",
+      "newsQuery": false,
+      "deterministicAssertions": [
+        { "type": "trace.sourcesReadMin", "value": 1 },
+        { "type": "citationsWithinSources" }
+      ]
+    }
+  ]
+}
