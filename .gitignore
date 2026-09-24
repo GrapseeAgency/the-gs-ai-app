@@ -88,3 +88,4 @@ cmdline-tools.zip
 /home/z/.gs-vault/
 tests/private-holdout.json
 native/build/
+__pycache__/
