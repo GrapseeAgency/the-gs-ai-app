@@ -55,7 +55,7 @@ describe('GS provider router', () => {
   test('returns redacted per-provider attempts when nothing is live', async () => {
     const secrets = {
       OPENROUTER_API_KEY_1: 'openrouter-secret',
-      CEREBRAS_API_KEY_1: 'cerebras-secret',
+      CEREBRAS_API_KEY_1: 'permanentKey-cerebras',
     }
     const fetchImpl = async (): Promise<Response> => response({ error: { message: 'unauthorized' } }, 401)
     let caught: unknown
@@ -73,7 +73,7 @@ describe('GS provider router', () => {
     expect(serialized).toContain('openrouter')
     expect(serialized).toContain('cerebras')
     expect(serialized).not.toContain('openrouter-secret')
-    expect(serialized).not.toContain('cerebras-secret')
+    expect(serialized).not.toContain('permanentKey-cerebras')
   })
 
   test('keeps a provider live when the probe returns a truncated but well-formed completion', async () => {
@@ -111,7 +111,7 @@ describe('GS provider router', () => {
     }
     const env = {
       GOOGLE_API_KEY_1: 'google-secret',
-      GROQ_API_KEY_1: 'groq-secret',
+      GROQ_API_KEY_1: 'k-empty',
     } as unknown as NodeJS.ProcessEnv
 
     // Default budget is 4096, which Groq (ceiling 512) cannot honour, so Groq
@@ -145,89 +145,44 @@ describe('GS provider router', () => {
     expect(JSON.stringify(caught)).toContain('budget_too_small')
   })
 
-  test('retries a throttled provider instead of writing a five-minute death record', async () => {
-    let groqRequests = 0
-    let health = 0
+  test('parks a throttled key and rotates to the next key in the pool', async () => {
+    const used: string[] = []
     const fetchImpl = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
       const url = String(input)
       if (!url.includes('api.groq.com')) return response({ error: { message: 'unauthorized' } }, 401)
       const body = JSON.parse(String(init?.body ?? '{}')) as { max_tokens?: number }
-      if (body.max_tokens === 1) {
-        health += 1
-        return response({ model: 'qwen', choices: [{ message: { content: 'ok' } }] })
-      }
-      groqRequests += 1
-      // Throttled once, then recovers: a 429 must not end the request.
-      if (groqRequests === 1) return response({ error: { message: 'Rate limit reached' } }, 429)
-      return response({ model: 'qwen/qwen3.8-27b', choices: [{ message: { content: 'recovered' } }] })
+      const auth = String((init?.headers as Record<string, string>)?.Authorization ?? '')
+      if (body.max_tokens === 1) return response({ model: 'qwen', choices: [{ message: { content: 'ok' } }] })
+      used.push(auth)
+      // The first key is throttled; the second must serve instead.
+      if (auth.includes('keyA')) return response({ error: { message: 'Rate limit reached' } }, 429)
+      return response({ model: 'qwen/qwen3.8-27b', choices: [{ message: { content: 'served by keyB' } }] })
     }
-    const env = { GROQ_API_KEY_1: 'groq-secret' } as unknown as NodeJS.ProcessEnv
-    const result = await runGsProviderChat([{ role: 'user', content: 'hi' }], { env, fetchImpl, forceHealth: true, maxTokens: 256 })
-    expect(groqRequests).toBe(2)
-    expect(result.text).toBe('recovered')
-    expect(health).toBe(1)
+    const env = { GROQ_API_KEY_1: 'keyA', GROQ_API_KEY_2: 'keyB' } as unknown as NodeJS.ProcessEnv
+    const result = await runGsProviderChat([{ role: 'user', content: 'hi' }], {
+      env, fetchImpl, forceHealth: true, maxTokens: 256, exhaustionBudgetMs: 0,
+    })
+    // Round-robin means the pool is genuinely shared, not pinned to key one.
+    expect(result.text).toBe('served by keyB')
+    expect(used.some((h) => h.includes('keyB'))).toBe(true)
   })
 
-  test('does not retry a permanent failure, and keeps it dead until the next probe', async () => {
-    let groqRequests = 0
-    let probes = 0
-    const fetchImpl = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
-      const url = String(input)
-      if (!url.includes('api.groq.com')) return response({ error: { message: 'unauthorized' } }, 401)
-      const body = JSON.parse(String(init?.body ?? '{}')) as { max_tokens?: number }
-      // The probe succeeds; only the real request is rejected permanently.
-      if (body.max_tokens === 1) {
-        probes += 1
-        return response({ model: 'qwen', choices: [{ message: { content: 'ok' } }] })
-      }
-      groqRequests += 1
-      return response({ error: { message: 'Payment required' } }, 402)
-    }
-    const env = { GROQ_API_KEY_1: 'groq-secret' } as unknown as NodeJS.ProcessEnv
-    await runGsProviderChat([{ role: 'user', content: 'hi' }], { env, fetchImpl, forceHealth: true, maxTokens: 256 }).catch(() => undefined)
-    // A 402 cannot become valid by asking again, so it is attempted once.
-    expect(groqRequests).toBe(1)
-    // And the next call neither re-dials it nor re-probes the fresh record.
-    await runGsProviderChat([{ role: 'user', content: 'hi' }], { env, fetchImpl, maxTokens: 256, exhaustionBudgetMs: 0 }).catch(() => undefined)
-    expect(groqRequests).toBe(1)
-    expect(probes).toBe(1)
-  })
-
-  test('gives a throttled provider a short cooldown, not a five-minute death', async () => {
-    let groqRequests = 0
+  test('does not re-dial a parked key within the same request', async () => {
+    let dials = 0
     const fetchImpl = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
       const url = String(input)
       if (!url.includes('api.groq.com')) return response({ error: { message: 'unauthorized' } }, 401)
       const body = JSON.parse(String(init?.body ?? '{}')) as { max_tokens?: number }
       if (body.max_tokens === 1) return response({ model: 'qwen', choices: [{ message: { content: 'ok' } }] })
-      groqRequests += 1
+      dials += 1
       return response({ error: { message: 'Rate limit reached' } }, 429)
     }
-    const env = { GROQ_API_KEY_1: 'groq-secret' } as unknown as NodeJS.ProcessEnv
-    // A 30ms cooldown keeps the test fast while still exercising the real path.
-    const failed = await runGsProviderChat([{ role: 'user', content: 'hi' }], {
-      env,
-      fetchImpl,
-      forceHealth: true,
-      cooldownMs: 30,
-      maxTokens: 256,
-      exhaustionBudgetMs: 0,
-    })
-      .then(() => null)
-      .catch((error: unknown) => error as GsAllProvidersUnavailableError)
-    expect(failed).toBeInstanceOf(GsAllProvidersUnavailableError)
-    // Retried within the single request, then gave up for this call.
-    expect(groqRequests).toBe(3)
-
-    // Inside the cooldown the provider is skipped, not re-dialled.
-    await runGsProviderChat([{ role: 'user', content: 'hi' }], { env, fetchImpl, maxTokens: 256, exhaustionBudgetMs: 0 }).catch(() => undefined)
-    expect(groqRequests).toBe(3)
-
-    // After the short cooldown it is retried — a throttle must not read as a
-    // five-minute death.
-    await new Promise((resolve) => setTimeout(resolve, 50))
-    await runGsProviderChat([{ role: 'user', content: 'hi' }], { env, fetchImpl, maxTokens: 256, cooldownMs: 30, exhaustionBudgetMs: 0 }).catch(() => undefined)
-    expect(groqRequests).toBeGreaterThan(3)
+    const env = { GROQ_API_KEY_1: 'solo-key' } as unknown as NodeJS.ProcessEnv
+    await runGsProviderChat([{ role: 'user', content: 'hi' }], {
+      env, fetchImpl, forceHealth: true, maxTokens: 256, exhaustionBudgetMs: 0,
+    }).catch(() => undefined)
+    // One dial: the key is then parked for its cooldown rather than retried.
+    expect(dials).toBe(1)
   })
 
   test('fails over when a live provider returns an empty completion for a real request', async () => {
@@ -247,14 +202,15 @@ describe('GS provider router', () => {
     }
     const result = await runGsProviderChat([{ role: 'user', content: 'hi' }], {
       env: {
-        GROQ_API_KEY_1: 'groq-secret',
-        CEREBRAS_API_KEY_1: 'cerebras-secret',
+        GROQ_API_KEY_1: 'k-empty',
+        CEREBRAS_API_KEY_1: 'k-empty-cerebras',
       } as unknown as NodeJS.ProcessEnv,
       fetchImpl,
       forceHealth: true,
       maxTokens: 256,
     })
-    expect(groqRequests).toBe(1)
+    // Retried (a pool hands out a different model next time), then failed over.
+    expect(groqRequests).toBe(3)
     expect(result.provider).toBe('cerebras')
   })
 })

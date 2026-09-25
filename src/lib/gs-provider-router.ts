@@ -116,7 +116,15 @@ const TRANSIENT_BASE_DELAY_MS = 750
  * retrying.
  */
 function isTransientFailure(attempt: GsProviderAttempt): boolean {
-  if (attempt.code === 'empty_completion' || attempt.code === 'invalid_response') return false
+  if (attempt.code === 'invalid_response') return false
+  // An empty completion from a model POOL (kilo-auto/free picks a different
+  // model per call) is that one model's bad luck, not a dead provider: the next
+  // attempt gets a different model. Treating it as permanent parked Kilo for
+  // five minutes and cascaded the whole router into 503s.
+  if (attempt.code === 'empty_completion') return true
+  // Every key parked: the pool recovers on its own cooldown, so this is a wait,
+  // not a permanent fault.
+  if (attempt.code === 'all_keys_throttled') return true
   if (attempt.code === 'timeout' || attempt.code === 'network_error') return true
   // An HTTP failure carries its status in the code; `status` is only populated
   // when the probe path supplies it. Reading status alone would misclassify a
@@ -349,6 +357,35 @@ function providerKeys(config: ProviderConfig, env: NodeJS.ProcessEnv): string[] 
   return [...found]
 }
 
+/**
+ * Key-level round-robin with per-key cooldown.
+ *
+ * Free tiers meter quota PER KEY, not per IP (verified: 6 keys, 5 answered 200
+ * while the sixth — the one already burned by probing — returned 429). So keys
+ * stack and must all be used, with a throttled key parked briefly rather than
+ * retried. Measured against the pool as a whole.
+ */
+const keyCooldownUntil = new Map<string, number>()
+const KEY_THROTTLE_COOLDOWN_MS = 60_000
+let keyCursor = 0
+
+/** Next usable key, round-robin. Returns undefined when all are cooling. */
+function nextUsableKey(keys: string[], now = Date.now()): string | undefined {
+  if (keys.length === 0) return undefined
+  for (let i = 0; i < keys.length; i += 1) {
+    const key = keys[(keyCursor + i) % keys.length]
+    if ((keyCooldownUntil.get(key) ?? 0) <= now) {
+      keyCursor = (keyCursor + i + 1) % keys.length
+      return key
+    }
+  }
+  return undefined
+}
+
+function parkKey(key: string, now = Date.now()): void {
+  keyCooldownUntil.set(key, now + KEY_THROTTLE_COOLDOWN_MS)
+}
+
 function modelFor(config: ProviderConfig, role: GsRouterRole, env: NodeJS.ProcessEnv): string {
   const envName = `GS_AI_${config.id.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}_${role.toUpperCase()}_MODEL`
   const override = env[envName]
@@ -464,6 +501,18 @@ async function probeProvider(
       model,
     }
   }
+  const probeKey = nextUsableKey(keys)
+  if (!probeKey) {
+    return {
+      provider: config.id,
+      healthy: false,
+      checkedAt,
+      status: null,
+      code: 'all_keys_throttled',
+      message: `${config.id}: every configured key is in throttle cooldown`,
+      model,
+    }
+  }
   try {
     const response = await fetchWithTimeout(
       fetchImpl,
@@ -473,7 +522,7 @@ async function probeProvider(
         headers: {
           Accept: 'application/json',
           'Content-Type': 'application/json',
-          [config.authHeader]: `${config.authPrefix}${keys[0]}`,
+          [config.authHeader]: `${config.authPrefix}${probeKey}`,
         },
         body: JSON.stringify({
           model,
@@ -484,6 +533,7 @@ async function probeProvider(
       },
       HEALTH_TIMEOUT_MS,
     )
+    if (response.status === 429) parkKey(probeKey)
     if (!response.ok) {
       const message = await readErrorMessage(response)
       const code = `http_${response.status}`
@@ -590,6 +640,10 @@ async function callProvider(
   // A missing credential is permanent for this process; retrying it only burns
   // the backoff budget on every request.
   if (keys.length === 0) throw codedError(config.id, `${config.id}: no configured API key`, 'missing_key')
+  const key = nextUsableKey(keys)
+  if (!key) {
+    throw codedError(config.id, `${config.id}: every configured key is in throttle cooldown`, 'all_keys_throttled')
+  }
   const model = modelFor(config, role, env)
   const response = await fetchWithTimeout(
     fetchImpl,
@@ -599,7 +653,7 @@ async function callProvider(
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
-        [config.authHeader]: `${config.authPrefix}${keys[0]}`,
+        [config.authHeader]: `${config.authPrefix}${key}`,
       },
       body: JSON.stringify({
         model,
@@ -611,6 +665,8 @@ async function callProvider(
     },
     options.timeoutMs ?? REQUEST_TIMEOUT_MS,
   )
+  // Quota is metered per key, so a throttle is a statement about THIS key only.
+  if (response.status === 429) parkKey(key)
   if (!response.ok) {
     const message = await readErrorMessage(response)
     const error = new Error(safeMessage(message, `${config.id}: HTTP ${response.status}`))
