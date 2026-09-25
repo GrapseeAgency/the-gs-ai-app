@@ -89,3 +89,5 @@ cmdline-tools.zip
 tests/private-holdout.json
 native/build/
 __pycache__/
+/data/.provider-catalog.json
+/data/.provider-catalog.json.*.tmp

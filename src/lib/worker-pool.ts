@@ -28,6 +28,7 @@ import { publishEnd } from '@/lib/stream-broker'
 import { produceRun } from '@/lib/turn-producer'
 import { loadKeyPool } from '@/lib/keypool'
 import { freeOnlyEnabled, queuedRunIsDue } from '@/lib/capacity-policy'
+import { ensureProviderCatalogSync } from '@/lib/provider-catalog-store'
 
 const WORKER_CONCURRENCY = Number(process.env.GS_WORKER_CONCURRENCY ?? 3)
 const TICK_MS = 1_000
@@ -130,6 +131,7 @@ async function recoverStuckJobs(): Promise<void> {
  */
 export function ensureWorkerLoop(): void {
   if (loopState.__gsWorkerLoop) return
+  ensureProviderCatalogSync()
   loopState.__gsWorkerLoop = { active: 0, timer: null as unknown as NodeJS.Timeout, recoveryTimer: null as unknown as NodeJS.Timeout }
   loopState.__gsWorkerLoop.timer = setInterval(() => void tick(), TICK_MS)
   loopState.__gsWorkerLoop.recoveryTimer = setInterval(() => void recoverStuckJobs(), RECOVERY_INTERVAL_MS)
