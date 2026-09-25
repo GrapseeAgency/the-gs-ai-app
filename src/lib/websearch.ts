@@ -29,6 +29,7 @@
  */
 
 import ZAI from 'z-ai-web-dev-sdk'
+import { freeOnlyEnabled } from '@/lib/capacity-policy'
 
 // ---------------------------------------------------------------------------
 // Bounds (§8) — every limit is explicit; nothing is unbounded.
@@ -363,7 +364,24 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   ])
 }
 
+async function fallbackReadPage(url: string): Promise<unknown> {
+  if (!isSafePublicHttpUrl(url)) throw new Error('unsafe page URL')
+  const response = await fetch(url, {
+    headers: { 'User-Agent': UA },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  })
+  const html = (await response.text()).slice(0, 2_000_000)
+  return { code: response.status, status: response.status, data: { html } }
+}
+
 async function defaultDeps(): Promise<SearchDeps> {
+  if (freeOnlyEnabled()) {
+    return {
+      search: async (query, num) => fallbackSearchRaw(query, num),
+      readPage: fallbackReadPage,
+      now: () => new Date(),
+    }
+  }
   const zai = await ZAI.create()
   return {
     search: async (query, num) => {
