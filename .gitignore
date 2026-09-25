@@ -89,3 +89,6 @@ cmdline-tools.zip
 tests/private-holdout.json
 native/build/
 __pycache__/
+
+keys.json
+.venv-bench/
