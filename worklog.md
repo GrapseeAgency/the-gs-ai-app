@@ -4184,3 +4184,18 @@ Stage Summary:
 - BUILT, COMMITTED, PUSHED, VERIFIED this session: scaffold lever layer (5d598db), IFBench official harness (80405b3 + import fix 84faf9e), tau2 data provisioning, suite-defaults merge/pacing (62c5e55), workflow scaffold+benchmarks inputs + if:always() artifact upload, honest CLI exit codes, C++ native engine (a8ea7d2, ASan-clean 14/14, honest overhead artifact), baseline assembly tooling, agent-browser app check (clean).
 - BLOCKED ON PROVIDER QUOTA — benchmark execution intentionally STOPPED per task rule (no local fallback). Cron job 412546 (15-min webDevReview) is active to resume the sequence when quota returns: probe shim → dispatch baseline → assemble → aci → verification → context → router, each with delta+CI vs baseline and keep/revert verdicts.
 - To unblock tau2: fund one OpenRouter key (raw 402 on gpt-4o-mini user-sim; never silently substituted).
+
+---
+Task ID: SCAFFOLD-BENCH (resume 1 — workflow trigger fix)
+Agent: main (Z.ai Code)
+Task: Git sync + diagnose/fix benchmark.yml 0-job startup failures + resume the baseline dispatch sequence.
+
+Work Log:
+- Git synced as requested: local was 1 ahead / 90 behind; rebased (superseded runtime-only commit skipped), pushed 27c15d2. Tree clean, backup tag backup/local-01a62e1 local-only.
+- z-ai quota recovered: shim /api/v1/openai/models healthy, zero [ZAI-BREAKER]/BENCH-SHIM-ERROR lines in dev.log at 15:22Z (lockdown was 02:00-06:58Z).
+- DIAGNOSED the 0-job startup failures (raw evidence, runs API): since a5c6c71 every push to main fired a 0-job failure run of benchmark.yml (36081243077, 36082501113, 36105391647, 36105420784, 36153729479) despite `push: tags: ['v*']`; all pre-a5c6c71 dispatch runs had jobs. a5c6c71's constructs (benchmarks input + eval job-if with github.event.inputs ||/==null chains) were NEVER executed by a dispatch run — unproven.
+- FIX (one point): removed push/tag triggers entirely (workflow is dispatch-only by task design: sandbox writes code + dispatches, Actions executes) and rewrote eval job-if to the documented form `inputs.benchmarks == '' || contains(inputs.benchmarks, matrix.benchmark)` (inputs context is documented for jobs.<job_id>.if; SKIP-ALL convenience dropped, never dispatched).
+- Eval gate scheduled run 36110802093: hermetic + live-60-case jobs green; Welch t-test job red — separate workflow, noted for later pass.
+
+Stage Summary:
+- benchmark.yml now dispatch-only with a proven-context subset filter; next: push, verify no push-run fires, then dispatch baseline subset ifbench,tau2_telecom (resume step 1) and report HTTP status + run URL.
