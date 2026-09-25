@@ -1,0 +1,79 @@
+{
+  "artifact": "baseline-scaffold-v1",
+  "generated_at": "2026-09-25T06:58:24+00:00",
+  "rule_reminder": [
+    "same model throughout (served id recorded per run)",
+    "every score carries a CI (hard rule 3)",
+    "underpowered benchmarks cannot crown winners (stats/power)",
+    "BLOCKED entries carry the raw reason (hard rule 5)"
+  ],
+  "latency_scaffold_calls": {
+    "source": "shim dev.log (142 calls, profile=baseline)",
+    "p50_ms": 20438,
+    "p95_ms": 56686
+  },
+  "benchmarks": [
+    {
+      "benchmark": "ifbench",
+      "model": "gs-ai",
+      "scaffold": "baseline",
+      "status": "BLOCKED",
+      "n_samples": 300,
+      "metric": "accuracy",
+      "git_commit": "b997585ba50e",
+      "dataset_revision": "unresolved-at-run-start",
+      "harness": "inspect_ai",
+      "harness_version": "0.3.268",
+      "docker_image_digest": "sha256:a1eedebd6aac70044ad61ac0c7f20633f223771c5ef51f0d962bd8f176dcd422",
+      "raw_log_url": "ifbench__gs-ai__1790297619.rawlog.txt",
+      "run_id": "08f83061-e7cf-4b1c-99c0-c97480be5edf",
+      "raw_reason": "RuntimeError: inspect eval exited 1 (see raw log)"
+    },
+    {
+      "benchmark": "tau2_telecom",
+      "model": "gs-ai",
+      "scaffold": "baseline",
+      "status": "BLOCKED",
+      "n_samples": 50,
+      "metric": "pass_k",
+      "git_commit": "b997585ba50e",
+      "dataset_revision": "unresolved-at-run-start",
+      "harness": "tau2",
+      "harness_version": "1.0.1",
+      "docker_image_digest": "sha256:a1eedebd6aac70044ad61ac0c7f20633f223771c5ef51f0d962bd8f176dcd422",
+      "raw_log_url": "tau2_telecom__gs-ai__1790297621.rawlog.txt",
+      "run_id": "14a6283d-b369-4c8f-ab4d-e1c6bffc0a5d",
+      "raw_reason": "RuntimeError: tau2 exited 1 (see raw log)"
+    },
+    {
+      "benchmark": "gpqa_diamond",
+      "model": "gs-ai",
+      "scaffold": "baseline",
+      "status": "BLOCKED",
+      "n_samples": 198,
+      "raw_reason": "eval job CANCELLED at the 360-min GitHub-hosted runner cap: z-ai account-level 429s short-circuited the primary provider from ~02:00Z to 06:50Z (breaker probe log: '[ZAI-BREAKER] 429 observed' continuous); shim completed 245 total calls in the earlier burst window (00:50-02:00Z) but inspect finalizes eval logs only at eval completion, so 0 samples were recoverable from the partial logs (inspect status=started, samples=0 \u2014 verified in artifacts results-gpqa_diamond-gs-ai-baseline / results-aime-gs-ai-baseline).",
+      "run_id": "36079361754",
+      "git_commit": "b997585b"
+    },
+    {
+      "benchmark": "aime",
+      "model": "gs-ai",
+      "scaffold": "baseline",
+      "status": "BLOCKED",
+      "n_samples": 30,
+      "raw_reason": "eval job CANCELLED at the 360-min GitHub-hosted runner cap: z-ai account-level 429s short-circuited the primary provider from ~02:00Z to 06:50Z (breaker probe log: '[ZAI-BREAKER] 429 observed' continuous); shim completed 245 total calls in the earlier burst window (00:50-02:00Z) but inspect finalizes eval logs only at eval completion, so 0 samples were recoverable from the partial logs (inspect status=started, samples=0 \u2014 verified in artifacts results-gpqa_diamond-gs-ai-baseline / results-aime-gs-ai-baseline).",
+      "run_id": "36079361754",
+      "git_commit": "b997585b"
+    }
+  ],
+  "power_analysis": [],
+  "blocked_count": 4,
+  "scored_count": 0,
+  "notes": "Baseline arm run 36079361754 (fixed harness, sha b997585b). OUTCOME: zero scored benchmarks \u2014 z-ai account-level 429s locked the provider from ~02:00Z; gpqa/aime jobs were cancelled at the 6h hosted-runner cap with inspect logs unfinalized (0 recoverable samples; ~245 real calls' answers lost to inspect buffering). ifbench BLOCKED on ImportError fixed in 84faf9e AFTER this dispatch (re-dispatch required); tau2 BLOCKED on missing data dir fixed post-dispatch, and will then record the true funding blocker (user-sim 402) unless an OpenRouter key is funded. Per rule 5 no score is estimated; per the task rule benchmark execution stops here until provider quota returns \u2014 no local fallback.",
+  "quota_timeline": {
+    "provider": "z-ai (primary; gs-ai tier)",
+    "locked_since": "~2026-09-25T02:00Z (account-level 429)",
+    "still_locked_at": "2026-09-25T06:58Z (every 10-min breaker probe returned 429)",
+    "working_burst_before_lock": "00:50-02:00Z: 245 successful shim calls"
+  }
+}

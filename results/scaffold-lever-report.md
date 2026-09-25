@@ -16,7 +16,7 @@ time.
 | Run | Arm | Dispatched (UTC) | HTTP | Head sha | Outcome |
 |-----|-----|------------------|------|----------|---------|
 | 36043125749 | baseline (run 9, pre-fix harness) | 2026-09-24 18:42 | 204 | e1bc2c4 | FAILED: gpqa/aime cancelled at 6h runner cap under z-ai throttle (~245 real calls); ifbench BLOCKED (task missing); tau2 BLOCKED (websockets dep, fixed) |
-| 36079361754 | baseline (fixed harness) | 2026-09-25 00:50 | 204 | b997585b | in flight |
+| 36079361754 | baseline (fixed harness) | 2026-09-25 00:50 | 204 | b997585b | FAILED: ifbench ImportError (fixed 84faf9e); tau2 data-dir (fixed); gpqa/aime CANCELLED at 6h cap — z-ai 429 lockdown 02:00-06:50Z, 0 recoverable samples |
 
 ## Execution architecture
 
@@ -47,10 +47,10 @@ Status marks: ✅ scored · ⏳ run in flight · 🚫 BLOCKED (raw reason in art
 
 | Lever          | Benchmark    | Score [CI]          | Δ vs baseline       | Cost Δ | Latency Δ | Verdict |
 |----------------|--------------|---------------------|---------------------|--------|-----------|---------|
-| Baseline       | gpqa_diamond | ⏳ run 36079361754  | —                   | —      | —         | —       |
-| Baseline       | aime         | ⏳ run 36079361754  | —                   | —      | —         | —       |
-| Baseline       | ifbench      | ⏳ run 36079361754 (run-9 attempt: task missing, fixed 80405b3) | — | — | — | — |
-| Baseline       | tau2_telecom | ⏳ run 36079361754 (expected BLOCKED: user-sim unfunded) | — | — | — | — |
+| Baseline       | gpqa_diamond | 🚫 BLOCKED — z-ai 429 lockdown + 6h runner cap (tests/baseline-scaffold-v1.json) | — | — | — | pending quota |
+| Baseline       | aime         | 🚫 BLOCKED — same (0 recoverable samples from partial inspect logs) | — | — | — | pending quota |
+| Baseline       | ifbench      | 🚫 BLOCKED this run (ImportError; FIXED 84faf9e — needs re-dispatch) | — | — | — | pending quota |
+| Baseline       | tau2_telecom | 🚫 BLOCKED this run (data dir; FIXED post-dispatch) → then true blocker = user-sim 402 (needs funded OpenRouter key) | — | — | — | pending funding |
 | ACI            | all          | pending dispatch    | —                   | —      | —         | —       |
 | Verification   | all          | pending dispatch    | —                   | —      | —         | —       |
 | Context        | all          | pending dispatch    | —                   | —      | —         | —       |
@@ -82,3 +82,25 @@ UNDERPOWERED for +5pt claims. The scorecard's power section refuses winner
 declarations on underpowered n (stats/power.py). IFBench at n=300 is powered
 for ~±5-6pt at typical baselines; AIME at n=30 resolves only very large
 effects (~±18pt) — flagged.
+
+## BLOCKER (2026-09-25T07:00Z) — exactly what is broken
+
+The z-ai account (primary provider for the gs-ai tier) has returned
+account-level 429 on EVERY call since ~02:00Z (7+ hours). Evidence:
+`dev.log` `[ZAI-BREAKER] 429 observed` on every 10-minute probe, plus two
+Actions runs burning their 6-hour caps in breaker-cooldown cycles (run 9:
+~245 calls in bursts then lockdown; run 36079361754: 245→245 calls).
+
+Per the task's own rule ("If the workflow cannot run for a reason you cannot
+fix, say exactly what is broken and stop. Do not fall back to local"):
+benchmark execution is STOPPED until provider quota returns. The sandbox
+breaker discipline was never bypassed.
+
+## Resume sequence (when quota returns — verify with ONE shim probe first)
+
+1. Probe: `curl -s -X POST http://localhost:3000/api/v1/openai/chat/completions -H 'Content-Type: application/json' -d '{"model":"gs-ai","messages":[{"role":"user","content":"reply OK"}],"max_tokens":8}'` — a 200 means quota is back.
+2. Dispatch baseline (fixed harness completes all four rows):
+   `curl -X POST -H "Authorization: token $PAT" -H "Accept: application/vnd.github+json" https://api.github.com/repos/GrapseeAgency/the-gs-ai-app/actions/workflows/benchmark.yml/dispatches -d '{"ref":"main","inputs":{"model":"gs-ai","suite":"knowledge","scaffold":"baseline"}}'`
+3. Download artifacts → `python3 scripts/assemble-baseline.py --run-dir <artifacts> --output tests/baseline-scaffold-v1.json`
+4. Then one arm per dispatch, in order: `scaffold=aci` → `verification` → `context` → `router`; after each: assemble + `stats/regression.py` delta vs baseline + verdict in this table.
+5. tau2 stays BLOCKED unless an OpenRouter key with user-sim funding is provisioned (raw 402) — never silently substituted.
