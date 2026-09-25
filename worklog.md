@@ -4199,3 +4199,14 @@ Work Log:
 
 Stage Summary:
 - benchmark.yml now dispatch-only with a proven-context subset filter; next: push, verify no push-run fires, then dispatch baseline subset ifbench,tau2_telecom (resume step 1) and report HTTP status + run URL.
+
+---
+Task ID: SCAFFOLD-BENCH (resume 2 — matrix-in-job-if root cause)
+Agent: main (Z.ai Code)
+Task: Root-cause the 0-job startup failures via dispatch API validation; fix and dispatch baseline subset.
+
+Work Log:
+- 4ab6e53 (trigger removal) did NOT stop push-runs: run 36154781258 fired on that push, 0 jobs — trigger definition was not the cause.
+- DECISIVE: dispatch API returned 422 with the parser's own message: "(Line: 112, Col: 9): Unrecognized named-value: 'matrix'" in `inputs.benchmarks == '' || contains(inputs.benchmarks, matrix.benchmark)` — the `matrix` context is NOT valid in jobs.<job_id>.if (a5c6c71 shipped the same construct; that invalidity is why GitHub startup-failed every push and would 422 every dispatch).
+- FIX: removed the eval job-level `if` entirely; subset filtering moved to STEP-level conditions (checkout → subset step emits run=true/false → setup-python/install/run gated on steps.subset.outputs.run); non-selected legs write an honest SKIPPED_BY_SUBSET result JSON (never silent) and still upload artifacts (if:always()).
+- Commit + push, then re-dispatch (API 422/204 is the file-validity verdict).
