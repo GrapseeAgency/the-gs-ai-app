@@ -706,5 +706,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     return int(args.func(args) or 0)
 
 
+def cli(argv: Optional[List[str]] = None) -> int:
+    """Setuptools console-script alias for the documented ``cli.main:cli`` entry."""
+    return main(argv)
+
+
 if __name__ == "__main__":
     raise SystemExit(main())

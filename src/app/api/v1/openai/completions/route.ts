@@ -75,8 +75,10 @@ export async function POST(req: NextRequest) {
   }
 
   const model = (body.model ?? 'gs-ai').trim()
-  const isVendor = model.includes('/')
-  if (!isVendor && !['gs-ai', 'gs-ai-flash', 'gs-ai-thinking'].includes(model)) {
+  const normalized = model.replace(/^openai-api\/openai\//, '').replace(/^openai\//, '')
+  const isGsModel = ['gs-ai', 'gs-ai-flash', 'gs-ai-thinking'].includes(normalized)
+  const isVendor = !isGsModel && model.includes('/')
+  if (!isGsModel && !isVendor) {
     return openAiError(404, 'model_not_found', `Unknown model '${model}'.`)
   }
 
@@ -99,7 +101,7 @@ export async function POST(req: NextRequest) {
         servedModel = `openrouter/${result.model ?? model}`
       } else {
         const result = await runGsProviderChat(messages, {
-          role: model === 'gs-ai-flash' ? 'cheap' : model === 'gs-ai-thinking' ? 'planner' : 'generator',
+          role: normalized === 'gs-ai-flash' ? 'cheap' : normalized === 'gs-ai-thinking' ? 'planner' : 'generator',
           temperature: body.temperature ?? 0.2,
           maxTokens: body.max_tokens,
         })

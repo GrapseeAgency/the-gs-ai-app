@@ -163,7 +163,8 @@ function resolveShimModelLocal(model: string | undefined):
   | { backend: 'openrouter'; models: string[] }
   | null {
   const m = (model ?? 'gs-ai').trim()
-  switch (m) {
+  const normalized = m.replace(/^openai-api\/openai\//, '').replace(/^openai\//, '')
+  switch (normalized) {
     case 'gs-ai':
       return { backend: 'gs-ai', role: 'generator' }
     case 'gs-ai-flash':

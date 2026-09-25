@@ -37,6 +37,12 @@ export type GsHealthRecord = {
   code: string
   message: string
   model: string
+  /**
+   * Absolute time before which a known-dead provider is skipped. Set only for
+   * transient failures (throttle, timeout, 5xx) so they recover on their own;
+   * permanent failures carry no retry time and wait for the next health probe.
+   */
+  retryAfter?: number
 }
 
 export type GsProviderChatResult = {
@@ -66,12 +72,47 @@ type ProviderConfig = {
   keyPrefixes: readonly string[]
   healthModel: string
   models: Record<GsRouterRole, string>
+  /**
+   * Hard ceiling for a single completion. Free tiers enforce a per-minute
+   * output-token limit and reject an oversized request outright, so a request
+   * that omits `max_tokens` can be refused by the provider's own default.
+   */
+  maxOutputTokens: number
   baseUrlEnv?: string
 }
 
 const HEALTH_TTL_MS = 5 * 60 * 1_000
 const HEALTH_TIMEOUT_MS = 12_000
 const REQUEST_TIMEOUT_MS = 90_000
+/** Used when the caller does not pin a budget, clamped per provider. */
+const DEFAULT_MAX_TOKENS = 1_000
+/**
+ * A throttled provider is not a dead provider. Rate limits and 5xx recover on
+ * their own, so they earn a short cooldown instead of poisoning the health
+ * cache for the full TTL — otherwise one burst turns into five minutes of 503.
+ */
+const TRANSIENT_COOLDOWN_MS = 15_000
+const TRANSIENT_MAX_ATTEMPTS = 3
+const TRANSIENT_BASE_DELAY_MS = 750
+
+/**
+ * `false` means "this will not fix itself": auth, quota and missing-resource
+ * errors, plus malformed/empty content, which repeats deterministically for
+ * the same request. Everything else (429, 5xx, timeouts, transport) is worth
+ * retrying.
+ */
+function isTransientFailure(attempt: GsProviderAttempt): boolean {
+  if (attempt.code === 'empty_completion' || attempt.code === 'invalid_response') return false
+  if (attempt.code === 'timeout' || attempt.code === 'network_error') return true
+  // An HTTP failure carries its status in the code; `status` is only populated
+  // when the probe path supplies it. Reading status alone would misclassify a
+  // 402 as transient and retry a dead credential.
+  const status = attempt.status ?? /^http_(\d{3})$/.exec(attempt.code)?.[1]
+  if (status === undefined) return false
+  const code = Number(status)
+  if (code === 429 || code === 408) return true
+  return code >= 500
+}
 
 // Priority is intentional: Google → Groq → Cerebras → OpenRouter →
 // SiliconFlow → HF → the rest. BFL is last because its public API is image
@@ -89,6 +130,7 @@ const PROVIDER_CONFIGS: readonly ProviderConfig[] = [
       cheap: 'gemini-2.5-flash',
       planner: 'gemini-2.5-pro',
     },
+    maxOutputTokens: 8_192,
     baseUrlEnv: 'GS_AI_GOOGLE_BASE_URL',
   },
   {
@@ -103,6 +145,9 @@ const PROVIDER_CONFIGS: readonly ProviderConfig[] = [
       cheap: 'openai/gpt-oss-20b',
       planner: 'qwen/qwen3.8-27b',
     },
+    // Groq's on_demand tier enforces OTPM=1000: any request asking for more
+    // output tokens is rejected before generation starts.
+    maxOutputTokens: 1_000,
     baseUrlEnv: 'GS_AI_GROQ_BASE_URL',
   },
   {
@@ -117,6 +162,7 @@ const PROVIDER_CONFIGS: readonly ProviderConfig[] = [
       cheap: 'gpt-oss-120b',
       planner: 'qwen-3.8-27b',
     },
+    maxOutputTokens: 8_192,
     baseUrlEnv: 'GS_AI_CEREBRAS_BASE_URL',
   },
   {
@@ -131,6 +177,7 @@ const PROVIDER_CONFIGS: readonly ProviderConfig[] = [
       cheap: 'aion-labs/aion-3.5-mini',
       planner: 'qwen/qwen3.8-max-prime',
     },
+    maxOutputTokens: 8_192,
     baseUrlEnv: 'GS_AI_OPENROUTER_BASE_URL',
   },
   {
@@ -145,6 +192,7 @@ const PROVIDER_CONFIGS: readonly ProviderConfig[] = [
       cheap: 'Qwen/Qwen3-8B',
       planner: 'Qwen/Qwen3-32B',
     },
+    maxOutputTokens: 4_096,
     baseUrlEnv: 'GS_AI_SILICONFLOW_BASE_URL',
   },
   {
@@ -159,6 +207,7 @@ const PROVIDER_CONFIGS: readonly ProviderConfig[] = [
       cheap: 'meta-llama/Llama-3.1-8B-Instruct',
       planner: 'meta-llama/Llama-3.1-8B-Instruct',
     },
+    maxOutputTokens: 2_048,
     baseUrlEnv: 'GS_AI_HUGGINGFACE_BASE_URL',
   },
   {
@@ -173,6 +222,7 @@ const PROVIDER_CONFIGS: readonly ProviderConfig[] = [
       cheap: 'abab6.5s-chat',
       planner: 'abab6.5s-chat',
     },
+    maxOutputTokens: 4_096,
     baseUrlEnv: 'GS_AI_DMX_BASE_URL',
   },
   {
@@ -187,6 +237,7 @@ const PROVIDER_CONFIGS: readonly ProviderConfig[] = [
       cheap: 'Llama-3.3-70B-Instruct',
       planner: 'Llama-3.3-70B-Instruct',
     },
+    maxOutputTokens: 2_048,
     baseUrlEnv: 'GS_AI_HELMHOLTZ_BASE_URL',
   },
   {
@@ -201,6 +252,7 @@ const PROVIDER_CONFIGS: readonly ProviderConfig[] = [
       cheap: 'flux-pro',
       planner: 'flux-pro',
     },
+    maxOutputTokens: 1_024,
     baseUrlEnv: 'GS_AI_BFL_BASE_URL',
   },
 ]
@@ -219,6 +271,8 @@ type RouterOptions = {
   fetchImpl?: FetchLike
   timeoutMs?: number
   forceHealth?: boolean
+  /** Test seam: how long a transient failure is skipped. */
+  cooldownMs?: number
 }
 
 const globalState = globalThis as typeof globalThis & { __gsProviderRouterState?: RuntimeState }
@@ -313,14 +367,32 @@ async function fetchWithTimeout(
   }
 }
 
-function parseChatResponse(payload: unknown, provider: GsProviderId, fallbackModel: string): { text: string; model: string } {
-  if (!payload || typeof payload !== 'object') throw new Error(`${provider}: invalid JSON response`)
+function codedError(provider: GsProviderId, message: string, code: string): Error {
+  const error = new Error(message)
+  ;(error as Error & { code?: string }).code = code
+  return error
+}
+
+function parseChatResponse(
+  payload: unknown,
+  provider: GsProviderId,
+  fallbackModel: string,
+  options: { requireText?: boolean } = {},
+): { text: string; model: string } {
+  if (!payload || typeof payload !== 'object') throw codedError(provider, `${provider}: invalid JSON response`, 'invalid_response')
   const record = payload as { choices?: unknown; model?: unknown }
   const choice = Array.isArray(record.choices) ? record.choices[0] : null
-  const message = choice && typeof choice === 'object' ? (choice as { message?: unknown }).message : null
+  if (!choice || typeof choice !== 'object') {
+    throw codedError(provider, `${provider}: no completion choice in response`, 'invalid_response')
+  }
+  const message = (choice as { message?: unknown }).message
   const textValue = message && typeof message === 'object' ? (message as { content?: unknown }).content : null
   const text = typeof textValue === 'string' ? textValue : ''
-  if (!text) throw new Error(`${provider}: empty completion`)
+  // A well-formed choice with no text is a truncated completion, not a dead
+  // provider: the 1-token health probe and thinking models legitimately return
+  // `finish_reason: length` with empty content. Only the real request path
+  // requires usable text.
+  if (!text && options.requireText) throw codedError(provider, `${provider}: empty completion`, 'empty_completion')
   const model = typeof record.model === 'string' && record.model.trim() ? record.model.trim() : fallbackModel
   return { text, model }
 }
@@ -366,14 +438,22 @@ async function probeProvider(
     )
     if (!response.ok) {
       const message = await readErrorMessage(response)
+      const code = `http_${response.status}`
+      const attempt: GsProviderAttempt = {
+        provider: config.id,
+        code,
+        status: response.status,
+        message: safeMessage(message, `${config.id}: health check failed`),
+      }
       return {
         provider: config.id,
         healthy: false,
         checkedAt,
         status: response.status,
-        code: `http_${response.status}`,
-        message: safeMessage(message, `${config.id}: health check failed`),
+        code,
+        message: attempt.message,
         model,
+        ...retryAfterFor(attempt, checkedAt),
       }
     }
     const payload: unknown = await response.json()
@@ -389,8 +469,14 @@ async function probeProvider(
       code: attempt.code,
       message: attempt.message,
       model,
+      ...retryAfterFor(attempt, checkedAt),
     }
   }
+}
+
+/** A transient failure is skipped only until its short cooldown expires. */
+function retryAfterFor(attempt: GsProviderAttempt, now = Date.now(), cooldownMs = TRANSIENT_COOLDOWN_MS): { retryAfter?: number } {
+  return isTransientFailure(attempt) ? { retryAfter: now + cooldownMs } : {}
 }
 
 function freshRecords(now = Date.now()): boolean {
@@ -399,6 +485,17 @@ function freshRecords(now = Date.now()): boolean {
     if (now - record.checkedAt >= HEALTH_TTL_MS) return false
   }
   return true
+}
+
+/** A dead provider is skippable while it is in cooldown, or dead for the full TTL. */
+function skipUntil(record: GsHealthRecord | undefined, now = Date.now()): boolean {
+  if (!record) return true
+  if (record.healthy) return false
+  // A transient failure is skipped only until its cooldown expires; once it
+  // does, the provider is worth dialling again without waiting for a re-probe.
+  if (record.retryAfter !== undefined) return now < record.retryAfter
+  // A permanent failure waits for the record to go stale and be re-probed.
+  return now - record.checkedAt < HEALTH_TTL_MS
 }
 
 export function getGsProviderHealth(): GsHealthRecord[] {
@@ -443,6 +540,11 @@ async function callProvider(
   const keys = providerKeys(config, env)
   if (keys.length === 0) throw new Error(`${config.id}: no configured API key`)
   const model = modelFor(config, role, env)
+  // Always send an explicit budget, clamped to the provider ceiling. Omitting
+  // it lets the provider apply its own default, which on rate-limited tiers is
+  // larger than the account is allowed to request and is rejected pre-flight.
+  const requested = options.maxTokens ?? DEFAULT_MAX_TOKENS
+  const maxTokens = Math.max(1, Math.min(requested, config.maxOutputTokens))
   const response = await fetchWithTimeout(
     fetchImpl,
     baseUrlFor(config, env),
@@ -457,7 +559,7 @@ async function callProvider(
         model,
         messages,
         temperature: options.temperature ?? 0.2,
-        ...(options.maxTokens !== undefined ? { max_tokens: options.maxTokens } : {}),
+        max_tokens: maxTokens,
         stream: false,
       }),
     },
@@ -470,7 +572,7 @@ async function callProvider(
     throw error
   }
   const payload: unknown = await response.json()
-  const parsed = parseChatResponse(payload, config.id, model)
+  const parsed = parseChatResponse(payload, config.id, model, { requireText: true })
   return {
     provider: config.id,
     model: parsed.model,
@@ -492,7 +594,7 @@ export async function runGsProviderChat(
   const attempts: GsProviderAttempt[] = []
   for (const config of PROVIDER_CONFIGS) {
     const record = state.records.get(config.id)
-    if (!record?.healthy) {
+    if (skipUntil(record)) {
       attempts.push({
         provider: config.id,
         code: record?.code ?? 'unchecked',
@@ -501,17 +603,34 @@ export async function runGsProviderChat(
       })
       continue
     }
-    try {
-      const result = await callProvider(config, role, messages, options, fetchImpl)
-      return result
-    } catch (error) {
-      const attempt = attemptFromError(config, error)
-      attempts.push(attempt)
-      const current = state.records.get(config.id)
-      if (current) {
-        state.records.set(config.id, { ...current, healthy: false, checkedAt: Date.now(), code: attempt.code, status: attempt.status, message: attempt.message })
+    for (let tries = 1; tries <= TRANSIENT_MAX_ATTEMPTS; tries += 1) {
+      try {
+        return await callProvider(config, role, messages, options, fetchImpl)
+      } catch (error) {
+        const attempt = attemptFromError(config, error)
+        attempts.push(attempt)
+        const now = Date.now()
+        const transient = isTransientFailure(attempt)
+        const current = state.records.get(config.id)
+        if (current) {
+          state.records.set(config.id, {
+            ...current,
+            healthy: false,
+            checkedAt: now,
+            code: attempt.code,
+            status: attempt.status,
+            message: attempt.message,
+            ...retryAfterFor(attempt, now, options.cooldownMs),
+          })
+        }
+        console.warn(
+          `GS-PROVIDER-${transient ? 'THROTTLED' : 'DEAD'} provider=${config.id} code=${attempt.code} status=${attempt.status ?? 'none'} try=${tries}/${TRANSIENT_MAX_ATTEMPTS}`,
+        )
+        // Only transient failures are worth another attempt; a 401/402 will
+        // not become valid by asking again.
+        if (!transient || tries === TRANSIENT_MAX_ATTEMPTS) break
+        await new Promise((resolve) => setTimeout(resolve, TRANSIENT_BASE_DELAY_MS * 2 ** (tries - 1)))
       }
-      console.warn(`GS-PROVIDER-DEAD provider=${config.id} code=${attempt.code} status=${attempt.status ?? 'none'}`)
     }
   }
   throw new GsAllProvidersUnavailableError(attempts)

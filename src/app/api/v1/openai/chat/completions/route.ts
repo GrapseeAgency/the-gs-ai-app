@@ -111,7 +111,8 @@ export function resolveShimModel(model: string | undefined): ResolvedShimModel |
 }
 
 function resolveShimBaseModel(m: string): ResolvedModel | null {
-  switch (m) {
+  const normalized = m.replace(/^openai-api\/openai\//, '').replace(/^openai\//, '')
+  switch (normalized) {
     case 'gs-ai':
       return { backend: 'gs-ai', role: 'generator' }
     case 'gs-ai-flash':
