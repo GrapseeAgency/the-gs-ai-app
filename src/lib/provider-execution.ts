@@ -145,6 +145,13 @@ export function isGenericTextProviderId(value: unknown): value is GenericTextPro
   )
 }
 
+/** Resolve aliases without making an unsupported provider look supported. */
+export function isGenericTextProviderSupported(provider: unknown): boolean {
+  if (typeof provider !== 'string') return false
+  const canonical = resolveProviderId(provider)
+  return canonical !== null && isGenericTextProviderId(canonical)
+}
+
 export type ProviderExecutionErrorCode =
   | 'invalid-options'
   | 'unsupported-provider'
@@ -423,7 +430,6 @@ function normalizeMessages(
 function validateOptionalNumber(
   value: number | undefined,
   provider: ProviderId,
-  name: string,
   minimum = 0,
   maximum = Number.MAX_SAFE_INTEGER,
 ): void {
@@ -431,8 +437,6 @@ function validateOptionalNumber(
   if (!Number.isFinite(value) || value < minimum || value > maximum) {
     throw new ProviderExecutionError('invalid-options', provider)
   }
-  // Keep the name out of the error message; it is an internal validation hint.
-  void name
 }
 
 function headersToRecord(headers: HeadersInit | undefined): Record<string, string> {
@@ -506,10 +510,10 @@ function buildPayload(
   stream: boolean,
   request: NormalizedRequest,
 ): Record<string, unknown> {
-  validateOptionalNumber(request.temperature, provider, 'temperature')
-  validateOptionalNumber(request.topP, provider, 'topP', 0, 1)
-  validateOptionalNumber(request.maxTokens, provider, 'maxTokens', 1, 1_000_000)
-  validateOptionalNumber(request.seed, provider, 'seed', -(Number.MAX_SAFE_INTEGER), Number.MAX_SAFE_INTEGER)
+  validateOptionalNumber(request.temperature, provider)
+  validateOptionalNumber(request.topP, provider, 0, 1)
+  validateOptionalNumber(request.maxTokens, provider, 1, 1_000_000)
+  validateOptionalNumber(request.seed, provider, -(Number.MAX_SAFE_INTEGER), Number.MAX_SAFE_INTEGER)
   if (request.stop !== undefined) {
     const validStop =
       typeof request.stop === 'string' ||
@@ -528,16 +532,16 @@ function buildPayload(
   return payload
 }
 
-function selectFetch(request: NormalizedRequest): ProviderExecutionFetch {
+function selectFetch(request: NormalizedRequest, provider: ProviderId): ProviderExecutionFetch {
   const candidate = request.fetchImpl ?? request.fetch
   if (candidate !== undefined) {
     if (typeof candidate !== 'function') {
-      throw new ProviderExecutionError('invalid-options')
+      throw new ProviderExecutionError('invalid-options', provider)
     }
     return candidate
   }
   if (typeof globalThis.fetch !== 'function') {
-    throw new ProviderExecutionError('network-error')
+    throw new ProviderExecutionError('network-error', provider, null, true)
   }
   return globalThis.fetch.bind(globalThis)
 }
@@ -971,7 +975,6 @@ async function consumeStreamingResponse(
   response: Response,
   request: NormalizedRequest,
   provider: ProviderId,
-  config: GenericTextProviderId,
   deadline: RequestDeadline,
 ): Promise<StreamResult> {
   const maxBytes = responseByteLimit(request)
@@ -983,6 +986,12 @@ async function consumeStreamingResponse(
   if (contentTypeIsJson(response) && !contentTypeIsEventStream(response)) {
     const text = await readBoundedText(response, maxBytes, provider)
     if (text.trim().length === 0) throw new ProviderCapacityError(provider)
+    // A few compatible routers mislabel an actual SSE response as JSON. If
+    // the bounded payload starts with an SSE line, feed it through the same
+    // parser instead of rejecting it as malformed JSON.
+    if (/^\s*(?:data\s*:|:)/.test(text)) {
+      return consumeBoundedSse(streamFromText(text), maxBytes, provider, onDelta, deadline)
+    }
     const payload = (() => {
       try {
         return JSON.parse(text) as unknown
@@ -991,10 +1000,7 @@ async function consumeStreamingResponse(
       }
     })()
     const completion = completionText(payload)
-    if (completion.length === 0) {
-      if (payloadLooksLikeCapacityFailure(payload)) throw new ProviderCapacityError(provider)
-      throw new ProviderCapacityError(provider)
-    }
+    if (completion.length === 0) throw new ProviderCapacityError(provider)
     await onDelta(completion)
     return { text: completion, model: completionModel(payload) }
   }
@@ -1009,9 +1015,7 @@ async function consumeStreamingResponse(
     const text = await readBoundedText(response, maxBytes, provider)
     stream = streamFromText(text)
   }
-  const result = await consumeBoundedSse(stream, maxBytes, provider, onDelta, deadline)
-  void config // retained in the signature to make provider routing explicit
-  return result
+  return consumeBoundedSse(stream, maxBytes, provider, onDelta, deadline)
 }
 
 async function executeNormalized(request: NormalizedRequest): Promise<ProviderExecutionResult> {
@@ -1026,7 +1030,7 @@ async function executeNormalized(request: NormalizedRequest): Promise<ProviderEx
     throw new ProviderExecutionError('invalid-options', provider)
   }
   const payload = buildPayload(provider, model, messages, stream, request)
-  const fetchImpl = selectFetch(request)
+  const fetchImpl = selectFetch(request, provider)
   const deadline = createDeadline(request.signal, provider)
   const connectTimeout = connectTimeoutFor(request)
   const bodyTimeout = stream ? streamTimeoutFor(request) : completionTimeoutFor(request)
@@ -1057,7 +1061,7 @@ async function executeNormalized(request: NormalizedRequest): Promise<ProviderEx
 
     if (stream) {
       const result = await withTimeout(
-        consumeStreamingResponse(response, request, provider, configId, deadline),
+        consumeStreamingResponse(response, request, provider, deadline),
         bodyTimeout,
         deadline,
         provider,
@@ -1164,9 +1168,7 @@ export async function executeProviderStreamText(
   onDeltaOrOptions?: ProviderExecutionDeltaHandler | ProviderExecutionOptions,
   maybeOptions: ProviderExecutionOptions = {},
 ): Promise<string> {
-  return (
-    await executeProviderStream(request, onDeltaOrOptions as ProviderExecutionDeltaHandler, maybeOptions)
-  ).text
+  return (await executeProviderStream(request, onDeltaOrOptions, maybeOptions)).text
 }
 
 // Small aliases make the adapter easy to discover beside the existing
