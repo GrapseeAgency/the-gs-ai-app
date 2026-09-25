@@ -367,7 +367,7 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
 async function fallbackReadPage(url: string): Promise<unknown> {
   if (!isSafePublicHttpUrl(url)) throw new Error('unsafe page URL')
   const response = await fetch(url, {
-    headers: { 'User-Agent': UA },
+    headers: { 'User-Agent': FALLBACK_UA },
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   })
   const html = (await response.text()).slice(0, 2_000_000)
