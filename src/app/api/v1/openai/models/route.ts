@@ -8,9 +8,9 @@ import { NextResponse } from 'next/server'
 export const runtime = 'nodejs'
 
 const MODELS = [
-  { id: 'gs-ai', note: 'production synthesis flagship (z-ai glm-4.6, thinking disabled)' },
-  { id: 'gs-ai-flash', note: 'production flash tier (z-ai glm-4.5-flash)' },
-  { id: 'gs-ai-thinking', note: 'production thinking tier (z-ai glm-4.6, reasoning_effort=high)' },
+  { id: 'gs-ai', note: 'GS AI provider router, generator role' },
+  { id: 'gs-ai-flash', note: 'GS AI provider router, cheap role' },
+  { id: 'gs-ai-thinking', note: 'GS AI provider router, planner role' },
   { id: 'openai/gpt-5.5', note: 'OpenRouter passthrough' },
   { id: 'anthropic/claude-opus-4.8', note: 'OpenRouter passthrough' },
   { id: 'google/gemini-3.1-pro', note: 'OpenRouter passthrough' },

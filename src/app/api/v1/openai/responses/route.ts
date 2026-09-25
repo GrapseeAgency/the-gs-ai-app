@@ -13,8 +13,11 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { completeChatWithMeta } from '@/lib/ai'
 import { orCompleteChat } from '@/lib/openrouter'
+import {
+  GsAllProvidersUnavailableError,
+  runGsProviderChat,
+} from '@/lib/gs-provider-router'
 import { authOkShim, flattenContentShim } from '../shared'
 
 export const runtime = 'nodejs'
@@ -95,10 +98,14 @@ export async function POST(req: NextRequest) {
   try {
     let text = ''
     let servedModel: string | null = null
-    if (resolved.backend === 'zai') {
-      const meta = await completeChatWithMeta(messages, resolved.providerModel, resolved.thinking)
-      text = meta.text
-      servedModel = meta.model
+    if (resolved.backend === 'gs-ai') {
+      const result = await runGsProviderChat(messages, {
+        role: resolved.role,
+        temperature: body.temperature ?? 0.2,
+        maxTokens: body.max_output_tokens,
+      })
+      text = result.text
+      servedModel = result.servedModel
     } else {
       const meta = await orCompleteChat(messages, resolved.models, null)
       text = meta.text
@@ -136,6 +143,12 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e)
     console.error(`BENCH-SHIM-ERROR kind=responses requested=${body.model ?? 'gs-ai'}: ${message.slice(0, 300)}`)
+    if (e instanceof GsAllProvidersUnavailableError) {
+      return NextResponse.json(
+        { error: { message, code: e.code, providers: e.attempts } },
+        { status: 503 }
+      )
+    }
     return NextResponse.json(
       { error: { message: message.slice(0, 500), code: 'upstream_error' } },
       { status: 502 }
@@ -146,17 +159,17 @@ export async function POST(req: NextRequest) {
 // Local copy of the shim model resolution (chat/completions route owns the
 // canonical one); kept identical so future drift shows in code review.
 function resolveShimModelLocal(model: string | undefined):
-  | { backend: 'zai'; providerModel: string | null; thinking: { mode: 'flash' | 'thinking'; effort?: string } | null }
+  | { backend: 'gs-ai'; role: 'generator' | 'cheap' | 'planner' }
   | { backend: 'openrouter'; models: string[] }
   | null {
   const m = (model ?? 'gs-ai').trim()
   switch (m) {
     case 'gs-ai':
-      return { backend: 'zai', providerModel: 'glm-4.6', thinking: { mode: 'flash' } }
+      return { backend: 'gs-ai', role: 'generator' }
     case 'gs-ai-flash':
-      return { backend: 'zai', providerModel: 'glm-4.5-flash', thinking: { mode: 'flash' } }
+      return { backend: 'gs-ai', role: 'cheap' }
     case 'gs-ai-thinking':
-      return { backend: 'zai', providerModel: 'glm-4.6', thinking: { mode: 'thinking', effort: 'high' } }
+      return { backend: 'gs-ai', role: 'planner' }
     default:
       if (m.includes('/')) return { backend: 'openrouter', models: [m] }
       return null

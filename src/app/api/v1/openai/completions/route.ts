@@ -3,7 +3,6 @@
  *
  * Required by lm-eval for MCQ tasks (MMLU, HellaSwag, ARC) which score via
  * per-token logprobs of the answer-letter continuation. The shim's upstreams
- * (z-ai SDK endpoint and the OpenRouter free-pool chain as wired in this repo)
  * do not surface `logprobs` on these paths, so a faithful logprob-based MCQ
  * implementation is NOT possible here.
  *
@@ -17,8 +16,11 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { completeChatWithMeta } from '@/lib/ai'
 import { orCompleteChat } from '@/lib/openrouter'
+import {
+  GsAllProvidersUnavailableError,
+  runGsProviderChat,
+} from '@/lib/gs-provider-router'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300
@@ -60,7 +62,7 @@ export async function POST(req: NextRequest) {
     return openAiError(
       501,
       'not_implemented',
-      'logprobs/echo cannot be produced by the GS AI shim upstreams (z-ai SDK and the OpenRouter free-pool chain do not expose per-token logprobs on these paths). Use a harness generation mode (inspect-ai multiple_choice) over /api/v1/openai/chat/completions instead of logprob MCQ scoring.'
+      'logprobs/echo cannot be produced by the GS AI shim upstreams. Use a harness generation mode (inspect-ai multiple_choice) over /api/v1/openai/chat/completions instead of logprob MCQ scoring.'
     )
   }
 
@@ -80,6 +82,7 @@ export async function POST(req: NextRequest) {
 
   const startedAt = Date.now()
   try {
+    let servedModel: string | null = null
     const choices = [] as {
       index: number
       text: string
@@ -91,11 +94,17 @@ export async function POST(req: NextRequest) {
       const messages = [{ role: 'user', content: prompts[i] }]
       let text = ''
       if (isVendor) {
-        text = (await orCompleteChat(messages, [model], null)).text
+        const result = await orCompleteChat(messages, [model], null)
+        text = result.text
+        servedModel = `openrouter/${result.model ?? model}`
       } else {
-        const providerModel = model === 'gs-ai-flash' ? 'glm-4.5-flash' : 'glm-4.6'
-        const thinking = model === 'gs-ai-thinking' ? { mode: 'thinking' as const, effort: 'high' } : null
-        text = await completeChatWithMeta(messages, providerModel, thinking).then((m) => m.text)
+        const result = await runGsProviderChat(messages, {
+          role: model === 'gs-ai-flash' ? 'cheap' : model === 'gs-ai-thinking' ? 'planner' : 'generator',
+          temperature: body.temperature ?? 0.2,
+          maxTokens: body.max_tokens,
+        })
+        text = result.text
+        servedModel = result.servedModel
       }
       choices.push({ index: i, text, finish_reason: 'stop', logprobs: null })
     }
@@ -108,7 +117,7 @@ export async function POST(req: NextRequest) {
         id: `cmpl-gs-${Date.now().toString(36)}`,
         object: 'text_completion',
         created: Math.floor(Date.now() / 1000),
-        model,
+        model: servedModel ?? model,
         choices,
         usage: {
           prompt_tokens: Math.ceil(prompts.join('').length / 4),
@@ -120,6 +129,12 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e)
     console.error(`BENCH-SHIM-ERROR kind=completions requested=${model}: ${message.slice(0, 300)}`)
+    if (e instanceof GsAllProvidersUnavailableError) {
+      return NextResponse.json(
+        { error: { message, type: e.code, code: e.code, providers: e.attempts } },
+        { status: 503, headers: { 'x-gs-bench': 'openai-shim' } }
+      )
+    }
     return openAiError(502, 'upstream_error', message.slice(0, 500))
   }
 }

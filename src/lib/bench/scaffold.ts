@@ -10,8 +10,8 @@
  *                 (typed args, enums, validation BEFORE execution, structured
  *                 errors), per-tool output summarization, 8000-char offload
  *                 with agent-aware truncation hints
- *   verification  LEVER 2 — separate-model verifier (gs-ai-flash ≠ generator
- *                 glm-4.6, temperature 0), max 2 regenerations, honest
+ *   verification  LEVER 2 — separate-model verifier (cheap role ≠ generator
+ *                 role, temperature 0), max 2 regenerations, honest
  *                 "unverified" label after budget
  *   context       LEVER 3 — episodic memory: LLM summary of older history
  *                 regenerated per request when >5 messages (single-turn
@@ -21,9 +21,9 @@
  *
  * HARD RULES ENCODED HERE:
  *   - Rule 2 (same model): the generator is ALWAYS the gs-ai tier
- *     (glm-4.6, thinking off) for every profile. Verifier/summarizer use
- *     gs-ai-flash and planner uses gs-ai-thinking BY DESIGN — those roles are
- *     part of the scaffold under test, recorded per-call in telemetry.
+ *     (provider-router generator role) for every profile. Verifier/summarizer
+ *     use the cheap role and planner uses the planner role BY DESIGN — those
+ *     roles are part of the scaffold under test, recorded per-call in telemetry.
  *   - Rule 4 (provenance): every call appends one JSONL line to
  *     tool-results/bench-scaffold-<UTC date>.jsonl + a BENCH-SCAFFOLD log line.
  *   - Rule 5 (no fabrication): tool failures are surfaced to the model as
@@ -35,9 +35,9 @@
  * (turn executor, search pipeline, router) are untouched.
  */
 
-import { completeChatWithMeta } from '@/lib/ai'
-import { bingWeb, duckduckgoLite, wikipedia } from '@/lib/search/engines'
-import type { EngineQuery, RawResult } from '@/lib/search/types'
+import { runGsProviderChat } from '@/lib/gs-provider-router'
+import { bingWeb, duckduckgoLite, wikipedia, type EngineQuery } from '@/lib/search/engines'
+import type { RawResult } from '@/lib/search/types'
 import { createHash } from 'crypto'
 import { appendFileSync, mkdirSync, writeFileSync } from 'fs'
 import path from 'path'
@@ -79,9 +79,9 @@ export type ScaffoldOutcome = {
 // role-model resolution (scaffold roles are part of the lever under test)
 // ---------------------------------------------------------------------------
 
-const GENERATOR = { providerModel: 'glm-4.6', thinking: { mode: 'flash' as const } }
-const CHEAP = { providerModel: 'glm-4.5-flash', thinking: { mode: 'flash' as const } } // verifier / summarizer
-const PLANNER = { providerModel: 'glm-4.6', thinking: { mode: 'thinking' as const, effort: 'high' } }
+const GENERATOR = { role: 'generator' as const }
+const CHEAP = { role: 'cheap' as const } // verifier / summarizer
+const PLANNER = { role: 'planner' as const }
 
 // Verbatim scaffold preambles — provenance by construction (rule 4).
 export const ACI_PREAMBLE = `You may use tools before answering. To call a tool output EXACTLY one JSON object on its own line and NOTHING else on that line:
@@ -162,7 +162,8 @@ async function callModel(
   role: typeof GENERATOR | typeof CHEAP | typeof PLANNER,
   temperature = 0.2
 ): Promise<{ text: string; model: string | null }> {
-  return completeChatWithMeta(messages, role.providerModel, role.thinking, temperature)
+  const result = await runGsProviderChat(messages, { role: role.role, temperature })
+  return { text: result.text, model: result.servedModel }
 }
 
 // ---------------------------------------------------------------------------
