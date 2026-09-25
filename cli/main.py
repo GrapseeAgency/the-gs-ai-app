@@ -445,8 +445,28 @@ def _run_tau2(entry: Dict[str, Any], model: str, res: Dict[str, Any], log_lines:
     records exploit_rate = (visible_pass - heldout_pass) via the Phase 8
     module when the env splits are provided.
     """
-    log_lines.append(f"# harness=tau2 task={entry['task']}")
+    log_lines.append(f"# harness=tau2 task={entry['task']} model_arg={model}")
     env = dict(os.environ)
+    # tau2's pip package ships NO data directory (raw: run 36079361754
+    # FileNotFoundError .../data/tau2/domains/telecom/tasks.json; run-9 job
+    # warned "Data directory does not exist"). Provision the official data
+    # at a PINNED revision and point TAU2_DATA_DIR at it.
+    if not env.get("TAU2_DATA_DIR"):
+        tau2_src = Path("/tmp/tau2-bench-data")
+        if not (tau2_src / ".git").exists():
+            subprocess.run(
+                ["git", "clone", "--depth", "1", "https://github.com/sierra-research/tau2-bench", str(tau2_src)],
+                capture_output=True, text=True, timeout=300,
+            )
+        if (tau2_src / "data").exists():
+            env["TAU2_DATA_DIR"] = str(tau2_src / "data")
+            sha = subprocess.run(["git", "-C", str(tau2_src), "rev-parse", "HEAD"],
+                                 capture_output=True, text=True).stdout.strip()
+            log_lines.append(f"# tau2 data provisioned revision={sha} dir={env['TAU2_DATA_DIR']}")
+        else:
+            raise RuntimeError(
+                "tau2 data directory could not be provisioned (git clone failed) — see raw log"
+            )
     # litellm routes openai/* models to OPENAI_API_BASE — point it at the shim
     env["OPENAI_BASE_URL"] = f"{endpoint()}/api/v1/openai"
     env["OPENAI_API_BASE"] = f"{endpoint()}/api/v1/openai"
