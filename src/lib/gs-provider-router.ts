@@ -11,6 +11,7 @@
 export type GsProviderId =
   | 'google'
   | 'groq'
+  | 'kilo'
   | 'cerebras'
   | 'openrouter'
   | 'siliconflow'
@@ -163,6 +164,28 @@ const PROVIDER_CONFIGS: readonly ProviderConfig[] = [
     // max_tokens<=256 succeeds, >=1000 is refused.
     maxOutputTokens: 512,
     baseUrlEnv: 'GS_AI_GROQ_BASE_URL',
+  },
+  {
+    id: 'kilo',
+    // Kilo gateway. Free tier only, so the model is pinned to `kilo-auto/free`
+    // (verified live: 1-token probe -> HTTP 200, served by
+    // dots-studio/dots-3-note-preview:free). The catalogue also exposes
+    // explicit `:free` ids, but those returned 429 while auto was healthy, so
+    // the router is left to pick among the free pool.
+    baseUrl: 'https://api.kilo.ai/api/gateway/chat/completions',
+    authHeader: 'Authorization',
+    authPrefix: 'Bearer ',
+    keyPrefixes: ['KILO_API_KEY'],
+    healthModel: 'kilo-auto/free',
+    models: {
+      generator: 'kilo-auto/free',
+      cheap: 'kilo-auto/free',
+      planner: 'kilo-auto/free',
+    },
+    // Free tier meters ~200 requests/hour per IP, which is a request budget,
+    // not an output budget; the gateway accepts a large completion window.
+    maxOutputTokens: 8_192,
+    baseUrlEnv: 'GS_AI_KILO_BASE_URL',
   },
   {
     id: 'cerebras',
