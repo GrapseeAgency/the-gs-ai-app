@@ -547,7 +547,9 @@ async function callProvider(
 ): Promise<GsProviderChatResult> {
   const env = options.env ?? process.env
   const keys = providerKeys(config, env)
-  if (keys.length === 0) throw new Error(`${config.id}: no configured API key`)
+  // A missing credential is permanent for this process; retrying it only burns
+  // the backoff budget on every request.
+  if (keys.length === 0) throw codedError(config.id, `${config.id}: no configured API key`, 'missing_key')
   const model = modelFor(config, role, env)
   // Always send an explicit budget, clamped to the provider ceiling. Omitting
   // it lets the provider apply its own default, which on rate-limited tiers is
