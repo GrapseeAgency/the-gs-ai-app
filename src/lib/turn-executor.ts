@@ -28,6 +28,16 @@ import { loadKeyPool } from '@/lib/keypool'
 import { orCompleteChat, orStreamChat } from '@/lib/openrouter'
 import { planRoute } from '@/lib/router'
 import {
+  selectCatalogFastRoutes,
+  type CatalogFastRoute,
+} from '@/lib/catalog-router'
+import {
+  executeProviderCompletion,
+  executeProviderStream,
+  isProviderCapacityError,
+} from '@/lib/provider-execution'
+import { configuredProviderKey } from '@/lib/provider-catalog-store'
+import {
   SYSTEM_PROMPT,
   VISION_GROUNDING_PROMPT,
   streamChat,
@@ -210,6 +220,8 @@ export type Prep = {
   modelRoute: ModelRoute
   providerModel: string | null
   openRouterModels: string[] | null
+  /** Free catalog candidates for the lightweight text fast path. */
+  catalogFastRoutes: CatalogFastRoute[]
   freeAvailable: boolean
   /** FLASH MODE (Phase 2) — the wire mode as the client sent it. */
   requestedMode: ThinkingMode
@@ -457,7 +469,7 @@ export async function prepareTurn(
   )
 
   const keypool = await loadKeyPool()
-  const freeAvailable = keypool.keys.length > 0
+  const openRouterKeyAvailable = keypool.keys.length > 0
   const forceFree = process.env.GS_FORCE_FREE_CHAIN === '1'
   const freeOnly = freeOnlyEnabled()
   const lock = routerPlan.providerLock
@@ -475,6 +487,12 @@ export async function prepareTurn(
     (freeTextRoute || tierFreeEligible) &&
     // Vision has no verified free adapter yet; queue instead of paying.
     routerPlan.route !== 'VISION'
+  const catalogFastRoutes = selectCatalogFastRoutes({
+    route: routerPlan.route,
+    hasImages: useVision,
+    hasDocuments: currentTurnDocs.length > 0 || historyDocTurns.length > 0,
+    estimatedInputChars: content.length + recentDesc.reduce((sum, message) => sum + message.content.length, 0),
+  })
   const baseRoute = resolveModelRoute(routerPlan.internalModelId)
   const freeChain = forceFreeEligible
     ? routerPlan.route === 'TEXT_SIMPLE' && !routerPlan.registerClass
@@ -484,7 +502,7 @@ export async function prepareTurn(
       ? OPENROUTER_MODELS[routerPlan.internalModelId] ?? OPENROUTER_MODELS['gs-free-big']
       : lock === 'zai'
         ? null
-        : freeAvailable && tierFreeEligible
+        : openRouterKeyAvailable && tierFreeEligible
           ? routerPlan.route === 'TEXT_SIMPLE' && !routerPlan.registerClass
             ? OPENROUTER_MODELS['gs-free']
             : OPENROUTER_MODELS['gs-free-big']
@@ -493,10 +511,17 @@ export async function prepareTurn(
     ? { backend: 'openrouter', models: freeChain }
     : baseRoute
   const providerModel = modelRoute.backend === 'zai' ? modelRoute.providerModel : null
-  const openRouterModels = modelRoute.backend === 'openrouter' ? modelRoute.models : null
-  if (freeChain) {
+  const catalogOpenRouterModels = catalogFastRoutes
+    .filter((candidate) => candidate.provider === 'openrouter')
+    .map((candidate) => candidate.modelId)
+  const baseOpenRouterModels = modelRoute.backend === 'openrouter' ? modelRoute.models : []
+  const mergedOpenRouterModels = [...new Set([...baseOpenRouterModels, ...catalogOpenRouterModels])]
+  const openRouterModels: string[] | null = mergedOpenRouterModels.length > 0 ? mergedOpenRouterModels : null
+  const freeAvailable =
+    keypool.keys.length > 0 || catalogFastRoutes.some((candidate) => candidate.provider !== 'openrouter')
+  if (freeChain || catalogFastRoutes.length > 0) {
     console.log(
-      `GS-FREE-ROUTE conv=${id} route=${routerPlan.route} chain=${freeChain.join('|')} keys=${keypool.keys.length}${forceFree ? ' forced=1' : ''}${freeOnly ? ' freeOnly=1' : ''}${routerPlan.registerClass ? ' register=1' : ''}${lock ? ` lock=${lock}` : ''}`
+      `GS-FREE-ROUTE conv=${id} route=${routerPlan.route} chain=${(openRouterModels ?? []).join('|')} catalogCandidates=${catalogFastRoutes.length} keys=${keypool.keys.length}${forceFree ? ' forced=1' : ''}${freeOnly ? ' freeOnly=1' : ''}${routerPlan.registerClass ? ' register=1' : ''}${lock ? ` lock=${lock}` : ''}`
     )
   }
 
@@ -568,6 +593,7 @@ export async function prepareTurn(
     modelRoute,
     providerModel,
     openRouterModels,
+    catalogFastRoutes,
     freeAvailable,
     requestedMode,
     thinking,
@@ -758,6 +784,7 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
   const modelRoute = prep.modelRoute
   const providerModel = prep.providerModel
   const openRouterModels = prep.openRouterModels
+  const catalogFastRoutes = prep.catalogFastRoutes
   const freeAvailable = prep.freeAvailable
   const gsCapLog = prep.gsCapLog
   const history = prep.history
@@ -1249,7 +1276,7 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
     onDelta?: (d: string) => void
   ): Promise<string> => {
     // Free-only is a hard spend guard. The durable queue waits for capacity.
-    if (freeOnlyEnabled() && !openRouterModels) {
+    if (freeOnlyEnabled() && !openRouterModels && catalogFastRoutes.length === 0) {
       throw new FreeCapacityUnavailableError(
         'No free provider route is currently eligible for this turn.'
       )
@@ -1281,6 +1308,56 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
           return onDelta(d)
         }
       : undefined
+
+    // Newly discovered free text models are attempted first for the tiny,
+    // text-only fast path. They are provider-internal candidates; no model ID
+    // is sent to the client. A failure before the first delta can safely try
+    // the next candidate, while a mid-stream failure is surfaced to avoid
+    // duplicating output.
+    let catalogOutputStarted = false
+    let lastCatalogError: unknown = null
+    const directCatalogRoutes = catalogFastRoutes.filter((route) => route.provider !== 'openrouter')
+    for (const route of directCatalogRoutes) {
+      const apiKey = configuredProviderKey(route.provider)
+      if (!apiKey) continue
+      try {
+        callStartedAt = Date.now()
+        const result = onDelta
+          ? await executeProviderStream({
+              provider: route.provider,
+              model: route.modelId,
+              messages: msgs,
+              apiKey,
+              temperature: 0.2,
+              onDelta: (delta) => {
+                catalogOutputStarted = true
+                return wrappedOnDelta?.(delta)
+              },
+            })
+          : await executeProviderCompletion({
+              provider: route.provider,
+              model: route.modelId,
+              messages: msgs,
+              apiKey,
+              temperature: 0.2,
+            })
+        return result.text
+      } catch (error) {
+        if (catalogOutputStarted) throw error
+        lastCatalogError = error
+        console.warn(
+          `GS-CATALOG-SKIP conv=${id} provider=${route.provider} capacity=${isProviderCapacityError(error) ? 1 : 0}`
+        )
+      }
+    }
+    if (freeOnlyEnabled() && !openRouterModels && directCatalogRoutes.length > 0) {
+      throw new FreeCapacityUnavailableError(
+        lastCatalogError instanceof Error
+          ? 'Free catalog providers are temporarily unavailable.'
+          : 'No free catalog provider is currently eligible.'
+      )
+    }
+
     try {
       if (openRouterModels) {
         callStartedAt = Date.now()
@@ -1294,6 +1371,7 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
         : await completeChat(msgs, activeProviderModel, prep.thinking.config)
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
+      if (freeOnlyEnabled()) throw e
       if (openRouterModels) {
         if (message.startsWith('OpenRouter ')) {
           console.log(

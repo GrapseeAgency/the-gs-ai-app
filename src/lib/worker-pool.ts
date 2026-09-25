@@ -29,6 +29,7 @@ import { produceRun } from '@/lib/turn-producer'
 import { loadKeyPool } from '@/lib/keypool'
 import { freeOnlyEnabled, queuedRunIsDue } from '@/lib/capacity-policy'
 import { ensureProviderCatalogSync } from '@/lib/provider-catalog-store'
+import { hasEligibleDirectFreeCatalogRoute } from '@/lib/catalog-router'
 
 const WORKER_CONCURRENCY = Number(process.env.GS_WORKER_CONCURRENCY ?? 3)
 const TICK_MS = 1_000
@@ -47,7 +48,7 @@ async function freeCapacityAvailable(): Promise<boolean> {
     return freeCapacityCache.available
   }
   const pool = await loadKeyPool()
-  const available = pool.keys.length > 0
+  const available = pool.keys.length > 0 || hasEligibleDirectFreeCatalogRoute()
   freeCapacityCache = { checkedAt: now, available }
   return available
 }
