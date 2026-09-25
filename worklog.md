@@ -4148,3 +4148,23 @@ Work Log:
 Stage Summary:
 - Scaffold layer live on the serving shim; one-lever-per-dispatch enforced by workflow input; baseline = run 9 (in flight).
 - Next: run 9 completes → fetch scorecard+artifacts → tests/baseline-scaffold-v1.json + power analysis → dispatch scaffold=aci → delta+CI → keep/revert → verification → context → router.
+
+---
+Task ID: SCAFFOLD-BENCH (dispatch log update)
+Agent: main (Z.ai Code)
+Task: Actions-only scaffold benchmark execution — baseline arm in flight.
+
+Work Log:
+- Run 9 (36043125749) post-mortem: gpqa/aime CANCELLED at the 6h hosted-runner cap under z-ai throttle (~245 real shim calls, none scored); ifbench job green-but-BLOCKED (task missing from inspect-evals; CLI exit-code bug) — both fixed; tau2 BLOCKED (websockets dep) — fixed.
+- FIX 1 (80405b3): IFBench harness — inspect-evals (PyPI 0.21.0 AND main) has NO ifbench (wheel+API verified); allenai/IFBench gated for anon; allenai/IFBench_test PUBLIC (300 prompts; the old "58" was the count of new constraint TYPES — honest correction in knowledge.yaml). bench_tasks/ifbench_open.py = official strict verifier (git-pinned 1c40f0c) ported line-for-line; offline-validated (task builds 300 samples; scorer follow=1.0 / violate=0.0 / prompt-needing path exercised). requirements pin + deps added.
+- FIX 2 (84faf9e): bench_tasks imports for inspect_ai 0.3.268 (Task/task at top level; raw ImportError from run 36079361754's ifbench job).
+- FIX 3: tau2 pip package ships NO data dir (raw FileNotFoundError); adapter provisions sierra-research/tau2-bench data at /tmp with pinned revision logged via TAU2_DATA_DIR.
+- FIX 4: suite defaults never reached entries (CLI read entry["_defaults"] — nonexistent), so inspect ran at its own concurrency; merge fixed, arms pace at max_connections=2 (identical across arms).
+- Workflow: `benchmarks` subset input (default full suite) so fixed rows can complete without re-grinding; competitor columns already dropped; artifacts upload if:always().
+- DISPATCH: run 36079361754 (baseline arm, fixed harness, sha b997585b) at 2026-09-25T00:50Z, HTTP 204. build ✅ escape-gate ✅ (BLOCKED verdict, honest); gpqa/aime in flight; ifbench/tau2 BLOCKED in THIS run (fixes land next dispatch).
+- Telemetry on disk: tool-results/bench-scaffold-2026-09-24.jsonl (6 lines — aci/verification/router smokes; router zero-state due to open breaker).
+
+Stage Summary:
+- Machinery complete and live: dispatch → Actions → shim → inspect/tau2 → scorecard commit + artifacts (if:always()).
+- ONLY constraint: z-ai quota (breaker open ~50 min at last check). Sacred — never bypassed; runner retries with backoff and resumes in bursts.
+- Next dispatches (in order): (1) baseline subset ifbench,tau2_telecom (fixed harness) → completes the baseline arm; (2) scaffold=aci full; (3) verification; (4) context; (5) router. After each: download artifacts → scripts/assemble-baseline.py → stats/regression.py delta+CI → results/scaffold-lever-report.md verdict keep/revert.
