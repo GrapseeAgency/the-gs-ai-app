@@ -206,7 +206,10 @@ const PROVIDER_CONFIGS: readonly ProviderConfig[] = [
   },
   {
     id: 'huggingface',
-    baseUrl: 'https://api-inference.huggingface.co/v1/chat/completions',
+    // `api-inference.huggingface.co` no longer resolves; HF moved inference
+    // behind `router.huggingface.co`, which answers chat/completions. The old
+    // host made every Hugging Face request a transport failure.
+    baseUrl: 'https://router.huggingface.co/v1/chat/completions',
     authHeader: 'Authorization',
     authPrefix: 'Bearer ',
     keyPrefixes: ['HF_API_KEY', 'HUGGINGFACE_API_KEY'],
@@ -236,7 +239,10 @@ const PROVIDER_CONFIGS: readonly ProviderConfig[] = [
   },
   {
     id: 'helmholtz',
-    baseUrl: 'https://blablador.fz-juelich.de/v1/chat/completions',
+    // `blablador.fz-juelich.de` serves only the SPA; the OpenAI-compatible API
+    // lives on the `api.` host, which answers JSON and reports a clear auth
+    // error instead of an HTML page the router could not parse.
+    baseUrl: 'https://api.blablador.fz-juelich.de/v1/chat/completions',
     authHeader: 'Authorization',
     authPrefix: 'Bearer ',
     keyPrefixes: ['HELMHOLTZ_API_KEY', 'BLABLADOR_API_KEY'],
