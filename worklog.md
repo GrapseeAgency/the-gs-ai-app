@@ -4210,3 +4210,19 @@ Work Log:
 - DECISIVE: dispatch API returned 422 with the parser's own message: "(Line: 112, Col: 9): Unrecognized named-value: 'matrix'" in `inputs.benchmarks == '' || contains(inputs.benchmarks, matrix.benchmark)` — the `matrix` context is NOT valid in jobs.<job_id>.if (a5c6c71 shipped the same construct; that invalidity is why GitHub startup-failed every push and would 422 every dispatch).
 - FIX: removed the eval job-level `if` entirely; subset filtering moved to STEP-level conditions (checkout → subset step emits run=true/false → setup-python/install/run gated on steps.subset.outputs.run); non-selected legs write an honest SKIPPED_BY_SUBSET result JSON (never silent) and still upload artifacts (if:always()).
 - Commit + push, then re-dispatch (API 422/204 is the file-validity verdict).
+
+---
+Task ID: SCAFFOLD-BENCH (resume 3 — dispatch live)
+Agent: main (Z.ai Code)
+Task: Validate the fixed workflow with the resume-sequence dispatch; re-arm the autonomous loop.
+
+Work Log:
+- DISPATCH SUCCESSFUL: POST /actions/workflows/benchmark.yml/dispatches → HTTP 204 (ref main, head f90ee73). Run 36155160244 created 15:35:08Z. URL: https://github.com/GrapseeAgency/the-gs-ai-app/actions/runs/36155160244
+- Dispatch inputs: model=gs-ai, suite=knowledge, scaffold=baseline, benchmarks=ifbench,tau2_telecom (resume step 1 — completes the baseline arm rows fixed post-run-36079361754).
+- Live job evidence: build ✅ success, sandbox-escape-verification ✅ success, eval(gpqa_diamond) ✅ success = SKIPPED_BY_SUBSET path verified step-by-step (filter success → setup-python/install/run skipped → honest marker written → artifact uploaded), eval(aime) ✅ same; eval(ifbench) IN_PROGRESS (real scoring leg), eval(tau2_telecom) IN_PROGRESS (expected honest BLOCKED — user-sim needs funded OpenRouter key).
+- Confirmed: no push-run fired for f90ee73 (file valid + dispatch-only trigger) — both symptoms of the a5c6c71 breakage eliminated.
+- Cron 414196 re-armed (previous session's job 412546 expired with session): every 15 min, webDevReview, priority 10, carries the full resume sequence + dispatch inputs + breaker discipline.
+- Noted: 'Eval gate' scheduled workflow run 36110802093 has a failing Welch t-test job (hermetic + live-60-case jobs green) — separate workflow, scheduled for a later pass.
+
+Stage Summary:
+- Benchmark pipeline is UNBLOCKED end-to-end: dispatch-only workflow valid again, subset filtering honest and observable, baseline-subset run in flight. Next (cron-driven): await run 36155160244 → fetch artifacts → assemble-baseline.py → update tests/baseline-scaffold-v1.json → dispatch scaffold=aci → delta+CI → keep/revert → verification → context → router.
