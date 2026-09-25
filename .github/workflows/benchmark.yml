@@ -21,6 +21,10 @@ on:
         default: 'baseline'
         type: choice
         options: [baseline, aci, verification, context, router]
+      benchmarks:
+        description: 'optional comma list to run a subset (default: full knowledge suite)'
+        required: false
+        default: ''
   push:
     tags: ['v*']
 
@@ -96,6 +100,8 @@ jobs:
     needs: [build, sandbox-escape-verification]
     runs-on: ubuntu-latest
     timeout-minutes: 360
+    # Optional subset filter (substring match is exact-safe for the four names)
+    if: ${{ !contains(github.event.inputs.benchmarks || '', 'SKIP-ALL') && (github.event.inputs.benchmarks == '' || github.event.inputs.benchmarks == null || contains(github.event.inputs.benchmarks, matrix.benchmark)) }}
     strategy:
       fail-fast: false
       max-parallel: 20
