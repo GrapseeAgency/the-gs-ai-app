@@ -11,6 +11,13 @@ serving catalogue maps it to glm-4.6 — the discrepancy is recorded, not
 hidden; the per-run result files carry whatever the provider returned at run
 time.
 
+## Dispatch log (rule: every dispatch recorded)
+
+| Run | Arm | Dispatched (UTC) | HTTP | Head sha | Outcome |
+|-----|-----|------------------|------|----------|---------|
+| 36043125749 | baseline (run 9, pre-fix harness) | 2026-09-24 18:42 | 204 | e1bc2c4 | FAILED: gpqa/aime cancelled at 6h runner cap under z-ai throttle (~245 real calls); ifbench BLOCKED (task missing); tau2 BLOCKED (websockets dep, fixed) |
+| 36079361754 | baseline (fixed harness) | 2026-09-25 00:50 | 204 | b997585b | in flight |
+
 ## Execution architecture
 
 sandbox (writes code, dispatches via REST)
@@ -40,10 +47,10 @@ Status marks: ✅ scored · ⏳ run in flight · 🚫 BLOCKED (raw reason in art
 
 | Lever          | Benchmark    | Score [CI]          | Δ vs baseline       | Cost Δ | Latency Δ | Verdict |
 |----------------|--------------|---------------------|---------------------|--------|-----------|---------|
-| Baseline       | gpqa_diamond | ⏳ run 36043125749  | —                   | —      | —         | —       |
-| Baseline       | aime         | ⏳ run 36043125749  | —                   | —      | —         | —       |
-| Baseline       | ifbench      | 🚫 run 9 (harness bug, fixed in 80405b3) | — | — | — | — |
-| Baseline       | tau2_telecom | 🚫 user-sim unfunded (402) | —            | —      | —         | —       |
+| Baseline       | gpqa_diamond | ⏳ run 36079361754  | —                   | —      | —         | —       |
+| Baseline       | aime         | ⏳ run 36079361754  | —                   | —      | —         | —       |
+| Baseline       | ifbench      | ⏳ run 36079361754 (run-9 attempt: task missing, fixed 80405b3) | — | — | — | — |
+| Baseline       | tau2_telecom | ⏳ run 36079361754 (expected BLOCKED: user-sim unfunded) | — | — | — | — |
 | ACI            | all          | pending dispatch    | —                   | —      | —         | —       |
 | Verification   | all          | pending dispatch    | —                   | —      | —         | —       |
 | Context        | all          | pending dispatch    | —                   | —      | —         | —       |
