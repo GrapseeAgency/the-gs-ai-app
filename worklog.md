@@ -4168,3 +4168,19 @@ Stage Summary:
 - Machinery complete and live: dispatch → Actions → shim → inspect/tau2 → scorecard commit + artifacts (if:always()).
 - ONLY constraint: z-ai quota (breaker open ~50 min at last check). Sacred — never bypassed; runner retries with backoff and resumes in bursts.
 - Next dispatches (in order): (1) baseline subset ifbench,tau2_telecom (fixed harness) → completes the baseline arm; (2) scaffold=aci full; (3) verification; (4) context; (5) router. After each: download artifacts → scripts/assemble-baseline.py → stats/regression.py delta+CI → results/scaffold-lever-report.md verdict keep/revert.
+
+---
+Task ID: SCAFFOLD-BENCH (session handoff — provider quota blocker)
+Agent: main (Z.ai Code)
+Task: Scaffold benchmark execution via Actions + C++ engine — session-end state.
+
+Work Log:
+- Run 36079361754 (baseline arm, fixed harness) concluded 06:50Z at the 6h hosted-runner cap: gpqa/aime CANCELLED with 0 recoverable samples (inspect finalizes logs only at eval completion); ifbench BLOCKED (ImportError, FIXED 84faf9e post-dispatch); tau2 BLOCKED (data dir, FIXED post-dispatch; true blocker = user-sim 402 needs funding).
+- ROOT BLOCKER: z-ai account-level 429 from ~02:00Z through 06:58Z (7h) — every 10-min breaker probe returned 429 (dev.log [ZAI-BREAKER] lines). Two runs (9 and 36079361754) burned their 6h caps in breaker-cooldown cycles. Breaker discipline NEVER bypassed.
+- tests/baseline-scaffold-v1.json: assembled from run artifacts — all four benchmarks BLOCKED with raw reasons + quota timeline + evidence pointers. scored=0. No estimated numbers (rule 5).
+- results/scaffold-lever-report.md: lever table, dispatch log, exact blocker statement, and the resume sequence (probe → baseline dispatch → assemble → arms one at a time → regression verdicts).
+
+Stage Summary:
+- BUILT, COMMITTED, PUSHED, VERIFIED this session: scaffold lever layer (5d598db), IFBench official harness (80405b3 + import fix 84faf9e), tau2 data provisioning, suite-defaults merge/pacing (62c5e55), workflow scaffold+benchmarks inputs + if:always() artifact upload, honest CLI exit codes, C++ native engine (a8ea7d2, ASan-clean 14/14, honest overhead artifact), baseline assembly tooling, agent-browser app check (clean).
+- BLOCKED ON PROVIDER QUOTA — benchmark execution intentionally STOPPED per task rule (no local fallback). Cron job 412546 (15-min webDevReview) is active to resume the sequence when quota returns: probe shim → dispatch baseline → assemble → aci → verification → context → router, each with delta+CI vs baseline and keep/revert verdicts.
+- To unblock tau2: fund one OpenRouter key (raw 402 on gpt-4o-mini user-sim; never silently substituted).
