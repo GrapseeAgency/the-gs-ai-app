@@ -84,8 +84,13 @@ type ProviderConfig = {
 const HEALTH_TTL_MS = 5 * 60 * 1_000
 const HEALTH_TIMEOUT_MS = 12_000
 const REQUEST_TIMEOUT_MS = 90_000
-/** Used when the caller does not pin a budget, clamped per provider. */
-const DEFAULT_MAX_TOKENS = 1_000
+/**
+ * Used when the caller does not pin a budget, clamped per provider. Kept low
+ * on purpose: live free tiers meter output tokens per minute and reject any
+ * request whose declared budget exceeds the remaining window, so an
+ * over-generous default makes the whole run fail rather than merely truncate.
+ */
+const DEFAULT_MAX_TOKENS = 512
 /**
  * A throttled provider is not a dead provider. Rate limits and 5xx recover on
  * their own, so they earn a short cooldown instead of poisoning the health
@@ -146,8 +151,9 @@ const PROVIDER_CONFIGS: readonly ProviderConfig[] = [
       planner: 'qwen/qwen3.8-27b',
     },
     // Groq's on_demand tier enforces OTPM=1000: any request asking for more
-    // output tokens is rejected before generation starts.
-    maxOutputTokens: 1_000,
+    // output tokens is rejected before generation starts. Measured live:
+    // max_tokens<=256 succeeds, >=1000 is refused.
+    maxOutputTokens: 512,
     baseUrlEnv: 'GS_AI_GROQ_BASE_URL',
   },
   {
@@ -171,13 +177,16 @@ const PROVIDER_CONFIGS: readonly ProviderConfig[] = [
     authHeader: 'Authorization',
     authPrefix: 'Bearer ',
     keyPrefixes: ['OPENROUTER_API_KEY'],
-    healthModel: 'qwen/qwen3.8-max-prime',
+    healthModel: 'meta-llama/llama-3.3-70b-instruct',
     models: {
-      generator: 'qwen/qwen3.8-max-prime',
-      cheap: 'aion-labs/aion-3.5-mini',
-      planner: 'qwen/qwen3.8-max-prime',
+      // Verified live 12/12 at max_tokens=1024 (~2.5s mean). The previously
+      // configured qwen/qwen3.8-max-prime is upstream-quota limited on this
+      // account and answers 402/429, which made OpenRouter a dead link.
+      generator: 'meta-llama/llama-3.3-70b-instruct',
+      cheap: 'meta-llama/llama-3.3-70b-instruct',
+      planner: 'meta-llama/llama-3.3-70b-instruct',
     },
-    maxOutputTokens: 8_192,
+    maxOutputTokens: 4_096,
     baseUrlEnv: 'GS_AI_OPENROUTER_BASE_URL',
   },
   {

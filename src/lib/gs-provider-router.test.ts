@@ -114,14 +114,14 @@ describe('GS provider router', () => {
     await runGsProviderChat([{ role: 'user', content: 'hi' }], { env, fetchImpl, forceHealth: true })
     // The 1-token probes are the first two budgets; the served request follows.
     expect(budgets.slice(0, 2)).toEqual([1, 1])
-    expect(budgets[2]).toBe(1000)
+    expect(budgets[2]).toBe(512)
 
     // An oversized caller budget is clamped to the serving provider's ceiling.
     budgets.length = 0
     await runGsProviderChat([{ role: 'user', content: 'hi' }], { env, fetchImpl, maxTokens: 100_000 })
     expect(budgets[budgets.length - 1]).toBe(8_192)
 
-    // Groq's on_demand tier rejects anything above 1000 output tokens, so the
+    // Groq's on_demand tier refuses a large declared budget outright, so the
     // clamp must bite there too when Groq is the serving provider.
     budgets.length = 0
     await runGsProviderChat([{ role: 'user', content: 'hi' }], {
@@ -130,7 +130,7 @@ describe('GS provider router', () => {
       maxTokens: 100_000,
       forceHealth: true,
     })
-    expect(budgets[budgets.length - 1]).toBe(1_000)
+    expect(budgets[budgets.length - 1]).toBe(512)
   })
 
   test('retries a throttled provider instead of writing a five-minute death record', async () => {
