@@ -110,6 +110,16 @@ export function resolveShimModel(model: string | undefined): ResolvedShimModel |
   return resolved ? { ...resolved, profile } : null
 }
 
+/**
+ * OpenAI-compatible clients do not all send a namespaced model id. litellm,
+ * for example, strips its own `openai/` prefix and posts the bare `gpt-4o-mini`.
+ * Rejecting those 404s the whole request, so a bare id in the OpenAI namespace
+ * is mapped back to its explicit vendor form and served as a documented vendor
+ * passthrough. The GS AI tiers are unaffected — they are matched first, and a
+ * scaffold profile still pins the generator to gs-ai.
+ */
+const BARE_OPENAI_MODEL = /^(?:gpt-|chatgpt|o[1-9](?:-|$)|text-|davinci|babbage|ada)/
+
 function resolveShimBaseModel(m: string): ResolvedModel | null {
   const normalized = m.replace(/^openai-api\/openai\//, '').replace(/^openai\//, '')
   switch (normalized) {
@@ -121,6 +131,9 @@ function resolveShimBaseModel(m: string): ResolvedModel | null {
       return { backend: 'gs-ai', role: 'planner' }
     default:
       if (m.includes('/')) return { backend: 'openrouter', models: [m] }
+      if (BARE_OPENAI_MODEL.test(normalized)) {
+        return { backend: 'openrouter', models: [`openai/${normalized}`] }
+      }
       return null
   }
 }
