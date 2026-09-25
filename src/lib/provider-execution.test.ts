@@ -65,20 +65,27 @@ describe('generic provider execution', () => {
       expect(call.headers.get('content-type')).toBe('application/json')
       expect(call.headers.get('accept')).toBe('application/json')
       expect(call.headers.get('x-test-request')).toBe('present')
+      if (provider === 'openrouter') {
+        expect(call.headers.get('http-referer')).toBe('https://grapsee.agency')
+        expect(call.headers.get('x-title')).toBe('GS AI')
+      }
       expect(call.body).toMatchObject({ model: `${provider}-model`, stream: false })
-      expect(String(initBody(call.body))).not.toContain(secret)
+      expect(initBody(call.body)).not.toContain(secret)
     }
   })
 
   test('parses streamed deltas with the shared SSE semantics', async () => {
     const deltas: string[] = []
-    const fetchImpl: ProviderExecutionFetch = async () =>
-      sseResponse([
+    let requestBody: Record<string, unknown> | null = null
+    const fetchImpl: ProviderExecutionFetch = async (_input, init) => {
+      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>
+      return sseResponse([
         'data: {"model":"served-stream-model","choices":[{"delta":{"content":"Hel"}}]}\n\n',
         ': heartbeat\n\n',
         'data: {"choices":[{"delta":{"content":"lo"}}]}\n\n',
         'data: [DONE]\n\n',
       ])
+    }
 
     const result = await executeProviderStream(
       {
@@ -94,6 +101,7 @@ describe('generic provider execution', () => {
     )
 
     expect(deltas).toEqual(['Hel', 'lo'])
+    expect(requestBody).toMatchObject({ model: 'requested-model', stream: true })
     expect(result).toEqual({
       provider: 'groq',
       text: 'Hello',
