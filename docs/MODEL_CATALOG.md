@@ -21,6 +21,7 @@ The policy does **not** promise that third-party free tiers are permanent or unm
 
 A model discovered from a provider is an untrusted `candidate`. Provider metadata can establish advertised modalities, context, and price, but it is not treated as GS AI quality evidence. A model must pass health and application-capability validation before it can become a routing candidate for production traffic.
 
+The generic OpenAI-compatible execution adapter covers the configured text providers, but production routing still promotes only models with application evidence. A newly listed provider model is not silently trusted just because its endpoint answered.
 ## C++ boundary
 
 The C++ engine in `native/` is the heavy local execution layer: agent loops, context shaping, tool dispatch, and local backend selection. Remote provider HTTP, secrets, catalog synchronization, queueing, and public API translation stay in the Bun/Next backend. The C++ registry is not a replacement for `src/lib/router.ts` and never receives provider keys.
