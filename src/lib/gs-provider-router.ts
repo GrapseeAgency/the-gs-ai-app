@@ -85,12 +85,20 @@ const HEALTH_TTL_MS = 5 * 60 * 1_000
 const HEALTH_TIMEOUT_MS = 12_000
 const REQUEST_TIMEOUT_MS = 90_000
 /**
- * Used when the caller does not pin a budget, clamped per provider. Kept low
- * on purpose: live free tiers meter output tokens per minute and reject any
- * request whose declared budget exceeds the remaining window, so an
- * over-generous default makes the whole run fail rather than merely truncate.
+ * Budget used when the caller does not pin one. Sized for real reasoning work
+ * (AIME/GPQA step-by-step derivations run 2k-4k tokens), NOT clamped down to
+ * whatever a rate-limited free tier will tolerate.
+ *
+ * The router never silently truncates a response to fit a provider. A provider
+ * whose ceiling is below the requested budget is skipped and the next one is
+ * tried; if none can honour it the request fails loudly. Truncating instead
+ * produced completions cut off mid-derivation, which the AIME scorer graded as
+ * wrong answers — an infrastructure limit masquerading as a capability result.
  */
-const DEFAULT_MAX_TOKENS = 512
+const DEFAULT_MAX_TOKENS = 4_096
+/** How long a request will keep retrying through transient exhaustion. */
+const EXHAUSTION_BUDGET_MS = 120_000
+const EXHAUSTION_RETRY_MS = 3_000
 /**
  * A throttled provider is not a dead provider. Rate limits and 5xx recover on
  * their own, so they earn a short cooldown instead of poisoning the health
@@ -288,6 +296,8 @@ type RouterOptions = {
   forceHealth?: boolean
   /** Test seam: how long a transient failure is skipped. */
   cooldownMs?: number
+  /** Test seam: total time spent retrying through transient exhaustion. */
+  exhaustionBudgetMs?: number
 }
 
 const globalState = globalThis as typeof globalThis & { __gsProviderRouterState?: RuntimeState }
@@ -550,6 +560,7 @@ async function callProvider(
   messages: GsMessage[],
   options: RouterOptions,
   fetchImpl: FetchLike,
+  maxTokens: number,
 ): Promise<GsProviderChatResult> {
   const env = options.env ?? process.env
   const keys = providerKeys(config, env)
@@ -557,11 +568,6 @@ async function callProvider(
   // the backoff budget on every request.
   if (keys.length === 0) throw codedError(config.id, `${config.id}: no configured API key`, 'missing_key')
   const model = modelFor(config, role, env)
-  // Always send an explicit budget, clamped to the provider ceiling. Omitting
-  // it lets the provider apply its own default, which on rate-limited tiers is
-  // larger than the account is allowed to request and is rejected pre-flight.
-  const requested = options.maxTokens ?? DEFAULT_MAX_TOKENS
-  const maxTokens = Math.max(1, Math.min(requested, config.maxOutputTokens))
   const response = await fetchWithTimeout(
     fetchImpl,
     baseUrlFor(config, env),
@@ -607,50 +613,83 @@ export async function runGsProviderChat(
   const env = options.env ?? process.env
   const fetchImpl = options.fetchImpl ?? globalThis.fetch.bind(globalThis)
   const role = options.role ?? 'generator'
-  await ensureGsProviderHealth({ env, fetchImpl, forceHealth: options.forceHealth })
+  const budget = Math.max(1, options.maxTokens ?? DEFAULT_MAX_TOKENS)
+  const deadline = Date.now() + (options.exhaustionBudgetMs ?? EXHAUSTION_BUDGET_MS)
   const attempts: GsProviderAttempt[] = []
+  // Providers that can actually honour the caller's budget. A provider with a
+  // lower ceiling is not eligible: serving it would mean silently truncating
+  // the answer, which reads as a wrong answer rather than a capacity limit.
+  const eligible = PROVIDER_CONFIGS.filter((c) => c.maxOutputTokens >= budget)
   for (const config of PROVIDER_CONFIGS) {
-    const record = state.records.get(config.id)
-    if (skipUntil(record)) {
+    if (!eligible.includes(config)) {
       attempts.push({
         provider: config.id,
-        code: record?.code ?? 'unchecked',
-        status: record?.status ?? null,
-        message: record?.message ?? `${config.id}: not health-checked`,
+        code: 'budget_too_small',
+        status: null,
+        message: `${config.id}: ceiling ${config.maxOutputTokens} < requested ${budget}`,
       })
-      continue
-    }
-    for (let tries = 1; tries <= TRANSIENT_MAX_ATTEMPTS; tries += 1) {
-      try {
-        return await callProvider(config, role, messages, options, fetchImpl)
-      } catch (error) {
-        const attempt = attemptFromError(config, error)
-        attempts.push(attempt)
-        const now = Date.now()
-        const transient = isTransientFailure(attempt)
-        const current = state.records.get(config.id)
-        if (current) {
-          state.records.set(config.id, {
-            ...current,
-            healthy: false,
-            checkedAt: now,
-            code: attempt.code,
-            status: attempt.status,
-            message: attempt.message,
-            ...retryAfterFor(attempt, now, options.cooldownMs),
-          })
-        }
-        console.warn(
-          `GS-PROVIDER-${transient ? 'THROTTLED' : 'DEAD'} provider=${config.id} code=${attempt.code} status=${attempt.status ?? 'none'} try=${tries}/${TRANSIENT_MAX_ATTEMPTS}`,
-        )
-        // Only transient failures are worth another attempt; a 401/402 will
-        // not become valid by asking again.
-        if (!transient || tries === TRANSIENT_MAX_ATTEMPTS) break
-        await new Promise((resolve) => setTimeout(resolve, TRANSIENT_BASE_DELAY_MS * 2 ** (tries - 1)))
-      }
     }
   }
-  throw new GsAllProvidersUnavailableError(attempts)
+  if (eligible.length === 0) {
+    throw new GsAllProvidersUnavailableError(attempts)
+  }
+
+  let lastAttempts: GsProviderAttempt[] = attempts
+  while (true) {
+    await ensureGsProviderHealth({ env, fetchImpl, forceHealth: options.forceHealth })
+    const round: GsProviderAttempt[] = []
+    for (const config of eligible) {
+      const record = state.records.get(config.id)
+      if (skipUntil(record)) {
+        round.push({
+          provider: config.id,
+          code: record?.code ?? 'unchecked',
+          status: record?.status ?? null,
+          message: record?.message ?? `${config.id}: not health-checked`,
+        })
+        continue
+      }
+      for (let tries = 1; tries <= TRANSIENT_MAX_ATTEMPTS; tries += 1) {
+        try {
+          return await callProvider(config, role, messages, options, fetchImpl, budget)
+        } catch (error) {
+          const attempt = attemptFromError(config, error)
+          round.push(attempt)
+          const now = Date.now()
+          const transient = isTransientFailure(attempt)
+          const current = state.records.get(config.id)
+          if (current) {
+            state.records.set(config.id, {
+              ...current,
+              healthy: false,
+              checkedAt: now,
+              code: attempt.code,
+              status: attempt.status,
+              message: attempt.message,
+              ...retryAfterFor(attempt, now, options.cooldownMs),
+            })
+          }
+          console.warn(
+            `GS-PROVIDER-${transient ? 'THROTTLED' : 'DEAD'} provider=${config.id} code=${attempt.code} status=${attempt.status ?? 'none'} try=${tries}/${TRANSIENT_MAX_ATTEMPTS}`,
+          )
+          // Only transient failures are worth another attempt; a 401/402 will
+          // not become valid by asking again. These in-request retries are the
+          // cheap path, so they are not gated on the exhaustion budget.
+          if (!transient || tries === TRANSIENT_MAX_ATTEMPTS) break
+          await new Promise((resolve) => setTimeout(resolve, TRANSIENT_BASE_DELAY_MS * 2 ** (tries - 1)))
+        }
+      }
+    }
+    lastAttempts = [...attempts, ...round]
+    // Everything eligible is throttled or down. Rate-limit windows reset in
+    // seconds, so waiting briefly converts a would-be 503 into a served
+    // request instead of a sample scored as a model failure.
+    if (Date.now() >= deadline) break
+    const anyPermanent = round.some((a) => !isTransientFailure(a) && a.code !== 'unchecked')
+    if (anyPermanent && round.every((a) => !isTransientFailure(a) && a.code !== 'unchecked')) break
+    await new Promise((resolve) => setTimeout(resolve, EXHAUSTION_RETRY_MS))
+  }
+  throw new GsAllProvidersUnavailableError(lastAttempts)
 }
 
 export const GS_PROVIDER_PRIORITY: readonly GsProviderId[] = PROVIDER_CONFIGS.map((config) => config.id)

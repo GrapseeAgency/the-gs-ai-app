@@ -33,7 +33,7 @@ describe('GS provider router', () => {
       GROQ_API_KEY_1: secretGroq,
     } as unknown as NodeJS.ProcessEnv
 
-    const first = await ensureGsProviderHealth({ env, fetchImpl, forceHealth: true })
+    const first = await ensureGsProviderHealth({ env, fetchImpl, forceHealth: true, maxTokens: 256 })
     expect(first.find((record) => record.provider === 'google')?.healthy).toBe(false)
     expect(first.find((record) => record.provider === 'groq')?.healthy).toBe(true)
     const afterFirstHealth = calls.length
@@ -44,6 +44,7 @@ describe('GS provider router', () => {
       env,
       fetchImpl,
       role: 'generator',
+      maxTokens: 256,
     })
     expect(result.provider).toBe('groq')
     expect(result.servedModel).toBe('groq/groq-served')
@@ -89,16 +90,20 @@ describe('GS provider router', () => {
       env: { GOOGLE_API_KEY_1: 'google-secret' } as unknown as NodeJS.ProcessEnv,
       fetchImpl,
       forceHealth: true,
+      maxTokens: 256,
     })
     expect(health.find((record) => record.provider === 'google')?.healthy).toBe(true)
   })
 
-  test('clamps max_tokens to the provider ceiling instead of letting the provider default reject it', async () => {
+  test('never truncates: a provider below the requested budget is ineligible', async () => {
     const budgets: number[] = []
+    const urls: string[] = []
     const fetchImpl = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
       const url = String(input)
-      if (url.includes('generativelanguage.googleapis.com') || url.includes('api.groq.com')) {
-        const body = JSON.parse(String(init?.body ?? '{}')) as { max_tokens?: number }
+      const body = JSON.parse(String(init?.body ?? '{}')) as { max_tokens?: number }
+      if (body.max_tokens === 1) return response({ model: 'probe', choices: [{ message: { content: 'ok' } }] })
+      if (url.includes('api.groq.com') || url.includes('generativelanguage.googleapis.com')) {
+        urls.push(url)
         if (typeof body.max_tokens === 'number') budgets.push(body.max_tokens)
         return response({ model: 'served', choices: [{ message: { content: 'ok' } }] })
       }
@@ -109,28 +114,35 @@ describe('GS provider router', () => {
       GROQ_API_KEY_1: 'groq-secret',
     } as unknown as NodeJS.ProcessEnv
 
-    // No explicit budget from the caller: the router must still send one, so a
-    // rate-limited provider never falls back to a rejected server-side default.
+    // Default budget is 4096, which Groq (ceiling 512) cannot honour, so Groq
+    // must be skipped rather than served a silently truncated answer.
     await runGsProviderChat([{ role: 'user', content: 'hi' }], { env, fetchImpl, forceHealth: true })
-    // The 1-token probes are the first two budgets; the served request follows.
-    expect(budgets.slice(0, 2)).toEqual([1, 1])
-    expect(budgets[2]).toBe(512)
+    expect(budgets.every((b) => b === 4096)).toBe(true)
+    expect(urls.some((u) => u.includes('api.groq.com'))).toBe(false)
 
-    // An oversized caller budget is clamped to the serving provider's ceiling.
+    // With a budget everyone can meet, the full budget is sent verbatim.
     budgets.length = 0
-    await runGsProviderChat([{ role: 'user', content: 'hi' }], { env, fetchImpl, maxTokens: 100_000 })
-    expect(budgets[budgets.length - 1]).toBe(8_192)
+    urls.length = 0
+    await runGsProviderChat([{ role: 'user', content: 'hi' }], { env, fetchImpl, maxTokens: 256, forceHealth: true })
+    expect(budgets[budgets.length - 1]).toBe(256)
+  })
 
-    // Groq's on_demand tier refuses a large declared budget outright, so the
-    // clamp must bite there too when Groq is the serving provider.
-    budgets.length = 0
-    await runGsProviderChat([{ role: 'user', content: 'hi' }], {
-      env: { GROQ_API_KEY_1: 'groq-secret' } as unknown as NodeJS.ProcessEnv,
-      fetchImpl,
-      maxTokens: 100_000,
-      forceHealth: true,
-    })
-    expect(budgets[budgets.length - 1]).toBe(512)
+  test('fails loudly when no provider can honour the requested budget', async () => {
+    const fetchImpl = async (): Promise<Response> =>
+      response({ model: 'probe', choices: [{ message: { content: 'ok' } }] })
+    let caught: unknown
+    try {
+      await runGsProviderChat([{ role: 'user', content: 'hi' }], {
+        env: { GROQ_API_KEY_1: 'groq-secret' } as unknown as NodeJS.ProcessEnv,
+        fetchImpl,
+        maxTokens: 999_999,
+        forceHealth: true,
+      })
+    } catch (error) {
+      caught = error
+    }
+    expect(caught).toBeInstanceOf(GsAllProvidersUnavailableError)
+    expect(JSON.stringify(caught)).toContain('budget_too_small')
   })
 
   test('retries a throttled provider instead of writing a five-minute death record', async () => {
@@ -150,7 +162,7 @@ describe('GS provider router', () => {
       return response({ model: 'qwen/qwen3.8-27b', choices: [{ message: { content: 'recovered' } }] })
     }
     const env = { GROQ_API_KEY_1: 'groq-secret' } as unknown as NodeJS.ProcessEnv
-    const result = await runGsProviderChat([{ role: 'user', content: 'hi' }], { env, fetchImpl, forceHealth: true })
+    const result = await runGsProviderChat([{ role: 'user', content: 'hi' }], { env, fetchImpl, forceHealth: true, maxTokens: 256 })
     expect(groqRequests).toBe(2)
     expect(result.text).toBe('recovered')
     expect(health).toBe(1)
@@ -172,11 +184,11 @@ describe('GS provider router', () => {
       return response({ error: { message: 'Payment required' } }, 402)
     }
     const env = { GROQ_API_KEY_1: 'groq-secret' } as unknown as NodeJS.ProcessEnv
-    await runGsProviderChat([{ role: 'user', content: 'hi' }], { env, fetchImpl, forceHealth: true }).catch(() => undefined)
+    await runGsProviderChat([{ role: 'user', content: 'hi' }], { env, fetchImpl, forceHealth: true, maxTokens: 256 }).catch(() => undefined)
     // A 402 cannot become valid by asking again, so it is attempted once.
     expect(groqRequests).toBe(1)
     // And the next call neither re-dials it nor re-probes the fresh record.
-    await runGsProviderChat([{ role: 'user', content: 'hi' }], { env, fetchImpl }).catch(() => undefined)
+    await runGsProviderChat([{ role: 'user', content: 'hi' }], { env, fetchImpl, maxTokens: 256, exhaustionBudgetMs: 0 }).catch(() => undefined)
     expect(groqRequests).toBe(1)
     expect(probes).toBe(1)
   })
@@ -198,6 +210,8 @@ describe('GS provider router', () => {
       fetchImpl,
       forceHealth: true,
       cooldownMs: 30,
+      maxTokens: 256,
+      exhaustionBudgetMs: 0,
     })
       .then(() => null)
       .catch((error: unknown) => error as GsAllProvidersUnavailableError)
@@ -206,13 +220,13 @@ describe('GS provider router', () => {
     expect(groqRequests).toBe(3)
 
     // Inside the cooldown the provider is skipped, not re-dialled.
-    await runGsProviderChat([{ role: 'user', content: 'hi' }], { env, fetchImpl }).catch(() => undefined)
+    await runGsProviderChat([{ role: 'user', content: 'hi' }], { env, fetchImpl, maxTokens: 256, exhaustionBudgetMs: 0 }).catch(() => undefined)
     expect(groqRequests).toBe(3)
 
     // After the short cooldown it is retried — a throttle must not read as a
     // five-minute death.
     await new Promise((resolve) => setTimeout(resolve, 50))
-    await runGsProviderChat([{ role: 'user', content: 'hi' }], { env, fetchImpl, cooldownMs: 30 }).catch(() => undefined)
+    await runGsProviderChat([{ role: 'user', content: 'hi' }], { env, fetchImpl, maxTokens: 256, cooldownMs: 30, exhaustionBudgetMs: 0 }).catch(() => undefined)
     expect(groqRequests).toBeGreaterThan(3)
   })
 
@@ -238,6 +252,7 @@ describe('GS provider router', () => {
       } as unknown as NodeJS.ProcessEnv,
       fetchImpl,
       forceHealth: true,
+      maxTokens: 256,
     })
     expect(groqRequests).toBe(1)
     expect(result.provider).toBe('cerebras')
