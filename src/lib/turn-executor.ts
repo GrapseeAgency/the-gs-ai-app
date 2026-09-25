@@ -127,6 +127,11 @@ import {
 import { MAX_ATTACHMENTS_PER_MESSAGE } from '@/lib/attachments'
 import { appendEvent, tracked } from '@/lib/turn-events'
 import { getRun } from '@/lib/run-store'
+import {
+  FreeCapacityUnavailableError,
+  freeOnlyEnabled,
+  isFreeCapacityUnavailableError,
+} from '@/lib/capacity-policy'
 
 const HISTORY_LIMIT = 20
 const MAX_CONTENT_LENGTH = 32000
@@ -252,6 +257,8 @@ export type TurnResult = {
   savedMessage?: Record<string, unknown>
   /** pre-turn 4xx/5xx mapping (all-images/docs unreadable, upstream error) */
   errorResponse?: { status: number; code: string; message: string }
+  /** True when the durable worker should requeue instead of terminal-failing. */
+  retryable?: boolean
   errorRaw?: string
 }
 
@@ -452,15 +459,22 @@ export async function prepareTurn(
   const keypool = await loadKeyPool()
   const freeAvailable = keypool.keys.length > 0
   const forceFree = process.env.GS_FORCE_FREE_CHAIN === '1'
+  const freeOnly = freeOnlyEnabled()
   const lock = routerPlan.providerLock
   const tierFreeEligible =
     routerPlan.route === 'TEXT_SIMPLE' || routerPlan.route === 'WEB' || routerPlan.registerClass
+  const freeTextRoute =
+    routerPlan.route === 'TEXT_SIMPLE' ||
+    routerPlan.route === 'TEXT_COMPLEX' ||
+    routerPlan.route === 'CODING' ||
+    routerPlan.route === 'WEB' ||
+    routerPlan.route === 'DEEP_RESEARCH' ||
+    routerPlan.route === 'DOCUMENT'
   const forceFreeEligible =
-    forceFree &&
-    (tierFreeEligible ||
-      routerPlan.route === 'TEXT_COMPLEX' ||
-      routerPlan.route === 'CODING' ||
-      routerPlan.route === 'DEEP_RESEARCH')
+    (freeOnly || forceFree) &&
+    (freeTextRoute || tierFreeEligible) &&
+    // Vision has no verified free adapter yet; queue instead of paying.
+    routerPlan.route !== 'VISION'
   const baseRoute = resolveModelRoute(routerPlan.internalModelId)
   const freeChain = forceFreeEligible
     ? routerPlan.route === 'TEXT_SIMPLE' && !routerPlan.registerClass
@@ -482,7 +496,7 @@ export async function prepareTurn(
   const openRouterModels = modelRoute.backend === 'openrouter' ? modelRoute.models : null
   if (freeChain) {
     console.log(
-      `GS-FREE-ROUTE conv=${id} route=${routerPlan.route} chain=${freeChain.join('|')} keys=${keypool.keys.length}${forceFree ? ' forced=1' : ''}${routerPlan.registerClass ? ' register=1' : ''}${lock ? ` lock=${lock}` : ''}`
+      `GS-FREE-ROUTE conv=${id} route=${routerPlan.route} chain=${freeChain.join('|')} keys=${keypool.keys.length}${forceFree ? ' forced=1' : ''}${freeOnly ? ' freeOnly=1' : ''}${routerPlan.registerClass ? ' register=1' : ''}${lock ? ` lock=${lock}` : ''}`
     )
   }
 
@@ -1234,6 +1248,12 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
     modelMessages: ChatMessageInput[] | VisionChatMessage[],
     onDelta?: (d: string) => void
   ): Promise<string> => {
+    // Free-only is a hard spend guard. The durable queue waits for capacity.
+    if (freeOnlyEnabled() && !openRouterModels) {
+      throw new FreeCapacityUnavailableError(
+        'No free provider route is currently eligible for this turn.'
+      )
+    }
     if (useVision) {
       return onDelta
         ? (await streamVisionChat(modelMessages as VisionChatMessage[], onDelta)).text

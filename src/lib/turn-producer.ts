@@ -10,13 +10,15 @@
  */
 
 import { publishChunk, publishEnd, startStreamTtlKeeper, type BrokerTerminalStatus } from '@/lib/stream-broker'
-import { claimRun, finishRun, getRun, heartbeatRun, LEASE_TTL_MS } from '@/lib/run-store'
+import { claimRun, finishRun, getRun, heartbeatRun, requeueRun, LEASE_TTL_MS } from '@/lib/run-store'
 import { appendEvent } from '@/lib/turn-events'
 import { messageToJson } from '@/lib/serializers'
 import { db } from '@/lib/db'
 import { runTurn, type Prep } from '@/lib/turn-executor'
 
-export const backgroundRunsEnabled = (): boolean => process.env.BACKGROUND_RUNS_ENABLED === '1'
+// Free-only routing needs the durable queue by default. Set
+// BACKGROUND_RUNS_ENABLED=0 to opt back into the legacy inline transport.
+export const backgroundRunsEnabled = (): boolean => process.env.BACKGROUND_RUNS_ENABLED !== '0'
 
 export function newStreamId(): string {
   return `st-${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`
@@ -139,6 +141,15 @@ export async function produceRun(runId: string, prepInput?: Prep): Promise<void>
   try {
     const result = await runTurn(prep, push)
     await chain // flush every data chunk before the terminal marker
+    if (result.retryable) {
+      await requeueRun(runId, result.errorRaw ?? 'free provider capacity unavailable')
+      await appendEvent(runId, 'RunQueued', {
+        reason: 'free_capacity_unavailable',
+        error: result.errorRaw?.slice(0, 300) ?? null,
+      })
+      console.warn(`RUN-QUEUED run=${runId} stream=${streamId} reason=free_capacity_unavailable`)
+      return
+    }
     const runStatus = result.finalStatus === 'error' ? 'failed' : 'completed'
     await finishRun(runId, runStatus, result.finalStatus, result.errorRaw ?? null, result.assistantMessageId ?? null)
     if (result.finalStatus === 'error') {

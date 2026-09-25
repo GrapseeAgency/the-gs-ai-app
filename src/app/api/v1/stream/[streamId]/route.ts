@@ -39,6 +39,9 @@ const RECONCILE_AFTER_MS = 45_000
 // A run with no update for this long is orphaned (hard-kill recovery owns
 // the authoritative flip; the subscriber exits honestly instead of hanging).
 const ORPHAN_SILENCE_MS = 180_000
+// Queued free-capacity waits are not orphans; keep the stream alive while
+// the durable queue retries, with a bounded safety ceiling.
+const QUEUE_MAX_SILENCE_MS = 24 * 60 * 60 * 1_000
 
 export async function GET(req: NextRequest, { params }: RouteContext) {
   const { streamId } = await params
@@ -142,6 +145,11 @@ export async function GET(req: NextRequest, { params }: RouteContext) {
                 )
                 return close()
               }
+              if (fresh.status === 'queued') {
+                write(`data: ${JSON.stringify({ event: 'status', data: '"queued"' })}\n\n`)
+                lastActivityAt = Date.now()
+                if (silence < QUEUE_MAX_SILENCE_MS) continue
+              }
               if (fresh.status === 'awaiting_approval') {
                 write(`data: ${JSON.stringify({ event: 'status', data: '"awaiting_approval"' })}\n\n`)
                 write(
@@ -149,7 +157,7 @@ export async function GET(req: NextRequest, { params }: RouteContext) {
                 )
                 return close()
               }
-              if (silence > ORPHAN_SILENCE_MS) {
+              if (silence > ORPHAN_SILENCE_MS && (fresh.status !== 'queued' || silence > QUEUE_MAX_SILENCE_MS)) {
                 write(
                   `data: ${JSON.stringify({ event: 'end', data: JSON.stringify({ status: 'killed', synthetic: true, reason: 'orphan-silence' }) })}\n\n`
                 )

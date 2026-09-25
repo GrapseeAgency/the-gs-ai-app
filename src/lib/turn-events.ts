@@ -38,6 +38,7 @@ export type TurnEventType =
   | 'ApprovalRequested'
   | 'ApprovalDecided'
   | 'RunReconciled'
+  | 'RunQueued'
   | 'RunCompleted'
   | 'RunFailed'
 
