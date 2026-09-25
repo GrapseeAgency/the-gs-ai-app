@@ -31,7 +31,14 @@ from typing import Any, Dict, List
 from inspect_ai.dataset import Sample
 from inspect_ai.model import GenerateConfig
 from inspect_ai.scorer import Scorer, scorer, accuracy, Score, Target
-from inspect_ai.solver import Solver, Task, generate
+from inspect_ai.solver import Solver, generate
+
+try:  # Task/task live at top level in inspect_ai >= 0.3.2xx (raw: run
+      # 36079361754 ImportError from inspect_ai.solver); keep old paths.
+    from inspect_ai import Task, task
+except ImportError:  # pragma: no cover
+    from inspect_ai.solver import Task
+    from inspect_ai import task
 
 DATASET_ID = "allenai/IFBench_test"
 SPLIT = "train"

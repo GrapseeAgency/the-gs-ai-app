@@ -1,5 +1,5 @@
 {
-  "$comment": "GS BENCH — dataset revision ledger. Written/updated by the runner at dataset download time (gs-bench run resolves each dataset revision and appends it here). Fields: dataset_id -> {revision, resolved_at, source, verified_http}. The revision string is what every result file's dataset_revision field must cite. No entry may be hand-edited to a value the runner did not resolve.",
+  "$comment": "GS BENCH \u2014 dataset revision ledger. Written/updated by the runner at dataset download time (gs-bench run resolves each dataset revision and appends it here). Fields: dataset_id -> {revision, resolved_at, source, verified_http}. The revision string is what every result file's dataset_revision field must cite. No entry may be hand-edited to a value the runner did not resolve.",
   "entries": {
     "Idavidrein/gpqa": {
       "status": "verified-exists",
@@ -31,5 +31,11 @@
       "resolved_at": null,
       "source": "https://github.com/sierra-research/tau2-bench"
     }
+  },
+  "ifbench::allenai/IFBench_test": {
+    "revision": "2e8a48de45ff3bf41242f927254ca81b59ca3ae2",
+    "split": "train",
+    "n_rows_resolved": 300,
+    "resolved_at": "2026-09-25T00:56:39+00:00"
   }
 }
