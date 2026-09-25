@@ -404,24 +404,40 @@ def _run_inspect(entry: Dict[str, Any], model: str, res: Dict[str, Any], log_lin
         raise RuntimeError("no inspect json log produced")
     newest = files[-1]
     data = _json.loads(newest.read_text())
-    samples = data.get("results", {}).get("scores") or {}
-    # inspect stores per-sample under results.samples in eval log v3+; fall
-    # back to aggregate scorer metrics if per-sample is absent.
+    # inspect's log schema has moved: `results.scores` is a LIST of scorer
+    # objects in current versions, and per-sample records live under the
+    # top-level `samples` key rather than `results.samples`. Accept both
+    # shapes so a completed run is not reported as BLOCKED.
+    results = data.get("results") or {}
+    aggregate = results.get("scores") or []
+    aggregate_list = aggregate if isinstance(aggregate, list) else list(aggregate.values())
+    raw_samples = data.get("samples")
+    if raw_samples is None:
+        raw_samples = results.get("samples") or []
+    sample_list = list(raw_samples.values()) if isinstance(raw_samples, dict) else list(raw_samples)
+
     per_sample: List[float] = []
-    for s in data.get("results", {}).get("samples", []) or []:
-        sc = (s.get("scores") or {})
-        for _, v in sc.items():
+    for s in sample_list:
+        if not isinstance(s, dict):
+            continue
+        sc = s.get("scores") or {}
+        sc_items = sc.values() if isinstance(sc, dict) else sc
+        for v in sc_items:
+            if not isinstance(v, dict):
+                continue
             val = v.get("value")
             if isinstance(val, str) and val in ("C", "I"):
                 per_sample.append(1.0 if val == "C" else 0.0)
+            elif isinstance(val, bool):
+                per_sample.append(1.0 if val else 0.0)
             elif isinstance(val, (int, float)):
                 per_sample.append(float(val))
     if per_sample:
         _score_with_ci(res, per_sample, entry.get("metric", "accuracy"))
     else:
         acc = None
-        for _, v in samples.items():
-            m = v.get("metrics", {})
+        for v in aggregate_list:
+            m = v.get("metrics", {}) if isinstance(v, dict) else {}
             if "accuracy" in m:
                 acc = m["accuracy"].get("value")
         if acc is None:
