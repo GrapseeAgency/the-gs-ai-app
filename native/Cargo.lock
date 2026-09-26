@@ -353,6 +353,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "gs-bench"
+version = "0.1.0"
+dependencies = [
+ "gs-common",
+ "gs-core",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "gs-common"
 version = "0.1.0"
 dependencies = [

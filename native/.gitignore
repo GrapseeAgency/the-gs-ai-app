@@ -3,3 +3,4 @@
 cpp/ocr_wrapper/models/
 cpp/ocr_wrapper/vendor/
 cpp/ocr_wrapper/build-android-*/
+data/benchmarks/
