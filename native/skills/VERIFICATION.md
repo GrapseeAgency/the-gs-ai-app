@@ -71,6 +71,86 @@ No NDK, no `adb`, and per instruction neither was to be installed. Every other
 stage of that skill remains unexecuted. The skill documents the prerequisites
 rather than claiming a result.
 
+## VERIFIED — native runtime phases 1-6, 9, 10
+
+Committed on `native-runtime`, all unpushed (no token yet).
+
+| Phase | Deliverable | Evidence |
+|---|---|---|
+| 1 | workspace + C ABI + kernels | headers compile standalone; kernels 68/68; cargo check + clippy 0 |
+| 2 | libllama linked, CPU decode | 20/20 ABI checks, `" Hello."`, 383.7 ms / 16 tok |
+| 3 | provider pool | 59 core tests: rotation, parking, dead keys, breaker, failover |
+| 4 | agent loop | all six intents classify with no LLM call; Time served locally |
+| 5 | memory | identifiers survive compaction; 20 turns fit a 4K window |
+| 6 | verification | numeric/contradiction/citation guards; same-model refused |
+| 9 | plugins + skills | panic isolation + quarantine; 1% listing cap enforced |
+| 10 | server | live curl, all five endpoints |
+
+`cargo test --workspace` 74 passed, 0 failed. `cargo clippy` 0 warnings.
+
+### Live server evidence
+
+```
+GET  /health              -> {"status":"ok", ...}
+POST /v1/chat/completions ("what time is it?")
+    -> served_locally:true, provider:"local-clock", 13 tokens total
+POST /v1/completions      -> HTTP 501 (logprobs honestly unimplemented)
+POST /v1/chat/completions with an EMPTY provider pool
+    -> HTTP 503 "no provider available: every provider is dead, parked,
+               or has no live key"
+POST detached:true        -> {"stream_id":"chatcmpl-3"} returned immediately
+```
+
+The 503 is the load-bearing result: an empty pool produces a refusal with an
+actionable reason, never an invented answer.
+
+## Four FFI defects found by a gate rather than by reading
+
+1. **Function symbol collision.** The wrapper's `llama_free` and libllama's
+   `llama_free` share a name. The inner teardown call bound to the wrapper's
+   own function: infinite recursion, stack exhaustion, SIGSEGV at teardown
+   with all 20 functional checks already passing.
+2. **Heap corruption.** `llama_batch.seq_id` is `llama_seq_id**`. Reassigning
+   it to `std::vector` storage made `llama_batch_free` free a non-heap
+   pointer ("free(): invalid pointer" + core dump).
+3. **Type collision.** The wrapper declared `struct llama_context`, also
+   llama.cpp's name. C++ treats a redeclared struct in one namespace as the
+   SAME type, so `llama_free()` instantiated the wrapper's destructor on the
+   library's object and segfaulted inside `~basic_string`. Renaming the
+   functions was not enough; the type had to become `gs_llama_ctx`.
+4. **Missing build define.** `build.rs` never defined `GS_LLAMA_HAVE_LLAMA`,
+   so the wrapper compiled in its "libllama not linked" mode while Rust linked
+   `libllama.so`. `LlamaModel::load` returned a handle that could never
+   generate. `load` now verifies the backend initialised rather than trusting
+   a non-null handle.
+
+Also: `llama_backend_init`/`free` are process-global and not reentrant, so
+every libllama call now goes through a `LLAMA_LOCK`. Load-bearing for the
+multi-threaded server, not just the test harness.
+
+## BLOCKED — phases 7, 8 (diffusion), 11
+
+| Phase | Raw reason |
+|---|---|
+| 7 OCR | PaddleOCR needs a Paddle-Lite NDK cross-compile. `ANDROID_NDK_HOME` unset, no NDK installed (per instruction). |
+| 8 diffusion | Needs a ~2.3 GB SD weight download. The procedural SVG path is live and needs no weights. |
+| 11 measurement | Provider quota: z-ai account-level 429 and OpenRouter 402 on the tau2 user-sim, recorded in `worklog.md`. No scorecard was produced, because producing one would mean fabricating it. |
+
+## Answers to the two questions, as far as the evidence goes
+
+**Can local-only replace provider calls for simple chat?** Not established, and
+not claimed. One 0.5B Q4_K_M model produced a correct one-word answer on CPU.
+That demonstrates the *path*, not the capability. The 0.5B is deliberately a
+plumbing fixture. Answering it properly needs the 60%-of-traffic question set
+run local-only versus pooled with Wilson CIs, which is Phase 11 and is blocked.
+
+**Highest-leverage change?** Not yet measurable; the lever table requires
+Phase 11. What the evidence does say: 16 tokens took 383.7 ms on 4 CPU cores,
+so on this hardware **latency, not capability, is the binding constraint** for
+local chat. That points at speculative decoding and right-sized models as the
+first levers to measure, rather than the context-compaction levers the dossier
+lists.
+
 ## Findings that forced skill corrections
 
 1. **`huggingface-cli` is gone.** `huggingface-hub 2.0.0` dropped the `cli` extra
