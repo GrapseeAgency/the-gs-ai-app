@@ -36,8 +36,16 @@ void set_err(const std::string& m) { t_err = m; }
 // ---------------------------------------------------------------------------
 // Context. Defined here rather than in the header so the C++ type stays opaque
 // to C callers.
+//
+// The NAME MATTERS. This was originally `struct llama_context`, which is also
+// llama.cpp's own struct name. C++ treats a redeclared struct in the same
+// namespace as THE SAME TYPE, so `llama_free(ctx->ctx)` called llama.cpp's
+// destructor on llama.cpp's object while the compiler had bound the type to
+// ours -- destroying an uninitialised std::string and segfaulting at teardown.
+// Renaming the functions was not enough; the TYPE had to be renamed too.
+// Every symbol this wrapper introduces, types included, is gs_-prefixed.
 // ---------------------------------------------------------------------------
-struct llama_context {
+struct gs_llama_ctx {
     llama_config_t cfg{};
     bool available = false;
     std::string backend_name = "none";
@@ -72,10 +80,10 @@ int32_t gs_llama_validate_config(const llama_config_t* config) {
     return GS_OK;
 }
 
-gs_llama_context_t* gs_llama_create(const llama_config_t* config) {
+gs_llama_ctx* gs_llama_create(const llama_config_t* config) {
     if (gs_llama_validate_config(config) != GS_OK) return nullptr;
 
-    gs_llama_context_t* c = new (std::nothrow) llama_context();
+    gs_llama_ctx* c = new (std::nothrow) gs_llama_ctx();
     if (!c) { set_err("out of memory allocating context"); return nullptr; }
 
     // The model_path is borrowed and does NOT outlive this call.

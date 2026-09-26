@@ -50,7 +50,7 @@ typedef struct {
     int32_t status;           /* gs_status_t */
 } llama_result_t;
 
-typedef struct llama_context gs_llama_context_t;
+typedef struct gs_llama_ctx gs_llama_context_t;
 
 /* Last-error accessor is shared: gs_last_error() from gs_abi.h. */
 
