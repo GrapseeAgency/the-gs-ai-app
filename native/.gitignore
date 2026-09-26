@@ -1,0 +1,5 @@
+
+# OCR model weights and the Paddle-Lite runtime: fetched, not source.
+cpp/ocr_wrapper/models/
+cpp/ocr_wrapper/vendor/
+cpp/ocr_wrapper/build-android-*/
