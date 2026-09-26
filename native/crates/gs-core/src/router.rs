@@ -473,6 +473,11 @@ impl ProviderPool {
         }))
     }
 
+    /// Number of configured providers, for /health reporting.
+    pub fn slots_len(&self) -> usize {
+        self.slots.len()
+    }
+
     pub fn health_snapshot(&self) -> HashMap<String, ProviderState> {
         self.health
             .lock()
