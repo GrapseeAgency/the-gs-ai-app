@@ -289,15 +289,31 @@ pub enum PoolError {
     /// 200 with an empty body. Retried once, then failed over.
     #[error("{provider} returned an empty completion")]
     Empty { provider: String },
+    /// 404 model_not_found. A CALLER CONFIGURATION ERROR, not an outage: the
+    /// provider is healthy, the model id is wrong. Must never trip the
+    /// breaker, or a single bad id takes a working provider offline.
+    #[error("{provider} does not serve model '{model}' (caller config error)")]
+    ModelNotFound { provider: String, model: String },
     #[error("no provider available: {reason}")]
     NoProvider { reason: String },
 }
 
 impl PoolError {
     /// Whether this failure should count toward the circuit breaker.
-    /// 429 explicitly must not.
+    ///
+    /// Three exclusions, each for a distinct reason:
+    ///  - RateLimited: the key is busy, the provider is up.
+    ///  - KeyDead: one credential is bad, the provider is up.
+    ///  - ModelNotFound: the caller named a model the provider does not
+    ///    serve. The provider is demonstrably up -- it answered. Counting
+    ///    this would let a typo take a healthy provider offline.
     pub fn counts_toward_breaker(&self) -> bool {
-        !matches!(self, PoolError::RateLimited { .. } | PoolError::KeyDead { .. })
+        !matches!(
+            self,
+            PoolError::RateLimited { .. }
+                | PoolError::KeyDead { .. }
+                | PoolError::ModelNotFound { .. }
+        )
     }
 }
 

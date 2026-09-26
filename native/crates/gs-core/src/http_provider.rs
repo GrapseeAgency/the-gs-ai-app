@@ -151,6 +151,17 @@ impl Provider for HttpProvider {
                 .unwrap_or_else(|| body.chars().take(200).collect());
 
             return Err(match status.as_u16() {
+                // 404 on a chat call is almost always model_not_found. That is
+                // the caller naming a model this provider does not serve, and
+                // the provider is demonstrably alive because it answered.
+                // Mapping it to Transport would trip the breaker and take a
+                // healthy provider offline over a typo.
+                404 if msg.contains("model") || msg.contains("Model") => {
+                    PoolError::ModelNotFound {
+                        provider: self.name.clone(),
+                        model: model.to_string(),
+                    }
+                }
                 // Rate limited: park this key, do NOT count toward the breaker.
                 429 => PoolError::RateLimited {
                     provider: self.name.clone(),
@@ -208,6 +219,48 @@ impl Provider for HttpProvider {
             output_tokens: usage.completion_tokens,
             was_retry: false,
         })
+    }
+}
+
+impl HttpProvider {
+    /// Discover the model ids this provider actually serves.
+    ///
+    /// Hardcoding a model id is how the 404 path gets exercised in the first
+    /// place: ids are per-account (a key may see a subset), and they change.
+    /// A benchmark MUST call this and use what comes back.
+    pub async fn list_models(&self, key: &str) -> Result<Vec<String>, PoolError> {
+        let resp = self
+            .client
+            .get(format!("{}/models", self.base_url))
+            .header("Authorization", format!("Bearer {key}"))
+            .send()
+            .await
+            .map_err(|e| PoolError::Transport {
+                provider: self.name.clone(),
+                detail: format!("model discovery failed: {e}"),
+            })?;
+        if !resp.status().is_success() {
+            return Err(PoolError::Transport {
+                provider: self.name.clone(),
+                detail: format!("model discovery HTTP {}", resp.status()),
+            });
+        }
+        #[derive(Deserialize)]
+        struct ModelList {
+            #[serde(default)]
+            data: Vec<ModelEntry>,
+        }
+        #[derive(Deserialize)]
+        struct ModelEntry {
+            id: String,
+        }
+        let parsed: ModelList = resp.json().await.map_err(|e| PoolError::Transport {
+            provider: self.name.clone(),
+            detail: format!("malformed model list: {e}"),
+        })?;
+        let mut ids: Vec<String> = parsed.data.into_iter().map(|m| m.id).collect();
+        ids.sort();
+        Ok(ids)
     }
 }
 
@@ -297,6 +350,43 @@ mod tests {
             Some(v) => unsafe { std::env::set_var("GS_PROVIDERS", v) },
             None => unsafe { std::env::remove_var("GS_PROVIDERS") },
         }
+    }
+
+    #[test]
+    fn a_model_not_found_never_counts_toward_the_breaker() {
+        // This is the regression that would have corrupted the GPQA run: a
+        // hardcoded id 404s, and if that opened the breaker every subsequent
+        // sample would be refused as a "provider outage".
+        let e = PoolError::ModelNotFound {
+            provider: "groq".into(),
+            model: "llama-3.1-8b-instant".into(),
+        };
+        assert!(
+            !e.counts_toward_breaker(),
+            "a caller config error must not open the circuit"
+        );
+        // And it must not be confused with a dead key either.
+        assert!(!matches!(e, PoolError::KeyDead { .. }));
+
+        // The three exclusions, all distinct reasons.
+        assert!(!PoolError::RateLimited { provider: "p".into(), key_index: 0 }
+            .counts_toward_breaker());
+        assert!(!PoolError::KeyDead { provider: "p".into(), key_index: 0 }
+            .counts_toward_breaker());
+        // A real outage still does count.
+        assert!(PoolError::Transport { provider: "p".into(), detail: "d".into() }
+            .counts_toward_breaker());
+    }
+
+    #[test]
+    fn a_model_not_found_names_the_bad_id_for_the_operator() {
+        let e = PoolError::ModelNotFound {
+            provider: "groq".into(),
+            model: "auto".into(),
+        };
+        let s = format!("{e}");
+        assert!(s.contains("auto"), "the offending id must be named: {s}");
+        assert!(s.contains("groq"));
     }
 
     #[test]
