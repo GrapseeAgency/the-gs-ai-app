@@ -1,0 +1,8 @@
+{
+  "name": "code_review",
+  "description": "Static checks over a code snippet",
+  "capabilities": ["code"],
+  "token_budget": 8192,
+  "entrypoint": "native://plugins/code_review",
+  "timeout_ms": 15000
+}

@@ -1,0 +1,8 @@
+{
+  "name": "ocr",
+  "description": "Extract text from an image",
+  "capabilities": ["vision", "ocr"],
+  "token_budget": 4096,
+  "entrypoint": "native://plugins/ocr",
+  "timeout_ms": 20000
+}

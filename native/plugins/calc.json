@@ -1,0 +1,8 @@
+{
+  "name": "calc",
+  "description": "Evaluate arithmetic exactly and return a number",
+  "capabilities": ["compute"],
+  "token_budget": 256,
+  "entrypoint": "native://plugins/calc",
+  "timeout_ms": 2000
+}

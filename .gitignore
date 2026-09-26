@@ -88,4 +88,22 @@ cmdline-tools.zip
 /home/z/.gs-vault/
 tests/private-holdout.json
 native/build/
+
+# --- GS AI native runtime build artefacts --------------------------------
+# Cargo workspace output. 377 MB of incremental artefacts otherwise.
+native/target/
+# Vendored third-party C/C++ trees (llama.cpp, stable-diffusion.cpp)
+native/cpp/*/vendor/
+# Compiled objects and shared libraries anywhere under native/
+native/**/*.o
+native/**/*.a
+native/**/*.so
+native/**/*.so.*
+# Model weights and runtime caches. data/.gitignore keeps the .gitkeep files.
+native/data/models/*
+native/data/cache/*
+# Benchmark harness scratch: a0d8a96 declared these output, not source.
+.venv-bench/
+gs_bench.egg-info/
+tool-results/
 __pycache__/

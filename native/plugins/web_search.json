@@ -1,0 +1,8 @@
+{
+  "name": "web_search",
+  "description": "Search the web for current information",
+  "capabilities": ["search"],
+  "token_budget": 2000,
+  "entrypoint": "native://plugins/web_search",
+  "timeout_ms": 10000
+}

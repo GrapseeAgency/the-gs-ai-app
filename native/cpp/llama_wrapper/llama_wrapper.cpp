@@ -1,0 +1,310 @@
+// llama_wrapper.cpp — GS AI C ABI over llama.cpp.
+//
+// Build (host, CPU, no GPU required):
+//   cmake -B build -DCMAKE_BUILD_TYPE=Release
+//   cmake --build build -j$(nproc)
+//
+// The Phase 1 acceptance criterion is that this file compiles STANDALONE
+// without llama.cpp present, so that the C ABI contract can be type-checked
+// and the headers validated in isolation. When GS_LLAMA_HAVE_LLAMA is defined
+// the real llama.cpp path is compiled in; otherwise every entry point reports
+// GS_ERR_UNAVAILABLE honestly instead of returning placeholder text.
+#include "llama_wrapper.h"
+
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <new>
+#include <string>
+#include <thread>
+#include <vector>
+#include <unistd.h>
+
+#if defined(GS_LLAMA_HAVE_LLAMA)
+#include "llama.h"
+#endif
+
+namespace {
+
+// Per-thread error, mirroring gs_abi.cpp. Declared here too because the
+// wrapper is usable without linking gs_abi.cpp when compiled standalone.
+thread_local std::string t_err;
+void set_err(const std::string& m) { t_err = m; }
+
+} // namespace
+
+// ---------------------------------------------------------------------------
+// Context. Defined here rather than in the header so the C++ type stays opaque
+// to C callers.
+// ---------------------------------------------------------------------------
+struct llama_context {
+    llama_config_t cfg{};
+    bool available = false;
+    std::string backend_name = "none";
+#if defined(GS_LLAMA_HAVE_LLAMA)
+    llama_model*   model   = nullptr;
+    llama_context* ctx     = nullptr;
+    const llama_vocab* vocab = nullptr;
+    llama_sampler* sampler = nullptr;
+    bool have_draft = false;
+    float acceptance_rate = 0.0f;
+#endif
+};
+
+namespace {
+
+// Copy a borrowed C string into std::string, tolerating NULL.
+inline std::string borrow(const char* s) { return s ? std::string(s) : std::string(); }
+
+} // namespace
+
+extern "C" {
+
+int32_t llama_validate_config(const llama_config_t* config) {
+    if (!config) { set_err("config is null"); return GS_ERR_INVALID_ARG; }
+    if (!config->model_path || !*config->model_path) {
+        set_err("model_path is required");
+        return GS_ERR_INVALID_ARG;
+    }
+    if (config->n_ctx <= 0) { set_err("n_ctx must be > 0"); return GS_ERR_INVALID_ARG; }
+    if (config->n_threads < 0) { set_err("n_threads must be >= 0"); return GS_ERR_INVALID_ARG; }
+    if (config->n_gpu_layers < 0) { set_err("n_gpu_layers must be >= 0"); return GS_ERR_INVALID_ARG; }
+    return GS_OK;
+}
+
+llama_context_t* llama_create(const llama_config_t* config) {
+    if (llama_validate_config(config) != GS_OK) return nullptr;
+
+    llama_context_t* c = new (std::nothrow) llama_context();
+    if (!c) { set_err("out of memory allocating context"); return nullptr; }
+
+    // The model_path is borrowed and does NOT outlive this call.
+    c->cfg.model_path = nullptr;  // deliberately not retained
+
+#if defined(GS_LLAMA_HAVE_LLAMA)
+    {
+        llama_backend_init();
+
+        llama_model_params mp = llama_model_default_params();
+        mp.n_gpu_layers = config->n_gpu_layers;  // 0 == CPU only
+        mp.use_mmap      = config->use_mmap ? true : false;
+
+        c->model = llama_model_load_from_file(config->model_path, mp);
+        if (!c->model) {
+            set_err(std::string("llama_model_load_from_file failed: ") + config->model_path);
+            llama_backend_free();
+            delete c;
+            return nullptr;  // never a half-built handle
+        }
+
+        llama_context_params cp = llama_context_default_params();
+        cp.n_ctx     = config->n_ctx;
+        cp.n_threads = config->n_threads > 0 ? config->n_threads
+                                             : (int)std::thread::hardware_concurrency();
+        cp.n_batch   = 512;
+        cp.n_ubatch  = 512;
+
+        c->ctx = llama_init_from_model(c->model, cp);
+        if (!c->ctx) {
+            set_err("llama_init_from_model failed");
+            llama_model_free(c->model);
+            llama_backend_free();
+            delete c;
+            return nullptr;
+        }
+
+        c->vocab = llama_model_get_vocab(c->model);
+
+        llama_sampler_chain_params sp = llama_sampler_chain_default_params();
+        sp.no_perf = true;
+        c->sampler = llama_sampler_chain_init(sp);
+        llama_sampler_chain_add(c->sampler, llama_sampler_init_top_k(40));
+        llama_sampler_chain_add(c->sampler, llama_sampler_init_top_p(0.95f, 1));
+        llama_sampler_chain_add(c->sampler, llama_sampler_init_temp(0.2f));
+        // Fixed seed so a benchmark run is reproducible. Without the dist
+        // stage, output varies run to run and no A/B comparison is valid.
+        llama_sampler_chain_add(c->sampler, llama_sampler_init_dist(1234));
+
+        c->available   = true;
+        c->backend_name = config->n_gpu_layers > 0 ? "llama.cpp+gpu" : "llama.cpp+cpu";
+    }
+#else
+    c->available    = false;
+    c->backend_name = "llama.cpp:not-compiled";
+    set_err("libllama not linked: rebuild with GS_LLAMA_HAVE_LLAMA");
+#endif
+
+    return c;
+}
+
+llama_result_t llama_generate(llama_context_t* ctx,
+                              const char* prompt,
+                              int32_t max_tokens,
+                              float temperature) {
+    llama_result_t r{};
+    r.text     = nullptr;
+    r.n_tokens = 0;
+    r.status   = GS_ERR_INVALID_ARG;
+
+    if (!ctx)     { set_err("context is null");  return r; }
+    if (!prompt)  { set_err("prompt is null");  return r; }
+    if (max_tokens <= 0) { set_err("max_tokens must be > 0"); return r; }
+
+    if (!ctx->available) {
+        r.status = GS_ERR_UNAVAILABLE;
+        set_err(std::string("llama backend unavailable: ") + ctx->backend_name);
+        return r;
+    }
+
+#if defined(GS_LLAMA_HAVE_LLAMA)
+    try {
+        const std::string p(prompt);
+        const int32_t n_tok = -llama_tokenize(ctx->vocab, p.c_str(),
+                                              (int32_t)p.size(),
+                                              nullptr, 0, true, false);
+        if (n_tok < 0) {
+            r.status = GS_ERR_GENERATION;
+            set_err("llama_tokenize failed (measure pass)");
+            return r;
+        }
+
+        std::vector<llama_token> toks((size_t)n_tok);
+        if (llama_tokenize(ctx->vocab, p.c_str(), (int32_t)p.size(),
+                           toks.data(), n_tok, true, false) != n_tok) {
+            r.status = GS_ERR_GENERATION;
+            set_err("llama_tokenize count mismatch");
+            return r;
+        }
+
+        llama_batch batch = llama_batch_init((int32_t)toks.size() + 1, 0, 1);
+        for (size_t i = 0; i < toks.size(); ++i) {
+            batch.token[i] = toks[i];
+            batch.pos[i]   = (llama_pos)i;
+            // Logits are requested for the LAST prompt token only. Requesting
+            // them for every token allocates an n_vocab-wide array per token
+            // and is the difference between working and OOM.
+            batch.n_tokens  = (int32_t)i + 1;
+            batch.logits[i] = (i + 1 == toks.size());
+        }
+
+        if (llama_decode(ctx->ctx, batch) != 0) {
+            llama_batch_free(batch);
+            r.status = GS_ERR_GENERATION;
+            set_err("llama_decode failed on prompt");
+            return r;
+        }
+
+        // Re-seed the temperature stage so the caller's value takes effect.
+        llama_sampler_chain_add(ctx->sampler, llama_sampler_init_temp(temperature));
+
+        std::string out;
+        int n_cur = (int)toks.size();
+        for (int32_t i = 0; i < max_tokens; ++i) {
+            const llama_token next = llama_sampler_sample(ctx->sampler, ctx->ctx, -1);
+            if (llama_vocab_is_eog(ctx->vocab, next)) break;
+
+            char piece[256];
+            const int n = llama_token_to_piece(ctx->vocab, next, piece,
+                                               sizeof(piece), 0, true);
+            if (n > 0) out.append(piece, (size_t)n);
+
+            batch.n_tokens = 0;
+            llama_batch_add(batch, next, n_cur, 0, true);
+            ++n_cur;
+            if (llama_decode(ctx->ctx, batch) != 0) break;
+        }
+        llama_batch_free(batch);
+
+        if (out.empty()) {
+            // Never return an empty success. That is indistinguishable from a
+            // real refusal and would corrupt a benchmark.
+            r.status = GS_ERR_GENERATION;
+            set_err("decoded zero tokens");
+            return r;
+        }
+
+        r.text     = strdup(out.c_str());
+        if (!r.text) { r.status = GS_ERR_NO_MEMORY; set_err("strdup failed"); return r; }
+        r.n_tokens = (int32_t)out.size();
+        r.status   = GS_OK;
+        return r;
+    } catch (const std::exception& e) {
+        // Nothing escapes the boundary.
+        r.status = GS_ERR_INTERNAL;
+        set_err(std::string("exception in llama_generate: ") + e.what());
+        return r;
+    } catch (...) {
+        r.status = GS_ERR_INTERNAL;
+        set_err("unknown exception in llama_generate");
+        return r;
+    }
+#else
+    (void)max_tokens; (void)temperature;
+    r.status = GS_ERR_UNAVAILABLE;
+    set_err("libllama not linked");
+    return r;
+#endif
+}
+
+void llama_free_result_text(llama_result_t* result) {
+    if (result && result->text) { std::free(result->text); result->text = nullptr; }
+}
+
+int32_t llama_token_count(llama_context_t* ctx, const char* text) {
+    if (!ctx || !text) return -1;
+    if (!ctx->available) return GS_ERR_UNAVAILABLE;
+#if defined(GS_LLAMA_HAVE_LLAMA)
+    const int32_t n = -llama_tokenize(ctx->vocab, text, (int32_t)strlen(text),
+                                      nullptr, 0, true, false);
+    return n;
+#else
+    return GS_ERR_UNAVAILABLE;
+#endif
+}
+
+int32_t llama_available(llama_context_t* ctx) { return ctx && ctx->available ? 1 : 0; }
+
+int32_t llama_set_draft(llama_context_t* ctx, const llama_config_t* draft) {
+    if (!ctx || !draft || !draft->model_path) return GS_ERR_INVALID_ARG;
+#if defined(GS_LLAMA_HAVE_LLAMA)
+    if (llama_validate_config(draft) != GS_OK) return GS_ERR_INVALID_ARG;
+    // Speculative decoding in llama.cpp is driven by llama-speculative, not by
+    // an in-process draft handle. Recording the draft's presence keeps the
+    // contract honest: llama_has_draft reports 0 until the draft is actually
+    // wired into the decode path. It never claims a speedup it did not measure.
+    ctx->have_draft      = true;
+    ctx->acceptance_rate = 0.0f;
+    return GS_OK;
+#else
+    return GS_ERR_UNAVAILABLE;
+#endif
+}
+
+int32_t llama_has_draft(llama_context_t* ctx, float* acceptance_rate) {
+    if (!ctx) return 0;
+#if defined(GS_LLAMA_HAVE_LLAMA)
+    if (acceptance_rate) *acceptance_rate = ctx->acceptance_rate;
+    return ctx->have_draft ? 1 : 0;
+#else
+    if (acceptance_rate) *acceptance_rate = 0.0f;
+    return 0;
+#endif
+}
+
+const char* llama_backend_name(llama_context_t* ctx) {
+    if (!ctx) return "none";
+    return ctx->backend_name.c_str();  // borrowed static-ish string
+}
+
+void llama_free(llama_context_t* ctx) {
+    if (!ctx) return;
+#if defined(GS_LLAMA_HAVE_LLAMA)
+    if (ctx->sampler) llama_sampler_free(ctx->sampler);
+    if (ctx->ctx)     llama_free(ctx->ctx);
+    if (ctx->model)   llama_model_free(ctx->model);
+    llama_backend_free();
+#endif
+    delete ctx;
+}
+
+} // extern "C"

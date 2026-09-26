@@ -1,0 +1,10 @@
+{
+  "name": "research_paper",
+  "description": "Find, read, and synthesize research papers",
+  "steps": [
+    {"plugin": "web_search", "input": "$query"},
+    {"plugin": "ocr", "input": "$documents"},
+    {"plugin": "summarize", "input": "$text"}
+  ],
+  "token_budget": 16384
+}

@@ -1,0 +1,9 @@
+{
+  "name": "fact_check",
+  "description": "Verify claims against cited sources",
+  "steps": [
+    {"plugin": "web_search", "input": "$claim"},
+    {"plugin": "summarize", "input": "$evidence"}
+  ],
+  "token_budget": 8192
+}

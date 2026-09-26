@@ -1,0 +1,38 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/gs-common",
+    "crates/gs-core",
+    "crates/gs-ffi",
+    "crates/gs-server",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.88"
+license = "UNLICENSED"
+publish = false
+
+[workspace.dependencies]
+gs-common = { path = "crates/gs-common" }
+gs-core   = { path = "crates/gs-core" }
+gs-ffi    = { path = "crates/gs-ffi" }
+serde      = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror  = "2"
+tokio      = { version = "1", features = ["full"] }
+tracing    = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+axum       = { version = "0.7", features = ["json"] }
+async-trait = "0.1"
+futures    = "0.3"
+rusqlite   = { version = "0.32", features = ["bundled"] }
+reqwest    = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
+rand       = "0.8"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+panic = "unwind"   # required: gs-ffi uses catch_unwind at every boundary
