@@ -20,7 +20,22 @@ use std::time::Instant;
 pub struct Question {
     pub id: String,
     pub question: String,
+    /// The options. Required: GPQA is multiple choice, and a stem with no
+    /// options is not a benchmark item, it is a broken prompt.
+    pub choices: Vec<String>,
     pub answer: String,
+}
+
+impl Question {
+    /// Render as an A) B) C) D) block. Without this the model answers with a
+    /// bare number and every sample scores as unparseable.
+    pub fn rendered(&self) -> String {
+        let mut s = format!("{}\n\n", self.question.trim_end());
+        for (i, c) in self.choices.iter().enumerate() {
+            s.push_str(&format!("{}) {}\n", (b'A' + i as u8) as char, c.trim()));
+        }
+        s
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -223,7 +238,7 @@ impl Runner {
             if n > 0 && self.pace_ms > 0 {
                 tokio::time::sleep(std::time::Duration::from_millis(self.pace_ms)).await;
             }
-            let prompt = scaffold_prompt(self.scaffold, &q.question);
+            let prompt = scaffold_prompt(self.scaffold, &q.rendered());
             let msgs = vec![Message::user(prompt)];
 
             // Retry while the only key is parked. The pool parks for 60s by
@@ -394,7 +409,12 @@ mod tests {
     use super::*;
 
     fn q(id: &str, a: &str) -> Question {
-        Question { id: id.into(), question: "Q?".into(), answer: a.into() }
+        Question {
+            id: id.into(),
+            question: "Q?".into(),
+            choices: vec!["one".into(), "two".into()],
+            answer: a.into(),
+        }
     }
 
     #[test]
@@ -501,6 +521,36 @@ mod tests {
             scaffold_prompt(Scaffold::Baseline, "Q?"),
             scaffold_prompt(Scaffold::Router, "Q?"),
             "router must match baseline exactly to be a control"
+        );
+    }
+
+    #[test]
+    fn options_are_rendered_as_lettered_choices() {
+        let qq = Question {
+            id: "x".into(),
+            question: "Which is true?".into(),
+            choices: vec!["10 eV".into(), "11 eV".into(), "12 eV".into(), "13 eV".into()],
+            answer: "C".into(),
+        };
+        let r = qq.rendered();
+        for (i, l) in ["A) 10 eV", "B) 11 eV", "C) 12 eV", "D) 13 eV"].iter().enumerate() {
+            assert!(r.contains(l), "missing option {i}: {r}");
+        }
+    }
+
+    #[test]
+    fn every_staged_question_has_options() {
+        let p = "data/benchmarks/gpqa/diamond.jsonl";
+        if !std::path::Path::new(p).exists() {
+            eprintln!("skipping: {p} not staged");
+            return;
+        }
+        let qs = load_questions(p).expect("staged GPQA must parse");
+        assert_eq!(qs.len(), 198);
+        // The bug this pins: a stem with no options is not a benchmark item.
+        assert!(
+            qs.iter().all(|q| q.choices.len() == 4),
+            "every GPQA Diamond item must carry 4 options"
         );
     }
 
