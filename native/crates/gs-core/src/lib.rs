@@ -5,6 +5,7 @@
 //! here: C++ owns that, behind the C ABI in gs-ffi.
 
 pub mod agent;
+pub mod http_provider;
 pub mod budget;
 pub mod memory;
 pub mod router;
@@ -15,6 +16,7 @@ pub mod verification;
 pub use agent::{AgentLoop, AgentOutcome, IntentClassifier, Plan, Step};
 pub use budget::TokenBudget;
 pub use memory::{MemoryStore, Compaction, WorkingMemory};
+pub use http_provider::{HttpProvider, pool_from_env};
 pub use router::{ProviderPool, PoolError, Provider};
 pub use skills::{SkillRegistry, Skill};
 pub use tools::{ToolRegistry, ToolResult};
