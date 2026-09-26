@@ -4,9 +4,9 @@
  *   - `model_path` and every `const char*` INPUT are borrowed for the duration
  *     of the call only.
  *   - llama_result_t.text is malloc'd and owned by the CALLER.
- *   - Handles come from llama_create and go to llama_free. Nothing else.
+ *   - Handles come from gs_llama_create and go to gs_llama_free. Nothing else.
  *
- * No C++ exception may cross this boundary; llama_generate catches internally
+ * No C++ exception may cross this boundary; gs_llama_generate catches internally
  * and reports GS_ERR_INTERNAL with the message retrievable via gs_last_error().
  *
  * Compiles standalone:
@@ -45,49 +45,49 @@ typedef struct {
 } llama_config_t;
 
 typedef struct {
-    char*   text;             /* OWNED by caller -> llama_free_result_text */
+    char*   text;             /* OWNED by caller -> gs_llama_free_result_text */
     int32_t n_tokens;
     int32_t status;           /* gs_status_t */
 } llama_result_t;
 
-typedef struct llama_context llama_context_t;
+typedef struct llama_context gs_llama_context_t;
 
 /* Last-error accessor is shared: gs_last_error() from gs_abi.h. */
 
 /* Validates config without loading a model. Returns GS_OK or a gs_status_t. */
-int32_t llama_validate_config(const llama_config_t* config);
+int32_t gs_llama_validate_config(const llama_config_t* config);
 
 /* Creates a context. Returns NULL on failure; call gs_last_error() for the
  * reason. Deliberately returns NULL rather than a partially-initialised
  * handle so callers cannot use a half-built context. */
-llama_context_t* llama_create(const llama_config_t* config);
+gs_llama_context_t* gs_llama_create(const llama_config_t* config);
 
 /* Generates up to max_tokens. On GS_OK, result->text is caller-owned.
  * On any error, result->text is NULL and result->status carries the code. */
-llama_result_t llama_generate(llama_context_t* ctx,
+llama_result_t gs_llama_generate(gs_llama_context_t* ctx,
                               const char* prompt,
                               int32_t max_tokens,
                               float temperature);
 
 /* Releases result->text. Safe to call with NULL. */
-void llama_free_result_text(llama_result_t* result);
+void gs_llama_free_result_text(llama_result_t* result);
 
 /* Token count for text, or negative on error. */
-int32_t llama_token_count(llama_context_t* ctx, const char* text);
+int32_t gs_llama_token_count(gs_llama_context_t* ctx, const char* text);
 
 /* 1 if the backing backend initialised and generate can work. */
-int32_t llama_available(llama_context_t* ctx);
+int32_t gs_llama_available(gs_llama_context_t* ctx);
 
 /* Speculative decoding support. llama-create must be called with a draft model
  * path for this to report 1. */
-int32_t llama_set_draft(llama_context_t* ctx, const llama_config_t* draft);
-int32_t llama_has_draft(llama_context_t* ctx, float* acceptance_rate);
+int32_t gs_llama_set_draft(gs_llama_context_t* ctx, const llama_config_t* draft);
+int32_t gs_llama_has_draft(gs_llama_context_t* ctx, float* acceptance_rate);
 
 /* Self-reported backend name, borrowed static string. Never NULL. */
-const char* llama_backend_name(llama_context_t* ctx);
+const char* gs_llama_backend_name(gs_llama_context_t* ctx);
 
 /* Destroys the context. NULL-safe. Context must outlive all borrowed strings. */
-void llama_free(llama_context_t* ctx);
+void gs_llama_free(gs_llama_context_t* ctx);
 
 #ifdef __cplusplus
 } /* extern "C" */

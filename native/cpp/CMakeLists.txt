@@ -21,8 +21,21 @@ target_include_directories(gs_llama PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/llama_wrapper)
 if(DEFINED GS_LLAMA_ROOT AND EXISTS "${GS_LLAMA_ROOT}/include/llama.h")
   target_compile_definitions(gs_llama PRIVATE GS_LLAMA_HAVE_LLAMA)
-  target_include_directories(gs_llama PRIVATE ${GS_LLAMA_ROOT}/include)
-  target_link_libraries(gs_llama PUBLIC ${GS_LLAMA_ROOT}/bin/libllama.so)
+  # llama.h does `#include "ggml.h"`, and ggml headers live in a SEPARATE
+  # tree from llama's own. Both must be on the include path or the compile
+  # dies with "fatal error: ggml.h: No such file or directory".
+  target_include_directories(gs_llama PRIVATE
+      ${GS_LLAMA_ROOT}/include
+      ${GS_LLAMA_ROOT}/ggml/include)
+  # Prefer the versioned .so over the bare symlink so the runtime loader keeps
+  # a resolvable SONAME.
+  find_library(GS_LLAMA_SO
+    NAMES llama PATHS ${GS_LLAMA_ROOT}/build/bin ${GS_LLAMA_ROOT}/bin NO_DEFAULT_PATH)
+  if(GS_LLAMA_SO)
+    target_link_libraries(gs_llama PUBLIC ${GS_LLAMA_SO})
+  else()
+    target_link_libraries(gs_llama PUBLIC ${GS_LLAMA_ROOT}/bin/libllama.so)
+  endif()
   message(STATUS "gs_llama: linked against libllama at ${GS_LLAMA_ROOT}")
 else()
   message(WARNING "gs_llama: GS_LLAMA_ROOT not set - ABI surface only, generation BLOCKED")
