@@ -8,6 +8,7 @@ pub mod agent;
 pub mod http_provider;
 pub mod image;
 pub mod local_provider;
+pub mod scratch;
 pub mod budget;
 pub mod memory;
 pub mod router;
