@@ -1,0 +1,178 @@
+name: ios-native
+
+# Cross-compiles libgs_ffi.a for iOS device and simulator and assembles a real
+# .xcframework containing both slices. Binaries are artifacts, never git.
+#
+# Like the Android build this is PORTABLE-ONLY: no ONNX Runtime, no llama.cpp, no
+# Tesseract. None have drop-in arm64-ios prebuilts here, and the static library
+# is meant to be small enough to ship inside an app.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [native-runtime]
+    paths:
+      - 'native/**'
+      - '.github/workflows/ios-native.yml'
+      - '.cargo/config.toml'
+
+concurrency:
+  group: ios-native-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  GS_ALLOW_MISSING_ONNX: "1"
+
+jobs:
+  build:
+    name: xcframework
+    runs-on: macos-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: |
+          set -euo pipefail
+          # Pinned rather than "latest": a runner image upgrade that changes the
+          # default SDK makes a previously green build fail for reasons
+          # unrelated to the code.
+          sudo xcode-select -s /Applications/Xcode_15.4.app 2>/dev/null || \
+            sudo xcode-select -s /Applications/Xcode_16.2.app 2>/dev/null || \
+            xcode-select -s
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+
+      - name: Install Rust targets
+        run: |
+          set -euo pipefail
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+            | sh -s -- -y --profile minimal --default-toolchain stable
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          rustup target add aarch64-apple-ios aarch64-apple-ios-sim
+          rustc --version
+          rustc --print target-list | grep -E '^aarch64-apple-ios' || true
+
+      - name: Build device slice (aarch64-apple-ios)
+        working-directory: native
+        run: |
+          set -euo pipefail
+          # AR_CRATES=gs-ffi: only the FFI crate. Building the workspace would
+          # pull in the desktop backends and the axum server, neither of which
+          # belongs in a phone library.
+          AR_CRATES=gs-ffi \
+          AR_TARGETS=aarch64-apple-ios \
+          AR_OUTPUT_DIR="$GITHUB_WORKSPACE/dist/ios/device" \
+          cargo build --release -p gs-ffi --lib
+
+      - name: Build simulator slice (aarch64-apple-ios-sim)
+        working-directory: native
+        run: |
+          set -euo pipefail
+          AR_CRATES=gs-ffi \
+          AR_TARGETS=aarch64-apple-ios-sim \
+          AR_OUTPUT_DIR="$GITHUB_WORKSPACE/dist/ios/simulator" \
+          cargo build --release -p gs-ffi --lib
+
+      - name: Assemble the xcframework
+        run: |
+          set -euo pipefail
+          set -a; source "$GITHUB_ENV"; set +a
+          rm -rf "$GITHUB_WORKSPACE/dist/ios/GsFfi.xcframework"
+          mkdir -p "$GITHUB_WORKSPACE/dist/ios/GsFfi.xcframework/Headers"
+
+          # Headers next to each slice: a consumer reads the module, not the
+          # binary, and a missing header is the most common reason a generated
+          # xcframework will not import.
+          for f in \
+            native/cpp/mobile/gs_mobile.h \
+            native/cpp/include/gs_abi.h; do
+            cp "$f" "$GITHUB_WORKSPACE/dist/ios/GsFfi.xcframework/Headers/"
+          done
+
+          # Headers must declare their own dependencies, and gs_mobile.h includes
+          # gs_abi.h by plain name, so both land in the same directory.
+          cat > "$GITHUB_WORKSPACE/dist/ios/GsFfi.xcframework/Headers/module.modulemap" <<'MAP'
+module GsFfi {
+    header "gs_abi.h"
+    header "gs_mobile.h"
+    export *
+}
+MAP
+
+          xcodebuild -create-xcframework \
+            -library  "$GITHUB_WORKSPACE/dist/ios/device/libgs_ffi.a" \
+              -headers "$GITHUB_WORKSPACE/dist/ios/GsFfi.xcframework/Headers" \
+            -library  "$GITHUB_WORKSPACE/dist/ios/simulator/libgs_ffi.a" \
+              -headers "$GITHUB_WORKSPACE/dist/ios/GsFfi.xcframework/Headers" \
+            -output   "$GITHUB_WORKSPACE/dist/ios/GsFfi.xcframework"
+
+      - name: Verify slices, archs and exported ABI
+        run: |
+          set -euo pipefail
+          XF="$GITHUB_WORKSPACE/dist/ios/GsFfi.xcframework"
+          test -d "$XF" || { echo "MISSING xcframework"; exit 1; }
+
+          echo "=== Info.plist ==="
+          plutil -p "$XF/Info.plist" | head -40
+
+          echo "=== slices ==="
+          ls -1 "$XF"
+
+          for pair in "device:aarch64" "simulator:aarch64"; do
+            LIB="${pair%%:*}"; ARCH="${pair##*:}"
+            A="$GITHUB_WORKSPACE/dist/ios/$LIB/libgs_ffi.a"
+            test -f "$A" || { echo "MISSING: $A"; exit 1; }
+            echo "--- $LIB: $(file -b "$A")"
+            file -b "$A" | grep -q "Archive" || { echo "FAIL: not an archive"; exit 1; }
+            # The Mach-O inside the archive must be the requested arch.
+            INNER=$(ar t "$A" | head -1)
+            echo "    member: $INNER"
+            lipo -info "$A" || { echo "FAIL: lipo could not read $A"; exit 1; }
+            lipo -info "$A" | grep -q "$ARCH" || {
+              echo "FAIL: $LIB is not $ARCH: $(lipo -info "$A")"; exit 1; }
+            # Symbols: an archive that exists but exports nothing is the exact
+            # failure that was fixed for the .so, and it must be caught here too.
+            N=$(nm -gU "$A" 2>/dev/null | grep -c 'gs_ffi_mobile_' || true)
+            echo "    gs_ffi_mobile_* exported: $N"
+            [ "$N" -ge 8 ] || { echo "FAIL: expected >=8 exports, got $N"; exit 1; }
+          done
+
+          echo "=== exported mobile ABI (device) ==="
+          nm -gU "$GITHUB_WORKSPACE/dist/ios/device/libgs_ffi.a" \
+            | grep -oE 'gs_[a-z_0-9]+' | sort -u | head -20
+
+          echo "=== dSYM ==="
+          # Rust ships a .a with debug info; a dSYM is produced when dSYM is
+          # requested, and its absence is reported rather than glossed over.
+          DSYM=$(find "$GITHUB_WORKSPACE/dist/ios" -name '*.dSYM' -type d | head -1)
+          if [ -n "$DSYM" ]; then
+            echo "dSYM: $DSYM"
+            du -sh "$DSYM"
+            dwarfdump --uuid "$DSYM" | head -4
+          else
+            echo "dSYM: none produced (debug info is inside the .a; set"
+            echo "      RUSTFLAGS=-C debuginfo=2 + dsymutil for a standalone dSYM)"
+          fi
+
+          echo "VERIFIED: xcframework with both slices and the mobile ABI"
+
+      - name: Upload xcframework
+        uses: actions/upload-artifact@v4
+        with:
+          name: GsFfi.xcframework
+          path: dist/ios/GsFfi.xcframework
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload raw static libraries
+        uses: actions/upload-artifact@v4
+        with:
+          name: libgs_ffi-a
+          path: |
+            dist/ios/device/libgs_ffi.a
+            dist/ios/simulator/libgs_ffi.a
+            dist/ios/GsFfi.xcframework/Headers/*
+          if-no-files-found: error
+          retention-days: 14
