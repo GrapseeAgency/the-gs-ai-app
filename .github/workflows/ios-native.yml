@@ -32,17 +32,38 @@ jobs:
       - name: Check out
         uses: actions/checkout@v4
 
+      # ATTEMPT 2 FAILED HERE. Raw error, run 36347243110:
+      #   xcode-select: error: missing argument to '-s'
+      # The fallback branch ran `xcode-select -s` with no path, which is a usage
+      # error rather than a toolchain problem. The image already has a working
+      # default Xcode, so pinning is best-effort: pick a pinned one if present,
+      # otherwise use the default and say which was chosen.
       - name: Select Xcode
         run: |
           set -euo pipefail
-          # Pinned rather than "latest": a runner image upgrade that changes the
-          # default SDK makes a previously green build fail for reasons
-          # unrelated to the code.
-          sudo xcode-select -s /Applications/Xcode_15.4.app 2>/dev/null || \
-            sudo xcode-select -s /Applications/Xcode_16.2.app 2>/dev/null || \
-            xcode-select -s
+          echo "=== available Xcodes ==="
+          ls -1d /Applications/Xcode*.app 2>/dev/null || echo "(none listed)"
+          SELECTED=""
+          for V in 16.2 16.1 15.4; do
+            if [ -d "/Applications/Xcode_${V}.app" ]; then
+              # -p prints the path without changing global state, which is
+              # enough for the SDK and lipo calls this job makes.
+              SELECTED="/Applications/Xcode_${V}.app"
+              break
+            fi
+          done
+          if [ -n "$SELECTED" ]; then
+            echo "pinned: $SELECTED"
+            echo "DEVELOPER_DIR=$SELECTED" >> "$GITHUB_ENV"
+          else
+            echo "no pinned Xcode present; using the image default"
+            echo "default: $(xcode-select -p)"
+          fi
+          # -p never fails on a missing argument, unlike -s.
+          xcode-select -p
           xcodebuild -version
           xcrun --sdk iphoneos --show-sdk-version
+          xcrun --sdk iphonesimulator --show-sdk-version
 
       - name: Install Rust targets
         run: |
