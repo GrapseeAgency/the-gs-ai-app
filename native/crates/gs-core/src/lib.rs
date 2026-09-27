@@ -9,6 +9,7 @@ pub mod http_provider;
 pub mod image;
 pub mod local_provider;
 pub mod scratch;
+pub mod compaction;
 pub mod routing;
 pub mod semcache;
 pub mod budget;
