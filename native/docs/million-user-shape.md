@@ -159,29 +159,60 @@ batching reduces the number of GPUs needed.
 
 ## 5. Where is the first wall?
 
-**Not the GPU. The architectural gap is concurrency.**
+**Not the GPU. The architectural gap was concurrency. It is now measured and
+partly closed.**
 
-In priority order:
+1. **No batched serving path — FIXED, measured, target missed.**
+   This was the first wall. `LocalProvider` held a `Mutex` over the llama.cpp
+   context, so the machine served exactly one request at a time: **3.84 req/s**
+   measured, with 7.7 of 8 GiB of VRAM idle.
 
-1. **No batched serving path (architectural, blocks everything else).**
-   `LocalProvider` holds a `Mutex` over the llama.cpp context, so the machine
-   serves exactly one request at a time. This is the first wall because it caps
-   throughput at 4.76 req/s regardless of how much VRAM is free. 7.7 GiB of the
-   8 GiB VRAM is unused after loading a 0.5B model, and 4 idle cores sit beside a
-   GPU that is being fed one token at a time. Fixing this is worth more than any
-   hardware purchase, and it is unmeasured.
+   It is now a queue plus a scheduler thread feeding `n_seq_max` sequence slots,
+   with several sequences per `llama_decode`. A pool of N contexts was tried in
+   the design and rejected on measurement: N contexts still submit to one GPU
+   queue, so Vulkan serialises them and aggregate throughput barely moves.
 
-2. **Prompt length (measured, controllable).** p95 is 1867 ms against a p50 of
+   Measured, 32 tokens, greedy, same machine/model/prompts/minute:
+
+   | concurrency | batched req/s | vs baseline |
+   |---:|---:|---:|
+   | 25 | 7.65 | 2.26x |
+   | 50 | 9.48 | 2.80x |
+   | 100 | 12.52 | 3.68x |
+   | 200 | 12.85 | 3.35x |
+   | baseline (the Mutex) | 3.84 | 1.00x |
+
+   **12.85 req/s at 200 concurrent. The 15 req/s target was MISSED, by 14%.**
+   It saturates there: past batch ~100 a 0.5B model on this Radeon 580 is
+   compute-bound rather than memory-bound, and raising `n_seq_max` further buys
+   nothing. The honest number is 12.85, and the wall has moved rather than
+   disappeared — it is now the GPU's arithmetic throughput at small model size,
+   not a missing code path.
+
+   Batched output is byte-identical to decoding each request alone: 50/50 at
+   concurrency 25, 50, 100 and 200. That is asserted, not assumed.
+
+   Fifty concurrent requests through `LocalProvider`: 50/50 returned, 50/50
+   non-empty, 50 distinct answers, 8.28 req/s end to end.
+
+2. **Non-determinism in the single-request path — FIXED.** Found while verifying
+   the above, and worse than the mutex. The serial path appended a temperature
+   stage to a sampler chain on every call without resetting it, so completions
+   were not reproducible and `temperature=0` did not mean greedy. A reused
+   context agreed with itself 0/10 across two runs while two fresh contexts
+   agreed 10/10. Now 50/50 on both paths.
+
+3. **Prompt length (measured, controllable).** p95 is 1867 ms against a p50 of
    210 ms. The tail is prompts that decode to the 256-token cap. Capping
    `max_tokens` per intent, and offloading large tool output (Item 6.2b, 98.5%
    context reduction measured), attack this directly.
 
-3. **Provider quota, not provider money (measured ceiling).** 33,600 req/day
+4. **Provider quota, not provider money (measured ceiling).** 33,600 req/day
    across 7 Kilo keys. This binds the 15% provider share, and it binds hard:
    free tiers are the entire budget, so there is no paid headroom to buy past
    it without changing the free-tier assumption.
 
-4. **Not VRAM, at this model size.** A 0.5B Q4_K_M model plus KV cache fits in
+5. **Not VRAM, at this model size.** A 0.5B Q4_K_M model plus KV cache fits in
    8192 MiB with room to spare. VRAM becomes the wall at a 7B+ Q4 (~4.5 GB
    weights) with several concurrent sequences, which is also the tier the router
    currently cannot serve locally. That is the point where the rented-GPU line in
