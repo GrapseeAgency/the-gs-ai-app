@@ -194,10 +194,12 @@ gs_llama_ctx* gs_llama_create(const llama_config_t* config) {
     return c;
 }
 
-llama_result_t gs_llama_generate(gs_llama_context_t* ctx,
+llama_result_t gs_llama_generate_opts(gs_llama_context_t* ctx,
                               const char* prompt,
                               int32_t max_tokens,
-                              float temperature) {
+                              float temperature,
+                              int32_t clear_cache,
+                              int32_t start_pos) {
     llama_result_t r{};
     r.text     = nullptr;
     r.n_tokens = 0;
@@ -223,7 +225,12 @@ llama_result_t gs_llama_generate(gs_llama_context_t* ctx,
         // "the first sample works and every later sample errors with -5".
         // Each call is an independent completion: a benchmark samples the same
         // model 100 times and must not accumulate the previous question.
-        llama_memory_clear(llama_get_memory(ctx->ctx), /*data=*/true);
+        if (clear_cache) {
+            // Skipped only when a snapshot was just restored. Clearing here
+            // would discard the restored prefix and silently re-prefill it,
+            // which makes prefix reuse a no-op that still looks like it ran.
+            llama_memory_clear(llama_get_memory(ctx->ctx), /*data=*/true);
+        }
 
         const int32_t n_tok = -llama_tokenize(ctx->vocab, p.c_str(),
                                               (int32_t)p.size(),
@@ -253,9 +260,20 @@ llama_result_t gs_llama_generate(gs_llama_context_t* ctx,
         const int32_t n_batch = llama_n_batch(ctx->ctx);
         const int32_t chunk   = (n_batch > 0 ? n_batch : 512);
         const int32_t n_prompt = (int32_t)toks.size();
-        if ((int64_t)n_prompt + 1 > (int64_t)llama_n_ctx(ctx->ctx)) {
+        // Where this batch begins. After a restore the cache is already
+        // occupied, so the batch has to continue from there.
+        int32_t base_pos = start_pos;
+        if (base_pos < 0) {
+#if defined(GS_LLAMA_HAVE_LLAMA)
+            base_pos = (int32_t)llama_memory_seq_pos_max(llama_get_memory(ctx->ctx), 0) + 1;
+#else
+            base_pos = 0;
+#endif
+        }
+        if ((int64_t)base_pos + n_prompt + 1 > (int64_t)llama_n_ctx(ctx->ctx)) {
             r.status = GS_ERR_INVALID_ARG;
-            set_err("prompt of " + std::to_string(n_prompt) + " tokens does not fit a context of "
+            set_err("prompt of " + std::to_string(n_prompt) + " tokens at position "
+                    + std::to_string(base_pos) + " does not fit a context of "
                     + std::to_string(llama_n_ctx(ctx->ctx)) + "; raise the context or shorten the prompt");
             return r;
         }
@@ -289,7 +307,7 @@ llama_result_t gs_llama_generate(gs_llama_context_t* ctx,
             const int32_t n = (n_prompt - base < chunk ? n_prompt - base : chunk);
             for (int32_t i = 0; i < n; ++i) {
                 batch.token[i]    = toks[(size_t)base + (size_t)i];
-                batch.pos[i]      = (llama_pos)(base + i);
+                batch.pos[i]      = (llama_pos)(base_pos + base + i);
                 batch.n_seq_id[i] = 1;
                 batch.seq_id[i][0]= 0;    // single sequence 0
                 batch.n_tokens    = n;
@@ -310,7 +328,7 @@ llama_result_t gs_llama_generate(gs_llama_context_t* ctx,
         std::string out;
         std::vector<llama_token> emitted;
         emitted.reserve((size_t)max_tokens);
-        int n_cur = (int)toks.size();
+        int n_cur = base_pos + (int)toks.size();
         int32_t n_generated = 0;   // counted here, not derived from the text
         for (int32_t i = 0; i < max_tokens; ++i) {
             const llama_token next = llama_sampler_sample(ctx->sampler, ctx->ctx, -1);
@@ -368,6 +386,13 @@ llama_result_t gs_llama_generate(gs_llama_context_t* ctx,
     set_err("libllama not linked");
     return r;
 #endif
+}
+
+llama_result_t gs_llama_generate(gs_llama_context_t* ctx,
+                                  const char* prompt,
+                                  int32_t max_tokens,
+                                  float temperature) {
+    return gs_llama_generate_opts(ctx, prompt, max_tokens, temperature, /*clear_cache=*/1, /*start_pos=*/0);
 }
 
 void gs_llama_free_result_text(llama_result_t* result) {
@@ -480,6 +505,34 @@ typedef struct {
 } spec_run_t;
 
 #if defined(GS_LLAMA_HAVE_LLAMA)
+// Prefill `toks` starting at `start`, chunked. Returns positions written.
+static int spec_prefill_at(gs_llama_ctx* ctx, const std::vector<llama_token>& toks,
+                           int32_t start, std::string* err) {
+    const int32_t n = (int32_t)toks.size();
+    if (n <= 0) return 0;
+    const int32_t chunk = llama_n_batch(ctx->ctx) > 0 ? llama_n_batch(ctx->ctx) : 512;
+    llama_batch batch = llama_batch_init(n < chunk ? n : chunk, 0, 1);
+    if (!batch.token) { if (err) *err = "batch init failed"; return -1; }
+    for (int32_t base = 0; base < n; base += chunk) {
+        const int32_t m = (n - base < chunk) ? (n - base) : chunk;
+        for (int32_t i = 0; i < m; ++i) {
+            batch.token[i]    = toks[(size_t)(base + i)];
+            batch.pos[i]      = (llama_pos)(start + base + i);
+            batch.n_seq_id[i] = 1;
+            batch.seq_id[i][0]= 0;
+            batch.n_tokens    = m;
+            batch.logits[i]   = (base + m == n) && (i + 1 == m);
+        }
+        if (llama_decode(ctx->ctx, batch) != 0) {
+            if (err) *err = "decode failed at offset " + std::to_string(base);
+            llama_batch_free(batch);
+            return -1;
+        }
+    }
+    llama_batch_free(batch);
+    return n;
+}
+
 // Prefill `toks` into ctx, chunked. Returns the number of positions written.
 static int spec_prefill(gs_llama_ctx* ctx, const std::vector<llama_token>& toks, std::string* err) {
     const int32_t n = (int32_t)toks.size();
@@ -738,12 +791,118 @@ llama_result_t gs_llama_generate_speculative(gs_llama_context_t* ctx,
 #endif
 }
 
-extern "C" int32_t gs_llama_n_ctx(gs_llama_context_t* ctx) {
+
+
+
+// ---------------------------------------------------------------------------
+// KV state serialisation and prefix reuse
+// ---------------------------------------------------------------------------
+
+#if defined(GS_LLAMA_HAVE_LLAMA)
+// Prefill `toks` starting at `start`, chunked to n_batch.
+static int gs_prefill_at(gs_llama_ctx* ctx, const std::vector<llama_token>& toks,
+                         int32_t start, std::string* err) {
+    const int32_t n = (int32_t)toks.size();
+    if (n <= 0) return 0;
+    const int32_t chunk = llama_n_batch(ctx->ctx) > 0 ? llama_n_batch(ctx->ctx) : 512;
+    llama_batch batch = llama_batch_init(n < chunk ? n : chunk, 0, 1);
+    if (!batch.token) { if (err) *err = "batch init failed"; return -1; }
+    for (int32_t base = 0; base < n; base += chunk) {
+        const int32_t m = (n - base < chunk) ? (n - base) : chunk;
+        for (int32_t i = 0; i < m; ++i) {
+            batch.token[i]    = toks[(size_t)(base + i)];
+            batch.pos[i]      = (llama_pos)(start + base + i);
+            batch.n_seq_id[i] = 1;
+            batch.seq_id[i][0]= 0;
+            batch.n_tokens    = m;
+            batch.logits[i]   = (base + m == n) && (i + 1 == m);
+        }
+        if (llama_decode(ctx->ctx, batch) != 0) {
+            if (err) *err = "decode failed at offset " + std::to_string(base);
+            llama_batch_free(batch);
+            return -1;
+        }
+    }
+    llama_batch_free(batch);
+    return n;
+}
+#endif
+
+extern "C" {
+
+int32_t gs_llama_n_ctx(gs_llama_context_t* ctx) {
     if (!ctx) return 0;
 #if defined(GS_LLAMA_HAVE_LLAMA)
-    if (!ctx->ctx) return 0;
-    return (int32_t)llama_n_ctx(ctx->ctx);
+    return ctx->ctx ? (int32_t)llama_n_ctx(ctx->ctx) : 0;
 #else
     return 0;
 #endif
 }
+
+int32_t gs_llama_prefill(gs_llama_context_t* ctx, const char* prompt, int32_t clear_cache) {
+    if (!ctx || !prompt) return GS_ERR_INVALID_ARG;
+    if (!ctx->available) return GS_ERR_UNAVAILABLE;
+#if defined(GS_LLAMA_HAVE_LLAMA)
+    try {
+        if (clear_cache) llama_memory_clear(llama_get_memory(ctx->ctx), true);
+        const std::string p(prompt);
+        const int32_t n = -llama_tokenize(ctx->vocab, p.c_str(), (int32_t)p.size(), nullptr, 0, true, false);
+        if (n <= 0) return GS_ERR_INVALID_ARG;
+        std::vector<llama_token> toks((size_t)n);
+        if (llama_tokenize(ctx->vocab, p.c_str(), (int32_t)p.size(), toks.data(), n, true, false) != n)
+            return GS_ERR_GENERATION;
+        const int32_t base = (int32_t)llama_memory_seq_pos_max(llama_get_memory(ctx->ctx), 0) + 1;
+        if ((int64_t)base + n + 1 > (int64_t)llama_n_ctx(ctx->ctx)) {
+            set_err("prefill of " + std::to_string(n) + " tokens at position " + std::to_string(base)
+                    + " does not fit a context of " + std::to_string(llama_n_ctx(ctx->ctx)));
+            return GS_ERR_INVALID_ARG;
+        }
+        std::string err;
+        if (gs_prefill_at(ctx, toks, base, &err) < 0) { set_err("prefill: " + err); return GS_ERR_GENERATION; }
+        return GS_OK;
+    } catch (const std::exception& e) {
+        set_err(std::string("prefill exception: ") + e.what());
+        return GS_ERR_INTERNAL;
+    }
+#else
+    (void)prompt; (void)clear_cache;
+    return GS_ERR_UNAVAILABLE;
+#endif
+}
+
+int64_t gs_llama_state_size(gs_llama_context_t* ctx) {
+    if (!ctx) return 0;
+#if defined(GS_LLAMA_HAVE_LLAMA)
+    return ctx->ctx ? (int64_t)llama_state_get_size(ctx->ctx) : 0;
+#else
+    return 0;
+#endif
+}
+
+int64_t gs_llama_state_save(gs_llama_context_t* ctx, uint8_t* dest, int64_t cap) {
+    if (!ctx || !dest || cap <= 0) return 0;
+#if defined(GS_LLAMA_HAVE_LLAMA)
+    if (!ctx->ctx) return 0;
+    const size_t n = llama_state_get_data(ctx->ctx, dest, (size_t)cap);
+    return n > 0 ? (int64_t)n : 0;
+#else
+    (void)dest; (void)cap;
+    return 0;
+#endif
+}
+
+int64_t gs_llama_state_restore(gs_llama_context_t* ctx, const uint8_t* src, int64_t len) {
+    if (!ctx || !src || len <= 0) return 0;
+#if defined(GS_LLAMA_HAVE_LLAMA)
+    if (!ctx->ctx) return 0;
+    const size_t n = llama_state_set_data(ctx->ctx, src, (size_t)len);
+    return n > 0 ? (int64_t)n : 0;
+#else
+    (void)src; (void)len;
+    return 0;
+#endif
+}
+
+void gs_llama_state_free(uint8_t* buf) { free(buf); }
+
+}  // extern "C"

@@ -154,6 +154,14 @@ int32_t gs_llama_n_layer(gs_llama_context_t* ctx);
 /* Context size actually in force, as opposed to the one requested. */
 int32_t gs_llama_n_ctx(gs_llama_context_t* ctx);
 
+/* KV state serialisation, for prefix reuse. save allocates a buffer the caller
+ * owns and frees with gs_llama_state_free; restore reads one. Returns the byte
+ * count written, or 0 on failure. */
+int64_t gs_llama_state_save(gs_llama_context_t* ctx, uint8_t* dest, int64_t cap);
+int64_t gs_llama_state_restore(gs_llama_context_t* ctx, const uint8_t* src, int64_t len);
+int64_t gs_llama_state_size(gs_llama_context_t* ctx);
+void    gs_llama_state_free(uint8_t* buf);
+
 /* Destroys the context. NULL-safe. Context must outlive all borrowed strings. */
 void gs_llama_free(gs_llama_context_t* ctx);
 

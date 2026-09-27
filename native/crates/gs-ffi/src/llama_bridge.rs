@@ -75,6 +75,26 @@ pub struct LlamaResult {
     pub status: c_int,
 }
 
+/// An owned snapshot of a context's KV state.
+pub struct StateBlob {
+    buf: Vec<u8>,
+}
+
+impl StateBlob {
+    pub fn len(&self) -> usize {
+        self.buf.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.buf.is_empty()
+    }
+}
+
+impl std::fmt::Debug for StateBlob {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "StateBlob({} bytes)", self.buf.len())
+    }
+}
+
 /// Speculative-decoding counters, mirroring gs_spec_stats_t.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default)]
@@ -111,6 +131,19 @@ extern "C" {
         out_stats: *mut SpecStats,
     ) -> LlamaResult;
     fn gs_llama_n_ctx(ctx: *mut c_void) -> c_int;
+    fn gs_llama_prefill(ctx: *mut c_void, prompt: *const c_char, clear_cache: c_int) -> c_int;
+    fn gs_llama_state_size(ctx: *mut c_void) -> i64;
+    fn gs_llama_state_save(ctx: *mut c_void, dest: *mut u8, cap: i64) -> i64;
+    fn gs_llama_state_restore(ctx: *mut c_void, src: *const u8, len: i64) -> i64;
+    fn gs_llama_state_free(buf: *mut u8);
+    fn gs_llama_generate_opts(
+        ctx: *mut c_void,
+        prompt: *const c_char,
+        max_tokens: c_int,
+        temperature: f32,
+        clear_cache: c_int,
+        start_pos: c_int,
+    ) -> LlamaResult;
     fn gs_llama_gpu_offload_supported(ctx: *mut c_void) -> c_int;
     fn gs_llama_free(ctx: *mut c_void);
 }
@@ -211,6 +244,99 @@ impl LlamaModel {
             }
         })
         .unwrap_or_else(|_| "unknown".into())
+    }
+
+    /// Prefill the cache without generating. Returns the number of positions
+    /// now resident, or an error.
+    pub fn prefill(&mut self, prompt: &str, clear_cache: bool) -> Result<i32, i32> {
+        let c = std::ffi::CString::new(prompt).map_err(|_| GS_ERR_INVALID_ARG)?;
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+            gs_llama_prefill(self.raw, c.as_ptr(), if clear_cache { 1 } else { 0 })
+        }))
+        .map_err(|_| GS_ERR_INTERNAL)
+    }
+
+    /// Generate WITHOUT clearing the KV cache first.
+    ///
+    /// Only valid immediately after state_restore(), where the prefix is
+    /// already resident. Calling it cold leaves a stale cache in place and the
+    /// model will answer confidently from the wrong context, which is why the
+    /// clearing variant is the default and this one is opt-in by name.
+    pub fn generate_preserving_cache(
+        &mut self,
+        prompt: &str,
+        max_tokens: i32,
+        temperature: f32,
+    ) -> Result<String, i32> {
+        // -1: read the resident position from the cache rather than assuming.
+        self.generate_from(self.raw, prompt, max_tokens, temperature, 0, -1)
+    }
+
+    fn generate_from(
+        &mut self,
+        _unused: *mut c_void,
+        prompt: &str,
+        max_tokens: i32,
+        temperature: f32,
+        clear_cache: i32,
+        start_pos: i32,
+    ) -> Result<String, i32> {
+        let c = std::ffi::CString::new(prompt).map_err(|_| GS_ERR_INVALID_ARG)?;
+        let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+            gs_llama_generate_opts(self.raw, c.as_ptr(), max_tokens, temperature, clear_cache, start_pos)
+        }))
+        .map_err(|_| GS_ERR_INTERNAL)?;
+        if res.status != GS_OK {
+            if !res.text.is_null() {
+                let mut r = LlamaResult { text: res.text, n_tokens: 0, status: res.status };
+                unsafe { gs_llama_free_result_text(&mut r) };
+            }
+            return Err(res.status);
+        }
+        if res.text.is_null() {
+            return Err(GS_ERR_GENERATION);
+        }
+        self.last_n = res.n_tokens;
+        let owned = unsafe { CStr::from_ptr(res.text) }.to_string_lossy().into_owned();
+        let mut r = LlamaResult { text: res.text, n_tokens: res.n_tokens, status: res.status };
+        unsafe { gs_llama_free_result_text(&mut r) };
+        Ok(owned)
+    }
+
+    /// Serialise the whole KV state. Restoring it into a context that has
+    /// already prefilled the same prefix skips that prefill entirely, which is
+    /// where the prefix-reuse saving comes from.
+    ///
+    /// The buffer is owned here and freed on drop, so no C allocation outlives
+    /// the Rust value that took it.
+    pub fn state_save(&self) -> Result<StateBlob, i32> {
+        let n = std::panic::catch_unwind(|| unsafe { gs_llama_state_size(self.raw) })
+            .unwrap_or(0);
+        if n <= 0 {
+            return Err(GS_ERR_UNAVAILABLE);
+        }
+        let mut buf = vec![0u8; n as usize];
+        let got = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+            gs_llama_state_save(self.raw, buf.as_mut_ptr(), n)
+        }))
+        .unwrap_or(0);
+        if got <= 0 {
+            return Err(GS_ERR_GENERATION);
+        }
+        buf.truncate(got as usize);
+        Ok(StateBlob { buf })
+    }
+
+    /// Restore a previously saved state, discarding whatever is cached now.
+    pub fn state_restore(&mut self, blob: &StateBlob) -> Result<usize, i32> {
+        let got = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+            gs_llama_state_restore(self.raw, blob.buf.as_ptr(), blob.buf.len() as i64)
+        }))
+        .unwrap_or(0);
+        if got <= 0 {
+            return Err(GS_ERR_GENERATION);
+        }
+        Ok(got as usize)
     }
 
     /// Context size actually in force, used by the speculative loop.
