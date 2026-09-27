@@ -96,9 +96,21 @@ jobs:
           test -f "$SRC" || { echo "MISSING: $SRC"; ls -la target/aarch64-apple-ios/release/ 2>/dev/null; exit 1; }
           mkdir -p "$GITHUB_WORKSPACE/dist/ios/device"
           cp "$SRC" "$GITHUB_WORKSPACE/dist/ios/device/libgs_ffi.a"
-          echo "built: $(file -b "$SRC")"
-          file -b "$SRC" | grep -q 'arm64' || {
-            echo "FAIL: device slice is not arm64: $(file -b "$SRC")"; exit 1; }
+          # lipo, not file. A .a is an ar archive, so `file -b` on it says only
+          # "current ar archive" and never mentions the architecture -- the Mach-O
+          # members inside carry it. Raw error, run 36350855007:
+          #     FAIL: device slice is not arm64: current ar archive
+          #     ##[error]Process completed with exit code 1.
+          echo "built: $(lipo -info "$SRC")"
+          lipo -info "$SRC" | grep -q 'arm64' || {
+            echo "FAIL: device slice is not arm64: $(lipo -info "$SRC")"; exit 1; }
+          # The member itself must be a Mach-O arm64, not just the archive header.
+          MEMBER=$(ar t "$SRC" | head -1)
+          echo "first member: $MEMBER"
+          ( cd /tmp && rm -rf arslice && mkdir arslice && cd arslice \
+              && ar x "$SRC" "$MEMBER" && file -b "$MEMBER" ) | tee /tmp/member.txt
+          grep -q 'arm64' /tmp/member.txt || {
+            echo "FAIL: archive member is not arm64: $(cat /tmp/member.txt)"; exit 1; }
 
       - name: Build simulator slice (aarch64-apple-ios-sim)
         working-directory: native
@@ -109,15 +121,15 @@ jobs:
           test -f "$SRC" || { echo "MISSING: $SRC"; ls -la target/aarch64-apple-ios-sim/release/ 2>/dev/null; exit 1; }
           mkdir -p "$GITHUB_WORKSPACE/dist/ios/simulator"
           cp "$SRC" "$GITHUB_WORKSPACE/dist/ios/simulator/libgs_ffi.a"
-          echo "built: $(file -b "$SRC")"
-          file -b "$SRC" | grep -q 'arm64' || {
-            echo "FAIL: simulator slice is not arm64: $(file -b "$SRC")"; exit 1; }
-          # A device and a simulator slice that are the same Mach-O would give
-          # xcodebuild a framework it cannot use on either. x86_64 is also
-          # acceptable on an Intel runner and is allowed through explicitly.
-          if [ "$(file -b "$SRC" | grep -c arm64)" -gt 0 ]; then
-            echo "NOTE: simulator is arm64; a physical arm64 Mac will use it"
-          fi
+          # Same correction as the device slice: lipo reads a .a, file does not.
+          echo "built: $(lipo -info "$SRC")"
+          lipo -info "$SRC" | grep -q 'arm64' || {
+            echo "FAIL: simulator slice is not arm64: $(lipo -info "$SRC")"; exit 1; }
+          MEMBER=$(ar t "$SRC" | head -1)
+          ( cd /tmp && rm -rf arslice && mkdir arslice && cd arslice \
+              && ar x "$SRC" "$MEMBER" && file -b "$MEMBER" ) | tee /tmp/member.txt
+          grep -q 'arm64' /tmp/member.txt || {
+            echo "FAIL: archive member is not arm64: $(cat /tmp/member.txt)"; exit 1; }
 
       - name: Assemble the xcframework
         run: |
