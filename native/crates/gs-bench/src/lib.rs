@@ -139,6 +139,28 @@ pub fn extract_answer_strict(text: &str) -> Option<char> {
             return Some(u);
         }
     }
+    // An explicit ANSWER: marker.
+    //
+    // This branch was missing entirely, which rigged the comparison against the
+    // scaffolds that use it. The aci, verification and context scaffolds all
+    // instruct the model to end with "ANSWER: <letter>"; a parser that only
+    // accepts a leading letter cannot read the answer the scaffold asked for.
+    // Measured on the local model: 56 of 100 aci replies carried the marker and
+    // only 15 parsed.
+    if let Some(i) = t.rfind("ANSWER:") {
+        let rest = &t[i + 7..];
+        // A model that echoes the instruction back ("ANSWER: <letter> where
+        // <letter> is one of A, B, C, D") has not answered anything. Treating
+        // the A in that echo as its answer would manufacture a correct answer
+        // out of a non-answer, which is precisely what this parser forbids.
+        if !rest.contains("<letter>") {
+            if let Some(u) = first_standalone_letter(rest) {
+                return Some(u);
+            }
+        }
+        return None;
+    }
+
     // Strip a markdown fence if the provider wrapped the JSON.
     let fenced = t.strip_prefix("```json").or_else(|| t.strip_prefix("```")).unwrap_or(t);
     let fenced = fenced.trim().trim_end_matches("```").trim();
@@ -875,5 +897,25 @@ mod tests {
         let qs = load_questions(p).expect("staged GPQA must parse");
         assert_eq!(qs.len(), 198, "GPQA Diamond is 198 questions");
         assert!(qs.iter().all(|q| ["A", "B", "C", "D"].contains(&q.answer.as_str())));
+    }
+}
+
+#[cfg(test)]
+mod aci_marker_tests {
+    use super::extract_answer_strict;
+
+    #[test]
+    fn the_answer_marker_with_trailing_prose_is_read() {
+        // Observed from the aci arm on the local model. 56 of 100 replies
+        // carried the marker and only 15 parsed, so this path was under-reading.
+        let cases = [
+            ("ANSWER: D. Spinal", Some('D')),
+            ("ANSWER: D**.", Some('D')),
+            ("ANSWER: A\nANSWER", Some('A')),
+            ("blah blah\nANSWER: C because reasons", Some('C')),
+        ];
+        for (raw, want) in cases {
+            assert_eq!(extract_answer_strict(raw), want, "{raw:?}");
+        }
     }
 }
