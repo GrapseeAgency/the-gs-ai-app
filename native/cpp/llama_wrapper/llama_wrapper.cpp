@@ -49,6 +49,7 @@ struct gs_llama_ctx {
     llama_config_t cfg{};
     bool available = false;
     std::string backend_name = "none";
+    std::string device_name  = "";
 #if defined(GS_LLAMA_HAVE_LLAMA)
     llama_model*   model   = nullptr;
     llama_context* ctx     = nullptr;
@@ -76,7 +77,11 @@ int32_t gs_llama_validate_config(const llama_config_t* config) {
     }
     if (config->n_ctx <= 0) { set_err("n_ctx must be > 0"); return GS_ERR_INVALID_ARG; }
     if (config->n_threads < 0) { set_err("n_threads must be >= 0"); return GS_ERR_INVALID_ARG; }
-    if (config->n_gpu_layers < 0) { set_err("n_gpu_layers must be >= 0"); return GS_ERR_INVALID_ARG; }
+    // n_gpu_layers < 0 is llama.cpp's "offload every layer" sentinel and must be
+    // accepted: it is the only value that means GPU-only. Rejecting it forced
+    // every caller to 0, i.e. CPU-only, while the operator believed the run was
+    // on the GPU.
+    if (config->n_gpu_layers == INT32_MIN) { set_err("n_gpu_layers is out of range"); return GS_ERR_INVALID_ARG; }
     return GS_OK;
 }
 
@@ -94,7 +99,7 @@ gs_llama_ctx* gs_llama_create(const llama_config_t* config) {
         llama_backend_init();
 
         llama_model_params mp = llama_model_default_params();
-        mp.n_gpu_layers = config->n_gpu_layers;  // 0 == CPU only
+        mp.n_gpu_layers = config->n_gpu_layers;  // 0 == CPU only, <0 == every layer
         // NOTE: llama_model_params no longer has `use_mmap`. mmap is not a
         // caller-selectable knob in current llama.h; weights are mapped by
         // default. cfg.use_mmap is retained in the ABI for forward
@@ -137,7 +142,44 @@ gs_llama_ctx* gs_llama_create(const llama_config_t* config) {
         llama_sampler_chain_add(c->sampler, llama_sampler_init_dist(1234));
 
         c->available   = true;
-        c->backend_name = config->n_gpu_layers > 0 ? "llama.cpp+gpu" : "llama.cpp+cpu";
+        // Name the device that was ACTUALLY selected, not the one that was
+        // requested. The old label derived from n_gpu_layers, so llama.cpp's
+        // "offload every layer" sentinel (-1) was reported as CPU while every
+        // layer sat on the GPU — a label that would have gone straight into a
+        // benchmark table claiming the wrong hardware.
+        c->backend_name = "llama.cpp+cpu";
+#if defined(GS_LLAMA_HAVE_LLAMA)
+        // Report the accelerator that actually exists on this machine, by
+        // enumerating backends rather than by inspecting what was requested.
+        //
+        // The label used to be derived from n_gpu_layers, so llama.cpp's
+        // "offload every layer" sentinel (-1) printed "cpu" while every layer
+        // was on the GPU. A benchmark table that names the wrong hardware is
+        // worse than one that names none, and llama_model_desc does not carry
+        // the device in current llama.h.
+        {
+            const size_t n = ggml_backend_dev_count();
+            for (size_t i = 0; i < n; ++i) {
+                ggml_backend_dev_t dev = ggml_backend_dev_get(i);
+                if (!dev) continue;
+                const enum ggml_backend_dev_type t = ggml_backend_dev_type(dev);
+                if (t != GGML_BACKEND_DEVICE_TYPE_GPU && t != GGML_BACKEND_DEVICE_TYPE_IGPU) continue;
+                const char *name = ggml_backend_dev_name(dev);
+                std::string label = "llama.cpp+gpu";
+                if (name) {
+                    const std::string nm(name);
+                    if (nm.find("Vulkan") != std::string::npos)      label = "llama.cpp+vulkan";
+                    else if (nm.find("CUDA") != std::string::npos)   label = "llama.cpp+cuda";
+                    else if (nm.find("ROCm") != std::string::npos)    label = "llama.cpp+rocm";
+                    else if (nm.find("Metal") != std::string::npos)   label = "llama.cpp+metal";
+                    else if (nm.find("SYCL") != std::string::npos)    label = "llama.cpp+sycl";
+                }
+                c->backend_name = label;
+                c->device_name  = name ? name : "gpu";
+                break;
+            }
+        }
+#endif
     }
 #else
     c->available    = false;
@@ -170,6 +212,15 @@ llama_result_t gs_llama_generate(gs_llama_context_t* ctx,
 #if defined(GS_LLAMA_HAVE_LLAMA)
     try {
         const std::string p(prompt);
+
+        // Clear the KV cache before prefill. Without this the cache still
+        // holds the previous call's positions while this call's batch starts
+        // writing at position 0 again, llama_decode fails, and the symptom is
+        // "the first sample works and every later sample errors with -5".
+        // Each call is an independent completion: a benchmark samples the same
+        // model 100 times and must not accumulate the previous question.
+        llama_memory_clear(llama_get_memory(ctx->ctx), /*data=*/true);
+
         const int32_t n_tok = -llama_tokenize(ctx->vocab, p.c_str(),
                                               (int32_t)p.size(),
                                               nullptr, 0, true, false);
@@ -187,6 +238,24 @@ llama_result_t gs_llama_generate(gs_llama_context_t* ctx,
             return r;
         }
 
+        // Prefill must be CHUNKED to the context's n_batch.
+        //
+        // Feeding the whole prompt as one batch trips
+        //   GGML_ASSERT(n_tokens_all <= cparams.n_batch) failed
+        // inside llama-context.cpp, which is a GGML_ASSERT: it aborts the
+        // process outright, so the caller never sees an error. A benchmark
+        // whose prompt grows with its scaffold preamble therefore dies on the
+        // long questions and silently produces no data for that arm.
+        const int32_t n_batch = llama_n_batch(ctx->ctx);
+        const int32_t chunk   = (n_batch > 0 ? n_batch : 512);
+        const int32_t n_prompt = (int32_t)toks.size();
+        if ((int64_t)n_prompt + 1 > (int64_t)llama_n_ctx(ctx->ctx)) {
+            r.status = GS_ERR_INVALID_ARG;
+            set_err("prompt of " + std::to_string(n_prompt) + " tokens does not fit a context of "
+                    + std::to_string(llama_n_ctx(ctx->ctx)) + "; raise the context or shorten the prompt");
+            return r;
+        }
+
         // Prefill via the plain llama_batch struct.
         //
         // The extended API (llama_batch_ext) is the newer interface but is
@@ -199,7 +268,8 @@ llama_result_t gs_llama_generate(gs_llama_context_t* ctx,
         // logits[] is requested for the LAST prompt token only. Setting it
         // for every token allocates an n_vocab-wide float array per token and
         // is the difference between a working decode and an OOM.
-        llama_batch batch = llama_batch_init((int32_t)toks.size() + 1, 0, 1);
+        const int32_t cap = (n_prompt < chunk ? n_prompt : chunk) + 1;
+        llama_batch batch = llama_batch_init(cap, 0, 1);
         if (!batch.token) {
             r.status = GS_ERR_NO_MEMORY;
             set_err("llama_batch_init failed");
@@ -211,20 +281,23 @@ llama_result_t gs_llama_generate(gs_llama_context_t* ctx,
         // llama_batch_free frees that array, so pointing it at a std::vector
         // buffer is a heap corruption ("free(): invalid pointer") on teardown.
         // Write through the pointers llama gave us instead.
-        for (size_t i = 0; i < toks.size(); ++i) {
-            batch.token[i]    = toks[i];
-            batch.pos[i]      = (llama_pos)i;
-            batch.n_seq_id[i] = 1;
-            batch.seq_id[i][0]= 0;      // single sequence 0
-            batch.n_tokens    = (int32_t)i + 1;
-            batch.logits[i]   = (i + 1 == toks.size());
-        }
-
-        if (llama_decode(ctx->ctx, batch) != 0) {
-            llama_batch_free(batch);
-            r.status = GS_ERR_GENERATION;
-            set_err("llama_decode failed on prompt");
-            return r;
+        for (int32_t base = 0; base < n_prompt; base += chunk) {
+            const int32_t n = (n_prompt - base < chunk ? n_prompt - base : chunk);
+            for (int32_t i = 0; i < n; ++i) {
+                batch.token[i]    = toks[(size_t)base + (size_t)i];
+                batch.pos[i]      = (llama_pos)(base + i);
+                batch.n_seq_id[i] = 1;
+                batch.seq_id[i][0]= 0;    // single sequence 0
+                batch.n_tokens    = n;
+                // Logits are needed only after the final prompt token.
+                batch.logits[i]   = (base + n == n_prompt) && (i + 1 == n);
+            }
+            if (llama_decode(ctx->ctx, batch) != 0) {
+                llama_batch_free(batch);
+                r.status = GS_ERR_GENERATION;
+                set_err("llama_decode failed on prompt at offset " + std::to_string(base));
+                return r;
+            }
         }
 
         // Re-seed the temperature stage so the caller's value takes effect.
@@ -334,6 +407,15 @@ int32_t gs_llama_has_draft(gs_llama_context_t* ctx, float* acceptance_rate) {
 const char* gs_llama_backend_name(gs_llama_context_t* ctx) {
     if (!ctx) return "none";
     return ctx->backend_name.c_str();  // borrowed static-ish string
+}
+
+int32_t gs_llama_gpu_offload_supported(gs_llama_context_t* ctx) {
+    (void)ctx;
+#if defined(GS_LLAMA_HAVE_LLAMA)
+    return llama_supports_gpu_offload() ? 1 : 0;
+#else
+    return 0;
+#endif
 }
 
 void gs_llama_free(gs_llama_context_t* ctx) {

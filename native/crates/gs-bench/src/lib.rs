@@ -140,16 +140,42 @@ pub fn extract_answer_strict(text: &str) -> Option<char> {
         }
     }
     // Strip a markdown fence if the provider wrapped the JSON.
-    let t = t.strip_prefix("```json").or_else(|| t.strip_prefix("```")).unwrap_or(t);
-    let t = t.trim().trim_end_matches("```").trim();
-    let v: serde_json::Value = serde_json::from_str(t).ok()?;
-    let a = v.get("answer")?.as_str()?;
-    let u = a.trim().to_ascii_uppercase();
-    if ["A", "B", "C", "D"].contains(&u.as_str()) {
-        Some(u.chars().next().unwrap())
-    } else {
-        None
+    let fenced = t.strip_prefix("```json").or_else(|| t.strip_prefix("```")).unwrap_or(t);
+    let fenced = fenced.trim().trim_end_matches("```").trim();
+    if let Ok(v) = serde_json::from_str::<serde_json::Value>(fenced) {
+        if let Some(a) = v.get("answer").and_then(|x| x.as_str()) {
+            let u = a.trim().to_ascii_uppercase();
+            if ["A", "B", "C", "D"].contains(&u.as_str()) {
+                return Some(u.chars().next().unwrap());
+            }
+        }
+        // Well-formed JSON with no usable answer: refuse rather than go
+        // hunting through the object for a stray letter.
+        return None;
     }
+
+    // Leading answer, unconstrained decoding.
+    //
+    // Constrained decoding is not available on the local llama.cpp text path,
+    // so the model answers "D)", "D. False", "B\n\nIt depends on..." instead
+    // of a bare letter. That is still a stated answer: the first token names
+    // the option and the rest is the model explaining itself.
+    //
+    // The rule is "a standalone A-D in the first LEAD_CHARS", and LEAD_CHARS is
+    // deliberately tiny.
+    //
+    // A 16-char window was tried and is wrong: it makes "the answer is C" parse,
+    // which is exactly the prose-guessing the strict parser exists to refuse,
+    // and an existing test caught it. The local model always leads with the
+    // letter -- "D)", "D. False, True", "B\n\nIt depends" -- so a three-character
+    // window covers every observed output while keeping "a letter buried in
+    // prose" refused.
+    const LEAD_CHARS: usize = 3;
+    let head: String = t.chars().take(LEAD_CHARS).collect();
+    if let Some(u) = first_standalone_letter(&head) {
+        return Some(u);
+    }
+    None
 }
 
 /// Extract a single A/B/C/D answer.
@@ -163,22 +189,7 @@ pub fn extract_answer(text: &str) -> Option<char> {
     let t = text.trim();
     // Prefer an explicit marker, last occurrence wins so a revision counts.
     if let Some(i) = t.rfind("ANSWER:") {
-        let rest = &t[i + 7..];
-        for c in rest.chars() {
-            let u = c.to_ascii_uppercase();
-            if ['A', 'B', 'C', 'D'].contains(&u) {
-                return Some(u);
-            }
-        }
-    }
-    // A bare single letter, e.g. "D" or "**D**".
-    let cleaned: String = t
-        .chars()
-        .filter(|c| !c.is_whitespace() && *c != '*' && *c != '.' && *c != ':')
-        .collect();
-    if cleaned.len() == 1 {
-        let u = cleaned.chars().next()?.to_ascii_uppercase();
-        if ['A', 'B', 'C', 'D'].contains(&u) {
+        if let Some(u) = first_standalone_letter(&t[i + 7..]) {
             return Some(u);
         }
     }
@@ -186,12 +197,50 @@ pub fn extract_answer(text: &str) -> Option<char> {
     let lower = t.to_lowercase();
     for pat in ["answer is", "option", "choice", "answer:"] {
         if let Some(p) = lower.rfind(pat) {
-            for c in t[p + pat.len()..].chars() {
-                let u = c.to_ascii_uppercase();
-                if ['A', 'B', 'C', 'D'].contains(&u) {
-                    return Some(u);
-                }
+            if let Some(u) = first_standalone_letter(&t[p + pat.len()..]) {
+                return Some(u);
             }
+        }
+    }
+    // A bare or lightly-decorated letter: "D", "D)", "(D)", "**D**", "D.".
+    //
+    // The decoration set matters more than it looks: this model answers "D)"
+    // more often than anything else, and a parser that only accepts a naked
+    // letter reports a correct answer as unparseable, which drops parse_rate
+    // to zero and measures the parser instead of the model.
+    let cleaned: String = t
+        .chars()
+        .filter(|c| {
+            !c.is_whitespace()
+                && !matches!(c, '*' | '.' | ':' | ')' | '(' | '[' | ']' | ',' | '-' | '_')
+        })
+        .collect();
+    if cleaned.chars().count() == 1 {
+        let u = cleaned.chars().next()?.to_ascii_uppercase();
+        if ['A', 'B', 'C', 'D'].contains(&u) {
+            return Some(u);
+        }
+    }
+    None
+}
+
+/// The first A-D that stands alone as a token, not a letter inside a word.
+///
+/// Scanning character-by-character is wrong: "the correct option" contains a
+/// C in "correct", so a naive scan of that region returns C. Requiring the
+/// character to be bounded by a non-alphanumeric on both sides removes the
+/// whole class of false positives.
+fn first_standalone_letter(s: &str) -> Option<char> {
+    let chars: Vec<char> = s.chars().collect();
+    for (i, &c) in chars.iter().enumerate() {
+        let u = c.to_ascii_uppercase();
+        if !['A', 'B', 'C', 'D'].contains(&u) {
+            continue;
+        }
+        let before_ok = i == 0 || !chars[i - 1].is_ascii_alphabetic();
+        let after_ok = i + 1 >= chars.len() || !chars[i + 1].is_ascii_alphabetic();
+        if before_ok && after_ok {
+            return Some(u);
         }
     }
     None
@@ -526,6 +575,65 @@ pub fn delta_table(baseline: &Scorecard, lever: &Scorecard) -> Vec<String> {
         }
     ));
     out
+}
+
+#[cfg(test)]
+mod answer_parsing {
+    use super::{extract_answer, extract_answer_strict, first_standalone_letter};
+
+    #[test]
+    fn a_bare_letter_is_a_constrained_decode_result() {
+        let cases = [("A", 'A'), (" D ", 'D'), ("**D**", 'D'), ("`B`", 'B'), ("C.", 'C')];
+        for (raw, want) in cases {
+            assert_eq!(extract_answer_strict(raw), Some(want), "{raw:?}");
+        }
+    }
+
+    #[test]
+    fn json_schemas_are_read_not_hunted_through() {
+        assert_eq!(extract_answer_strict(r#"{"answer":"C"}"#), Some('C'));
+        assert_eq!(extract_answer_strict("```json\n{\"answer\":\"B\"}\n```"), Some('B'));
+        // Valid JSON, no answer field: refuse instead of scraping a letter.
+        assert_eq!(extract_answer_strict(r#"{"explanation":"A B C D"}"#), None);
+    }
+
+    #[test]
+    fn a_leading_letter_with_trailing_prose_counts_as_an_answer() {
+        // The local llama.cpp path has no constrained decoding, so this is the
+        // shape the model actually produces.
+        let cases = [("D)", 'D'), ("D) False, True", 'D'), ("B.\n\nIt depends.", 'B'), ("C:\nSome explanation", 'C')];
+        for (raw, want) in cases {
+            assert_eq!(extract_answer_strict(raw), Some(want), "{raw:?}");
+        }
+    }
+
+    #[test]
+    fn a_letter_buried_in_prose_is_not_an_answer() {
+        // Strictness: the rule is anchored to the front of the output.
+        for raw in [
+            "I think the correct option is the third one, which is D",
+            "Let me think about this question for a moment before answering.",
+            "",
+        ] {
+            assert_eq!(extract_answer_strict(raw), None, "{raw:?}");
+        }
+    }
+
+    #[test]
+    fn a_letter_inside_a_word_is_never_mistaken_for_an_answer() {
+        // "correct" contains a C, "A" is in the middle of nothing.
+        assert_eq!(first_standalone_letter("the correct answer"), None);
+        assert_eq!(first_standalone_letter("(C) because"), Some('C'));
+        assert_eq!(first_standalone_letter("the answer is B."), Some('B'));
+    }
+
+    #[test]
+    fn the_permissive_parser_agrees_on_the_common_shapes() {
+        assert_eq!(extract_answer("ANSWER: D"), Some('D'));
+        assert_eq!(extract_answer("The answer is C."), Some('C'));
+        // And still refuses to guess.
+        assert_eq!(extract_answer("no idea"), None);
+    }
 }
 
 #[cfg(test)]

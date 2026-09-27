@@ -40,7 +40,7 @@ typedef struct {
     const char* model_path;   /* borrowed */
     int32_t     n_ctx;
     int32_t     n_threads;
-    int32_t     n_gpu_layers; /* 0 = CPU only. This is the guaranteed path. */
+    int32_t     n_gpu_layers; /* <0 = every layer. 0 = CPU only. */
     int32_t     use_mmap;     /* nonzero -> mmap weights */
 } llama_config_t;
 
@@ -85,6 +85,18 @@ int32_t gs_llama_has_draft(gs_llama_context_t* ctx, float* acceptance_rate);
 
 /* Self-reported backend name, borrowed static string. Never NULL. */
 const char* gs_llama_backend_name(gs_llama_context_t* ctx);
+
+/* 1 when this build has a working accelerator offload path (Vulkan, CUDA,
+ * SYCL, ...), 0 for a CPU-only build. A caller that requires GPU execution must
+ * check this at load and refuse to run rather than silently degrading to the
+ * host: that is how a "GPU" run becomes a CPU run that still reports success.
+ *
+ * This build of llama.cpp exposes no per-model offloaded-layer count through a
+ * stable C API, so the authoritative check that layers really landed on the
+ * device is llama.cpp's own load report ("offloaded N/M layers to GPU"), which
+ * the caller reads from the log. This function answers the prior question:
+ * is offload even possible here. */
+int32_t gs_llama_gpu_offload_supported(gs_llama_context_t* ctx);
 
 /* Destroys the context. NULL-safe. Context must outlive all borrowed strings. */
 void gs_llama_free(gs_llama_context_t* ctx);

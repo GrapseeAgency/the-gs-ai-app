@@ -7,6 +7,7 @@
 pub mod agent;
 pub mod http_provider;
 pub mod image;
+pub mod local_provider;
 pub mod budget;
 pub mod memory;
 pub mod router;
@@ -21,7 +22,9 @@ pub use memory::{MemoryStore, Compaction, WorkingMemory};
 pub use http_provider::{HttpProvider, pool_from_env};
 pub use router::{ProviderPool, PoolError, Provider};
 pub use vision::{gather as gather_vision_evidence, VisionEvidence};
+pub use image::diffuse as diffuse;
 pub use image::Spec as ImageSpec;
+pub use local_provider::LocalProvider;
 pub use skills::{SkillRegistry, Skill};
 pub use tools::{ToolRegistry, ToolResult};
 pub use verification::{Verification, Verdict};

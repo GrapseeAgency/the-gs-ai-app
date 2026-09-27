@@ -45,6 +45,7 @@ extern "C" {
     fn gs_llama_free_result_text(result: *mut LlamaResult);
     fn gs_llama_available(ctx: *mut c_void) -> c_int;
     fn gs_llama_backend_name(ctx: *mut c_void) -> *const c_char;
+    fn gs_llama_gpu_offload_supported(ctx: *mut c_void) -> c_int;
     fn gs_llama_free(ctx: *mut c_void);
 }
 
@@ -127,6 +128,17 @@ impl LlamaModel {
             }
         })
         .unwrap_or_else(|_| "unknown".into())
+    }
+
+    /// Whether this build has a working accelerator offload path.
+    ///
+    /// Checked at load time by callers that require GPU execution. A build
+    /// without it must be refused, not tolerated: silently running on the host
+    /// while the operator believes the run is on the GPU is the failure mode
+    /// this exists to prevent.
+    pub fn gpu_offload_supported(&self) -> bool {
+        std::panic::catch_unwind(|| unsafe { gs_llama_gpu_offload_supported(self.raw) != 0 })
+            .unwrap_or(false)
     }
 
     /// Generate. The returned String is owned by Rust; the C side's `text` is

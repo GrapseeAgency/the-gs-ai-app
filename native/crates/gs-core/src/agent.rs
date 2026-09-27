@@ -41,10 +41,19 @@ impl IntentClassifier {
             "make a diagram", "create a diagram", "draw a diagram", "flowchart",
             "make a logo", "create a logo", "design a logo",
             "mockup", "wireframe",
-            "generate an image", "create an image", "make an image", "draw a picture",
         ];
         if IMAGE_MARKERS.iter().any(|m| t.contains(m)) {
             return Intent::ImageCreate;
+        }
+
+        // Photographic requests go to diffusion, not to the geometry renderer.
+        const DIFFUSION_MARKERS: &[&str] = &[
+            "generate an image", "create an image", "make an image", "draw a picture",
+            "draw me a", "paint a", "render a photo", "photorealistic", "photorealistic",
+            "a photo of", "picture of", "illustration of", "digital art",
+        ];
+        if DIFFUSION_MARKERS.iter().any(|m| t.contains(m)) {
+            return Intent::ImageGenerate;
         }
 
         const CODE_MARKERS: &[&str] = &[
@@ -75,6 +84,29 @@ impl IntentClassifier {
 
         Intent::Chat
     }
+}
+
+/// Strip the instruction wrapper off a generation request.
+///
+/// stable-diffusion.cpp conditions on the description, not the request, so
+/// "generate an image of a red apple" must reach it as "a red apple". Feeding
+/// it the whole sentence makes the model render the words.
+pub fn diffusion_prompt(text: &str) -> String {
+    let t = text.trim();
+    const PREFIXES: &[&str] = &[
+        "generate an image of", "create an image of", "make an image of",
+        "draw a picture of", "draw me a", "draw a", "paint a", "render a photo of",
+        "render a", "generate an image", "create an image", "make an image",
+    ];
+    for p in PREFIXES {
+        if let Some(rest) = t.to_lowercase().strip_prefix(p) {
+            let rest = rest.trim().trim_start_matches("of ").trim();
+            if !rest.is_empty() {
+                return rest.to_string();
+            }
+        }
+    }
+    t.to_string()
 }
 
 /// Explicit image attachment marker, since text alone cannot carry pixels.
@@ -163,8 +195,9 @@ pub fn plan_for(intent: Intent, user_text: &str) -> Plan {
             Step::ToolCall { plugin: "ocr".into(), input: user_text.into() },
             Step::Synthesize,
         ],
-        // Procedural generation is pure geometry and needs no model turn.
+        // Both generation paths are local compute, not model turns.
         Intent::ImageCreate => vec![Step::DirectModel],
+        Intent::ImageGenerate => vec![Step::DirectModel],
     };
     Plan { intent, steps }
 }
@@ -211,6 +244,27 @@ impl AgentLoop {
         let mut messages = vec![Message::system(
             "You are GS AI. Answer directly. Cite sources when you state facts.",
         )];
+
+        // --- ImageGenerate: diffusion over the prompt -----------------------
+        // Runs before the model so the answer is a real file path, not a
+        // description of an image nobody generated.
+        if intent == Intent::ImageGenerate {
+            let prompt = diffusion_prompt(user_text);
+            let req = crate::image::diffuse::DiffuseRequest { prompt, ..Default::default() };
+            match crate::image::diffuse::run(&req) {
+                Ok(d) => {
+                    messages.push(Message::user(format!(
+                        "[GENERATED IMAGE] {}\n[PROMPT] {}\nThe image exists at the path above.",
+                        d.path.display(), req.prompt
+                    )));
+                }
+                Err(e) => {
+                    messages.push(Message::user(format!(
+                        "[IMAGE GENERATION FAILED] {e}"
+                    )));
+                }
+            }
+        }
 
         // --- Vision: OCR + CLIP over the attached image --------------------
         // Runs before the model so the model reasons over recovered text rather
@@ -331,6 +385,22 @@ mod tests {
     }
 
     #[test]
+    fn photographic_requests_route_to_diffusion_not_geometry() {
+        // "make a chart" is arithmetic; "make an image of a mountain" is not.
+        for q in [
+            "generate an image of a red apple on a wooden table",
+            "create an image of a mountain lake",
+            "paint a portrait of a cat",
+        ] {
+            assert_eq!(IntentClassifier::classify(q), Intent::ImageGenerate, "{q:?}");
+        }
+        assert_eq!(
+            IntentClassifier::classify("make a chart of A 10, B 25"),
+            Intent::ImageCreate
+        );
+    }
+
+    #[test]
     fn image_requests_classify_as_image_create() {
         // Checked before the generic word lists, because "make a chart of X"
         // also trips them and must not be routed to a model.
@@ -338,10 +408,22 @@ mod tests {
             "make a chart of A 10, B 25",
             "create a diagram of the pipeline",
             "draw a pie chart of A 1, B 2",
-            "generate an image of a mountain",
         ] {
             assert_eq!(IntentClassifier::classify(q), Intent::ImageCreate, "{q:?}");
         }
+    }
+
+    #[test]
+    fn the_diffusion_prompt_drops_the_instruction_wrapper() {
+        // The model conditions on the description; the verb is noise that the
+        // model will otherwise try to render as text.
+        assert_eq!(
+            diffusion_prompt("Generate an image of a red apple on a wooden table"),
+            "a red apple on a wooden table"
+        );
+        assert_eq!(diffusion_prompt("paint a mountain lake"), "mountain lake");
+        // Nothing to strip: pass the request through rather than lose it.
+        assert_eq!(diffusion_prompt("a lone lighthouse"), "a lone lighthouse");
     }
 
     #[test]

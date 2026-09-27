@@ -14,8 +14,10 @@ pub enum Intent {
     Research,
     Code,
     Vision,
-    /// Procedural or diffusion image generation. Geometry-only by default.
+    /// Procedural image generation. Geometry only: no weights, no GPU.
     ImageCreate,
+    /// Diffusion image generation. Runs stable-diffusion.cpp on the GPU.
+    ImageGenerate,
     Time,
 }
 
@@ -31,6 +33,8 @@ impl Intent {
             Intent::Research => 16_384,
             // Procedural generation is pure geometry: no tokens are spent.
             Intent::ImageCreate => 256,
+            // Diffusion is a local compute job, not a model conversation.
+            Intent::ImageGenerate => 256,
         }
     }
 
@@ -42,6 +46,7 @@ impl Intent {
             Intent::Code => "code",
             Intent::Vision => "vision",
             Intent::ImageCreate => "image_create",
+            Intent::ImageGenerate => "image_generate",
             Intent::Time => "time",
         }
     }
