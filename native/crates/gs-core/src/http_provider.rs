@@ -171,7 +171,7 @@ impl Provider for HttpProvider {
                     key_index: 0,
                 },
                 // Permanently invalid credentials/terms: kill the key.
-                401 | 402 | 403 => PoolError::KeyDead {
+                401..=403 => PoolError::KeyDead {
                     provider: self.name.clone(),
                     key_index: 0,
                 },
@@ -273,7 +273,7 @@ impl HttpProvider {
 /// `GS_PROVIDERS` format: `name=base_url:free,name2=base_url2:paid`
 /// `GS_KEYS_<NAME>` holds the comma-separated keys for that provider.
 pub fn pool_from_env() -> crate::router::ProviderPool {
-    use crate::router::{Clock, ProviderPool, SystemClock};
+    use crate::router::{ProviderPool, SystemClock};
     use std::sync::Arc;
 
     let table = std::env::var("GS_PROVIDERS").unwrap_or_default();

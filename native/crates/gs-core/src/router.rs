@@ -299,6 +299,29 @@ pub enum PoolError {
 }
 
 impl PoolError {
+    /// Replace the key index with the one the pool actually used.
+    ///
+    /// `HttpProvider` receives only a borrowed key STRING and has no way to
+    /// know which pool slot it came from, so it stamps a placeholder 0 into
+    /// every error it builds. The pool does know the real index, so it
+    /// overwrites it here.
+    ///
+    /// Without this, every rate-limit message reads "key 0" no matter which
+    /// slot failed, which makes correct rotation look like a rotation bug.
+    pub fn with_key_index(self, idx: usize) -> Self {
+        match self {
+            PoolError::RateLimited { provider, .. } => PoolError::RateLimited {
+                provider,
+                key_index: idx,
+            },
+            PoolError::KeyDead { provider, .. } => PoolError::KeyDead {
+                provider,
+                key_index: idx,
+            },
+            other => other,
+        }
+    }
+
     /// Whether this failure should count toward the circuit breaker.
     ///
     /// Three exclusions, each for a distinct reason:
@@ -453,7 +476,11 @@ impl ProviderPool {
                         .set(&pname, ProviderState::Healthy, now_ms);
                     return Ok(completion);
                 }
-                Err(e) => {
+                Err(raw) => {
+                    // Stamp the real slot index. `raw` carried a placeholder
+                    // from the provider, which is why every rate-limit line
+                    // used to read "key 0".
+                    let e = raw.with_key_index(key_index);
                     let mut kp = slot.keys.lock().unwrap();
                     match &e {
                         PoolError::RateLimited { .. } => {
@@ -672,6 +699,61 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn reported_rate_limit_indices_advance_across_keys() {
+        // The operator's exact observation: the log said "rate limited on
+        // key 0" forever. This drives the pool end to end with scripted 429s
+        // and asserts the REPORTED index advances 0 -> 1 -> 2. If this ever
+        // reads 0,0,0 the reporting bug is back.
+        struct Always429;
+        #[::async_trait::async_trait]
+        impl Provider for Always429 {
+            fn name(&self) -> &str { "groq" }
+            fn base_url(&self) -> &str { "http://local" }
+            fn is_healthy(&self) -> bool { true }
+            fn is_free(&self) -> bool { true }
+            async fn complete(
+                &self, _m: &[Message], _c: &CompletionConfig, _k: &str,
+            ) -> Result<Completion, PoolError> {
+                // Placeholder 0, exactly like the real HttpProvider.
+                Err(PoolError::RateLimited { provider: "groq".into(), key_index: 0 })
+            }
+        }
+        let pool = ProviderPool::new(
+            vec![(Arc::new(Always429) as Arc<dyn Provider>,
+                  vec!["k0".into(), "k1".into(), "k2".into()])],
+            Arc::new(FakeClock { base: 1_000 }),
+        );
+        // All three keys park, so the pool reports each in turn and then
+        // exhausts. Capture the errors the pool surfaces.
+        for expected in 0..3usize {
+            let e = pool
+                .complete(&[Message::user("x")], &CompletionConfig::default())
+                .await
+                .expect_err("all keys rate limited");
+            match e {
+                PoolError::RateLimited { key_index, .. } => {
+                    assert_eq!(
+                        key_index, expected,
+                        "reported index must advance; saw {key_index} expected {expected}"
+                    );
+                }
+                other => panic!("expected RateLimited, got {other:?}"),
+            }
+        }
+        // Fourth call: every key parked, so the pool reports exhaustion
+        // rather than pretending a parked key is available.
+        let e = pool
+            .complete(&[Message::user("x")], &CompletionConfig::default())
+            .await
+            .expect_err("pool exhausted");
+        assert!(
+            matches!(e, PoolError::NoProvider { .. }),
+            "expected exhaustion, got {e:?}"
+        );
+        assert_eq!(pool.stats.rate_limits.load(Ordering::Relaxed), 3);
+    }
+
+    #[tokio::test]
     async fn failover_moves_to_the_next_provider() {
         let a = scripted("alpha", true, vec![Err(500), Err(500), Err(500)]);
         let b = scripted("bravo", true, vec![Ok(())]);
@@ -764,5 +846,59 @@ mod tests {
         let s = format!("{e}");
         assert!(!s.contains("secret"), "key value must never appear");
         assert!(s.contains("key 2"), "key index must appear for auditing");
+    }
+}
+
+#[cfg(test)]
+mod key_index_tests {
+    use super::*;
+
+    #[test]
+    fn a_provider_placeholder_index_is_corrected_by_the_pool() {
+        // A provider cannot know its slot, so it stamps 0. The pool must
+        // overwrite it, otherwise every rate-limit line reads "key 0" and
+        // working rotation looks broken.
+        let e = PoolError::RateLimited { provider: "groq".into(), key_index: 0 }
+            .with_key_index(7);
+        match e {
+            PoolError::RateLimited { key_index, .. } => {
+                assert_eq!(key_index, 7, "pool must stamp the real slot");
+            }
+            _ => panic!("wrong variant"),
+        }
+    }
+
+    #[test]
+    fn stamping_preserves_the_error_kind_and_breaker_semantics() {
+        let dead = PoolError::KeyDead { provider: "p".into(), key_index: 0 }
+            .with_key_index(3);
+        assert!(!dead.counts_toward_breaker(), "KeyDead must stay excluded");
+        // Non-key errors are untouched by stamping.
+        let t = PoolError::Transport { provider: "p".into(), detail: "d".into() }
+            .with_key_index(9);
+        assert!(t.counts_toward_breaker());
+        assert_eq!(t.to_string(), "p transport failure: d");
+    }
+
+    #[test]
+    fn three_keys_rotate_and_report_distinct_indices() {
+        // The exact scenario from the operator's log: with 3 keys the pool
+        // must visit 0, 1, 2 and never stall on 0.
+        let mut kp = KeyPool::new(vec!["a".into(), "b".into(), "c".into()], 60_000);
+        let now = 1_000;
+        let seen: Vec<usize> = (0..9).map(|_| kp.next_key(now).unwrap().0).collect();
+        assert_eq!(seen, vec![0, 1, 2, 0, 1, 2, 0, 1, 2]);
+        let distinct: std::collections::HashSet<usize> = seen.iter().copied().collect();
+        assert_eq!(distinct.len(), 3, "all three slots must be used");
+    }
+
+    #[test]
+    fn a_parked_key_moves_the_cursor_past_itself() {
+        // If key 0 is parked the next call must NOT report 0 again.
+        let mut kp = KeyPool::new(vec!["a".into(), "b".into(), "c".into()], 60_000);
+        let now = 1_000;
+        kp.park(0, now);
+        let next: Vec<usize> = (0..4).map(|_| kp.next_key(now).unwrap().0).collect();
+        assert!(!next.contains(&0), "parked key must not be handed out: {next:?}");
     }
 }
