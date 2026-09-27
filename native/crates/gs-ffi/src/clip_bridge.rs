@@ -34,6 +34,33 @@ extern "C" {
 /// MobileCLIP2-S0 input geometry.
 pub const IMAGE_SIDE: usize = 256;
 
+/// Whether this binary was compiled with ONNX Runtime linked in.
+///
+/// This is the run-time half of a fail-closed build. The build script now
+/// panics when ONNX is missing, so a broken build should be impossible; this
+/// check exists because that guarantee is only as good as the flag that
+/// produced the binary, and a stale artifact from before the hardening, or a
+/// build from a different toolchain, would otherwise fail in exactly the same
+/// quiet way it used to: correct source, no vision, green tests.
+pub const COMPILED_WITH_ONNX: bool = cfg!(gs_onnxruntime);
+
+/// Abort with a loud, actionable message if the vision stack is not present.
+///
+/// Intended to be the first thing a vision-using binary does. A missing
+/// capability is reported as an error at startup, not discovered later as an
+/// empty result that looks like "the image had no text".
+pub fn require_onnx_runtime(binary: &str) {
+    if !COMPILED_WITH_ONNX {
+        eprintln!(
+            "Error: CLIP was not compiled in. Build was invoked without \
+             GS_ONNXRUNTIME_ROOT.\n\
+             See native/.cargo/config.toml.\n\
+             Binary: {binary}"
+        );
+        std::process::exit(3);
+    }
+}
+
 #[derive(Debug)]
 pub enum ClipError {
     /// Built without ONNX Runtime on this machine.

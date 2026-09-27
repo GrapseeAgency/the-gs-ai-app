@@ -11,6 +11,8 @@ use std::path::PathBuf;
 use std::process::exit;
 
 fn main() {
+    // Fail closed at start-up if the vision stack is not compiled in.
+    gs_ffi::require_onnx_runtime("run_ocr.rs");
     let path = match std::env::args().nth(1) {
         Some(p) => PathBuf::from(p),
         None => {

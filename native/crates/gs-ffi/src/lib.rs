@@ -8,7 +8,7 @@ pub mod llama_bridge;
 pub mod ocr_bridge;
 pub mod sd_bridge;
 
-pub use clip_bridge::{ClipError, ClipModel, IMAGE_SIDE};
+pub use clip_bridge::{require_onnx_runtime, ClipError, ClipModel, IMAGE_SIDE, COMPILED_WITH_ONNX};
 pub use llama_bridge::{KvType, LlamaModel, LlamaConfig, SpecStats, StateBlob};
 pub use ocr_bridge::{extract_text, OcrError, OcrModel};
 pub use sd_bridge::render_svg;

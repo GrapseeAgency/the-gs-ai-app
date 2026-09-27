@@ -1,0 +1,35 @@
+# Checked-in defaults for the native build.
+#
+# Why this file exists
+# --------------------
+# GS_ONNXRUNTIME_ROOT and GS_LLAMA_ROOT are environment variables, which meant
+# that any `cargo build` run without them exported produced a binary with CLIP
+# and llama.cpp compiled OUT. The build emitted a cargo:warning and carried on,
+# so the workspace built cleanly, every unit test passed, and the resulting
+# binary reported:
+#
+#     BLOCKED: built without ONNX Runtime (GS_CLIP_HAVE_ONNXRUNTIME undefined)
+#
+# i.e. a build that silently dropped the entire vision stack while looking
+# green. That is the worst failure mode available: a capability that is present
+# in the source, absent in the artifact, and indistinguishable from a working
+# build unless you happen to run the demo.
+#
+# Pinning the paths here means a plain `cargo build` in this directory produces
+# the full-featured binary. The build script also panics if the path is wrong,
+# so an incorrect value here fails the build rather than disabling a feature.
+#
+# Override on the command line for a different machine, e.g.
+#   GS_ONNXRUNTIME_ROOT=/opt/onnxruntime cargo build --release
+# The environment takes precedence over this file.
+
+[env]
+# ONNX Runtime 1.20.0, user-space install.
+GS_ONNXRUNTIME_ROOT = "/mnt/new_volume/onnxruntime/onnxruntime-linux-x64-1.20.0"
+
+# llama.cpp build tree. Contains include/llama.h and the shared libraries.
+GS_LLAMA_ROOT = "/mnt/new_volume/llm-workspace/llama.cpp"
+
+# Thread count for the vision wrapper's ONNX sessions. Matches the dossier's
+# intra_op_num_threads=4.
+GS_ONNX_THREADS = "4"

@@ -6,6 +6,10 @@
 //! still compiles and every entry point honestly reports UNAVAILABLE.
 
 fn main() {
+    // Tell the compiler this cfg name is expected, so an unexpected one is a
+    // warning rather than silently accepted.
+    println!("cargo:rustc-check-cfg=cfg(gs_onnxruntime)");
+
     let cpp = std::path::Path::new("..").join("..").join("cpp");
     let inc = cpp.join("include");
 
@@ -129,14 +133,34 @@ fn main() {
         );
     }
     if have_ort {
+        // Make the compiled-in state queryable from Rust, so a binary can
+        // assert its own capabilities at start-up instead of a human having to
+        // remember which env vars a build needed. A cargo feature cannot do
+        // this: features come from the caller, and a build script cannot enable
+        // its own crate's feature. rustc-cfg is the mechanism that works.
+        println!("cargo:rustc-cfg=gs_onnxruntime");
         let root = ort_root.as_ref().expect("set when have_ort");
         println!("cargo:rustc-link-search=native={root}/lib");
         println!("cargo:rustc-link-lib=dylib=onnxruntime");
         println!("cargo:rustc-link-arg=-Wl,-rpath,{root}/lib");
-    } else {
+    } else if std::env::var("GS_ALLOW_MISSING_ONNX").is_ok() {
         println!(
-            "cargo:warning=GS_ONNXRUNTIME_ROOT unset or invalid: CLIP embeddings \
-             are BLOCKED, provider routing only"
+            "cargo:warning=GS_ALLOW_MISSING_ONNX is set: building WITHOUT CLIP. \
+             Vision is disabled in this binary by explicit request."
+        );
+    } else {
+        // Fail CLOSED. A silent skip here produced a binary that built cleanly,
+        // passed every unit test, and then reported "built without ONNX
+        // Runtime" at run time: the whole vision stack compiled out behind a
+        // cargo:warning. A build failure the operator can fix is strictly
+        // better than a build that lies about its own capabilities.
+        panic!(
+            "GS_ONNXRUNTIME_ROOT is unset or does not point at a usable ONNX Runtime.\n\
+             Expected <root>/include/onnxruntime_cxx_api.h and <root>/lib/libonnxruntime.so\n\
+             Set it in native/.cargo/config.toml, or in the environment:\n\
+             \n    GS_ONNXRUNTIME_ROOT=/path/to/onnxruntime-linux-x64-1.20.0 cargo build\n\
+             \nRefusing to emit a binary that silently lacks CLIP embeddings.\n\
+             For a deliberately vision-less build, set GS_ALLOW_MISSING_ONNX=1."
         );
     }
 

@@ -36,6 +36,8 @@ fn resize_center_crop(img: &image::RgbImage, side: u32) -> image::RgbImage {
 }
 
 fn main() {
+    // Fail closed at start-up if the vision stack is not compiled in.
+    gs_ffi::require_onnx_runtime("run_clip.rs");
     let mut args = std::env::args().skip(1);
     let path = match args.next() {
         Some(p) => PathBuf::from(p),

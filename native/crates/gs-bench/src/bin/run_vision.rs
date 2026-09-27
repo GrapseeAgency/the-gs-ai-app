@@ -14,6 +14,8 @@ use std::path::PathBuf;
 use std::process::exit;
 
 fn main() {
+    // Fail closed at start-up if the vision stack is not compiled in.
+    gs_ffi::require_onnx_runtime("run_vision.rs");
     let mut args = std::env::args().skip(1);
     let prompt = match args.next() {
         Some(p) => p,
