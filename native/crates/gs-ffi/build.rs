@@ -157,7 +157,7 @@ fn main() {
         panic!(
             "GS_ONNXRUNTIME_ROOT is unset or does not point at a usable ONNX Runtime.\n\
              Expected <root>/include/onnxruntime_cxx_api.h and <root>/lib/libonnxruntime.so\n\
-             Set it in native/.cargo/config.toml, or in the environment:\n\
+             Set it in .cargo/config.toml, or in the environment:\n\
              \n    GS_ONNXRUNTIME_ROOT=/path/to/onnxruntime-linux-x64-1.20.0 cargo build\n\
              \nRefusing to emit a binary that silently lacks CLIP embeddings.\n\
              For a deliberately vision-less build, set GS_ALLOW_MISSING_ONNX=1."

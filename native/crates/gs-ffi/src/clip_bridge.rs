@@ -54,7 +54,7 @@ pub fn require_onnx_runtime(binary: &str) {
         eprintln!(
             "Error: CLIP was not compiled in. Build was invoked without \
              GS_ONNXRUNTIME_ROOT.\n\
-             See native/.cargo/config.toml.\n\
+             See .cargo/config.toml.\n\
              Binary: {binary}"
         );
         std::process::exit(3);

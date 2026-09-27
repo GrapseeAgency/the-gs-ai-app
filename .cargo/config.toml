@@ -15,9 +15,15 @@
 # in the source, absent in the artifact, and indistinguishable from a working
 # build unless you happen to run the demo.
 #
-# Pinning the paths here means a plain `cargo build` in this directory produces
-# the full-featured binary. The build script also panics if the path is wrong,
-# so an incorrect value here fails the build rather than disabling a feature.
+# Pinning the paths here means a plain `cargo build` produces the full-featured
+# binary. The build script also panics if the path is wrong, so an incorrect
+# value here fails the build rather than disabling a feature.
+#
+# This file lives at the REPOSITORY ROOT, not in native/, because cargo reads
+# .cargo/config.toml by walking up from the current working directory. With it
+# in native/, `cargo build` worked from native/ but failed closed from the repo
+# root -- which the fail-closed guard caught, because that is exactly the kind
+# of cwd-dependent surprise this whole change exists to eliminate.
 #
 # Override on the command line for a different machine, e.g.
 #   GS_ONNXRUNTIME_ROOT=/opt/onnxruntime cargo build --release
