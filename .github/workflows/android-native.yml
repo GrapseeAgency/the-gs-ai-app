@@ -86,6 +86,14 @@ jobs:
           echo "ANDROID_HOME=$SDK_ROOT"   >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
           echo "ANDROID_NDK_HOME=$SDK_ROOT/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+          # Both names, same path. The image ships NDK 27.3.13750724 and
+          # cargo-ndk 4 resolves the disagreement by preferring whichever
+          # variable it sees, which silently built against an NDK this job did
+          # not install:
+          #   warning: Environment variable `ANDROID_NDK_HOME =
+          #     "/home/runner/android-sdk/ndk/25.2.9519653"` doesn't match
+          #     `ANDROID_NDK_ROOT = "/usr/local/lib/android/sdk/ndk/27.3.13750724"`
+          echo "ANDROID_NDK_ROOT=$SDK_ROOT/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
           echo "$SDK_ROOT/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
 
           # Assert the tool exists BEFORE relying on it. The previous failure
@@ -113,12 +121,11 @@ jobs:
           ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_HOME }}
         run: |
           set -euo pipefail
-          # JNI headers: the JNI shim in gs-ffi/build.rs is compiled on Android
-          # and needs jni.h. cargo-ndk exports these once the NDK is visible.
-          cargo ndk env
-          # shellcheck disable=SC1091
-          source "$HOME/.cargo/ndk-env"
-          echo "CC=$CC  CARGO_TARGET_ARMV7_LINUX_ANDROIDEABI_LINKER=${CARGO_TARGET_ARMV7_LINUX_ANDROIDEABI_LINKER:-unset}"
+          # cargo-ndk sets CC_*_ANDROID_LINKER and friends for the targets it is
+          # given. There is no `cargo ndk env` subcommand and no ndk-env file to
+          # source: attempt 2 failed with
+          #     error: no such command: `env`
+          #     help: a command with a similar name exists: `new`
           cargo ndk \
             -t ${{ matrix.target }} \
             -o "$GITHUB_WORKSPACE/dist/android/${{ matrix.abi }}" \

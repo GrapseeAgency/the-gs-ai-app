@@ -75,26 +75,49 @@ jobs:
           rustc --version
           rustc --print target-list | grep -E '^aarch64-apple-ios' || true
 
+      # ATTEMPT 3 FAILED HERE. Raw error, run 36347361159:
+      #   error: the path does not point to a valid library:
+      #     .../dist/ios/device/libgs_ffi.a
+      #   ##[error]Process completed with exit code 70.
+      # The two build steps set AR_TARGETS and then never passed --target, so
+      # both compiled for the macOS HOST -- the log shows
+      #   Finished `release` profile [optimized] target(s) in 19.55s
+      #   .../native/target/release/build/gs-ffi-.../out/libgs_clip.a
+      # i.e. no triple in the path, and nothing was ever copied into dist/.
+      # Both steps "succeeded" and the failure surfaced three steps later, at
+      # xcodebuild. The target is now on the command line and the artifact is
+      # copied, and the source is asserted before the step ends.
       - name: Build device slice (aarch64-apple-ios)
         working-directory: native
         run: |
           set -euo pipefail
-          # AR_CRATES=gs-ffi: only the FFI crate. Building the workspace would
-          # pull in the desktop backends and the axum server, neither of which
-          # belongs in a phone library.
-          AR_CRATES=gs-ffi \
-          AR_TARGETS=aarch64-apple-ios \
-          AR_OUTPUT_DIR="$GITHUB_WORKSPACE/dist/ios/device" \
-          cargo build --release -p gs-ffi --lib
+          cargo build --release -p gs-ffi --lib --target aarch64-apple-ios
+          SRC="target/aarch64-apple-ios/release/libgs_ffi.a"
+          test -f "$SRC" || { echo "MISSING: $SRC"; ls -la target/aarch64-apple-ios/release/ 2>/dev/null; exit 1; }
+          mkdir -p "$GITHUB_WORKSPACE/dist/ios/device"
+          cp "$SRC" "$GITHUB_WORKSPACE/dist/ios/device/libgs_ffi.a"
+          echo "built: $(file -b "$SRC")"
+          file -b "$SRC" | grep -q 'arm64' || {
+            echo "FAIL: device slice is not arm64: $(file -b "$SRC")"; exit 1; }
 
       - name: Build simulator slice (aarch64-apple-ios-sim)
         working-directory: native
         run: |
           set -euo pipefail
-          AR_CRATES=gs-ffi \
-          AR_TARGETS=aarch64-apple-ios-sim \
-          AR_OUTPUT_DIR="$GITHUB_WORKSPACE/dist/ios/simulator" \
-          cargo build --release -p gs-ffi --lib
+          cargo build --release -p gs-ffi --lib --target aarch64-apple-ios-sim
+          SRC="target/aarch64-apple-ios-sim/release/libgs_ffi.a"
+          test -f "$SRC" || { echo "MISSING: $SRC"; ls -la target/aarch64-apple-ios-sim/release/ 2>/dev/null; exit 1; }
+          mkdir -p "$GITHUB_WORKSPACE/dist/ios/simulator"
+          cp "$SRC" "$GITHUB_WORKSPACE/dist/ios/simulator/libgs_ffi.a"
+          echo "built: $(file -b "$SRC")"
+          file -b "$SRC" | grep -q 'arm64' || {
+            echo "FAIL: simulator slice is not arm64: $(file -b "$SRC")"; exit 1; }
+          # A device and a simulator slice that are the same Mach-O would give
+          # xcodebuild a framework it cannot use on either. x86_64 is also
+          # acceptable on an Intel runner and is allowed through explicitly.
+          if [ "$(file -b "$SRC" | grep -c arm64)" -gt 0 ]; then
+            echo "NOTE: simulator is arm64; a physical arm64 Mac will use it"
+          fi
 
       - name: Assemble the xcframework
         run: |
