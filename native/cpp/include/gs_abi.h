@@ -42,6 +42,14 @@ typedef enum gs_status {
 const char* gs_last_error(void);
 void gs_clear_error(void);
 
+/* Record an error for the calling thread. Added because the three wrappers
+ * each kept a PRIVATE thread_local: gs_abi's g_last_error, llama_wrapper's
+ * t_err, and the mobile one. gs_last_error() read only the first, so 43 writes
+ * in the llama wrapper and every mobile error were unreachable -- a caller got
+ * "" for a failure that had a perfectly good explanation sitting in a variable
+ * nothing read. One channel, one accessor. */
+void gs_set_error(const char* msg);
+
 /* Generic owned-string release. Every gs_free_* in other headers forwards here
  * so callers only need one free convention. */
 void gs_free_string(char* s);

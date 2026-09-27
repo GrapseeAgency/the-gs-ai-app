@@ -6,6 +6,16 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
+# crate-type MUST be declared under [lib], not [package]. Under [package] cargo
+# silently reports crate_types: ['lib'] and emits only the rlib, which is how the
+# mobile artifacts went missing the first time. [lib] is unambiguous.
+[lib]
+name = "gs_ffi"
+# cdylib  -> libgs_ffi.so for Android (JVM System.loadLibrary)
+# staticlib -> libgs_ffi.a for the iOS xcframework
+# rlib    -> the workspace binaries keep linking it exactly as before
+crate-type = ["rlib", "cdylib", "staticlib"]
+
 [dependencies]
 gs-common = { workspace = true }
 tracing   = { workspace = true }

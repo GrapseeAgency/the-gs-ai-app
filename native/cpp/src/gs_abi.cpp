@@ -22,6 +22,8 @@ const char* gs_last_error(void) { return g_last_error.c_str(); }
 
 void gs_clear_error(void) { g_last_error.clear(); }
 
+void gs_set_error(const char* msg) { g_last_error = msg ? msg : ""; }
+
 void gs_free_string(char* s) {
     // The ABI promises caller-owned strings are malloc'd, so free() is the
     // correct release. Guarding NULL keeps every gs_free_* idempotent.

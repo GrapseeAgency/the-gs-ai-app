@@ -28,8 +28,10 @@ namespace {
 
 // Per-thread error, mirroring gs_abi.cpp. Declared here too because the
 // wrapper is usable without linking gs_abi.cpp when compiled standalone.
-thread_local std::string t_err;
-void set_err(const std::string& m) { t_err = m; }
+// Writes through the shared gs_abi channel. This used to be a private
+// thread_local that nothing read, so every llama error was reported to Rust as
+// an empty string despite a correct message being right here.
+void set_err(const std::string& m) { gs_set_error(m.c_str()); }
 
 } // namespace
 
