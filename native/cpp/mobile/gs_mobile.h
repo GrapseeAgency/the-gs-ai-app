@@ -69,6 +69,10 @@ char* gs_mobile_ocr(gs_mobile_ctx_t* ctx, const char* image_path);
  * Returns the number of floats written, or negative gs_status_t. */
 int32_t gs_mobile_embed_image(gs_mobile_ctx_t* ctx, const char* image_path, float* out, int32_t cap);
 
+/* Embed a text query into `out`, which must hold gs_mobile_embed_dim floats.
+ * Returns floats written, or negative gs_status_t. */
+int32_t gs_mobile_embed_text(gs_mobile_ctx_t* ctx, const char* text, float* out, int32_t cap);
+
 /* Embedding width, or negative gs_status_t when no embedder is compiled in. */
 int32_t gs_mobile_embed_dim(gs_mobile_ctx_t* ctx);
 

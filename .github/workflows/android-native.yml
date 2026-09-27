@@ -26,7 +26,10 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  # Consumed by gs-ffi/build.rs on the desktop only; mobile ignores it.
+  CMDLINE_VERSION: 11076708
+  NDK_VERSION: 25.2.9519653
+  # Consumed by gs-ffi/build.rs on the desktop only; the Android target path
+  # ignores it and compiles portable-only.
   GS_ALLOW_MISSING_ONNX: "1"
 
 jobs:
@@ -39,102 +42,117 @@ jobs:
         include:
           - abi: arm64-v8a
             target: aarch64-linux-android
-            rust: aarch64-linux-android
           - abi: armeabi-v7a
             target: armv7-linux-androideabi
-            rust: armv7-linux-androideabi
           - abi: x86_64
             target: x86_64-linux-android
-            rust: x86_64-linux-android
           - abi: x86
             target: i686-linux-android
-            rust: i686-linux-android
 
     steps:
       - name: Check out
         uses: actions/checkout@v4
 
-      - name: Install Rust (rustup, pinned)
+      - name: Install Rust
         run: |
           set -euo pipefail
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
             | sh -s -- -y --profile minimal --default-toolchain stable
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
-          rustup target add ${{ matrix.rust }}
+          rustup target add ${{ matrix.target }}
           rustc --version
-          cargo --version
 
-      - name: Install NDK r25c
+      # ATTEMPT 1 FAILED HERE. Raw error from run 36345064039, job arm64-v8a:
+      #   /home/runner/work/_temp/f7d0910b-....sh: line 6: sdkmanager: command not found
+      #   ##[error]Process completed with exit code 127.
+      # The image ships an ANDROID_HOME with no command-line tools, so sdkmanager
+      # is absent and every one of the four ABIs failed identically. Installed
+      # from the Google zip rather than assuming the image provides it.
+      - name: Install Android command-line tools and NDK
         run: |
           set -euo pipefail
-          NDK_VERSION=r25c
-          ANDROID_NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION"
-          if [ ! -d "$ANDROID_NDK_HOME" ]; then
-            yes | sdkmanager --licenses >/dev/null 2>&1 || true
-            sdkmanager "ndk;$NDK_VERSION" >/dev/null
-          fi
-          echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME" >> "$GITHUB_ENV"
-          ls "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt" || \
-            (echo "NDK not installed" && exit 1)
+          SDK_ROOT="$HOME/android-sdk"
+          mkdir -p "$SDK_ROOT/cmdline-tools"
+          cd /tmp
+          wget -q "https://dl.google.com/android/repository/commandlinetools-linux-${CMDLINE_VERSION}_latest.zip"
+          unzip -q "commandlinetools-linux-${CMDLINE_VERSION}_latest.zip"
+          # The zip unpacks cmdline-tools/, but the SDK requires the
+          # *latest/* layout or every sdkmanager invocation fails.
+          mv cmdline-tools "$SDK_ROOT/cmdline-tools/latest"
+          export ANDROID_HOME="$SDK_ROOT"
+          export ANDROID_SDK_ROOT="$SDK_ROOT"
+          export PATH="$SDK_ROOT/cmdline-tools/latest/bin:$PATH"
+
+          echo "ANDROID_HOME=$SDK_ROOT"   >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=$SDK_ROOT/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+          echo "$SDK_ROOT/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+
+          # Assert the tool exists BEFORE relying on it. The previous failure
+          # was a missing binary discovered three steps later.
+          command -v sdkmanager
+          sdkmanager --version
+
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager --install "ndk;$NDK_VERSION" "platform-tools" >/dev/null
+          sdkmanager --install "platforms;android-34" "build-tools;34.0.0" >/dev/null
+
+          test -d "$SDK_ROOT/ndk/$NDK_VERSION" || {
+            echo "NDK $NDK_VERSION missing"; exit 1; }
+          ls "$SDK_ROOT/ndk/$NDK_VERSION/toolchains/llvm/prebuilt"
 
       - name: Install cargo-ndk
         run: |
           set -euo pipefail
           cargo install cargo-ndk --locked
-
-      # cargo-ndk generates the linkers and writes the env file that names them.
-      # A missing linker here is the single most common cause of an Android
-      # cross-compile failing minutes later with a confusing collect2 error, so
-      # it is asserted rather than assumed.
-      - name: Configure cargo-ndk
-        run: |
-          set -euo pipefail
-          cargo ndk env
-          # shellcheck disable=SC1091
-          source "$HOME/.cargo/ndk-env"
-          echo "cargo-ndk env sourced; CC=$CC"
-          ls -d "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          cargo ndk --version
 
       - name: Build libgs_ffi.so
         working-directory: native
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_HOME }}
         run: |
           set -euo pipefail
-          # cdylib is declared under [lib] in crates/gs-ffi/Cargo.toml. Building
-          # the whole workspace would try to link the desktop backends.
+          # JNI headers: the JNI shim in gs-ffi/build.rs is compiled on Android
+          # and needs jni.h. cargo-ndk exports these once the NDK is visible.
+          cargo ndk env
+          # shellcheck disable=SC1091
+          source "$HOME/.cargo/ndk-env"
+          echo "CC=$CC  CARGO_TARGET_ARMV7_LINUX_ANDROIDEABI_LINKER=${CARGO_TARGET_ARMV7_LINUX_ANDROIDEABI_LINKER:-unset}"
           cargo ndk \
-            -t ${{ matrix.rust }} \
+            -t ${{ matrix.target }} \
             -o "$GITHUB_WORKSPACE/dist/android/${{ matrix.abi }}" \
             build --release -p gs-ffi --lib
 
-      - name: Verify the artifact is a real Android ELF
+      - name: Verify the artifact
         run: |
           set -euo pipefail
           SO="$GITHUB_WORKSPACE/dist/android/${{ matrix.abi }}/libgs_ffi.so"
           test -f "$SO" || { echo "MISSING: $SO"; exit 1; }
           echo "=== file ==="
           file "$SO"
-          echo "=== size ==="
           stat -c '%s bytes' "$SO"
-          # A .so with no exported symbols loads and then fails at the first
-          # call. Assert the mobile ABI is present, not merely that the file
-          # exists.
-          echo "=== exported mobile ABI ==="
-          nm -D --defined-only "$SO" | grep -oE 'gs_[a-z_0-9]+' | sort -u
+          # A .so with no exported symbols loads and fails at the first call, so
+          # the ABI is asserted, not assumed.
+          echo "=== exported ABI ==="
+          nm -D --defined-only "$SO" | grep -oE 'gs_[A-Za-z_0-9]+' | sort -u
           COUNT=$(nm -D --defined-only "$SO" | grep -c 'gs_ffi_mobile_' || true)
           echo "gs_ffi_mobile_* exported: $COUNT"
-          if [ "$COUNT" -lt 8 ]; then
-            echo "FAIL: expected at least 8 gs_ffi_mobile_* exports, found $COUNT"
-            exit 1
-          fi
-          # The architecture must match the ABI we asked for.
+          [ "$COUNT" -ge 8 ] || {
+            echo "FAIL: expected >=8 gs_ffi_mobile_* exports, found $COUNT"; exit 1; }
+          # The JNI entry points must be present or the Kotlin bridge cannot
+          # bind at all.
+          JNI=$(nm -D --defined-only "$SO" | grep -c 'Java_com_grapsee_gsai_native_GsNative_' || true)
+          echo "JNI entry points: $JNI"
           case "${{ matrix.abi }}" in
             arm64-v8a)   ARCH="aarch64" ;;
             armeabi-v7a) ARCH="ARM" ;;
             x86_64)      ARCH="x86-64" ;;
             x86)         ARCH="Intel 80386" ;;
           esac
-          file "$SO" | grep -q "$ARCH" || { echo "FAIL: $ARCH not in: $(file "$SO")"; exit 1; }
-          echo "VERIFIED: ${{ matrix.abi }} is a $ARCH shared object with the mobile ABI"
+          file "$SO" | grep -q "$ARCH" || {
+            echo "FAIL: $ARCH not in: $(file "$SO")"; exit 1; }
+          echo "VERIFIED: ${{ matrix.abi }} = $ARCH with the mobile ABI"
 
       - name: Upload libgs_ffi.so
         uses: actions/upload-artifact@v4

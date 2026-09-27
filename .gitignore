@@ -107,3 +107,9 @@ native/data/cache/*
 gs_bench.egg-info/
 tool-results/
 __pycache__/
+
+# Native prebuilts and model weights: built or downloaded in CI, never committed.
+# A .gguf in git is a permanent 1.1 GB liability; the app downloads on consent.
+native/prebuilts/
+**/*.gguf
+**/*.onnx

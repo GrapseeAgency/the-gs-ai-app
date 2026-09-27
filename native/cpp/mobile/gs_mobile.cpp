@@ -148,6 +148,12 @@ int32_t gs_mobile_embed_image(gs_mobile_ctx_t* ctx, const char* image_path, floa
     return GS_ERR_UNAVAILABLE;
 }
 
+int32_t gs_mobile_embed_text(gs_mobile_ctx_t* ctx, const char* text, float* out, int32_t cap) {
+    (void)ctx; (void)text; (void)out; (void)cap;
+    set_err("no text embedder is compiled into this mobile build");
+    return GS_ERR_UNAVAILABLE;
+}
+
 int32_t gs_mobile_embed_dim(gs_mobile_ctx_t* ctx) {
     (void)ctx;
     return GS_ERR_UNAVAILABLE;

@@ -5,6 +5,8 @@
 
 pub mod clip_bridge;
 pub mod llama_bridge;
+#[cfg(target_os = "android")]
+pub mod jni;
 pub mod mobile;
 pub mod ocr_bridge;
 pub mod sd_bridge;

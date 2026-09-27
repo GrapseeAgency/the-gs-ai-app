@@ -20,6 +20,11 @@ crate-type = ["rlib", "cdylib", "staticlib"]
 gs-common = { workspace = true }
 tracing   = { workspace = true }
 
+# Android only. The JNI glue is meaningless on a desktop build, and the crate
+# pulls in a C dependency that has no purpose off-device.
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.21"
+
 [build-dependencies]
 cc = "1"
 pkg-config = "0.3"

@@ -53,6 +53,7 @@ fn main() {
     // define the wrapper compiles but every call reports UNAVAILABLE, and
     // LlamaModel::load will hand back a handle that cannot generate anything.
     println!("cargo:rerun-if-env-changed=GS_LLAMA_ROOT");
+    let kernels = cpp.join("..").join("c").join("kernels");
     let llama_root = if mobile { None } else { std::env::var("GS_LLAMA_ROOT").ok() };
     let mut have_llama = false;
     if let Some(root) = &llama_root {
@@ -66,6 +67,27 @@ fn main() {
         }
     }
     llama_build.compile("gs_llama");
+
+    // Link libllama/ggml. These directives were lost during the mobile work and
+    // the symptom was a link failure that named llama symbols rather than
+    // anything about the change that caused it:
+    //   undefined symbol: llama_backend_init / llama_model_default_params
+    if have_llama {
+        let root = llama_root.as_ref().expect("set when have_llama");
+        for sub in ["build/bin", "bin"] {
+            let p = format!("{root}/{sub}");
+            if std::path::Path::new(&p).is_dir() {
+                println!("cargo:rustc-link-search=native={p}");
+            }
+        }
+        for l in ["llama", "ggml", "ggml-base"] {
+            println!("cargo:rustc-link-lib=dylib={l}");
+        }
+        let bin = format!("{root}/build/bin");
+        if std::path::Path::new(&bin).is_dir() {
+            println!("cargo:rustc-link-arg=-Wl,-rpath,{bin}");
+        }
+    }
 
     // shared ABI: status codes, last-error, device gate
     cc::Build::new()
@@ -115,6 +137,16 @@ fn main() {
         }
     }
     clip_build.compile("gs_clip");
+
+    if have_ort {
+        // Link and rpath ONNX Runtime. This block was lost during the mobile
+        // work and the failure named ONNX rather than the edit that caused it:
+        //   undefined symbol: OrtGetApiBase
+        let root = ort_root.as_ref().expect("set when have_ort");
+        println!("cargo:rustc-link-search=native={root}/lib");
+        println!("cargo:rustc-link-lib=dylib=onnxruntime");
+        println!("cargo:rustc-link-arg=-Wl,-rpath,{root}/lib");
+    }
 
     // ocr_tess: Tesseract is found through pkg-config when it is installed.
     // Absent it, the wrapper compiles and reports UNAVAILABLE.
@@ -197,86 +229,12 @@ fn main() {
         mb.compile("gs_mobile");
     }
 
-    // ---- JNI shim, Android only ------------------------------------------
-    if std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default() == "android" {
-        let jni_inc = std::env::var("JNI_INCLUDE_DIRS").unwrap_or_default();
-        let mdir = cpp.join("mobile");
-        let mut jb = cc::Build::new();
-        jb.cpp(true)
-            .std("c++17")
-            .include(&inc)
-            .include(&mdir)
-            .file(mdir.join("gs_jni.cpp"))
-            .warnings(false);
-        for d in jni_inc.split(':').filter(|s| !s.is_empty()) {
-            jb.include(d);
-        }
-        jb.compile("gs_jni");
-    }
-    if have_ort {
-        // Make the compiled-in state queryable from Rust, so a binary can
-        // assert its own capabilities at start-up instead of a human having to
-        // remember which env vars a build needed. A cargo feature cannot do
-        // this: features come from the caller, and a build script cannot enable
-        // its own crate's feature. rustc-cfg is the mechanism that works.
-        println!("cargo:rustc-cfg=gs_onnxruntime");
-        let root = ort_root.as_ref().expect("set when have_ort");
-        println!("cargo:rustc-link-search=native={root}/lib");
-        println!("cargo:rustc-link-lib=dylib=onnxruntime");
-        println!("cargo:rustc-link-arg=-Wl,-rpath,{root}/lib");
-    } else if mobile {
-        // Intended: the portable mobile surface has no ONNX and says so.
-        println!("cargo:warning=portable mobile build: no ONNX Runtime linked");
-    } else if std::env::var("GS_ALLOW_MISSING_ONNX").is_ok() {
-        println!(
-            "cargo:warning=GS_ALLOW_MISSING_ONNX is set: building WITHOUT CLIP. \
-             Vision is disabled in this binary by explicit request."
-        );
-    } else {
-        // Fail CLOSED. A silent skip here produced a binary that built cleanly,
-        // passed every unit test, and then reported "built without ONNX
-        // Runtime" at run time: the whole vision stack compiled out behind a
-        // cargo:warning. A build failure the operator can fix is strictly
-        // better than a build that lies about its own capabilities.
-        panic!(
-            "GS_ONNXRUNTIME_ROOT is unset or does not point at a usable ONNX Runtime.\n\
-             Expected <root>/include/onnxruntime_cxx_api.h and <root>/lib/libonnxruntime.so\n\
-             Set it in .cargo/config.toml, or in the environment:\n\
-             \n    GS_ONNXRUNTIME_ROOT=/path/to/onnxruntime-linux-x64-1.20.0 cargo build\n\
-             \nRefusing to emit a binary that silently lacks CLIP embeddings.\n\
-             For a deliberately vision-less build, set GS_ALLOW_MISSING_ONNX=1."
-        );
-    }
+    // JNI lives in Rust (src/jni.rs, android-only) rather than in a C++ shim.
+    // Two implementations would export the same Java_* symbols and the dynamic
+    // linker would pick one arbitrarily, which is the worst possible outcome
+    // for a bridge: it works in the developer's build and not in CI.
+    println!("cargo:rerun-if-env-changed=JNI_INCLUDE_DIRS");
 
-    // ---- link libllama when a build tree is available --------------------
-    if have_llama {
-        let root = llama_root.as_ref().expect("set when have_llama");
-        println!("cargo:rustc-link-search=native={root}/build/bin");
-        println!("cargo:rustc-link-search=native={root}/bin");
-        println!("cargo:rustc-link-lib=dylib=llama");
-        println!("cargo:rustc-link-lib=dylib=ggml");
-        println!("cargo:rustc-link-lib=dylib=ggml-base");
-        // Load-time path so the binary runs without LD_LIBRARY_PATH.
-        println!("cargo:rustc-link-arg=-Wl,-rpath,{root}/build/bin");
-    } else {
-        println!(
-            "cargo:warning=GS_LLAMA_ROOT unset or invalid: local generation is \
-             BLOCKED, provider routing only"
-        );
-    }
-
-    // ---- C kernels --------------------------------------------------------
-    let kernels = std::path::Path::new("..").join("..").join("c").join("kernels");
-    cc::Build::new()
-        .include(&kernels)
-        .file(kernels.join("simd.c"))
-        .flag_if_supported("-std=c11")
-        .warnings(true)
-        .compile("gs_kernels");
-
-    println!("cargo:rerun-if-changed={}/llama_wrapper/llama_wrapper.cpp", cpp.display());
-    println!("cargo:rerun-if-changed={}/src/gs_abi.cpp", cpp.display());
-    println!("cargo:rerun-if-changed={}/sd_wrapper/sd_wrapper.cpp", cpp.display());
     println!("cargo:rerun-if-changed={}/clip_wrapper/clip_wrapper.cpp", cpp.display());
     println!("cargo:rerun-if-changed={}/mobile/gs_mobile.cpp", cpp.display());
     println!("cargo:rerun-if-changed={}/mobile/gs_jni.cpp", cpp.display());
