@@ -223,6 +223,7 @@ async fn chat_completions(
             max_tokens: req.max_tokens.unwrap_or(512),
             temperature: req.temperature.unwrap_or(0.2),
             top_p: 0.95,
+        response_format: None,
         };
         tokio::spawn(async move {
             let mut seq = 0u64;
@@ -250,6 +251,7 @@ async fn chat_completions(
         max_tokens: req.max_tokens.unwrap_or(512),
         temperature: req.temperature.unwrap_or(0.2),
         top_p: 0.95,
+        response_format: None,
     };
 
     match s.agent.run_turn(&user_text, &cfg, None).await {
