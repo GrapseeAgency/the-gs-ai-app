@@ -78,39 +78,6 @@ gs_llama_context_t* gs_llama_create(const llama_config_t* config);
 
 /* Generates up to max_tokens. On GS_OK, result->text is caller-owned.
  * On any error, result->text is NULL and result->status carries the code. */
-/* Speculative decoding. This build of llama.cpp exposes no speculative API,
- * so draft-and-verify is implemented here.
- *
- * A draft context is any second gs_llama_context_t built from a SMALLER model.
- * For each step the draft proposes n_draft tokens autoregressively; the main
- * model then decodes all of them in ONE batched llama_decode and we keep the
- * longest prefix on which its own greedy choice agrees, discarding the rest.
- *
- * Under the greedy sampler that makes the output byte-identical to
- * non-speculative decoding, which is the property that makes this lossless
- * rather than an approximation. Sampling above 0 is NOT covered: exact
- * losslessness there needs the modified rejection sampler, and this call
- * refuses to pretend otherwise.
- */
-typedef struct {
-    int32_t drafted;     /* tokens the draft proposed */
-    int32_t accepted;    /* of those, confirmed by the main model */
-    int32_t generated;   /* tokens emitted in total */
-    double  accept_rate; /* accepted/drafted, or 1.0 when nothing was drafted */
-    /* How many times the KV cache had to be rebuilt from the token list. A
-     * batched verify cannot be partially rolled back, so every disagreement
-     * costs one re-prefill. This is the dominant cost and must be reported. */
-    int32_t resyncs;
-} gs_spec_stats_t;
-
-llama_result_t gs_llama_generate_speculative(gs_llama_context_t* ctx,
-                                             gs_llama_context_t* draft,
-                                             const char* prompt,
-                                             int32_t max_tokens,
-                                             float temperature,
-                                             int32_t n_draft,
-                                             gs_spec_stats_t* out_stats);
-
 llama_result_t gs_llama_generate(gs_llama_context_t* ctx,
                               const char* prompt,
                               int32_t max_tokens,
