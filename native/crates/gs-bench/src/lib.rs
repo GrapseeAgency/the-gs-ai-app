@@ -375,7 +375,15 @@ impl Runner {
             .filter(|r| r.error.is_none() && r.parsed.is_none())
             .count() as u32;
         // The three numbers, kept apart on purpose.
-        let n_parsed = n - unparseable;
+        //
+        // n_parsed must EXCLUDE errored samples. Previously it was
+        // n - unparseable, and because an errored sample has error=Some it
+        // was never counted as unparseable - so an errored sample counted as
+        // PARSED. That produced the impossible pair parse_rate=1.0 with
+        // n_errored=1. The denominator for accuracy is parsed, not attempted.
+        let n_parsed = n - unparseable - errored;
+        // parse_rate is over ATTEMPTED samples, and an errored sample was
+        // never parsed, so it belongs in the denominator as a failure.
         let parse_rate = if n == 0 { 0.0 } else { n_parsed as f64 / n as f64 };
         // accuracy over PARSED only: the reasoning signal.
         let accuracy = if n_parsed == 0 { 0.0 } else { correct as f64 / n_parsed as f64 };
@@ -600,6 +608,20 @@ mod tests {
         assert!(delta_table(&b, &l)[0].contains("REVERT (flat)"));
         let mut u = b.clone(); u.scaffold = "aci".into(); u.score = 0.6;
         assert!(delta_table(&b, &u)[0].contains("KEEP"));
+    }
+
+    #[test]
+    fn an_errored_sample_never_counts_as_parsed() {
+        // The operator saw parse_rate=1.0 together with n_errored=1, which
+        // is impossible. This is the arithmetic that produced it and the
+        // arithmetic that fixes it.
+        let n = 1u32;
+        let unparseable = 0u32;   // an errored sample is not "unparseable"
+        let errored = 1u32;
+        let n_parsed = n - unparseable - errored;
+        assert_eq!(n_parsed, 0, "an errored sample is not parsed");
+        let parse_rate = n_parsed as f64 / n as f64;
+        assert_eq!(parse_rate, 0.0, "parse_rate must be 0 when nothing parsed");
     }
 
     #[test]

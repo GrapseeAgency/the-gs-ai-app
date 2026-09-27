@@ -294,6 +294,13 @@ pub enum PoolError {
     /// breaker, or a single bad id takes a working provider offline.
     #[error("{provider} does not serve model '{model}' (caller config error)")]
     ModelNotFound { provider: String, model: String },
+    /// The provider rejected the request itself: a malformed body, or a
+    /// constrained-decoding failure such as Groq's
+    /// "Failed to generate JSON". The provider is healthy and reachable, so
+    /// this must NOT open the breaker, and retrying the identical request is
+    /// pointless - the payload has to change.
+    #[error("{provider} rejected the request (HTTP {status}): {detail}")]
+    BadRequest { provider: String, status: u16, detail: String },
     #[error("no provider available: {reason}")]
     NoProvider { reason: String },
 }
@@ -336,6 +343,7 @@ impl PoolError {
             PoolError::RateLimited { .. }
                 | PoolError::KeyDead { .. }
                 | PoolError::ModelNotFound { .. }
+                | PoolError::BadRequest { .. }
         )
     }
 }

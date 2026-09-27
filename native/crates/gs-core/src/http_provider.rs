@@ -124,26 +124,37 @@ impl Provider for HttpProvider {
         }
 
         let started = std::time::Instant::now();
-        let resp = self
-            .client
-            .post(format!("{}/chat/completions", self.base_url))
-            .header("Authorization", format!("Bearer {key}"))
-            .header("content-type", "application/json")
-            .json(&payload)
-            .send()
-            .await;
-
-        let resp = match resp {
-            Ok(r) => r,
-            Err(e) => {
-                return Err(PoolError::Transport {
-                    provider: self.name.clone(),
-                    // reqwest's error text can echo the URL but never the
-                    // header, so no key material can reach this string.
-                    detail: e.to_string(),
-                })
-            }
+        let send = |body: &serde_json::Value| {
+            self.client
+                .post(format!("{}/chat/completions", self.base_url))
+                .header("Authorization", format!("Bearer {key}"))
+                .header("content-type", "application/json")
+                .json(body)
+                .send()
         };
+
+        let constrained = payload.get("response_format").is_some();
+        let mut resp = match send(&payload).await { Ok(r) => r, Err(e) => {
+            return Err(PoolError::Transport {
+                provider: self.name.clone(),
+                detail: e.to_string(),
+            })
+        }};
+
+        // Constrained decoding is a best-effort optimisation, not a
+        // requirement. When the provider cannot satisfy the grammar for this
+        // prompt (Groq returns 400 "Failed to generate JSON" on math-heavy
+        // GPQA items) retry the identical request WITHOUT the constraint
+        // rather than discarding the sample. The strict parser will then
+        // report it as unparseable if the model did not commit to a letter,
+        // which is honest.
+        if constrained && resp.status() == 400 {
+            let mut bare = payload.clone();
+            if let Some(obj) = bare.as_object_mut() { obj.remove("response_format"); }
+            if let Ok(r2) = send(&bare).await { resp = r2; }
+        }
+
+        let resp = resp;
 
         let status = resp.status();
         if !status.is_success() {
@@ -174,6 +185,15 @@ impl Provider for HttpProvider {
                 401..=403 => PoolError::KeyDead {
                     provider: self.name.clone(),
                     key_index: 0,
+                },
+                // 400: the provider rejected THIS payload. Constrained
+                // decoding in particular fails outright on some prompts
+                // ("Failed to generate JSON"). That is a request bug, not an
+                // outage, so it must not open the breaker.
+                400 => PoolError::BadRequest {
+                    provider: self.name.clone(),
+                    status: 400,
+                    detail: msg.chars().take(160).collect(),
                 },
                 // Upstream said 503 (service unavailable) is an outage.
                 s => PoolError::Transport {
