@@ -9,6 +9,8 @@ publish.workspace = true
 [dependencies]
 gs-common = { workspace = true }
 gs-core   = { workspace = true }
+gs-ffi    = { workspace = true }
 serde     = { workspace = true }
 serde_json= { workspace = true }
 tokio     = { workspace = true }
+image     = { version = "0.25", default-features = false, features = ["jpeg", "png"] }

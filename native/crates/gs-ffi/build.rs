@@ -55,6 +55,45 @@ fn main() {
         .warnings(true)
         .compile("gs_sd");
 
+    // clip_wrapper: ONNX Runtime is optional. Without GS_ONNXRUNTIME_ROOT the
+    // wrapper still compiles and every entry point reports UNAVAILABLE, so a
+    // machine without onnxruntime can still build the workspace.
+    let clip_dir = cpp.join("clip_wrapper");
+    let mut clip_build = cc::Build::new();
+    clip_build
+        .cpp(true)
+        .std("c++17")
+        .include(&inc)
+        .include(&clip_dir)
+        .file(clip_dir.join("clip_wrapper.cpp"))
+        .warnings(true);
+
+    let ort_root = std::env::var("GS_ONNXRUNTIME_ROOT").ok();
+    let mut have_ort = false;
+    if let Some(root) = &ort_root {
+        let p = std::path::Path::new(root);
+        let inc_dir = p.join("include");
+        if inc_dir.join("onnxruntime_cxx_api.h").exists() {
+            clip_build
+                .define("GS_CLIP_HAVE_ONNXRUNTIME", None)
+                .include(&inc_dir);
+            have_ort = true;
+        }
+    }
+    clip_build.compile("gs_clip");
+    if have_ort {
+        let root = ort_root.as_ref().expect("set when have_ort");
+        println!("cargo:rustc-link-search=native={root}/lib");
+        println!("cargo:rustc-link-lib=dylib=onnxruntime");
+        println!("cargo:rustc-link-arg=-Wl,-rpath,{root}/lib");
+        println!("cargo:rerun-if-env-changed=GS_ONNXRUNTIME_ROOT");
+    } else {
+        println!(
+            "cargo:warning=GS_ONNXRUNTIME_ROOT unset or invalid: CLIP embeddings \
+             are BLOCKED, provider routing only"
+        );
+    }
+
     // ---- link libllama when a build tree is available --------------------
     if have_llama {
         let root = llama_root.as_ref().expect("set when have_llama");
@@ -85,5 +124,6 @@ fn main() {
     println!("cargo:rerun-if-changed={}/llama_wrapper/llama_wrapper.cpp", cpp.display());
     println!("cargo:rerun-if-changed={}/src/gs_abi.cpp", cpp.display());
     println!("cargo:rerun-if-changed={}/sd_wrapper/sd_wrapper.cpp", cpp.display());
+    println!("cargo:rerun-if-changed={}/clip_wrapper/clip_wrapper.cpp", cpp.display());
     println!("cargo:rerun-if-changed={}/simd.c", kernels.display());
 }
