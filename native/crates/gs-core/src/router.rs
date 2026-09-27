@@ -337,6 +337,9 @@ impl PoolError {
     ///  - ModelNotFound: the caller named a model the provider does not
     ///    serve. The provider is demonstrably up -- it answered. Counting
     ///    this would let a typo take a healthy provider offline.
+    ///  - Empty: a 200 with no content. Reasoning models on Groq do this
+    ///    intermittently. The provider answered, so it is not an outage, and
+    ///    three blank bodies must not take a healthy provider offline.
     pub fn counts_toward_breaker(&self) -> bool {
         !matches!(
             self,
@@ -344,6 +347,7 @@ impl PoolError {
                 | PoolError::KeyDead { .. }
                 | PoolError::ModelNotFound { .. }
                 | PoolError::BadRequest { .. }
+                | PoolError::Empty { .. }
         )
     }
 }

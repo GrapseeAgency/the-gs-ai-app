@@ -308,8 +308,13 @@ impl Runner {
                 match self.pool.complete(&msgs, &self.config).await {
                     Ok(c) => break Ok(c),
                     Err(e) => {
+                        // An empty completion is retried on the SAME key
+                        // first: reasoning models on Groq occasionally return
+                        // a 200 with no content, and rotating to another key
+                        // does not help when the MODEL is the variable.
                         let retryable = e.to_string().contains("no provider available")
-                            || e.to_string().contains("rate limited");
+                            || e.to_string().contains("rate limited")
+                            || e.to_string().contains("empty completion");
                         if retryable && attempt < 12 {
                             attempt += 1;
                             eprintln!(
