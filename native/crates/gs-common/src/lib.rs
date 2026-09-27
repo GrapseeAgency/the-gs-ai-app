@@ -99,11 +99,15 @@ pub struct CompletionConfig {
     pub max_tokens: u32,
     pub temperature: f32,
     pub top_p: f32,
+    /// Optional OpenAI `response_format` body. A json_schema with an enum is
+    /// how a benchmark forces a parseable answer INSTEAD OF parsing prose.
+    /// Verified supported on Groq and OpenRouter.
+    pub response_format: Option<serde_json::Value>,
 }
 
 impl Default for CompletionConfig {
     fn default() -> Self {
-        Self { model: String::new(), max_tokens: 512, temperature: 0.2, top_p: 0.95 }
+        Self { model: String::new(), max_tokens: 512, temperature: 0.2, top_p: 0.95, response_format: None }
     }
 }
 

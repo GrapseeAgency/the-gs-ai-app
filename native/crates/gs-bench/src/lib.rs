@@ -96,7 +96,54 @@ pub fn scaffold_prompt(s: Scaffold, question: &str) -> String {
     }
 }
 
+/// A json_schema that forces the model to emit exactly one of A/B/C/D.
+///
+/// This is the Step 1 fix: the model is constrained to the answer space by the
+/// decoder, so parse failure becomes a provider problem rather than a
+/// formatting accident. Verified supported on Groq and OpenRouter.
+pub fn letter_schema() -> serde_json::Value {
+    serde_json::json!({
+        "type": "json_schema",
+        "json_schema": {
+            "name": "multiple_choice",
+            "strict": true,
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "answer": { "type": "string", "enum": ["A", "B", "C", "D"] }
+                },
+                "required": ["answer"],
+                "additionalProperties": false
+            }
+        }
+    })
+}
+
+/// STRICT parser. Reads only the constrained `{"answer": "X"}` object.
+///
+/// It deliberately does NOT fall back to scanning prose. A permissive
+/// extractor is exactly what conflated format compliance with reasoning in
+/// the previous run, so the two are now separated: anything this rejects is
+/// counted as UNPARSEABLE and reported as such, never silently guessed.
+pub fn extract_answer_strict(text: &str) -> Option<char> {
+    let t = text.trim();
+    // Strip a markdown fence if the provider wrapped the JSON.
+    let t = t.strip_prefix("```json").or_else(|| t.strip_prefix("```")).unwrap_or(t);
+    let t = t.trim().trim_end_matches("```").trim();
+    let v: serde_json::Value = serde_json::from_str(t).ok()?;
+    let a = v.get("answer")?.as_str()?;
+    let u = a.trim().to_ascii_uppercase();
+    if ["A", "B", "C", "D"].contains(&u.as_str()) {
+        Some(u.chars().next().unwrap())
+    } else {
+        None
+    }
+}
+
 /// Extract a single A/B/C/D answer.
+///
+/// PERMISSIVE. Retained only for comparison against the strict parser; the
+/// scorecard uses the strict one.
 ///
 /// Returns None when no answer can be found, which the caller scores as WRONG.
 /// Guessing here would let a non-answer become a correct one by luck.
@@ -168,6 +215,18 @@ pub struct Scorecard {
     pub n_errored: u32,  // provider/transport failure, not answered
     pub n_skipped: u32,  // not attempted
     pub unparseable: u32,
+    /// parse_rate = parsed / n_samples: how often the answer was well-formed.
+    pub parse_rate: f64,
+    /// accuracy over PARSED samples only: the reasoning signal.
+    pub accuracy: f64,
+    pub n_parsed: u32,
+    /// unparseable counted as WRONG. The number to quote, because it cannot
+    /// be inflated by silently dropping the hard items.
+    pub accuracy_floor_adjusted: f64,
+    pub ci_floor_low: f64,
+    pub ci_floor_high: f64,
+    pub ci_accuracy_low: f64,
+    pub ci_accuracy_high: f64,
     pub provider_distribution: BTreeMap<String, u32>,
     pub model_distribution: BTreeMap<String, u32>,
     pub latency_p50_ms: u64,
@@ -269,7 +328,7 @@ impl Runner {
             };
             let r = match r {
                 Ok(c) => {
-                    let parsed = extract_answer(&c.text);
+                    let parsed = extract_answer_strict(&c.text);
                     SampleResult {
                         id: q.id.clone(),
                         // Unparseable counts as WRONG. Dropping it would
@@ -315,6 +374,15 @@ impl Runner {
             .iter()
             .filter(|r| r.error.is_none() && r.parsed.is_none())
             .count() as u32;
+        // The three numbers, kept apart on purpose.
+        let n_parsed = n - unparseable;
+        let parse_rate = if n == 0 { 0.0 } else { n_parsed as f64 / n as f64 };
+        // accuracy over PARSED only: the reasoning signal.
+        let accuracy = if n_parsed == 0 { 0.0 } else { correct as f64 / n_parsed as f64 };
+        // floor-adjusted: unparseable = wrong. The number to quote.
+        let floor_adj = if n == 0 { 0.0 } else { correct as f64 / n as f64 };
+        let ci_a = ScoreWithCI::wilson(correct, n_parsed);
+        let ci_f = ScoreWithCI::wilson(correct, n);
 
         let mut pd: BTreeMap<String, u32> = BTreeMap::new();
         let mut md: BTreeMap<String, u32> = BTreeMap::new();
@@ -341,6 +409,14 @@ impl Runner {
             n_errored: errored,
             n_skipped: 0,
             unparseable,
+            parse_rate,
+            accuracy,
+            n_parsed,
+            accuracy_floor_adjusted: floor_adj,
+            ci_floor_low: ci_f.ci_low,
+            ci_floor_high: ci_f.ci_high,
+            ci_accuracy_low: ci_a.ci_low,
+            ci_accuracy_high: ci_a.ci_high,
             provider_distribution: pd,
             model_distribution: md,
             latency_p50_ms: percentile(&lat, 0.50),
@@ -430,6 +506,34 @@ mod tests {
     }
 
     #[test]
+    fn the_strict_parser_reads_only_constrained_json() {
+        assert_eq!(extract_answer_strict(r#"{"answer":"C"}"#), Some('C'));
+        assert_eq!(extract_answer_strict("```json\n{\"answer\":\"B\"}\n```"), Some('B'));
+        assert_eq!(extract_answer_strict(r#"{"answer":"d"}"#), Some('D'));
+    }
+
+    #[test]
+    fn the_strict_parser_refuses_prose_where_the_loose_one_would_guess() {
+        // This is the separation the previous run failed to make. The loose
+        // parser finds a letter in prose; the strict one must not, because
+        // that is exactly what let formatting masquerade as reasoning.
+        let prose = "Let us think. The answer is C because of the energy gap.";
+        assert_eq!(extract_answer(prose), Some('C'), "loose parser still guesses");
+        assert_eq!(extract_answer_strict(prose), None, "strict must refuse");
+        assert_eq!(extract_answer_strict("C"), None);
+        assert_eq!(extract_answer_strict(r#"{"answer":"Z"}"#), None);
+        assert_eq!(extract_answer_strict("not json at all"), None);
+    }
+
+    #[test]
+    fn the_schema_constrains_to_exactly_the_four_letters() {
+        let s = letter_schema();
+        let letters = &s["json_schema"]["schema"]["properties"]["answer"]["enum"];
+        assert_eq!(letters.as_array().unwrap().len(), 4);
+        assert!(s["json_schema"]["schema"]["additionalProperties"] == false);
+    }
+
+    #[test]
     fn an_unparseable_answer_returns_none_and_scores_wrong() {
         // Guessing here would turn a non-answer into a lucky correct answer.
         assert_eq!(extract_answer("I am not sure about this one"), None);
@@ -468,7 +572,10 @@ mod tests {
         let mut b = Scorecard { scaffold: "baseline".into(), model_requested: "m".into(),
             n_samples: 10, n_correct: 5, score: 0.5, ci_low: 0.2, ci_high: 0.8,
             ci_method: "wilson-95".into(), n_failed: 5, n_errored: 0, n_skipped: 0,
-            unparseable: 0, provider_distribution: BTreeMap::new(),
+            unparseable: 0, parse_rate: 1.0, accuracy: 0.5, n_parsed: 10,
+            accuracy_floor_adjusted: 0.5, ci_floor_low: 0.2, ci_floor_high: 0.8,
+            ci_accuracy_low: 0.2, ci_accuracy_high: 0.8,
+            provider_distribution: BTreeMap::new(),
             model_distribution: BTreeMap::new(), latency_p50_ms: 1, latency_p95_ms: 2,
             total_inference_ms: 0, git_commit: "x".into(),
             sample_set_sha: "aaaa".into(), per_sample_path: String::new() };
@@ -482,7 +589,10 @@ mod tests {
         let mut b = Scorecard { scaffold: "baseline".into(), model_requested: "m".into(),
             n_samples: 10, n_correct: 5, score: 0.5, ci_low: 0.2, ci_high: 0.8,
             ci_method: "wilson-95".into(), n_failed: 5, n_errored: 0, n_skipped: 0,
-            unparseable: 0, provider_distribution: BTreeMap::new(),
+            unparseable: 0, parse_rate: 1.0, accuracy: 0.5, n_parsed: 10,
+            accuracy_floor_adjusted: 0.5, ci_floor_low: 0.2, ci_floor_high: 0.8,
+            ci_accuracy_low: 0.2, ci_accuracy_high: 0.8,
+            provider_distribution: BTreeMap::new(),
             model_distribution: BTreeMap::new(), latency_p50_ms: 1, latency_p95_ms: 2,
             total_inference_ms: 0, git_commit: "x".into(),
             sample_set_sha: "aaaa".into(), per_sample_path: String::new() };

@@ -104,7 +104,7 @@ impl Provider for HttpProvider {
 
         let model = if config.model.is_empty() { "auto" } else { &config.model };
 
-        let payload = serde_json::json!({
+        let mut payload = serde_json::json!({
             "model": model,
             "messages": messages.iter().map(|m| serde_json::json!({
                 "role": match m.role {
@@ -119,6 +119,9 @@ impl Provider for HttpProvider {
             "temperature": config.temperature,
             "top_p": config.top_p,
         });
+        if let Some(rf) = &config.response_format {
+            payload["response_format"] = rf.clone();
+        }
 
         let started = std::time::Instant::now();
         let resp = self

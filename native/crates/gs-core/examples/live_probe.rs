@@ -16,6 +16,7 @@ async fn main() {
         max_tokens: 16,
         temperature: 0.0,
         top_p: 1.0,
+        response_format: None,
     };
     match pool
         .complete(&[Message::user("Reply with exactly: POOL-OK")], &cfg)

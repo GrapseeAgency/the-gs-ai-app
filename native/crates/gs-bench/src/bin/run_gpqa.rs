@@ -11,6 +11,7 @@ fn main() {
     let mut limit: Option<usize> = None;
     let mut pace: u64 = 2000;
     let mut maxtok: u32 = 1024;
+    let mut constrained: bool = true;
     let mut outdir = "data/benchmarks/results".to_string();
     let mut i = 0;
     while i < args.len() {
@@ -27,6 +28,7 @@ fn main() {
                 i += 2;
             }
             "--pace-ms" => { pace = args.get(i+1).and_then(|v| v.parse().ok()).unwrap_or(2000); i += 2; }
+            "--unconstrained" => { constrained = false; i += 1; }
             "--max-tokens" => { maxtok = args.get(i+1).and_then(|v| v.parse().ok()).unwrap_or(1024); i += 2; }
             "--limit" => { limit = args.get(i + 1).and_then(|v| v.parse().ok()); i += 2; }
             "--out" => { outdir = args.get(i + 1).cloned().unwrap_or(outdir); i += 2; }
@@ -58,8 +60,12 @@ fn main() {
         }
         // Model ids must come from the provider, not from memory.
         let model = std::env::var("GS_BENCH_MODEL").unwrap_or_else(|_| "allam-2-7b".into());
-        let cfg = CompletionConfig { model: model.clone(), max_tokens: maxtok,
-                                    temperature: 0.0, top_p: 1.0 };
+        let mut cfg = CompletionConfig { model: model.clone(), max_tokens: maxtok,
+                                    temperature: 0.0, top_p: 1.0, response_format: None };
+        // Constrained decoding: the model cannot emit anything but a letter.
+        if constrained {
+            cfg.response_format = Some(gs_bench::letter_schema());
+        }
         let runner = Runner { pool, config: cfg, scaffold, pace_ms: pace, park_wait_ms: 15_000 };
         let (results, card) = runner.run(&qs).await;
 
@@ -74,12 +80,17 @@ fn main() {
         let cj = format!("{stem}.scorecard.json");
         std::fs::write(&cj, serde_json::to_string_pretty(&card2).unwrap_or_default()).ok();
 
-        println!("{{\"scaffold\":\"{}\",\"score\":{:.4},\"ci_low\":{:.4},\"ci_high\":{:.4},\
-                   \"n_samples\":{},\"n_correct\":{},\"n_errored\":{},\"unparseable\":{},\
+        println!("{{\"scaffold\":\"{}\",\"parse_rate\":{:.4},\"accuracy\":{:.4},\
+                   \"accuracy_floor_adjusted\":{:.4},\"ci_floor\":[{:.4},{:.4}],\
+                   \"ci_acc\":[{:.4},{:.4}],\"n_samples\":{},\"n_parsed\":{},\
+                   \"n_correct\":{},\"n_errored\":{},\"unparseable\":{},\
                    \"p50_ms\":{},\"p95_ms\":{},\"per_sample\":\"{}\"}}",
-            card2.scaffold, card2.score, card2.ci_low, card2.ci_high,
-            card2.n_samples, card2.n_correct, card2.n_errored, card2.unparseable,
-            card2.latency_p50_ms, card2.latency_p95_ms, card2.per_sample_path);
+            card2.scaffold, card2.parse_rate, card2.accuracy,
+            card2.accuracy_floor_adjusted, card2.ci_floor_low, card2.ci_floor_high,
+            card2.ci_accuracy_low, card2.ci_accuracy_high,
+            card2.n_samples, card2.n_parsed, card2.n_correct, card2.n_errored,
+            card2.unparseable, card2.latency_p50_ms, card2.latency_p95_ms,
+            card2.per_sample_path);
         let _ = BTreeMap::<String, u32>::new();
         let _ = delta_table;
     });
