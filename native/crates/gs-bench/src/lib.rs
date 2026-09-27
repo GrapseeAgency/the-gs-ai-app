@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::time::Instant;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct Question {
     pub id: String,
     pub question: String,
@@ -127,6 +127,18 @@ pub fn letter_schema() -> serde_json::Value {
 /// counted as UNPARSEABLE and reported as such, never silently guessed.
 pub fn extract_answer_strict(text: &str) -> Option<char> {
     let t = text.trim();
+    // A lone letter IS a constrained-decode result: Groq and OpenRouter both
+    // sometimes render the json_schema answer as a bare character rather than
+    // wrapped in the object. Accepting it is still strict, because a single
+    // isolated character cannot be a guess drawn from prose - that is the
+    // distinction the loose parser loses. Anything longer is refused.
+    let bare = t.trim_matches(|c: char| c == '*' || c == '`' || c == '.');
+    if bare.chars().count() == 1 {
+        let u = bare.chars().next().unwrap().to_ascii_uppercase();
+        if ['A', 'B', 'C', 'D'].contains(&u) {
+            return Some(u);
+        }
+    }
     // Strip a markdown fence if the provider wrapped the JSON.
     let t = t.strip_prefix("```json").or_else(|| t.strip_prefix("```")).unwrap_or(t);
     let t = t.trim().trim_end_matches("```").trim();
@@ -276,6 +288,23 @@ pub fn load_questions(path: &str) -> Result<Vec<Question>, String> {
     Ok(out)
 }
 
+/// Rank items by expected difficulty so a smoke test exercises the hard end.
+///
+/// The previous smoke used the first N items, which were easy: 5/5 parsed on a
+/// model that went on to fail on a chemistry question. A gate that only ever
+/// sees easy items is not a gate. Longest question text is a usable proxy for
+/// expected reasoning length, and it needs no labels.
+pub fn hardest(items: &[Question], n: usize) -> Vec<Question> {
+    let mut v = items.to_vec();
+    v.sort_by(|a, b| {
+        let la = a.question.len() + a.choices.iter().map(|c| c.len()).sum::<usize>();
+        let lb = b.question.len() + b.choices.iter().map(|c| c.len()).sum::<usize>();
+        lb.cmp(&la).then_with(|| a.id.cmp(&b.id))   // stable tie-break
+    });
+    v.truncate(n);
+    v
+}
+
 pub struct Runner {
     pub pool: std::sync::Arc<gs_core::router::ProviderPool>,
     pub config: CompletionConfig,
@@ -312,10 +341,16 @@ impl Runner {
                         // first: reasoning models on Groq occasionally return
                         // a 200 with no content, and rotating to another key
                         // does not help when the MODEL is the variable.
-                        let retryable = e.to_string().contains("no provider available")
-                            || e.to_string().contains("rate limited")
-                            || e.to_string().contains("empty completion");
-                        if retryable && attempt < 12 {
+                        let s = e.to_string();
+                        let empty = s.contains("empty completion");
+                        // An empty completion gets EXACTLY ONE retry, to rule
+                        // out a transient. With a single provider there is
+                        // nowhere to fail over to, so retrying six times just
+                        // burns 90s per sample and then errors it anyway.
+                        let retryable = empty || s.contains("no provider available")
+                            || s.contains("rate limited");
+                        let cap = if empty { 1 } else { 12 };
+                        if retryable && attempt < cap {
                             attempt += 1;
                             eprintln!(
                                 "  [retry {attempt}] waiting {}ms for a key: {e}",
@@ -533,7 +568,12 @@ mod tests {
         let prose = "Let us think. The answer is C because of the energy gap.";
         assert_eq!(extract_answer(prose), Some('C'), "loose parser still guesses");
         assert_eq!(extract_answer_strict(prose), None, "strict must refuse");
-        assert_eq!(extract_answer_strict("C"), None);
+        // A lone letter is accepted: it is a constrained decode, not a guess.
+        assert_eq!(extract_answer_strict("C"), Some('C'));
+        assert_eq!(extract_answer_strict("**D**"), Some('D'));
+        // But a letter embedded in prose is still refused.
+        assert_eq!(extract_answer_strict("the answer is C"), None);
+        assert_eq!(extract_answer_strict("AC"), None);
         assert_eq!(extract_answer_strict(r#"{"answer":"Z"}"#), None);
         assert_eq!(extract_answer_strict("not json at all"), None);
     }
@@ -673,6 +713,32 @@ mod tests {
         for (i, l) in ["A) 10 eV", "B) 11 eV", "C) 12 eV", "D) 13 eV"].iter().enumerate() {
             assert!(r.contains(l), "missing option {i}: {r}");
         }
+    }
+
+    #[test]
+    fn the_smoke_gate_selects_the_longest_items_not_the_first() {
+        let items: Vec<Question> = (0..40)
+            .map(|i| Question {
+                id: format!("q{i}"),
+                question: "x".repeat(i * 10 + 5),
+                choices: vec!["a".into(), "b".into()],
+                answer: "A".into(),
+            })
+            .collect();
+        let gate = hardest(&items, 10);
+        assert_eq!(gate.len(), 10);
+        // The longest must be included; the shortest must not.
+        assert_eq!(gate[0].id, "q39", "longest item first");
+        assert!(!gate.iter().any(|q| q.id == "q0"), "shortest must be excluded");
+        // Every gate item must be at least as long as everything outside it.
+        let min_in = gate.iter().map(|q| q.question.len()).min().unwrap();
+        let max_out = items
+            .iter()
+            .filter(|q| !gate.iter().any(|g| g.id == q.id))
+            .map(|q| q.question.len())
+            .max()
+            .unwrap();
+        assert!(min_in >= max_out, "gate must be the hard end, not a mix");
     }
 
     #[test]

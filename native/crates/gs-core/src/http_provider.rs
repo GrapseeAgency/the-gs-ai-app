@@ -47,6 +47,10 @@ struct ChoiceOut {
 struct MessageOut {
     #[serde(default)]
     content: String,
+    /// Reasoning models emit their chain of thought here and can leave
+    /// `content` empty when the reasoning exhausts max_tokens.
+    #[serde(default)]
+    reasoning: String,
 }
 #[derive(Debug, Deserialize, Default)]
 struct UsageOut {
@@ -190,9 +194,12 @@ impl Provider for HttpProvider {
                 // decoding in particular fails outright on some prompts
                 // ("Failed to generate JSON"). That is a request bug, not an
                 // outage, so it must not open the breaker.
-                400 => PoolError::BadRequest {
+                // 413: the request exceeds what this model/tier accepts. A
+                // parameter problem, not an outage.
+                400 | 413 => PoolError::BadRequest {
                     provider: self.name.clone(),
                     status: 400,
+                    // detail carries the real code below
                     detail: msg.chars().take(160).collect(),
                 },
                 // Upstream said 503 (service unavailable) is an outage.

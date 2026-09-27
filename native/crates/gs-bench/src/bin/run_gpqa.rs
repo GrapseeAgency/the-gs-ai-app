@@ -9,6 +9,7 @@ fn main() {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
     let mut scaffold = Scaffold::Baseline;
     let mut limit: Option<usize> = None;
+    let mut hardest = false;
     let mut pace: u64 = 2000;
     let mut maxtok: u32 = 1024;
     let mut constrained: bool = true;
@@ -30,6 +31,7 @@ fn main() {
             "--pace-ms" => { pace = args.get(i+1).and_then(|v| v.parse().ok()).unwrap_or(2000); i += 2; }
             "--unconstrained" => { constrained = false; i += 1; }
             "--max-tokens" => { maxtok = args.get(i+1).and_then(|v| v.parse().ok()).unwrap_or(1024); i += 2; }
+            "--hardest" => { hardest = true; i += 1; }
             "--limit" => { limit = args.get(i + 1).and_then(|v| v.parse().ok()); i += 2; }
             "--out" => { outdir = args.get(i + 1).cloned().unwrap_or(outdir); i += 2; }
             _ => { i += 1; }
@@ -50,8 +52,16 @@ fn main() {
             Ok(v) => v,
             Err(e) => { eprintln!("BLOCKED: {e}"); std::process::exit(2); }
         };
-        if let Some(n) = limit { qs.truncate(n); }
-        eprintln!("staged {} questions, scaffold={}, pace={}ms, max_tokens={}", qs.len(), scaffold.as_str(), pace, maxtok);
+        if let Some(n) = limit {
+            // --hardest takes the long end of the set, not the first N, so
+            // the gate cannot pass on easy items.
+            if hardest {
+                qs = gs_bench::hardest(&qs, n);
+            } else {
+                qs.truncate(n);
+            }
+        }
+        eprintln!("staged {} questions, scaffold={}, pace={}ms, max_tokens={}, hardest={}", qs.len(), scaffold.as_str(), pace, maxtok, hardest);
 
         let pool = Arc::new(pool_from_env());
         if pool.slots_len() == 0 {
