@@ -27,6 +27,10 @@ pub struct LlamaConfig {
     pub cache_type_k: c_int,
     /// ggml_type for the V cache. 1 = F16 (default), 2 = Q4_0, 8 = Q8_0.
     pub cache_type_v: c_int,
+    /// Concurrent sequences the context keeps apart. 0 or 1 disables batching,
+    /// which is the single-request behaviour this bridge had before batching
+    /// existed.
+    pub n_seq_max: c_int,
 }
 
 /// KV cache element type. Mirrors `gs_kv_type_t` in the C header.
@@ -99,6 +103,18 @@ extern "C" {
     #[allow(dead_code)]
     fn gs_llama_validate_config(config: *const LlamaConfig) -> c_int;
     fn gs_llama_create(config: *const LlamaConfig) -> *mut c_void;
+    fn gs_llama_free_text(s: *mut c_char);
+
+    fn gs_llama_batch_generate(
+        ctx: *mut c_void,
+        prompts: *const *const c_char,
+        n: c_int,
+        max_tokens: c_int,
+        temperature: f32,
+        out_texts: *mut *mut c_char,
+        out_lens: *mut c_int,
+    ) -> c_int;
+
     fn gs_llama_generate(
         ctx: *mut c_void,
         prompt: *const c_char,
@@ -159,7 +175,7 @@ impl LlamaModel {
     /// Load a model. Returns Err with a status code on any failure — never a
     /// half-built handle.
     pub fn load(path: &str, n_ctx: i32, n_threads: i32, n_gpu_layers: i32) -> Result<Self, i32> {
-        Self::load_with_kv(path, n_ctx, n_threads, n_gpu_layers, KvType::F16, KvType::F16)
+        Self::load_with(path, n_ctx, n_threads, n_gpu_layers, KvType::F16, KvType::F16, 1)
     }
 
     /// Load with an explicit KV cache element type. F16 unless asked otherwise.
@@ -170,6 +186,24 @@ impl LlamaModel {
         n_gpu_layers: i32,
         kv_k: KvType,
         kv_v: KvType,
+    ) -> Result<Self, i32> {
+        Self::load_with(path, n_ctx, n_threads, n_gpu_layers, kv_k, kv_v, 1)
+    }
+
+    /// Load with KV cache element types and a sequence-slot count.
+    ///
+    /// `n_seq_max` is how many independent sequences [`Self::batch_generate`]
+    /// can run in one decode. It costs one KV slot per sequence, so it is a
+    /// memory decision as much as a throughput one: n_ctx is divided between the
+    /// slots. 1 means no batching.
+    pub fn load_with(
+        path: &str,
+        n_ctx: i32,
+        n_threads: i32,
+        n_gpu_layers: i32,
+        kv_k: KvType,
+        kv_v: KvType,
+        n_seq_max: i32,
     ) -> Result<Self, i32> {
         let c_path = match std::ffi::CString::new(path) {
             Ok(c) => c,
@@ -183,6 +217,7 @@ impl LlamaModel {
             n_threads,
             n_gpu_layers,
             use_mmap: 1,
+            n_seq_max: n_seq_max.max(1),
         };
 
         // The whole load is inside catch_unwind: a panic in FFI must not
@@ -362,6 +397,80 @@ impl LlamaModel {
 
     /// Generate. The returned String is owned by Rust; the C side's `text` is
     /// released here so the C allocation never leaks.
+    /// Decode `prompts` concurrently, one sequence each, in a single
+    /// llama_decode per step.
+    ///
+    /// This is the primitive behind removing the mutex in LocalProvider. A pool
+    /// of N contexts would not have helped: N contexts still submit to one GPU
+    /// queue, so the submissions serialise. Batching several sequences into one
+    /// decode is what actually raises aggregate throughput.
+    ///
+    /// The context must have been loaded with `n_seq_max >= prompts.len()`.
+    /// The context is mutated, so this takes `&mut self` like `generate`.
+    ///
+    /// With a greedy sampler each output is identical to decoding that prompt
+    /// alone; the batch changes how many tokens travel together, not which
+    /// tokens are chosen.
+    pub fn batch_generate(
+        &mut self,
+        prompts: &[String],
+        max_tokens: i32,
+        temperature: f32,
+    ) -> Result<Vec<String>, i32> {
+        if prompts.is_empty() {
+            return Ok(Vec::new());
+        }
+        let c_prompts: Vec<std::ffi::CString> = prompts
+            .iter()
+            .map(|p| std::ffi::CString::new(p.as_str()).map_err(|_| GS_ERR_INVALID_ARG))
+            .collect::<Result<_, _>>()?;
+        let ptrs: Vec<*const c_char> = c_prompts.iter().map(|c| c.as_ptr()).collect();
+        let n = ptrs.len() as c_int;
+        let mut out_texts: Vec<*mut c_char> = vec![std::ptr::null_mut(); ptrs.len()];
+        let mut out_lens: Vec<c_int> = vec![-1; ptrs.len()];
+
+        let status = {
+            let _guard = LLAMA_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            // AssertUnwindSafe: the raw pointers handed to C are only read
+            // there, and a panic must not be turned into a refusal to unwind.
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+                gs_llama_batch_generate(
+                    self.raw,
+                    ptrs.as_ptr(),
+                    n,
+                    max_tokens,
+                    temperature,
+                    out_texts.as_mut_ptr(),
+                    out_lens.as_mut_ptr(),
+                )
+            }))
+            .map_err(|_| GS_ERR_INTERNAL)?
+        };
+
+        // Reclaim every allocation the callee made before inspecting the status:
+        // a partial failure still fills the slots it did finish, and leaking
+        // them would turn one failed request into a slow leak per request.
+        let mut out: Vec<String> = Vec::with_capacity(ptrs.len());
+        for (i, p) in out_texts.iter().enumerate() {
+            if p.is_null() {
+                out.push(String::new());
+                continue;
+            }
+            let owned = unsafe { CStr::from_ptr(*p) }.to_string_lossy().into_owned();
+            unsafe { gs_llama_free_text(*p) };
+            if out_lens[i] < 0 {
+                out.push(String::new());
+            } else {
+                out.push(owned);
+            }
+        }
+
+        if status != GS_OK {
+            return Err(status);
+        }
+        Ok(out)
+    }
+
     pub fn generate(&mut self, prompt: &str, max_tokens: i32, temperature: f32) -> Result<String, i32> {
         let c_prompt = std::ffi::CString::new(prompt).map_err(|_| GS_ERR_INVALID_ARG)?;
 

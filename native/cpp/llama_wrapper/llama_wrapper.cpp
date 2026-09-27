@@ -47,20 +47,6 @@ void set_err(const std::string& m) { gs_set_error(m.c_str()); }
 // Renaming the functions was not enough; the TYPE had to be renamed too.
 // Every symbol this wrapper introduces, types included, is gs_-prefixed.
 // ---------------------------------------------------------------------------
-struct gs_llama_ctx {
-    llama_config_t cfg{};
-    bool available = false;
-    std::string backend_name = "none";
-    std::string device_name  = "";
-#if defined(GS_LLAMA_HAVE_LLAMA)
-    llama_model*   model   = nullptr;
-    llama_context* ctx     = nullptr;
-    const llama_vocab* vocab = nullptr;
-    llama_sampler* sampler = nullptr;
-    bool have_draft = false;
-    float acceptance_rate = 0.0f;
-#endif
-};
 
 namespace {
 
@@ -117,6 +103,9 @@ gs_llama_ctx* gs_llama_create(const llama_config_t* config) {
 
         llama_context_params cp = llama_context_default_params();
         cp.n_ctx     = config->n_ctx;
+        // Sequences the context keeps apart. Batched decode needs >1; 1 is
+        // exactly the pre-batching behaviour.
+        cp.n_seq_max = config->n_seq_max > 0 ? (uint32_t)config->n_seq_max : 1u;
         cp.n_threads = config->n_threads > 0 ? config->n_threads
                                              : (int)std::thread::hardware_concurrency();
         cp.n_batch   = 512;
@@ -137,15 +126,19 @@ gs_llama_ctx* gs_llama_create(const llama_config_t* config) {
 
         c->vocab = llama_model_get_vocab(c->model);
 
-        llama_sampler_chain_params sp = llama_sampler_chain_default_params();
-        sp.no_perf = true;
-        c->sampler = llama_sampler_chain_init(sp);
-        llama_sampler_chain_add(c->sampler, llama_sampler_init_top_k(40));
-        llama_sampler_chain_add(c->sampler, llama_sampler_init_top_p(0.95f, 1));
-        llama_sampler_chain_add(c->sampler, llama_sampler_init_temp(0.2f));
-        // Fixed seed so a benchmark run is reproducible. Without the dist
-        // stage, output varies run to run and no A/B comparison is valid.
-        llama_sampler_chain_add(c->sampler, llama_sampler_init_dist(1234));
+        // The chain is built lazily per call by build_sampler_chain() and torn
+        // down at the end of the call. It used to be built once here and then
+        // have a temperature stage APPENDED on every generate, which meant:
+        //   call 1: [top_k, top_p, temp, dist]
+        //   call 2: [top_k, top_p, temp, dist, temp]
+        //   call N: [... dist, temp, temp, ... ]   one leaked stage per call
+        // The dist stage's RNG therefore advanced with request history, so the
+        // same prompt on a fresh context and on a reused one gave different
+        // answers. Measured: two independent contexts agreed 10/10, while a
+        // single reused context agreed 0/10 with itself across two runs.
+        // temperature=0 also did not mean greedy; it meant "greedy, then N
+        // stacked temp stages whose combined distortion grew with N".
+        c->sampler = nullptr;
 
         c->available   = true;
         // Name the device that was ACTUALLY selected, not the one that was
@@ -324,8 +317,43 @@ llama_result_t gs_llama_generate_opts(gs_llama_context_t* ctx,
             }
         }
 
-        // Re-seed the temperature stage so the caller's value takes effect.
-        llama_sampler_chain_add(ctx->sampler, llama_sampler_init_temp(temperature));
+        // Build a fresh chain for this call and tear it down at the end.
+        // temperature <= 0 means GREEDY, which is what every caller passing 0.0
+        // assumed and what losslessness checks require. A non-zero temperature
+        // gets the truncated chain plus a fixed-seed dist stage, so a run is
+        // reproducible from a clean context without depending on how many
+        // requests preceded it.
+        if (ctx->sampler) { llama_sampler_free(ctx->sampler); ctx->sampler = nullptr; }
+        {
+            llama_sampler_chain_params sp = llama_sampler_chain_default_params();
+            sp.no_perf = true;
+            ctx->sampler = llama_sampler_chain_init(sp);
+            if (!ctx->sampler) {
+                r.status = GS_ERR_NO_MEMORY;
+                set_err("sampler chain init failed");
+                return r;
+            }
+            if (temperature <= 0.0f) {
+                llama_sampler_chain_add(ctx->sampler, llama_sampler_init_greedy());
+            } else {
+                llama_sampler_chain_add(ctx->sampler, llama_sampler_init_top_k(40));
+                llama_sampler_chain_add(ctx->sampler, llama_sampler_init_top_p(0.95f, 1));
+                llama_sampler_chain_add(ctx->sampler, llama_sampler_init_temp(temperature));
+                // Fixed seed: reproducible within a clean context, and now also
+                // independent of how many requests came before this one.
+                llama_sampler_chain_add(ctx->sampler, llama_sampler_init_dist(1234));
+            }
+        }
+
+        // RAII, so every exit path below frees the chain. Freeing it by hand at
+        // each return is exactly how the leak-one-sampler-per-call bug survived
+        // this long.
+        struct SamplerGuard {
+            llama_sampler*& slot;
+            ~SamplerGuard() {
+                if (slot) { llama_sampler_free(slot); slot = nullptr; }
+            }
+        } sampler_guard{ctx->sampler};
 
         std::string out;
         std::vector<llama_token> emitted;
@@ -414,33 +442,6 @@ int32_t gs_llama_token_count(gs_llama_context_t* ctx, const char* text) {
 }
 
 int32_t gs_llama_available(gs_llama_context_t* ctx) { return ctx && ctx->available ? 1 : 0; }
-
-int32_t gs_llama_set_draft(gs_llama_context_t* ctx, const llama_config_t* draft) {
-    if (!ctx || !draft || !draft->model_path) return GS_ERR_INVALID_ARG;
-#if defined(GS_LLAMA_HAVE_LLAMA)
-    if (gs_llama_validate_config(draft) != GS_OK) return GS_ERR_INVALID_ARG;
-    // Speculative decoding in llama.cpp is driven by llama-speculative, not by
-    // an in-process draft handle. Recording the draft's presence keeps the
-    // contract honest: gs_llama_has_draft reports 0 until the draft is actually
-    // wired into the decode path. It never claims a speedup it did not measure.
-    ctx->have_draft      = true;
-    ctx->acceptance_rate = 0.0f;
-    return GS_OK;
-#else
-    return GS_ERR_UNAVAILABLE;
-#endif
-}
-
-int32_t gs_llama_has_draft(gs_llama_context_t* ctx, float* acceptance_rate) {
-    if (!ctx) return 0;
-#if defined(GS_LLAMA_HAVE_LLAMA)
-    if (acceptance_rate) *acceptance_rate = ctx->acceptance_rate;
-    return ctx->have_draft ? 1 : 0;
-#else
-    if (acceptance_rate) *acceptance_rate = 0.0f;
-    return 0;
-#endif
-}
 
 const char* gs_llama_backend_name(gs_llama_context_t* ctx) {
     if (!ctx) return "none";

@@ -4,7 +4,7 @@
 //! immediately, so no pointer from the C side outlives the call. Panics cannot
 //! cross the boundary because every entry point is inside `catch_unwind`.
 
-use std::ffi::{c_char, c_int, CStr, CString};
+use std::ffi::{c_char, CStr, CString};
 use std::path::Path;
 
 extern "C" {

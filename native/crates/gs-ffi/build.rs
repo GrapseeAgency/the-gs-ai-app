@@ -235,6 +235,27 @@ fn main() {
     // for a bridge: it works in the developer's build and not in CI.
     println!("cargo:rerun-if-env-changed=JNI_INCLUDE_DIRS");
 
+    // Batched decode needs the gs_llama_ctx definition, so it compiles as part
+    // of the same unit as llama_wrapper rather than as a separate archive.
+    {
+        let mut bb = cc::Build::new();
+        bb.cpp(true)
+            .std("c++17")
+            .include(&inc)
+            .include(cpp.join("llama_wrapper"))
+            .file(cpp.join("llama_wrapper").join("batch.cpp"))
+            .warnings(true);
+        if let Some(root) = &llama_root {
+            let p = std::path::Path::new(root);
+            if p.join("include").join("llama.h").exists() {
+                bb.define("GS_LLAMA_HAVE_LLAMA", None)
+                    .include(p.join("include"))
+                    .include(p.join("ggml").join("include"));
+            }
+        }
+        bb.compile("gs_batch");
+    }
+    println!("cargo:rerun-if-changed={}/llama_wrapper/batch.cpp", cpp.display());
     println!("cargo:rerun-if-changed={}/clip_wrapper/clip_wrapper.cpp", cpp.display());
     println!("cargo:rerun-if-changed={}/mobile/gs_mobile.cpp", cpp.display());
     println!("cargo:rerun-if-changed={}/mobile/gs_jni.cpp", cpp.display());

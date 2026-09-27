@@ -19,6 +19,8 @@
 
 #ifdef __cplusplus
 extern "C" {
+
+typedef struct gs_llama_ctx gs_llama_context_t;
 #endif
 
 /* vtable-by-VALUE contract: the FIRST member of the struct is the vtable
@@ -56,7 +58,37 @@ typedef struct {
     int32_t     use_mmap;     /* nonzero -> mmap weights */
     int32_t     cache_type_k; /* gs_kv_type_t. F16 unless asked otherwise. */
     int32_t     cache_type_v; /* gs_kv_type_t. F16 unless asked otherwise. */
+    int32_t     n_seq_max;    /* concurrent sequences. 0 or 1 = no batching. */
 } llama_config_t;
+
+} /* extern "C" -- reopened below */
+
+#include <string>
+#if defined(GS_LLAMA_HAVE_LLAMA)
+#include <llama.h>
+#endif
+
+/* The context layout.
+ *
+ * Defined here, rather than kept opaque, so a second translation unit
+ * (batch.cpp) can reach the fields without a duplicate declaration that could
+ * drift. It is NOT the surface a host app uses: that is gs_abi.h plus, for
+ * mobile, gs_mobile.h.
+ */
+struct gs_llama_ctx {
+    llama_config_t cfg{};
+    bool available = false;
+    std::string backend_name = "none";
+    std::string device_name  = "";
+#if defined(GS_LLAMA_HAVE_LLAMA)
+    llama_model*       model   = nullptr;
+    llama_context*     ctx     = nullptr;
+    const llama_vocab* vocab   = nullptr;
+    llama_sampler*     sampler = nullptr;
+#endif
+};
+
+extern "C" {
 
 typedef struct {
     char*   text;             /* OWNED by caller -> gs_llama_free_result_text */
@@ -64,7 +96,7 @@ typedef struct {
     int32_t status;           /* gs_status_t */
 } llama_result_t;
 
-typedef struct gs_llama_ctx gs_llama_context_t;
+
 
 /* Last-error accessor is shared: gs_last_error() from gs_abi.h. */
 
@@ -76,8 +108,57 @@ int32_t gs_llama_validate_config(const llama_config_t* config);
  * handle so callers cannot use a half-built context. */
 gs_llama_context_t* gs_llama_create(const llama_config_t* config);
 
+/* Batched decode: N independent prompts, ONE llama_decode per step.
+ *
+ * Each prompt takes its own seq_id so the KV cache keeps them apart. With a
+ * greedy sampler every sequence's output is identical to decoding it alone.
+ *
+ * out_texts[i] is malloc'd and owned by the caller (free it). out_lens[i] is the
+ * byte length, or -1 when that slot produced nothing, so "no answer" stays
+ * distinguishable from "the answer was empty".
+ *
+ * n must not exceed the context's n_seq_max.
+ */
+/* Releases a string produced by gs_llama_batch_generate. The deallocator is
+ * paired with the wrapper's own allocator rather than assumed to be the host's
+ * free(), which is a real hazard across a C ABI. */
+void gs_llama_free_text(char* s);
+
+int32_t gs_llama_batch_generate(gs_llama_context_t* ctx,
+                                const char* const* prompts,
+                                int32_t n,
+                                int32_t max_tokens,
+                                float temperature,
+                                char** out_texts,
+                                int32_t* out_lens);
+
 /* Generates up to max_tokens. On GS_OK, result->text is caller-owned.
  * On any error, result->text is NULL and result->status carries the code. */
+/* Batched decode: N independent prompts, ONE llama_decode per step.
+ *
+ * Each prompt takes its own seq_id so the KV cache keeps them apart. With a
+ * greedy sampler every sequence's output is identical to decoding it alone.
+ *
+ * out_texts[i] is malloc'd and owned by the caller (free it). out_lens[i] is the
+ * byte length, or -1 when that slot produced nothing, so "no answer" stays
+ * distinguishable from "the answer was empty".
+ *
+ * n must not exceed the context's n_seq_max.
+ */
+/* Releases a string produced by gs_llama_batch_generate. The deallocator is
+ * paired with the wrapper's own allocator rather than assumed to be the host's
+ * free(), which is a real hazard across a C ABI. */
+void gs_llama_free_text(char* s);
+
+int32_t gs_llama_batch_generate(gs_llama_context_t* ctx,
+                                const char* const* prompts,
+                                int32_t n,
+                                int32_t max_tokens,
+                                float temperature,
+                                char** out_texts,
+                                int32_t* out_lens);
+
+
 llama_result_t gs_llama_generate(gs_llama_context_t* ctx,
                               const char* prompt,
                               int32_t max_tokens,
@@ -91,11 +172,6 @@ int32_t gs_llama_token_count(gs_llama_context_t* ctx, const char* text);
 
 /* 1 if the backing backend initialised and generate can work. */
 int32_t gs_llama_available(gs_llama_context_t* ctx);
-
-/* Speculative decoding support. llama-create must be called with a draft model
- * path for this to report 1. */
-int32_t gs_llama_set_draft(gs_llama_context_t* ctx, const llama_config_t* draft);
-int32_t gs_llama_has_draft(gs_llama_context_t* ctx, float* acceptance_rate);
 
 /* Self-reported backend name, borrowed static string. Never NULL. */
 const char* gs_llama_backend_name(gs_llama_context_t* ctx);
