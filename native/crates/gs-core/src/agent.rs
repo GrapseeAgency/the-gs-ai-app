@@ -32,6 +32,21 @@ impl IntentClassifier {
             return Intent::Vision;
         }
 
+        // Image creation is checked before the generic markers because
+        // "make a chart of X" also trips the research/word lists, and
+        // procedural geometry must never be routed to a model.
+        const IMAGE_MARKERS: &[&str] = &[
+            "make a chart", "create a chart", "draw a chart", "chart of",
+            "bar chart", "line chart", "pie chart",
+            "make a diagram", "create a diagram", "draw a diagram", "flowchart",
+            "make a logo", "create a logo", "design a logo",
+            "mockup", "wireframe",
+            "generate an image", "create an image", "make an image", "draw a picture",
+        ];
+        if IMAGE_MARKERS.iter().any(|m| t.contains(m)) {
+            return Intent::ImageCreate;
+        }
+
         const CODE_MARKERS: &[&str] = &[
             "```", "function ", "class ", "def ", "import ", "const ", "let ", "public ",
             "private ", "fn ", "->", "SELECT ", "def ", "npm ", "cargo ", "git ",
@@ -148,6 +163,8 @@ pub fn plan_for(intent: Intent, user_text: &str) -> Plan {
             Step::ToolCall { plugin: "ocr".into(), input: user_text.into() },
             Step::Synthesize,
         ],
+        // Procedural generation is pure geometry and needs no model turn.
+        Intent::ImageCreate => vec![Step::DirectModel],
     };
     Plan { intent, steps }
 }
@@ -311,6 +328,26 @@ mod tests {
             find_image_path("Read the text in /tmp/invoice.png").as_deref(),
             Some("/tmp/invoice.png")
         );
+    }
+
+    #[test]
+    fn image_requests_classify_as_image_create() {
+        // Checked before the generic word lists, because "make a chart of X"
+        // also trips them and must not be routed to a model.
+        for q in [
+            "make a chart of A 10, B 25",
+            "create a diagram of the pipeline",
+            "draw a pie chart of A 1, B 2",
+            "generate an image of a mountain",
+        ] {
+            assert_eq!(IntentClassifier::classify(q), Intent::ImageCreate, "{q:?}");
+        }
+    }
+
+    #[test]
+    fn non_image_requests_are_not_image_create() {
+        assert_eq!(IntentClassifier::classify("what time is it"), Intent::Time);
+        assert_eq!(IntentClassifier::classify("refactor this function"), Intent::Code);
     }
 
     #[test]

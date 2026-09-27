@@ -14,6 +14,8 @@ pub enum Intent {
     Research,
     Code,
     Vision,
+    /// Procedural or diffusion image generation. Geometry-only by default.
+    ImageCreate,
     Time,
 }
 
@@ -27,6 +29,8 @@ impl Intent {
             Intent::Search => 4096,
             Intent::Code => 8192,
             Intent::Research => 16_384,
+            // Procedural generation is pure geometry: no tokens are spent.
+            Intent::ImageCreate => 256,
         }
     }
 
@@ -37,6 +41,7 @@ impl Intent {
             Intent::Research => "research",
             Intent::Code => "code",
             Intent::Vision => "vision",
+            Intent::ImageCreate => "image_create",
             Intent::Time => "time",
         }
     }
