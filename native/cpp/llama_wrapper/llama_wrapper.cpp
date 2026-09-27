@@ -119,6 +119,10 @@ gs_llama_ctx* gs_llama_create(const llama_config_t* config) {
                                              : (int)std::thread::hardware_concurrency();
         cp.n_batch   = 512;
         cp.n_ubatch  = 512;
+        // KV cache element type. F16 is the default; a caller can trade fidelity
+        // for footprint by asking for 4-bit. ggml validates the pairing.
+        cp.type_k = (ggml_type)(config->cache_type_k ? config->cache_type_k : GGML_TYPE_F16);
+        cp.type_v = (ggml_type)(config->cache_type_v ? config->cache_type_v : GGML_TYPE_F16);
 
         c->ctx = llama_init_from_model(c->model, cp);
         if (!c->ctx) {
@@ -305,9 +309,11 @@ llama_result_t gs_llama_generate(gs_llama_context_t* ctx,
 
         std::string out;
         int n_cur = (int)toks.size();
+        int32_t n_generated = 0;   // counted here, not derived from the text
         for (int32_t i = 0; i < max_tokens; ++i) {
             const llama_token next = llama_sampler_sample(ctx->sampler, ctx->ctx, -1);
             if (llama_vocab_is_eog(ctx->vocab, next)) break;
+            ++n_generated;
 
             char piece[256];
             const int n = llama_token_to_piece(ctx->vocab, next, piece,
@@ -338,7 +344,10 @@ llama_result_t gs_llama_generate(gs_llama_context_t* ctx,
 
         r.text     = strdup(out.c_str());
         if (!r.text) { r.status = GS_ERR_NO_MEMORY; set_err("strdup failed"); return r; }
-        r.n_tokens = (int32_t)out.size();
+        // Tokens actually sampled. This was out.size(), i.e. a BYTE count,
+        // which made a 64-token generation report 359 and turned tokens/sec
+        // into a number about bytes per second.
+        r.n_tokens = n_generated;
         r.status   = GS_OK;
         return r;
     } catch (const std::exception& e) {
@@ -407,6 +416,16 @@ int32_t gs_llama_has_draft(gs_llama_context_t* ctx, float* acceptance_rate) {
 const char* gs_llama_backend_name(gs_llama_context_t* ctx) {
     if (!ctx) return "none";
     return ctx->backend_name.c_str();  // borrowed static-ish string
+}
+
+int32_t gs_llama_n_layer(gs_llama_context_t* ctx) {
+    if (!ctx) return 0;
+#if defined(GS_LLAMA_HAVE_LLAMA)
+    if (!ctx->model) return 0;
+    return (int32_t)llama_model_n_layer(ctx->model);
+#else
+    return 0;
+#endif
 }
 
 int32_t gs_llama_gpu_offload_supported(gs_llama_context_t* ctx) {

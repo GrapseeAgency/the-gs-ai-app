@@ -36,12 +36,26 @@ typedef struct gs_llm_service_vtable_s {
     int32_t  (*available)(void* self);
 } gs_llm_service_vtable_t;
 
+/* KV cache element types, mirroring ggml_type. Named rather than passed as a
+ * raw int so an ABI caller cannot set a type the build does not support. */
+typedef enum {
+    GS_KV_F16  = 1,   /* exact, the default */
+    GS_KV_Q8_0 = 8,
+    GS_KV_Q5_1 = 7,
+    GS_KV_Q5_0 = 6,
+    GS_KV_Q4_1 = 3,
+    GS_KV_Q4_0 = 2,   /* the aggressive 4-bit option */
+    GS_KV_IQ4_NL = 20
+} gs_kv_type_t;
+
 typedef struct {
     const char* model_path;   /* borrowed */
     int32_t     n_ctx;
     int32_t     n_threads;
     int32_t     n_gpu_layers; /* <0 = every layer. 0 = CPU only. */
     int32_t     use_mmap;     /* nonzero -> mmap weights */
+    int32_t     cache_type_k; /* gs_kv_type_t. F16 unless asked otherwise. */
+    int32_t     cache_type_v; /* gs_kv_type_t. F16 unless asked otherwise. */
 } llama_config_t;
 
 typedef struct {
@@ -97,6 +111,12 @@ const char* gs_llama_backend_name(gs_llama_context_t* ctx);
  * the caller reads from the log. This function answers the prior question:
  * is offload even possible here. */
 int32_t gs_llama_gpu_offload_supported(gs_llama_context_t* ctx);
+
+/* Layer count, so a demo can report cache footprint per layer. The KV cache
+ * bytes themselves are NOT read from here: llama.cpp exposes no stable byte
+ * count for them, so the demos measure real process RSS (VmHWM) instead of
+ * reporting a number derived from the requested type. */
+int32_t gs_llama_n_layer(gs_llama_context_t* ctx);
 
 /* Destroys the context. NULL-safe. Context must outlive all borrowed strings. */
 void gs_llama_free(gs_llama_context_t* ctx);

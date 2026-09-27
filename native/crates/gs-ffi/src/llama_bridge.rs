@@ -23,6 +23,49 @@ pub struct LlamaConfig {
     pub n_threads: c_int,
     pub n_gpu_layers: c_int,
     pub use_mmap: c_int,
+    /// ggml_type for the K cache. 1 = F16 (default), 2 = Q4_0, 8 = Q8_0.
+    pub cache_type_k: c_int,
+    /// ggml_type for the V cache. 1 = F16 (default), 2 = Q4_0, 8 = Q8_0.
+    pub cache_type_v: c_int,
+}
+
+/// KV cache element type. Mirrors `gs_kv_type_t` in the C header.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KvType {
+    F16 = 1,
+    Q8_0 = 8,
+    Q5_1 = 7,
+    Q5_0 = 6,
+    Q4_1 = 3,
+    /// The aggressive option: 4-bit, roughly a quarter of F16 per element.
+    Q4_0 = 2,
+    Iq4Nl = 20,
+}
+
+impl KvType {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            KvType::F16 => "f16",
+            KvType::Q8_0 => "q8_0",
+            KvType::Q5_1 => "q5_1",
+            KvType::Q5_0 => "q5_0",
+            KvType::Q4_1 => "q4_1",
+            KvType::Q4_0 => "q4_0",
+            KvType::Iq4Nl => "iq4_nl",
+        }
+    }
+    pub fn from_name(s: &str) -> Option<Self> {
+        match s.to_ascii_lowercase().as_str() {
+            "f16" => Some(KvType::F16),
+            "q8_0" => Some(KvType::Q8_0),
+            "q5_1" => Some(KvType::Q5_1),
+            "q5_0" => Some(KvType::Q5_0),
+            "q4_1" => Some(KvType::Q4_1),
+            "q4_0" => Some(KvType::Q4_0),
+            "iq4_nl" => Some(KvType::Iq4Nl),
+            _ => None,
+        }
+    }
 }
 
 #[repr(C)]
@@ -45,6 +88,8 @@ extern "C" {
     fn gs_llama_free_result_text(result: *mut LlamaResult);
     fn gs_llama_available(ctx: *mut c_void) -> c_int;
     fn gs_llama_backend_name(ctx: *mut c_void) -> *const c_char;
+    fn gs_llama_n_layer(ctx: *mut c_void) -> c_int;
+    fn gs_llama_token_count(ctx: *mut c_void, text: *const c_char) -> c_int;
     fn gs_llama_gpu_offload_supported(ctx: *mut c_void) -> c_int;
     fn gs_llama_free(ctx: *mut c_void);
 }
@@ -66,6 +111,9 @@ pub struct LlamaModel {
     /// Kept alive for the handle's lifetime: the C side borrows nothing, but
     /// holding it here documents the ownership and avoids a surprise free.
     _path: String,
+    /// Output tokens from the most recent generate(). Reported by the C side,
+    /// which counts pieces; the text length is not a token count.
+    last_n: i32,
 }
 
 // The handle is only touched through &mut self on the C side, which is safe
@@ -77,11 +125,25 @@ impl LlamaModel {
     /// Load a model. Returns Err with a status code on any failure — never a
     /// half-built handle.
     pub fn load(path: &str, n_ctx: i32, n_threads: i32, n_gpu_layers: i32) -> Result<Self, i32> {
+        Self::load_with_kv(path, n_ctx, n_threads, n_gpu_layers, KvType::F16, KvType::F16)
+    }
+
+    /// Load with an explicit KV cache element type. F16 unless asked otherwise.
+    pub fn load_with_kv(
+        path: &str,
+        n_ctx: i32,
+        n_threads: i32,
+        n_gpu_layers: i32,
+        kv_k: KvType,
+        kv_v: KvType,
+    ) -> Result<Self, i32> {
         let c_path = match std::ffi::CString::new(path) {
             Ok(c) => c,
             Err(_) => return Err(GS_ERR_INVALID_ARG), // interior NUL
         };
         let cfg = LlamaConfig {
+            cache_type_k: kv_k as c_int,
+            cache_type_v: kv_v as c_int,
             model_path: c_path.as_ptr(),
             n_ctx,
             n_threads,
@@ -109,7 +171,7 @@ impl LlamaModel {
             let _ = std::panic::catch_unwind(|| unsafe { gs_llama_free(created) });
             return Err(GS_ERR_UNAVAILABLE);
         }
-        Ok(Self { raw: created, _path: path.to_string() })
+        Ok(Self { raw: created, _path: path.to_string(), last_n: 0 })
     }
 
     pub fn is_available(&self) -> bool {
@@ -128,6 +190,31 @@ impl LlamaModel {
             }
         })
         .unwrap_or_else(|_| "unknown".into())
+    }
+
+    /// Number of output tokens produced by the last generate() call.
+    ///
+    /// Reported by the C side, which counts decoded pieces. The text length is
+    /// not a token count and using it as one would make tokens/sec a fiction.
+    pub fn last_n_tokens(&self) -> i32 {
+        self.last_n
+    }
+
+    /// Tokenise without generating. Used by demos to size a prompt.
+    pub fn token_count(&self, text: &str) -> i32 {
+        std::panic::catch_unwind(|| {
+            let c = match std::ffi::CString::new(text) {
+                Ok(c) => c,
+                Err(_) => return -1,
+            };
+            unsafe { gs_llama_token_count(self.raw, c.as_ptr()) }
+        })
+        .unwrap_or(-1)
+    }
+
+    /// Layer count, for reporting cache footprint per layer.
+    pub fn n_layer(&self) -> i32 {
+        std::panic::catch_unwind(|| unsafe { gs_llama_n_layer(self.raw) }).unwrap_or(0)
     }
 
     /// Whether this build has a working accelerator offload path.
@@ -165,6 +252,7 @@ impl LlamaModel {
         if res.text.is_null() {
             return Err(GS_ERR_GENERATION);
         }
+        self.last_n = res.n_tokens;
         let owned = unsafe { CStr::from_ptr(res.text) }.to_string_lossy().into_owned();
         let mut r = LlamaResult { text: res.text, n_tokens: res.n_tokens, status: res.status };
         unsafe { gs_llama_free_result_text(&mut r) };
