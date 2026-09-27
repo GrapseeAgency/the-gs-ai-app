@@ -93,13 +93,17 @@ jobs:
 
           # Headers must declare their own dependencies, and gs_mobile.h includes
           # gs_abi.h by plain name, so both land in the same directory.
-          cat > "$GITHUB_WORKSPACE/dist/ios/GsFfi.xcframework/Headers/module.modulemap" <<'MAP'
-module GsFfi {
-    header "gs_abi.h"
-    header "gs_mobile.h"
-    export *
-}
-MAP
+          # A heredoc cannot be used here: its body would sit at column 1
+          # inside this YAML literal block, which ends the block early and makes
+          # "module GsFfi {" parse as a mapping key. printf has no such trap.
+          MM="$GITHUB_WORKSPACE/dist/ios/GsFfi.xcframework/Headers/module.modulemap"
+          printf '%s\n' \
+            'module GsFfi {' \
+            '    header "gs_abi.h"' \
+            '    header "gs_mobile.h"' \
+            '    export *' \
+            '}' > "$MM"
+          cat "$MM"
 
           xcodebuild -create-xcframework \
             -library  "$GITHUB_WORKSPACE/dist/ios/device/libgs_ffi.a" \
