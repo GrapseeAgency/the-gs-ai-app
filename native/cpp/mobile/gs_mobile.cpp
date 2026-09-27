@@ -139,9 +139,12 @@ char* gs_mobile_ocr(gs_mobile_ctx_t* ctx, const char* image_path) {
     return nullptr;
 }
 
-int32_t gs_mobile_embed_image(gs_mobile_ctx_t* ctx, const char* image_path, float* out, int32_t cap) {
+int32_t gs_mobile_embed_image(gs_mobile_ctx_t* ctx, const uint8_t* rgb, int32_t w, int32_t h,
+                              float* out, int32_t cap) {
     (void)ctx;
-    (void)image_path;
+    (void)rgb;
+    (void)w;
+    (void)h;
     (void)out;
     (void)cap;
     set_err("no image embedder is compiled into this mobile build");

@@ -27,7 +27,7 @@ extern "C" {
 
 /// Opaque JNIEnv. The `jni` crate owns the real definitions; these are the
 /// symbols gs-ffi needs and they are resolved at link time against the NDK.
-use jni::objects::{JClass, JObject, JString};
+use jni::objects::{JByteArray, JClass, JObject, JString};
 use jni::sys::{jboolean, jfloatArray, jint, jobject, JNI_FALSE, JNI_TRUE};
 use jni::JNIEnv;
 
@@ -136,9 +136,35 @@ pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_buildInfo(
     .unwrap_or(std::ptr::null_mut())
 }
 
+/// Default token budget for chat(). A phone reply that runs to 4096 tokens is
+/// unreadable in a chat bubble and will still be streaming when the user has
+/// scrolled away.
+const DEFAULT_MAX_TOKENS: jint = 256;
+
 /// Generate a completion. Returns a Java String, or throws.
 #[no_mangle]
 pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_chat(
+    env: JNIEnv,
+    class: JClass,
+    prompt: JString,
+) -> jobject {
+    chat_impl(env, class, prompt, DEFAULT_MAX_TOKENS)
+}
+
+/// As `chat`, with an explicit token budget. The single-argument form cannot
+/// carry one -- JNI mangles by arity, so this is a distinct name rather than an
+/// overload.
+#[no_mangle]
+pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_chatWithBudget(
+    env: JNIEnv,
+    class: JClass,
+    prompt: JString,
+    max_tokens: jint,
+) -> jobject {
+    chat_impl(env, class, prompt, max_tokens)
+}
+
+fn chat_impl(
     mut env: JNIEnv,
     _class: JClass,
     prompt: JString,
@@ -244,6 +270,57 @@ pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_embedText(
     .unwrap_or(std::ptr::null_mut())
 }
 
+/// Embed an image. The bytes are raw RGB, three per pixel, row-major.
+#[no_mangle]
+pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_embedImage(
+    mut env: JNIEnv,
+    _class: JClass,
+    rgb: JByteArray,
+    w: jint,
+    h: jint,
+) -> jfloatArray {
+    guard!(&mut env, "embedImage", {
+        let ctx = unsafe { global() };
+        if ctx.is_null() {
+            throw(&mut env, "embedImage");
+            return std::ptr::null_mut();
+        }
+        if w <= 0 || h <= 0 {
+            throw(&mut env, "embedImage");
+            return std::ptr::null_mut();
+        }
+        // The array length is checked against the geometry rather than trusted:
+        // a caller that lies about w/h gets an exception rather than a read past
+        // the end of the Java heap.
+        let expect = (w as i64) * (h as i64) * 3;
+        let have = env.get_array_length(&rgb).unwrap_or(0) as i64;
+        if have < expect {
+            throw(&mut env, "embedImage");
+            return std::ptr::null_mut();
+        }
+        let dim = unsafe { gs_mobile_embed_dim(ctx) };
+        if dim < 0 {
+            throw(&mut env, "embedImage");
+            return std::ptr::null_mut();
+        }
+        let mut buf = vec![0f32; dim as usize];
+        let n = unsafe { gs_mobile_embed_image(ctx, rgb.as_raw() as *const u8, w, h, buf.as_mut_ptr(), dim) };
+        if n < 0 {
+            throw(&mut env, "embedImage");
+            return std::ptr::null_mut();
+        }
+        let arr = match env.new_float_array(dim as jint) {
+            Ok(a) => a,
+            Err(_) => return std::ptr::null_mut(),
+        };
+        if env.set_float_array_region(&arr, 0, dim as jint, &buf).is_err() {
+            return std::ptr::null_mut();
+        }
+        arr.into_raw()
+    })
+    .unwrap_or(std::ptr::null_mut())
+}
+
 /// Release the process-wide context.
 #[no_mangle]
 pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_shutdown(
@@ -271,6 +348,14 @@ extern "C" {
     ) -> *mut c_char;
     fn gs_mobile_ocr(ctx: *mut c_void, image_path: *const c_char) -> *mut c_char;
     fn gs_mobile_embed_dim(ctx: *mut c_void) -> c_int;
+    fn gs_mobile_embed_image(
+        ctx: *mut c_void,
+        rgb: *const u8,
+        w: c_int,
+        h: c_int,
+        out: *mut f32,
+        cap: c_int,
+    ) -> c_int;
     fn gs_mobile_embed_text(
         ctx: *mut c_void,
         text: *const c_char,

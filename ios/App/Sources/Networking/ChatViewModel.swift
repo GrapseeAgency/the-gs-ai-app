@@ -1065,7 +1065,15 @@ final class ChatViewModel: ObservableObject {
      * responder answers from the text prompt exactly as before, unchanged.
      */
     private func streamLocalReply(_ prompt: String) async {
-        let reply = Self.localReply(prompt)
+        // COMMIT 1 (a) of the mobile wiring: try the native engine first, and
+        // keep the existing responder for everything else.
+        //
+        // The ordering matters. The app still attempts the network before
+        // reaching this function — this is the failure path, not a local-first
+        // router — so a healthy app is unchanged. Self.localReply is NOT
+        // removed: a device with no model, a build with no framework, or a
+        // generation that throws must still answer.
+        let reply = nativeReply(prompt) ?? Self.localReply(prompt)
         let words = reply.split(separator: " ", omittingEmptySubsequences: false)
         for (index, word) in words.enumerated() {
             streamBuffer.append((index == 0 ? "" : " ") + word)
@@ -1074,6 +1082,32 @@ final class ChatViewModel: ObservableObject {
             } catch {
                 break // Stop pressed mid-reply: keep what's on screen
             }
+        }
+    }
+
+    /// A completion from the native engine, or nil when there is nothing to get.
+    ///
+    /// nil covers every "no engine here" case rather than throwing, because each
+    /// of them means the same thing to this function: use the existing
+    /// responder. `GsNative.chat` itself throws and that is caught here — a
+    /// thrown error out of the local path would abandon a turn that had a
+    /// perfectly good answer available.
+    ///
+    /// Not force-unwrapped and not `try!`: a missing framework, an uninitialised
+    /// context and a generation failure are all ordinary states on a phone.
+    private func nativeReply(_ prompt: String) -> String? {
+        guard GsNativeLoader.isAvailable else {
+            if let reason = GsNativeLoader.unavailableReason {
+                print("[ChatViewModel] local path: \(reason.detail)")
+            }
+            return nil
+        }
+        do {
+            let text = try GsNative.chat(prompt)
+            return text.isEmpty ? nil : text
+        } catch {
+            print("[ChatViewModel] native generation failed; using the built-in responder: \(error)")
+            return nil
         }
     }
 

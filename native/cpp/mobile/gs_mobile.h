@@ -66,8 +66,13 @@ char* gs_mobile_chat(gs_mobile_ctx_t* ctx, const char* prompt, int32_t max_token
 char* gs_mobile_ocr(gs_mobile_ctx_t* ctx, const char* image_path);
 
 /* Embed an image into `out`, which must hold gs_mobile_embed_dim floats.
- * Returns the number of floats written, or negative gs_status_t. */
-int32_t gs_mobile_embed_image(gs_mobile_ctx_t* ctx, const char* image_path, float* out, int32_t cap);
+ *
+ * `rgb` is raw 8-bit RGB, three bytes per pixel, row-major, w*h*3 bytes. Not a
+ * path: decoding PNG/JPEG would be a dependency the mobile build does not carry,
+ * and the host already holds the decoded pixels. Returns the number of floats
+ * written, or negative gs_status_t. */
+int32_t gs_mobile_embed_image(gs_mobile_ctx_t* ctx, const uint8_t* rgb, int32_t w, int32_t h,
+                              float* out, int32_t cap);
 
 /* Embed a text query into `out`, which must hold gs_mobile_embed_dim floats.
  * Returns floats written, or negative gs_status_t. */

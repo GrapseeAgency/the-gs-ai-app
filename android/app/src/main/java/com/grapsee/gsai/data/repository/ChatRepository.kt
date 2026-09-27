@@ -18,6 +18,9 @@ import com.grapsee.gsai.data.remote.GsBackendException
 import com.grapsee.gsai.data.remote.MessageDto
 import com.grapsee.gsai.data.remote.MessageSourceDto
 import com.grapsee.gsai.data.remote.UpdateConversationRequest
+import com.grapsee.gsai.native.GsNative
+import com.grapsee.gsai.native.GsNativeLoader
+import android.util.Log
 import kotlinx.serialization.encodeToString
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -547,10 +550,37 @@ class ChatRepository(
      * connectivity, so the app reads fully functional on a fresh install.
      */
     private suspend fun streamLocalReply(prompt: String, onDelta: (String) -> Unit) {
-        val reply = localReply(prompt)
+        // COMMIT 1 (a) of the mobile wiring: try the native engine first, and
+        // keep the existing responder for everything else.
+        //
+        // The ordering matters. The app still attempts the network before
+        // reaching this function — this is the failure path, not a local-first
+        // router — so a healthy app is unchanged. The responder below is NOT
+        // removed: a phone with no model, a build with no engine, or a
+        // generation that throws must still answer.
+        val reply = nativeReply(prompt) ?: localReply(prompt)
         reply.split(" ").forEachIndexed { index, word ->
             onDelta(if (index == 0) word else " $word")
             delay(26)
+        }
+    }
+
+    /**
+     * A completion from the native engine, or null when there is nothing to get.
+     *
+     * Null covers every "no engine here" case rather than throwing, because
+     * every one of them means the same thing to this function: use the existing
+     * responder. [GsNative.chat] itself throws on failure and that is caught
+     * here — a thrown exception out of the local path would take down a chat
+     * turn that had a perfectly good answer available.
+     */
+    private fun nativeReply(prompt: String): String? {
+        if (!GsNativeLoader.isAvailable()) return null
+        return try {
+            GsNative.chat(prompt).takeIf { it.isNotBlank() }
+        } catch (t: Throwable) {
+            Log.w("ChatRepository", "native generation failed; using the built-in responder", t)
+            null
         }
     }
 
