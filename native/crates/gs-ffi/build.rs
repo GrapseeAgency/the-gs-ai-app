@@ -81,6 +81,51 @@ fn main() {
         }
     }
     clip_build.compile("gs_clip");
+
+    // ocr_tess: Tesseract is found through pkg-config when it is installed.
+    // Absent it, the wrapper compiles and reports UNAVAILABLE.
+    let ocr_dir = cpp.join("ocr_wrapper");
+    let mut ocr_build = cc::Build::new();
+    ocr_build
+        .cpp(true)
+        .std("c++17")
+        .include(&ocr_dir)
+        .file(ocr_dir.join("gs_ocr_tess.cpp"))
+        .warnings(true);
+
+    // Tesseract and Leptonica are probed independently: chaining them would
+    // keep only the last library's link flags, so -ltesseract would be lost.
+    let pkgs: Vec<pkg_config::Library> = ["tesseract", "lept"]
+        .iter()
+        .filter_map(|p| {
+            pkg_config::Config::new()
+                .cargo_metadata(false)
+                .probe(p)
+                .ok()
+        })
+        .collect();
+    let have_tess = pkgs.len() == 2;
+    if have_tess {
+        ocr_build.define("GS_OCR_HAVE_TESSERACT", None);
+        for c in &pkgs {
+            for p in &c.include_paths {
+                ocr_build.include(p);
+            }
+            for p in &c.link_paths {
+                println!("cargo:rustc-link-search=native={}", p.display());
+            }
+            for l in &c.libs {
+                println!("cargo:rustc-link-lib=dylib={l}");
+            }
+        }
+    }
+    ocr_build.compile("gs_ocr_tess");
+    if !have_tess {
+        println!(
+            "cargo:warning=tesseract/leptonica not found via pkg-config: OCR is \
+             BLOCKED, provider routing only"
+        );
+    }
     if have_ort {
         let root = ort_root.as_ref().expect("set when have_ort");
         println!("cargo:rustc-link-search=native={root}/lib");
@@ -125,5 +170,6 @@ fn main() {
     println!("cargo:rerun-if-changed={}/src/gs_abi.cpp", cpp.display());
     println!("cargo:rerun-if-changed={}/sd_wrapper/sd_wrapper.cpp", cpp.display());
     println!("cargo:rerun-if-changed={}/clip_wrapper/clip_wrapper.cpp", cpp.display());
+    println!("cargo:rerun-if-changed={}/ocr_wrapper/gs_ocr_tess.cpp", cpp.display());
     println!("cargo:rerun-if-changed={}/simd.c", kernels.display());
 }
