@@ -75,6 +75,17 @@ pub struct LlamaResult {
     pub status: c_int,
 }
 
+/// Speculative-decoding counters, mirroring gs_spec_stats_t.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SpecStats {
+    pub drafted: c_int,
+    pub accepted: c_int,
+    pub generated: c_int,
+    pub accept_rate: f64,
+    pub resyncs: c_int,
+}
+
 extern "C" {
     #[allow(dead_code)]
     fn gs_llama_validate_config(config: *const LlamaConfig) -> c_int;
@@ -90,6 +101,16 @@ extern "C" {
     fn gs_llama_backend_name(ctx: *mut c_void) -> *const c_char;
     fn gs_llama_n_layer(ctx: *mut c_void) -> c_int;
     fn gs_llama_token_count(ctx: *mut c_void, text: *const c_char) -> c_int;
+    fn gs_llama_generate_speculative(
+        ctx: *mut c_void,
+        draft: *mut c_void,
+        prompt: *const c_char,
+        max_tokens: c_int,
+        temperature: f32,
+        n_draft: c_int,
+        out_stats: *mut SpecStats,
+    ) -> LlamaResult;
+    fn gs_llama_n_ctx(ctx: *mut c_void) -> c_int;
     fn gs_llama_gpu_offload_supported(ctx: *mut c_void) -> c_int;
     fn gs_llama_free(ctx: *mut c_void);
 }
@@ -190,6 +211,61 @@ impl LlamaModel {
             }
         })
         .unwrap_or_else(|_| "unknown".into())
+    }
+
+    /// Context size actually in force, used by the speculative loop.
+    pub fn n_ctx(&self) -> i32 {
+        std::panic::catch_unwind(|| unsafe { gs_llama_n_ctx(self.raw) }).unwrap_or(0)
+    }
+
+    /// Speculative decode against a smaller `draft` model.
+    ///
+    /// **KNOWN BROKEN - NOT FOR USE.** See the commit that introduced this.
+    /// Measured on 5 prompts: 0.104x the baseline speed (9.6x SLOWER), overall
+    /// acceptance 0.118, and 0 of 5 outputs identical to non-speculative
+    /// decoding. The output is not merely different, it is garbage
+    /// ("thewatercycleakesrwaterfrom theo ####"). A draft-and-verify scheme
+    /// whose entire justification is that it is lossless, and which is neither
+    /// lossless nor faster, must not be reachable from a shipping path.
+    ///
+    /// The gate is an error rather than a doc comment so a caller gets a
+    /// refusal at runtime instead of silently degraded text.
+    ///
+    /// Greedy only, by design: above 0 temperature the exact-losslessness
+    /// property does not hold without the modified rejection sampler.
+    pub fn generate_speculative(
+        &mut self,
+        draft: &mut LlamaModel,
+        prompt: &str,
+        max_tokens: i32,
+        temperature: f32,
+        n_draft: i32,
+    ) -> Result<(String, SpecStats), i32> {
+        if std::env::var("GS_ENABLE_BROKEN_SPEC").is_err() {
+            return Err(GS_ERR_UNAVAILABLE);
+        }
+        let c = std::ffi::CString::new(prompt).map_err(|_| GS_ERR_INVALID_ARG)?;
+        let mut stats = SpecStats::default();
+        let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+            gs_llama_generate_speculative(
+                self.raw, draft.raw, c.as_ptr(), max_tokens, temperature, n_draft, &mut stats,
+            )
+        }))
+        .map_err(|_| GS_ERR_INTERNAL)?;
+        if res.status != GS_OK {
+            if !res.text.is_null() {
+                let mut r = LlamaResult { text: res.text, n_tokens: 0, status: res.status };
+                unsafe { gs_llama_free_result_text(&mut r) };
+            }
+            return Err(res.status);
+        }
+        if res.text.is_null() {
+            return Err(GS_ERR_GENERATION);
+        }
+        let owned = unsafe { CStr::from_ptr(res.text) }.to_string_lossy().into_owned();
+        let mut r = LlamaResult { text: res.text, n_tokens: res.n_tokens, status: res.status };
+        unsafe { gs_llama_free_result_text(&mut r) };
+        Ok((owned, stats))
     }
 
     /// Number of output tokens produced by the last generate() call.
