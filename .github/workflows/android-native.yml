@@ -1,0 +1,145 @@
+name: android-native
+
+# Cross-compiles libgs_ffi.so for the four Android ABIs and attaches one
+# artifact per ABI. Binaries are artifacts, never git: the repo carries source
+# only.
+#
+# The mobile build is PORTABLE-ONLY by design. ONNX Runtime, llama.cpp and
+# Tesseract have no drop-in prebuilts for arm64 Android, and a 300 MB decode
+# engine inside a phone binary is not the product. gs-ffi detects an Android
+# target in build.rs and links only the portable C++ surface, whose
+# backend-dependent entry points report GS_ERR_UNAVAILABLE with a reason.
+# That is what the host app's local-first routing checks.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [native-runtime]
+    paths:
+      - 'native/**'
+      - '.github/workflows/android-native.yml'
+      - '.cargo/config.toml'
+
+concurrency:
+  group: android-native-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  # Consumed by gs-ffi/build.rs on the desktop only; mobile ignores it.
+  GS_ALLOW_MISSING_ONNX: "1"
+
+jobs:
+  build:
+    name: ${{ matrix.abi }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - abi: arm64-v8a
+            target: aarch64-linux-android
+            rust: aarch64-linux-android
+          - abi: armeabi-v7a
+            target: armv7-linux-androideabi
+            rust: armv7-linux-androideabi
+          - abi: x86_64
+            target: x86_64-linux-android
+            rust: x86_64-linux-android
+          - abi: x86
+            target: i686-linux-android
+            rust: i686-linux-android
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Install Rust (rustup, pinned)
+        run: |
+          set -euo pipefail
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+            | sh -s -- -y --profile minimal --default-toolchain stable
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          rustup target add ${{ matrix.rust }}
+          rustc --version
+          cargo --version
+
+      - name: Install NDK r25c
+        run: |
+          set -euo pipefail
+          NDK_VERSION=r25c
+          ANDROID_NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION"
+          if [ ! -d "$ANDROID_NDK_HOME" ]; then
+            yes | sdkmanager --licenses >/dev/null 2>&1 || true
+            sdkmanager "ndk;$NDK_VERSION" >/dev/null
+          fi
+          echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME" >> "$GITHUB_ENV"
+          ls "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt" || \
+            (echo "NDK not installed" && exit 1)
+
+      - name: Install cargo-ndk
+        run: |
+          set -euo pipefail
+          cargo install cargo-ndk --locked
+
+      # cargo-ndk generates the linkers and writes the env file that names them.
+      # A missing linker here is the single most common cause of an Android
+      # cross-compile failing minutes later with a confusing collect2 error, so
+      # it is asserted rather than assumed.
+      - name: Configure cargo-ndk
+        run: |
+          set -euo pipefail
+          cargo ndk env
+          # shellcheck disable=SC1091
+          source "$HOME/.cargo/ndk-env"
+          echo "cargo-ndk env sourced; CC=$CC"
+          ls -d "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+
+      - name: Build libgs_ffi.so
+        working-directory: native
+        run: |
+          set -euo pipefail
+          # cdylib is declared under [lib] in crates/gs-ffi/Cargo.toml. Building
+          # the whole workspace would try to link the desktop backends.
+          cargo ndk \
+            -t ${{ matrix.rust }} \
+            -o "$GITHUB_WORKSPACE/dist/android/${{ matrix.abi }}" \
+            build --release -p gs-ffi --lib
+
+      - name: Verify the artifact is a real Android ELF
+        run: |
+          set -euo pipefail
+          SO="$GITHUB_WORKSPACE/dist/android/${{ matrix.abi }}/libgs_ffi.so"
+          test -f "$SO" || { echo "MISSING: $SO"; exit 1; }
+          echo "=== file ==="
+          file "$SO"
+          echo "=== size ==="
+          stat -c '%s bytes' "$SO"
+          # A .so with no exported symbols loads and then fails at the first
+          # call. Assert the mobile ABI is present, not merely that the file
+          # exists.
+          echo "=== exported mobile ABI ==="
+          nm -D --defined-only "$SO" | grep -oE 'gs_[a-z_0-9]+' | sort -u
+          COUNT=$(nm -D --defined-only "$SO" | grep -c 'gs_ffi_mobile_' || true)
+          echo "gs_ffi_mobile_* exported: $COUNT"
+          if [ "$COUNT" -lt 8 ]; then
+            echo "FAIL: expected at least 8 gs_ffi_mobile_* exports, found $COUNT"
+            exit 1
+          fi
+          # The architecture must match the ABI we asked for.
+          case "${{ matrix.abi }}" in
+            arm64-v8a)   ARCH="aarch64" ;;
+            armeabi-v7a) ARCH="ARM" ;;
+            x86_64)      ARCH="x86-64" ;;
+            x86)         ARCH="Intel 80386" ;;
+          esac
+          file "$SO" | grep -q "$ARCH" || { echo "FAIL: $ARCH not in: $(file "$SO")"; exit 1; }
+          echo "VERIFIED: ${{ matrix.abi }} is a $ARCH shared object with the mobile ABI"
+
+      - name: Upload libgs_ffi.so
+        uses: actions/upload-artifact@v4
+        with:
+          name: libgs_ffi-${{ matrix.abi }}
+          path: dist/android/${{ matrix.abi }}/libgs_ffi.so
+          if-no-files-found: error
+          retention-days: 14
