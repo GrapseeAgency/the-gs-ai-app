@@ -22,6 +22,7 @@ fn main() {
     // Link the real llama.cpp when a build tree is available. Without this
     // define the wrapper compiles but every call reports UNAVAILABLE, and
     // LlamaModel::load will hand back a handle that cannot generate anything.
+    println!("cargo:rerun-if-env-changed=GS_LLAMA_ROOT");
     let llama_root = std::env::var("GS_LLAMA_ROOT").ok();
     let mut have_llama = false;
     if let Some(root) = &llama_root {
@@ -68,6 +69,7 @@ fn main() {
         .file(clip_dir.join("clip_wrapper.cpp"))
         .warnings(true);
 
+    println!("cargo:rerun-if-env-changed=GS_ONNXRUNTIME_ROOT");
     let ort_root = std::env::var("GS_ONNXRUNTIME_ROOT").ok();
     let mut have_ort = false;
     if let Some(root) = &ort_root {
@@ -131,7 +133,6 @@ fn main() {
         println!("cargo:rustc-link-search=native={root}/lib");
         println!("cargo:rustc-link-lib=dylib=onnxruntime");
         println!("cargo:rustc-link-arg=-Wl,-rpath,{root}/lib");
-        println!("cargo:rerun-if-env-changed=GS_ONNXRUNTIME_ROOT");
     } else {
         println!(
             "cargo:warning=GS_ONNXRUNTIME_ROOT unset or invalid: CLIP embeddings \
@@ -149,7 +150,6 @@ fn main() {
         println!("cargo:rustc-link-lib=dylib=ggml-base");
         // Load-time path so the binary runs without LD_LIBRARY_PATH.
         println!("cargo:rustc-link-arg=-Wl,-rpath,{root}/build/bin");
-        println!("cargo:rerun-if-env-changed=GS_LLAMA_ROOT");
     } else {
         println!(
             "cargo:warning=GS_LLAMA_ROOT unset or invalid: local generation is \

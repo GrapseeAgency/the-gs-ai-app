@@ -45,6 +45,15 @@ fn last_error() -> String {
     unsafe { CStr::from_ptr(p) }.to_string_lossy().into_owned()
 }
 
+/// Extract the text from an image, if OCR is available on this build.
+///
+/// Returns `None` when OCR is unavailable or the image cannot be read, so
+/// callers can degrade to CLIP-only rather than pretending an image was empty.
+pub fn extract_text(path: &std::path::Path) -> Option<String> {
+    let m = OcrModel::new().ok()?;
+    m.recognize(path).ok()
+}
+
 /// An initialised Tesseract engine.
 pub struct OcrModel {
     ctx: *mut std::ffi::c_void,

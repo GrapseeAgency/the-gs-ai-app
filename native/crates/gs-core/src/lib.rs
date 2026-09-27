@@ -12,12 +12,14 @@ pub mod router;
 pub mod skills;
 pub mod tools;
 pub mod verification;
+pub mod vision;
 
 pub use agent::{AgentLoop, AgentOutcome, IntentClassifier, Plan, Step};
 pub use budget::TokenBudget;
 pub use memory::{MemoryStore, Compaction, WorkingMemory};
 pub use http_provider::{HttpProvider, pool_from_env};
 pub use router::{ProviderPool, PoolError, Provider};
+pub use vision::{gather as gather_vision_evidence, VisionEvidence};
 pub use skills::{SkillRegistry, Skill};
 pub use tools::{ToolRegistry, ToolResult};
 pub use verification::{Verification, Verdict};

@@ -28,7 +28,7 @@ impl IntentClassifier {
             return Intent::Time;
         }
 
-        if has_image_marker(&t) {
+        if has_image_marker(&t) || find_image_path(&t).is_some() {
             return Intent::Vision;
         }
 
@@ -65,6 +65,28 @@ impl IntentClassifier {
 /// Explicit image attachment marker, since text alone cannot carry pixels.
 fn has_image_marker(t: &str) -> bool {
     t.contains("[image]") || t.contains("[image:")
+}
+
+/// Find an image file path mentioned in the text.
+///
+/// A bare path is how an operator actually asks ("read the text in
+/// /tmp/invoice.png"), so requiring an explicit [image] marker would make the
+/// vision path unreachable from the plainest possible prompt.
+pub fn find_image_path(text: &str) -> Option<String> {
+    const EXTS: &[&str] = &["png", "jpg", "jpeg", "bmp", "gif", "tif", "tiff", "webp"];
+    for tok in text.split_whitespace() {
+        let cleaned = tok.trim_matches(|c: char| {
+            c.is_ascii_punctuation() && c != '/' && c != '.' && c != '_' && c != '-'
+        });
+        if !cleaned.starts_with('/') && !cleaned.starts_with("./") {
+            continue;
+        }
+        let lower = cleaned.to_ascii_lowercase();
+        if EXTS.iter().any(|e| lower.ends_with(&format!(".{e}"))) {
+            return Some(cleaned.to_string());
+        }
+    }
+    None
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -172,6 +194,34 @@ impl AgentLoop {
         let mut messages = vec![Message::system(
             "You are GS AI. Answer directly. Cite sources when you state facts.",
         )];
+
+        // --- Vision: OCR + CLIP over the attached image --------------------
+        // Runs before the model so the model reasons over recovered text rather
+        // than being asked to "look" at pixels it cannot see.
+        let mut vision_evidence: Option<crate::vision::VisionEvidence> = None;
+        if intent == Intent::Vision {
+            match find_image_path(user_text) {
+                Some(p) => {
+                    let started = (self.now_unix_ms)();
+                    let evidence = crate::vision::gather(std::path::Path::new(&p), user_text);
+                    messages.push(Message::user(evidence.context(user_text)));
+                    vision_evidence = Some(evidence);
+                    tracing::info!(
+                        vision_ms = (self.now_unix_ms)() - started,
+                        image = %p,
+                        "vision evidence gathered"
+                    );
+                }
+                None => {
+                    // An [image] marker with no path: nothing to decode.
+                    messages.push(Message::user(format!(
+                        "[VISION] An image was attached but no readable path was given, so \
+                         no pixels could be decoded. Ask for a file path."
+                    )));
+                }
+            }
+        }
+
         for step in &plan.steps {
             if let Step::ToolCall { plugin, input } = step {
                 // Tool output is offloaded by the caller and arrives here as
@@ -218,9 +268,16 @@ impl AgentLoop {
             reason: "token budget exhausted before any completion".into(),
         })?;
 
+        // The OCR text is appended verbatim so exact identifiers survive no
+        // matter how the model phrased its reading.
+        let answer = match &vision_evidence {
+            Some(ev) => crate::vision::compose_answer(ev, &c.text),
+            None => c.text.clone(),
+        };
+
         Ok(AgentOutcome {
             intent,
-            answer: c.text.clone(),
+            answer,
             provider: c.provider.clone(),
             served_model: c.served_model.clone(),
             key_index: c.key_index,
@@ -241,6 +298,34 @@ mod tests {
     use crate::router::{Clock, Provider};
     use async_trait::async_trait;
     use std::sync::atomic::{AtomicUsize, Ordering};
+
+    #[test]
+    fn a_bare_image_path_classifies_as_vision() {
+        // The point: an operator says "read the text in <path>", with no
+        // [image] marker, and must still reach the vision path.
+        assert_eq!(
+            IntentClassifier::classify("Read the text in /tmp/invoice.png"),
+            Intent::Vision
+        );
+        assert_eq!(
+            find_image_path("Read the text in /tmp/invoice.png").as_deref(),
+            Some("/tmp/invoice.png")
+        );
+    }
+
+    #[test]
+    fn non_image_paths_are_not_treated_as_vision_attachments() {
+        assert_eq!(find_image_path("read /tmp/notes.txt"), None);
+        assert_eq!(find_image_path("compile the project"), None);
+    }
+
+    #[test]
+    fn trailing_punctuation_is_stripped_from_the_path() {
+        assert_eq!(
+            find_image_path("what is in /tmp/photo.jpg?").as_deref(),
+            Some("/tmp/photo.jpg")
+        );
+    }
     use std::time::Instant;
 
     struct FixedClock(u64);

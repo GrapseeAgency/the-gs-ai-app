@@ -135,3 +135,23 @@ fn main() {
     }
     println!("\nTOP MATCH: {} score={:.4}", best.1, best.0);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn centre_crop_produces_the_model_input_size() {
+        let img = image::RgbImage::new(512, 300);
+        let out = resize_center_crop(&img, 256);
+        assert_eq!(out.width(), 256);
+        assert_eq!(out.height(), 256);
+    }
+
+    #[test]
+    fn a_square_image_is_passed_through_unchanged() {
+        let img = image::RgbImage::new(256, 256);
+        let out = resize_center_crop(&img, 256);
+        assert_eq!((out.width(), out.height()), (256, 256));
+    }
+}

@@ -433,6 +433,8 @@ dependencies = [
  "async-trait",
  "futures",
  "gs-common",
+ "gs-ffi",
+ "image",
  "reqwest",
  "rusqlite",
  "serde",
