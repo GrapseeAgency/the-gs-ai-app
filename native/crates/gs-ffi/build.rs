@@ -119,8 +119,23 @@ fn main() {
         .include(&inc)
         .include(&clip_dir)
         .warnings(true);
+    // On mobile the clip wrapper is deliberately not compiled: ONNX Runtime has
+    // no drop-in arm64 Android build and a portable phone library must not carry
+    // a decode engine. Its entry points still exist in gs_mobile and report
+    // GS_ERR_UNAVAILABLE with a reason.
+    //
+    // The compile() call below used to be UNCONDITIONAL, which emitted a
+    // `rustc-link-lib=static=gs_clip` for an archive that was never created.
+    // Raw error, run 36350855020, all four ABIs:
+    //     llvm-ar: error: unable to load
+    //       .../out/libgs_clip.a: No such file or directory
+    //     error: failed to run custom build command for `gs-ffi`
+    //     ##[error]Process completed with exit code 101.
+    // So: compile only when there is something to compile.
+    let mut have_clip_src = false;
     if !mobile {
         clip_build.file(clip_dir.join("clip_wrapper.cpp"));
+        have_clip_src = true;
     }
 
     println!("cargo:rerun-if-env-changed=GS_ONNXRUNTIME_ROOT");
@@ -136,7 +151,11 @@ fn main() {
             have_ort = true;
         }
     }
-    clip_build.compile("gs_clip");
+    if have_clip_src {
+        clip_build.compile("gs_clip");
+    } else {
+        println!("cargo:warning=skipping gs_clip: no sources on this target");
+    }
 
     if have_ort {
         // Link and rpath ONNX Runtime. This block was lost during the mobile
@@ -157,8 +176,13 @@ fn main() {
         .std("c++17")
         .include(&ocr_dir)
         .warnings(true);
+    // Same defect as clip_wrapper: compiling with zero sources emits a link
+    // directive for an archive that does not exist. Both produced the same
+    // llvm-ar error on the same run.
+    let mut have_ocr_src = false;
     if !mobile {
         ocr_build.file(ocr_dir.join("gs_ocr_tess.cpp"));
+        have_ocr_src = true;
     }
 
     // Tesseract and Leptonica are probed independently: chaining them would
@@ -188,7 +212,11 @@ fn main() {
             }
         }
     }
-    ocr_build.compile("gs_ocr_tess");
+    if have_ocr_src {
+        ocr_build.compile("gs_ocr_tess");
+    } else {
+        println!("cargo:warning=skipping gs_ocr_tess: no sources on this target");
+    }
     if !have_tess && !mobile {
         println!(
             "cargo:warning=tesseract/leptonica not found via pkg-config: OCR is \
