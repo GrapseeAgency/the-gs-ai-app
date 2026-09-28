@@ -16,10 +16,15 @@ android {
     // traineddata for a segment that is ~1% of installs is the wrong trade in
     // the base APK and a reasonable one on request.
     //
-    // This belongs at the `android { }` level. Inside `defaultConfig` it is a
-    // SCRIPT COMPILATION error -- "'val' cannot be reassigned" -- which reads
-    // like nothing to do with dynamic features at all.
-    dynamicFeatures = [":ocr-fallback"]
+    // Two things about this line, both of which are script COMPILE errors rather
+    // than configuration errors, so the messages name neither the property nor
+    // the module:
+    //   * it belongs at the `android { }` level, not inside `defaultConfig`
+    //   * the type is MutableSet<String>, so an array literal does not compile:
+    //       Assignment type mismatch: actual type is 'Array<String>', but
+    //       'MutableSet<String>' was expected.
+    //       Array literals outside of annotations are unsupported.
+    dynamicFeatures = mutableSetOf(":ocr-fallback")
 
     defaultConfig {
         applicationId = "com.grapsee.gsai"
