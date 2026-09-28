@@ -18,6 +18,12 @@ android {
         versionCode = 73
         versionName = "0.68.2"
 
+        // Decision 1: the OCR fallback is an ON-DEMAND dynamic feature, so the
+        // base APK pays 0 bytes for Tesseract. 12.3 MB of static libraries plus
+        // ~15 MB of traineddata for a segment that is ~1% of installs is the
+        // wrong trade in the base APK and a reasonable one on request.
+        dynamicFeatures = [":ocr-fallback"]
+
         // REAL transport origin — applies to EVERY build type (v0.66.0 fix).
         // HISTORY: this was the Android-emulator host-loopback alias (10.0 dot
         // 2 dot, unroutable from any real phone) with the reachable origin only
@@ -81,6 +87,16 @@ android {
 
 dependencies {
     implementation(libs.androidx.core.ktx)
+
+    // Decision 1. ML Kit is the PRIMARY OCR path and is bundled, because
+    // ~99% of Android devices have Play Services. The fallback is NOT here: it
+    // lives in the :ocr-fallback dynamic feature and is installed on request.
+    implementation(libs.mlkit.text.recognition)
+    implementation(libs.play.core)
+    implementation(libs.play.core.ktx)
+    // Availability CHECK only. No Play Services feature module, so nothing here
+    // downloads anything or requires Play Services to function.
+    implementation(libs.play.services.base)
     // Baseline-profile installer: on API 26-28 devices the merged library
     // profile (Compose/Room/Lifecycle ship one in each AAR) is installed at
     // first run by this artifact; API 29+ installs it at package time.

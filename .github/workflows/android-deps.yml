@@ -449,13 +449,16 @@ jobs:
           echo "=== package contents ==="
           find dist -type f | sort | sed -n '1,40p'
           echo "total: $(du -sh dist | cut -f1)"
-          tar -czf "llamacpp-${{ matrix.abi }}.tar.gz" -C dist .
-          ls -la "llamacpp-${{ matrix.abi }}.tar.gz"
 
+      # The DIRECTORY, not a tarball. GitHub's artifact API always returns a zip
+      # wrapper, so uploading a .tar.gz produces a zip containing a tarball, and
+      # a consumer that runs `tar -xzf` on it gets:
+      #     tar: This does not look like a tar archive
+      # which is what the first device run did. One layer, not two.
       - uses: actions/upload-artifact@v4
         with:
           name: llamacpp-${{ matrix.abi }}
-          path: llamacpp-${{ matrix.abi }}.tar.gz
+          path: dist/
           if-no-files-found: error
           retention-days: 14
 

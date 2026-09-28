@@ -146,7 +146,36 @@ jobs:
             "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip" \
             -o /tmp/artifact/llamacpp.zip
           ls -la /tmp/artifact/llamacpp.zip
-          tar -xzf /tmp/artifact/llamacpp.zip -C native/prebuilts/android-x86_64
+          echo "=== what kind of file did the API hand back? ==="
+          file /tmp/artifact/llamacpp.zip
+          # GitHub's artifact API returns a ZIP. Raw, first device run:
+          #     tar: This does not look like a tar archive
+          #     tar: Exiting with failure status due to previous errors
+          #     ##[error]Process completed with exit code 2.
+          # It used to be a tarball wrapped in a zip. Uploaded a directory
+          # instead, and this handles both shapes anyway because the cost of
+          # guessing wrong is a 40-minute emulator run.
+          if unzip -l /tmp/artifact/llamacpp.zip >/dev/null 2>&1; then
+            echo "zip: unzipping"
+            rm -rf /tmp/artifact/x && mkdir -p /tmp/artifact/x
+            unzip -o -q /tmp/artifact/llamacpp.zip -d /tmp/artifact/x
+            # A tarball inside the zip is still possible; unwrap it.
+            T=$(find /tmp/artifact/x -name '*.tar.gz' | sed -n '1p')
+            if [ -n "$T" ]; then
+              echo "zip contained a tarball: $T"
+              tar -xzf "$T" -C native/prebuilts/android-x86_64
+            else
+              cp -r /tmp/artifact/x/. native/prebuilts/android-x86_64/
+            fi
+          elif tar -tzf /tmp/artifact/llamacpp.zip >/dev/null 2>&1; then
+            echo "gzip: untarring"
+            tar -xzf /tmp/artifact/llamacpp.zip -C native/prebuilts/android-x86_64
+          else
+            echo "FAIL: the artifact is neither a zip nor a gzip tarball"
+            file /tmp/artifact/llamacpp.zip
+            head -c 200 /tmp/artifact/llamacpp.zip | cat -v | sed -n '1,5p'
+            exit 1
+          fi
           echo "=== prebuilt contents ==="
           find native/prebuilts/android-x86_64 -type f | sort | sed -n '1,30p'
           test -f native/prebuilts/android-x86_64/include/llama.h || {
