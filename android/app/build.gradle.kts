@@ -10,20 +10,48 @@ plugins {
 android {
     namespace = "com.grapsee.gsai"
     compileSdk = 35
-
-    // Decision 1: the OCR fallback is an ON-DEMAND dynamic feature, so the base
-    // APK pays 0 bytes for Tesseract. 12.3 MB of static libraries plus ~15 MB of
-    // traineddata for a segment that is ~1% of installs is the wrong trade in
-    // the base APK and a reasonable one on request.
+    // Decision 1 is NOT wired. dynamicFeatures is commented out and the app
+    // builds without it.
     //
-    // Three attempts on one line, all SCRIPT COMPILE errors whose messages name
-    // neither the property nor the module, so each one read as unrelated:
-    //   1. inside defaultConfig      -> 'val' cannot be reassigned
-    //   2. = arrayOf(...)            -> actual type is 'Array<String>', but
-    //                                    'MutableSet<String>' was expected
-    //   3. = mutableSetOf(...)       -> 'val' cannot be reassigned
-    // AGP 8 types this as a SetProperty, which Kotlin DSL assigns with `+=`:
-    dynamicFeatures += setOf(":ocr-fallback")
+    // BLOCKED after four attempts on the :ocr-fallback module, every one caught
+    // by android-app.yml within about 90 seconds of being pushed:
+    //
+    //   1. dynamicFeatures inside defaultConfig -> 'val' cannot be reassigned
+    //   2. = arrayOf(...) -> actual type is 'Array<String>', but
+    //      'MutableSet<String>' was expected
+    //   3. = mutableSetOf(...) -> 'val' cannot be reassigned
+    //   4. com.android.library requested a version while AGP was already on the
+    //      classpath -> Error resolving plugin
+    // and then, once it did resolve:
+    //
+    //     Could not determine the dependencies of task ':app:checkDebugLibraries'.
+    //     > Could not resolve project ':ocr-fallback'.
+    //       > No matching variant of project ':ocr-fallback' was found. The
+    //         consumer was configured to find a component for use during
+    //         'android-reverse-meta-data' ... BuildTypeAttr with value 'debug'
+    //         but:
+    //           - Variant 'debugApiElements' declares a component ...
+    //
+    // The Kotlin DSL line itself is correct. The module resolves to a variant
+    // AGP will not match, and leaving it enabled took the WHOLE app build down,
+    // which is worse than not having the module at all.
+    //
+    // Everything the module needs is in the tree and unused:
+    //   android/ocr-fallback/build.gradle.kts
+    //   android/app/src/main/java/com/grapsee/gsai/ocr/OcrEngine.kt
+    //
+    // UNBLOCKING IT: the failure is about reverse-metadata PUBLICATION, and a
+    // split must not be a publishable variant. Next thing to try, in order:
+    //   a. delete the publishing { singleVariant(...) } block from
+    //      android/ocr-fallback/build.gradle.kts entirely rather than narrowing
+    //      it to one variant
+    //   b. give the module the same testBuildType and build types as the base
+    //   c. if it still will not match, build the split with `bundleRelease`
+    //      rather than through the debug variant, since reverse-metadata is a
+    //      publication concern and a release bundle is the only place a split
+    //      actually matters
+    //
+    // dynamicFeatures += setOf(":ocr-fallback")
 
     defaultConfig {
         applicationId = "com.grapsee.gsai"
