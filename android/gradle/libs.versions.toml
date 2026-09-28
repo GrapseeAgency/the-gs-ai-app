@@ -71,7 +71,13 @@ play-services-base = { group = "com.google.android.gms", name = "play-services-b
 mlkit-text-recognition = { group = "com.google.mlkit", name = "text-recognition", version.ref = "mlkitText" }
 
 [plugins]
-android-library = { id = "com.android.library", version.ref = "agp" }
+# NO version. The :app module already puts AGP on the classpath, and asking for
+# a version of a plugin that is already there fails:
+#     Error resolving plugin [id: 'com.android.library', version: '8.5.2']
+#     The request for this plugin could not be satisfied because the plugin is
+#     already on the classpath with an unknown version, so compatibility
+#     cannot be checked.
+android-library = { id = "com.android.library" }
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
