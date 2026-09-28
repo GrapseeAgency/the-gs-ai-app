@@ -41,16 +41,16 @@ jobs:
       matrix:
         include:
           - abi: arm64-v8a
-            machine: AArch64
+            triple: aarch64-linux-android
             target: aarch64-linux-android
           - abi: armeabi-v7a
-            machine: ARM
+            triple: armv7a-linux-androideabi
             target: armv7-linux-androideabi
           - abi: x86_64
-            machine: X86-64
+            triple: x86_64-linux-android
             target: x86_64-linux-android
           - abi: x86
-            machine: Intel 80386
+            triple: i686-linux-android
             target: i686-linux-android
 
     steps:
@@ -275,58 +275,48 @@ jobs:
           # of which are C++ and all of which will need libc++_shared.so. An APK
           # for this product carries it regardless of what gs-ffi does.
           DIST="$GITHUB_WORKSPACE/dist/android/${{ matrix.abi }}"
-          # FOUND BY WHAT IT IS, NOT BY A DIRECTORY NAME. The obvious path
-          #   sysroot/usr/lib/<triple>/libc++_shared.so
-          # is right for three of the four ABIs and wrong for armeabi-v7a, which
-          # NDK r25 does not ship where the triple suggests:
-          #     ##[error]no libc++_shared.so at
-          #     .../ndk/25.2.9519653/.../sysroot/usr/lib/armv7a-linux-androideabi/libc++_shared.so
-          # A hardcoded directory is a guess about another toolchain's layout;
-          # reading the ELF machine is a fact about the file. If no candidate
-          # matches, the sysroot contents are printed so the next reader does not
-          # have to go looking.
-          CPP=""
-          # NO -type f. The NDK ships libc++_shared.so as a SYMLINK, and -type f filters
-          # symlinks out, so the candidate list came back empty and the step failed
-          # with a message implying the file does not exist in the NDK at all.
-          # Run 36443756041 printed zero candidate lines and then:
-          #     ::error::no libc++_shared.so with Machine matching 'X86-64'
-          # RESOLVE THE NDK, DO NOT ASSUME IT. This workflow already records the
-          # disagreement (step 5 sets both, and they differ):
-          #     ANDROID_NDK_HOME: /home/runner/android-sdk/ndk/25.2.9519653
-          #     ANDROID_NDK_ROOT  -> ".../ndk/27.3.13750724"     (does not exist)
-          # find on a nonexistent directory prints nothing and exits 0, so the
-          # candidate loop below iterated ZERO times, CPP stayed empty, and the
-          # step reported the file missing -- an accurate description of
-          # $ANDROID_NDK_ROOT and a false one about the NDK. Two runs lost to it.
-          NDK=""
-          for CANDDIR in "${ANDROID_NDK_HOME:-}" "${ANDROID_NDK_ROOT:-}" "${ANDROID_SDK_ROOT:-}/ndk/${NDK_VERSION}" "${ANDROID_HOME:-}/ndk/${NDK_VERSION}"; do
-            if [ -n "$CANDDIR" ] && [ -d "$CANDDIR/toolchains/llvm/prebuilt" ]; then
-              NDK="$CANDDIR"
-              echo "  NDK resolves to $NDK"
-              break
+
+          # THE DOCUMENTED PATH. NO find. NO ELF-MACHINE MATCH.
+          #
+          #   $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/<triple>/libc++_shared.so
+          #
+          # This is a fixed, documented, stable location in every NDK. Three runs
+          # were spent trying to DISCOVER the file -- first a hardcoded path under
+          # $ANDROID_NDK_ROOT (which points at a nonexistent ndk/27.3... because
+          # this workflow sets ANDROID_NDK_HOME and ANDROID_NDK_ROOT to different
+          # versions), then `find -type f` (which filters out the symlink), then
+          # `find` plus a readelf Machine comparison. Every one of them was a
+          # search for something whose address is written down.
+          #
+          # ANDROID_NDK_HOME, not ANDROID_NDK_ROOT: step 5 sets both and they
+          # disagree, and this workflow's own comment records that.
+          SYSLIB="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib"
+          CPP="$SYSLIB/${{ matrix.triple }}/libc++_shared.so"
+          echo "NDK       : $ANDROID_NDK_HOME"
+          echo "sysroot   : $SYSLIB"
+          echo "companion : $CPP"
+          ls -ld "$ANDROID_NDK_HOME" "$SYSLIB" 2>&1 | sed -n '1,4p' || true
+
+          if [ ! -f "$CPP" ]; then
+            # The install is broken, not our path. Prove that with ls rather than
+            # asserting it, then reinstall once.
+            echo "=== NOT AT THE DOCUMENTED PATH. What is actually in the sysroot: ==="
+            ls -1 "$SYSLIB" 2>&1 | sed -n '1,30p' || true
+            echo "=== and in the triple directory we expected ==="
+            ls -la "$SYSLIB/${{ matrix.triple }}" 2>&1 | sed -n '1,30p' || true
+            echo "=== reinstalling the NDK once ==="
+            yes | sdkmanager --install "ndk;$NDK_VERSION" >/dev/null 2>&1 || true
+            if [ ! -f "$CPP" ]; then
+              echo "::error::libc++_shared.so still absent from the documented path after reinstalling the NDK."
+              echo "  $CPP"
+              echo "Raw listing above is the evidence. The NDK install is broken."
+              exit 1
             fi
-          done
-          if [ -z "$NDK" ]; then
-            echo "::error::no NDK found among ANDROID_NDK_HOME, ANDROID_NDK_ROOT, ANDROID_SDK_ROOT/ndk/${NDK_VERSION}, ANDROID_HOME/ndk/${NDK_VERSION}"
-            ls -d "${ANDROID_SDK_ROOT:-/nonexistent}"/ndk/* 2>&1 | sed -n '1,10p' || true
-            exit 1
           fi
-          for CAND in $(find "$NDK" -name 'libc++_shared.so' 2>/dev/null); do
-            M=$(readelf -h "$CAND" 2>/dev/null | sed -n 's/^[[:space:]]*Machine:[[:space:]]*//p')
-            echo "  candidate $(basename "$(dirname "$CAND")") -> Machine: ${M:-unknown}"
-            case "$M" in
-              *${{ matrix.machine }}*) CPP="$CAND"; break ;;
-            esac
-          done
-          if [ -z "$CPP" ]; then
-            echo "::error::no libc++_shared.so with Machine matching '${{ matrix.machine }}' under $NDK"
-            find "$NDK" -name 'libc++_shared.so' | sed -n '1,40p'
-            exit 1
-          fi
-          echo "  using $CPP"
+
           cp "$CPP" "$DIST/libc++_shared.so"
           ls -l "$DIST/"
+          echo "  readelf says it is a $(readelf -h "$DIST/libc++_shared.so" | sed -n 's/^[[:space:]]*Machine:[[:space:]]*//p') shared object"
 
           # COMPLETENESS, NOT A GUESS. A JNI library that will not dlopen without
           # a second .so is not self-contained, and the missing companion is
