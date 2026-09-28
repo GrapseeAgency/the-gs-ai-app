@@ -5,7 +5,7 @@
 
 pub mod clip_bridge;
 pub mod llama_bridge;
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", feature = "jni-typecheck"))]
 pub mod jni;
 pub mod mobile;
 pub mod ocr_bridge;

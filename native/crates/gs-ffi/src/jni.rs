@@ -5,59 +5,107 @@
 //! logic, no model selection, no routing. Those belong in Kotlin and in
 //! gs-core respectively.
 //!
-//! Two rules are enforced here rather than documented:
+//! Three rules are enforced here rather than documented:
 //!
 //!   * Every entry point is `catch_unwind`-guarded. A Rust panic unwinding into
 //!     the JVM is undefined behaviour; in practice it aborts the process.
-//!   * A failure becomes a Java exception carrying gs_last_error(), never an
-//!     empty string. A Kotlin caller that receives "" cannot distinguish "the
-//!     model declined" from "native inference is not in this build", and will
-//!     happily render a blank bubble instead of falling back to the provider.
+//!   * A failure becomes a Java exception carrying the native reason, never an
+//!     empty string. A Kotlin caller given "" cannot distinguish "the model
+//!     declined" from "native inference is not in this build", and renders a
+//!     blank bubble instead of falling back to the provider.
+//!   * There is exactly one declaration of every C symbol, in `mobile.rs`. This
+//!     file used to re-declare the `gs_mobile_*` functions with `*mut c_void`
+//!     while `mobile.rs` declared them with `*mut GS_MobileCtx`; both modules
+//!     compile on Android, so the duplicate `extern "C"` blocks collided.
 //!
 //! Symbol names follow JNI's mangling of `com.grapsee.gsai.native.GsNative`,
 //! which is what the Kotlin `external fun` declarations resolve against.
 
-use std::ffi::{c_char, c_int, c_void, CStr, CString};
+use std::sync::Mutex;
 
-extern "C" {
-    // gs_abi.h — the shared status/error channel.
-    fn gs_last_error() -> *const c_char;
-    fn gs_free_string(s: *mut c_char);
-}
-
-/// Opaque JNIEnv. The `jni` crate owns the real definitions; these are the
-/// symbols gs-ffi needs and they are resolved at link time against the NDK.
-use jni::objects::{JByteArray, JClass, JObject, JString};
+use jni::objects::{JByteArray, JClass, JString};
 use jni::sys::{jboolean, jfloatArray, jint, jobject, JNI_FALSE, JNI_TRUE};
 use jni::JNIEnv;
 
-fn last_error() -> String {
-    let p = unsafe { gs_last_error() };
-    if p.is_null() {
-        return String::from("no error detail reported");
-    }
-    unsafe { CStr::from_ptr(p) }.to_string_lossy().into_owned()
+use crate::mobile::{self, MobileCtx};
+
+/// The one process-wide context. A phone app is a single user, and a per-call
+/// context would re-load the weights on every message.
+///
+/// A `Mutex<Option<..>>` rather than a bare pointer in a static: a JNI entry
+/// point is reachable from any thread in the JVM, and an unsynchronised static
+/// pointer is unsound the moment two of them read it. See the `Send` impl on
+/// `MobileCtx` for the safety argument this depends on.
+static GLOBAL: Mutex<Option<MobileCtx>> = Mutex::new(None);
+
+/// Take the global slot.
+///
+/// Returns an `Err(reason)` instead of poisoning the whole app: a panic inside
+/// one generation must degrade to "the local path is unavailable" and leave the
+/// chat UI working, which is the entire reason the fallback exists.
+fn with_global<T>(f: impl FnOnce(&MobileCtx) -> T) -> Result<T, String> {
+    let g = GLOBAL
+        .lock()
+        .map_err(|_| "local context mutex poisoned by an earlier panic".to_string())?;
+    let ctx = g.as_ref().ok_or_else(|| "no native context; call init(modelPath) first".to_string())?;
+    Ok(f(ctx))
 }
 
-/// Throw a Java exception carrying the native error text, and return None so
-/// callers can `return throw(env, "chat")`.
-fn throw<'a>(env: &mut JNIEnv<'a>, what: &str) -> Option<()> {
-    let msg = format!("GsNative.{what}: {}", last_error());
-    // dev.grapsee.gsai.native.GsNativeException. If the class is missing we
-    // must still not return a value that Kotlin would treat as success.
+fn set_global(ctx: Option<MobileCtx>) {
+    match GLOBAL.lock() {
+        // Dropping the old value runs MobileCtx::drop, which calls
+        // gs_mobile_free exactly once. Re-initialising is therefore safe and
+        // leaks nothing.
+        Ok(mut g) => *g = ctx,
+        Err(_) => {
+            // A poisoned mutex means the slot's contents are unknown. Leaving it
+            // alone is the only safe option: freeing a context we may have
+            // already freed is worse than leaking it.
+        }
+    }
+}
+
+/// Run a fallible operation on the global context, flattening the two error
+/// layers: "no context / poisoned" and "the engine declined".
+fn call<T>(f: impl FnOnce(&MobileCtx) -> Result<T, mobile::MobileError>) -> Result<T, String> {
+    match with_global(f) {
+        Ok(r) => r.map_err(|e| e.to_string()),
+        Err(e) => Err(e),
+    }
+}
+
+/// Throw a Java exception carrying the native reason.
+///
+/// Returns () rather than a value: the entry points disagree about what a
+/// failure looks like (jboolean, jobject, jfloatArray) and a helper that returns
+/// one shape compiles for none of them.
+fn throw(env: &mut JNIEnv, what: &str, reason: impl std::fmt::Display) {
+    let msg = format!("GsNative.{what}: {reason}");
+    // com.grapsee.gsai.native.GsNativeException. If the class is missing, the
+    // entry points still return their explicit failure value, so Kotlin never
+    // sees a success-shaped null.
     if let Ok(cls) = env.find_class("com/grapsee/gsai/native/GsNativeException") {
         let _ = env.throw_new(cls, msg);
     }
-    None
 }
 
+/// Run `$body`, turning a panic into a Java exception plus `$fail`.
+///
+/// `$fail` is explicit and type-checked against the body. An earlier version
+/// inferred the failure type from a helper returning `Option<()>`, which
+/// compiled for no entry point at all once the bodies started returning
+/// `jboolean` and raw pointers.
 macro_rules! guard {
-    ($env:expr, $name:expr, $body:expr) => {
-        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| $body)) {
+    ($env:ident, $name:expr, $fail:expr, $body:expr) => {{
+        let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| $body));
+        match r {
             Ok(v) => v,
-            Err(_) => throw($env, $name),
+            Err(_) => {
+                throw(&mut $env, $name, "panic in native code; the context is not usable");
+                $fail
+            }
         }
-    };
+    }};
 }
 
 /// Create the native context.
@@ -72,33 +120,25 @@ pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_init(
     _class: JClass,
     model_path: JString,
 ) -> jboolean {
-    guard!(&mut env, "init", {
+    guard!(env, "init", JNI_FALSE, {
         let path: String = match env.get_string(&model_path) {
             Ok(s) => s.into(),
-            Err(_) => return JNI_FALSE,
+            Err(e) => {
+                throw(&mut env, "init", e);
+                return JNI_FALSE;
+            }
         };
-        let c = CString::new(path).unwrap_or_default();
-        let ctx = unsafe { gs_mobile_create(c.as_ptr(), 2048, 4) };
-        if ctx.is_null() {
-            return JNI_FALSE;
+        match MobileCtx::create(&path, 2048, 4) {
+            Ok(c) => {
+                set_global(Some(c));
+                JNI_TRUE
+            }
+            Err(e) => {
+                throw(&mut env, "init", e);
+                JNI_FALSE
+            }
         }
-        // The context is process-wide on purpose: a phone app is one user, and
-        // a per-call context would re-load the weights on every message.
-        unsafe { set_global(ctx) };
-        JNI_TRUE
     })
-    .map(|b| b as jboolean)
-    .unwrap_or(JNI_FALSE)
-}
-
-static mut GLOBAL_CTX: *mut c_void = std::ptr::null_mut();
-
-unsafe fn set_global(p: *mut c_void) {
-    GLOBAL_CTX = p;
-}
-
-unsafe fn global() -> *mut c_void {
-    GLOBAL_CTX
 }
 
 /// 1 when a generation backend is compiled in. Kotlin checks this to decide
@@ -108,16 +148,16 @@ pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_backendAvailable(
     mut env: JNIEnv,
     _class: JClass,
 ) -> jboolean {
-    guard!(&mut env, "backendAvailable", {
-        let ctx = unsafe { global() };
-        if ctx.is_null() {
-            return JNI_FALSE;
+    guard!(env, "backendAvailable", JNI_FALSE, {
+        match with_global(|c| c.backend_available()) {
+            Ok(true) => JNI_TRUE,
+            Ok(false) => JNI_FALSE,
+            Err(e) => {
+                throw(&mut env, "backendAvailable", e);
+                JNI_FALSE
+            }
         }
-        let ok = unsafe { gs_mobile_backend_available(ctx) != 0 };
-        if ok { JNI_TRUE } else { JNI_FALSE }
     })
-    .map(|b| b as jboolean)
-    .unwrap_or(JNI_FALSE)
 }
 
 /// Build identification, so a crash report can be matched to a commit.
@@ -126,74 +166,70 @@ pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_buildInfo(
     mut env: JNIEnv,
     _class: JClass,
 ) -> jobject {
-    guard!(&mut env, "buildInfo", {
-        let info = crate::mobile::build_info();
+    guard!(env, "buildInfo", std::ptr::null_mut(), {
+        let info = mobile::build_info();
         match env.new_string(info) {
             Ok(s) => s.into_raw(),
-            Err(_) => std::ptr::null_mut(),
+            Err(e) => {
+                throw(&mut env, "buildInfo", e);
+                std::ptr::null_mut()
+            }
         }
     })
-    .unwrap_or(std::ptr::null_mut())
 }
 
 /// Default token budget for chat(). A phone reply that runs to 4096 tokens is
 /// unreadable in a chat bubble and will still be streaming when the user has
 /// scrolled away.
-const DEFAULT_MAX_TOKENS: jint = 256;
+const DEFAULT_MAX_TOKENS: i32 = 256;
 
 /// Generate a completion. Returns a Java String, or throws.
 #[no_mangle]
 pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_chat(
     env: JNIEnv,
-    class: JClass,
+    _class: JClass,
     prompt: JString,
 ) -> jobject {
-    chat_impl(env, class, prompt, DEFAULT_MAX_TOKENS)
+    chat_impl(env, prompt, DEFAULT_MAX_TOKENS)
 }
 
 /// As `chat`, with an explicit token budget. The single-argument form cannot
-/// carry one -- JNI mangles by arity, so this is a distinct name rather than an
+/// carry one — JNI mangles by arity, so this is a distinct name rather than an
 /// overload.
 #[no_mangle]
 pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_chatWithBudget(
     env: JNIEnv,
-    class: JClass,
-    prompt: JString,
-    max_tokens: jint,
-) -> jobject {
-    chat_impl(env, class, prompt, max_tokens)
-}
-
-fn chat_impl(
-    mut env: JNIEnv,
     _class: JClass,
     prompt: JString,
     max_tokens: jint,
 ) -> jobject {
-    guard!(&mut env, "chat", {
-        let ctx = unsafe { global() };
-        if ctx.is_null() {
-            throw(&mut env, "chat");
-            return std::ptr::null_mut();
-        }
+    chat_impl(env, prompt, max_tokens as i32)
+}
+
+fn chat_impl(mut env: JNIEnv, prompt: JString, max_tokens: i32) -> jobject {
+    guard!(env, "chat", std::ptr::null_mut(), {
         let p: String = match env.get_string(&prompt) {
             Ok(s) => s.into(),
-            Err(_) => return std::ptr::null_mut(),
+            Err(e) => {
+                throw(&mut env, "chat", e);
+                return std::ptr::null_mut();
+            }
         };
-        let c = CString::new(p).unwrap_or_default();
-        let out = unsafe { gs_mobile_chat(ctx, c.as_ptr(), max_tokens, 0.2) };
-        if out.is_null() {
-            throw(&mut env, "chat");
-            return std::ptr::null_mut();
-        }
-        let s = unsafe { CStr::from_ptr(out) }.to_string_lossy().into_owned();
-        unsafe { gs_free_string(out) };
-        match env.new_string(s) {
-            Ok(j) => j.into_raw(),
-            Err(_) => std::ptr::null_mut(),
+        let r = call(|c| c.chat(&p, max_tokens, 0.2));
+        match r {
+            Ok(text) => match env.new_string(text) {
+                Ok(j) => j.into_raw(),
+                Err(e) => {
+                    throw(&mut env, "chat", e);
+                    std::ptr::null_mut()
+                }
+            },
+            Err(e) => {
+                throw(&mut env, "chat", e);
+                std::ptr::null_mut()
+            }
         }
     })
-    .unwrap_or(std::ptr::null_mut())
 }
 
 /// OCR. Returns text, or throws — never an empty string on failure.
@@ -203,30 +239,28 @@ pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_runOcr(
     _class: JClass,
     image_path: JString,
 ) -> jobject {
-    guard!(&mut env, "runOcr", {
-        let ctx = unsafe { global() };
-        if ctx.is_null() {
-            throw(&mut env, "runOcr");
-            return std::ptr::null_mut();
-        }
+    guard!(env, "runOcr", std::ptr::null_mut(), {
         let p: String = match env.get_string(&image_path) {
             Ok(s) => s.into(),
-            Err(_) => return std::ptr::null_mut(),
+            Err(e) => {
+                throw(&mut env, "runOcr", e);
+                return std::ptr::null_mut();
+            }
         };
-        let c = CString::new(p).unwrap_or_default();
-        let out = unsafe { gs_mobile_ocr(ctx, c.as_ptr()) };
-        if out.is_null() {
-            throw(&mut env, "runOcr");
-            return std::ptr::null_mut();
-        }
-        let s = unsafe { CStr::from_ptr(out) }.to_string_lossy().into_owned();
-        unsafe { gs_free_string(out) };
-        match env.new_string(s) {
-            Ok(j) => j.into_raw(),
-            Err(_) => std::ptr::null_mut(),
+        match call(|c| c.ocr(&p)) {
+            Ok(text) => match env.new_string(text) {
+                Ok(j) => j.into_raw(),
+                Err(e) => {
+                    throw(&mut env, "runOcr", e);
+                    std::ptr::null_mut()
+                }
+            },
+            Err(e) => {
+                throw(&mut env, "runOcr", e);
+                std::ptr::null_mut()
+            }
         }
     })
-    .unwrap_or(std::ptr::null_mut())
 }
 
 /// Embed a text query. Returns a float array, or throws.
@@ -236,41 +270,25 @@ pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_embedText(
     _class: JClass,
     text: JString,
 ) -> jfloatArray {
-    guard!(&mut env, "embedText", {
-        let ctx = unsafe { global() };
-        if ctx.is_null() {
-            throw(&mut env, "embedText");
-            return std::ptr::null_mut();
-        }
+    guard!(env, "embedText", std::ptr::null_mut(), {
         let t: String = match env.get_string(&text) {
             Ok(s) => s.into(),
-            Err(_) => return std::ptr::null_mut(),
+            Err(e) => {
+                throw(&mut env, "embedText", e);
+                return std::ptr::null_mut();
+            }
         };
-        let c = CString::new(t).unwrap_or_default();
-        let dim = unsafe { gs_mobile_embed_dim(ctx) };
-        if dim < 0 {
-            throw(&mut env, "embedText");
-            return std::ptr::null_mut();
+        match call(|c| c.embed_text(&t)) {
+            Ok(v) => finish_embed(&mut env, &v),
+            Err(e) => {
+                throw(&mut env, "embedText", e);
+                std::ptr::null_mut()
+            }
         }
-        let mut buf = vec![0f32; dim as usize];
-        let n = unsafe { gs_mobile_embed_text(ctx, c.as_ptr(), buf.as_mut_ptr(), dim) };
-        if n < 0 {
-            throw(&mut env, "embedText");
-            return std::ptr::null_mut();
-        }
-        let arr = match env.new_float_array(dim as jint) {
-            Ok(a) => a,
-            Err(_) => return std::ptr::null_mut(),
-        };
-        if env.set_float_array_region(&arr, 0, dim as jint, &buf).is_err() {
-            return std::ptr::null_mut();
-        }
-        arr.into_raw()
     })
-    .unwrap_or(std::ptr::null_mut())
 }
 
-/// Embed an image. The bytes are raw RGB, three per pixel, row-major.
+/// Embed raw RGB pixels, three per pixel, row-major.
 #[no_mangle]
 pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_embedImage(
     mut env: JNIEnv,
@@ -279,87 +297,72 @@ pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_embedImage(
     w: jint,
     h: jint,
 ) -> jfloatArray {
-    guard!(&mut env, "embedImage", {
-        let ctx = unsafe { global() };
-        if ctx.is_null() {
-            throw(&mut env, "embedImage");
-            return std::ptr::null_mut();
-        }
+    guard!(env, "embedImage", std::ptr::null_mut(), {
         if w <= 0 || h <= 0 {
-            throw(&mut env, "embedImage");
+            throw(&mut env, "embedImage", format!("w and h must be > 0, got {w}x{h}"));
             return std::ptr::null_mut();
         }
-        // The array length is checked against the geometry rather than trusted:
-        // a caller that lies about w/h gets an exception rather than a read past
-        // the end of the Java heap.
-        let expect = (w as i64) * (h as i64) * 3;
-        let have = env.get_array_length(&rgb).unwrap_or(0) as i64;
-        if have < expect {
-            throw(&mut env, "embedImage");
-            return std::ptr::null_mut();
-        }
-        let dim = unsafe { gs_mobile_embed_dim(ctx) };
-        if dim < 0 {
-            throw(&mut env, "embedImage");
-            return std::ptr::null_mut();
-        }
-        let mut buf = vec![0f32; dim as usize];
-        let n = unsafe { gs_mobile_embed_image(ctx, rgb.as_raw() as *const u8, w, h, buf.as_mut_ptr(), dim) };
-        if n < 0 {
-            throw(&mut env, "embedImage");
-            return std::ptr::null_mut();
-        }
-        let arr = match env.new_float_array(dim as jint) {
-            Ok(a) => a,
-            Err(_) => return std::ptr::null_mut(),
+        let expect = (w as usize) * (h as usize) * 3;
+        let len = match env.get_array_length(&rgb) {
+            Ok(n) => n as usize,
+            Err(e) => {
+                throw(&mut env, "embedImage", e);
+                return std::ptr::null_mut();
+            }
         };
-        if env.set_float_array_region(&arr, 0, dim as jint, &buf).is_err() {
+        // Checked here as well as in MobileCtx. A short array is a caller bug
+        // and must not reach as_raw(), which would hand the C side a length it
+        // cannot check.
+        if len < expect {
+            throw(&mut env, "embedImage", format!("expected {expect} bytes for {w}x{h} RGB, got {len}"));
             return std::ptr::null_mut();
         }
-        arr.into_raw()
+        // A copy rather than get_byte_array_elements: the JVM may move or pin
+        // the backing array, and the C call must not observe that mid-decode.
+        let owned: Vec<u8> = match env.convert_byte_array(&rgb) {
+            Ok(v) => v,
+            Err(e) => {
+                throw(&mut env, "embedImage", e);
+                return std::ptr::null_mut();
+            }
+        };
+        match call(|c| c.embed_image(&owned, w as i32, h as i32)) {
+            Ok(v) => finish_embed(&mut env, &v),
+            Err(e) => {
+                throw(&mut env, "embedImage", e);
+                std::ptr::null_mut()
+            }
+        }
     })
-    .unwrap_or(std::ptr::null_mut())
 }
 
-/// Release the process-wide context.
+/// Copy a float vector into a fresh Java array, or null.
+fn finish_embed(env: &mut JNIEnv, buf: &[f32]) -> jfloatArray {
+    if buf.is_empty() {
+        // An empty vector is a failure here: callers index into it, and an empty
+        // cosine similarity is silently 0.0 rather than an error.
+        throw(env, "embed", "embedder returned no dimensions");
+        return std::ptr::null_mut();
+    }
+    let arr = match env.new_float_array(buf.len() as jint) {
+        Ok(a) => a,
+        Err(e) => {
+            throw(env, "embed", e);
+            return std::ptr::null_mut();
+        }
+    };
+    if let Err(e) = env.set_float_array_region(&arr, 0, buf) {
+        throw(env, "embed", e);
+        return std::ptr::null_mut();
+    }
+    arr.into_raw()
+}
+
+/// Release the process-wide context. Safe to call when nothing was loaded.
 #[no_mangle]
 pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_shutdown(
     _env: JNIEnv,
     _class: JClass,
 ) {
-    let ctx = unsafe { global() };
-    if !ctx.is_null() {
-        unsafe { gs_mobile_free(ctx) };
-        unsafe { set_global(std::ptr::null_mut()) };
-    }
-}
-
-// Imported from the C++ portable layer. Declared here rather than routed
-// through gs-ffi/src/mobile.rs so the JNI surface keeps its own stable names.
-extern "C" {
-    fn gs_mobile_create(model_path: *const c_char, n_ctx: c_int, n_threads: c_int) -> *mut c_void;
-    fn gs_mobile_free(ctx: *mut c_void);
-    fn gs_mobile_backend_available(ctx: *mut c_void) -> c_int;
-    fn gs_mobile_chat(
-        ctx: *mut c_void,
-        prompt: *const c_char,
-        max_tokens: c_int,
-        temperature: f32,
-    ) -> *mut c_char;
-    fn gs_mobile_ocr(ctx: *mut c_void, image_path: *const c_char) -> *mut c_char;
-    fn gs_mobile_embed_dim(ctx: *mut c_void) -> c_int;
-    fn gs_mobile_embed_image(
-        ctx: *mut c_void,
-        rgb: *const u8,
-        w: c_int,
-        h: c_int,
-        out: *mut f32,
-        cap: c_int,
-    ) -> c_int;
-    fn gs_mobile_embed_text(
-        ctx: *mut c_void,
-        text: *const c_char,
-        out: *mut f32,
-        cap: c_int,
-    ) -> c_int;
+    set_global(None);
 }

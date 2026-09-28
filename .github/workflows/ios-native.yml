@@ -111,7 +111,11 @@ jobs:
           #     first member: __.SYMDEF
           #     ar: target/aarch64-apple-ios/release/libgs_ffi.a: No such file
           #         or directory
-          ABS="$(cd native && pwd)/$SRC"
+          # The step already has `working-directory: native`, so `cd native`
+          # failed. Raw error, run 36374785497:
+          #     cd: native: No such file or directory
+          # Resolved against the step's own cwd instead of a hard-coded parent.
+          ABS="$(cd "$(dirname "$SRC")" && pwd)/$(basename "$SRC")"
           # __.SYMDEF is a macOS archive pseudo-member, not an object file.
           # `ar t | head -1` returns it, so filter the __-prefixed entries out
           # before extracting.

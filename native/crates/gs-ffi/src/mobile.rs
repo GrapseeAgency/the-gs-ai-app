@@ -91,11 +91,13 @@ pub extern "C" fn gs_ffi_mobile_free(ctx: *mut GS_MobileCtx) {
 #[no_mangle]
 pub extern "C" fn gs_ffi_mobile_embed_image(
     ctx: *mut GS_MobileCtx,
-    image_path: *const c_char,
+    rgb: *const u8,
+    w: c_int,
+    h: c_int,
     out: *mut f32,
     cap: c_int,
 ) -> c_int {
-    unsafe { gs_mobile_embed_image(ctx, image_path, out, cap) }
+    unsafe { gs_mobile_embed_image(ctx, rgb, w, h, out, cap) }
 }
 
 #[no_mangle]
@@ -123,7 +125,15 @@ extern "C" {
     fn gs_mobile_embed_dim(ctx: *mut GS_MobileCtx) -> c_int;
     fn gs_mobile_embed_image(
         ctx: *mut GS_MobileCtx,
-        image_path: *const c_char,
+        rgb: *const u8,
+        w: c_int,
+        h: c_int,
+        out: *mut f32,
+        cap: c_int,
+    ) -> c_int;
+    fn gs_mobile_embed_text(
+        ctx: *mut GS_MobileCtx,
+        text: *const c_char,
         out: *mut f32,
         cap: c_int,
     ) -> c_int;
@@ -163,9 +173,23 @@ fn last_error() -> String {
     unsafe { CStr::from_ptr(p) }.to_string_lossy().into_owned()
 }
 
-/// A mobile context. Send is NOT implemented: llama.cpp contexts are not
-/// concurrency-safe, and the mobile surface serialises through the same lock the
-/// JNI shim uses.
+/// A mobile context.
+///
+/// Send is implemented deliberately, and the JNI layer stores its one context in
+/// a `static Mutex<Option<MobileCtx>>`. A bare `static` holding a raw pointer is
+/// unsound the moment two threads read it, and a JNI entry point is reachable
+/// from any thread in the JVM.
+///
+/// SAFETY of the Send impl: the C context is not itself concurrency-safe, but
+/// every access goes through the Mutex that owns it, so no two threads are ever
+/// inside the C call at once. Moving the handle between threads moves only the
+/// pointer, never concurrent use of it. Removing this impl is what would make
+/// the JNI global unsound, which is why it is an `unsafe impl` with its argument
+/// written down rather than a derived bound.
+// SAFETY: see the type-level comment above. Access is serialised by the owning
+// Mutex in every call site.
+unsafe impl Send for MobileCtx {}
+
 pub struct MobileCtx {
     raw: *mut GS_MobileCtx,
 }
@@ -241,13 +265,50 @@ impl MobileCtx {
         Ok(d as usize)
     }
 
-    pub fn embed_image(&self, image_path: &str) -> Result<Vec<f32>, MobileError> {
+    /// Embed raw 8-bit RGB, three bytes per pixel, row-major.
+    ///
+    /// The length is checked against `w * h * 3` rather than trusted: a caller
+    /// that lies about the geometry would otherwise read past the end of the
+    /// buffer, which is a memory-safety bug and not a wrong answer.
+    pub fn embed_image(&self, rgb: &[u8], w: i32, h: i32) -> Result<Vec<f32>, MobileError> {
+        if w <= 0 || h <= 0 {
+            return Err(MobileError::InvalidArg("w and h must be > 0".into()));
+        }
+        let need = (w as usize).saturating_mul(h as usize).saturating_mul(3);
+        if rgb.len() < need {
+            return Err(MobileError::InvalidArg(format!(
+                "expected {need} bytes for {w}x{h} RGB, got {}",
+                rgb.len()
+            )));
+        }
         let dim = self.embed_dim()?;
         let mut buf = vec![0f32; dim];
-        let p = CString::new(image_path)
-            .map_err(|_| MobileError::InvalidArg("path contains NUL".into()))?;
         let n = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
-            gs_mobile_embed_image(self.raw, p.as_ptr(), buf.as_mut_ptr(), dim as c_int)
+            gs_mobile_embed_image(
+                self.raw,
+                rgb.as_ptr(),
+                w as c_int,
+                h as c_int,
+                buf.as_mut_ptr(),
+                dim as c_int,
+            )
+        }))
+        .unwrap_or(-1);
+        if n < 0 {
+            return Err(MobileError::Unavailable(last_error()));
+        }
+        buf.truncate(n as usize);
+        Ok(buf)
+    }
+
+    /// Embed a text query. Mirrors [`Self::embed_image`] on the error contract.
+    pub fn embed_text(&self, text: &str) -> Result<Vec<f32>, MobileError> {
+        let dim = self.embed_dim()?;
+        let mut buf = vec![0f32; dim];
+        let p =
+            CString::new(text).map_err(|_| MobileError::InvalidArg("text contains NUL".into()))?;
+        let n = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+            gs_mobile_embed_text(self.raw, p.as_ptr(), buf.as_mut_ptr(), dim as c_int)
         }))
         .unwrap_or(-1);
         if n < 0 {

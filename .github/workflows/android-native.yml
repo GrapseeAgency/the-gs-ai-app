@@ -53,6 +53,22 @@ jobs:
       - name: Check out
         uses: actions/checkout@v4
 
+      # The JNI bridge is `#[cfg(target_os = "android")]` by default, so a type
+      # error in it is invisible to `cargo test` and to `cargo build` on a host.
+      # That is not theoretical: nine E0308 errors sat in src/jni.rs until the
+      # arm64 build ran (run 36374643605). This step is the fix for the blind
+      # spot — a few seconds of host compilation, before the NDK is even
+      # installed. It needs no ONNX and no llama.cpp, so it is the cheapest
+      # possible place to catch the class of error that was invisible.
+      - name: Type-check the JNI bridge on the host
+        working-directory: native
+        run: |
+          set -euo pipefail
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+            | sh -s -- -y --profile minimal --default-toolchain stable
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          cargo check -p gs-ffi --features jni-typecheck
+
       - name: Install Rust
         run: |
           set -euo pipefail

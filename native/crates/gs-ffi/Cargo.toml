@@ -16,13 +16,24 @@ name = "gs_ffi"
 # rlib    -> the workspace binaries keep linking it exactly as before
 crate-type = ["rlib", "cdylib", "staticlib"]
 
+[features]
+# Compiles src/jni.rs on a non-Android host so it is type-checked by `cargo
+# check` and `cargo test` rather than only by the cross-compile job. The
+# `Java_*` exports are still not emitted on a desktop build: the module below is
+# also gated on the target.
+jni-typecheck = []
+
 [dependencies]
 gs-common = { workspace = true }
 tracing   = { workspace = true }
 
-# Android only. The JNI glue is meaningless on a desktop build, and the crate
-# pulls in a C dependency that has no purpose off-device.
-[target.'cfg(target_os = "android")'.dependencies]
+# Not target-gated. The `jni` crate is pure Rust (jni-sys has no C component),
+# so it costs a few seconds of compile time on a desktop build and buys the
+# ability to type-check src/jni.rs on any host:
+#     cargo check -p gs-ffi --features jni-typecheck
+# That check exists because src/jni.rs is `#[cfg(target_os = "android")]` by
+# default, and 9 type errors in it shipped unnoticed until the arm64 build ran.
+# A blind spot that only an NDK can see is a blind spot.
 jni = "0.21"
 
 [build-dependencies]
