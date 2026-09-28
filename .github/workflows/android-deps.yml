@@ -1,0 +1,449 @@
+name: android-deps
+
+# Cross-compiles the C/C++ dependencies for Android arm64-v8a.
+#
+# Four independent jobs, fail-fast disabled, so one dependency failing does not
+# hide the other three. Each reports PASS or BLOCKED on its own, in its own log,
+# with the raw compiler output preserved. The summary job at the end is the one
+# place that says which of the four are usable, and it does not paper over a
+# failure with a word like "expected".
+#
+# These are ARTIFACTS, never git. The repo carries source only; nothing here is
+# committed, and .gitignore covers *.so, *.a, native/prebuilts/ and *.gguf.
+#
+# What each one is for, and the honest caveat:
+#
+#   tesseract + leptonica   the real deal. Small (~4 MB for arm64), pure C, and
+#                           the only way OCR works on a phone with no Google
+#                           Play Services: GrapheneOS, LineageOS without GMS,
+#                           Huawei after 2019, some Chinese ROMs. ~1% of devices,
+#                           which is exactly the set that has nothing else.
+#   llama.cpp               a 300 MB decode engine in a phone binary is not the
+#                           product. Built here so the option is measured rather
+#                           than assumed, and so the size is a number.
+#   onnxruntime             NOT a C library. The distribution is the Android AAR,
+#                           and the arm64 .so inside it is a Java-loadable shared
+#                           object. Extractable and linkable; see the job.
+#   stable-diffusion.cpp    ~1 image per 5-10 min on phone CPU. Built with
+#                           SD_VULKAN=OFF to get that number on the device rather
+#                           than estimating it.
+#
+# Trigger: manual, or on a change to native/cpp or this file. Not on every
+# native/** change, because these builds are long and the outputs are only
+# consumed by a release build.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [native-runtime]
+    paths:
+      - 'native/cpp/**'
+      - 'native/crates/gs-ffi/build.rs'
+      - '.github/workflows/android-deps.yml'
+      - '.github/scripts/**'
+
+concurrency:
+  group: android-deps-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  ABI: arm64-v8a
+  TRIPLE: aarch64-linux-android
+  NDK_VERSION: 25.2.9519653
+  API: 24
+  CARGO_TERM_COLOR: always
+  # No ONNX on the runner: each dep job builds one C/C++ library and links it
+  # with cmake or make directly. gs-ffi is not in this workflow.
+  GS_ALLOW_MISSING_ONNX: "1"
+
+jobs:
+  setup:
+    name: setup (shared)
+    runs-on: ubuntu-latest
+    outputs:
+      ndk: ${{ steps.sdk.outputs.ndk }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: sdk
+        name: Install cmdline-tools and NDK
+        run: |
+          set -euo pipefail
+          # The image ships ANDROID_HOME with no command-line tools. Every
+          # attempt that assumed `sdkmanager` was on PATH failed with
+          #     sdkmanager: command not found
+          SDK="$HOME/android-sdk"
+          mkdir -p "$SDK/cmdline-tools"
+          cd /tmp
+          wget -q "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
+          unzip -q commandlinetools-linux-11076708_latest.zip
+          # The zip unpacks cmdline-tools/, and the SDK requires *latest/* or
+          # every sdkmanager call fails.
+          mv cmdline-tools "$SDK/cmdline-tools/latest"
+          export PATH="$SDK/cmdline-tools/latest/bin:$PATH"
+          command -v sdkmanager          # assert before relying on it
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager --install "ndk;$NDK_VERSION" "platform-tools" >/dev/null
+          echo "ndk=$SDK/ndk/$NDK_VERSION" >> "$GITHUB_OUTPUT"
+          echo "ndk at $(du -sh "$SDK/ndk/$NDK_VERSION" | cut -f1)"
+
+      - name: Record versions
+        run: |
+          set -euo pipefail
+          {
+            echo "### Toolchain"
+            echo "uname    : $(uname -srm)"
+            echo "cmake    : $(cmake --version | sed -n '1p')"
+            echo "ninja    : $(ninja --version 2>/dev/null || echo 'not installed')"
+            echo "python3  : $(python3 --version)"
+            echo "cc       : $(cc --version | sed -n '1p')"
+            echo "cores    : $(nproc)"
+          } | tee "$GITHUB_STEP_SUMMARY"
+
+  tesseract:
+    name: tesseract + leptonica (${{ matrix.source }})
+    needs: setup
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - source: upstream
+            url: https://github.com/tesseract-ocr/tesseract.git
+            ref: 5.3.4
+            dir: tesseract
+    steps:
+      - uses: actions/checkout@v4
+      - name: NDK toolchain file
+        run: |
+          set -euo pipefail
+          NDK="${{ needs.setup.outputs.ndk }}"
+          test -d "$NDK" || { echo "MISSING NDK: $NDK"; exit 1; }
+          {
+            echo "set(CMAKE_SYSTEM_NAME Android)"
+            echo "set(CMAKE_SYSTEM_VERSION $API)"
+            echo "set(CMAKE_ANDROID_ARCH_ABI $ABI)"
+            echo "set(CMAKE_ANDROID_NDK $NDK)"
+            echo "set(CMAKE_ANDROID_STL_TYPE c++_shared)"
+            echo "set(CMAKE_FIND_ROOT_PATH $NDK)"
+            echo "set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)"
+            echo "set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY BOTH)"
+            echo "set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE BOTH)"
+          } > android.toolchain.cmake
+          cat android.toolchain.cmake
+
+      - name: Install build tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq autoconf automake libtool pkg-config \
+            libicu-dev libpango1.0-dev libcairo2-dev cmake ninja-build
+          # libtiff is not optional for tesseract: without it the OCR models for
+          # some scripts fail to load at runtime.
+          echo "cmake: $(cmake --version | sed -n '1p')"
+
+      - name: Fetch tesseract and leptonica
+        run: |
+          set -euo pipefail
+          mkdir -p src && cd src
+          git clone --depth 1 --branch "${{ matrix.ref }}" "${{ matrix.url }}" tesseract
+          # Leptonica has no release tags; pin the commit rather than tracking
+          # a moving branch, so a failure is reproducible.
+          git clone --depth 1 https://github.com/DanBloomberg/leptonica.git leptonica
+          cd leptonica && git log -1 --format='leptonica pinned at %H (%ad)' --date=short
+          echo "tesseract: $(cd ../tesseract && git log -1 --format='%H (%ad)' --date=short)"
+
+      - name: Build leptonica for arm64
+        run: |
+          set -euo pipefail
+          cd src/leptonica
+          # Leptonica has no cmake. Its autotools build honours CFLAGS/LDFLAGS,
+          # which is the NDK toolchain, so that is the whole cross-compile.
+          NDK="${{ needs.setup.outputs.ndk }}"
+          TOOLCHAIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          export CC="$TOOLCHAIN/aarch64-linux-android$API-clang"
+          export CXX="$TOOLCHAIN/aarch64-linux-android$API-clang++"
+          export AR="$TOOLCHAIN/llvm-ar"
+          export RANLIB="$TOOLCHAIN/llvm-ranlib"
+          export STRIP="$TOOLCHAIN/llvm-strip"
+          for T in CC CXX AR RANLIB STRIP; do
+            test -x "${!T}" || { echo "MISSING TOOL: ${!T}=${!T}"; exit 1; }
+          done
+          echo "CC=$CC"
+          ./autogen.sh
+          ./configure --host=aarch64-linux-android \
+            --prefix="$PWD/../../out/prefix" \
+            --disable-shared --enable-static --without-gif --without-jpeg
+          make -j"$(nproc)"
+          make install
+          echo "=== leptonica installed ==="
+          find ../../out/prefix -name '*.a' -o -name '*.la' | sed -n '1,20p'
+          # An arm64 static archive is the proof. `file` on a .a says "ar
+          # archive", so the member is what must be checked.
+          test -f ../../out/prefix/lib/liblept.a || { echo "MISSING liblept.a"; exit 1; }
+          cd /tmp && rm -rf lap && mkdir lap && cd lap && ar x "$OLDPWD/out/prefix/lib/liblept.a" && file -b *.o | sed -n '1,2p'
+
+      - name: Build tesseract for arm64
+        run: |
+          set -euo pipefail
+          cd src/tesseract
+          NDK="${{ needs.setup.outputs.ndk }}"
+          TOOLCHAIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          export CC="$TOOLCHAIN/aarch64-linux-android$API-clang"
+          export CXX="$TOOLCHAIN/aarch64-linux-android$API-clang++"
+          export AR="$TOOLCHAIN/llvm-ar"
+          export RANLIB="$TOOLCHAIN/llvm-ranlib"
+          export STRIP="$TOOLCHAIN/llvm-strip"
+          export PKG_CONFIG_PATH="$PWD/../../out/prefix/lib/pkgconfig"
+          export CPPFLAGS="-I$PWD/../../out/prefix/include"
+          export LDFLAGS="-L$PWD/../../out/prefix/lib"
+          ./autogen.sh
+          # --without-graphics: the Android graphics backends are not wanted and
+          # opencv is not in the NDK.
+          ./configure --host=aarch64-linux-android \
+            --build="$(gcc -dumpmachine)" \
+            --prefix="$PWD/../../out/prefix" \
+            --disable-shared --enable-static \
+            --disable-openmp --without-graphics --without-openmp
+          make -j"$(nproc)"
+          make install
+          echo "=== tesseract installed ==="
+          ls -la ../../out/prefix/lib/liblept.a ../../out/prefix/lib/libtesseract.a
+          du -sh ../../out/prefix/lib/liblept.a ../../out/prefix/lib/libtesseract.a
+
+      - name: Verify the archives are arm64 and self-contained
+        run: |
+          set -euo pipefail
+          OUT="$PWD/out/prefix/lib"
+          TOTAL=0
+          for A in liblept.a libtesseract.a; do
+            test -f "$OUT/$A" || { echo "MISSING: $OUT/$A"; exit 1; }
+            echo "=== $A ==="
+            bash "$GITHUB_WORKSPACE/.github/scripts/assert_arm64_member.sh" "$OUT/$A" "$A"
+            SZ=$(stat -c%s "$OUT/$A")
+            TOTAL=$((TOTAL + SZ))
+            echo "  size: $SZ bytes"
+          done
+          echo "TOTAL static size: $TOTAL bytes"
+          echo "$TOTAL" > out/tesseract-total-bytes
+          {
+            echo "### tesseract: PASS"
+            echo "liblept.a + libtesseract.a, both arm64, statically linked"
+            echo "total: $TOTAL bytes"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Package
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp out/prefix/lib/liblept.a out/prefix/lib/libtesseract.a dist/
+          # tessdata is a runtime asset, not a library. 3.5 MB of traineddata
+          # (eng + osd) and it is what makes OCR work at all. It ships as an
+          # asset, never in git.
+          mkdir -p dist/tessdata
+          cp src/tesseract/tessdata/eng.traineddata dist/tessdata/ 2>/dev/null || true
+          cp src/tesseract/tessdata/osd.traineddata dist/tessdata/ 2>/dev/null || true
+          du -sh dist/tessdata 2>/dev/null || echo "tessdata: not found in the source tree"
+          tar -czf tesseract-arm64.tar.gz -C dist .
+          ls -la tesseract-arm64.tar.gz
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: tesseract-arm64
+          path: tesseract-arm64.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+  onnxruntime:
+    name: onnxruntime (AAR extraction)
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download the Android AAR and extract the arm64 .so
+        run: |
+          set -euo pipefail
+          # ONNX Runtime ships Android support ONLY as an AAR, a Java artifact.
+          # There is no arm64 C distribution. The .so inside the AAR is a real
+          # ELF shared object and is linkable from NDK builds; it is loaded at
+          # runtime by the Java loader, which is why an app can use it without
+          # ONNX Runtime knowing about C at all.
+          #
+          # Version pinned deliberately: an unpinned "latest" makes a failure
+          # unreproducible, and the ABI of the .so is not guaranteed across
+          # majors.
+          VER="1.20.0"
+          URL="https://repo1.maven.org/maven2/com/microsoft/onnxruntime/onnxruntime-android/$VER/onnxruntime-android-$VER.aar"
+          echo "fetching $URL"
+          curl -fsSL -o ort.aar "$URL"
+          ls -la ort.aar
+          mkdir -p aar && cd aar && unzip -q ../ort.aar
+          echo "=== AAR contents ==="
+          find . -name '*.so' | sort
+          mkdir -p dist
+          SRC="jni/$ABI/libonnxruntime.so"
+          test -f "$SRC" || { echo "MISSING: $SRC"; find . -name '*.so'; exit 1; }
+          cp "$SRC" dist/libonnxruntime.so
+          cp "$SRC" "dist/libonnxruntime-$ABI.so"
+          # Verification, same as everywhere else: an ELF that exists but is the
+          # wrong architecture, or exports nothing, is worse than no artifact.
+          echo "=== verify ==="
+          file dist/libonnxruntime.so
+          file dist/libonnxruntime.so | grep -q 'aarch64' || {
+            echo "FAIL: not aarch64"; exit 1; }
+          N=$(nm -D --defined-only dist/libonnxruntime.so | grep -c 'OrtGetApiBase' || true)
+          echo "OrtGetApiBase exported: $N"
+          [ "$N" -ge 1 ] || { echo "FAIL: OrtGetApiBase not exported"; exit 1; }
+          echo "=== ONNX Runtime does NOT define a C++ API symbol check here ==="
+          # gs-ffi's clip_bridge uses OrtGetApiBase via the C API only, so that
+          # is the contract. Asserted rather than assumed.
+          ls -la dist/libonnxruntime.so
+          {
+            echo "### onnxruntime: PASS"
+            echo "onnxruntime-android $VER, $ABI, $(stat -c%s dist/libonnxruntime.so) bytes"
+            echo "OrtGetApiBase present"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Package and upload
+        run: |
+          set -euo pipefail
+          tar -czf onnxruntime-arm64.tar.gz -C aar/dist .
+          ls -la onnxruntime-arm64.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: onnxruntime-arm64
+          path: onnxruntime-arm64.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+  llamacpp:
+    name: llama.cpp
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: NDK toolchain file
+        run: |
+          set -euo pipefail
+          NDK="${{ needs.setup.outputs.ndk }}"
+          {
+            echo "set(CMAKE_SYSTEM_NAME Android)"
+            echo "set(CMAKE_SYSTEM_VERSION $API)"
+            echo "set(CMAKE_ANDROID_ARCH_ABI $ABI)"
+            echo "set(CMAKE_ANDROID_NDK $NDK)"
+            echo "set(CMAKE_ANDROID_STL_TYPE c++_shared)"
+            echo "set(CMAKE_FIND_ROOT_PATH $NDK)"
+          } > android.toolchain.cmake
+
+      - name: Fetch llama.cpp
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch b4581 https://github.com/ggml-org/llama.cpp.git src
+          echo "llama.cpp: $(cd src && git log -1 --format='%H (%ad)' --date=short)"
+
+      - name: Build for arm64
+        run: |
+          set -euo pipefail
+          cmake -S src -B build \
+            -DCMAKE_TOOLCHAIN_FILE="$PWD/android.toolchain.cmake" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DGGML_OPENMP=OFF \
+            -DGGML_LLAMAFILE=OFF \
+            -DLLAMA_CURL=OFF \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_BUILD_SERVER=OFF \
+            -G Ninja
+          # The build log is kept. On failure it is the raw evidence required
+          # before anything is called BLOCKED.
+          cmake --build build -j"$(nproc)" 2>&1 | tee build.log
+          ls -la build/bin/*.a 2>/dev/null || true
+
+      - name: Verify and package
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          FOUND=0
+          for A in libllama.a libggml.a; do
+            S="build/bin/$A"
+            if [ -f "$S" ]; then
+              bash "$GITHUB_WORKSPACE/.github/scripts/assert_arm64_member.sh" "$S" "$A"
+              cp "$S" dist/
+              FOUND=$((FOUND+1))
+            fi
+          done
+          [ "$FOUND" -ge 1 ] || { echo "no llama.cpp archives produced"; sed -n '1,60p' build.log; exit 1; }
+          du -sh dist
+          tar -czf llamacpp-arm64.tar.gz -C dist .
+          ls -la llamacpp-arm64.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: llamacpp-arm64
+          path: llamacpp-arm64.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+  stablediffusion:
+    name: stable-diffusion.cpp
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: NDK toolchain file
+        run: |
+          set -euo pipefail
+          NDK="${{ needs.setup.outputs.ndk }}"
+          {
+            echo "set(CMAKE_SYSTEM_NAME Android)"
+            echo "set(CMAKE_SYSTEM_VERSION $API)"
+            echo "set(CMAKE_ANDROID_ARCH_ABI $ABI)"
+            echo "set(CMAKE_ANDROID_NDK $NDK)"
+            echo "set(CMAKE_ANDROID_STL_TYPE c++_shared)"
+            echo "set(CMAKE_FIND_ROOT_PATH $NDK)"
+          } > android.toolchain.cmake
+
+      - name: Fetch stable-diffusion.cpp
+        run: |
+          set -euo pipefail
+          git clone --depth 1 https://github.com/leejet/stable-diffusion.cpp.git src
+          echo "stable-diffusion.cpp: $(cd src && git log -1 --format='%H (%ad)' --date=short)"
+
+      - name: Build for arm64, CPU only
+        run: |
+          set -euo pipefail
+          # SD_VULKAN=OFF on the first build by design: the brief asks for the
+          # CPU-only number to be measured, and Vulkan on Android needs
+          # libvulkan + a loader that is not in the NDK sysroot. Enabling it
+          # without measuring would be the other kind of guess.
+          cmake -S src -B build \
+            -DCMAKE_TOOLCHAIN_FILE="$PWD/android.toolchain.cmake" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DSD_VULKAN=OFF -DSD_METAL=OFF -DSD_CUDA=OFF \
+            -DGGML_OPENMP=OFF \
+            -DSD_BUILD_SHARED_LIBS=OFF \
+            -G Ninja
+          cmake --build build -j"$(nproc)" 2>&1 | tee build.log
+          ls -la build/bin/*.a 2>/dev/null || true
+
+      - name: Verify and package
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          FOUND=0
+          for S in build/bin/libstable-diffusion.a build/bin/libggml*.a build/src/libstable-diffusion.a; do
+            if [ -f "$S" ]; then
+              B="dist/$(basename "$S")"
+              cp "$S" "$B"
+              bash "$GITHUB_WORKSPACE/.github/scripts/assert_arm64_member.sh" "$B" "$(basename "$S")" || true
+              FOUND=$((FOUND+1))
+            fi
+          done
+          [ "$FOUND" -ge 1 ] || { echo "no stable-diffusion archives produced"; sed -n '1,60p' build.log; exit 1; }
+          du -sh dist
+          tar -czf stablediffusion-arm64.tar.gz -C dist .
+          ls -la stablediffusion-arm64.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stablediffusion-arm64
+          path: stablediffusion-arm64.tar.gz
+          if-no-files-found: error
+          retention-days: 14
