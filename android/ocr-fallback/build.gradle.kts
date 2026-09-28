@@ -40,13 +40,36 @@ android {
         // Must match the base module's minSdk. Play refuses a split whose
         // minSdk is lower, and the error does not name the mismatch.
         minSdk = 26
+        // Must match the base module's versionCode. Raw error, run 36392220316:
+        //     No matching variant of project ':ocr-fallback' was found. The
+        //     consumer was configured to find a component for use during
+        //     'android-reverse-meta-data' ... attribute 'BuildTypeAttr' with
+        //     value 'debug'
+        // A dynamic feature is a split OF the base APK, so the two must agree on
+        // identity as well as on ABI. A versionCode behind the base is refused
+        // by Play at install time with an error that names neither module.
+        versionCode = 73
     }
 
-    // A dynamic feature is a LIBRARY module, not an application. It has no
-    // launcher, no versionName and no applicationId.
+    // A dynamic feature is a LIBRARY module, not an application: no launcher,
+    // no applicationId. Its build types must EXPLICITLY mirror the base's, or
+    // AGP cannot match a variant for the split and reports a resolution error
+    // that reads like a dependency problem rather than a missing build type.
     buildTypes {
+        getByName("debug") {
+            isMinifyEnabled = false
+        }
         release {
             isMinifyEnabled = false
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+        }
+    }
+
+    // A split must not be published to a maven repo. Reverse-metadata
+    // publication is what the resolution error above was about.
+    publishing {
+        singleVariant("release") {
+            withSourcesJar(false)
         }
     }
 }
