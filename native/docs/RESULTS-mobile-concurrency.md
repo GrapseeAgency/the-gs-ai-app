@@ -440,7 +440,7 @@ Runs 36385099961 (attempt 4) and 36385724635 (attempt 5).
 |---|---|---|
 | onnxruntime | **PASS** | 12,528,434 B, aarch64 ELF, `OrtGetApiBase` present |
 | llama.cpp | **PASS** | `libllama.a` 2,779,124 B, `libggml.a` 80,556 B, `libggml-base.a` 1,001,246 B — all aarch64 |
-| tesseract + leptonica | **PASS** | stripped 12,282,294 B; raw 86,252,478 B |
+| tesseract + leptonica | **PASS** | 12,282,294 B stripped uncompressed; 3,721,175 B as the shipped .tar.gz |
 | stable-diffusion.cpp | **BLOCKED** | five attempts, logs below |
 
 **Tesseract, which is the one that actually matters.** It is the fallback for the
@@ -463,11 +463,27 @@ brief's ~4 MB estimate was roughly a third of reality. Autotools builds static
 archives with far more than the object code a phone would load, and 7.2 MB of
 `libtesseract` is mostly C++ and the LSTM engine.
 
-**This is the number to argue about, and it is the number that decides whether
-Tesseract ships.** 12.3 MB of static libraries in an APK, plus ~15 MB of
-`eng.traineddata`, is ~27 MB added to a download for a user base segment that is
-1% of installs. That may still be the right trade — those users have no OCR at
-all otherwise — but it should be a decision, not an accident of measurement.
+**This is the number to argue about, and it decides whether Tesseract ships.**
+Three different figures, all true, and the choice between them is a real
+decision rather than a presentation one:
+
+    86,252,478 B   unstripped archives -- not what ships, debug symbols and DWARF
+    12,282,294 B   stripped, uncompressed -- what occupies space on the device
+     3,721,175 B   the shipped .tar.gz, gzipped
+
+An APK stores `.so` entries compressed and extracts them at install, so what the
+user's storage actually costs is the 12.3 MB figure and what the download costs
+is closer to the 3.7 MB one. Plus ~15 MB of `eng.traineddata`, which is a
+runtime asset rather than a library.
+
+The brief expected ~4 MB. The gzipped artifact is 3.7 MB and the brief was
+therefore close to right about the download; it was off by 3x about device
+storage. Both statements matter and quoting only the flattering one is how a 4 MB
+expectation survives contact with a real build.
+
+Whether this ships at all is still a judgement call: ~12 MB of device storage and
+a download for a segment that is 1% of installs. Those users have no OCR at all
+otherwise, which is the argument for it.
 
 ### ONNX Runtime is not a C library
 
