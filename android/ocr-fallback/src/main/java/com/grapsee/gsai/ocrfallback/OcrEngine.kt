@@ -1,4 +1,4 @@
-package com.grapsee.gsai.ocr
+package com.grapsee.gsai.ocrfallback
 
 import android.content.Context
 import android.util.Log
@@ -17,6 +17,21 @@ import kotlin.coroutines.resumeWithException
 
 /**
  * OCR engine selection, and the one-time install of the fallback.
+ *
+ * MOVED OUT OF THE APP MODULE. It was in app/src/main and would not compile:
+ * Play Core was not resolving onto the classpath, so every splitinstall type was
+ * an unresolved reference --
+ *     Unresolved reference 'SplitInstallStateUpdateListener'.
+ *     Unresolved reference 'SplitInstallState'.
+ *     Unresolved reference 'getInstalledModuleNames'.
+ *     Unresolved reference 'uninstallModule'.
+ * and one call site got past that to a type mismatch against
+ * com.google.android.play.core.splitinstall.SplitInstallStateUpdateListener.
+ *
+ * The code belongs HERE, in the feature module, which is where the decision to
+ * use the fallback belongs. The app module should not reference the fallback's
+ * types at all: it asks the module whether the module is installed, and never
+ * links against it.
  *
  * ## The two paths
  *
