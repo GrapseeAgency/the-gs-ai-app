@@ -94,7 +94,22 @@ jobs:
           # --no-daemon because a runner has one process and gradle's daemon
           # survives the step and eats the next one.
           gradle --version
-          gradle --no-daemon --stacktrace :app:compileDebugKotlin
+          # --info, because at the default level Gradle reports only
+          #   Compilation error. See log for more details
+          # and the actual `e: file://...` lines never reach the job log.
+          # Raw, run 36383562738. That is the same defect as every other
+          # swallowed diagnostic in this repo's history: a build that fails
+          # without saying why, which costs a full re-run to diagnose.
+          # --console=plain so the lines are not wrapped in ANSI box drawing.
+          gradle --no-daemon --console=plain --info --stacktrace \
+            :app:compileDebugKotlin 2>&1 | tee compile.log
+          # Echo the diagnostics on their own, so a failure is legible without
+          # scrolling a 4000-line --info log.
+          echo "=== kotlin diagnostics ==="
+          grep -E '^e: |^w: .*(GsNative|Model|Local)' compile.log | sed -n '1,80p' || true
+          echo "=== (end) ==="
+          # Fail on gradle's status, not on grep's.
+          test "${PIPESTATUS[0]}" -eq 0
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
           # The Kotlin module references GsNative's JNI surface only through
@@ -107,7 +122,7 @@ jobs:
         working-directory: android
         run: |
           set -euo pipefail
-          gradle --no-daemon --stacktrace :app:testDebugUnitTest
+          gradle --no-daemon --console=plain --stacktrace :app:testDebugUnitTest
         continue-on-error: true
 
       - name: Report

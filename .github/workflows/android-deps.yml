@@ -132,9 +132,25 @@ jobs:
           done
           echo "CC=$CC"
           ./autogen.sh
+          # Every optional image library is disabled, and libpng is the reason
+          # this step exists. Raw, run 36383749573:
+          #     ld: error: unable to find library -lpng16
+          #     make[2]: *** [Makefile:2961: convertfilestopdf] Error 1
+          # leptonica's configure found the HOST's libpng through pkg-config and
+          # enabled PNG support, then handed -lpng16 to the NDK linker, which
+          # cannot see host libraries. Cross-compiling means the target's
+          # libraries, and no target libpng exists in this build.
+          #
+          # None of these are needed for OCR: they are image-file conveniences,
+          # and tesseract hands leptonica decoded pixel data. Disabling them is
+          # how a leptonica cross-build is meant to be done.
           ./configure --host=aarch64-linux-android \
             --prefix="$PWD/../../out/prefix" \
-            --disable-shared --enable-static --without-gif --without-jpeg
+            --disable-shared --enable-static \
+            --without-gif --without-jpeg --without-libpng --without-libtiff \
+            --without-libwebp --without-zlib
+          echo "=== leptonica configure result ==="
+          grep -iE 'png|jpeg|tiff|zlib|webp' config.log 2>/dev/null | tail -5 || true
           make -j"$(nproc)"
           make install
           echo "=== leptonica installed ==="
@@ -328,20 +344,37 @@ jobs:
           cmake --build build -j"$(nproc)" 2>&1 | tee build.log
           ls -la build/bin/*.a 2>/dev/null || true
 
+      # Raw, run 36383749573: the build SUCCEEDED, all 49 targets linked
+      #   [41/49] Linking CXX static library src/libllama.a
+      #   [49/49] Linking CXX static library common/libcommon.a
+      # and then this step failed with
+      #   no llama.cpp archives produced
+      # because it looked in build/bin/, which is where a Makefile build puts
+      # them. A cmake build writes them next to their sources:
+      #   build/src/libllama.a, build/ggml/src/libggml.a
+      #
+      # So: find them anywhere under build/, and print every .a when there is
+      # none. A verify step that asserts a hardcoded path is a guess.
       - name: Verify and package
         run: |
           set -euo pipefail
           mkdir -p dist
           FOUND=0
-          for A in libllama.a libggml.a; do
-            S="build/bin/$A"
-            if [ -f "$S" ]; then
-              bash "$GITHUB_WORKSPACE/.github/scripts/assert_arm64_member.sh" "$S" "$A"
-              cp "$S" dist/
-              FOUND=$((FOUND+1))
-            fi
+          for S in $(find build -name 'libllama.a' -o -name 'libggml.a' -o -name 'libggml-base.a' | sort); do
+            B="dist/$(basename "$S")"
+            cp "$S" "$B"
+            bash "$GITHUB_WORKSPACE/.github/scripts/assert_arm64_member.sh" "$B" "$(basename "$S")"
+            echo "  $S -> $B ($(stat -c%s "$S") bytes)"
+            FOUND=$((FOUND+1))
           done
-          [ "$FOUND" -ge 1 ] || { echo "no llama.cpp archives produced"; sed -n '1,60p' build.log; exit 1; }
+          if [ "$FOUND" -eq 0 ]; then
+            echo "no llama.cpp archives anywhere under build/; every .a that exists:"
+            find build -name '*.a' | sort
+            echo "--- the last 30 lines of the build ---"
+            tail -30 build.log || true
+            exit 1
+          fi
+          echo "archives found: $FOUND"
           du -sh dist
           tar -czf llamacpp-arm64.tar.gz -C dist .
           ls -la llamacpp-arm64.tar.gz
@@ -379,8 +412,22 @@ jobs:
       - name: Fetch stable-diffusion.cpp
         run: |
           set -euo pipefail
-          # NOT "src" -- same collision, same run.
-          git clone --depth 1 https://github.com/leejet/stable-diffusion.cpp.git src-sd
+          # --recurse-submodules is REQUIRED, not optional. Raw, run 36383749573:
+          #     CMake Error at cmake/ggml.cmake:5 (add_subdirectory):
+          #       The source directory
+          #         /home/runner/.../src-sd/ggml
+          #       does not contain a CMakeLists.txt file.
+          # ggml is a git SUBMODULE. `git clone --depth 1` leaves it as an empty
+          # directory, so the whole project fails to configure -- and the error
+          # names a missing CMakeLists rather than an unfetched submodule, which
+          # is a genuinely misleading message.
+          git clone --depth 1 --recurse-submodules --shallow-submodules \
+            https://github.com/leejet/stable-diffusion.cpp.git src-sd
+          test -f src-sd/ggml/CMakeLists.txt || {
+            echo "FAIL: src-sd/ggml/CMakeLists.txt is missing; the submodule is not fetched"
+            ls -la src-sd/ggml | sed -n '1,10p'
+            exit 1
+          }
           echo "stable-diffusion.cpp: $(cd src-sd && git log -1 --format='%H (%ad)' --date=short)"
 
       - name: Build for arm64, CPU only
@@ -405,15 +452,21 @@ jobs:
           set -euo pipefail
           mkdir -p dist
           FOUND=0
-          for S in build/bin/libstable-diffusion.a build/bin/libggml*.a build/src/libstable-diffusion.a; do
-            if [ -f "$S" ]; then
-              B="dist/$(basename "$S")"
-              cp "$S" "$B"
-              bash "$GITHUB_WORKSPACE/.github/scripts/assert_arm64_member.sh" "$B" "$(basename "$S")" || true
-              FOUND=$((FOUND+1))
-            fi
+          # find, not a hardcoded build/bin path. Same defect as llama.cpp in the
+          # same run: a cmake build writes archives next to their sources.
+          for S in $(find build -name '*.a' | sort); do
+            B="dist/$(basename "$S")"
+            cp "$S" "$B"
+            bash "$GITHUB_WORKSPACE/.github/scripts/assert_arm64_member.sh" "$B" "$(basename "$S")" || true
+            echo "  $S -> $B ($(stat -c%s "$S") bytes)"
+            FOUND=$((FOUND+1))
           done
-          [ "$FOUND" -ge 1 ] || { echo "no stable-diffusion archives produced"; sed -n '1,60p' build.log; exit 1; }
+          if [ "$FOUND" -eq 0 ]; then
+            echo "no stable-diffusion archives anywhere under build/"
+            tail -30 build.log || true
+            exit 1
+          fi
+          echo "archives found: $FOUND"
           du -sh dist
           tar -czf stablediffusion-arm64.tar.gz -C dist .
           ls -la stablediffusion-arm64.tar.gz
