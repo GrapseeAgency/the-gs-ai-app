@@ -105,8 +105,51 @@ fn main() {
         if root.join("include").join("llama.h").exists() {
             llama_build
                 .define("GS_LLAMA_HAVE_LLAMA", None)
-                .include(root.join("include"))
-                .include(root.join("ggml").join("include"));
+                .include(root.join("include"));
+            // TWO LAYOUTS, AND PICKING THE WRONG ONE IS A BUILD FAILURE.
+            //
+            // A llama.cpp BUILD TREE (GS_LLAMA_ROOT, desktop) puts the ggml
+            // headers at ggml/include/. The android-deps PACKAGE (GS_LLAMA_PREBUILT,
+            // mobile) ships them at ggml-include/. Adding only the build-tree path
+            // meant the mobile build compiled llama_wrapper.cpp and then:
+            //
+            //     native/prebuilts/android-x86_64/include/llama.h:4:10: fatal
+            //     error: 'ggml.h' file not found
+            //     1 error generated.
+            //     error occurred in cc-rs: command did not execute successfully
+            //
+            // Both are added, and only when present. cc-rs tolerates include
+            // paths that do not exist, so this costs nothing and covers both
+            // shapes rather than encoding a guess about which one we were handed.
+            let ggml_tree = root.join("ggml").join("include");
+            let ggml_pkg = root.join("ggml-include");
+            let have_tree = ggml_tree.is_dir();
+            let have_pkg = ggml_pkg.is_dir();
+            // Fail with a NAMED error rather than a compiler diagnostic about a
+            // header, because "ggml.h not found" does not say which of the two
+            // layouts was expected. Checked BEFORE the include() calls, which
+            // take ownership of the paths.
+            if !have_tree && !have_pkg {
+                let listing: Vec<String> = std::fs::read_dir(root)
+                    .map(|d| {
+                        d.filter_map(|e| e.ok().map(|e| e.file_name()))
+                            .map(|n| n.to_string_lossy().into_owned())
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                panic!(
+                    "no ggml headers under {}: expected ggml/include/ (build tree) \
+                     or ggml-include/ (prebuilt package), found neither. contents: {:?}",
+                    root.display(),
+                    listing
+                );
+            }
+            if have_tree {
+                llama_build.include(&ggml_tree);
+            }
+            if have_pkg {
+                llama_build.include(&ggml_pkg);
+            }
             have_llama = true;
         }
     }
