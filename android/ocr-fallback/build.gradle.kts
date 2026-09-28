@@ -53,16 +53,14 @@ android {
         // Must match the base module's minSdk. Play refuses a split whose
         // minSdk is lower, and the error does not name the mismatch.
         minSdk = 26
-        // The base module's id. A dynamic feature does NOT get its own
-        // applicationId -- it derives one from the base at packaging time, and
-        // that lookup is what was failing:
-        //     Failed to calculate the value of task
-        //     ':ocr-fallback:processDebugMainManifest' property 'applicationId'.
-        //       > Failed to calculate the value of property 'applicationId'.
-        //         > Collection is empty.
-        // AGP reads this from the base module's variant; declaring the base
-        // explicitly here is what gives it something to read.
-        applicationId = "com.grapsee.gsai"
+        // NO applicationId. A dynamic feature does not have one:
+        //     Line 65:         applicationId = "com.grapsee.gsai"
+        //                            ^ Unresolved reference 'applicationId'.
+        // which is the proof that the original
+        //     Failed to calculate ... property 'applicationId'.
+        //       > Collection is empty.
+        // was AGP failing to find the BASE module's id, not a missing setting
+        // here. Attempt 2 of 4; stopping, per the instruction to move on.
         // NO versionCode here. A library module has none; the base app's
         // version governs the split at install time. Declaring it gives
         //     Unresolved reference 'versionCode'.

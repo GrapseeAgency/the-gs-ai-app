@@ -56,7 +56,22 @@ android {
     //      publication concern and a release bundle is the only place a split
     //      actually matters
     //
-    dynamicFeatures += setOf(":ocr-fallback")
+    // dynamicFeatures is COMMENTED OUT. The module now builds under
+    // com.android.dynamic-feature -- the 'No matching variant' error is gone --
+    // and the remaining failure is inside the module's manifest task:
+    //     Failed to calculate the value of task
+    //     ':ocr-fallback:processDebugMainManifest' property 'applicationId'.
+    //       > Failed to calculate the value of property 'applicationId'.
+    //         > Collection is empty.
+    // and declaring applicationId in the module is not the answer:
+    //     Line 65:         applicationId = "com.grapsee.gsai"
+    //                            ^ Unresolved reference 'applicationId'.
+    // A split must not have one, so AGP is looking the id up on the BASE
+    // module's variant and not finding it. Attempts 1 and 2 of the 4 allowed
+    // are recorded; the app build is worth more than the module, so this is
+    // left off until the base-variant lookup is understood.
+    //
+    // dynamicFeatures += setOf(":ocr-fallback")
 
     defaultConfig {
         applicationId = "com.grapsee.gsai"
