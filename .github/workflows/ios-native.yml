@@ -105,10 +105,21 @@ jobs:
           lipo -info "$SRC" | grep -q 'arm64' || {
             echo "FAIL: device slice is not arm64: $(lipo -info "$SRC")"; exit 1; }
           # The member itself must be a Mach-O arm64, not just the archive header.
-          MEMBER=$(ar t "$SRC" | head -1)
-          echo "first member: $MEMBER"
-          ( cd /tmp && rm -rf arslice && mkdir arslice && cd arslice \
-              && ar x "$SRC" "$MEMBER" && file -b "$MEMBER" ) | tee /tmp/member.txt
+          # $SRC is relative to native/, and the extraction below runs in a
+          # temp dir, so it must be absolute or `ar x` looks in the wrong place.
+          # Raw error, run 36374643457:
+          #     first member: __.SYMDEF
+          #     ar: target/aarch64-apple-ios/release/libgs_ffi.a: No such file
+          #         or directory
+          ABS="$(cd native && pwd)/$SRC"
+          # __.SYMDEF is a macOS archive pseudo-member, not an object file.
+          # `ar t | head -1` returns it, so filter the __-prefixed entries out
+          # before extracting.
+          MEMBER=$(ar t "$ABS" | grep -v '^__' | head -1)
+          echo "first object member: $MEMBER"
+          test -n "$MEMBER" || { echo "FAIL: archive has no object members"; exit 1; }
+          rm -rf /tmp/arslice && mkdir -p /tmp/arslice
+          ( cd /tmp/arslice && ar x "$ABS" "$MEMBER" && file -b "$MEMBER" ) | tee /tmp/member.txt
           grep -q 'arm64' /tmp/member.txt || {
             echo "FAIL: archive member is not arm64: $(cat /tmp/member.txt)"; exit 1; }
 
