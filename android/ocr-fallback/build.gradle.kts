@@ -52,10 +52,14 @@ android {
 }
 
 dependencies {
+    // Nothing beyond core-ktx. The split installer lives in the BASE module; the
+    // feature only exposes its own entry point and is reached by reflection.
+    //
+    // (An `implementation(libs.androidx.annotation)` was here and does not
+    // resolve: "Unresolved reference 'annotation'" -- the alias was never in the
+    // version catalog. Removed rather than added, because the module does not
+    // need it.)
     implementation(libs.androidx.core.ktx)
-    // The split installer lives in the BASE module; the feature only needs to
-    // expose its own entry point.
-    implementation(libs.androidx.annotation)
 }
 
 /**
