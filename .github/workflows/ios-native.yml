@@ -194,13 +194,41 @@ jobs:
               echo "FAIL: $LIB is not $ARCH: $(lipo -info "$A")"; exit 1; }
             # Symbols: an archive that exists but exports nothing is the exact
             # failure that was fixed for the .so, and it must be caught here too.
-            N=$(nm -gU "$A" 2>/dev/null | grep -c 'gs_ffi_mobile_' || true)
+            #
+            # Raw error, run 36376843232:
+            #     members: 199
+            #     gs_ffi_mobile_* exported: 0
+            #     FAIL: expected >=8 exports, got 0
+            #
+            # That 0 was not measured, it was swallowed. `nm -gU ... 2>/dev/null`
+            # produced NO output -- either nm rejected the flags or it scanned
+            # nothing -- and grep -c over nothing is 0, which is indistinguishable
+            # from a library that genuinely exports nothing. That is the second
+            # time in this file a 2>/dev/null turned a tool failure into a
+            # plausible-looking number; the first was cargo-ndk's silent copy.
+            #
+            # So: no stderr suppression, and nm's own output is captured so a
+            # failure is reported as a failure. `nm -g` (defined symbols) is
+            # used rather than -gU because -U means different things on GNU nm
+            # and Apple nm, and a flag that means something else on the machine
+            # running the check is not a check.
+            if ! SYMS=$(nm -g "$A" 2>&1); then
+              echo "FAIL: nm could not read $A"
+              printf '%s\n' "$SYMS" | sed -n '1,20p'
+              exit 1
+            fi
+            N=$(printf '%s\n' "$SYMS" | grep -cE 'gs_ffi_mobile_' || true)
+            echo "    total nm lines   : $(printf '%s\n' "$SYMS" | wc -l | tr -d ' ')"
             echo "    gs_ffi_mobile_* exported: $N"
-            [ "$N" -ge 8 ] || { echo "FAIL: expected >=8 exports, got $N"; exit 1; }
+            if [ "$N" -lt 8 ]; then
+              echo "FAIL: expected >=8 exports, got $N. Sample of what nm did return:"
+              printf '%s\n' "$SYMS" | grep -E 'gs_' | sed -n '1,15p'
+              exit 1
+            fi
           done
 
           echo "=== exported mobile ABI (device) ==="
-          nm -gU "$GITHUB_WORKSPACE/dist/ios/device/libgs_ffi.a" \
+          nm -g "$GITHUB_WORKSPACE/dist/ios/device/libgs_ffi.a" \
             | grep -oE 'gs_[a-z_0-9]+' | sort -u | sed -n '1,20p'
 
           echo "=== dSYM ==="
