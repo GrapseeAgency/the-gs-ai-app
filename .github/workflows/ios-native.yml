@@ -168,7 +168,18 @@ jobs:
             A="$GITHUB_WORKSPACE/dist/ios/$LIB/libgs_ffi.a"
             test -f "$A" || { echo "MISSING: $A"; exit 1; }
             echo "--- $LIB: $(file -b "$A")"
-            file -b "$A" | grep -q "Archive" || { echo "FAIL: not an archive"; exit 1; }
+            # `ar t`, not a grep on `file`. Raw error, run 36376320644:
+            #     FAIL: not an archive
+            #     ##[error]Process completed with exit code 1.
+            # `file -b` on a .a says "current ar archive" -- lowercase -- so
+            # `grep -q "Archive"` never matches. That is the same tool mistake
+            # twice: attempt 5 failed on `file` for the ARCHITECTURE and this
+            # failed on `file` for the FILE TYPE. `ar t` succeeding is the
+            # definitive test that the file is a real archive, and it is what
+            # the member extraction uses anyway.
+            MEMBERS=$(ar t "$A" | sed -n '1,200p')
+            test -n "$MEMBERS" || { echo "FAIL: $LIB is not a readable ar archive"; exit 1; }
+            echo "    members: $(printf '%s' "$MEMBERS" | wc -l | tr -d ' ')"
             # The Mach-O inside the archive must be the requested arch.
             INNER=$(ar t "$A" | grep -v '^__' | sed -n '1p')
             echo "    member: $INNER"
