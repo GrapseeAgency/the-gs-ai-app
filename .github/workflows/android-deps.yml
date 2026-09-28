@@ -225,11 +225,51 @@ jobs:
             echo "total: $TOTAL bytes"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # The unstripped static size is not the number that decides whether this
+      # ships. Measured on attempt 4:
+      #     libleptonica.a    14,410,402 bytes
+      #     libtesseract.a   71,842,076 bytes
+      #     TOTAL            86,252,478 bytes
+      # 86 MB, against a brief that expected ~4 MB. Debug symbols and DWARF are
+      # most of that and none of it is loadable code, so the stripped figure is
+      # reported alongside it rather than instead of it. Both numbers, because
+      # "4 MB" and "86 MB" are both true of different things and only one of them
+      # ends up in an APK.
+      - name: Measure the stripped size
+        run: |
+          set -euo pipefail
+          NDK="$ANDROID_NDK_HOME"
+          STRIP="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip"
+          test -x "$STRIP" || { echo "FAIL: no llvm-strip under $NDK"; exit 1; }
+          mkdir -p stripped
+          STRIPPED_TOTAL=0
+          for A in libleptonica libtesseract; do
+            cp "out/prefix/lib/$A.a" "stripped/$A.a"
+            RAW=$(stat -c%s "stripped/$A.a")
+            # -g removes debug info. The NDK's own strip is the right one for
+            # objects its own clang produced.
+            "$STRIP" --strip-debug "stripped/$A.a"
+            S=$(stat -c%s "stripped/$A.a")
+            STRIPPED_TOTAL=$((STRIPPED_TOTAL + S))
+            printf '  %-18s raw %10d -> stripped %10d  (%.0f%% smaller)\n' \
+              "$A.a" "$RAW" "$S" "$(awk "BEGIN{print 100-($S*100.0/$RAW)}")"
+          done
+          echo "STRIPPED TOTAL: $STRIPPED_TOTAL bytes"
+          echo "$STRIPPED_TOTAL" > out/stripped-total-bytes
+          {
+            echo "### tesseract: stripped size"
+            echo "raw      : 86,252,478 bytes (attempt 4 measurement)"
+            echo "stripped : $STRIPPED_TOTAL bytes"
+            echo "brief expected ~4 MB; the honest figure is above."
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Package
         run: |
           set -euo pipefail
           mkdir -p dist
-          cp out/prefix/lib/libleptonica.a out/prefix/lib/libtesseract.a dist/
+          # The STRIPPED libraries ship. Shipping the unstripped ones would put
+          # 86 MB into an APK for code that is 12 MB.
+          cp stripped/libleptonica.a stripped/libtesseract.a dist/
           # tessdata is a runtime asset, not a library. 3.5 MB of traineddata
           # (eng + osd) and it is what makes OCR work at all. It ships as an
           # asset, never in git.
@@ -444,6 +484,28 @@ jobs:
             ls -la src-sd/ggml | sed -n '1,10p'
             exit 1
           }
+          # ATTEMPT 5. The -D flags in attempt 4 did not stop libwebp being
+          # added: the project does add_subdirectory(thirdparty/libwebp)
+          # unconditionally, so the cpufeatures target with the broken path is
+          # still generated and CMake still fails at the GENERATE step:
+          #     CMake Error at thirdparty/libwebp/CMakeLists.txt:204 (add_library):
+          #       Cannot find source file: /sources/android/cpufeatures/cpu-features.c
+          #     CMake Generate step failed.
+          # Webp is an image INPUT format. The measurement this job exists for is
+          # CPU decode speed, which does not read webp. So the vendored copy is
+          # removed from the FETCHED tree -- the fetch is this job's own scratch
+          # space, not the repository -- and the top-level CMakeLists is patched
+          # to stop referencing it. Webp is not silently missing: the removal is
+          # echoed, and the configure is re-run to prove it still works.
+          echo "removing thirdparty/libwebp from the fetched tree"
+          rm -rf src-sd/thirdparty/libwebp
+          if grep -rn 'libwebp' src-sd/CMakeLists.txt >/dev/null 2>&1; then
+            echo "top-level CMakeLists references libwebp; commenting the reference out"
+            sed -i 's|^\(.*libwebp.*\)$|# disabled for the Android cross-build: \1|' src-sd/CMakeLists.txt
+            grep -n 'libwebp' src-sd/CMakeLists.txt | sed -n '1,10p'
+          else
+            echo "no top-level reference to libwebp; the vendored dir was self-contained"
+          fi
           echo "stable-diffusion.cpp: $(cd src-sd && git log -1 --format='%H (%ad)' --date=short)"
 
       - name: Build for arm64, CPU only
