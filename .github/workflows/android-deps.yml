@@ -57,51 +57,8 @@ env:
   GS_ALLOW_MISSING_ONNX: "1"
 
 jobs:
-  setup:
-    name: setup (shared)
-    runs-on: ubuntu-latest
-    outputs:
-      ndk: ${{ steps.sdk.outputs.ndk }}
-    steps:
-      - uses: actions/checkout@v4
-      - id: sdk
-        name: Install cmdline-tools and NDK
-        run: |
-          set -euo pipefail
-          # The image ships ANDROID_HOME with no command-line tools. Every
-          # attempt that assumed `sdkmanager` was on PATH failed with
-          #     sdkmanager: command not found
-          SDK="$HOME/android-sdk"
-          mkdir -p "$SDK/cmdline-tools"
-          cd /tmp
-          wget -q "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
-          unzip -q commandlinetools-linux-11076708_latest.zip
-          # The zip unpacks cmdline-tools/, and the SDK requires *latest/* or
-          # every sdkmanager call fails.
-          mv cmdline-tools "$SDK/cmdline-tools/latest"
-          export PATH="$SDK/cmdline-tools/latest/bin:$PATH"
-          command -v sdkmanager          # assert before relying on it
-          yes | sdkmanager --licenses >/dev/null 2>&1 || true
-          sdkmanager --install "ndk;$NDK_VERSION" "platform-tools" >/dev/null
-          echo "ndk=$SDK/ndk/$NDK_VERSION" >> "$GITHUB_OUTPUT"
-          echo "ndk at $(du -sh "$SDK/ndk/$NDK_VERSION" | cut -f1)"
-
-      - name: Record versions
-        run: |
-          set -euo pipefail
-          {
-            echo "### Toolchain"
-            echo "uname    : $(uname -srm)"
-            echo "cmake    : $(cmake --version | sed -n '1p')"
-            echo "ninja    : $(ninja --version 2>/dev/null || echo 'not installed')"
-            echo "python3  : $(python3 --version)"
-            echo "cc       : $(cc --version | sed -n '1p')"
-            echo "cores    : $(nproc)"
-          } | tee "$GITHUB_STEP_SUMMARY"
-
   tesseract:
     name: tesseract + leptonica (${{ matrix.source }})
-    needs: setup
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -113,11 +70,16 @@ jobs:
             dir: tesseract
     steps:
       - uses: actions/checkout@v4
+      - name: Install the NDK
+        run: bash "$GITHUB_WORKSPACE/.github/scripts/install-ndk.sh"
+        env:
+          NDK_VERSION: ${{ env.NDK_VERSION }}
+          CMDLINE_VERSION: 11076708
+
       - name: NDK toolchain file
         run: |
           set -euo pipefail
-          NDK="${{ needs.setup.outputs.ndk }}"
-          test -d "$NDK" || { echo "MISSING NDK: $NDK"; exit 1; }
+          NDK="$ANDROID_NDK_HOME"
           {
             echo "set(CMAKE_SYSTEM_NAME Android)"
             echo "set(CMAKE_SYSTEM_VERSION $API)"
@@ -158,7 +120,7 @@ jobs:
           cd src/leptonica
           # Leptonica has no cmake. Its autotools build honours CFLAGS/LDFLAGS,
           # which is the NDK toolchain, so that is the whole cross-compile.
-          NDK="${{ needs.setup.outputs.ndk }}"
+          NDK="$ANDROID_NDK_HOME"
           TOOLCHAIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin"
           export CC="$TOOLCHAIN/aarch64-linux-android$API-clang"
           export CXX="$TOOLCHAIN/aarch64-linux-android$API-clang++"
@@ -186,7 +148,7 @@ jobs:
         run: |
           set -euo pipefail
           cd src/tesseract
-          NDK="${{ needs.setup.outputs.ndk }}"
+          NDK="$ANDROID_NDK_HOME"
           TOOLCHAIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin"
           export CC="$TOOLCHAIN/aarch64-linux-android$API-clang"
           export CXX="$TOOLCHAIN/aarch64-linux-android$API-clang++"
@@ -256,7 +218,6 @@ jobs:
 
   onnxruntime:
     name: onnxruntime (AAR extraction)
-    needs: setup
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -318,14 +279,19 @@ jobs:
 
   llamacpp:
     name: llama.cpp
-    needs: setup
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install the NDK
+        run: bash "$GITHUB_WORKSPACE/.github/scripts/install-ndk.sh"
+        env:
+          NDK_VERSION: ${{ env.NDK_VERSION }}
+          CMDLINE_VERSION: 11076708
+
       - name: NDK toolchain file
         run: |
           set -euo pipefail
-          NDK="${{ needs.setup.outputs.ndk }}"
+          NDK="$ANDROID_NDK_HOME"
           {
             echo "set(CMAKE_SYSTEM_NAME Android)"
             echo "set(CMAKE_SYSTEM_VERSION $API)"
@@ -338,13 +304,17 @@ jobs:
       - name: Fetch llama.cpp
         run: |
           set -euo pipefail
-          git clone --depth 1 --branch b4581 https://github.com/ggml-org/llama.cpp.git src
-          echo "llama.cpp: $(cd src && git log -1 --format='%H (%ad)' --date=short)"
+          # NOT "src": the repository root already contains one, and
+          #   fatal: destination path 'src' already exists and is not an empty
+          #   directory.
+          # is what that produced for both cmake jobs (run 36383123086).
+          git clone --depth 1 --branch b4581 https://github.com/ggml-org/llama.cpp.git src-llama
+          echo "llama.cpp: $(cd src-llama && git log -1 --format='%H (%ad)' --date=short)"
 
       - name: Build for arm64
         run: |
           set -euo pipefail
-          cmake -S src -B build \
+          cmake -S src-llama -B build \
             -DCMAKE_TOOLCHAIN_FILE="$PWD/android.toolchain.cmake" \
             -DCMAKE_BUILD_TYPE=Release \
             -DGGML_OPENMP=OFF \
@@ -384,14 +354,19 @@ jobs:
 
   stablediffusion:
     name: stable-diffusion.cpp
-    needs: setup
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install the NDK
+        run: bash "$GITHUB_WORKSPACE/.github/scripts/install-ndk.sh"
+        env:
+          NDK_VERSION: ${{ env.NDK_VERSION }}
+          CMDLINE_VERSION: 11076708
+
       - name: NDK toolchain file
         run: |
           set -euo pipefail
-          NDK="${{ needs.setup.outputs.ndk }}"
+          NDK="$ANDROID_NDK_HOME"
           {
             echo "set(CMAKE_SYSTEM_NAME Android)"
             echo "set(CMAKE_SYSTEM_VERSION $API)"
@@ -404,8 +379,9 @@ jobs:
       - name: Fetch stable-diffusion.cpp
         run: |
           set -euo pipefail
-          git clone --depth 1 https://github.com/leejet/stable-diffusion.cpp.git src
-          echo "stable-diffusion.cpp: $(cd src && git log -1 --format='%H (%ad)' --date=short)"
+          # NOT "src" -- same collision, same run.
+          git clone --depth 1 https://github.com/leejet/stable-diffusion.cpp.git src-sd
+          echo "stable-diffusion.cpp: $(cd src-sd && git log -1 --format='%H (%ad)' --date=short)"
 
       - name: Build for arm64, CPU only
         run: |
@@ -414,7 +390,7 @@ jobs:
           # CPU-only number to be measured, and Vulkan on Android needs
           # libvulkan + a loader that is not in the NDK sysroot. Enabling it
           # without measuring would be the other kind of guess.
-          cmake -S src -B build \
+          cmake -S src-sd -B build \
             -DCMAKE_TOOLCHAIN_FILE="$PWD/android.toolchain.cmake" \
             -DCMAKE_BUILD_TYPE=Release \
             -DSD_VULKAN=OFF -DSD_METAL=OFF -DSD_CUDA=OFF \
