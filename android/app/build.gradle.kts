@@ -199,5 +199,24 @@ dependencies {
     // JVM unit tests (parser correctness + incrementality). Test-only —
     // nothing here ships in either APK.
     testImplementation("junit:junit:4.13.2")
+
+    // ANDROIDTEST. These were ABSENT, so the entire instrumented-test source set
+    // did not compile:
+    //     .kt:10:12 Unresolved reference 'junit'.
+    //     .kt:109:6  Unresolved reference 'Test'.
+    //     .kt:111:9  Unresolved reference 'assumeTrue'.
+    //     .kt:101:9  Unresolved reference 'assertNotNull'.
+    // Raw, run 36409455281, which cost a 5-minute emulator build to find out.
+    //
+    // It went unnoticed because android-app.yml compiled only the MAIN source
+    // set (`:app:compileDebugKotlin`), so an androidTest file that could not
+    // compile looked fine until the one job that does compile it ran. The
+    // workflow now compiles it too.
+    androidTestImplementation("junit:junit:4.13.2")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test:rules:1.6.1")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
+    androidTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     testImplementation("io.ktor:ktor-client-mock:2.3.12")
 }

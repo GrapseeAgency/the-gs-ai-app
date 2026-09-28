@@ -101,12 +101,20 @@ jobs:
           # swallowed diagnostic in this repo's history: a build that fails
           # without saying why, which costs a full re-run to diagnose.
           # --console=plain so the lines are not wrapped in ANSI box drawing.
+          # BOTH source sets. Compiling only the main one let a completely
+          # non-compiling androidTest file pass for as long as nobody ran the
+          # emulator:
+          #     .kt:10:12 Unresolved reference 'junit'.
+          #     .kt:109:6  Unresolved reference 'Test'.
+          # A source set that is never compiled is a source set nobody is
+          # checking, and the instrumented tests are the whole point of the
+          # device run.
           gradle --no-daemon --console=plain --info --stacktrace \
-            :app:compileDebugKotlin 2>&1 | tee compile.log
+            :app:compileDebugKotlin :app:compileDebugAndroidTestKotlin 2>&1 | tee compile.log
           # Echo the diagnostics on their own, so a failure is legible without
           # scrolling a 4000-line --info log.
           echo "=== kotlin diagnostics ==="
-          grep -E '^e: |^w: .*(GsNative|Model|Local)' compile.log | sed -n '1,80p' || true
+          grep -E '^e: |^w: .*(GsNative|Model|Local|Device)' compile.log | sed -n '1,80p' || true
           echo "=== (end) ==="
           # Fail on gradle's status, not on grep's.
           test "${PIPESTATUS[0]}" -eq 0

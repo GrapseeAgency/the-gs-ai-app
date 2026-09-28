@@ -16,6 +16,7 @@ import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.security.MessageDigest
 
@@ -222,7 +223,7 @@ class DeviceVerificationTest {
         // The real download. It resumes from `seeded`, so the server must honour
         // the Range request; if it does not, the downloader restarts from zero
         // rather than appending, and `resumed` reports which happened.
-        val result = kotlinx.coroutines.runBlocking {
+        val result = runBlocking {
             ModelDownloader.download(model, dest, partial) { b, t ->
                 if (t > 0 && b % (50L * 1024 * 1024) < 64 * 1024) {
                     println("DownloadTest: progress $b / $t")
