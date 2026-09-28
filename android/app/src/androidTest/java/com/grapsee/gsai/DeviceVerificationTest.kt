@@ -57,6 +57,12 @@ class DeviceVerificationTest {
         // app declares no storage permission at all. The app's own external dir
         // needs none, and it is also where a real user's downloaded model lands.
         for (dir in listOf(
+            // The app's PRIVATE dir. /sdcard is unreadable on API 30 (EACCES,
+            // run 36430187499) and /sdcard/Android/data/<pkg> cannot even be
+            // created by the adb shell user:
+            //     mkdir: '/sdcard/Android/data/com.grapsee.gsai': Permission denied
+            // run-as reaches this one because a debug APK is debuggable.
+            ctx.filesDir,
             ctx.getExternalFilesDir(null),
             ctx.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
             File("/sdcard"),
@@ -98,8 +104,24 @@ class DeviceVerificationTest {
             "selfCheck did not report a backend: $check",
             check.contains("backend="),
         )
-        println("GsNativeTest: isAvailable = ${GsNativeLoader.isAvailable()}")
+        val available = GsNativeLoader.isAvailable()
+        println("GsNativeTest: isAvailable = $available")
         println("GsNativeTest: loader      = ${GsNativeLoader.state()}")
+        // ASSERTED, NOT PRINTED. This test previously only printed isAvailable,
+        // and so PASSED against a portable-only build whose every call answers
+        // GS_ERR_UNAVAILABLE. Raw, run 36430187499, from the same logcat:
+        //     selfCheck = context=present backend=unavailable(unavailable:
+        //     no generation backend compiled in) selfCheck=gs-ffi 0.1.0
+        //     portable portable portable portable portable
+        //     isAvailable = false
+        // A test that observes the thing it exists to check, and reports success
+        // either way, is worse than no test: it converts a known-broken library
+        // into a green run.
+        assertTrue(
+            "isAvailable() is false: the .so loaded but has no generation " +
+                "backend, so chat() cannot return text. selfCheck said: $check",
+            available,
+        )
     }
 
     // =====================================================================

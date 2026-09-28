@@ -75,15 +75,25 @@ object ModelCatalog {
         id = "qwen2.5-0.5b-instruct-q4_k_m",
         displayName = "Qwen2.5 0.5B Instruct (Q4_K_M)",
         url = "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf",
-        // NOT VERIFIED. This file has never been fetched by this repo, so there
-        // is no honest hash to put here. An empty sha256 is treated as "cannot
-        // verify" and the download is REFUSED rather than accepted unchecked --
-        // see ModelDownloader. Before this model is offered to anyone, its hash
-        // has to be computed from a real download:
-        //     sha256sum qwen2.5-1.5b-instruct-q4_k_m.gguf
-        // Shipping an unverifiable model would mean the integrity check on the
-        // download is decorative.
-        sha256 = "",
+        // MEASURED, not asserted. android-device downloads this exact URL on
+        // every run and hashes it, and the byte count is checked against this
+        // field's `bytes` before the hash is compared:
+        //     sha256: 74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db
+        //     expect: 74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db
+        //     CHECKSUM MATCHES ModelCatalog.kt -- the hardcoded hash is correct
+        //     [ "$SZ" = "491400032" ]
+        // (runs 36405645557, 36409455281, 36414439107 -- identical each time.)
+        //
+        // It was EMPTY until now, which is why the download tests refused:
+        //     Refused(reason=Qwen2.5 0.5B Instruct (Q4_K_M) has no verified
+        //     checksum yet)
+        // An empty sha256 is treated as "cannot verify" and refused rather than
+        // accepted unchecked. That refusal is CORRECT behaviour working on a
+        // catalogue entry that had never been filled in -- the defect was the
+        // empty string, not the check.
+        //
+        // MODEL_1_5B below is still empty and still refuses, on purpose.
+        sha256 = "74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db",
         bytes = 491_400_032L,
         minRamBytes = 2L * 1024 * 1024 * 1024,
     )

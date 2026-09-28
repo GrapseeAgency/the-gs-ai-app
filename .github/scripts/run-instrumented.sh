@@ -136,24 +136,36 @@ echo "=== 2b. put the model where the app is allowed to read it ==="
 # step 0b. It also needs no permission on a real device, so this path is what a
 # user's own model install will use too -- the test exercises the real location
 # rather than a CI-only one.
+# THREE PLACES TRIED, IN ORDER, because each failed differently on API 30:
+#
+#   1. the app's PRIVATE dir, reached with run-as (a debug APK is debuggable)
+#   2. /sdcard/Android/data/<pkg>/files  -- the adb shell user CANNOT create it:
+#          mkdir: '/sdcard/Android/data/com.grapsee.gsai': Permission denied
+#      (run 36430187499)
+#   3. /sdcard -- the app gets EACCES reading it (run 36420986162), because an
+#      arbitrary file at the root of /sdcard is outside every media collection
+#      and this app declares no storage permission at all
+#
+# Only (1) is expected to work. (2) and (3) remain as diagnostics: if (1) fails,
+# the log shows exactly which barrier applies instead of a test failing later
+# with a permission error that names nothing.
 DEV_MODEL=""
-APPDIR=/sdcard/Android/data/com.grapsee.gsai/files
+MODEL_NAME=qwen2.5-0.5b-instruct-q4_k_m.gguf
 if [ -f "$GITHUB_WORKSPACE/model.gguf" ]; then
-  adb shell mkdir -p "$APPDIR" 2>&1 | head -2 || true
   echo "pushing model.gguf (491 MB on an emulator; be patient)"
-  if adb push "$GITHUB_WORKSPACE/model.gguf" "$APPDIR/qwen2.5-0.5b-instruct-q4_k_m.gguf"; then
-    DEV_MODEL="$APPDIR/qwen2.5-0.5b-instruct-q4_k_m.gguf"
-    echo "pushed to: $DEV_MODEL"
+  adb push "$GITHUB_WORKSPACE/model.gguf" /data/local/tmp/$MODEL_NAME >/dev/null
+  adb shell chmod 644 /data/local/tmp/$MODEL_NAME || true
+  if adb shell run-as com.grapsee.gsai mkdir -p files 2>&1 | head -2 &&
+     adb shell run-as com.grapsee.gsai cp /data/local/tmp/$MODEL_NAME files/$MODEL_NAME 2>&1 | head -2; then
+    DEV_MODEL="/data/data/com.grapsee.gsai/files/$MODEL_NAME"
+    echo "pushed into the app's private dir via run-as"
   else
-    # Fall back to /sdcard so the run still has a model to try; if that is also
-    # unreadable the test will FAIL with the EACCES and name the cause, rather
-    # than skip and hide it.
-    adb push "$GITHUB_WORKSPACE/model.gguf" /sdcard/qwen2.5-0.5b-instruct-q4_k_m.gguf || true
-    DEV_MODEL=/sdcard/qwen2.5-0.5b-instruct-q4_k_m.gguf
-    echo "WARNING: push to the app dir failed; fell back to /sdcard" >&2
+    echo "run-as route failed; recording the alternative barriers for diagnosis:"
+    echo "  2. $(adb shell mkdir -p /sdcard/Android/data/com.grapsee.gsai/files 2>&1 | head -1)"
+    echo "  3. $(adb shell run-as com.grapsee.gsai ls -la /sdcard/$MODEL_NAME 2>&1 | head -1)"
+    DEV_MODEL=""
   fi
-  echo "on device: $(adb shell ls -la "$DEV_MODEL" 2>&1)"
-  echo "app can read it: $(adb shell run-as com.grapsee.gsai ls -la "$DEV_MODEL" 2>&1 | head -2 || true)"
+  echo "in-app listing: $(adb shell run-as com.grapsee.gsai ls -la files/ 2>&1 | tail -2 || true)"
 else
   echo "no model.gguf; model-backed tests will SKIP rather than fail"
 fi

@@ -135,6 +135,57 @@ jobs:
           cargo install cargo-ndk --locked
           cargo ndk --version
 
+      - name: Fetch the cross-compiled llama.cpp for this ABI
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPS_RUN_ID: ${{ github.event.inputs.deps_run_id || '' }}
+        run: |
+          set -euo pipefail
+          # THE BUILD WAS PORTABLE-ONLY. Definitive, from run 36430187499 (the
+          # first run with a loadable .so on a booted emulator):
+          #     warning: gs-ffi@0.1.0: portable mobile build: CLIP, OCR and
+          #     llama.cpp are NOT compiled in; every such call reports
+          #     GS_ERR_UNAVAILABLE
+          # and from the test's own selfCheck() on the device:
+          #     selfCheck = context=present backend=unavailable(unavailable:
+          #     no generation backend compiled in) selfCheck=gs-ffi 0.1.0
+          #     portable portable portable portable portable
+          #     isAvailable = false
+          #
+          # GS_LLAMA_PREBUILT existed and worked, but nothing in this workflow
+          # ever set it, so build.rs saw llama_root = None, did not compile the
+          # wrapper, and shipped a portable library that dlopens and then refuses
+          # to generate anything. The .so exported all ten mobile symbols
+          # throughout, which is why nothing caught it.
+          if [ -z "$DEPS_RUN_ID" ] || [ "$DEPS_RUN_ID" = "0" ]; then
+            DEPS_RUN_ID=$(curl -fsS -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/workflows/android-deps.yml/runs?per_page=1&status=success" | python3 -c 'import json,sys; print(str(json.load(sys.stdin)["workflow_runs"][0]["id"]))')
+            echo "dispatch: using the latest successful android-deps run"
+          fi
+          echo "deps run: $DEPS_RUN_ID"
+          rm -rf native/prebuilts/android-${{ matrix.abi }} /tmp/prebuilt
+          mkdir -p native/prebuilts/android-${{ matrix.abi }} /tmp/prebuilt
+          ARTIFACT_ID=$(curl -fsS -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs/$DEPS_RUN_ID/artifacts" | python3 -c 'import json,sys; a=json.load(sys.stdin)["artifacts"]; h=[x for x in a if x["name"]=="llamacpp-${{ matrix.abi }}"]; print(h[0]["id"] if h else "")')
+          if [ -z "$ARTIFACT_ID" ]; then
+            echo "::error::no llamacpp-${{ matrix.abi }} artifact in run $DEPS_RUN_ID. Without it the .so builds PORTABLE-ONLY and every call reports GS_ERR_UNAVAILABLE."
+            exit 1
+          fi
+          curl -fsSL -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip" -o /tmp/prebuilt/a.zip
+          python3 -c 'import zipfile; zipfile.ZipFile("/tmp/prebuilt/a.zip").extractall("/tmp/prebuilt/x")'
+          # Find the package root: the directory holding include/llama.h. build.rs
+          # requires include/llama.h under GS_LLAMA_PREBUILT, so pointing it at a
+          # directory that merely CONTAINS the package silently yields portable.
+          PKG=$(dirname "$(dirname "$(find /tmp/prebuilt/x -name llama.h -path '*include*' -type f | head -1)")")
+          if [ ! -f "$PKG/include/llama.h" ]; then
+            echo "::error::no include/llama.h under $PKG"
+            find /tmp/prebuilt/x -type f | sed -n '1,25p'
+            exit 1
+          fi
+          echo "package root: $PKG"
+          ls -l "$PKG/lib/" || true
+          cp -r "$PKG"/. native/prebuilts/android-${{ matrix.abi }}/
+          ls -l native/prebuilts/android-${{ matrix.abi }}/native/prebuilts/android-${{ matrix.abi }}/
+          echo "GS_LLAMA_PREBUILT=$GITHUB_WORKSPACE/native/prebuilts/android-${{ matrix.abi }}" >> "$GITHUB_ENV"
+
       - name: Build libgs_ffi.so
         working-directory: native
         run: |
@@ -147,7 +198,7 @@ jobs:
           cargo ndk \
             -t ${{ matrix.target }} \
             -o "$GITHUB_WORKSPACE/dist/android/${{ matrix.abi }}" \
-            build --release -p gs-ffi --lib
+            build --release -p gs-ffi --lib 2>&1 | tee "$GITHUB_WORKSPACE/build-${{ matrix.abi }}.log"
 
           # ATTEMPT 5. cargo-ndk printed
           #     Copying libraries to .../dist/android/arm64-v8a
@@ -231,6 +282,23 @@ jobs:
             exit 1
           fi
           echo "  every dlopen dependency is accounted for"
+
+          # REFUSE TO SHIP A PORTABLE LIBRARY. This is the check whose absence
+          # let a portable-only .so reach a device, export ten symbols, and pass
+          # every build-time gate in the repository. build.rs already announces
+          # this condition; the workflow just never read the announcement.
+          if grep -q 'portable mobile build' "$GITHUB_WORKSPACE/build-${{ matrix.abi }}.log"; then
+            echo "::error::the build is PORTABLE-ONLY -- llama.cpp was not compiled in."
+            echo "Every chat() on a phone would return GS_ERR_UNAVAILABLE."
+            grep -n 'portable mobile build' "$GITHUB_WORKSPACE/build-${{ matrix.abi }}.log" || true
+            exit 1
+          fi
+          if ! grep -q 'WITH a llama.cpp backend' "$GITHUB_WORKSPACE/build-${{ matrix.abi }}.log"; then
+            echo "::error::the build log does not confirm a llama.cpp backend was linked."
+            grep -iE 'llama|backend|prebuilt' "$GITHUB_WORKSPACE/build-${{ matrix.abi }}.log" | sed -n '1,20p' || true
+            exit 1
+          fi
+          echo "  build log confirms a llama.cpp backend is compiled in"
 
           TRI="${{ matrix.target }}"
           DEST="$GITHUB_WORKSPACE/dist/android/${{ matrix.abi }}"
