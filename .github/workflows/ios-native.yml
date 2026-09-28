@@ -163,7 +163,13 @@ jobs:
           echo "=== slices ==="
           ls -1 "$XF"
 
-          for pair in "device:aarch64" "simulator:aarch64"; do
+          # arm64, not aarch64. aarch64 is the RUST TRIPLE
+          # (aarch64-apple-ios); the ARCHITECTURE that lipo reports is arm64.
+          # Raw error, run 36376588212:
+          #     FAIL: device is not aarch64: Non-fat file: .../libgs_ffi.a
+          #         is architecture: arm64
+          #     ##[error]Process completed with exit code 1.
+          for pair in "device:arm64" "simulator:arm64"; do
             LIB="${pair%%:*}"; ARCH="${pair##*:}"
             A="$GITHUB_WORKSPACE/dist/ios/$LIB/libgs_ffi.a"
             test -f "$A" || { echo "MISSING: $A"; exit 1; }
