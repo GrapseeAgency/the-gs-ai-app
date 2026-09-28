@@ -350,8 +350,20 @@ jobs:
           retention-days: 14
 
   llamacpp:
-    name: llama.cpp
+    name: llama.cpp (${{ matrix.abi }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - abi: arm64-v8a
+            target: aarch64-linux-android
+          # x86_64 is not optional. The instrumented tests run on an x86_64
+          # emulator, and an x86_64 emulator CANNOT load an arm64 .so. Without
+          # this slice the device tests could only ever exercise the paths that
+          # report UNAVAILABLE, which is the opposite of what they are for.
+          - abi: x86_64
+            target: x86_64-linux-android
     steps:
       - uses: actions/checkout@v4
       - name: Install the NDK
@@ -367,11 +379,12 @@ jobs:
           {
             echo "set(CMAKE_SYSTEM_NAME Android)"
             echo "set(CMAKE_SYSTEM_VERSION $API)"
-            echo "set(CMAKE_ANDROID_ARCH_ABI $ABI)"
+            echo "set(CMAKE_ANDROID_ARCH_ABI ${{ matrix.abi }})"
             echo "set(CMAKE_ANDROID_NDK $NDK)"
             echo "set(CMAKE_ANDROID_STL_TYPE c++_shared)"
             echo "set(CMAKE_FIND_ROOT_PATH $NDK)"
           } > android.toolchain.cmake
+          cat android.toolchain.cmake
 
       - name: Fetch llama.cpp
         run: |
@@ -379,11 +392,11 @@ jobs:
           # NOT "src": the repository root already contains one, and
           #   fatal: destination path 'src' already exists and is not an empty
           #   directory.
-          # is what that produced for both cmake jobs (run 36383123086).
+          # is what that produced (run 36383123086).
           git clone --depth 1 --branch b4581 https://github.com/ggml-org/llama.cpp.git src-llama
           echo "llama.cpp: $(cd src-llama && git log -1 --format='%H (%ad)' --date=short)"
 
-      - name: Build for arm64
+      - name: Build
         run: |
           set -euo pipefail
           cmake -S src-llama -B build \
@@ -395,29 +408,23 @@ jobs:
             -DBUILD_SHARED_LIBS=OFF \
             -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_BUILD_SERVER=OFF \
             -G Ninja
-          # The build log is kept. On failure it is the raw evidence required
+          # The build log is kept: on failure it is the raw evidence required
           # before anything is called BLOCKED.
           cmake --build build -j"$(nproc)" 2>&1 | tee build.log
-          ls -la build/bin/*.a 2>/dev/null || true
 
-      # Raw, run 36383749573: the build SUCCEEDED, all 49 targets linked
+      # Raw, run 36385099961: the build SUCCEEDED, all 49 targets linked
       #   [41/49] Linking CXX static library src/libllama.a
-      #   [49/49] Linking CXX static library common/libcommon.a
-      # and then this step failed with
-      #   no llama.cpp archives produced
-      # because it looked in build/bin/, which is where a Makefile build puts
-      # them. A cmake build writes them next to their sources:
-      #   build/src/libllama.a, build/ggml/src/libggml.a
-      #
-      # So: find them anywhere under build/, and print every .a when there is
+      # and then verification failed with "no llama.cpp archives produced"
+      # because it looked in build/bin/. A cmake build writes archives next to
+      # their sources, so find them anywhere and print every .a when there is
       # none. A verify step that asserts a hardcoded path is a guess.
-      - name: Verify and package
+      - name: Package with headers
         run: |
           set -euo pipefail
-          mkdir -p dist
+          mkdir -p dist/lib dist/include dist/ggml-include
           FOUND=0
-          for S in $(find build -name 'libllama.a' -o -name 'libggml.a' -o -name 'libggml-base.a' | sort); do
-            B="dist/$(basename "$S")"
+          for S in $(find build -name '*.a' | sort); do
+            B="dist/lib/$(basename "$S")"
             cp "$S" "$B"
             bash "$GITHUB_WORKSPACE/.github/scripts/assert_arm64_member.sh" "$B" "$(basename "$S")"
             echo "  $S -> $B ($(stat -c%s "$S") bytes)"
@@ -426,28 +433,37 @@ jobs:
           if [ "$FOUND" -eq 0 ]; then
             echo "no llama.cpp archives anywhere under build/; every .a that exists:"
             find build -name '*.a' | sort
-            echo "--- the last 30 lines of the build ---"
             tail -30 build.log || true
             exit 1
           fi
-          echo "archives found: $FOUND"
-          du -sh dist
-          tar -czf llamacpp-arm64.tar.gz -C dist .
-          ls -la llamacpp-arm64.tar.gz
+          # HEADERS. gs-ffi's wrapper #includes <llama.h> and <ggml.h>, so the
+          # archives alone cannot be linked -- the build fails on a missing
+          # header, not on a missing library, which is a confusing way to learn
+          # that only the .a files were shipped.
+          cp -r src-llama/include/. dist/include/
+          mkdir -p dist/ggml-include
+          cp -r src-llama/ggml/include/. dist/ggml-include/ 2>/dev/null || true
+          test -f dist/include/llama.h || { echo "FAIL: dist/include/llama.h missing"; exit 1; }
+          echo "=== package contents ==="
+          find dist -type f | sort | sed -n '1,40p'
+          echo "total: $(du -sh dist | cut -f1)"
+          tar -czf "llamacpp-${{ matrix.abi }}.tar.gz" -C dist .
+          ls -la "llamacpp-${{ matrix.abi }}.tar.gz"
+
       - uses: actions/upload-artifact@v4
         with:
-          name: llamacpp-arm64
-          path: llamacpp-arm64.tar.gz
+          name: llamacpp-${{ matrix.abi }}
+          path: llamacpp-${{ matrix.abi }}.tar.gz
           if-no-files-found: error
           retention-days: 14
 
   stablediffusion:
-    name: stable-diffusion.cpp (BLOCKED - five attempts, see comment)
-    # So a known, documented gap does not paint the whole workflow red and hide
-    # the three dependencies that DO build. The job still runs and still fails,
-    # and its log still carries the raw compiler output -- this changes the
-    # reporting, not the truth.
-    continue-on-error: true
+    name: stable-diffusion.cpp
+    # No continue-on-error any more: the operator diagnosed the cause (the
+    # vendored libwebp points at ${ANDROID_NDK}/sources/android/cpufeatures/,
+    # a path Google removed from the NDK years ago) and specified the flags
+    # that skip it. If these fail the job goes red, which is the correct
+    # outcome.
     # BLOCKED after five attempts, with raw logs. The cause is an upstream
     # out-of-tree configure defect in the vendored libwebp, not a missing SDK,
     # not a missing toolchain, and not an environment limitation:
@@ -564,7 +580,7 @@ jobs:
             -DSD_VULKAN=OFF -DSD_METAL=OFF -DSD_CUDA=OFF \
             -DGGML_OPENMP=OFF \
             -DSD_BUILD_SHARED_LIBS=OFF \
-            -DSD_ENABLE_WEBP=OFF -DGGML_WEBP=OFF -DWEBP=OFF \
+            -DSD_WEBP=OFF -DSD_WEBM=OFF \
             -G Ninja
           cmake --build build -j"$(nproc)" 2>&1 | tee build.log
           ls -la build/bin/*.a 2>/dev/null || true

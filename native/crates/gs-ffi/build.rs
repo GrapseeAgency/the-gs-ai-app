@@ -53,18 +53,63 @@ fn main() {
     // define the wrapper compiles but every call reports UNAVAILABLE, and
     // LlamaModel::load will hand back a handle that cannot generate anything.
     println!("cargo:rerun-if-env-changed=GS_LLAMA_ROOT");
+    println!("cargo:rerun-if-env-changed=GS_LLAMA_PREBUILT");
     let kernels = cpp.join("..").join("c").join("kernels");
-    let llama_root = if mobile { None } else { std::env::var("GS_LLAMA_ROOT").ok() };
+
+    // Where do the llama.cpp headers and archives come from?
+    //
+    // Desktop: GS_LLAMA_ROOT, a full llama.cpp build tree.
+    //
+    // Mobile: GS_LLAMA_PREBUILT, the per-ABI package produced by the
+    // android-deps workflow. This is new. The mobile build was PORTABLE-ONLY --
+    // llama_root was forced to None, so gs_mobile_backend_available() returned 0
+    // and every call reported GS_ERR_UNAVAILABLE. That made the .so ~220 KB and
+    // shippable, and it also meant chat could not run on a phone at all.
+    //
+    // It also meant the device tests could not test the thing they exist to
+    // test. Compiled and symbol-verified is not working, and the gap was only
+    // visible once there was something to run it on.
+    //
+    // PREBUILT takes precedence on mobile because a cross-compiled archive is
+    // the only thing that CAN work there: a host build tree is x86-64 Linux and
+    // cannot link into an arm64 Android library.
+    let prebuilt = std::env::var("GS_LLAMA_PREBUILT").ok().map(std::path::PathBuf::from);
+    let llama_root = if mobile {
+        // Only a prebuilt package is usable on a device target.
+        prebuilt.as_ref().and_then(|p| {
+            if p.join("include").join("llama.h").exists() { Some(p.clone()) } else { None }
+        })
+    } else {
+        std::env::var("GS_LLAMA_ROOT").ok().map(std::path::PathBuf::from)
+    };
+    let using_prebuilt = prebuilt.is_some() && llama_root.is_some();
+
     let mut have_llama = false;
     if let Some(root) = &llama_root {
-        let p = std::path::Path::new(root);
-        if p.join("include").join("llama.h").exists() {
+        if root.join("include").join("llama.h").exists() {
             llama_build
                 .define("GS_LLAMA_HAVE_LLAMA", None)
-                .include(p.join("include"))
-                .include(p.join("ggml").join("include"));
+                .include(root.join("include"))
+                .include(root.join("ggml").join("include"));
             have_llama = true;
         }
+    }
+    if mobile && have_llama {
+        // This is the define gs_mobile_backend_available() keys off. Without it
+        // the library links cleanly and still cannot generate, which is the
+        // worst combination: it looks installed and does nothing.
+        println!("cargo:rustc-cfg=gs_mobile_llama");
+        println!("cargo:rustc-check-cfg=cfg(gs_mobile_llama)");
+        println!("cargo:warning=mobile build WITH a llama.cpp backend from the prebuilt package");
+    } else if mobile {
+        println!(
+            "cargo:warning=portable mobile build: no llama.cpp prebuilt at GS_LLAMA_PREBUILT. \
+             Every generation call will report GS_ERR_UNAVAILABLE. This is a supported \
+             configuration and the app falls back, but chat will not run."
+        );
+    }
+    if using_prebuilt {
+        println!("cargo:warning=using cross-compiled llama.cpp from {}", llama_root.as_ref().unwrap().display());
     }
     llama_build.compile("gs_llama");
 
@@ -74,7 +119,11 @@ fn main() {
     //   undefined symbol: llama_backend_init / llama_model_default_params
     if have_llama {
         let root = llama_root.as_ref().expect("set when have_llama");
-        for sub in ["build/bin", "bin"] {
+        // The prebuilt package puts archives in lib/; a host llama.cpp build
+        // tree puts them in build/bin. Both are searched, and rpath is only
+        // emitted for a host tree because a device library is not loaded from
+        // a build directory.
+        for sub in ["lib", "build/bin", "bin"] {
             let p = format!("{root}/{sub}");
             if std::path::Path::new(&p).is_dir() {
                 println!("cargo:rustc-link-search=native={p}");
@@ -83,8 +132,35 @@ fn main() {
         for l in ["llama", "ggml", "ggml-base"] {
             println!("cargo:rustc-link-lib=dylib={l}");
         }
+        // ggml pulls in more than these three on some builds, and a missing
+        // archive here produces "undefined symbol: ggml_..." at link time with
+        // no indication of which package should have provided it. So link
+        // whatever .a files the package actually contains, and PRINT them.
+        let libdir = std::path::Path::new(root).join("lib");
+        if libdir.is_dir() {
+            let mut names: Vec<String> = Vec::new();
+            if let Ok(rd) = std::fs::read_dir(&libdir) {
+                for e in rd.flatten() {
+                    let p = e.path();
+                    if p.extension().and_then(|x| x.to_str()) == Some("a") {
+                        if let Some(stem) = p.file_stem().and_then(|x| x.to_str()) {
+                            names.push(stem.to_string());
+                        }
+                    }
+                }
+            }
+            names.sort();
+            println!("cargo:warning=linking llama.cpp archives: {}", names.join(", "));
+            for n in names {
+                println!("cargo:rustc-link-lib=static={n}");
+            }
+        } else {
+            for l in ["llama", "ggml", "ggml-base"] {
+                println!("cargo:rustc-link-lib=static={l}");
+            }
+        }
         let bin = format!("{root}/build/bin");
-        if std::path::Path::new(&bin).is_dir() {
+        if !using_prebuilt && std::path::Path::new(&bin).is_dir() {
             println!("cargo:rustc-link-arg=-Wl,-rpath,{bin}");
         }
     }

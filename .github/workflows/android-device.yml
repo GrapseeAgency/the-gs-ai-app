@@ -1,0 +1,138 @@
+name: android-device
+
+# Runs the instrumented tests on a real Android emulator.
+#
+# WHY THIS EXISTS
+#
+# Every bridge in this repo is compiled and symbol-verified, and none of it had
+# ever been executed. That is not the same as working, and the gap is now closed
+# by actually running it:
+#
+#   * a portable-only .so links cleanly, exports 10 symbols, and answers every
+#     call with GS_ERR_UNAVAILABLE. Only a test that CALLS it can tell.
+#   * the sampler-chain defect that made completions depend on request history
+#     compiled perfectly for weeks.
+#   * `GsNativeLoader` was written to survive UnsatisfiedLinkError, which means
+#     it would also survive being wrong about everything else.
+#
+# The emulator is x86_64. That is not incidental: an x86_64 emulator cannot load
+# an arm64 .so, so the instrumented tests only exercise the real generation path
+# if llama.cpp is ALSO cross-compiled for x86_64-android. That is why the
+# llamacpp job in android-deps.yml is a two-entry matrix.
+#
+# WHAT THIS JOB DOES NOT CLAIM
+#
+# An x86_64 emulator is not a phone. It is roughly 10-20x slower per core than
+# the arm64 hardware these libraries target, so a timing measured here is a
+# floor, not a figure. Nothing in the artifacts is a performance claim.
+#
+# A test that does not RUN is not a pass. The report step distinguishes a green
+# test from a skipped one and from a device that never booted, and says so in
+# the output rather than inferring success from a zero exit code.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [native-runtime]
+    paths:
+      - 'android/**'
+      - 'native/crates/gs-ffi/**'
+      - 'native/cpp/**'
+      - '.github/workflows/android-device.yml'
+      - '.github/workflows/android-native.yml'
+
+concurrency:
+  group: android-device-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GS_ALLOW_MISSING_ONNX: "1"
+
+jobs:
+  instrumented:
+    name: instrumented tests (emulator, x86_64, API 30)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable KVM
+        run: |
+          set -euo pipefail
+          # Without KVM the emulator runs under full software emulation, which is
+          # roughly 20x slower and pushes a 60-minute job past any useful
+          # limit. The udev rules are the documented approach:
+          #   https://github.com/reactivecircus/android-emulator-runner
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -la /dev/kvm
+          test -e /dev/kvm || { echo "FAIL: /dev/kvm is missing; the emulator cannot run"; exit 1; }
+
+      - name: Enable the Android SDK and JDK
+        run: |
+          set -euo pipefail
+          SDK="$HOME/android-sdk"
+          mkdir -p "$SDK/cmdline-tools"
+          cd /tmp
+          wget -q "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
+          unzip -q -o commandlinetools-linux-11076708_latest.zip
+          mv cmdline-tools "$SDK/cmdline-tools/latest"
+          export PATH="$SDK/cmdline-tools/latest/bin:$PATH"
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          # compileSdk 35 to build the app; the EMULATOR is API 30 because that is
+          # the oldest image the runner's acceleration supports well, and the
+          # app's minSdk is 26 so API 30 is in range.
+          sdkmanager --install "platforms;android-35" "build-tools;35.0.0" "platform-tools" "system-images;android-30;google_apis;x86_64" >/dev/null
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          echo "$SDK/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "$SDK/emulator" >> "$GITHUB_PATH"
+          echo "image: $(ls "$SDK/system-images/android-30/google_apis/")"
+
+      - name: Start the emulator and run the instrumented tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: google_apis
+          arch: x86_64
+          profile: Nexus 6
+          # A cold-boot profile. snapshot and headless are on by default.
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: .github/scripts/run-instrumented.sh
+
+      - name: Report what actually ran
+        if: always()
+        run: |
+          set -euo pipefail
+          echo "=== instrumented test summary ==="
+          for f in android/app/build/reports/androidTests/connected/*/index.html; do
+            [ -e "$f" ] || continue
+            echo "report: $f"
+          done
+          for f in android/app/build/outputs/androidTest-results/connected/*.xml; do
+            [ -e "$f" ] || continue
+            echo "--- $(basename "$f") ---"
+            grep -oE 'tests="[0-9]+" *[a-z]+="[0-9]+" *(failures|skipped)="[0-9]+"' "$f" || true
+            grep -oE '<testsuite[^>]*name="[^"]*"' "$f" | sed 's/^/    /' | sed -n '1,40p'
+          done
+          {
+            echo "### android-device"
+            echo "emulator: API 30, google_apis, x86_64"
+            echo "NOTE: an x86_64 emulator is not a phone. Timings here are a floor."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload logcat, test results and screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-device-evidence
+          path: |
+            android/app/build/outputs/androidTest-results/
+            android/app/build/reports/androidTests/
+            device-artifacts/
+            emulator-logcat.txt
+          if-no-files-found: warn
+          retention-days: 14
