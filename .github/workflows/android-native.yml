@@ -138,53 +138,104 @@ jobs:
       - name: Fetch the cross-compiled llama.cpp for this ABI
         env:
           GH_TOKEN: ${{ github.token }}
-          DEPS_RUN_ID: ${{ github.event.inputs.deps_run_id || '' }}
+          DEPS_RUN_ID: ${{ github.event.inputs.deps_run_id || github.event.workflow_run.id }}
         run: |
           set -euo pipefail
-          # THE BUILD WAS PORTABLE-ONLY. Definitive, from run 36430187499 (the
-          # first run with a loadable .so on a booted emulator):
-          #     warning: gs-ffi@0.1.0: portable mobile build: CLIP, OCR and
-          #     llama.cpp are NOT compiled in; every such call reports
-          #     GS_ERR_UNAVAILABLE
-          # and from the test's own selfCheck() on the device:
-          #     selfCheck = context=present backend=unavailable(unavailable:
-          #     no generation backend compiled in) selfCheck=gs-ffi 0.1.0
-          #     portable portable portable portable portable
-          #     isAvailable = false
+          # Downloaded from THE SPECIFIC RUN that triggered this one, via the REST
+          # API rather than `gh run download` (which only ever sees the latest run
+          # of a workflow and would be a race against the next android-deps push).
           #
-          # GS_LLAMA_PREBUILT existed and worked, but nothing in this workflow
-          # ever set it, so build.rs saw llama_root = None, did not compile the
-          # wrapper, and shipped a portable library that dlopens and then refuses
-          # to generate anything. The .so exported all ten mobile symbols
-          # throughout, which is why nothing caught it.
+          # Without this the .so is PORTABLE-ONLY: it links, it exports all 10
+          # mobile symbols, and every generation call answers GS_ERR_UNAVAILABLE.
+          # The tests would then "pass" by asserting that nothing works, which is
+          # the opposite of what they are for. So this fails the job.
+          # On workflow_dispatch there is no triggering run, so fall back to the
+          # most recent completed android-deps run. Without the fallback the job
+          # is unreachable by hand, and "I can only run it the way CI runs it" is
+          # not a usable property.
           if [ -z "$DEPS_RUN_ID" ] || [ "$DEPS_RUN_ID" = "0" ]; then
-            DEPS_RUN_ID=$(curl -fsS -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/workflows/android-deps.yml/runs?per_page=1&status=success" | python3 -c 'import json,sys; print(str(json.load(sys.stdin)["workflow_runs"][0]["id"]))')
+            DEPS_RUN_ID=$(
+              curl -fsS -H "Authorization: Bearer $GH_TOKEN" \
+                "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/workflows/android-deps.yml/runs?per_page=1&status=success" \
+              | python3 -c 'import json,sys; print(str(json.load(sys.stdin)["workflow_runs"][0]["id"]))'
+            )
             echo "dispatch: using the latest successful android-deps run"
           fi
           echo "deps run: $DEPS_RUN_ID"
-          rm -rf native/prebuilts/android-${{ matrix.abi }} /tmp/prebuilt
-          mkdir -p native/prebuilts/android-${{ matrix.abi }} /tmp/prebuilt
-          ARTIFACT_ID=$(curl -fsS -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs/$DEPS_RUN_ID/artifacts" | python3 -c 'import json,sys; a=json.load(sys.stdin)["artifacts"]; h=[x for x in a if x["name"]=="llamacpp-${{ matrix.abi }}"]; print(h[0]["id"] if h else "")')
+          mkdir -p native/prebuilts/android-${{ matrix.abi }} /tmp/artifact
+          ARTIFACT_ID=$(
+            curl -fsS -H "Authorization: Bearer $GH_TOKEN" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs/$DEPS_RUN_ID/artifacts" \
+            | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next((str(a["id"]) for a in d.get("artifacts",[]) if a["name"]=="llamacpp-x86_64"), ""))'
+          )
           if [ -z "$ARTIFACT_ID" ]; then
-            echo "::error::no llamacpp-${{ matrix.abi }} artifact in run $DEPS_RUN_ID. Without it the .so builds PORTABLE-ONLY and every call reports GS_ERR_UNAVAILABLE."
+            echo "FAIL: the llamacpp-x86_64 artifact is not in run $DEPS_RUN_ID."
+            echo "      Available:"
+            curl -fsS -H "Authorization: Bearer $GH_TOKEN" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs/$DEPS_RUN_ID/artifacts" \
+              | python3 -c 'import json,sys; [print("       ",a["name"],a["size_in_bytes"],"bytes") for a in json.load(sys.stdin).get("artifacts",[])]' 
+            echo "      Without it the app is portable-only and these tests cannot"
+            echo "      test generation at all."
             exit 1
           fi
-          curl -fsSL -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip" -o /tmp/prebuilt/a.zip
-          python3 -c 'import zipfile; zipfile.ZipFile("/tmp/prebuilt/a.zip").extractall("/tmp/prebuilt/x")'
-          # Find the package root: the directory holding include/llama.h. build.rs
-          # requires include/llama.h under GS_LLAMA_PREBUILT, so pointing it at a
-          # directory that merely CONTAINS the package silently yields portable.
-          PKG=$(dirname "$(dirname "$(find /tmp/prebuilt/x -name llama.h -path '*include*' -type f | head -1)")")
-          if [ ! -f "$PKG/include/llama.h" ]; then
-            echo "::error::no include/llama.h under $PKG"
-            find /tmp/prebuilt/x -type f | sed -n '1,25p'
+          echo "artifact id: $ARTIFACT_ID"
+          curl -fsSL -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip" \
+            -o /tmp/artifact/llamacpp.zip
+          ls -la /tmp/artifact/llamacpp.zip
+          echo "=== what kind of file did the API hand back? ==="
+          file /tmp/artifact/llamacpp.zip
+          # GitHub's artifact API returns a ZIP. Raw, first device run:
+          #     tar: This does not look like a tar archive
+          #     tar: Exiting with failure status due to previous errors
+          #     ##[error]Process completed with exit code 2.
+          # It used to be a tarball wrapped in a zip. Uploaded a directory
+          # instead, and this handles both shapes anyway because the cost of
+          # guessing wrong is a 40-minute emulator run.
+          if unzip -l /tmp/artifact/llamacpp.zip >/dev/null 2>&1; then
+            echo "zip: unzipping"
+            rm -rf /tmp/artifact/x && mkdir -p /tmp/artifact/x
+            unzip -o -q /tmp/artifact/llamacpp.zip -d /tmp/artifact/x
+            # A tarball inside the zip is still possible; unwrap it.
+            T=$(find /tmp/artifact/x -name '*.tar.gz' | sed -n '1p')
+            if [ -n "$T" ]; then
+              echo "zip contained a tarball: $T"
+              tar -xzf "$T" -C native/prebuilts/android-${{ matrix.abi }}
+            else
+              cp -r /tmp/artifact/x/. native/prebuilts/android-${{ matrix.abi }}/
+            fi
+          elif tar -tzf /tmp/artifact/llamacpp.zip >/dev/null 2>&1; then
+            echo "gzip: untarring"
+            tar -xzf /tmp/artifact/llamacpp.zip -C native/prebuilts/android-${{ matrix.abi }}
+          else
+            echo "FAIL: the artifact is neither a zip nor a gzip tarball"
+            file /tmp/artifact/llamacpp.zip
+            head -c 200 /tmp/artifact/llamacpp.zip | cat -v | sed -n '1,5p'
             exit 1
           fi
-          echo "package root: $PKG"
-          ls -l "$PKG/lib/" || true
-          cp -r "$PKG"/. native/prebuilts/android-${{ matrix.abi }}/
-          ls -l native/prebuilts/android-${{ matrix.abi }}/native/prebuilts/android-${{ matrix.abi }}/
+          echo "=== prebuilt contents ==="
+          find native/prebuilts/android-${{ matrix.abi }} -type f | sort | sed -n '1,30p'
+          test -f native/prebuilts/android-${{ matrix.abi }}/include/llama.h || {
+            echo "FAIL: no include/llama.h in the prebuilt package"; exit 1; }
+          test -d native/prebuilts/android-${{ matrix.abi }}/lib || {
+            echo "FAIL: no lib/ in the prebuilt package"; exit 1; }
+          echo "total: $(du -sh native/prebuilts/android-${{ matrix.abi }} | cut -f1)"
+          # The archives must be x86_64, not arm64. The emulator is x86_64 and an
+          # arm64 .so is rejected by the linker, which turns every test into a
+          # SKIP rather than a FAIL.
+          for a in native/prebuilts/android-${{ matrix.abi }}/lib/*.a; do
+            echo "  $(basename "$a"): $(file -b "$a")"
+          done
+
+          # THE VARIABLE THAT WAS NEVER SET. build.rs reads GS_LLAMA_PREBUILT and
+          # requires include/llama.h under it. Nothing in this workflow set it, so
+          # llama_root was None and the job published a PORTABLE-ONLY library:
+          #     warning: gs-ffi@0.1.0: portable mobile build: CLIP, OCR and
+          #     llama.cpp are NOT compiled in
+          # It exported all ten mobile symbols and passed every size and symbol
+          # gate in the repo. Only a call on a device could tell.
           echo "GS_LLAMA_PREBUILT=$GITHUB_WORKSPACE/native/prebuilts/android-${{ matrix.abi }}" >> "$GITHUB_ENV"
+          echo "GS_LLAMA_PREBUILT=$GITHUB_WORKSPACE/native/prebuilts/android-${{ matrix.abi }}"
 
       - name: Build libgs_ffi.so
         working-directory: native
