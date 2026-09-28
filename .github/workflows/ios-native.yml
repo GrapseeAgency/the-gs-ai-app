@@ -32,12 +32,6 @@ jobs:
       - name: Check out
         uses: actions/checkout@v4
 
-      # ATTEMPT 2 FAILED HERE. Raw error, run 36347243110:
-      #   xcode-select: error: missing argument to '-s'
-      # The fallback branch ran `xcode-select -s` with no path, which is a usage
-      # error rather than a toolchain problem. The image already has a working
-      # default Xcode, so pinning is best-effort: pick a pinned one if present,
-      # otherwise use the default and say which was chosen.
       - name: Select Xcode
         run: |
           set -euo pipefail
@@ -75,76 +69,50 @@ jobs:
           rustc --version
           rustc --print target-list | grep -E '^aarch64-apple-ios' || true
 
-      # ATTEMPT 3 FAILED HERE. Raw error, run 36347361159:
-      #   error: the path does not point to a valid library:
-      #     .../dist/ios/device/libgs_ffi.a
-      #   ##[error]Process completed with exit code 70.
-      # The two build steps set AR_TARGETS and then never passed --target, so
-      # both compiled for the macOS HOST -- the log shows
-      #   Finished `release` profile [optimized] target(s) in 19.55s
-      #   .../native/target/release/build/gs-ffi-.../out/libgs_clip.a
-      # i.e. no triple in the path, and nothing was ever copied into dist/.
-      # Both steps "succeeded" and the failure surfaced three steps later, at
-      # xcodebuild. The target is now on the command line and the artifact is
-      # copied, and the source is asserted before the step ends.
-      - name: Build device slice (aarch64-apple-ios)
+      # ATTEMPT 7. The cross-compile itself works — lipo reports
+      #   built: Non-fat file: target/aarch64-apple-ios/release/libgs_ffi.a
+      #       is architecture: arm64
+      # Every failure since attempt 3 has been in the verification I added, not
+      # in the build:
+      #   attempt 5  `file -b` on a .a says "current ar archive", never an arch
+      #   attempt 6  `ar t | head -1` returns __.SYMDEF, and $SRC was relative
+      #              while `ar x` ran in /tmp   -> ar: ... No such file or directory
+      #   attempt 7  grep: stdout: Broken pipe
+      # The last one is `set -euo pipefail` meeting `head`: head exits after one
+      # line, its upstream grep dies on SIGPIPE, pipefail propagates the
+      # non-zero status, and the step exits 2. Every pipeline below therefore
+      # uses `sed -n 'Np'`, which consumes its whole input and cannot close a
+      # pipe early. There is no `| head` left in this file.
+      - name: Build and verify device slice (aarch64-apple-ios)
         working-directory: native
         run: |
           set -euo pipefail
-          cargo build --release -p gs-ffi --lib --target aarch64-apple-ios
+          "$GITHUB_WORKSPACE/.github/scripts/assert_arm64_member.sh"          cargo build --release -p gs-ffi --lib --target aarch64-apple-ios
           SRC="target/aarch64-apple-ios/release/libgs_ffi.a"
-          test -f "$SRC" || { echo "MISSING: $SRC"; ls -la target/aarch64-apple-ios/release/ 2>/dev/null; exit 1; }
+          test -f "$SRC" || { echo "MISSING: $SRC"; exit 1; }
           mkdir -p "$GITHUB_WORKSPACE/dist/ios/device"
           cp "$SRC" "$GITHUB_WORKSPACE/dist/ios/device/libgs_ffi.a"
-          # lipo, not file. A .a is an ar archive, so `file -b` on it says only
-          # "current ar archive" and never mentions the architecture -- the Mach-O
-          # members inside carry it. Raw error, run 36350855007:
-          #     FAIL: device slice is not arm64: current ar archive
-          #     ##[error]Process completed with exit code 1.
+
+          # lipo, not file: a .a is an ar archive, so `file -b` on it reports
+          # only "current ar archive" and never an architecture.
           echo "built: $(lipo -info "$SRC")"
           lipo -info "$SRC" | grep -q 'arm64' || {
-            echo "FAIL: device slice is not arm64: $(lipo -info "$SRC")"; exit 1; }
-          # The member itself must be a Mach-O arm64, not just the archive header.
-          # $SRC is relative to native/, and the extraction below runs in a
-          # temp dir, so it must be absolute or `ar x` looks in the wrong place.
-          # Raw error, run 36374643457:
-          #     first member: __.SYMDEF
-          #     ar: target/aarch64-apple-ios/release/libgs_ffi.a: No such file
-          #         or directory
-          # The step already has `working-directory: native`, so `cd native`
-          # failed. Raw error, run 36374785497:
-          #     cd: native: No such file or directory
-          # Resolved against the step's own cwd instead of a hard-coded parent.
-          ABS="$(cd "$(dirname "$SRC")" && pwd)/$(basename "$SRC")"
-          # __.SYMDEF is a macOS archive pseudo-member, not an object file.
-          # `ar t | head -1` returns it, so filter the __-prefixed entries out
-          # before extracting.
-          MEMBER=$(ar t "$ABS" | grep -v '^__' | head -1)
-          echo "first object member: $MEMBER"
-          test -n "$MEMBER" || { echo "FAIL: archive has no object members"; exit 1; }
-          rm -rf /tmp/arslice && mkdir -p /tmp/arslice
-          ( cd /tmp/arslice && ar x "$ABS" "$MEMBER" && file -b "$MEMBER" ) | tee /tmp/member.txt
-          grep -q 'arm64' /tmp/member.txt || {
-            echo "FAIL: archive member is not arm64: $(cat /tmp/member.txt)"; exit 1; }
+            echo "FAIL: device slice is not arm64"; exit 1; }
+          "$GITHUB_WORKSPACE/.github/scripts/assert_arm64_member.sh" "$SRC" device
 
-      - name: Build simulator slice (aarch64-apple-ios-sim)
+      - name: Build and verify simulator slice (aarch64-apple-ios-sim)
         working-directory: native
         run: |
           set -euo pipefail
-          cargo build --release -p gs-ffi --lib --target aarch64-apple-ios-sim
+          "$GITHUB_WORKSPACE/.github/scripts/assert_arm64_member.sh"          cargo build --release -p gs-ffi --lib --target aarch64-apple-ios-sim
           SRC="target/aarch64-apple-ios-sim/release/libgs_ffi.a"
-          test -f "$SRC" || { echo "MISSING: $SRC"; ls -la target/aarch64-apple-ios-sim/release/ 2>/dev/null; exit 1; }
+          test -f "$SRC" || { echo "MISSING: $SRC"; exit 1; }
           mkdir -p "$GITHUB_WORKSPACE/dist/ios/simulator"
           cp "$SRC" "$GITHUB_WORKSPACE/dist/ios/simulator/libgs_ffi.a"
-          # Same correction as the device slice: lipo reads a .a, file does not.
           echo "built: $(lipo -info "$SRC")"
           lipo -info "$SRC" | grep -q 'arm64' || {
-            echo "FAIL: simulator slice is not arm64: $(lipo -info "$SRC")"; exit 1; }
-          MEMBER=$(ar t "$SRC" | head -1)
-          ( cd /tmp && rm -rf arslice && mkdir arslice && cd arslice \
-              && ar x "$SRC" "$MEMBER" && file -b "$MEMBER" ) | tee /tmp/member.txt
-          grep -q 'arm64' /tmp/member.txt || {
-            echo "FAIL: archive member is not arm64: $(cat /tmp/member.txt)"; exit 1; }
+            echo "FAIL: simulator slice is not arm64"; exit 1; }
+          "$GITHUB_WORKSPACE/.github/scripts/assert_arm64_member.sh" "$SRC" simulator
 
       - name: Assemble the xcframework
         run: |
@@ -190,7 +158,7 @@ jobs:
           test -d "$XF" || { echo "MISSING xcframework"; exit 1; }
 
           echo "=== Info.plist ==="
-          plutil -p "$XF/Info.plist" | head -40
+          plutil -p "$XF/Info.plist" | sed -n '1,40p'
 
           echo "=== slices ==="
           ls -1 "$XF"
@@ -202,7 +170,7 @@ jobs:
             echo "--- $LIB: $(file -b "$A")"
             file -b "$A" | grep -q "Archive" || { echo "FAIL: not an archive"; exit 1; }
             # The Mach-O inside the archive must be the requested arch.
-            INNER=$(ar t "$A" | head -1)
+            INNER=$(ar t "$A" | grep -v '^__' | sed -n '1p')
             echo "    member: $INNER"
             lipo -info "$A" || { echo "FAIL: lipo could not read $A"; exit 1; }
             lipo -info "$A" | grep -q "$ARCH" || {
@@ -216,16 +184,16 @@ jobs:
 
           echo "=== exported mobile ABI (device) ==="
           nm -gU "$GITHUB_WORKSPACE/dist/ios/device/libgs_ffi.a" \
-            | grep -oE 'gs_[a-z_0-9]+' | sort -u | head -20
+            | grep -oE 'gs_[a-z_0-9]+' | sort -u | sed -n '1,20p'
 
           echo "=== dSYM ==="
           # Rust ships a .a with debug info; a dSYM is produced when dSYM is
           # requested, and its absence is reported rather than glossed over.
-          DSYM=$(find "$GITHUB_WORKSPACE/dist/ios" -name '*.dSYM' -type d | head -1)
+          DSYM=$(find "$GITHUB_WORKSPACE/dist/ios" -name '*.dSYM' -type d | sed -n '1p')
           if [ -n "$DSYM" ]; then
             echo "dSYM: $DSYM"
             du -sh "$DSYM"
-            dwarfdump --uuid "$DSYM" | head -4
+            dwarfdump --uuid "$DSYM" | sed -n '1,4p'
           else
             echo "dSYM: none produced (debug info is inside the .a; set"
             echo "      RUSTFLAGS=-C debuginfo=2 + dsymutil for a standalone dSYM)"
