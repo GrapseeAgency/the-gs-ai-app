@@ -32,14 +32,16 @@ name: android-device
 
 on:
   workflow_dispatch:
-  push:
+  # Fires when android-deps FINISHES, not in parallel with it. The tests need the
+  # llamacpp-x86_64 artifact to exist, and a path-filtered push trigger races it:
+  # the device job starts while the cross-compile is still running, cannot find
+  # the artifact, and either fails pointlessly or -- worse, given the graceful
+  # fallback -- proceeds into a portable-only run whose tests "pass" by asserting
+  # that generation does not work.
+  workflow_run:
+    workflows: ["android-deps"]
+    types: [completed]
     branches: [native-runtime]
-    paths:
-      - 'android/**'
-      - 'native/crates/gs-ffi/**'
-      - 'native/cpp/**'
-      - '.github/workflows/android-device.yml'
-      - '.github/workflows/android-native.yml'
 
 concurrency:
   group: android-device-${{ github.ref }}
@@ -92,22 +94,42 @@ jobs:
           echo "image: $(ls "$SDK/system-images/android-30/google_apis/")"
 
       - name: Fetch the cross-compiled llama.cpp for this ABI
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPS_RUN_ID: ${{ github.event.workflow_run.id }}
         run: |
           set -euo pipefail
+          # Downloaded from THE SPECIFIC RUN that triggered this one, via the REST
+          # API rather than `gh run download` (which only ever sees the latest run
+          # of a workflow and would be a race against the next android-deps push).
+          #
           # Without this the .so is PORTABLE-ONLY: it links, it exports all 10
           # mobile symbols, and every generation call answers GS_ERR_UNAVAILABLE.
           # The tests would then "pass" by asserting that nothing works, which is
-          # the opposite of what they are for. So this step fails the job rather
-          # than letting a portable-only run be mistaken for a real one.
-          mkdir -p native/prebuilts
-          if ! gh run download --repo "$GITHUB_REPOSITORY" \
-               --name llamacpp-x86_64 --dir /tmp/llamacpp 2>/dev/null; then
-            echo "FAIL: the llamacpp-x86_64 artifact is not available."
-            echo "      Run the android-deps workflow first, or this job cannot"
-            echo "      test generation -- only the UNAVAILABLE path."
+          # the opposite of what they are for. So this fails the job.
+          echo "deps run: $DEPS_RUN_ID"
+          mkdir -p native/prebuilts/android-x86_64 /tmp/artifact
+          ARTIFACT_ID=$(
+            curl -fsS -H "Authorization: Bearer $GH_TOKEN" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs/$DEPS_RUN_ID/artifacts" \
+            | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next((str(a["id"]) for a in d.get("artifacts",[]) if a["name"]=="llamacpp-x86_64"), ""))'
+          )
+          if [ -z "$ARTIFACT_ID" ]; then
+            echo "FAIL: the llamacpp-x86_64 artifact is not in run $DEPS_RUN_ID."
+            echo "      Available:"
+            curl -fsS -H "Authorization: Bearer $GH_TOKEN" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs/$DEPS_RUN_ID/artifacts" \
+              | python3 -c 'import json,sys; [print("       ",a["name"],a["size_in_bytes"],"bytes") for a in json.load(sys.stdin).get("artifacts",[])]' 
+            echo "      Without it the app is portable-only and these tests cannot"
+            echo "      test generation at all."
             exit 1
           fi
-          tar -xzf /tmp/llamacpp/*.tar.gz -C native/prebuilts/android-x86_64
+          echo "artifact id: $ARTIFACT_ID"
+          curl -fsSL -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip" \
+            -o /tmp/artifact/llamacpp.zip
+          ls -la /tmp/artifact/llamacpp.zip
+          tar -xzf /tmp/artifact/llamacpp.zip -C native/prebuilts/android-x86_64
           echo "=== prebuilt contents ==="
           find native/prebuilts/android-x86_64 -type f | sort | sed -n '1,30p'
           test -f native/prebuilts/android-x86_64/include/llama.h || {
@@ -115,11 +137,11 @@ jobs:
           test -d native/prebuilts/android-x86_64/lib || {
             echo "FAIL: no lib/ in the prebuilt package"; exit 1; }
           echo "total: $(du -sh native/prebuilts/android-x86_64 | cut -f1)"
-          # The archives must be x86_64, not arm64, or the linker rejects them
-          # and every test SKIPS instead of running.
+          # The archives must be x86_64, not arm64. The emulator is x86_64 and an
+          # arm64 .so is rejected by the linker, which turns every test into a
+          # SKIP rather than a FAIL.
           for a in native/prebuilts/android-x86_64/lib/*.a; do
-            echo "  $(basename "$a")"
-            file -b "$a" | sed 's/^/    /'
+            echo "  $(basename "$a"): $(file -b "$a")"
           done
 
       - name: Fetch the 0.5B model and verify its checksum
