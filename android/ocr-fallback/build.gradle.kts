@@ -63,9 +63,9 @@ android {
 
     // A split must not be published to a maven repo. Reverse-metadata
     // publication is what the resolution error above was about.
-    // A split must not publish reverse metadata. `withSourcesJar()` takes no
-    // argument in AGP 8.5:
-    //     Too many arguments for 'fun withSourcesJar(): Unit'
+    // A split must not publish reverse metadata. withSourcesJar() takes no
+    // argument in AGP 8.5; passing one gives
+    //     Too many arguments for fun withSourcesJar(): Unit
     publishing {
         singleVariant("release")
     }
