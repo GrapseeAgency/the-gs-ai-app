@@ -11,6 +11,16 @@ android {
     namespace = "com.grapsee.gsai"
     compileSdk = 35
 
+    // Decision 1: the OCR fallback is an ON-DEMAND dynamic feature, so the base
+    // APK pays 0 bytes for Tesseract. 12.3 MB of static libraries plus ~15 MB of
+    // traineddata for a segment that is ~1% of installs is the wrong trade in
+    // the base APK and a reasonable one on request.
+    //
+    // This belongs at the `android { }` level. Inside `defaultConfig` it is a
+    // SCRIPT COMPILATION error -- "'val' cannot be reassigned" -- which reads
+    // like nothing to do with dynamic features at all.
+    dynamicFeatures = [":ocr-fallback"]
+
     defaultConfig {
         applicationId = "com.grapsee.gsai"
         minSdk = 26
@@ -18,11 +28,6 @@ android {
         versionCode = 73
         versionName = "0.68.2"
 
-        // Decision 1: the OCR fallback is an ON-DEMAND dynamic feature, so the
-        // base APK pays 0 bytes for Tesseract. 12.3 MB of static libraries plus
-        // ~15 MB of traineddata for a segment that is ~1% of installs is the
-        // wrong trade in the base APK and a reasonable one on request.
-        dynamicFeatures = [":ocr-fallback"]
 
         // REAL transport origin — applies to EVERY build type (v0.66.0 fix).
         // HISTORY: this was the Android-emulator host-loopback alias (10.0 dot
