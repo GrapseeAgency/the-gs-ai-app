@@ -286,7 +286,12 @@ jobs:
           # matches, the sysroot contents are printed so the next reader does not
           # have to go looking.
           CPP=""
-          for CAND in $(find "$ANDROID_NDK_ROOT" -name 'libc++_shared.so' -type f 2>/dev/null); do
+          # NO -type f. The NDK ships libc++_shared.so as a SYMLINK, and -type f filters
+          # symlinks out, so the candidate list came back empty and the step failed
+          # with a message implying the file does not exist in the NDK at all.
+          # Run 36443756041 printed zero candidate lines and then:
+          #     ::error::no libc++_shared.so with Machine matching 'X86-64'
+          for CAND in $(find "$ANDROID_NDK_ROOT" -name 'libc++_shared.so' 2>/dev/null); do
             M=$(readelf -h "$CAND" 2>/dev/null | sed -n 's/^[[:space:]]*Machine:[[:space:]]*//p')
             echo "  candidate $(basename "$(dirname "$CAND")") -> Machine: ${M:-unknown}"
             case "$M" in
@@ -295,7 +300,7 @@ jobs:
           done
           if [ -z "$CPP" ]; then
             echo "::error::no libc++_shared.so with Machine matching '${{ matrix.machine }}' under $ANDROID_NDK_ROOT"
-            find "$ANDROID_NDK_ROOT" -name 'libc++_shared.so' -type f | sed -n '1,40p'
+            find "$ANDROID_NDK_ROOT" -name 'libc++_shared.so' | sed -n '1,40p'
             exit 1
           fi
           echo "  using $CPP"
