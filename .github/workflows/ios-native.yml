@@ -98,7 +98,7 @@ jobs:
           echo "built: $(lipo -info "$SRC")"
           lipo -info "$SRC" | grep -q 'arm64' || {
             echo "FAIL: device slice is not arm64"; exit 1; }
-          bash "$GITHUB_WORKSPACE/.github/scripts/assert_arm64_member.sh" "$SRC" device
+          bash "$GITHUB_WORKSPACE/.github/scripts/assert_arch_member.sh" "$SRC" device
 
       - name: Build and verify simulator slice (aarch64-apple-ios-sim)
         working-directory: native
@@ -112,7 +112,7 @@ jobs:
           echo "built: $(lipo -info "$SRC")"
           lipo -info "$SRC" | grep -q 'arm64' || {
             echo "FAIL: simulator slice is not arm64"; exit 1; }
-          bash "$GITHUB_WORKSPACE/.github/scripts/assert_arm64_member.sh" "$SRC" simulator
+          bash "$GITHUB_WORKSPACE/.github/scripts/assert_arch_member.sh" "$SRC" simulator
 
       - name: Assemble the xcframework
         run: |

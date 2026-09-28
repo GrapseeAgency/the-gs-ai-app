@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
-# assert_arm64_member <archive> <label>
+# assert_arch_member <archive> <label> [expected]
+#
+# `expected` defaults to arm64/aarch64. It exists because this script was reused
+# for a two-ABI matrix and rejected a CORRECT x86_64 build:
+#     FAIL: libcommon.a: archive member is not arm64/aarch64
+# which is the same class of mistake as matching only "arm64" and rejecting ELF.
+#
 #
 # Verifies that a Mach-O object inside a static archive is arm64.
 #
@@ -45,13 +51,14 @@
 # A check that fails a passing build trains people to ignore it.
 set -euo pipefail
 
-if [ "$#" -ne 2 ]; then
-  echo "usage: $0 <archive> <label>" >&2
+if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then
+  echo "usage: $0 <archive> <label> [expected-arch]" >&2
   exit 2
 fi
 
 rel="$1"
 label="$2"
+EXPECT="${3:-arm64}"
 
 if [ ! -f "$rel" ]; then
   echo "FAIL: $label: no such archive: $rel" >&2
@@ -74,9 +81,17 @@ trap 'rm -rf "$work"' EXIT
 ( cd "$work" && ar x "$abs" "$member" && file -b "$member" ) > "$work/out.txt"
 cat "$work/out.txt"
 
-# arm64 for Mach-O, aarch64 for ELF. Both are the same 64-bit ARM ISA.
-if ! grep -qE 'arm64|aarch64' "$work/out.txt"; then
-  echo "FAIL: $label: archive member is not arm64/aarch64" >&2
+# `file` spells the same ISA differently per format and per vendor:
+#   Apple Mach-O : arm64        Android/Linux ELF : aarch64
+#   x86_64 ELF   : x86-64      x86_64 Mach-O      : x86_64
+case "$EXPECT" in
+  arm64)   PAT='arm64|aarch64|ARM aarch64' ;;
+  x86_64)  PAT='x86-64|x86_64' ;;
+  x86)     PAT='80386|i386' ;;
+  *)       PAT="$EXPECT" ;;
+esac
+if ! grep -qE "$PAT" "$work/out.txt"; then
+  echo "FAIL: $label: archive member is not $EXPECT" >&2
   echo "  file said: $(cat "$work/out.txt")" >&2
   exit 1
 fi

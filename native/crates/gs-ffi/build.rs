@@ -124,42 +124,45 @@ fn main() {
         // emitted for a host tree because a device library is not loaded from
         // a build directory.
         for sub in ["lib", "build/bin", "bin"] {
-            let p = format!("{root}/{sub}");
+            let p = format!("{}/{sub}", root.display());
             if std::path::Path::new(&p).is_dir() {
                 println!("cargo:rustc-link-search=native={p}");
             }
         }
-        for l in ["llama", "ggml", "ggml-base"] {
-            println!("cargo:rustc-link-lib=dylib={l}");
-        }
-        // ggml pulls in more than these three on some builds, and a missing
-        // archive here produces "undefined symbol: ggml_..." at link time with
-        // no indication of which package should have provided it. So link
-        // whatever .a files the package actually contains, and PRINT them.
+        // Static or shared is decided by WHAT IS ON DISK, not by a hardcoded
+        // assumption. The desktop llama.cpp here is a SHARED build, so there is
+        // no libllama.a anywhere, and asking for `static=llama` produces:
+        //     error: could not find native static library `llama`
+        // The prebuilt device package is static-only, because a .so for arm64
+        // Android is not something a NDK build can install into a library.
         let libdir = std::path::Path::new(root).join("lib");
-        if libdir.is_dir() {
-            let mut names: Vec<String> = Vec::new();
-            if let Ok(rd) = std::fs::read_dir(&libdir) {
-                for e in rd.flatten() {
-                    let p = e.path();
-                    if p.extension().and_then(|x| x.to_str()) == Some("a") {
-                        if let Some(stem) = p.file_stem().and_then(|x| x.to_str()) {
-                            names.push(stem.to_string());
-                        }
+        let mut statics: Vec<String> = Vec::new();
+        if let Ok(rd) = std::fs::read_dir(&libdir) {
+            for e in rd.flatten() {
+                let p = e.path();
+                if p.extension().and_then(|x| x.to_str()) == Some("a") {
+                    if let Some(stem) = p.file_stem().and_then(|x| x.to_str()) {
+                        statics.push(stem.to_string());
                     }
                 }
             }
-            names.sort();
-            println!("cargo:warning=linking llama.cpp archives: {}", names.join(", "));
-            for n in names {
+        }
+        statics.sort();
+        if !statics.is_empty() {
+            // Whatever the package actually contains, listed, because a missing
+            // archive surfaces as "undefined symbol: ggml_..." at link time with
+            // no hint about which package should have provided it.
+            println!("cargo:warning=linking static llama.cpp archives: {}", statics.join(", "));
+            for n in statics {
                 println!("cargo:rustc-link-lib=static={n}");
             }
         } else {
+            println!("cargo:warning=linking shared llama.cpp from {}/build/bin", root.display());
             for l in ["llama", "ggml", "ggml-base"] {
-                println!("cargo:rustc-link-lib=static={l}");
+                println!("cargo:rustc-link-lib=dylib={l}");
             }
         }
-        let bin = format!("{root}/build/bin");
+        let bin = format!("{}/build/bin", root.display());
         if !using_prebuilt && std::path::Path::new(&bin).is_dir() {
             println!("cargo:rustc-link-arg=-Wl,-rpath,{bin}");
         }

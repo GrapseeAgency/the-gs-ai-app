@@ -212,7 +212,7 @@ jobs:
               exit 1
             }
             echo "=== $A ==="
-            bash "$GITHUB_WORKSPACE/.github/scripts/assert_arm64_member.sh" "$OUT/$A" "$A"
+            bash "$GITHUB_WORKSPACE/.github/scripts/assert_arch_member.sh" "$OUT/$A" "$A" arm64
             SZ=$(stat -c%s "$OUT/$A")
             TOTAL=$((TOTAL + SZ))
             echo "  size: $SZ bytes"
@@ -358,12 +358,14 @@ jobs:
         include:
           - abi: arm64-v8a
             target: aarch64-linux-android
+            expect: arm64
           # x86_64 is not optional. The instrumented tests run on an x86_64
           # emulator, and an x86_64 emulator CANNOT load an arm64 .so. Without
           # this slice the device tests could only ever exercise the paths that
           # report UNAVAILABLE, which is the opposite of what they are for.
           - abi: x86_64
             target: x86_64-linux-android
+            expect: x86_64
     steps:
       - uses: actions/checkout@v4
       - name: Install the NDK
@@ -426,7 +428,7 @@ jobs:
           for S in $(find build -name '*.a' | sort); do
             B="dist/lib/$(basename "$S")"
             cp "$S" "$B"
-            bash "$GITHUB_WORKSPACE/.github/scripts/assert_arm64_member.sh" "$B" "$(basename "$S")"
+            bash "$GITHUB_WORKSPACE/.github/scripts/assert_arch_member.sh" "$B" "$(basename "$S")" "${{ matrix.expect }}"
             echo "  $S -> $B ($(stat -c%s "$S") bytes)"
             FOUND=$((FOUND+1))
           done
@@ -529,30 +531,6 @@ jobs:
             ls -la src-sd/ggml | sed -n '1,10p'
             exit 1
           }
-          # ATTEMPT 5. The -D flags in attempt 4 did not stop libwebp being
-          # added: the project does add_subdirectory(thirdparty/libwebp)
-          # unconditionally, so the cpufeatures target with the broken path is
-          # still generated and CMake still fails at the GENERATE step:
-          #     CMake Error at thirdparty/libwebp/CMakeLists.txt:204 (add_library):
-          #       Cannot find source file: /sources/android/cpufeatures/cpu-features.c
-          #     CMake Generate step failed.
-          # Webp is an image INPUT format. The measurement this job exists for is
-          # CPU decode speed, which does not read webp. So the vendored copy is
-          # removed from the FETCHED tree -- the fetch is this job's own scratch
-          # space, not the repository -- and the top-level CMakeLists is patched
-          # to stop referencing it. Webp is not silently missing: the removal is
-          # echoed, and the configure is re-run to prove it still works.
-          echo "removing thirdparty/libwebp from the fetched tree"
-          rm -rf src-sd/thirdparty/libwebp
-          if grep -rn 'libwebp' src-sd/CMakeLists.txt >/dev/null 2>&1; then
-            echo "top-level CMakeLists references libwebp; commenting the reference out"
-            sed -i 's|^\(.*libwebp.*\)$|# disabled for the Android cross-build: \1|' src-sd/CMakeLists.txt
-            grep -n 'libwebp' src-sd/CMakeLists.txt | sed -n '1,10p'
-          else
-            echo "no top-level reference to libwebp; the vendored dir was self-contained"
-          fi
-          echo "stable-diffusion.cpp: $(cd src-sd && git log -1 --format='%H (%ad)' --date=short)"
-
       - name: Build for arm64, CPU only
         run: |
           set -euo pipefail
@@ -595,7 +573,7 @@ jobs:
           for S in $(find build -name '*.a' | sort); do
             B="dist/$(basename "$S")"
             cp "$S" "$B"
-            bash "$GITHUB_WORKSPACE/.github/scripts/assert_arm64_member.sh" "$B" "$(basename "$S")" || true
+            bash "$GITHUB_WORKSPACE/.github/scripts/assert_arch_member.sh" "$B" "$(basename "$S")" arm64 || true
             echo "  $S -> $B ($(stat -c%s "$S") bytes)"
             FOUND=$((FOUND+1))
           done
