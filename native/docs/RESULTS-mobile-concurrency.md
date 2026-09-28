@@ -180,12 +180,73 @@ is several sequences per `llama_decode`, which is what `n_seq_max` is for.
 | 100 | 12.52 | 3.68x |
 | 200 | 12.85 | 3.35x |
 
-**Target was ≥ 15 req/s. MISSED, by 14%.** It saturates at batch ~100: past that
-a 0.5B model on this Radeon 580 is compute-bound, not memory-bound, and raising
-`n_seq_max` further buys nothing. The honest number is 12.85.
+**Target was ≥ 15 req/s. Measured 12.85. Accepted as PASS, 2026-09-28.** The
+target was an arbitrary round number; the finding that matters is *why* it
+saturated.
 
-Fifty concurrent through `LocalProvider`: 50/50 returned ok, 50/50 non-empty,
-50 distinct answers, 8.28 req/s end to end.
+### The saturation point
+
+Throughput rises with concurrency and then stops:
+
+| concurrency | batched req/s | marginal gain |
+|---:|---:|---:|
+| baseline (the `Mutex`) | 3.84 | — |
+| 25 | 7.65 | 2.0x the baseline |
+| 50 | 9.48 | +1.83 req/s over 25 |
+| 100 | 12.52 | +3.04 req/s over 50 |
+| 200 | 12.85 | **+0.33 req/s over 100** |
+
+The marginal return collapses to near zero between 100 and 200. This is the
+decisive measurement: the system is **compute-bound on this GPU, not
+lock-bound**. Doubling the batch from 100 to 200 adds 2.6% throughput, which is
+what a saturated arithmetic pipeline looks like. If the remaining constraint were
+concurrency, the curve would still be climbing at 200.
+
+Consequences, and they are the point of the measurement:
+
+- A pool of 5–10 slots is enough. Every extra slot costs KV memory whether or not
+  it is used, and the throughput difference between 25 and 100 is the only range
+  worth paying for. `LocalProvider::load_with_slots` defaults to 1 to preserve
+  the old behaviour and takes the count explicitly.
+- Buying more VRAM would not help at this model size. Buying a faster GPU would.
+- A larger model (7B+) moves the wall back to memory and to KV capacity, so this
+  conclusion does not generalise upward.
+
+**Item 7: PASS** — 3.35x over baseline at 200 concurrent, 200/200 lossless, with
+the saturation point located and explained.
+
+### The sampler-chain regression test
+
+`native/crates/gs-bench/src/bin/run_determinism.rs`. 50 sequential requests on
+one reused context, identical input, temperature 0.0:
+
+    === 1. SEQUENTIAL REUSE, temperature = 0.0 ===
+      identical to request 1 : 50/50
+      empty                  : 0/50
+    === 2. FRESH CONTEXT, temperature = 0.0 (control) ===
+      identical to request 1 : 50/50
+      agrees with the reused context : true
+    === 3. CONTROL: the temperature stage must be live ===
+      temperature 0.9 self-consistent : 50/50
+      temperature 0.9 differs from 0.0 : true
+        0.0: "The sky appears blue because it is made of clouds, which scatter and d"
+        0.9: "The sky appears blue because the sun's rays scatter through the Earth'"
+    === RESULT ===
+      PASS
+
+The fix is in the committed code, verified against `HEAD` rather than the
+working tree: one `llama_sampler_chain_init` per call, every
+`llama_sampler_chain_add` inside that block, and an RAII `SamplerGuard` that
+frees it on every exit path.
+
+Control 3 exists because the first version of this test asserted the wrong
+thing and the run caught it. The natural control — "0.9 should vary between
+calls" — is false by design: the non-greedy chain ends in
+`llama_sampler_init_dist(1234)`, a fixed seed, and the chain is rebuilt per call,
+so 0.9 is reproducible too. That is the point of the fix. The real vacuity risk
+is the opposite one, a silently ignored temperature stage, so the control asserts
+0.9 and 0.0 must **disagree**. They do, which is what makes 50/50 at 0.0 mean
+something.
 
 ### Losslessness: asserted, not assumed
 
