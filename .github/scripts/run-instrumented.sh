@@ -137,19 +137,39 @@ echo "      than fail, which is why that check exists."
 echo
 echo "=== 4. instrumented tests ==="
 set +e
-gradle --no-daemon --console=plain \
-  # NO -Pandroid.testInstrumentationRunnerArguments... here. Gradle rejects it
-  # against the configuration cache and the argument silently never arrives:
-  #     Passing custom test runner argument
-  #     android.testInstrumentationRunnerArguments.gs_test_model from gradle
-  #     properties or command line is not compatible with configuration caching.
-  # DeviceVerificationTest.findModel() searches /sdcard first, which is exactly
-  # where the push above puts it, so the argument buys nothing and cost a
-  # silently-missing input.
-  :app:connectedDebugAndroidTest 2>&1 | tee connected.log
+# NO -Pandroid.testInstrumentationRunnerArguments... here. Gradle rejects it
+# against the configuration cache and the argument silently never arrives:
+#     Passing custom test runner argument
+#     android.testInstrumentationRunnerArguments.gs_test_model from gradle
+#     properties or command line is not compatible with configuration caching.
+# DeviceVerificationTest.findModel() searches /sdcard first, which is exactly
+# where the push above puts it, so the argument bought nothing and cost a
+# silently-missing input.
+#
+# ONE LINE, NO BACKSLASH CONTINUATION. This was written as a continuation with
+# the comments placed after the `\`, which is a two-line trap: `\`+newline joins
+# the next line onto this one, the `#` then comments out everything to the end of
+# the JOINED line, gradle silently never ran, and the task name became a command:
+#     .github/scripts/run-instrumented.sh: line 149: :app:connectedDebugAndroidTest: command not found
+#     connectedDebugAndroidTest exit: 127
+# Raw, run 36414439107. It cost a booted emulator and a 5-minute APK build.
+gradle --no-daemon --console=plain :app:connectedDebugAndroidTest 2>&1 | tee connected.log
 TEST_RC=${PIPESTATUS[0]}
 set -e
 echo "connectedDebugAndroidTest exit: $TEST_RC"
+
+# 127 is "command not found", which is what a swallowed gradle invocation looks
+# like from here. Naming it means the next reader does not have to guess.
+if [ "$TEST_RC" = "127" ]; then
+  echo "FAIL: gradle was never invoked (exit 127). A backslash continuation"
+  echo "      followed by a comment line comments out the rest of the joined"
+  echo "      line. Check the gradle invocation above."
+  TEST_RC=1
+fi
+if [ ! -s connected.log ]; then
+  echo "FAIL: connected.log is empty, so no test output exists at all."
+  TEST_RC=1
+fi
 
 # A run in which ZERO tests execute is a FAILURE, whatever exit code Gradle
 # returned. This exact false pass is why the guard exists: run 36411916910 was
