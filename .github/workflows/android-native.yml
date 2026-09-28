@@ -41,12 +41,16 @@ jobs:
       matrix:
         include:
           - abi: arm64-v8a
+            triple: aarch64-linux-android
             target: aarch64-linux-android
           - abi: armeabi-v7a
+            triple: armv7a-linux-androideabi
             target: armv7-linux-androideabi
           - abi: x86_64
+            triple: x86_64-linux-android
             target: x86_64-linux-android
           - abi: x86
+            triple: i686-linux-android
             target: i686-linux-android
 
     steps:
@@ -140,25 +144,10 @@ jobs:
           # source: attempt 2 failed with
           #     error: no such command: `env`
           #     help: a command with a similar name exists: `new`
-          # -static-libstdc++: link the C++ runtime INTO the .so instead of
-          # leaving it as a DT_NEEDED on libc++_shared.so.
-          #
-          # Raw, run 36425439967, the first run to actually execute a test with
-          # the library present in the APK:
-          #     java.lang.UnsatisfiedLinkError: dlopen failed: library
-          #     "libc++_shared.so" not found: needed by
-          #     /data/app/.../base.apk!/lib/x86_64/libgs_ffi.so
-          #     in namespace classloader-namespace
-          #
-          # A JNI library that will not dlopen without a second .so is not
-          # self-contained, and the missing companion is invisible in the build:
-          # the APK is produced, the install succeeds, and only System.loadLibrary
-          # on the device reveals it. Static linking makes libgs_ffi.so one file
-          # with no runtime companion, which is what a shipping app wants.
           cargo ndk \
             -t ${{ matrix.target }} \
             -o "$GITHUB_WORKSPACE/dist/android/${{ matrix.abi }}" \
-            build --release -p gs-ffi --lib -- -C link-arg=-static-libstdc++
+            build --release -p gs-ffi --lib
 
           # ATTEMPT 5. cargo-ndk printed
           #     Copying libraries to .../dist/android/arm64-v8a
@@ -168,19 +157,61 @@ jobs:
           # trust the copy, find the artifact and place it explicitly -- and say
           # which path it came from, so the next failure is diagnosable from the
           # log instead of requiring a re-run.
-          # ASSERT IT. A DT_NEEDED on libc++_shared.so here means the static
-          # flag did not take, and the failure would otherwise reappear as an
-          # UnsatisfiedLinkError on a device twenty minutes later, behind a
-          # booted emulator. readelf is in binutils on the runner.
-          SO="$GITHUB_WORKSPACE/dist/android/${{ matrix.abi }}/libgs_ffi.so"
-          echo "=== DT_NEEDED of $SO ==="
-          readelf -d "$SO" | grep NEEDED || echo "  (none)"
-          if readelf -d "$SO" | grep -q 'libc++_shared'; then
-            echo "::error::$SO still needs libc++_shared.so. -static-libstdc++ did not take."
-            echo "Either ship libc++_shared.so in every APK or find what is pulling it in."
+          # SHIP THE COMPANION. Raw, run 36425439967, the first run to execute a
+          # test with the library actually in the APK:
+          #     java.lang.UnsatisfiedLinkError: dlopen failed: library
+          #     "libc++_shared.so" not found: needed by
+          #     .../base.apk!/lib/x86_64/libgs_ffi.so
+          #
+          # Attempt 1 was `-C link-arg=-static-libstdc++`, which does not even
+          # parse here:
+          #     error: unexpected argument '-C' found
+          # cargo ndk has no `--` passthrough for rustc flags.
+          #
+          # Shipping it is the correct answer anyway, not a fallback: this app
+          # links onnxruntime, Tesseract/Leptonica and stable-diffusion.cpp, all
+          # of which are C++ and all of which will need libc++_shared.so. An APK
+          # for this product carries it regardless of what gs-ffi does.
+          DIST="$GITHUB_WORKSPACE/dist/android/${{ matrix.abi }}"
+          CPP="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/${{ matrix.triple }}/libc++_shared.so"
+          if [ ! -f "$CPP" ]; then
+            echo "::error::no libc++_shared.so at $CPP"
             exit 1
           fi
-          echo "  no libc++_shared dependency: the .so is self-contained"
+          cp "$CPP" "$DIST/libc++_shared.so"
+          ls -l "$DIST/"
+
+          # COMPLETENESS, NOT A GUESS. A JNI library that will not dlopen without
+          # a second .so is not self-contained, and the missing companion is
+          # invisible until System.loadLibrary on a device: the APK builds, the
+          # install succeeds, the ELF machine is right, and only dlopen reveals
+          # it. So read the DT_NEEDED of what was just built and require that
+          # every non-system dependency is physically present beside it.
+          #
+          # This is deliberately not "is libc++_shared there" -- that was the
+          # previous assertion and it would have passed a library missing some
+          # other companion. Anything dlopen would need must be in this directory.
+          echo "=== DT_NEEDED completeness check ==="
+          MISSING=""
+          for NEED in $(readelf -d "$DIST/libgs_ffi.so" | sed -n 's/.*(NEEDED).*\[\(.*\)\]/\1/p'); do
+            case "$NEED" in
+              libc.so|libm.so|libdl.so|liblog.so|libandroid.so|libz.so|libjnigraphics.so|libEGL.so|libGLESv2.so|libOpenSLES.so|libnativewindow.so)
+                echo "  system  $NEED" ;;
+              *)
+                if [ -f "$DIST/$NEED" ]; then
+                  echo "  present $NEED"
+                else
+                  echo "  MISSING $NEED"
+                  MISSING="$MISSING $NEED"
+                fi ;;
+            esac
+          done
+          if [ -n "$MISSING" ]; then
+            echo "::error::libgs_ffi.so needs$MISSING and none is in $DIST."
+            echo "The APK would build, install, and then fail at System.loadLibrary."
+            exit 1
+          fi
+          echo "  every dlopen dependency is accounted for"
 
           TRI="${{ matrix.target }}"
           DEST="$GITHUB_WORKSPACE/dist/android/${{ matrix.abi }}"
@@ -246,6 +277,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: libgs_ffi-${{ matrix.abi }}
-          path: dist/android/${{ matrix.abi }}/libgs_ffi.so
+          path: dist/android/${{ matrix.abi }}/
           if-no-files-found: error
           retention-days: 14
