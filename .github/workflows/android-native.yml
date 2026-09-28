@@ -41,16 +41,16 @@ jobs:
       matrix:
         include:
           - abi: arm64-v8a
-            triple: aarch64-linux-android
+            machine: AArch64
             target: aarch64-linux-android
           - abi: armeabi-v7a
-            triple: armv7a-linux-androideabi
+            machine: ARM
             target: armv7-linux-androideabi
           - abi: x86_64
-            triple: x86_64-linux-android
+            machine: X86-64
             target: x86_64-linux-android
           - abi: x86
-            triple: i686-linux-android
+            machine: Intel 80386
             target: i686-linux-android
 
     steps:
@@ -173,11 +173,30 @@ jobs:
           # of which are C++ and all of which will need libc++_shared.so. An APK
           # for this product carries it regardless of what gs-ffi does.
           DIST="$GITHUB_WORKSPACE/dist/android/${{ matrix.abi }}"
-          CPP="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/${{ matrix.triple }}/libc++_shared.so"
-          if [ ! -f "$CPP" ]; then
-            echo "::error::no libc++_shared.so at $CPP"
+          # FOUND BY WHAT IT IS, NOT BY A DIRECTORY NAME. The obvious path
+          #   sysroot/usr/lib/<triple>/libc++_shared.so
+          # is right for three of the four ABIs and wrong for armeabi-v7a, which
+          # NDK r25 does not ship where the triple suggests:
+          #     ##[error]no libc++_shared.so at
+          #     .../ndk/25.2.9519653/.../sysroot/usr/lib/armv7a-linux-androideabi/libc++_shared.so
+          # A hardcoded directory is a guess about another toolchain's layout;
+          # reading the ELF machine is a fact about the file. If no candidate
+          # matches, the sysroot contents are printed so the next reader does not
+          # have to go looking.
+          CPP=""
+          for CAND in $(find "$ANDROID_NDK_ROOT" -name 'libc++_shared.so' -type f 2>/dev/null); do
+            M=$(readelf -h "$CAND" 2>/dev/null | sed -n 's/^[[:space:]]*Machine:[[:space:]]*//p')
+            echo "  candidate $(basename "$(dirname "$CAND")") -> Machine: ${M:-unknown}"
+            case "$M" in
+              *${{ matrix.machine }}*) CPP="$CAND"; break ;;
+            esac
+          done
+          if [ -z "$CPP" ]; then
+            echo "::error::no libc++_shared.so with Machine matching '${{ matrix.machine }}' under $ANDROID_NDK_ROOT"
+            find "$ANDROID_NDK_ROOT" -name 'libc++_shared.so' -type f | sed -n '1,40p'
             exit 1
           fi
+          echo "  using $CPP"
           cp "$CPP" "$DIST/libc++_shared.so"
           ls -l "$DIST/"
 
