@@ -113,3 +113,7 @@ __pycache__/
 native/prebuilts/
 **/*.gguf
 **/*.onnx
+
+# Object files: cc writes these next to the source in a manual in-tree build.
+*.o
+*.obj
