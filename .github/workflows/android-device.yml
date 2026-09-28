@@ -230,7 +230,16 @@ jobs:
           # A cold-boot profile. snapshot and headless are on by default.
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           disable-animations: true
-          script: .github/scripts/run-instrumented.sh
+          # `bash <script>`, NOT a bare path. The runner executes this through
+          # /usr/bin/sh -c, which needs the exec bit, and the bit is lost on
+          # checkout. Raw, run 36405645557 -- which BOOTED the emulator
+          # successfully and then died here:
+          #     [command]/usr/bin/sh -c .github/scripts/run-instrumented.sh
+          #     /usr/bin/sh: 1: .github/scripts/run-instrumented.sh: Permission denied
+          #     ##[error]The process '/usr/bin/sh' failed with exit code 126
+          # This is the third time in this repo that a mode bit, not a program,
+          # has been the failure. The fix is always the same: do not depend on it.
+          script: bash .github/scripts/run-instrumented.sh
 
       - name: Report what actually ran
         if: always()

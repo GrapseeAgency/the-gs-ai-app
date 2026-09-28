@@ -36,6 +36,17 @@ object GsNative {
     external fun buildInfo(): String
 
     /**
+     * What the library actually resolved at load time, as a readable string:
+     * `context=present backend=available(llama.cpp+vulkan) ...`.
+     *
+     * Returns exactly `"UNAVAILABLE"` when there is no context at all, so a
+     * caller can check for that one specific condition. A `chat` call that
+     * returns nothing cannot distinguish "the .so did not load" from "no
+     * generation backend" from "no model"; this names which.
+     */
+    external fun selfCheck(): String
+
+    /**
      * Generate a completion with the default token budget.
      *
      * @throws GsNativeException on any failure, with the native reason attached.

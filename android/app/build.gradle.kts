@@ -10,8 +10,13 @@ plugins {
 android {
     namespace = "com.grapsee.gsai"
     compileSdk = 35
-    // Decision 1 is NOT wired. dynamicFeatures is commented out and the app
-    // builds without it.
+    // Decision 1: RECONNECTED. The module now uses com.android.dynamic-feature
+    // (it was com.android.library, which is why the variant never matched) and
+    // the publishing block is deleted rather than narrowed. See the history on
+    // this file for the four attempts that preceded it.
+    //
+    // If the app build breaks here, comment this line out again: a split that
+    // will not resolve takes the WHOLE app build down with it.
     //
     // BLOCKED after four attempts on the :ocr-fallback module, every one caught
     // by android-app.yml within about 90 seconds of being pushed:
@@ -51,7 +56,7 @@ android {
     //      publication concern and a release bundle is the only place a split
     //      actually matters
     //
-    // dynamicFeatures += setOf(":ocr-fallback")
+    dynamicFeatures += setOf(":ocr-fallback")
 
     defaultConfig {
         applicationId = "com.grapsee.gsai"

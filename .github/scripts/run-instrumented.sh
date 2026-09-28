@@ -68,6 +68,34 @@ fi
 # than internal storage because adb cannot write into /data/data without root,
 # and the test looks in the external dir first.
 echo
+echo "=== 0a. THE EMULATOR MUST BE BOOTED AND THE RIGHT ABI ==="
+# A test that runs on a half-booted emulator produces fake passes, and a test
+# that runs on the wrong ABI skips every native path and looks green. Both are
+# asserted here, before anything else, and a failure stops the run rather than
+# proceeding.
+BOOT=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)
+echo "  sys.boot_completed = '${BOOT:-<empty>}'"
+if [ "$BOOT" != "1" ]; then
+  echo "FAIL: the emulator has not finished booting (sys.boot_completed=${BOOT:-empty})"
+  echo "      Running tests now would produce fake passes."
+  adb devices -l || true
+  exit 1
+fi
+ABI=$(adb shell getprop ro.product.cpu.abi 2>/dev/null | tr -d '\r' || true)
+MACH=$(adb shell uname -m 2>/dev/null | tr -d '\r' || true)
+SDKV=$(adb shell getprop ro.build.version.sdk 2>/dev/null | tr -d '\r' || true)
+echo "  ro.product.cpu.abi = ${ABI:-<empty>}"
+echo "  uname -m            = ${MACH:-<empty>}"
+echo "  sdk                 = ${SDKV:-<empty>}"
+if [ "$MACH" != "x86_64" ]; then
+  echo "FAIL: expected an x86_64 emulator, got '${MACH:-empty}'."
+  echo "      An arm64 .so would be rejected by the linker and every native"
+  echo "      test would SKIP rather than FAIL."
+  exit 1
+fi
+echo "  emulator is booted and x86_64 -- proceeding"
+
+echo
 echo "=== 0b. put the model on the device ==="
 DEV_MODEL=""
 if [ -f "$GITHUB_WORKSPACE/model.gguf" ]; then

@@ -28,13 +28,26 @@
 // result with no error.
 
 plugins {
-    alias(libs.plugins.android.library)
+    // com.android.dynamic-feature, NOT com.android.library. This is the third
+    // step of the unblocking recipe and it is the one that was missing: a
+    // library plugin will not produce the variant the app consumer expects,
+    // which is precisely the error we were getting --
+    //     No matching variant of project ':ocr-fallback' was found. The consumer
+    //     was configured to find a component for use during
+    //     'android-reverse-meta-data' ...
+    // A dynamic feature IS a library with extra packaging rules; the plugin is
+    // what teaches AGP to emit the split.
+    id("com.android.dynamic-feature")
     alias(libs.plugins.kotlin.android)
 }
 
 android {
     namespace = "com.grapsee.gsai.ocrfallback"
     compileSdk = 35
+
+    // Step 2 of the recipe. A dynamic feature must build the same test variant
+    // as the base, or the unit-test variant cannot be matched either.
+    testBuildType = "debug"
 
     defaultConfig {
         // Must match the base module's minSdk. Play refuses a split whose
@@ -63,12 +76,6 @@ android {
 
     // A split must not be published to a maven repo. Reverse-metadata
     // publication is what the resolution error above was about.
-    // A split must not publish reverse metadata. withSourcesJar() takes no
-    // argument in AGP 8.5; passing one gives
-    //     Too many arguments for fun withSourcesJar(): Unit
-    publishing {
-        singleVariant("release")
-    }
 }
 
 dependencies {

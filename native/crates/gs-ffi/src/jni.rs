@@ -160,6 +160,54 @@ pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_backendAvailable(
     })
 }
 
+/// What the library actually resolved at load time.
+///
+/// This exists because a device test that calls `chat` and gets nothing back
+/// cannot tell WHICH of three things failed: the .so did not load, the .so
+/// loaded but has no generation backend, or the backend is present and the model
+/// is missing. This reports that state directly, so a failing device run names
+/// the cause instead of leaving it to be guessed at.
+///
+/// Returns a human-readable string, never the literal "UNAVAILABLE", unless the
+/// whole mobile layer is missing -- so a caller testing for that exact string is
+/// testing for a real and specific condition.
+#[no_mangle]
+pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_selfCheck(
+    env: JNIEnv,
+    _class: JClass,
+) -> jobject {
+    let mut env = env;
+    let has_ctx = match GLOBAL.lock() {
+        Ok(g) => g.is_some(),
+        Err(_) => false,
+    };
+    let mut parts: Vec<String> = Vec::new();
+    parts.push(format!("context={}", if has_ctx { "present" } else { "absent" }));
+    if !has_ctx {
+        // The exact literal, because a caller is entitled to check for it.
+        return match env.new_string("UNAVAILABLE") {
+            Ok(s) => s.into_raw(),
+            Err(_) => std::ptr::null_mut(),
+        };
+    }
+    let backend = call(|c| {
+        if c.backend_available() {
+            Ok(c.backend_name())
+        } else {
+            Err(mobile::MobileError::Unavailable("no generation backend compiled in".into()))
+        }
+    });
+    match backend {
+        Ok(name) => parts.push(format!("backend=available({name})")),
+        Err(e) => parts.push(format!("backend=unavailable({e})")),
+    }
+    parts.push(format!("selfCheck={}", mobile::build_info()));
+    match env.new_string(parts.join(" ")) {
+        Ok(s) => s.into_raw(),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
 /// Build identification, so a crash report can be matched to a commit.
 #[no_mangle]
 pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_buildInfo(
