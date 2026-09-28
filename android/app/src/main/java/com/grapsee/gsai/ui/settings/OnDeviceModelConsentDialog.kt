@@ -81,7 +81,7 @@ fun OnDeviceModelConsentDialog(
                 // UNDECIDED would mean re-prompting next launch, which is the
                 // nag the "once per install" promise forbids. A dismissal is a
                 // refusal.
-                ModelStore.setConsent(Consent.DECLINED)
+                ModelStore.updateConsent(Consent.DECLINED)
                 onDismiss()
             },
             title = { Text("Enable on-device AI?") },
@@ -105,7 +105,7 @@ fun OnDeviceModelConsentDialog(
                             )
                             Switch(
                                 checked = !ModelStore.wifiOnlyConsent,
-                                onCheckedChange = { ModelStore.setWifiOnlyConsent(!it) },
+                                onCheckedChange = { ModelStore.updateWifiOnly(!it) },
                                 modifier = Modifier.testTag("gs_consent_cellular"),
                             )
                         }
@@ -115,7 +115,7 @@ fun OnDeviceModelConsentDialog(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        ModelStore.setConsent(Consent.GRANTED)
+                        ModelStore.updateConsent(Consent.GRANTED)
                         // Re-check rather than assume: the size, the checksum and
                         // the network policy are all enforced again here, so a
                         // GRANTED state is a permission, not a guarantee.
@@ -131,11 +131,11 @@ fun OnDeviceModelConsentDialog(
                                     when (r) {
                                         is ModelDownloader.Result.Complete -> {
                                             ModelStore.recordInstalled(r.file, model.id)
-                                            ModelStore.setLastError(null)
+                                            ModelStore.updateLastError(null)
                                             phase = Phase.DONE
                                         }
                                         is ModelDownloader.Result.Failed -> {
-                                            ModelStore.setLastError(r.reason)
+                                            ModelStore.updateLastError(r.reason)
                                             // Stay on the dialog with the reason
                                             // shown, rather than closing and
                                             // failing silently.
@@ -145,7 +145,7 @@ fun OnDeviceModelConsentDialog(
                                 }
                             }
                             is ModelStore.Result.Refused -> {
-                                ModelStore.setLastError(gate.reason)
+                                ModelStore.updateLastError(gate.reason)
                                 phase = Phase.FAILED
                             }
                         }
@@ -156,7 +156,7 @@ fun OnDeviceModelConsentDialog(
             dismissButton = {
                 TextButton(
                     onClick = {
-                        ModelStore.setConsent(Consent.DECLINED)
+                        ModelStore.updateConsent(Consent.DECLINED)
                         onDismiss()
                     },
                     modifier = Modifier.testTag("gs_consent_decline"),
@@ -200,7 +200,7 @@ fun OnDeviceModelConsentDialog(
                         // Cancel KEEPS the partial file. That is what makes the
                         // next attempt a resume rather than a restart.
                         job?.cancel()
-                        ModelStore.setLastError("Download cancelled. Partial download kept for resume.")
+                        ModelStore.updateLastError("Download cancelled. Partial download kept for resume.")
                         phase = Phase.ASK
                     },
                     modifier = Modifier.testTag("gs_consent_cancel"),

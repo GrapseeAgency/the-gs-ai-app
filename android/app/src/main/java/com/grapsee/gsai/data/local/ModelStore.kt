@@ -43,8 +43,18 @@ object ModelStore {
     var installedModelId by mutableStateOf<String?>(null); private set
     var lastError by mutableStateOf<String?>(null); private set
 
-    /** The UI reports download failures here so the reason survives a recompose. */
-    fun setLastError(reason: String?) {
+    /**
+     * The UI reports download failures here so the reason survives a recompose.
+     *
+     * Named `update...` rather than `set...` on purpose: a `fun setLastError`
+     * has the same JVM signature as the private setter Kotlin generates for
+     * `var lastError`, and the clash is a compile error:
+     *     Platform declaration clash: The following declarations have the same
+     *     JVM signature (setLastError(Ljava/lang/String;)V)
+     * `update` is also what SettingsStore uses for every setter, so the two
+     * stores read the same way.
+     */
+    fun updateLastError(reason: String?) {
         lastError = reason
     }
 
@@ -85,7 +95,7 @@ object ModelStore {
      */
     var wifiOnlyConsent by mutableStateOf(true); private set
 
-    fun setWifiOnlyConsent(v: Boolean) {
+    fun updateWifiOnly(v: Boolean) {
         wifiOnlyConsent = v
         prefs?.edit()?.putBoolean(K.wifiOnly, v)?.apply()
     }
@@ -118,7 +128,7 @@ object ModelStore {
      * the UI asks about size and connectivity, and only then calls
      * [beginDownload].
      */
-    fun setConsent(value: Consent) {
+    fun updateConsent(value: Consent) {
         consent = value
         prefs?.edit()?.putString(K.consent, value.name)?.apply()
         prefs?.edit()?.putBoolean(K.promptShown, true)?.apply()
