@@ -40,11 +40,11 @@ android {
         // Must match the base module's minSdk. Play refuses a split whose
         // minSdk is lower, and the error does not name the mismatch.
         minSdk = 26
-        // NO versionCode here. A library module has none, and the base app's
-        # governs the split at install time. Declaring it here is:
+        // NO versionCode here. A library module has none; the base app's
+        // version governs the split at install time. Declaring it gives
         //     Unresolved reference 'versionCode'.
-        // The "No matching variant" error that prompted it was about BUILD TYPES
-        // and reverse-metadata publication, not about the version code.
+        // The No matching variant error that prompted it was about BUILD
+        // TYPES and reverse-metadata publication, not the version code.
     }
 
     // A dynamic feature is a LIBRARY module, not an application: no launcher,
