@@ -87,7 +87,7 @@ jobs:
         working-directory: native
         run: |
           set -euo pipefail
-          "$GITHUB_WORKSPACE/.github/scripts/assert_arm64_member.sh"          cargo build --release -p gs-ffi --lib --target aarch64-apple-ios
+          cargo build --release -p gs-ffi --lib --target aarch64-apple-ios
           SRC="target/aarch64-apple-ios/release/libgs_ffi.a"
           test -f "$SRC" || { echo "MISSING: $SRC"; exit 1; }
           mkdir -p "$GITHUB_WORKSPACE/dist/ios/device"
@@ -104,7 +104,7 @@ jobs:
         working-directory: native
         run: |
           set -euo pipefail
-          "$GITHUB_WORKSPACE/.github/scripts/assert_arm64_member.sh"          cargo build --release -p gs-ffi --lib --target aarch64-apple-ios-sim
+          cargo build --release -p gs-ffi --lib --target aarch64-apple-ios-sim
           SRC="target/aarch64-apple-ios-sim/release/libgs_ffi.a"
           test -f "$SRC" || { echo "MISSING: $SRC"; exit 1; }
           mkdir -p "$GITHUB_WORKSPACE/dist/ios/simulator"

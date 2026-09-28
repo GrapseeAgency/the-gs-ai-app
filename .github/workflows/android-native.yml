@@ -133,8 +133,6 @@ jobs:
 
       - name: Build libgs_ffi.so
         working-directory: native
-        env:
-          ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_HOME }}
         run: |
           set -euo pipefail
           # cargo-ndk sets CC_*_ANDROID_LINKER and friends for the targets it is
@@ -146,6 +144,44 @@ jobs:
             -t ${{ matrix.target }} \
             -o "$GITHUB_WORKSPACE/dist/android/${{ matrix.abi }}" \
             build --release -p gs-ffi --lib
+
+          # ATTEMPT 5. cargo-ndk printed
+          #     Copying libraries to .../dist/android/arm64-v8a
+          # and then copied NOTHING, so the verify step died on
+          #     MISSING: .../dist/android/arm64-v8a/libgs_ffi.so
+          # with no indication of where the library actually went. Rather than
+          # trust the copy, find the artifact and place it explicitly -- and say
+          # which path it came from, so the next failure is diagnosable from the
+          # log instead of requiring a re-run.
+          TRI="${{ matrix.target }}"
+          DEST="$GITHUB_WORKSPACE/dist/android/${{ matrix.abi }}"
+          mkdir -p "$DEST"
+          FOUND=""
+          for CANDIDATE in \
+            "$DEST/libgs_ffi.so" \
+            "target/$TRI/release/libgs_ffi.so" \
+            "target/$TRI/release/deps/libgs_ffi.so"; do
+            if [ -f "$CANDIDATE" ]; then FOUND="$CANDIDATE"; break; fi
+          done
+          if [ -z "$FOUND" ]; then
+            echo "MISSING: libgs_ffi.so for $TRI. What is actually there:"
+            find target -name 'libgs_ffi*' -o -name '*.so' | sed -n '1,40p' || true
+            echo "--- and the crate types gs-ffi declares ---"
+            sed -n '/^\[lib\]/,/^\[/p' crates/gs-ffi/Cargo.toml
+            exit 1
+          fi
+          echo "found: $FOUND"
+          if [ "$FOUND" != "$DEST/libgs_ffi.so" ]; then
+            cp "$FOUND" "$DEST/libgs_ffi.so"
+            echo "copied to $DEST/libgs_ffi.so"
+          fi
+          file "$DEST/libgs_ffi.so"
+          # A cdylib that exists but exports nothing loads and fails at the
+          # first call, so the ABI is asserted, not assumed.
+          N=$(nm -D --defined-only "$DEST/libgs_ffi.so" | grep -c 'gs_ffi_mobile_' || true)
+          echo "gs_ffi_mobile_* exported: $N"
+          [ "$N" -ge 8 ] || {
+            echo "FAIL: expected >=8 gs_ffi_mobile_* exports, got $N"; exit 1; }
 
       - name: Verify the artifact
         run: |
