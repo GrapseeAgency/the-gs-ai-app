@@ -195,40 +195,38 @@ jobs:
             # Symbols: an archive that exists but exports nothing is the exact
             # failure that was fixed for the .so, and it must be caught here too.
             #
-            # Raw error, run 36376843232:
-            #     members: 199
-            #     gs_ffi_mobile_* exported: 0
+            # Counted by .github/scripts/count_exported_symbols.sh rather than by
+            # inline `nm`, because Xcode's nm cannot read the objects Rust
+            # produces. Raw error, run 36377091198:
+            #     nm: error: .../libgs_ffi.a(gs_ffi.gs_ffi....rcgu.o):
+            #       Unknown attribute kind (105)
+            #       (Producer: 'LLVM22.1.8-rust-1.98.1-stable'
+            #        Reader: 'LLVM APPLE_1_2100.1.1.101_0')
             #     FAIL: expected >=8 exports, got 0
-            #
-            # That 0 was not measured, it was swallowed. `nm -gU ... 2>/dev/null`
-            # produced NO output -- either nm rejected the flags or it scanned
-            # nothing -- and grep -c over nothing is 0, which is indistinguishable
-            # from a library that genuinely exports nothing. That is the second
-            # time in this file a 2>/dev/null turned a tool failure into a
-            # plausible-looking number; the first was cargo-ndk's silent copy.
-            #
-            # So: no stderr suppression, and nm's own output is captured so a
-            # failure is reported as a failure. `nm -g` (defined symbols) is
-            # used rather than -gU because -U means different things on GNU nm
-            # and Apple nm, and a flag that means something else on the machine
-            # running the check is not a check.
-            if ! SYMS=$(nm -g "$A" 2>&1); then
-              echo "FAIL: nm could not read $A"
-              printf '%s\n' "$SYMS" | sed -n '1,20p'
-              exit 1
-            fi
-            N=$(printf '%s\n' "$SYMS" | grep -cE 'gs_ffi_mobile_' || true)
-            echo "    total nm lines   : $(printf '%s\n' "$SYMS" | wc -l | tr -d ' ')"
+            # The gs_ffi member is one of the rejected ones, so "0 exports" was
+            # the reader's version skew wearing the costume of a real result.
+            # The script uses llvm-nm from the Rust toolchain -- the LLVM that
+            # emitted the objects -- and reports a reader failure as a failure
+            # rather than as a count of zero.
+            N="$(bash "$GITHUB_WORKSPACE/.github/scripts/count_exported_symbols.sh" "$A" gs_ffi_mobile_)"
             echo "    gs_ffi_mobile_* exported: $N"
             if [ "$N" -lt 8 ]; then
-              echo "FAIL: expected >=8 exports, got $N. Sample of what nm did return:"
-              printf '%s\n' "$SYMS" | grep -E 'gs_' | sed -n '1,15p'
+              echo "FAIL: expected >=8 exports, got $N"
+              # Print what the reader DID find, so a genuinely empty export table
+              # is distinguishable from a reader problem.
+              bash "$GITHUB_WORKSPACE/.github/scripts/count_exported_symbols.sh" \
+                "$A" 'gs_' 2>/dev/null | sed -n '1,20p' || true
               exit 1
             fi
           done
 
           echo "=== exported mobile ABI (device) ==="
-          nm -g "$GITHUB_WORKSPACE/dist/ios/device/libgs_ffi.a" \
+          # llvm-nm for the same reason as the count above.
+          SYSROOT="$(rustc --print sysroot)"
+          LLVM_NM="$(find "$SYSROOT" -name 'llvm-nm' -type f | sed -n '1p')"
+          test -n "$LLVM_NM" || { echo "FAIL: llvm-nm not found"; exit 1; }
+          "$LLVM_NM" --defined-only --extern-only \
+            "$GITHUB_WORKSPACE/dist/ios/device/libgs_ffi.a" \
             | grep -oE 'gs_[a-z_0-9]+' | sort -u | sed -n '1,20p'
 
           echo "=== dSYM ==="
