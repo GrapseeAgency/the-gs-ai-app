@@ -16,15 +16,14 @@ android {
     // traineddata for a segment that is ~1% of installs is the wrong trade in
     // the base APK and a reasonable one on request.
     //
-    // Two things about this line, both of which are script COMPILE errors rather
-    // than configuration errors, so the messages name neither the property nor
-    // the module:
-    //   * it belongs at the `android { }` level, not inside `defaultConfig`
-    //   * the type is MutableSet<String>, so an array literal does not compile:
-    //       Assignment type mismatch: actual type is 'Array<String>', but
-    //       'MutableSet<String>' was expected.
-    //       Array literals outside of annotations are unsupported.
-    dynamicFeatures = mutableSetOf(":ocr-fallback")
+    // Three attempts on one line, all SCRIPT COMPILE errors whose messages name
+    // neither the property nor the module, so each one read as unrelated:
+    //   1. inside defaultConfig      -> 'val' cannot be reassigned
+    //   2. = arrayOf(...)            -> actual type is 'Array<String>', but
+    //                                    'MutableSet<String>' was expected
+    //   3. = mutableSetOf(...)       -> 'val' cannot be reassigned
+    // AGP 8 types this as a SetProperty, which Kotlin DSL assigns with `+=`:
+    dynamicFeatures += setOf(":ocr-fallback")
 
     defaultConfig {
         applicationId = "com.grapsee.gsai"
