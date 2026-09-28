@@ -138,11 +138,32 @@ echo
 echo "=== 4. instrumented tests ==="
 set +e
 gradle --no-daemon --console=plain \
-  :app:connectedDebugAndroidTest \
-  -Pandroid.testInstrumentationRunnerArguments.gs_test_model="${GS_TEST_MODEL:-$DEV_MODEL}" 2>&1 | tee connected.log
+  # NO -Pandroid.testInstrumentationRunnerArguments... here. Gradle rejects it
+  # against the configuration cache and the argument silently never arrives:
+  #     Passing custom test runner argument
+  #     android.testInstrumentationRunnerArguments.gs_test_model from gradle
+  #     properties or command line is not compatible with configuration caching.
+  # DeviceVerificationTest.findModel() searches /sdcard first, which is exactly
+  # where the push above puts it, so the argument buys nothing and cost a
+  # silently-missing input.
+  :app:connectedDebugAndroidTest 2>&1 | tee connected.log
 TEST_RC=${PIPESTATUS[0]}
 set -e
 echo "connectedDebugAndroidTest exit: $TEST_RC"
+
+# A run in which ZERO tests execute is a FAILURE, whatever exit code Gradle
+# returned. This exact false pass is why the guard exists: run 36411916910 was
+# green in all nine steps, reported "Starting 0 tests on emulator-5554", and
+# exit 0. Only `testInstrumentationRunner` was missing.
+RAN=$(grep -oE 'Starting [0-9]+ tests?' connected.log | grep -oE '[0-9]+' | tail -1 || true)
+RAN=${RAN:-0}
+echo "tests the runner actually started: $RAN"
+if [ "$RAN" = "0" ]; then
+  echo "FAIL: the runner started ZERO tests. This is not a pass; it is an empty run."
+  echo "      Check testInstrumentationRunner in :app defaultConfig -- without it"
+  echo "      the androidTest APK has no runner and discovery returns nothing."
+  TEST_RC=1
+fi
 
 echo
 echo "=== 5. what ran, what skipped, what failed ==="

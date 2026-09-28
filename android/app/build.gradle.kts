@@ -75,6 +75,18 @@ android {
 
     defaultConfig {
         applicationId = "com.grapsee.gsai"
+
+        // THE ROOT CAUSE OF "0 TESTS RAN". This was absent, so the androidTest
+        // APK shipped with no instrumentation runner, the runner class could not
+        // be found, and discovery returned an empty set. Raw, run 36411916910,
+        // which was GREEN end to end and proved nothing:
+        //     Starting 0 tests on emulator-5554 - 11
+        //     BUILD SUCCESSFUL in 11m 47s
+        //     connectedDebugAndroidTest exit: 0
+        // A green run in which no test executed is the single worst outcome
+        // here, because it is indistinguishable from a passing run at a glance.
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
         minSdk = 26
         targetSdk = 35
         versionCode = 73
