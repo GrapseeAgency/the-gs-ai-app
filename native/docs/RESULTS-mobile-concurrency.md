@@ -432,29 +432,158 @@ parts that touch no UI — the downloader, SHA256 verification, resume, and the
 SharedPreferences/UserDefaults path entry — can be written immediately and do not
 depend on the answer.
 
-**Item 2 — cross-compiling the C/C++ dependencies for Android ARM64: BLOCKED by
-design, and the reason is measured rather than assumed.**
+**Item 2 — Android arm64 cross-compiles: 3 PASS, 1 BLOCKED.**
 
-The mobile build is PORTABLE-ONLY. The artifacts above prove the consequence:
-each `.so` is ~220 KB and exports 10 `gs_ffi_mobile_*` entry points. `build.rs`
-emits, on a mobile target:
+Runs 36385099961 (attempt 4) and 36385724635 (attempt 5).
 
-    cargo:warning=portable mobile build: CLIP, OCR and llama.cpp are NOT
-        compiled in; every such call reports GS_ERR_UNAVAILABLE
-    cargo:warning=skipping gs_clip: no sources on this target
-    cargo:warning=skipping gs_ocr_tess: no sources on this target
-
-| dep | status | why |
+| dep | status | measured |
 |---|---|---|
-| llama.cpp | not cross-compiled | a 300 MB decode engine inside a phone binary is not the product; a 0.5B Q4_K_M is 400 MB on disk and 1.5 GB resident with KV |
-| ONNX Runtime | not cross-compiled | the AAR is a Java artifact and does not satisfy a C ABI link; embedding it would add tens of MB for CLIP embeddings only |
-| Tesseract | not cross-compiled | no drop-in arm64 Android prebuilt; the brief's own escape hatch is ML Kit **for OCR only**, which was not taken because it is a different engine behind the same ABI and would make the "portable-only" claim false |
-| stable-diffusion.cpp | not cross-compiled | ~1 image per 5–10 min on phone CPU is not a feature |
+| onnxruntime | **PASS** | 12,528,434 B, aarch64 ELF, `OrtGetApiBase` present |
+| llama.cpp | **PASS** | `libllama.a` 2,779,124 B, `libggml.a` 80,556 B, `libggml-base.a` 1,001,246 B — all aarch64 |
+| tesseract + leptonica | **PASS** | stripped 12,282,294 B; raw 86,252,478 B |
+| stable-diffusion.cpp | **BLOCKED** | five attempts, logs below |
 
-None of this is "the environment cannot". It is a deliberate decision, taken
-before the work, and the ~220 KB artifacts are the evidence for it. If the intent
-was to cross-compile them anyway, the Tesseract line in the brief already names
-the fallback and I would need to know whether ML Kit is acceptable.
+**Tesseract, which is the one that actually matters.** It is the fallback for the
+~1% of Android devices with no Google Play Services, which is the entire reason
+it is being cross-compiled. Verified arm64 by extracting an archive member:
+
+    libleptonica.a  first object member: adaptmap.o
+    libtesseract.a  first object member: libtesseract_la-baseapi.o
+
+### The size is 12.3 MB stripped, not the ~4 MB the brief expected
+
+    libleptonica.a    14,410,402 raw  ->  5,067,010 stripped   (65% smaller)
+    libtesseract.a   71,842,076 raw  ->  7,215,284 stripped   (90% smaller)
+    TOTAL            86,252,478 raw  -> 12,282,294 stripped
+
+Both figures are reported because both are true of different things. 86 MB is
+what an unstripped autotools archive weighs; 12.3 MB is what the stripped
+archives weigh, and the stripped ones are what the package step ships. The
+brief's ~4 MB estimate was roughly a third of reality. Autotools builds static
+archives with far more than the object code a phone would load, and 7.2 MB of
+`libtesseract` is mostly C++ and the LSTM engine.
+
+**This is the number to argue about, and it is the number that decides whether
+Tesseract ships.** 12.3 MB of static libraries in an APK, plus ~15 MB of
+`eng.traineddata`, is ~27 MB added to a download for a user base segment that is
+1% of installs. That may still be the right trade — those users have no OCR at
+all otherwise — but it should be a decision, not an accident of measurement.
+
+### ONNX Runtime is not a C library
+
+There is no arm64 C distribution. The distribution is the Android AAR, and the
+`.so` inside it is a real ELF that is linkable from NDK builds and loadable by
+the Java loader. Version pinned to 1.20.0: an unpinned "latest" makes any
+failure unreproducible, and the ABI is not guaranteed across majors.
+
+### stable-diffusion.cpp — BLOCKED, five attempts, all logs
+
+Not an environment limitation and not a missing SDK. An upstream out-of-tree
+configure defect in the vendored libwebp.
+
+| # | run | raw error |
+|---:|---|---|
+| 1 | 36383123086 | `fatal: destination path 'src' already exists and is not an empty directory.` |
+| 2 | 36383749573 | `CMake Error at cmake/ggml.cmake:5 (add_subdirectory): The source directory .../src-sd/ggml does not contain a CMakeLists.txt file.` |
+| 3 | 36384581930 | `CMake Error at thirdparty/libwebp/CMakeLists.txt:204 (add_library): Cannot find source file: /sources/android/cpufeatures/cpu-features.c` |
+| 4 | 36385099961 | same error; `-DSD_ENABLE_WEBP=OFF -DGGML_WEBP=OFF -DWEBP=OFF` did nothing because libwebp is added unconditionally |
+| 5 | 36385724635 | `CMake Error at CMakeLists.txt:60 (endif)` — removing the vendored dir and commenting the reference broke the top-level file instead |
+
+Attempt 2's error names a missing `CMakeLists.txt` when the real cause is an
+unfetched git submodule, which is a genuinely misleading diagnostic. Attempt 3's
+path is an absolute `/sources/android/...` assembled from a relative path, which
+is not a path anything could have produced.
+
+The one untried idea is recorded in the workflow so a sixth attempt starts there
+rather than repeating these five: patch
+`thirdparty/libwebp/CMakeLists.txt` so the `cpufeatures-webp` target points at a
+real source, rather than deleting the reference.
+
+Separately, even if it built: ~1 image per 5-10 minutes on a phone CPU is not a
+feature, and the brief asks for that figure to be *measured* rather than
+estimated. Nothing here has been run on a device, so no figure has been
+measured.
+
+## Items 3, 4, 5 — what landed after the decisions
+
+### Item 3 — model download: implemented, not yet run on a device
+
+`ModelCatalog` (device class → model), `ModelDownloader` (resume, progress,
+cancel, SHA-256), `ModelStore` (consent, cellular policy), and a Compose
+`AlertDialog` as the one-time gate. Two existing files touched, three lines
+total: `GSApplication.init`, and a `Box` around `GsNavHost` in `MainActivity`.
+
+The 0.5B checksum is **measured, not copied from a release page**:
+
+    74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db
+    491,400,032 bytes — the same file the desktop benchmarks use
+
+The 1.5B checksum is **empty and that is deliberate**. This repo has never
+fetched that file, so there is no honest hash to write, and `mayDownload()`
+refuses to offer it. Shipping an unverifiable model would make the integrity
+check decorative. The comment says how to fill it in.
+
+Verification is three rules, all fail-closed: an empty expected hash refuses the
+download; a SHA mismatch **deletes** the partial, because resuming onto corrupt
+bytes yields a file that is the right size and wrong; the verified file is
+renamed into place, so a reader sees the whole model or no model.
+
+Resume is a Range request against the **partial file**, not a counter in
+preferences — a counter and the file disagree when the process is killed between
+write and flush. If the server ignores the range and replies 200, the partial is
+deleted rather than appended to.
+
+**This host cannot compile Kotlin** (empty `ANDROID_HOME`), which is why
+`android-app.yml` was added. It immediately found six errors across two rounds,
+in files this branch had added:
+
+    e: ModelCatalog.kt:133  Unresolved reference 'ActivityManager'
+    e: GsNavHost.kt:241     Unresolved reference 'remember'
+    e: ModelStore.kt:44     Platform declaration clash (setLastError)
+    e: ModelStore.kt:86     Platform declaration clash (setWifiOnlyConsent)
+    e: ModelStore.kt:121    Platform declaration clash (setConsent)
+
+The last three are one mistake made twice: a `fun setX(v: T)` compiles to the
+same JVM method as the private setter Kotlin generates for `var x: T`. All
+renamed to `update*`, which is what `SettingsStore` already uses.
+
+**Run 36385592273: `BUILD SUCCESSFUL`.** The app module compiles.
+
+### Items 4/5 commit 1(b) — the "Prefer on-device AI" toggle
+
+Default **OFF**, so shipped routing is unchanged until someone opts in. The
+guard requires all of: the switch is on, a model is installed, the engine has a
+backend, and no ready attachments — because a local model cannot read files that
+were just uploaded, so answering from it would produce a confident reply about
+content it never saw.
+
+A failure inside the native call is **not** a reason to give up: the provider
+path is still there. The reply is delivered as one delta, because the provider
+path streams only because the *server* streams.
+
+One `SwitchRow` in the existing AI section on Android, one `toggleRow` in the
+existing AI section on iOS. No new screens.
+
+### iOS OCR — Apple Vision
+
+`GsNative.runOcr` is routed to `AppleVisionOcr` rather than `gs_mobile_ocr`,
+because the C ABI has no OCR backend in an iOS build and calling it would return
+a GS_ERR_UNAVAILABLE string on every image — exactly the empty-string-instead-of-
+an-error failure the whole surface exists to prevent.
+
+`recognitionLevel = .accurate` (the fast path drops small text and is tuned for
+camera frames), `usesLanguageCorrection = false` (it "corrects" SKUs into
+words), and results sorted by bounding box because Vision returns them in no
+guaranteed order.
+
+OCR is deliberately **independent** of the engine: `GsNativeLoader.isOcrAvailable`
+is true whether or not a native context exists, because Vision is an OS
+framework. Reporting "on-device AI unavailable" on a device whose OCR works
+would be a false negative hiding a working feature.
+
+`Features/Vision/VisionView.swift` is still the honest "coming soon" stub. Wiring
+the engine is done; turning that stub into a screen with a picker and results is
+new UI, which the standing rules forbid.
 
 **No device or emulator run.** The JNI and C-interop paths are compiled,
 type-checked, exported and symbol-verified in CI. Nothing has been executed on
