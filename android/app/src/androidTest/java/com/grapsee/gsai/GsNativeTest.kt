@@ -37,16 +37,36 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class GsNativeTest {
 
+    /**
+     * Where the model is, in order of preference.
+     *
+     * The CI job pushes it with `adb push ... /sdcard/<name>` because adb cannot
+     * write into /data/data without root, so the app-external dir is checked too
+     * and not only the DOWNLOADS subdirectory. Without that second path the test
+     * finds nothing and SKIPS, which is the failure mode this file exists to
+     * prevent: a skipped test reads like a pass.
+     */
     private val deviceModel: String?
         get() {
-            val fromEnv = System.getenv("GS_TEST_MODEL")
-            if (!fromEnv.isNullOrBlank()) return fromEnv
-            val dir = InstrumentationRegistry.getInstrumentation()
-                .targetContext
-                .getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
-                ?: return null
-            val f = java.io.File(dir, "qwen2.5-0.5b-instruct-q4_k_m.gguf")
-            return if (f.isFile && f.length() > 0) f.absolutePath else null
+            val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+            // 1. the argument the runner passes through
+            val arg = InstrumentationRegistry.getArguments()
+                .getString("gs_test_model")
+            if (!arg.isNullOrBlank() && java.io.File(arg).isFile) return arg
+            // 2. anything already pushed
+            for (dir in listOf(
+                java.io.File("/sdcard"),
+                java.io.File("/storage/emulated/0"),
+                ctx.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
+            )) {
+                if (dir == null) continue
+                val f = java.io.File(dir, "qwen2.5-0.5b-instruct-q4_k_m.gguf")
+                if (f.isFile && f.length() > 0) {
+                    println("GsNativeTest: found model at ${f.absolutePath} (${f.length()} bytes)")
+                    return f.absolutePath
+                }
+            }
+            return null
         }
 
     private fun requireModel(): String {

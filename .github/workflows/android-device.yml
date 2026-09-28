@@ -91,6 +91,67 @@ jobs:
           echo "$SDK/emulator" >> "$GITHUB_PATH"
           echo "image: $(ls "$SDK/system-images/android-30/google_apis/")"
 
+      - name: Fetch the cross-compiled llama.cpp for this ABI
+        run: |
+          set -euo pipefail
+          # Without this the .so is PORTABLE-ONLY: it links, it exports all 10
+          # mobile symbols, and every generation call answers GS_ERR_UNAVAILABLE.
+          # The tests would then "pass" by asserting that nothing works, which is
+          # the opposite of what they are for. So this step fails the job rather
+          # than letting a portable-only run be mistaken for a real one.
+          mkdir -p native/prebuilts
+          if ! gh run download --repo "$GITHUB_REPOSITORY" \
+               --name llamacpp-x86_64 --dir /tmp/llamacpp 2>/dev/null; then
+            echo "FAIL: the llamacpp-x86_64 artifact is not available."
+            echo "      Run the android-deps workflow first, or this job cannot"
+            echo "      test generation -- only the UNAVAILABLE path."
+            exit 1
+          fi
+          tar -xzf /tmp/llamacpp/*.tar.gz -C native/prebuilts/android-x86_64
+          echo "=== prebuilt contents ==="
+          find native/prebuilts/android-x86_64 -type f | sort | sed -n '1,30p'
+          test -f native/prebuilts/android-x86_64/include/llama.h || {
+            echo "FAIL: no include/llama.h in the prebuilt package"; exit 1; }
+          test -d native/prebuilts/android-x86_64/lib || {
+            echo "FAIL: no lib/ in the prebuilt package"; exit 1; }
+          echo "total: $(du -sh native/prebuilts/android-x86_64 | cut -f1)"
+          # The archives must be x86_64, not arm64, or the linker rejects them
+          # and every test SKIPS instead of running.
+          for a in native/prebuilts/android-x86_64/lib/*.a; do
+            echo "  $(basename "$a")"
+            file -b "$a" | sed 's/^/    /'
+          done
+
+      - name: Fetch the 0.5B model and verify its checksum
+        run: |
+          set -euo pipefail
+          # This is the model the instrumented tests load. Fetching it here also
+          # VERIFIES the SHA-256 hardcoded in ModelCatalog.kt against the real
+          # upstream file, which until now was a claim nothing had tested.
+          #   expected: 74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db
+          #   size   : 491,400,032 bytes
+          URL="https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf"
+          EXPECT="74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db"
+          echo "fetching 491 MB from HuggingFace"
+          curl -fL --retry 3 --retry-delay 5 -o model.gguf "$URL"
+          SZ=$(stat -c%s model.gguf)
+          echo "size: $SZ (expected 491400032)"
+          [ "$SZ" = "491400032" ] || { echo "FAIL: size mismatch"; exit 1; }
+          GOT=$(sha256sum model.gguf | cut -d' ' -f1)
+          echo "sha256: $GOT"
+          echo "expect: $EXPECT"
+          if [ "$GOT" = "$EXPECT" ]; then
+            echo "CHECKSUM MATCHES ModelCatalog.kt -- the hardcoded hash is correct"
+            echo "GS_MODEL_VERIFIED=true" >> "$GITHUB_ENV"
+          else
+            # Not fatal to the device run: the model is still usable, and a
+            # mismatch is a finding rather than a reason to skip the hardware.
+            echo "CHECKSUM MISMATCH. ModelCatalog.kt needs updating. Continuing so"
+            echo "the device results are not lost, and this is reported as a FAILURE."
+            echo "GS_MODEL_VERIFIED=false" >> "$GITHUB_ENV"
+          fi
+          mkdir -p device-artifacts
+
       - name: Start the emulator and run the instrumented tests
         uses: reactivecircus/android-emulator-runner@v2
         with:

@@ -64,6 +64,21 @@ else
   find native/prebuilts -maxdepth 3 2>/dev/null | sed -n '1,20p' || true
 fi
 
+# Push the model onto the device. It goes to the app's EXTERNAL files dir rather
+# than internal storage because adb cannot write into /data/data without root,
+# and the test looks in the external dir first.
+echo
+echo "=== 0b. put the model on the device ==="
+DEV_MODEL=""
+if [ -f "$GITHUB_WORKSPACE/model.gguf" ]; then
+  echo "pushing model.gguf (this is slow on an emulator; be patient)"
+  adb push "$GITHUB_WORKSPACE/model.gguf" /sdcard/qwen2.5-0.5b-instruct-q4_k_m.gguf || true
+  DEV_MODEL=/sdcard/qwen2.5-0.5b-instruct-q4_k_m.gguf
+  echo "on device: $(adb shell ls -la /sdcard/qwen2.5-0.5b-instruct-q4_k_m.gguf 2>&1)"
+else
+  echo "no model.gguf; model-backed tests will SKIP rather than fail"
+fi
+
 echo
 echo "=== 1. build the APK and the instrumented-test APK ==="
 cd android
@@ -96,7 +111,7 @@ echo "=== 4. instrumented tests ==="
 set +e
 gradle --no-daemon --console=plain \
   :app:connectedDebugAndroidTest \
-  -Pandroid.testInstrumentationRunnerArguments.gs_test_model="${GS_TEST_MODEL:-}" 2>&1 | tee connected.log
+  -Pandroid.testInstrumentationRunnerArguments.gs_test_model="${GS_TEST_MODEL:-$DEV_MODEL}" 2>&1 | tee connected.log
 TEST_RC=${PIPESTATUS[0]}
 set -e
 echo "connectedDebugAndroidTest exit: $TEST_RC"
