@@ -140,10 +140,25 @@ jobs:
           # source: attempt 2 failed with
           #     error: no such command: `env`
           #     help: a command with a similar name exists: `new`
+          # -static-libstdc++: link the C++ runtime INTO the .so instead of
+          # leaving it as a DT_NEEDED on libc++_shared.so.
+          #
+          # Raw, run 36425439967, the first run to actually execute a test with
+          # the library present in the APK:
+          #     java.lang.UnsatisfiedLinkError: dlopen failed: library
+          #     "libc++_shared.so" not found: needed by
+          #     /data/app/.../base.apk!/lib/x86_64/libgs_ffi.so
+          #     in namespace classloader-namespace
+          #
+          # A JNI library that will not dlopen without a second .so is not
+          # self-contained, and the missing companion is invisible in the build:
+          # the APK is produced, the install succeeds, and only System.loadLibrary
+          # on the device reveals it. Static linking makes libgs_ffi.so one file
+          # with no runtime companion, which is what a shipping app wants.
           cargo ndk \
             -t ${{ matrix.target }} \
             -o "$GITHUB_WORKSPACE/dist/android/${{ matrix.abi }}" \
-            build --release -p gs-ffi --lib
+            build --release -p gs-ffi --lib -- -C link-arg=-static-libstdc++
 
           # ATTEMPT 5. cargo-ndk printed
           #     Copying libraries to .../dist/android/arm64-v8a
@@ -153,6 +168,20 @@ jobs:
           # trust the copy, find the artifact and place it explicitly -- and say
           # which path it came from, so the next failure is diagnosable from the
           # log instead of requiring a re-run.
+          # ASSERT IT. A DT_NEEDED on libc++_shared.so here means the static
+          # flag did not take, and the failure would otherwise reappear as an
+          # UnsatisfiedLinkError on a device twenty minutes later, behind a
+          # booted emulator. readelf is in binutils on the runner.
+          SO="$GITHUB_WORKSPACE/dist/android/${{ matrix.abi }}/libgs_ffi.so"
+          echo "=== DT_NEEDED of $SO ==="
+          readelf -d "$SO" | grep NEEDED || echo "  (none)"
+          if readelf -d "$SO" | grep -q 'libc++_shared'; then
+            echo "::error::$SO still needs libc++_shared.so. -static-libstdc++ did not take."
+            echo "Either ship libc++_shared.so in every APK or find what is pulling it in."
+            exit 1
+          fi
+          echo "  no libc++_shared dependency: the .so is self-contained"
+
           TRI="${{ matrix.target }}"
           DEST="$GITHUB_WORKSPACE/dist/android/${{ matrix.abi }}"
           mkdir -p "$DEST"

@@ -232,7 +232,21 @@ jobs:
             exit 1
           fi
           cp "$SO" android/app/src/main/jniLibs/x86_64/libgs_ffi.so
-          ls -l android/app/src/main/jniLibs/x86_64/libgs_ffi.so
+          # SAFETY NET, not the fix. android-native now links libc++ statically and
+          # FAILS ITS OWN BUILD if a libc++_shared DT_NEEDED survives, so this
+          # should find nothing. If it does, the companion is placed anyway so the
+          # tests can run and the run reports a result instead of being unable to
+          # start:
+          #     java.lang.UnsatisfiedLinkError: dlopen failed: library
+          #     "libc++_shared.so" not found
+          COMPANION=$(find /tmp/so-artifact/x -name 'libc++_shared.so' -type f | head -1 || true)
+          if [ -n "$COMPANION" ]; then
+            echo "NOTE: placing companion $(basename "$COMPANION")"
+            cp "$COMPANION" android/app/src/main/jniLibs/x86_64/libc++_shared.so
+          else
+            echo "companion: none needed"
+          fi
+          ls -l android/app/src/main/jniLibs/x86_64/
           # Prove the ELF machine is x86-64 BEFORE the APK is built. A wrong-ABI .so is
           # accepted by the build and rejected by the linker on device, where it looks
           # exactly like a missing file -- the ambiguity this step exists to remove.
