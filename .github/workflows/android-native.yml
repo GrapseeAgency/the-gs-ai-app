@@ -364,12 +364,12 @@ jobs:
           # let a portable-only .so reach a device, export ten symbols, and pass
           # every build-time gate in the repository. build.rs already announces
           # this condition; the workflow just never read the announcement.
-          if grep -q 'portable mobile build' "$GITHUB_WORKSPACE/build-${{ matrix.abi }}.log"; then
-            echo "::error::the build is PORTABLE-ONLY -- llama.cpp was not compiled in."
-            echo "Every chat() on a phone would return GS_ERR_UNAVAILABLE."
-            grep -n 'portable mobile build' "$GITHUB_WORKSPACE/build-${{ matrix.abi }}.log" || true
-            exit 1
-          fi
+          # POSITIVE CHECK ONLY. This used to be
+          #     grep -q 'portable mobile build' && exit 1
+          # which could NEVER pass: build.rs printed that line unconditionally for
+          # every mobile target, before attempting the llama.cpp linkage, so it
+          # proved only "the target is mobile". It is gone from build.rs now; the
+          # gate asserts the positive fact instead.
           if ! grep -q 'WITH a llama.cpp backend' "$GITHUB_WORKSPACE/build-${{ matrix.abi }}.log"; then
             echo "::error::the build log does not confirm a llama.cpp backend was linked."
             grep -iE 'llama|backend|prebuilt' "$GITHUB_WORKSPACE/build-${{ matrix.abi }}.log" | sed -n '1,20p' || true

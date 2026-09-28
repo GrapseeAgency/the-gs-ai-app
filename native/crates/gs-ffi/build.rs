@@ -26,12 +26,28 @@ fn is_mobile_target() -> bool {
 
 fn main() {
     let mobile = is_mobile_target();
-    if mobile {
-        println!(
-            "cargo:warning=portable mobile build: CLIP, OCR and llama.cpp are NOT \
-             compiled in; every such call reports GS_ERR_UNAVAILABLE"
-        );
-    }
+    // THIS MESSAGE WAS A LIE AND COST SEVERAL RUNS TO DISCOVER.
+    //
+    // It sat here, inside a bare `if mobile`, printing "portable mobile build:
+    // CLIP, OCR and llama.cpp are NOT compiled in" for EVERY mobile target --
+    // unconditionally, before the llama.cpp linkage seven lines below had even
+    // been attempted. So a build that linked a cross-compiled llama.cpp printed
+    // it, and a build that did not print it too. It distinguished nothing.
+    //
+    // Two separate things were believed because of it:
+    //   - that the shipped .so was portable-only (TRUE, and proven independently
+    //     by selfCheck() on the device, but for a different reason: nothing set
+    //     GS_LLAMA_PREBUILT at all)
+    //   - that a build log containing it proved the build was portable (FALSE --
+    //     it is printed unconditionally, so it proves only that the target is
+    //     mobile)
+    //
+    // A CI gate built on it (`grep -q 'portable mobile build' && exit 1`) could
+    // therefore never pass, and would have failed every future Android build
+    // forever. Removed rather than made conditional: the accurate statement is
+    // already made downstream, per-branch, by the messages that report which
+    // backend was actually linked.
+    let _ = mobile;
     // Tell the compiler this cfg name is expected, so an unexpected one is a
     // warning rather than silently accepted.
     println!("cargo:rustc-check-cfg=cfg(gs_onnxruntime)");
