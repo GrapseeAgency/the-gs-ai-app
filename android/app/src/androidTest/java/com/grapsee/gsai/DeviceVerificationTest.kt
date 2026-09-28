@@ -47,10 +47,20 @@ class DeviceVerificationTest {
             val f = File(arg)
             if (f.isFile && f.length() > 1_000_000) return f
         }
+        // getExternalFilesDir(null) is FIRST because it is the only one of these
+        // an app can read with no permission on API 30. Raw, run 36420986162:
+        //     java.io.FileNotFoundException:
+        //     /sdcard/qwen2.5-0.5b-instruct-q4_k_m.gguf: open failed:
+        //     EACCES (Permission denied)
+        // An arbitrary file at the root of /sdcard sits outside every media
+        // collection, so READ_EXTERNAL_STORAGE would not open it either, and this
+        // app declares no storage permission at all. The app's own external dir
+        // needs none, and it is also where a real user's downloaded model lands.
         for (dir in listOf(
+            ctx.getExternalFilesDir(null),
+            ctx.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
             File("/sdcard"),
             File("/storage/emulated/0"),
-            ctx.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
         )) {
             if (dir == null) continue
             val f = File(dir, "qwen2.5-0.5b-instruct-q4_k_m.gguf")

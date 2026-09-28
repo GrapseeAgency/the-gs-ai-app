@@ -96,13 +96,11 @@ fi
 echo "  emulator is booted and x86_64 -- proceeding"
 
 echo
-echo "=== 0b. put the model on the device ==="
-DEV_MODEL=""
+echo "=== 0b. model.gguf is present in the workspace ==="
+# It is NOT pushed yet. It cannot be: the app does not exist at this point, so its
+# external files directory does not exist either. See step 2b, after the install.
 if [ -f "$GITHUB_WORKSPACE/model.gguf" ]; then
-  echo "pushing model.gguf (this is slow on an emulator; be patient)"
-  adb push "$GITHUB_WORKSPACE/model.gguf" /sdcard/qwen2.5-0.5b-instruct-q4_k_m.gguf || true
-  DEV_MODEL=/sdcard/qwen2.5-0.5b-instruct-q4_k_m.gguf
-  echo "on device: $(adb shell ls -la /sdcard/qwen2.5-0.5b-instruct-q4_k_m.gguf 2>&1)"
+  ls -l "$GITHUB_WORKSPACE/model.gguf"
 else
   echo "no model.gguf; model-backed tests will SKIP rather than fail"
 fi
@@ -123,6 +121,42 @@ echo "=== 2. install ==="
 adb install -r -t app/build/outputs/apk/debug/app-debug.apk || exit 1
 adb install -r -t app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk || exit 1
 adb shell pm list packages | grep -i grapsee || true
+
+echo
+echo "=== 2b. put the model where the app is allowed to read it ==="
+# NOT /sdcard. Raw, run 36420986162:
+#     java.io.FileNotFoundException: /sdcard/qwen2.5-0.5b-instruct-q4_k_m.gguf:
+#     open failed: EACCES (Permission denied)
+# On API 30 an arbitrary file at the root of /sdcard is outside every media
+# collection, so READ_EXTERNAL_STORAGE would not grant it even if it were
+# declared -- and the app deliberately declares no storage permission at all.
+#
+# The app's OWN external files dir is readable with no permission whatsoever, and
+# it only exists once the app is installed, which is why this is step 2b and not
+# step 0b. It also needs no permission on a real device, so this path is what a
+# user's own model install will use too -- the test exercises the real location
+# rather than a CI-only one.
+DEV_MODEL=""
+APPDIR=/sdcard/Android/data/com.grapsee.gsai/files
+if [ -f "$GITHUB_WORKSPACE/model.gguf" ]; then
+  adb shell mkdir -p "$APPDIR" 2>&1 | head -2 || true
+  echo "pushing model.gguf (491 MB on an emulator; be patient)"
+  if adb push "$GITHUB_WORKSPACE/model.gguf" "$APPDIR/qwen2.5-0.5b-instruct-q4_k_m.gguf"; then
+    DEV_MODEL="$APPDIR/qwen2.5-0.5b-instruct-q4_k_m.gguf"
+    echo "pushed to: $DEV_MODEL"
+  else
+    # Fall back to /sdcard so the run still has a model to try; if that is also
+    # unreadable the test will FAIL with the EACCES and name the cause, rather
+    # than skip and hide it.
+    adb push "$GITHUB_WORKSPACE/model.gguf" /sdcard/qwen2.5-0.5b-instruct-q4_k_m.gguf || true
+    DEV_MODEL=/sdcard/qwen2.5-0.5b-instruct-q4_k_m.gguf
+    echo "WARNING: push to the app dir failed; fell back to /sdcard" >&2
+  fi
+  echo "on device: $(adb shell ls -la "$DEV_MODEL" 2>&1)"
+  echo "app can read it: $(adb shell run-as com.grapsee.gsai ls -la "$DEV_MODEL" 2>&1 | head -2 || true)"
+else
+  echo "no model.gguf; model-backed tests will SKIP rather than fail"
+fi
 
 echo
 echo "=== 3. the device's own view of the ABI ==="

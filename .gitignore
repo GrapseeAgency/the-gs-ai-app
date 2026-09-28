@@ -98,7 +98,13 @@ native/cpp/*/vendor/
 native/**/*.o
 native/**/*.a
 native/**/*.so
-native/**/*.so.*
+# The device job drops the cross-compiled libgs_ffi.so here so the APK packages a
+# real library. It is a CI build artifact, never a source file.
+android/app/src/main/jniLibs/
+native/**/*.so
+# The device job drops the cross-compiled libgs_ffi.so here so the APK packages a
+# real library. It is a CI build artifact, never a source file.
+android/app/src/main/jniLibs/.*
 # Model weights and runtime caches. data/.gitignore keeps the .gitkeep files.
 native/data/models/*
 native/data/cache/*
