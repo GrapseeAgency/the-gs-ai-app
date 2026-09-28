@@ -7,6 +7,7 @@ import com.grapsee.gsai.data.ProjectStore
 import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.di.ServiceLocator
 import dagger.hilt.android.HiltAndroidApp
+import com.grapsee.gsai.data.local.ModelStore
 
 /**
  * Application entry point. Hilt generates the dependency graph rooted here;
@@ -37,5 +38,11 @@ class GSApplication : Application() {
         // User-created projects load before the dashboard, search or detail read them.
         runCatching { ProjectStore.init(this) }
             .onFailure { Log.e("GSStartup", "ProjectStore init failed", it) }
+        // On-device model consent and the installed path hydrate before any UI
+        // asks whether local AI is available. It also re-checks the installed
+        // file, because a restored backup can carry a preference pointing at a
+        // model that is not on disk.
+        runCatching { ModelStore.init(this) }
+            .onFailure { Log.e("GSStartup", "ModelStore init failed", it) }
     }
 }

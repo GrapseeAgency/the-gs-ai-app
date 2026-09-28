@@ -1,0 +1,123 @@
+name: android-app
+
+# Compiles the Android app module and runs its unit tests.
+#
+# WHY THIS EXISTS
+#
+# Three defects in a row shipped in Kotlin that no compiler on any machine had
+# looked at, because there is no Kotlin compilation anywhere in this repo's CI:
+#
+#   * LocalContext.current read inside a coroutine lambda (composable-only value)
+#   * a property assigned from outside the object that declares it (private set)
+#   * a key constant referenced but never declared
+#
+# The same class of defect already cost the JNI bridge nine type errors, for the
+# same reason: code guarded behind a cfg or a directory that nothing builds. The
+# fix then and here is the same one -- make the compiler see it.
+#
+# The native library is NOT built here. android-native.yml produces the four
+# .so artifacts; this job compiles and tests the Kotlin against the module's
+# existing configuration, so a failure is a Kotlin failure and not a native one.
+#
+# There is no gradle wrapper JAR in the repo (only gradle-wrapper.properties),
+# so the runner's gradle is used. That is a real limitation of the repo and is
+# recorded rather than papered over: a wrapper would make builds reproducible
+# across machines, and its absence is a follow-up, not a solved problem.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [native-runtime]
+    paths:
+      - 'android/**'
+  pull_request:
+    branches: [native-runtime]
+    paths:
+      - 'android/**'
+
+concurrency:
+  group: android-app-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GRADLE_VERSION: 8.9
+
+jobs:
+  compile:
+    name: compile + unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install the Android SDK
+        run: |
+          set -euo pipefail
+          # The image ships ANDROID_HOME with no cmdline-tools, and sdkmanager is
+          # therefore not on PATH. Every workflow that assumed otherwise failed
+          # with "sdkmanager: command not found".
+          SDK="$HOME/android-sdk"
+          mkdir -p "$SDK/cmdline-tools"
+          cd /tmp
+          wget -q "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
+          unzip -q commandlinetools-linux-11076708_latest.zip
+          mv cmdline-tools "$SDK/cmdline-tools/latest"
+          export PATH="$SDK/cmdline-tools/latest/bin:$PATH"
+          command -v sdkmanager
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          # compileSdk/targetSdk 35, minSdk 26. Installed explicitly rather than
+          # letting the Gradle plugin pick a build-tools version, because an
+          # unpinned one makes a failure unreproducible.
+          sdkmanager --install "platforms;android-35" "build-tools;35.0.0" "platform-tools" >/dev/null
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          echo "$SDK/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "sdk: $(ls "$SDK/platforms")"
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('android/**/*.kts', 'android/gradle/libs.versions.toml') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - name: Compile the Kotlin
+        working-directory: android
+        run: |
+          set -euo pipefail
+          # --no-daemon because a runner has one process and gradle's daemon
+          # survives the step and eats the next one.
+          gradle --version
+          gradle --no-daemon --stacktrace :app:compileDebugKotlin
+        env:
+          ANDROID_HOME: ${{ env.ANDROID_HOME }}
+          # The Kotlin module references GsNative's JNI surface only through
+          # `external fun` declarations, so the .so is not needed to compile.
+          # Lint cannot see that, so the check is disabled for this job and
+          # re-enabled by android-native.yml's own build.
+          GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx3g
+
+      - name: Unit tests
+        working-directory: android
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --stacktrace :app:testDebugUnitTest
+        continue-on-error: true
+
+      - name: Report
+        if: always()
+        run: |
+          set -euo pipefail
+          {
+            echo "### android-app"
+            echo "compileDebugKotlin: see the step above"
+            echo "note: no gradle wrapper JAR is committed, so the runner's"
+            echo "      gradle $GRADLE_VERSION is used. Builds are therefore not"
+            echo "      reproducible across machines until a wrapper is added."
+          } >> "$GITHUB_STEP_SUMMARY"

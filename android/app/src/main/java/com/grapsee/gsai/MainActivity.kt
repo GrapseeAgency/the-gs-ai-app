@@ -7,6 +7,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -14,6 +15,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.grapsee.gsai.data.SettingsStore
+import com.grapsee.gsai.ui.settings.OnDeviceModelConsentDialog
 import com.grapsee.gsai.ui.navigation.GsNavHost
 import com.grapsee.gsai.ui.theme.TheGsAiTheme
 
@@ -54,7 +56,13 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    GsNavHost()
+                    // Box, not a wrapper composable: the dialog must render
+                    // ABOVE the whole nav graph without adding a node to it. No
+                    // new route, no new screen, no change to GsNavHost.
+                    Box(Modifier.fillMaxSize()) {
+                        GsNavHost()
+                        OnDeviceModelConsentDialog()
+                    }
                 }
             }
         }
