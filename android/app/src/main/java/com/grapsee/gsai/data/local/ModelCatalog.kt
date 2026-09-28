@@ -130,7 +130,7 @@ object ModelCatalog {
      * for the emulator and unusual images rather than for old devices.
      */
     fun totalRamBytes(context: android.content.Context): Long = runCatching {
-        val am = context.getSystemService(android.content.ActivityManager::class.java)
+        val am = context.getSystemService(android.app.ActivityManager::class.java)
         val mi = android.app.ActivityManager.MemoryInfo()
         am?.getMemoryInfo(mi)
         if (mi.totalMem > 0) mi.totalMem else fallbackRam()

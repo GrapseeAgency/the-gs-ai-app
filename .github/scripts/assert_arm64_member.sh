@@ -31,6 +31,18 @@
 # `file -b` on the .a itself is NOT a valid architecture check either: an ar
 # archive reports only "current ar archive". That is what lipo is for, and the
 # caller checks the archive with lipo before calling this.
+#
+# BOTH SPELLINGS, because this is used for two formats that name the same
+# architecture differently:
+#   Apple Mach-O  : "arm64"            (lipo says arm64, file says arm64)
+#   Android ELF   : "ARM aarch64"      (there is no "arm64" in an ELF header)
+#
+# The first version of this script matched only "arm64" and was written for iOS.
+# Reused unchanged for Android it rejected a CORRECT build:
+#     libggml-base.a first object member: ggml.c.o
+#     ELF 64-bit LSB relocatable, ARM aarch64, version 1 (SYSV), not stripped
+#     FAIL: libggml-base.a: archive member is not arm64
+# A check that fails a passing build trains people to ignore it.
 set -euo pipefail
 
 if [ "$#" -ne 2 ]; then
@@ -62,7 +74,9 @@ trap 'rm -rf "$work"' EXIT
 ( cd "$work" && ar x "$abs" "$member" && file -b "$member" ) > "$work/out.txt"
 cat "$work/out.txt"
 
-if ! grep -q 'arm64' "$work/out.txt"; then
-  echo "FAIL: $label: archive member is not arm64" >&2
+# arm64 for Mach-O, aarch64 for ELF. Both are the same 64-bit ARM ISA.
+if ! grep -qE 'arm64|aarch64' "$work/out.txt"; then
+  echo "FAIL: $label: archive member is not arm64/aarch64" >&2
+  echo "  file said: $(cat "$work/out.txt")" >&2
   exit 1
 fi

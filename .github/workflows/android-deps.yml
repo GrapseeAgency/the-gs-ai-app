@@ -154,11 +154,23 @@ jobs:
           make -j"$(nproc)"
           make install
           echo "=== leptonica installed ==="
-          find ../../out/prefix -name '*.a' -o -name '*.la' | sed -n '1,20p'
-          # An arm64 static archive is the proof. `file` on a .a says "ar
-          # archive", so the member is what must be checked.
-          test -f ../../out/prefix/lib/liblept.a || { echo "MISSING liblept.a"; exit 1; }
-          cd /tmp && rm -rf lap && mkdir lap && cd lap && ar x "$OLDPWD/out/prefix/lib/liblept.a" && file -b *.o | sed -n '1,2p'
+          find ../../out/prefix -name '*.a' -o -name '*.la' | sort | sed -n '1,20p'
+          # The library is libleptonica.a, NOT liblept.a. Leptonica renamed it
+          # and the old name is a configure-era alias that no longer appears in
+          # $libdir. Raw, run 36384581930:
+          #     ../../out/prefix/lib/libleptonica.a
+          #     MISSING liblept.a
+          #     ##[error]Process completed with exit code 1.
+          # The build had SUCCEEDED; the assertion named a file that does not
+          # exist in this version. Glob instead of hardcoding a name, and assert
+          # that exactly one leptonica library came out.
+          LEP=$(find ../../out/prefix/lib -name 'libleptonica.a' -o -name 'liblept.a' | sort | sed -n '1p')
+          test -n "$LEP" || {
+            echo "FAIL: no leptonica library under ../../out/prefix/lib; what is there:"
+            ls -la ../../out/prefix/lib 2>/dev/null || echo "  (no lib directory)"
+            exit 1
+          }
+          echo "leptonica library: $LEP ($(stat -c%s "$LEP") bytes)"
 
       - name: Build tesseract for arm64
         run: |
@@ -185,16 +197,20 @@ jobs:
           make -j"$(nproc)"
           make install
           echo "=== tesseract installed ==="
-          ls -la ../../out/prefix/lib/liblept.a ../../out/prefix/lib/libtesseract.a
-          du -sh ../../out/prefix/lib/liblept.a ../../out/prefix/lib/libtesseract.a
+          ls -la ../../out/prefix/lib/libleptonica.a ../../out/prefix/lib/libtesseract.a
+          du -sh ../../out/prefix/lib/libleptonica.a ../../out/prefix/lib/libtesseract.a
 
       - name: Verify the archives are arm64 and self-contained
         run: |
           set -euo pipefail
           OUT="$PWD/out/prefix/lib"
           TOTAL=0
-          for A in liblept.a libtesseract.a; do
-            test -f "$OUT/$A" || { echo "MISSING: $OUT/$A"; exit 1; }
+          for A in libleptonica.a libtesseract.a; do
+            test -f "$OUT/$A" || {
+              echo "FAIL: $OUT/$A is missing. What IS there:"
+              ls -la "$OUT" 2>/dev/null || echo "  (no directory)"
+              exit 1
+            }
             echo "=== $A ==="
             bash "$GITHUB_WORKSPACE/.github/scripts/assert_arm64_member.sh" "$OUT/$A" "$A"
             SZ=$(stat -c%s "$OUT/$A")
@@ -205,7 +221,7 @@ jobs:
           echo "$TOTAL" > out/tesseract-total-bytes
           {
             echo "### tesseract: PASS"
-            echo "liblept.a + libtesseract.a, both arm64, statically linked"
+            echo "libleptonica.a + libtesseract.a, both arm64, statically linked"
             echo "total: $TOTAL bytes"
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -213,7 +229,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          cp out/prefix/lib/liblept.a out/prefix/lib/libtesseract.a dist/
+          cp out/prefix/lib/libleptonica.a out/prefix/lib/libtesseract.a dist/
           # tessdata is a runtime asset, not a library. 3.5 MB of traineddata
           # (eng + osd) and it is what makes OCR work at all. It ships as an
           # asset, never in git.
@@ -437,12 +453,27 @@ jobs:
           # CPU-only number to be measured, and Vulkan on Android needs
           # libvulkan + a loader that is not in the NDK sysroot. Enabling it
           # without measuring would be the other kind of guess.
+          # Webp is off, and the reason is a real upstream defect rather than a
+          # preference. Raw, run 36384581930:
+          #     CMake Error at thirdparty/libwebp/CMakeLists.txt:204 (add_library):
+          #       Cannot find source file:
+          #         /sources/android/cpufeatures/cpu-features.c
+          #     CMake Error at thirdparty/libwebp/CMakeLists.txt:204 (add_library):
+          #       No SOURCES given to target: cpufeatures-webp
+          #     CMake Generate step failed.
+          # The path is nonsense -- an absolute /sources/android/... built from a
+          # relative path -- so libwebp's cpufeatures target does not resolve
+          # out of tree. Webp is an image INPUT format for this project and is
+          # not needed to measure CPU decode, which is the number the brief asks
+          # for. Unknown -D names are a cmake warning, not an error, so all
+          # three spellings are passed and the one that bites is the one used.
           cmake -S src-sd -B build \
             -DCMAKE_TOOLCHAIN_FILE="$PWD/android.toolchain.cmake" \
             -DCMAKE_BUILD_TYPE=Release \
             -DSD_VULKAN=OFF -DSD_METAL=OFF -DSD_CUDA=OFF \
             -DGGML_OPENMP=OFF \
             -DSD_BUILD_SHARED_LIBS=OFF \
+            -DSD_ENABLE_WEBP=OFF -DGGML_WEBP=OFF -DWEBP=OFF \
             -G Ninja
           cmake --build build -j"$(nproc)" 2>&1 | tee build.log
           ls -la build/bin/*.a 2>/dev/null || true
