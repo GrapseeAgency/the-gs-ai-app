@@ -5,7 +5,6 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.grapsee.gsai.native.GsNative
 import com.grapsee.gsai.native.GsNativeLoader
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -158,16 +157,26 @@ class GsNativeTest {
         println("GsNativeTest: ocr -> ${text.take(80)}")
     }
 
-    /** Release the context so the next test starts from a known state. */
+    /**
+     * Release the context twice.
+     *
+     * A double free in native teardown is a CRASH, not a Kotlin exception, so
+     * this earns its place: if the second release reaches a freed pointer the
+     * process dies and the whole suite reports nothing.
+     *
+     * The state afterwards is LOADED or UNAVAILABLE and nothing else, because
+     * release() drops the model but deliberately leaves the library loaded --
+     * re-init is cheap and re-loading a .so is not.
+     */
     @Test
     fun shutdownIsIdempotent() {
         assumeTrue(GsNativeLoader.isLibraryLoaded())
         GsNativeLoader.release()
-        GsNativeLoader.release() // must not throw when nothing was loaded
-        assertEquals(StateExpectations.LOADED_OR_UNAVAILABLE, GsNativeLoader.state().name.isNotEmpty(), true)
-    }
-
-    private object StateExpectations {
-        const val LOADED_OR_UNAVAILABLE = true
+        GsNativeLoader.release()   // must not throw when nothing was loaded
+        val state = GsNativeLoader.state()
+        assertTrue(
+            "state after a double release was ${state.name}, expected LOADED or UNAVAILABLE",
+            state == GsNativeLoader.State.LOADED || state == GsNativeLoader.State.UNAVAILABLE,
+        )
     }
 }
