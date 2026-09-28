@@ -30,6 +30,17 @@ object SettingsStore {
     var sendDoubleTap by mutableStateOf(false); private set
     // AI
     var memory by mutableStateOf(true); private set
+    /**
+     * Commit 1(b) of the mobile wiring: prefer the on-device engine over the
+     * provider when a model is installed.
+     *
+     * DEFAULT OFF, deliberately. The local path is only faster than a provider
+     * round trip on some prompts and some devices, it burns battery, and a
+     * default that silently changes where a user's chat data goes is a decision
+     * the user has to make. The device-class check runs before the network call
+     * ONLY while this is true; with it off, routing is exactly as it was.
+     */
+    var preferLocal by mutableStateOf(false); private set
     var personalisation by mutableStateOf(true); private set
     var reasoningEffort by mutableStateOf("Medium"); private set
     // Privacy
@@ -68,6 +79,9 @@ object SettingsStore {
         sendDoubleTap = p.bool(K.sendDoubleTap, sendDoubleTap)
         memory = p.bool(K.memory, memory)
         personalisation = p.bool(K.personalisation, personalisation)
+        // false is the field's own value, so an unset key means OFF. Turning
+        // local AI on without asking is the worse failure.
+        preferLocal = p.bool(K.preferLocal, preferLocal)
         reasoningEffort = p.string(K.reasoningEffort, reasoningEffort)
         trainingOptIn = p.bool(K.trainingOptIn, trainingOptIn)
         appPasscode = p.bool(K.appPasscode, appPasscode)
@@ -101,6 +115,7 @@ object SettingsStore {
         const val sendDoubleTap = "settings.sendDoubleTap"
         const val memory = "settings.memory"
         const val personalisation = "settings.personalisation"
+        const val preferLocal = "settings.preferLocal"
         const val reasoningEffort = "settings.reasoningEffort"
         const val trainingOptIn = "settings.trainingOptIn"
         const val appPasscode = "settings.appPasscode"
@@ -161,6 +176,9 @@ object SettingsStore {
     // AI
     fun updateMemory(v: Boolean) { memory = v; put(K.memory, v) }
     fun updatePersonalisation(v: Boolean) { personalisation = v; put(K.personalisation, v) }
+
+    /** Commit 1(b). See the field for why the default is off. */
+    fun updatePreferLocal(v: Boolean) { preferLocal = v; put(K.preferLocal, v) }
     fun updateReasoningEffort(v: String) { reasoningEffort = v; put(K.reasoningEffort, v) }
     // Privacy
     fun updateTrainingOptIn(v: Boolean) { trainingOptIn = v; put(K.trainingOptIn, v) }

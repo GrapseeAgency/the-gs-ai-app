@@ -482,7 +482,61 @@ final class ChatViewModel: ObservableObject {
         // Attachments-only turns are not regenerable: the ids are claimed by
         // the sent message server-side, so retry/regenerate stays text-only.
         lastSentText = text.isEmpty ? nil : text
+        // COMMIT 1(b). The device check runs BEFORE the network, and only while
+        // the user has turned it on. With "Prefer on-device AI" off -- the
+        // default -- every condition below is false and beginStreaming takes
+        // exactly the path it took before this existed.
+        //
+        // Attachments are excluded: a local model cannot read the files that
+        // were just uploaded, so answering from it would produce a confident
+        // reply about content it never saw. That is worse than a slow one.
+        if SettingsStore.shared.preferLocal, attachments.isEmpty, GsNativeLoader.isAvailable,
+           let local = try? GsNative.chat(text), !local.isEmpty {
+            beginLocalStreaming(text: text, reply: local)
+            return
+        }
         beginStreaming(text: text, appendUserMessage: true, attachments: attachments.isEmpty ? nil : attachments, mode: chatMode)
+    }
+
+    /// Commit 1(b): the local-first completion.
+    ///
+    /// This mirrors `beginStreaming`'s preamble exactly -- same trace reset, same
+    /// user row, same empty streaming assistant row -- and then skips the network
+    /// task entirely. Reusing the existing `StreamAccumulator` and
+    /// `finalizeLocal` rather than a parallel set of them is the point: a second
+    /// flush loop and a second finaliser would be two places for the
+    /// stop/cancel/regenerate logic to disagree.
+    ///
+    /// ONE delta, not a word-by-word stream. The provider path streams because
+    /// the SERVER streams; splitting a completed local answer with a timer would
+    /// imitate typing and would be a lie about where the text came from.
+    private func beginLocalStreaming(text: String, reply: String) {
+        errorMessage = nil
+        traceSteps = []
+        liveSources = []
+        clarifyPrompt = nil
+        searchPhase = .idle
+        effectiveMode = nil
+        streamSink = SearchEventSink()
+
+        messages.append(ChatMessage(
+            role: "user",
+            content: text,
+            createdAt: ConversationStore.now(),
+            attachments: nil))
+        messages.append(ChatMessage(
+            role: "assistant",
+            content: "",
+            isStreaming: true,
+            createdAt: ConversationStore.now()))
+
+        streamBuffer = StreamAccumulator()
+        isStreaming = true
+        startFlushLoop()
+
+        streamBuffer.append(reply)
+        flushStreamingText()
+        finalizeLocal()
     }
 
     /// PHASE 8.1 clarify quick-choice: the tapped label travels as a normal

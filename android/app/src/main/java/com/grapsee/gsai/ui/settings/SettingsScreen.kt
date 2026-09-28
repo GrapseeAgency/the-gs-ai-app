@@ -77,12 +77,23 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import com.grapsee.gsai.data.local.ModelStore
 
 private val themeOptions = listOf("Light", "Dark", "System")
 private val aiLanguageOptions = listOf("EN", "中文", "हिन्दी", "العربية")
 
 @Composable
-fun SettingsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {}) {
+fun SettingsScreen(
+    onBack: () -> Unit,
+    onNavigate: (String) -> Unit = {},
+    /**
+     * Commit 1(b): the user tapped "Prefer on-device AI" with no model
+     * installed. Defaulted so GsNavHost's existing call site is untouched.
+     * Shows the consent dialog over this screen rather than navigating
+     * anywhere, because there is no settings route for the downloader.
+     */
+    onLocalAiRequested: () -> Unit = {},
+) {
     var expandedId by remember { mutableStateOf<String?>(null) }
     // Privacy flows (UI-local)
     var showClearData by remember { mutableStateOf(false) }
@@ -188,6 +199,30 @@ fun SettingsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {}) {
                     title = "Personalisation",
                     checked = SettingsStore.personalisation,
                     onCheckedChange = { SettingsStore.updatePersonalisation(it) }
+                )
+                // Commit 1(b) of the mobile wiring. One row in the existing AI
+                // section, using the existing SwitchRow: no new screen, no new
+                // card, no new token. Default OFF, and the subtitle says what it
+                // will and will not do rather than implying local is always
+                // better.
+                SwitchRow(
+                    title = "Prefer on-device AI",
+                    subtitle = if (ModelStore.installedPath == null) {
+                        "Needs a model first — tap to download"
+                    } else {
+                        "Answer on this device before using the network"
+                    },
+                    checked = SettingsStore.preferLocal,
+                    onCheckedChange = { onCheckedChange ->
+                        if (!ModelStore.installedPath.isNullOrEmpty()) {
+                            SettingsStore.updatePreferLocal(onCheckedChange)
+                        } else {
+                            // Turning it on with no model would silently do
+                            // nothing, which is worse than not offering it.
+                            SettingsStore.updatePreferLocal(false)
+                            onLocalAiRequested()
+                        }
+                    }
                 )
                 // "Reasoning effort" (Low/Medium/High) deleted: it was a
                 // parameter dial wired to nothing — no send path, model or

@@ -101,13 +101,30 @@ public final class GsNative {
     }
 
     /// OCR an image file. Throws rather than returning `""` on failure.
+    ///
+    /// Routed to Apple Vision, not to `gs_mobile_ocr`. The C ABI has no OCR
+    /// backend compiled into an iOS build -- Tesseract was never cross-compiled
+    /// for it, and Decision 2 replaced that plan with Vision -- so calling the C
+    /// entry point here would return a GS_ERR_UNAVAILABLE string on every
+    /// image, which is exactly the "empty string instead of an error" failure
+    /// this whole surface is built to avoid.
+    ///
+    /// Note that this does NOT require a native context. Vision is an OS
+    /// framework, so OCR works in a build with no engine at all; the two
+    /// capabilities are genuinely independent and conflating them would mean
+    /// reporting "no local AI" on a device whose OCR is fine.
     public static func runOcr(_ imagePath: String) throws -> String {
-        let ctx = try requireContext("runOcr")
-        let out = imagePath.withCString { gs_mobile_ocr(ctx, $0) }
-        guard let out else { throw makeError("runOcr") }
-        defer { gs_llama_free_text(out) }
-        return String(cString: out)
+        try AppleVisionOcr.recogniseText(atPath: imagePath)
     }
+
+    /// OCR raw image bytes, for callers that hold the data rather than a path.
+    public static func runOcr(data: Data) throws -> String {
+        try AppleVisionOcr.recogniseText(data: data)
+    }
+
+    /// Which OCR engine is in use. Reported rather than assumed, because
+    /// "which engine ran" is a question a support answer needs.
+    public static var ocrEngine: String { "Apple Vision (VNRecognizeTextRequest)" }
 
     /// Embed a text query. Throws rather than returning an empty vector.
     public static func embedText(_ text: String) throws -> [Float] {

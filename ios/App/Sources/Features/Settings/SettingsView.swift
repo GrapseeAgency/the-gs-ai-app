@@ -156,6 +156,17 @@ struct SettingsView: View {
         section("AI") {
             toggleRow("Memory", isOn: $settings.memory)
             toggleRow("Personalisation", isOn: $settings.personalisation)
+            // Commit 1(b). One row in the existing AI section with the existing
+            // toggleRow: no new screen, no new card, no new token. Default OFF.
+            // The subtitle states the precondition rather than implying local is
+            // always better, because with no model installed this switch would
+            // do nothing at all.
+            // Only offered when the engine is actually reachable. A switch that
+            // silently does nothing is worse than no switch, and "is it
+            // available" is not a question a user can answer from a title.
+            if GsNativeLoader.isAvailable {
+                toggleRow("Prefer on-device AI", isOn: $settings.preferLocal)
+            }
         }
     }
 

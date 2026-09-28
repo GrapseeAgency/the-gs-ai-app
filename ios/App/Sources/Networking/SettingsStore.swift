@@ -27,6 +27,15 @@ final class SettingsStore: ObservableObject {
     // AI
     @Published var memory: Bool { didSet { defaults.set(memory, forKey: K.memory) } }
     @Published var personalisation: Bool { didSet { defaults.set(personalisation, forKey: K.personalisation) } }
+
+    /// Commit 1(b): answer from the on-device engine before the network.
+    ///
+    /// Default OFF, deliberately, and for the same reason as on Android: local is
+    /// not uniformly faster, it burns battery, and a default that silently moves
+    /// a user's chat data from a server to the device is a decision the user has
+    /// to make. With it off, `ChatViewModel` takes exactly the path it took
+    /// before this existed.
+    @Published var preferLocal: Bool { didSet { defaults.set(preferLocal, forKey: K.preferLocal) } }
     @Published var reasoning: String { didSet { defaults.set(reasoning, forKey: K.reasoning) } }
     // Privacy
     @Published var helpImprove: Bool { didSet { defaults.set(helpImprove, forKey: K.helpImprove) } }
@@ -66,6 +75,8 @@ final class SettingsStore: ObservableObject {
         autoTitle = defaults.object(forKey: K.autoTitle) as? Bool ?? true
         memory = defaults.object(forKey: K.memory) as? Bool ?? true
         personalisation = defaults.object(forKey: K.personalisation) as? Bool ?? true
+        // false, not true. An absent key must mean OFF.
+        preferLocal = defaults.object(forKey: K.preferLocal) as? Bool ?? false
         reasoning = defaults.string(forKey: K.reasoning) ?? "Medium"
         helpImprove = defaults.object(forKey: K.helpImprove) as? Bool ?? false
         appPasscode = defaults.object(forKey: K.appPasscode) as? Bool ?? false
@@ -101,6 +112,7 @@ final class SettingsStore: ObservableObject {
         static let autoTitle = "settings.autoTitle"
         static let memory = "settings.memory"
         static let personalisation = "settings.personalisation"
+        static let preferLocal = "settings.preferLocal"
         static let reasoning = "settings.reasoning"
         static let helpImprove = "settings.helpImprove"
         static let appPasscode = "settings.appPasscode"

@@ -72,6 +72,17 @@ public enum GsNativeLoader {
     /// The model this process has loaded, or nil.
     public static var loadedModelPath: String? { GsNative.loadedModel }
 
+    /// True when OCR works, which it does even with no engine loaded.
+    ///
+    /// Deliberately independent of ``isAvailable``. Vision is an OS framework,
+    /// so a build with no native engine can still read text out of an image, and
+    /// reporting "on-device AI unavailable" on a device whose OCR is working
+    /// would be a false negative that hides a working feature.
+    public static var isOcrAvailable: Bool { true }
+
+    /// The OCR engine that will run. Always Apple Vision on iOS.
+    public static var ocrEngine: String { GsNative.ocrEngine }
+
     /// Load the model if a path is known. Safe to call repeatedly.
     @discardableResult
     public static func initialize(modelPath: String) -> Bool {

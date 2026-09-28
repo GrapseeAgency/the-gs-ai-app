@@ -59,6 +59,9 @@ import com.grapsee.gsai.ui.voice.VoiceScreen
 import com.grapsee.gsai.ui.theme.GsMotion
 import com.grapsee.gsai.ui.theme.gsHaptic
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import com.grapsee.gsai.ui.settings.OnDeviceModelConsentDialog
 
 /**
  * AERUO KINETIC nav graph — the product shell. THE CONVERSATION WORKSPACE IS
@@ -231,7 +234,20 @@ fun GsNavHost(modifier: Modifier = Modifier) {
         composable(GsRoutes.ASSISTANTS) { AssistantsScreen(onNavigate = open) }
         composable(GsRoutes.PROFILE) { ProfileScreen(onNavigate = open) }
 
-        composable(GsRoutes.SETTINGS) { SettingsScreen(onBack = back, onNavigate = open) }
+        composable(GsRoutes.SETTINGS) {
+            // Commit 1(b). The consent dialog is already hosted in MainActivity
+            // above the nav graph; this only asks it to show, so a second host
+            // and a second dialog cannot exist.
+            var askLocalConsent by remember { mutableStateOf(false) }
+            SettingsScreen(
+                onBack = back,
+                onNavigate = open,
+                onLocalAiRequested = { askLocalConsent = true },
+            )
+            if (askLocalConsent) {
+                OnDeviceModelConsentDialog(onDismiss = { askLocalConsent = false })
+            }
+        }
         composable(GsRoutes.NOTIFICATIONS) {
             NotificationsScreen(
                 onBack = back,

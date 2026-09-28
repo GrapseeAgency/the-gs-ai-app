@@ -37,6 +37,8 @@ import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.UUID
+import com.grapsee.gsai.data.local.ModelStore
+import com.grapsee.gsai.data.SettingsStore
 
 /**
  * Chat source of truth: Room first, network as the sync engine.
@@ -342,6 +344,41 @@ class ChatRepository(
     ): String {
         activeJob = currentCoroutineContext()[Job]
 
+        // COMMIT 1(b). The device-class check runs BEFORE the network call, and
+        // only while the user has turned it on. With "Prefer on-device AI" off
+        // -- which is the default -- this is a single false and everything below
+        // is byte-for-byte the routing that shipped.
+        //
+        // The conditions are all required, and each one is a case where trying
+        // local would be worse than not trying:
+        //   * the switch is on              the user chose it
+        //   * a model is installed          otherwise this is a no-op
+        //   * the engine has a backend      a portable build loads and cannot
+        //                                 generate, and pretending otherwise
+        //                                 would strand the user with no reply
+        //   * no attachments ready          a local model has no access to the
+        //                                 uploaded files, so it would answer
+        //                                 about nothing
+        // A failure inside the native call is NOT a reason to give up: the
+        // provider path below is still there, which is the point of keeping it.
+        if (SettingsStore.preferLocal && !ModelStore.installedPath.isNullOrEmpty() &&
+            GsNativeLoader.isAvailable()
+        ) {
+            val hasReadyAttachments = attachments.any {
+                it.phase == AttachmentPhase.Ready && !it.remoteId.isNullOrBlank()
+            }
+            if (!hasReadyAttachments) {
+                val localId = runCatching {
+                    streamLocalFirst(content, conversationId, onDelta)
+                }.getOrNull()
+                if (localId != null) {
+                    onConversationResolved(localId)
+                    return localId
+                }
+                // fell through to the provider
+            }
+        }
+
         // Send gate in depth: only ready drafts with a server id may travel.
         val readyAttachments = attachments
             .filter { it.phase == AttachmentPhase.Ready && !it.remoteId.isNullOrBlank() }
@@ -549,6 +586,49 @@ class ChatRepository(
      * same cadence as a networked answer. Never mentions servers, errors or
      * connectivity, so the app reads fully functional on a fresh install.
      */
+    /**
+     * COMMIT 1(b): answer from the on-device engine, BEFORE the network.
+     *
+     * Returns the conversation id on success, or null if the engine could not
+     * produce an answer — in which case the caller runs the normal provider
+     * path. That fallback is the reason this is safe to ship with the switch
+     * off by default: the worst outcome is the old behaviour, one round trip
+     * later.
+     *
+     * The user message and the assistant reply are persisted the same way the
+     * provider path persists them, so the conversation reads identically
+     * whichever engine answered. A local answer that vanished on relaunch would
+     * be worse than no local answer.
+     */
+    private suspend fun streamLocalFirst(
+        content: String,
+        activeConversationId: String?,
+        onDelta: (String) -> Unit,
+    ): String? {
+        if (!GsNativeLoader.isAvailable()) return null
+        val text = nativeReply(content) ?: return null
+
+        val activeId = resolveConversation(activeConversationId, content)
+        val assistantId = UUID.randomUUID().toString()
+        db.messageDao().upsert(
+            MessageEntity(
+                id = UUID.randomUUID().toString(),
+                conversationId = activeId,
+                role = ROLE_USER,
+                content = content,
+                createdAt = nowIso(),
+                attachments = "[]"
+            )
+        )
+        // One delta, not a word-by-word stream. The engine returned a whole
+        // completion; re-splitting it with a timer would imitate typing and
+        // would be a lie about where the text came from. The provider path
+        // streams because the server streams.
+        onDelta(text)
+        persistAssistant(activeId, assistantId, StringBuilder(text))
+        return activeId
+    }
+
     private suspend fun streamLocalReply(prompt: String, onDelta: (String) -> Unit) {
         // COMMIT 1 (a) of the mobile wiring: try the native engine first, and
         // keep the existing responder for everything else.
