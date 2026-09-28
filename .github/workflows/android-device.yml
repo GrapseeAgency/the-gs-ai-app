@@ -32,6 +32,11 @@ name: android-device
 
 on:
   workflow_dispatch:
+    inputs:
+      deps_run_id:
+        description: "android-deps run id (blank = the latest successful one)"
+        required: false
+        default: ""
   # Fires when android-deps FINISHES, not in parallel with it. The tests need the
   # llamacpp-x86_64 artifact to exist, and a path-filtered push trigger races it:
   # the device job starts while the cross-compile is still running, cannot find
@@ -96,7 +101,7 @@ jobs:
       - name: Fetch the cross-compiled llama.cpp for this ABI
         env:
           GH_TOKEN: ${{ github.token }}
-          DEPS_RUN_ID: ${{ github.event.workflow_run.id }}
+          DEPS_RUN_ID: ${{ github.event.inputs.deps_run_id || github.event.workflow_run.id }}
         run: |
           set -euo pipefail
           # Downloaded from THE SPECIFIC RUN that triggered this one, via the REST
@@ -107,6 +112,18 @@ jobs:
           # mobile symbols, and every generation call answers GS_ERR_UNAVAILABLE.
           # The tests would then "pass" by asserting that nothing works, which is
           # the opposite of what they are for. So this fails the job.
+          # On workflow_dispatch there is no triggering run, so fall back to the
+          # most recent completed android-deps run. Without the fallback the job
+          # is unreachable by hand, and "I can only run it the way CI runs it" is
+          # not a usable property.
+          if [ -z "$DEPS_RUN_ID" ] || [ "$DEPS_RUN_ID" = "0" ]; then
+            DEPS_RUN_ID=$(
+              curl -fsS -H "Authorization: Bearer $GH_TOKEN" \
+                "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/workflows/android-deps.yml/runs?per_page=1&status=success" \
+              | python3 -c 'import json,sys; print(str(json.load(sys.stdin)["workflow_runs"][0]["id"]))'
+            )
+            echo "dispatch: using the latest successful android-deps run"
+          fi
           echo "deps run: $DEPS_RUN_ID"
           mkdir -p native/prebuilts/android-x86_64 /tmp/artifact
           ARTIFACT_ID=$(
