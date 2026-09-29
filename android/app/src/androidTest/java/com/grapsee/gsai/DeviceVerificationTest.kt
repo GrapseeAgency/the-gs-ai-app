@@ -203,6 +203,52 @@ class DeviceVerificationTest {
         )
     }
 
+    /**
+     * A reply that is a RESPONSE, not a continuation.
+     *
+     * The three assertions in a1 are necessary and nowhere near sufficient, and
+     * this run proved it. Raw, run 36545847058, with all three passing:
+     *
+     *     chat -> , i have a question about the following code:
+     *     ```
+     *     #include <iostream>
+     *     using namespace std;
+     *     int main() {
+     *         int x = 10
+     *     chat length = 893
+     *     common words in the reply = [the, is, a, i, and, to, of]
+     *
+     * 893 characters, not a substring of "hello", full of stop words -- and a
+     * document completion. Every shape check a string can satisfy, and not one
+     * bit of evidence that a human was spoken to.
+     *
+     * So the question itself carries the answer. A base model completing text has
+     * no way to arrive at "Paris"; a model that has been told a user is speaking
+     * and that an assistant turn is expected answers in one word. This fails on
+     * the exact failure it exists to catch, which is the whole point.
+     */
+    @Test
+    fun a1b_chat_answers_the_question_it_was_asked() {
+        val model = findModel()
+        assertNotNull("no model on the device", model)
+        println("GsNativeTest: model = ${model!!.absolutePath}")
+        assertTrue("init failed for $model", GsNativeLoader.initWith(model.absolutePath))
+        val check = GsNative.selfCheck()
+        println("GsNativeTest: selfCheck = $check")
+        assumeTrue("no generation backend: $check", check.contains("backend=available"))
+
+        val question = "What is the capital of France? Answer with one word."
+        val reply = GsNative.chat(question)
+        println("GsNativeTest: asked  -> $question")
+        println("GsNativeTest: replied -> ${reply.take(300)}")
+        assertTrue("the reply was empty", reply.isNotBlank())
+        assertTrue(
+            "the reply must contain the answer to the question that was asked. " +
+                "Asked: \"$question\"  Replied: $reply",
+            reply.lowercase().contains("paris"),
+        )
+    }
+
     // =====================================================================
     // 2. OCR
     // =====================================================================
