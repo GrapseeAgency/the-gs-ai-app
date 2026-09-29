@@ -10,6 +10,7 @@ Time is UTC.
 | Time | Issue | Status | Commit | Evidence |
 |------|-------|--------|--------|----------|
 | — | iOS build + simulator tests | NOT STARTED | — | — |
+| 14:0x | fixture glyph `V` unreadable by ML Kit | OPEN | — | 5x7 V is ambiguous with U and Y; a bolding pass was attempted and reverted |
 | — | dynamic feature module (`:ocr-fallback`) | BLOCKED (2/4 attempts) | — | see RESULTS-mobile-concurrency.md |
 | 04:0x | arm64-v8a `libgs_ffi.so` publishes | **PASS** | `7723183` | run `36543916433`, job `109327378295` success; `libgs_ffi.so` ELF64 `machine=AArch64`, 4,529,528 B |
 | 04:0x | x86_64 `libgs_ffi.so` publishes | **PASS** | `7723183` | run `36543916433`, job `109327377954` success |
@@ -19,7 +20,10 @@ Time is UTC.
 | 12:5x | `a1` chat returns text (strong bar) | **PASS** | `732bac9` | run `36566952196`: `chat("hello") -> Hello! How can I assist you today?` |
 | 12:5x | `<|im_end|>` leaking into the reply | FIXED, UNVERIFIED | `732bac9` | `special=false` + strip; needs a run |
 | 12:5x | OCR fixture delivered to the app | FIXED, UNVERIFIED | `732bac9` | `run-as` into filesDir; needs a run. a2 has never seen the image |
-| 12:5x | arm64-v8a `.so` with chat template | **PASS** | `732bac9` | run `36561597743`, job `109327378295` equivalent: arm64-v8a success |
+| 14:0x | `a2` OCR: marker not matched (V only) | FAIL | `3defde1` | run `36601495339`: `INYOICE INY-4471 DUE 2026-03-01` — every digit, dash and word is exact; only `V` misreads |
+| 14:0x | `a2`/`ocrReturns` now call ML Kit, not the native stub | FIXED | `3defde1` | native `runOcr` has no engine; ML Kit 16.0.1 is bundled and now has a call site |
+| 14:0x | `failureIsAnException` passed only while broken | **PASS** | `006ff4d` | run `36601495339` PASS: `chat("")` raises, `chat("hello")` returns text |
+| 12:5x | arm64-v8a `.so` with chat template | **PASS** | `732bac9` | run `36561597743` |
 | 12:5x | armeabi-v7a / x86 `.so` | FAILING | — | run `36561597743`. 32-bit ABIs, undiagnosed |
 
 | — | `a3` consent + `a4` resume + SHA-256 | PARTIAL | `d35f6d4` | a4 PASSED on x86_64 run `36515129722`; a3 SKIPPED |
