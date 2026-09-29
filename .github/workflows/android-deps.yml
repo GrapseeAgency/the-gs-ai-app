@@ -225,16 +225,16 @@ jobs:
             echo "total: $TOTAL bytes"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # The unstripped static size is not the number that decides whether this
-      # ships. Measured on attempt 4:
-      #     libleptonica.a    14,410,402 bytes
-      #     libtesseract.a   71,842,076 bytes
-      #     TOTAL            86,252,478 bytes
-      # 86 MB, against a brief that expected ~4 MB. Debug symbols and DWARF are
-      # most of that and none of it is loadable code, so the stripped figure is
-      # reported alongside it rather than instead of it. Both numbers, because
-      # "4 MB" and "86 MB" are both true of different things and only one of them
-      # ends up in an APK.
+          # The unstripped static size is not the number that decides whether this
+          # ships. Measured on attempt 4:
+          #     libleptonica.a    14,410,402 bytes
+          #     libtesseract.a   71,842,076 bytes
+          #     TOTAL            86,252,478 bytes
+          # 86 MB, against a brief that expected ~4 MB. Debug symbols and DWARF are
+          # most of that and none of it is loadable code, so the stripped figure is
+          # reported alongside it rather than instead of it. Both numbers, because
+          # "4 MB" and "86 MB" are both true of different things and only one of them
+          # ends up in an APK.
       - name: Measure the stripped size
         run: |
           set -euo pipefail
@@ -246,8 +246,8 @@ jobs:
           for A in libleptonica libtesseract; do
             cp "out/prefix/lib/$A.a" "stripped/$A.a"
             RAW=$(stat -c%s "stripped/$A.a")
-            # -g removes debug info. The NDK's own strip is the right one for
-            # objects its own clang produced.
+          # -g removes debug info. The NDK's own strip is the right one for
+          # objects its own clang produced.
             "$STRIP" --strip-debug "stripped/$A.a"
             S=$(stat -c%s "stripped/$A.a")
             STRIPPED_TOTAL=$((STRIPPED_TOTAL + S))
@@ -468,6 +468,24 @@ jobs:
       - name: Build
         run: |
           set -euo pipefail
+          # LLAMA_BUILD_APP IS THE ONE THAT WAS MISSING, and it is ON BY DEFAULT.
+          # At 3018a11e7 the top-level CMakeLists declares:
+          #   option(LLAMA_BUILD_APP "llama: build the unified binary" ${LLAMA_STANDALONE})
+          # so pinning the desktop commit turned on a target that the previous
+          # pinned branch did not have, and the very first build at the new pin
+          # died with:
+          #   FAILED: [code=1] bin/llama
+          #   ld: error: unable to find library -lllama-server-impl
+          #   ld: error: unable to find library -lllama-cli-impl
+          # The CLI links those impl libraries, and LLAMA_BUILD_SERVER/EXAMPLES
+          # being OFF is what removed them -- so the unified binary was being
+          # built with its own dependencies switched out from under it.
+          #
+          # NOTHING here needs a CLI, a server, or the common utils. build.rs
+          # links every .a this package ships (native/crates/gs-ffi/build.rs:200),
+          # so a stray bin/llama would not just cost disk, it would be handed to
+          # rustc as a link input. Hence COMMON and UI off as well -- both are
+          # ON by default at this commit too.
           cmake -S src-llama -B build \
             -DCMAKE_TOOLCHAIN_FILE="$PWD/android.toolchain.cmake" \
             -DCMAKE_BUILD_TYPE=Release \
@@ -476,24 +494,6 @@ jobs:
             -DLLAMA_CURL=OFF \
             -DBUILD_SHARED_LIBS=OFF \
             -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_BUILD_SERVER=OFF \
-            # LLAMA_BUILD_APP IS THE ONE THAT WAS MISSING, and it is ON BY DEFAULT.
-            # At 3018a11e7 the top-level CMakeLists declares:
-            #   option(LLAMA_BUILD_APP "llama: build the unified binary" ${LLAMA_STANDALONE})
-            # so pinning the desktop commit turned on a target that the previous
-            # pinned branch did not have, and the very first build at the new pin
-            # died with:
-            #   FAILED: [code=1] bin/llama
-            #   ld: error: unable to find library -lllama-server-impl
-            #   ld: error: unable to find library -lllama-cli-impl
-            # The CLI links those impl libraries, and LLAMA_BUILD_SERVER/EXAMPLES
-            # being OFF is what removed them -- so the unified binary was being
-            # built with its own dependencies switched out from under it.
-            #
-            # NOTHING here needs a CLI, a server, or the common utils. build.rs
-            # links every .a this package ships (native/crates/gs-ffi/build.rs:200),
-            # so a stray bin/llama would not just cost disk, it would be handed to
-            # rustc as a link input. Hence COMMON and UI off as well -- both are
-            # ON by default at this commit too.
             -DLLAMA_BUILD_APP=OFF -DLLAMA_BUILD_COMMON=OFF -DLLAMA_BUILD_UI=OFF \
             -G Ninja
           # The build log is kept: on failure it is the raw evidence required
