@@ -366,6 +366,37 @@ jobs:
           - abi: x86_64
             target: x86_64-linux-android
             expect: x86_64
+          # The two 32-bit ABIs, and the reason the armeabi-v7a and x86 slices
+          # of android-native.yml have never produced a .so. Raw, run 36561597743,
+          # job 109383529114:
+          #
+          #   FAIL: the llamacpp-armeabi-v7a artifact is not in run 36560212761.
+          #   Available:
+          #   llamacpp-x86_64 20348505 bytes
+          #   stablediffusion-arm64 17716590 bytes
+          #   tesseract-arm64 3721160 bytes
+          #   llamacpp-arm64-v8a 20634675 bytes
+          #   onnxruntime-arm64 12528498 bytes
+          #
+          # So the diagnosis in ISSUE-LOG.md -- "32-bit, undiagnosed" -- was not
+          # a linker problem at all. The archives these two jobs need were NEVER
+          # BUILT, because this matrix only ever had two entries. The `tar`
+          # failure later in that job is a downstream symptom of the artifact
+          # upload finding no build-*.log.
+          #
+          # armeabi-v7a is not a checkbox here: 32-bit ARM is a real shipping
+          # target, and without this slice any 32-bit phone gets a portable-only
+          # .so that reports isAvailable = false and cannot chat at all.
+          - abi: armeabi-v7a
+            target: armv7-linux-androideabi
+            expect: armeabi-v7a
+          # x86 has no real devices, but the matrix above already builds it, and
+          # a matrix entry that fails for want of a dependency is worse than one
+          # that is not there: it looks like a broken build rather than an
+          # unbuilt one.
+          - abi: x86
+            target: i686-linux-android
+            expect: x86
     steps:
       - uses: actions/checkout@v4
       - name: Install the NDK

@@ -88,6 +88,15 @@ case "$EXPECT" in
   arm64)   PAT='arm64|aarch64|ARM aarch64' ;;
   x86_64)  PAT='x86-64|x86_64' ;;
   x86)     PAT='80386|i386' ;;
+  # 32-bit ARM, and the fourth ABI in the android matrix. `file` prints the ISA
+  # UPPERCASE and alone:
+  #     ELF 32-bit LSB relocatable, ARM, EABI5, version 1 (SYSV), not stripped
+  # so the `*)` fallback below, which uses $EXPECT verbatim, would grep for
+  # lowercase "armeabi-v7a" and reject a perfectly correct build with
+  #     FAIL: libllama.a: archive member is not armeabi-v7a
+  # -- the same failure this script already caused once, for x86_64. Verified
+  # against the real file(1) strings for all four ABIs before being written.
+  armeabi-v7a) PAT='ARM|arm|eabi' ;;
   *)       PAT="$EXPECT" ;;
 esac
 if ! grep -qE "$PAT" "$work/out.txt"; then
