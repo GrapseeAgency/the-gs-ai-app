@@ -424,12 +424,15 @@ llama_result_t gs_llama_chat(gs_llama_context_t* ctx, const char* system,
     llama_result_t r;
     std::memset(&r, 0, sizeof(r));
     r.status = GS_ERR_GENERATION;
+#if defined(GS_LLAMA_HAVE_LLAMA)
     if (!ctx || !user || !*user) { set_err("ctx or user is null/empty"); return r; }
     if (!ctx->model) { set_err("context has no model"); return r; }
 
-    // The template the GGUF carries. Qwen2.5-Instruct ships ChatML here; a model
-    // with no template is a real possibility and must be a NAMED failure rather
-    // than a silent fallback to the raw prompt, which is the bug this fixes.
+    // The template the GGUF carries. Qwen2.5-Instruct ships ChatML here, and
+    // llama_model_chat_template returns whatever the file holds, so a different
+    // model is templated correctly without a code change here. A model with no
+    // template is a real possibility and must be a NAMED failure rather than a
+    // silent fall back to the raw prompt, because the raw path IS the bug.
     const char* tmpl = llama_model_chat_template(ctx->model, nullptr);
     if (!tmpl || !*tmpl) {
         set_err("this GGUF carries no chat template, so it cannot be prompted as "
@@ -455,9 +458,22 @@ llama_result_t gs_llama_chat(gs_llama_context_t* ctx, const char* system,
     if (got < 0) { set_err("llama_chat_apply_template failed"); return r; }
     buf.resize(static_cast<size_t>(got));
 
-    // Generation already stops on EOG (llama_vocab_is_eog in the decode loop), so
-    // <|im_end|> ends the assistant turn without any string matching here.
+    // Generation already stops on EOG (llama_vocab_is_eog breaks the decode
+    // loop), so <|im_end|> ends the assistant turn with no string matching.
     return gs_llama_generate(ctx, buf.c_str(), max_tokens, temperature);
+#else
+    // The wrapper is compiled on hosts with no llama.cpp at all, so every
+    // llama.h symbol above must sit behind this guard. Raw, run 36553404233:
+    //     llama_wrapper.cpp:449:20: error: 'llama_chat_apply_template' was not
+    //     declared in this scope
+    //     llama_wrapper.cpp:449:70: error: request for member 'size' in 'msgs',
+    //     which is of non-class type 'int'
+    // The second error is the first one seen twice: with the type unresolved the
+    // declaration does not parse as a declaration.
+    (void)ctx; (void)system; (void)user; (void)max_tokens; (void)temperature;
+    set_err("libllama not linked: rebuild with GS_LLAMA_HAVE_LLAMA");
+    return r;
+#endif
 }
 
 llama_result_t gs_llama_generate(gs_llama_context_t* ctx,
