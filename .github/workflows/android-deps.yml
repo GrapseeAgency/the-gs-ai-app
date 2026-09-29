@@ -529,6 +529,31 @@ jobs:
           # header, not on a missing library, which is a confusing way to learn
           # that only the .a files were shipped.
           cp -r src-llama/include/. dist/include/
+          # PUT THE ggml HEADERS IN include/ TOO, next to llama.h.
+          #
+          # llama.h:4 does `#include "ggml.h"` -- QUOTED. A quoted include always
+          # searches the directory of the file doing the including FIRST, before
+          # any -I path. So copying ggml.h beside llama.h makes the include resolve
+          # with no -I flag involved at all.
+          #
+          # Relying on -I instead is what just failed. build.rs does add
+          # ggml-include/ when it exists, and it does exist:
+          #     native/prebuilts/android-x86_64/ggml-include/ggml.h
+          # yet the compile still produced
+          #     include/llama.h:4:10: fatal error: 'ggml.h' file not found
+          # cc-rs does not echo its command line unless CC_ENABLE_DEBUG_OUTPUT is
+          # set, so the flags could not be confirmed from the log either. Rather
+          # than keep guessing at include-path plumbing, remove the dependency on
+          # it: the headers go where a quoted include looks first.
+          cp -r src-llama/ggml/include/. dist/include/
+          # dist/ggml-include/ is kept as well, so anything using <ggml.h> still
+          # resolves and the package keeps documenting where these came from.
+          if [ ! -f dist/include/ggml.h ]; then
+            echo "FAIL: dist/include/ggml.h missing after copying ggml headers"
+            ls -1 dist/include/ | sed -n '1,20p'
+            exit 1
+          fi
+          echo "dist/include/llama.h and dist/include/ggml.h are both present"
           mkdir -p dist/ggml-include
           cp -r src-llama/ggml/include/. dist/ggml-include/ 2>/dev/null || true
           test -f dist/include/llama.h || { echo "FAIL: dist/include/llama.h missing"; exit 1; }

@@ -1,0 +1,105 @@
+{
+  "total_count": 5,
+  "artifacts": [
+    {
+      "id": 11008205172,
+      "node_id": "MDg6QXJ0aWZhY3QxMTAwODIwNTE3Mg==",
+      "name": "stablediffusion-arm64",
+      "size_in_bytes": 17716988,
+      "url": "https://api.github.com/repos/GrapseeAgency/the-gs-ai-app/actions/artifacts/11008205172",
+      "archive_download_url": "https://api.github.com/repos/GrapseeAgency/the-gs-ai-app/actions/artifacts/11008205172/zip",
+      "expired": false,
+      "digest": "sha256:98a9d7e614f58c67de6b0581376ced9b4f1c429b0cd544c457991439045470a4",
+      "created_at": "2026-09-29T01:23:24Z",
+      "updated_at": "2026-09-29T01:23:24Z",
+      "expires_at": "2026-10-13T01:23:22Z",
+      "workflow_run": {
+        "id": 36507440133,
+        "repository_id": 1359230835,
+        "head_repository_id": 1359230835,
+        "head_branch": "native-runtime",
+        "head_sha": "cd4e50b15d9777860c51b5ca5a33aabbe802c7a6"
+      }
+    },
+    {
+      "id": 11007916663,
+      "node_id": "MDg6QXJ0aWZhY3QxMTAwNzkxNjY2Mw==",
+      "name": "onnxruntime-arm64",
+      "size_in_bytes": 12528246,
+      "url": "https://api.github.com/repos/GrapseeAgency/the-gs-ai-app/actions/artifacts/11007916663",
+      "archive_download_url": "https://api.github.com/repos/GrapseeAgency/the-gs-ai-app/actions/artifacts/11007916663/zip",
+      "expired": false,
+      "digest": "sha256:5411d156e71e7e3804c8f70c8477cbb434904cc992e31f85392e0d8dc2ea6270",
+      "created_at": "2026-09-29T01:20:46Z",
+      "updated_at": "2026-09-29T01:20:46Z",
+      "expires_at": "2026-10-13T01:20:44Z",
+      "workflow_run": {
+        "id": 36507440133,
+        "repository_id": 1359230835,
+        "head_repository_id": 1359230835,
+        "head_branch": "native-runtime",
+        "head_sha": "cd4e50b15d9777860c51b5ca5a33aabbe802c7a6"
+      }
+    },
+    {
+      "id": 11007792383,
+      "node_id": "MDg6QXJ0aWZhY3QxMTAwNzc5MjM4Mw==",
+      "name": "llamacpp-x86_64",
+      "size_in_bytes": 2996800,
+      "url": "https://api.github.com/repos/GrapseeAgency/the-gs-ai-app/actions/artifacts/11007792383",
+      "archive_download_url": "https://api.github.com/repos/GrapseeAgency/the-gs-ai-app/actions/artifacts/11007792383/zip",
+      "expired": false,
+      "digest": "sha256:3f53675e79c98946b37135f3bafe7b5a8bc4779d63a3ecd5d214b6fa6c83c08c",
+      "created_at": "2026-09-29T01:22:09Z",
+      "updated_at": "2026-09-29T01:22:09Z",
+      "expires_at": "2026-10-13T01:22:08Z",
+      "workflow_run": {
+        "id": 36507440133,
+        "repository_id": 1359230835,
+        "head_repository_id": 1359230835,
+        "head_branch": "native-runtime",
+        "head_sha": "cd4e50b15d9777860c51b5ca5a33aabbe802c7a6"
+      }
+    },
+    {
+      "id": 11007463231,
+      "node_id": "MDg6QXJ0aWZhY3QxMTAwNzQ2MzIzMQ==",
+      "name": "tesseract-arm64",
+      "size_in_bytes": 3721122,
+      "url": "https://api.github.com/repos/GrapseeAgency/the-gs-ai-app/actions/artifacts/11007463231",
+      "archive_download_url": "https://api.github.com/repos/GrapseeAgency/the-gs-ai-app/actions/artifacts/11007463231/zip",
+      "expired": false,
+      "digest": "sha256:a620b4a902c80ab6789a23e902b3b18282bb3ffc6a79440f1f6fdb1b20b02cf7",
+      "created_at": "2026-09-29T01:23:28Z",
+      "updated_at": "2026-09-29T01:23:28Z",
+      "expires_at": "2026-10-13T01:23:27Z",
+      "workflow_run": {
+        "id": 36507440133,
+        "repository_id": 1359230835,
+        "head_repository_id": 1359230835,
+        "head_branch": "native-runtime",
+        "head_sha": "cd4e50b15d9777860c51b5ca5a33aabbe802c7a6"
+      }
+    },
+    {
+      "id": 11007069816,
+      "node_id": "MDg6QXJ0aWZhY3QxMTAwNzA2OTgxNg==",
+      "name": "llamacpp-arm64-v8a",
+      "size_in_bytes": 2920597,
+      "url": "https://api.github.com/repos/GrapseeAgency/the-gs-ai-app/actions/artifacts/11007069816",
+      "archive_download_url": "https://api.github.com/repos/GrapseeAgency/the-gs-ai-app/actions/artifacts/11007069816/zip",
+      "expired": false,
+      "digest": "sha256:95f39584a788af04ca0702e32d5ec5d39c26b5ae5f889f29bc0eb409c1f35430",
+      "created_at": "2026-09-29T01:22:10Z",
+      "updated_at": "2026-09-29T01:22:10Z",
+      "expires_at": "2026-10-13T01:22:08Z",
+      "workflow_run": {
+        "id": 36507440133,
+        "repository_id": 1359230835,
+        "head_repository_id": 1359230835,
+        "head_branch": "native-runtime",
+        "head_sha": "cd4e50b15d9777860c51b5ca5a33aabbe802c7a6"
+      }
+    }
+  ]
+}
