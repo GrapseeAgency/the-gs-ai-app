@@ -81,9 +81,18 @@ fn call<T>(f: impl FnOnce(&MobileCtx) -> Result<T, mobile::MobileError>) -> Resu
 /// one shape compiles for none of them.
 fn throw(env: &mut JNIEnv, what: &str, reason: impl std::fmt::Display) {
     let msg = format!("GsNative.{what}: {reason}");
-    // com.grapsee.gsai.native.GsNativeException. If the class is missing, the
-    // entry points still return their explicit failure value, so Kotlin never
-    // sees a success-shaped null.
+    // com.grapsee.gsai.native.GsNativeException, which now EXISTS -- see
+    // android/app/src/main/java/com/grapsee/gsai/native/GsNativeException.kt.
+    //
+    // It did not, for the whole life of this bridge, and the note that used to
+    // stand here was wrong: the entry points returning a Java String return NULL
+    // on failure, and a null is not an explicit failure value to Kotlin code
+    // declared `: String`. Raw, run 36576882672:
+    //     java.lang.ClassNotFoundException: Didn't find class
+    //       "com.grapsee.gsai.native.GsNativeException" on path: DexPathList[...]
+    // so every native failure was a null reaching a caller with the reason
+    // discarded. The find_class is still guarded so a host that genuinely lacks
+    // the class degrades to the null return rather than aborting.
     if let Ok(cls) = env.find_class("com/grapsee/gsai/native/GsNativeException") {
         let _ = env.throw_new(cls, msg);
     }
