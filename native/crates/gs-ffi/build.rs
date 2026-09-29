@@ -206,14 +206,49 @@ fn main() {
                 }
             }
         }
-        statics.sort();
+        // TWO BUGS, BOTH INVISIBLE UNTIL A LINKER RAN.
+        //
+        // (1) THE `lib` PREFIX MUST BE STRIPPED. `file_stem()` on `libggml.a`
+        //     returns `libggml`, so `rustc-link-lib=static=libggml` makes rustc
+        //     search for `liblibggml.a`. That is the whole of run 36512916400:
+        //
+        //       error: could not find native static library `libggml`,
+        //       perhaps an -L flag is missing?
+        //
+        //     The -L flag was fine. The archives are all present. The name was
+        //     wrong, and the message blames the path, which is why nothing in the
+        //     build log pointed at it.
+        //
+        // (2) ORDER MATTERS FOR STATIC ARCHIVES, AND SORTING IS NOT ORDERING.
+        //     A consumer must precede what it consumes: llama needs ggml, ggml
+        //     needs ggml-cpu and ggml-base. Alphabetical gives
+        //         libggml, libggml-base, libggml-cpu, libllama
+        //     which is exactly backwards. The correct order is
+        //         llama, ggml, ggml-cpu, ggml-base
+        //     Left alphabetical, this becomes a wall of undefined symbols the
+        //     moment (1) is fixed -- so both are corrected together rather than
+        //     discovering (2) as a second failure.
+        //
+        // Anything not named here keeps a stable alphabetical position AFTER the
+        // known dependencies, so a future archive is still linked rather than
+        // silently dropped.
+        const DEP_ORDER: &[&str] = &["llama", "ggml", "ggml-cpu", "ggml-base"];
+        statics.sort_by_key(|n| {
+            let bare = n.strip_prefix("lib").unwrap_or(n.as_str());
+            match DEP_ORDER.iter().position(|d| *d == bare) {
+                Some(i) => (i, String::new()),
+                None => (DEP_ORDER.len(), n.clone()),
+            }
+        });
         if !statics.is_empty() {
             // Whatever the package actually contains, listed, because a missing
             // archive surfaces as "undefined symbol: ggml_..." at link time with
             // no hint about which package should have provided it.
-            println!("cargo:warning=linking static llama.cpp archives: {}", statics.join(", "));
+            println!("cargo:warning=linking static llama.cpp archives in link order: {}",
+                     statics.iter().map(|n| n.strip_prefix("lib").unwrap_or(n.as_str()).to_string()).collect::<Vec<_>>().join(", "));
             for n in statics {
-                println!("cargo:rustc-link-lib=static={n}");
+                let bare = n.strip_prefix("lib").unwrap_or(n.as_str()).to_string();
+                println!("cargo:rustc-link-lib=static={bare}");
             }
         } else {
             println!("cargo:warning=linking shared llama.cpp from {}/build/bin", root.display());
