@@ -84,8 +84,7 @@ class GsNativeTest {
     private fun requireModel(): String {
         val p = deviceModel
         assumeTrue(
-            "no model on the device; run-instrumented.sh places it at "
-                "files/ in the app private dir via run-as",
+            "no model on the device; run-instrumented.sh places it at files/ in the app private dir via run-as",
             p != null,
         )
         return p!!
