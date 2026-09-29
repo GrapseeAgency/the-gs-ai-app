@@ -266,8 +266,14 @@ class DeviceVerificationTest {
                 "module and is not yet routed through GsNative.runOcr.",
             check.contains("backend=available"),
         )
-        val dir = ctx.getExternalFilesDir(Environment.DIRECTORY_PICTURES)!!
-        val img = File(dir, "invoice.png")
+        // filesDir, not getExternalFilesDir(). The app's external dir needs the
+        // SYSTEM to create it, and on an emulator it is not there when the test
+        // runs -- so the fixture is pushed with run-as into the private dir, which
+        // needs no permission and is readable immediately. Raw, run 36566952196:
+        //     wrote /tmp/invoice.png  1158x90  text='INVOICE INV-4471 DUE 2026-03-01'
+        //     java.lang.AssertionError: fixture image missing at
+        //       /storage/emulated/0/Android/data/com.grapsee.gsai/files/Pictures/invoice.png
+        val img = File(ctx.filesDir, "invoice.png")
         assertTrue("fixture image missing at ${img.absolutePath}", img.isFile)
         val text = GsNative.runOcr(img.absolutePath)
         println("GsNativeTest: ocr -> ${text.take(160)}")

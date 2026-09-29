@@ -189,18 +189,32 @@ echo "=== 2c. the OCR fixture ==="
 # make_invoice_png.py rasterises a 5x7 bitmap font and writes the PNG with zlib
 # and struct from the standard library, so this works on any runner that can run
 # the tests at all.
-FIXTURE_DIR=/storage/emulated/0/Android/data/com.grapsee.gsai/files/Pictures
+# THE APP'S PRIVATE DIR, REACHED WITH run-as. NOT getExternalFilesDir().
+#
+# The generator works -- run 36566952196 printed
+#   wrote /tmp/invoice.png  1158x90  text='INVOICE INV-4471 DUE 2026-03-01'
+# -- and the push still did not happen, because the adb shell user cannot create
+# the app's external directory. Raw, from the same run's earlier history:
+#   mkdir: '/sdcard/Android/data/com.grapsee.gsai': Permission denied
+#
+# That directory is created by the SYSTEM when the app first touches external
+# storage, and by then the test is already running. The app's PRIVATE dir needs no
+# permission at all, and a debug APK is debuggable, so run-as can write into it.
+# This is the same route the 491 MB model already takes successfully:
+#   model = /data/user/0/com.grapsee.gsai/files/qwen2.5-0.5b-instruct-q4_k_m.gguf
 FIXTURE_NAME=invoice.png
 MARKER="INVOICE INV-4471 DUE 2026-03-01"
 if python3 "$GITHUB_WORKSPACE/.github/scripts/make_invoice_png.py" /tmp/invoice.png "$MARKER"; then
   echo "  marker: $MARKER"
   file /tmp/invoice.png || true
-  adb shell mkdir -p "$FIXTURE_DIR" 2>&1 | head -2 || true
-  if adb push /tmp/invoice.png "$FIXTURE_DIR/$FIXTURE_NAME" >/dev/null 2>&1; then
-    echo "  pushed to $FIXTURE_DIR/$FIXTURE_NAME"
-    echo "  on device: $(adb shell ls -l "$FIXTURE_DIR/$FIXTURE_NAME" 2>&1 | tr -d '\r')"
+  adb push /tmp/invoice.png /data/local/tmp/$FIXTURE_NAME >/dev/null 2>&1
+  adb shell chmod 644 /data/local/tmp/$FIXTURE_NAME || true
+  adb shell run-as com.grapsee.gsai mkdir -p files 2>&1 | head -2 || true
+  if adb shell run-as com.grapsee.gsai cp /data/local/tmp/$FIXTURE_NAME "files/$FIXTURE_NAME" 2>&1 | head -2; then
+    echo "  placed in the app's private dir via run-as"
+    echo "  in-app listing: $(adb shell run-as com.grapsee.gsai ls -l "files/$FIXTURE_NAME" 2>&1 | tr -d '\r')"
   else
-    echo "  WARNING: push failed; the OCR test will name the cause"
+    echo "  WARNING: run-as copy failed; the OCR test will name the cause"
   fi
 else
   # Do not pretend. A missing fixture must read as a missing fixture.

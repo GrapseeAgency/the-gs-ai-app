@@ -366,8 +366,19 @@ llama_result_t gs_llama_generate_opts(gs_llama_context_t* ctx,
             ++n_generated;
 
             char piece[256];
+            // special=FALSE. Control tokens must not reach the caller: with
+            // special=true the model's own end-of-turn marker comes back as
+            // literal text. Raw, run 36566952196, from a passing test:
+            //
+            //   asked  -> What is the capital of France? Answer with one word.
+            //   replied -> Paris. <|im_end|>
+            //   chat("hello") -> Hello! How can I assist you today?<|im_end|>
+            //
+            // The answer is right and the marker is still in the string a user
+            // would read. EOG detection above is by token id and is unaffected:
+            // this only changes what a token RENDERS as.
             const int n = llama_token_to_piece(ctx->vocab, next, piece,
-                                               sizeof(piece), 0, true);
+                                               sizeof(piece), 0, false);
             if (n > 0) out.append(piece, (size_t)n);
 
             // Feed the sampled token back in at the next position. The batch
@@ -383,6 +394,21 @@ llama_result_t gs_llama_generate_opts(gs_llama_context_t* ctx,
             if (llama_decode(ctx->ctx, batch) != 0) break;
         }
         llama_batch_free(batch);
+
+        // A tokenizer may render a control token as literal text rather than as
+        // an EOG, which is what produced the trailing <|im_end|> above. Remove
+        // any that survive, so a caller never sees template syntax.
+        {
+            static const char* kJunk[] = {
+                "<|im_end|>", "<|im_start|>", "<|endoftext|>", "<|eot_id|>",
+            };
+            for (const char* j : kJunk) {
+                std::string::size_type at;
+                while ((at = out.find(j)) != std::string::npos) {
+                    out.erase(at, std::strlen(j));
+                }
+            }
+        }
 
         if (out.empty()) {
             // Never return an empty success. That is indistinguishable from a
