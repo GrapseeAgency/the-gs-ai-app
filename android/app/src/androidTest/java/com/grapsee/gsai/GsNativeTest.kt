@@ -160,6 +160,42 @@ class GsNativeTest {
     }
 
     /**
+     * OCR reads the generated fixture, through the engine that exists.
+     *
+     * This test used to call `GsNative.runOcr` on a file in the app's EXTERNAL
+     * directory, and it could only ever skip. Two independent impossibilities
+     * were stacked:
+     *
+     *   - the fixture is placed in the app's PRIVATE dir with run-as, because
+     *     the adb shell user cannot create the external one
+     *         mkdir: '/sdcard/Android/data/com.grapsee.gsai': Permission denied
+     *     and the app cannot read /sdcard (EACCES, run 36420986162)
+     *   - `GsNative.runOcr` has no OCR engine compiled into this build, and says
+     *     so on every single call
+     *         GsNative.runOcr: unavailable: no OCR engine is compiled into this
+     *         mobile build; run OCR through the provider path or use a
+     *         gs-ocr-enabled build
+     *
+     * The OCR that ships is ML Kit, bundled in the app module, so that is what
+     * this calls. Raw, run 36598477726:
+     *     org.junit.AssumptionViolatedException: no fixture image at
+     *       /storage/emulated/0/Android/data/com.grapsee.gsai/files/Pictures/invoice.png
+     */
+    @Test
+    fun ocrReturnsTextOnAFixtureImage() {
+        val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+        val img = java.io.File(ctx.filesDir, "invoice.png")
+        assertTrue("fixture image missing at ${img.absolutePath}", img.isFile)
+        val text = MlKitOcr.recognize(ctx, img.absolutePath)
+        println("GsNativeTest: ocr -> ${text.replace("\n", " | ")}")
+        assertTrue("OCR returned an empty string", text.isNotBlank())
+        assertFalse("OCR returned an unavailability marker: $text",
+            text.contains("unavailable", ignoreCase = true))
+        assertTrue("the marker INV-4471 was not read from the fixture: $text",
+            text.contains("INV-4471"))
+    }
+
+    /**
      * Release the context twice.
      *
      * A double free in native teardown is a CRASH, not a Kotlin exception, so
