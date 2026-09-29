@@ -114,7 +114,21 @@ char* gs_mobile_chat(gs_mobile_ctx_t* ctx, const char* prompt, int32_t max_token
     if (max_tokens <= 0) max_tokens = 256;
 #ifdef GS_MOBILE_HAVE_LLAMA
     if (ctx->llama) {
-        llama_result_t r = gs_llama_generate(ctx->llama, prompt, max_tokens, temperature);
+        // TEMPLATED, NOT RAW. The raw prompt produced a prompt FRAGMENT rather
+        // than an answer, from a passing test on the emulator:
+        //
+        //   chat("hello") -> ", i have a question about the following code:"
+        //
+        // which is a base model completing a document, because nothing told it a
+        // user was speaking. The template comes from the GGUF itself, so this is
+        // not a Qwen-specific assumption.
+        //
+        // The system prompt is terse on purpose. This is a phone assistant and
+        // the tokens spent on a persona are tokens not spent answering.
+        static const char* kSystem = "You are a helpful assistant on a phone. "
+                                     "Answer briefly and directly.";
+        llama_result_t r = gs_llama_chat(ctx->llama, kSystem, prompt,
+                                         max_tokens, temperature);
         if (r.status != GS_OK) {
             set_err(std::string("generate failed: ") + gs_last_error());
             return nullptr;

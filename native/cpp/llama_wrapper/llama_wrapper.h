@@ -164,6 +164,30 @@ llama_result_t gs_llama_generate(gs_llama_context_t* ctx,
                               int32_t max_tokens,
                               float temperature);
 
+/* Chat, templated. `system` may be NULL or empty.
+ *
+ * This exists because the raw prompt was being handed straight to an INSTRUCT
+ * model, which does not continue a conversation -- it continues a document. The
+ * observed result on the emulator, from a passing test:
+ *
+ *     chat("hello") -> ", i have a question about the following code:"
+ *
+ * A prompt fragment. The model was completing the bare word "hello" in whatever
+ * style the base weights remembered, because nothing ever told it a user was
+ * speaking or that an assistant turn was expected.
+ *
+ * The template is read from the MODEL ITSELF (llama_model_chat_template) rather
+ * than hardcoded to ChatML, so a different GGUF carries its own template and is
+ * templated correctly without a code change here. add_ass=true, so the prompt
+ * ends with the tokens that open an assistant turn and generation begins where
+ * the answer does.
+ */
+llama_result_t gs_llama_chat(gs_llama_context_t* ctx,
+                             const char* system,
+                             const char* user,
+                             int32_t max_tokens,
+                             float temperature);
+
 /* Releases result->text. Safe to call with NULL. */
 void gs_llama_free_result_text(llama_result_t* result);
 

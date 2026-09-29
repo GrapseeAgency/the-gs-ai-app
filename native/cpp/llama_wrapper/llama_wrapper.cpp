@@ -418,6 +418,48 @@ llama_result_t gs_llama_generate_opts(gs_llama_context_t* ctx,
 #endif
 }
 
+llama_result_t gs_llama_chat(gs_llama_context_t* ctx, const char* system,
+                             const char* user, int32_t max_tokens,
+                             float temperature) {
+    llama_result_t r;
+    std::memset(&r, 0, sizeof(r));
+    r.status = GS_ERR_GENERATION;
+    if (!ctx || !user || !*user) { set_err("ctx or user is null/empty"); return r; }
+    if (!ctx->model) { set_err("context has no model"); return r; }
+
+    // The template the GGUF carries. Qwen2.5-Instruct ships ChatML here; a model
+    // with no template is a real possibility and must be a NAMED failure rather
+    // than a silent fallback to the raw prompt, which is the bug this fixes.
+    const char* tmpl = llama_model_chat_template(ctx->model, nullptr);
+    if (!tmpl || !*tmpl) {
+        set_err("this GGUF carries no chat template, so it cannot be prompted as "
+                "a chat model; gs_llama_generate is the raw-completion path");
+        r.status = GS_ERR_INVALID_ARG;
+        return r;
+    }
+
+    std::vector<llama_chat_message> msgs;
+    msgs.reserve(2);
+    if (system && *system) msgs.push_back(llama_chat_message{"system", system});
+    msgs.push_back(llama_chat_message{"user", user});
+
+    // Size pass first: the API returns the length it needs when buf is null, and
+    // a fixed buffer would either truncate a long system prompt or waste memory
+    // on every call.
+    int32_t need = llama_chat_apply_template(tmpl, msgs.data(), msgs.size(), true,
+                                             nullptr, 0);
+    if (need <= 0) { set_err("llama_chat_apply_template size pass returned 0"); return r; }
+    std::string buf(static_cast<size_t>(need), '\0');
+    int32_t got = llama_chat_apply_template(tmpl, msgs.data(), msgs.size(), true,
+                                            buf.data(), need);
+    if (got < 0) { set_err("llama_chat_apply_template failed"); return r; }
+    buf.resize(static_cast<size_t>(got));
+
+    // Generation already stops on EOG (llama_vocab_is_eog in the decode loop), so
+    // <|im_end|> ends the assistant turn without any string matching here.
+    return gs_llama_generate(ctx, buf.c_str(), max_tokens, temperature);
+}
+
 llama_result_t gs_llama_generate(gs_llama_context_t* ctx,
                                   const char* prompt,
                                   int32_t max_tokens,
