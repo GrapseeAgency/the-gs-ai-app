@@ -166,10 +166,10 @@ jobs:
           ARTIFACT_ID=$(
             curl -fsS -H "Authorization: Bearer $GH_TOKEN" \
               "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs/$DEPS_RUN_ID/artifacts" \
-            | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next((str(a["id"]) for a in d.get("artifacts",[]) if a["name"]=="llamacpp-x86_64"), ""))'
+            | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next((str(a["id"]) for a in d.get("artifacts",[]) if a["name"]=="llamacpp-${{ matrix.abi }}"), ""))'
           )
           if [ -z "$ARTIFACT_ID" ]; then
-            echo "FAIL: the llamacpp-x86_64 artifact is not in run $DEPS_RUN_ID."
+            echo "FAIL: the llamacpp-${{ matrix.abi }} artifact is not in run $DEPS_RUN_ID."
             echo "      Available:"
             curl -fsS -H "Authorization: Bearer $GH_TOKEN" \
               "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs/$DEPS_RUN_ID/artifacts" \
@@ -215,6 +215,29 @@ jobs:
           fi
           echo "=== prebuilt contents ==="
           find native/prebuilts/android-${{ matrix.abi }} -type f | sort | sed -n '1,30p'
+          # THE ARCHIVE MUST ACTUALLY BE THIS ABI, NOT JUST PRESENT.
+          # android-deps was green, assert_arch_member.sh passed, and the
+          # CMake-reported architecture was aarch64 -- all true, and all
+          # irrelevant, because this job was never given arm64 archives.
+          for A in native/prebuilts/android-${{ matrix.abi }}/lib/*.a; do
+            M=$(python3 -c 'import struct,sys
+          d=open(sys.argv[1],"rb").read(); off=8; n=0; bad=0
+          MACH={0x03:"i386",0x3e:"x86-64",0x28:"ARM",0xb7:"AArch64"}
+          WANT={"arm64-v8a":"AArch64","armeabi-v7a":"ARM","x86_64":"x86-64","x86":"i686"}["${{ matrix.abi }}"]
+          while off+60<=len(d):
+              h=d[off:off+60]
+              if h[58:60]!=b"\x60\n": break
+              try: sz=int(h[48:58].decode().strip())
+              except ValueError: break
+              b=d[off+60:off+60+sz]
+              if b[:4]==b"\x7fELF":
+                  n+=1
+                  if MACH.get(struct.unpack_from("<H",b,18)[0])!=WANT: bad+=1
+              off+=60+sz+(sz%2)
+          print("%d objects, %d wrong-architecture" % (n,bad))' "$A")
+            echo "  $(basename $A): $M"
+            case "$M" in *" 0 wrong-architecture") ;; *) echo "::error::$(basename $A) in the ${{ matrix.abi }} package is not ${{ matrix.abi }}: $M"; exit 1 ;; esac
+          done
           test -f native/prebuilts/android-${{ matrix.abi }}/include/llama.h || {
             echo "FAIL: no include/llama.h in the prebuilt package"; exit 1; }
           test -d native/prebuilts/android-${{ matrix.abi }}/lib || {
