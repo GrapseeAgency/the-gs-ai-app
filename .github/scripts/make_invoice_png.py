@@ -57,7 +57,9 @@ FONT = {
     "S": [".####", "#....", "#....", ".###.", "....#", "....#", "####."],
     "T": ["#####", "..#..", "..#..", "..#..", "..#..", "..#..", "..#.."],
     "U": ["#...#", "#...#", "#...#", "#...#", "#...#", "#...#", ".###."],
-    "V": ["#...#", "#...#", "#...#", "#...#", "#...#", ".#.#.", "..#.."],
+    # Converge from row 3, not row 5. Holding the arms vertical that long is a
+    # U with a pointed bottom and is read as one.
+    "V": ["#...#", "#...#", "#...#", ".#.#.", ".#.#.", "..#..", "..#.."],
     "W": ["#...#", "#...#", "#...#", "#.#.#", "#.#.#", "##.##", "#...#"],
     "X": ["#...#", "#...#", ".#.#.", "..#..", ".#.#.", "#...#", "#...#"],
     "Y": ["#...#", "#...#", ".#.#.", "..#..", "..#..", "..#..", "..#.."],
@@ -100,12 +102,16 @@ def check_font():
                  "characters" % (GH, GW))
 
 
-def render(text, scale=8, pad=32, gap=4):
+def render(text, scale=8, pad=32, gap=3):
     """Greyscale 8-bit, black ink on white. Returns (w, h, pixels)."""
-    # ML Kit needs clear separation. Measured, not guessed: at scale=6/gap=2 this
-    # produced "INVOICE INY-447 DUE 2926-03-01" -- the 1 was lost into the 7 and
-    # the V grew a tail from the adjacent hyphen. The glyphs themselves were
-    # correct (see --show); they were too small and too close together.
+    # ML Kit needs clear separation, and not too much of it. Measured across
+    # three runs, all on the same glyph shapes:
+    #   scale=6 gap=2 -> "IMJOICE IMYAA71 DUE 2926-03-g1"  (rows also shifted)
+    #   scale=8 gap=4 -> "INVOICE INY- 4 471 DUE 2 026- 03-01"  (4 became a
+    #                   separate token: the gap reads as a SPACE)
+    #   scale=8 gap=3 -> the current attempt
+    # So the glyphs are correct and the question is purely spacing: too small and
+    # strokes merge, too wide and the recogniser sees word breaks.
     cell = GW + gap
     cols = len(text) * cell - gap
     w = cols * scale + 2 * pad

@@ -4,7 +4,9 @@ import android.os.Environment
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.grapsee.gsai.native.GsNative
+import com.grapsee.gsai.native.GsNativeException
 import com.grapsee.gsai.native.GsNativeLoader
+import com.grapsee.gsai.ocr.MlKitOcr
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -121,53 +123,40 @@ class GsNativeTest {
     @Test
     fun failureIsAnExceptionNotAnEmptyString() {
         assumeTrue(GsNativeLoader.isLibraryLoaded())
-        val threw = try {
-            GsNative.chat("hello")
+        requireModel()
+
+        // A SUCCESS returns text.
+        val ok = GsNative.chat("hello")
+        assertTrue("chat returned an empty string on a working engine", ok.isNotBlank())
+        assertFalse(
+            "chat returned an unavailability marker: $ok",
+            ok.contains("unavailable", ignoreCase = true),
+        )
+
+        // A FAILURE throws, and never returns an empty string.
+        //
+        // This test used to assert that chat("hello") THROWS, which was true only
+        // while the engine was broken -- a test that can only pass when the
+        // product does not work. Raw, run 36598477726, with the engine working:
+        //
+        //     assumption failed: failureIsAnExceptionNotAnEmptyString
+        //
+        // because chat("hello") answered and the test had nothing to complain
+        // about. The invariant worth keeping is the other half: an input the
+        // engine cannot serve must RAISE, so a caller can tell failure from a
+        // short answer.
+        val empty = try {
+            GsNative.chat("")
             false
-        } catch (t: Throwable) {
-            println("GsNativeTest: expected failure, got ${t::class.java.name}: ${t.message}")
+        } catch (t: GsNativeException) {
+            println("GsNativeTest: empty prompt correctly threw: ${t.message}")
             true
         }
-        // If the engine IS available the call may legitimately succeed, in which
-        // case it must not have returned an empty string.
-        if (!threw) {
-            assumeTrue("engine is available; the failure path cannot be exercised", false)
-        }
-        assertTrue("expected an exception or a non-empty result", threw)
-    }
-
-    @Test
-    fun chatReturnsNonEmptyText() {
-        val model = requireModel()
-        assertTrue("init failed for $model", GsNativeLoader.initWith(model))
-        assumeTrue(
-            "no generation backend in this build; the portable library links but cannot generate",
-            GsNative.backendAvailable(),
+        assertTrue(
+            "an empty prompt returned normally; a caller cannot distinguish a " +
+                "failure from a short answer",
+            empty,
         )
-        val out = GsNative.chat("Say hello in one short sentence.")
-        assertTrue("chat returned an empty string", out.isNotBlank())
-        assertFalse(
-            "chat returned an unavailability marker instead of text: $out",
-            out.contains("unavailable", ignoreCase = true),
-        )
-        println("GsNativeTest: chat -> ${out.take(80)}")
-    }
-
-    @Test
-    fun ocrReturnsTextOnAFixtureImage() {
-        val model = requireModel()
-        assertTrue("init failed for $model", GsNativeLoader.initWith(model))
-        assumeTrue("no OCR backend in this build", GsNative.backendAvailable())
-        val dir = InstrumentationRegistry.getInstrumentation()
-            .targetContext
-            .getExternalFilesDir(Environment.DIRECTORY_PICTURES)!!
-        val img = java.io.File(dir, "invoice.png")
-        assumeTrue("no fixture image at ${img.absolutePath}", img.isFile)
-        val text = GsNative.runOcr(img.absolutePath)
-        assertTrue("OCR returned an empty string", text.isNotBlank())
-        assertFalse("OCR returned an unavailability marker: $text",
-            text.contains("unavailable", ignoreCase = true))
-        println("GsNativeTest: ocr -> ${text.take(80)}")
     }
 
     /**
