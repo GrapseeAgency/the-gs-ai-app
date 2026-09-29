@@ -171,6 +171,49 @@ else
 fi
 
 echo
+echo "=== 2c. the OCR fixture ==="
+# WITHOUT THIS THE OCR TEST CANNOT RUN. Raw, run 36515129722:
+#     java.lang.AssertionError: fixture image missing at
+#     /storage/emulated/0/Android/data/com.grapsee.gsai/files/Pictures/invoice.png
+# and `grep -c invoice.png` on this script returned 0 -- nothing ever created it.
+# A test that asserts a specific string appears in an image cannot pass against an
+# image that does not exist, and this one SKIPPED rather than failed, which is the
+# more expensive half of that.
+#
+# GENERATED, NOT COMMITTED. A committed fixture PNG is a binary in the repository,
+# and the marker would be a constant in two places that could drift apart. Drawing
+# it here means the string the test asserts on and the string in the image are the
+# same edit.
+FIXTURE_DIR=/storage/emulated/0/Android/data/com.grapsee.gsai/files/Pictures
+FIXTURE_NAME=invoice.png
+if command -v convert >/dev/null 2>&1; then
+  convert -size 800x200 xc:white -fill black -pointsize 32 \
+    -annotate +20+100 "INVOICE INV-4471 DUE 2026-03-01" /tmp/invoice.png
+  echo "generated /tmp/invoice.png with ImageMagick"
+elif command -v magick >/dev/null 2>&1; then
+  magick -size 800x200 xc:white -fill black -pointsize 32 \
+    -annotate +20+100 "INVOICE INV-4471 DUE 2026-03-01" /tmp/invoice.png
+  echo "generated /tmp/invoice.png with ImageMagick 7"
+else
+  # No ImageMagick on the runner. Python+PIL is not guaranteed either, so this
+  # writes a minimal uncompressed PNG with the marker drawn as text is not
+  # possible -- so fall back to whatever is present and SAY SO, rather than
+  # pushing a blank image and letting OCR fail with no explanation.
+  echo "NOTE: no ImageMagick on this runner. The OCR test needs it to draw the"
+  echo "      fixture, and will SKIP with that reason rather than pretend."
+  OCR_FIXTURE_READY=0
+fi
+if [ -f /tmp/invoice.png ]; then
+  adb shell mkdir -p "$FIXTURE_DIR" 2>&1 | head -2 || true
+  if adb push /tmp/invoice.png "$FIXTURE_DIR/$FIXTURE_NAME" >/dev/null 2>&1; then
+    echo "pushed $FIXTURE_NAME to $FIXTURE_DIR"
+    echo "  on device: $(adb shell ls -l "$FIXTURE_DIR/$FIXTURE_NAME" 2>&1 | tr -d '\r')"
+  else
+    echo "WARNING: could not push $FIXTURE_NAME; the OCR test will name the cause."
+  fi
+fi
+
+echo
 echo "=== 3. the device's own view of the ABI ==="
 adb shell getprop ro.product.cpu.abi
 adb shell getprop ro.build.version.sdk

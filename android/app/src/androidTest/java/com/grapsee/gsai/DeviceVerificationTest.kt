@@ -159,6 +159,48 @@ class DeviceVerificationTest {
             "chat returned an error string rather than a completion: $out",
             out.lowercase().contains("error:"),
         )
+
+        // A NON-EMPTY STRING IS NOT A REPLY.
+        //
+        // This assertion passed on output that was obviously not an answer:
+        //     chat -> , i have a question about the following code:
+        //     ```
+        //     #include <iostream>
+        //     using namespace std;
+        // That is the PROMPT being echoed back, not the model answering it -- the
+        // prompt template is not being applied to the model's output at all. A
+        // non-empty check cannot tell those apart, which is why the bar is now
+        // three properties instead of one.
+        println("GsNativeTest: chat length = ${out.length}")
+        assertTrue(
+            "the reply is ${out.length} characters; a completion this short is a " +
+                "fragment, not an answer: $out",
+            out.length > 20,
+        )
+
+        // It must not simply BE the prompt. A model that has echoed the prompt back
+        // will share a long substring with it; a model answering will not.
+        val prompt = "hello"
+        val echoed = prompt.length >= 10 &&
+            out.windowed(10).any { it == prompt.windowed(10).first() && prompt.contains(it) }
+        assertFalse(
+            "the reply is a substring of the prompt -- the prompt is being echoed " +
+                "back rather than answered: $out",
+            echoed,
+        )
+
+        // And it must contain ordinary English. Generated text that is entirely
+        // punctuation, code fences or whitespace indicates a sampler or prompt
+        // wiring fault rather than a working model.
+        val COMMON = listOf("the", "is", "a", "i", "you", "hello", "answer", "and", "to", "of")
+        val words = out.lowercase().split(Regex("[^a-z]+")).filter { it.isNotEmpty() }.toSet()
+        val hits = COMMON.filter { words.contains(it) }
+        println("GsNativeTest: common words in the reply = $hits")
+        assertTrue(
+            "the reply contains no ordinary English word, so it is not a natural " +
+                "language answer. Words seen: $words. Reply: $out",
+            hits.isNotEmpty(),
+        )
     }
 
     // =====================================================================

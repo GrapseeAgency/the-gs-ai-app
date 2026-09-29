@@ -487,7 +487,26 @@ jobs:
           # rustc as a link input. Hence COMMON and UI off as well -- both are
           # ON by default at this commit too.
           cmake -S src-llama -B build \
-            -DCMAKE_TOOLCHAIN_FILE="$PWD/android.toolchain.cmake" \
+            # THE NDK'S OWN TOOLCHAIN FILE, NOT A HAND-WRITTEN ONE.
+            #
+            # The hand-written file set CMAKE_SYSTEM_NAME and CMAKE_ANDROID_ARCH_ABI
+            # and CMake accepted all of it -- then selected the bare driver:
+            #     -- The C compiler identification is Clang 14.0.7
+            #     -- Check for working C compiler:
+            #        .../ndk/25.2.9519653/.../bin/clang - skipped
+            # The NDK's bare `clang` is a HOST driver. It takes its target from
+            # --target, and with none it builds for the build machine. So arm64-v8a
+            # produced x86_64 objects, every job went green, and the only place it
+            # surfaced was a cross-link from rustc twenty minutes later:
+            #     ld: error: .../android-arm64-v8a/lib/libllama.a(llama.cpp.o)
+            #     is incompatible with aarch64linux
+            #
+            # Setting an ABI variable in a hand-rolled file is not the same thing
+            # as using the NDK's file, which emits --target= and picks
+            # aarch64-linux-android24-clang.
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=${{ matrix.abi }} \
+            -DANDROID_PLATFORM=android-${{ env.API }} \
             -DCMAKE_BUILD_TYPE=Release \
             -DGGML_OPENMP=OFF \
             -DGGML_LLAMAFILE=OFF \
@@ -499,6 +518,24 @@ jobs:
           # The build log is kept: on failure it is the raw evidence required
           # before anything is called BLOCKED.
           cmake --build build -j"$(nproc)" 2>&1 | tee build.log
+          # THE ARCHITECTURE IS ASSERTED WHERE IT WENT WRONG.
+          #
+          # assert_arch_member.sh inspects the archives and PASSED on archives
+          # built for the wrong CPU, so whatever it checked was not sufficient.
+          # CMake naming the wrong compiler is upstream of the archives and is the
+          # cheapest thing to catch: one line of output, before an hour of compiling.
+          EXPECT="${{ matrix.target }}24-clang"
+          GOT=$(grep -aoE '[a-z0-9_]+-linux-android[0-9]+-clang' build.log | head -1 || true)
+          echo "expected driver: $EXPECT"
+          echo "driver CMake used: ${GOT:-<none>}"
+          if [ "$GOT" != "$EXPECT" ]; then
+            echo "::error::CMake selected '${GOT:-<none>}' for ABI ${{ matrix.abi }}, expected $EXPECT."
+            echo "  The bare NDK clang builds for the HOST. This job would have"
+            echo "  produced x86_64 archives labelled arm64-v8a and still gone green."
+            grep -aE 'Check for working C compiler|CMAKE_SYSTEM_PROCESSOR|GGML_SYSTEM_ARCH' build.log | sed -n '1,10p' || true
+            exit 1
+          fi
+          echo "  CMake selected the ${{ matrix.abi }} driver"
 
       # Raw, run 36385099961: the build SUCCEEDED, all 49 targets linked
       #   [41/49] Linking CXX static library src/libllama.a
