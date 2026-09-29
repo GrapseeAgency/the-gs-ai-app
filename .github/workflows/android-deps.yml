@@ -476,6 +476,25 @@ jobs:
             -DLLAMA_CURL=OFF \
             -DBUILD_SHARED_LIBS=OFF \
             -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_BUILD_SERVER=OFF \
+            # LLAMA_BUILD_APP IS THE ONE THAT WAS MISSING, and it is ON BY DEFAULT.
+            # At 3018a11e7 the top-level CMakeLists declares:
+            #   option(LLAMA_BUILD_APP "llama: build the unified binary" ${LLAMA_STANDALONE})
+            # so pinning the desktop commit turned on a target that the previous
+            # pinned branch did not have, and the very first build at the new pin
+            # died with:
+            #   FAILED: [code=1] bin/llama
+            #   ld: error: unable to find library -lllama-server-impl
+            #   ld: error: unable to find library -lllama-cli-impl
+            # The CLI links those impl libraries, and LLAMA_BUILD_SERVER/EXAMPLES
+            # being OFF is what removed them -- so the unified binary was being
+            # built with its own dependencies switched out from under it.
+            #
+            # NOTHING here needs a CLI, a server, or the common utils. build.rs
+            # links every .a this package ships (native/crates/gs-ffi/build.rs:200),
+            # so a stray bin/llama would not just cost disk, it would be handed to
+            # rustc as a link input. Hence COMMON and UI off as well -- both are
+            # ON by default at this commit too.
+            -DLLAMA_BUILD_APP=OFF -DLLAMA_BUILD_COMMON=OFF -DLLAMA_BUILD_UI=OFF \
             -G Ninja
           # The build log is kept: on failure it is the raw evidence required
           # before anything is called BLOCKED.
