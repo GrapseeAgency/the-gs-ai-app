@@ -1,14 +1,21 @@
 package com.grapsee.gsai
 
 import android.os.Environment
+import androidx.room.Room
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.grapsee.gsai.data.SettingsStore
+import com.grapsee.gsai.data.local.AppDatabase
 import com.grapsee.gsai.data.local.ModelCatalog
 import com.grapsee.gsai.data.local.ModelDownloader
 import com.grapsee.gsai.data.local.ModelStore
+import com.grapsee.gsai.data.remote.ApiClient
+import com.grapsee.gsai.data.repository.ChatRepository
 import com.grapsee.gsai.native.GsNative
 import com.grapsee.gsai.native.GsNativeLoader
 import com.grapsee.gsai.ocr.MlKitOcr
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.cio.CIO
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -418,15 +425,142 @@ class DeviceVerificationTest {
             false
         }
         println("LocalFirstToggleTest: stored preferLocal = $stored")
-        if (!stored) {
-            println("LocalFirstToggleTest: OFF, so the network is tried first -- correct")
-        } else {
-            println("LocalFirstToggleTest: ON, so a HIGH/MID device tries local first")
+        // THIS USED TO BE `assertTrue("settings are readable", true)`.
+        //
+        // A test named "prefer_local_is_off_by_default" that asserts nothing
+        // about the default is a test that cannot fail, and it was reporting
+        // PASS in a run I read as evidence. This is the assertion the name
+        // promises.
+        //
+        // It also catches a6 leaking: a6 turns the switch on, so a6 restores it
+        // in a finally, and this assertion is the thing that notices if it did
+        // not. JUnit's default method order is not the class-name order this
+        // file's header claims, so the two are genuinely independent.
+        assertFalse(
+            "preferLocal must be OFF by default -- that is the whole safety " +
+                "property of commit 1(b): with the switch off, routing is " +
+                "byte-for-byte what shipped. If this fails, either a test " +
+                "above turned it on and did not restore it, or the default " +
+                "in SettingsStore.kt:43 changed.",
+            stored
+        )
+    }
+
+    /**
+     * The wiring test. Everything else in this file calls GsNative directly, and
+     * a green suite of direct calls is compatible with a shipping app in which
+     * the chat screen never reaches the engine at all -- which is the failure
+     * that matters, because the engine working is not the same claim as the
+     * user getting it.
+     *
+     * So this drives [ChatRepository.send], the function the screen actually
+     * calls, with the switch on, a model installed, and a base URL that cannot
+     * possibly be dialled. The local path answers "Paris."; the built-in canned
+     * responder has no France branch and falls through to one of three generic
+     * templates, and the provider path cannot reach 127.0.0.1:1. Every one of
+     * those three outcomes is distinguishable, so "Paris." is proof the engine
+     * answered and not a coincidence.
+     *
+     * The canned responder is NOT removed. This asserts the switch works, not
+     * that the fallback is gone.
+     */
+    @Test
+    fun a6_the_chat_screen_path_answers_from_the_engine() {
+        val model = findModel()
+        assertNotNull(
+            "no model on the device, so the local path cannot run. This is a " +
+                "FAILURE, not a skip.",
+            model
+        )
+        val m = model!!
+
+        assertTrue("GsNativeLoader.initWith failed", GsNativeLoader.initWith(m.absolutePath))
+        assertTrue(
+            "isAvailable() is false, so ChatRepository's local branch is inert " +
+                "by design and this test would silently prove nothing. " +
+                "selfCheck: " + GsNative.selfCheck(),
+            GsNativeLoader.isAvailable()
+        )
+
+        SettingsStore.init(ctx)
+        ModelStore.init(ctx)
+        val preferLocalBefore = SettingsStore.preferLocal
+
+        val db = Room.inMemoryDatabaseBuilder(ctx, AppDatabase::class.java)
+            .allowMainThreadQueries()
+            .build()
+        // 127.0.0.1:1 is the discard port. Nothing listens, so the provider path
+        // fails fast instead of hanging, and a network answer is impossible.
+        // CIO explicitly, because that is what the app itself does
+        // (ServiceLocator.kt:38) -- a bare HttpClient() resolves its engine
+        // through ServiceLoader and can pick the Android one, which behaves
+        // differently under instrumentation.
+        val api = ApiClient(HttpClient(CIO), "http://127.0.0.1:1")
+        val repo = ChatRepository(api, db)
+
+        val out = StringBuilder()
+        var conversationId: String? = null
+
+        ModelStore.recordInstalled(m, ModelCatalog.MODEL_0_5B.id)
+        SettingsStore.updatePreferLocal(true)
+        try {
+            runBlocking {
+                conversationId = repo.send(
+                    conversationId = null,
+                    content = "What is the capital of France? Answer with one word.",
+                    onConversationResolved = { _ -> },
+                    onDelta = { out.append(it) }
+                )
+            }
+            val reply = out.toString()
+            println("FrontendWiringTest: asked     -> capital of France")
+            println("FrontendWiringTest: replied   -> $reply")
+            println("FrontendWiringTest: converse  -> $conversationId")
+
+            assertTrue(
+                "ChatRepository.send returned no text at all. expectedId=" +
+                    "${conversationId != null} isAvailable=" +
+                    "${GsNativeLoader.isAvailable()} installedPath=" +
+                    "${ModelStore.installedPath} preferLocal=" +
+                    "${SettingsStore.preferLocal}",
+                reply.isNotBlank()
+            )
+            // The discriminator. localReply() has no France branch -- it falls
+            // through to `else ->` and returns one of three generic templates,
+            // none of which contain "Paris". So this string can only have come
+            // from the on-device model.
+            assertTrue(
+                "the reply does not contain \"Paris\", so it was NOT produced by " +
+                    "the on-device engine. Got: ${reply.take(160)}",
+                reply.contains("Paris")
+            )
+
+            // And the persistence half of the contract: streamLocalFirst claims
+            // the turn is written to Room "the same way the provider path
+            // persists them, so the conversation reads identically whichever
+            // engine answered". Unverified until it is read back.
+            val id = conversationId
+            assertNotNull("send() returned no conversation id", id)
+            val rows = runBlocking { db.messageDao().forConversation(id!!) }
+            println("FrontendWiringTest: persisted -> ${rows.map { it.role }}")
+            assertEquals(
+                "expected the user turn and the assistant reply on disk, got " +
+                    "${rows.map { it.role to it.content.take(40) }}",
+                2,
+                rows.size
+            )
+            assertEquals(
+                "the assistant row does not hold the engine's answer",
+                reply.trim(),
+                rows.last { it.role == ChatRepository.ROLE_ASSISTANT }.content.trim()
+            )
+        } finally {
+            // a5 asserts the switch is off. If this does not run, a5 fails and
+            // says so, which is the intended coupling rather than a silent leak.
+            SettingsStore.updatePreferLocal(preferLocalBefore)
+            runCatching { ModelStore.removeInstalled() }
+            runCatching { GsNativeLoader.release() }
+            runCatching { db.close() }
         }
-        // The precondition either way: with no model the local path is inert.
-        if (ModelStore.installedPath == null) {
-            println("LocalFirstToggleTest: no model installed, so the local path cannot run")
-        }
-        assertTrue("settings are readable", true)
     }
 }
