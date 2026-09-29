@@ -102,7 +102,7 @@ def check_font():
                  "characters" % (GH, GW))
 
 
-def render(text, scale=8, pad=32, gap=3):
+def render(text, scale=8, pad=32, gap=3, bold=2):
     """Greyscale 8-bit, black ink on white. Returns (w, h, pixels)."""
     # ML Kit needs clear separation, and not too much of it. Measured across
     # three runs, all on the same glyph shapes:
@@ -131,6 +131,38 @@ def render(text, scale=8, pad=32, gap=3):
                     base = (pad + ry * scale + dy) * w + ox + rx * scale
                     for dx in range(scale):
                         px[base + dx] = 0
+    if bold > 1:
+        # Horizontal dilation of the RENDERED image, after the glyphs exist.
+        #
+        # Why: a 5x7 V is ambiguous. Hold the arms vertical and it is a U
+        # (ML Kit read "INY-" for "INV-", run 36598477726); converge early and the
+        # apex leaves a two-row stem, which is a Y (ML Kit read "INY-" again,
+        # run 36601495339). The glyph cannot fix that at this size, so the
+        # STROKES get wider instead: at scale 8 a stroke is 8px, and widening it
+        # to 16px gives a recogniser twice as much to work with without moving
+        # any edge by more than a pixel.
+        #
+        # Horizontal only. A vertical dilation would bleed one row of the glyph
+        # into the next and close the counters in 0, 4, 6 and 8 -- which is how
+        # "2026" became "2926" at gap=2.
+        #
+        # Applied to a SNAPSHOT, and only outward from an already-inked pixel, so
+        # it cannot cascade: without the snapshot a widened pixel widens again on
+        # the next column and the page fills in solid.
+        src = bytes(px)
+        b = bold - 1
+        for y in range(h):
+            row = y * w
+            for x in range(w):
+                if src[row + x] != 0:
+                    continue
+                for dx in range(1, b + 1):
+                    hit = (src[row + x - dx] == 0) if x - dx >= 0 else False
+                    if not hit and x + dx < w:
+                        hit = (src[row + x + dx] == 0)
+                    if hit:
+                        px[row + x] = 0
+
     return w, h, px
 
 
