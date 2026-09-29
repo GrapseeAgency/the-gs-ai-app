@@ -7,7 +7,9 @@ import com.grapsee.gsai.data.local.ModelCatalog
 import com.grapsee.gsai.data.local.ModelDownloader
 import com.grapsee.gsai.data.local.ModelStore
 import com.grapsee.gsai.native.GsNative
-import com.grapsee.gsai.native.GsNativeLoader
+import com.grapsee.gsai.ocr.MlKitOcr
+import com.grapsee.gsai.native.GsNative
+import com.grapsee.gsai.ocr.MlKitOcrLoader
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -256,28 +258,41 @@ class DeviceVerificationTest {
     @Test
     fun a2_ocr_reads_the_fixture() {
         val model = findModel()
-        assumeTrue("no model, so no native context for OCR", model != null)
+        assumeTrue("no model, so no native context", model != null)
         assertTrue("init failed", GsNativeLoader.initWith(model!!.absolutePath))
         val check = GsNative.selfCheck()
-        // A portable-only build reports no OCR backend, and ML Kit has not been
-        // wired into GsNative yet. Say so rather than asserting a pass.
-        assumeTrue(
-            "no OCR backend in this build: $check. ML Kit lives in the app " +
-                "module and is not yet routed through GsNative.runOcr.",
-            check.contains("backend=available"),
+        println("GsNativeTest: selfCheck = $check")
+
+        // THE NATIVE OCR PATH MUST REFUSE, NOT PRETEND.
+        //
+        // gs_mobile_ocr has no engine compiled into this build:
+        //     set_err("no OCR engine is compiled into this mobile build; ...")
+        // It returns null. The bridge now throws GsNativeException for that, so
+        // this asserts the refusal happens and is legible -- a null or a blank
+        // string here would mean the native path was reporting success on an
+        // image it never read.
+        val nativeFailure = runCatching { GsNative.runOcr("/data/local/tmp/nonexistent.png") }
+        println("GsNativeTest: native runOcr -> ${nativeFailure.exceptionOrNull()}")
+        assertTrue(
+            "the native OCR path reported success on an image it cannot read: " +
+                "$nativeFailure",
+            nativeFailure.isFailure,
         )
-        // filesDir, not getExternalFilesDir(). The app's external dir needs the
-        // SYSTEM to create it, and on an emulator it is not there when the test
-        // runs -- so the fixture is pushed with run-as into the private dir, which
-        // needs no permission and is readable immediately. Raw, run 36566952196:
-        //     wrote /tmp/invoice.png  1158x90  text='INVOICE INV-4471 DUE 2026-03-01'
-        //     java.lang.AssertionError: fixture image missing at
-        //       /storage/emulated/0/Android/data/com.grapsee.gsai/files/Pictures/invoice.png
+
+        // THE OCR THAT SHIPS. ML Kit, bundled in the app module.
         val img = File(ctx.filesDir, "invoice.png")
-        assertTrue("fixture image missing at ${img.absolutePath}", img.isFile)
-        val text = GsNative.runOcr(img.absolutePath)
-        println("GsNativeTest: ocr -> ${text.take(160)}")
-        assertTrue("OCR returned an empty string", text.isNotBlank())
+        assertTrue(
+            "fixture image missing at ${img.absolutePath}; the job generates it " +
+                "with .github/scripts/make_invoice_png.py and places it with run-as",
+            img.isFile,
+        )
+        println("GsNativeTest: fixture = ${img.absolutePath} (${img.length()} bytes)")
+        val text = MlKitOcr.recognize(ctx, img.absolutePath)
+        println("GsNativeTest: ocr -> ${text.replace("\n", " | ")}")
+        assertTrue(
+            "OCR returned an empty string, so nothing was read from the image",
+            text.isNotBlank(),
+        )
         assertTrue(
             "the fixture marker INV-4471 was not found in the OCR output:\n$text",
             text.contains("INV-4471"),
