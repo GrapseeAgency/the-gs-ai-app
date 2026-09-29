@@ -52,8 +52,21 @@ class GsNativeTest {
             val arg = InstrumentationRegistry.getArguments()
                 .getString("gs_test_model")
             if (!arg.isNullOrBlank() && java.io.File(arg).isFile) return arg
-            // 2. anything already pushed
+            // 2. anything already pushed. ctx.filesDir FIRST, and the reason is
+            //    measured rather than guessed: run-instrumented.sh places the model
+            //    with `run-as` because the adb shell user cannot create the app's
+            //    external directory
+            //        mkdir: '/sdcard/Android/data/com.grapsee.gsai': Permission denied
+            //    and a file that lands there is unreachable by the app anyway
+            //    (EACCES reading /sdcard, run 36420986162). The path that works is
+            //    the private one:
+            //        /data/user/0/com.grapsee.gsai/files/qwen2.5-...gguf
+            //    This file still searched only /sdcard and the downloads dir, so
+            //    requireModel() assumed and three tests skipped while a perfectly
+            //    good model sat one directory away.
             for (dir in listOf(
+                ctx.filesDir,
+                ctx.getExternalFilesDir(null),
                 java.io.File("/sdcard"),
                 java.io.File("/storage/emulated/0"),
                 ctx.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
@@ -71,7 +84,8 @@ class GsNativeTest {
     private fun requireModel(): String {
         val p = deviceModel
         assumeTrue(
-            "no model on the device; set GS_TEST_MODEL or push one to the downloads dir",
+            "no model on the device; run-instrumented.sh places it at "
+                "files/ in the app private dir via run-as",
             p != null,
         )
         return p!!
