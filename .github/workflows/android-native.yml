@@ -246,10 +246,23 @@ jobs:
           # source: attempt 2 failed with
           #     error: no such command: `env`
           #     help: a command with a similar name exists: `new`
-          cargo ndk \
-            -t ${{ matrix.target }} \
-            -o "$GITHUB_WORKSPACE/dist/android/${{ matrix.abi }}" \
-            build --release -p gs-ffi --lib 2>&1 | tee "$GITHUB_WORKSPACE/build-${{ matrix.abi }}.log"
+          # THE LINKER'S OWN VERBOSE OUTPUT, CAPTURED.
+          #
+          # The build fails with exactly one line of diagnosis:
+          #     error: could not compile `gs-ffi` (lib) due to 1 previous error
+          # and the error itself does not appear in the job log. cc-rs and cargo
+          # both swallow it, so the only way to see which archive is being opened,
+          # in what order, and which symbol fails to resolve is to ask the linker.
+          #
+          # -v is a link-arg, so it reaches the linker that rustc invokes and not
+          # the compiler. It is passed via RUSTFLAGS rather than CARGO_ENCODED_*
+          # because it must apply to every target of this cross build, including
+          # the C++ cdylib that cc-rs produced.
+          RUSTFLAGS="${{ env.RUSTFLAGS }} -C link-arg=-v" \
+            cargo ndk \
+              -t ${{ matrix.target }} \
+              -o "$GITHUB_WORKSPACE/dist/android/${{ matrix.abi }}" \
+              build --release -p gs-ffi --lib 2>&1 | tee "$GITHUB_WORKSPACE/build-${{ matrix.abi }}.log"
 
           # ATTEMPT 5. cargo-ndk printed
           #     Copying libraries to .../dist/android/arm64-v8a
@@ -426,6 +439,17 @@ jobs:
           file "$SO" | grep -q "$ARCH" || {
             echo "FAIL: $ARCH not in: $(file "$SO")"; exit 1; }
           echo "VERIFIED: ${{ matrix.abi }} = $ARCH with the mobile ABI"
+
+      - name: Upload the build and link logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs-${{ matrix.abi }}
+          path: |
+            build-*.log
+            ${{ runner.temp }}/link.log
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Upload libgs_ffi.so
         uses: actions/upload-artifact@v4
