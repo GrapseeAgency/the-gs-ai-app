@@ -518,6 +518,25 @@ jobs:
           # The build log is kept: on failure it is the raw evidence required
           # before anything is called BLOCKED.
           cmake --build build -j"$(nproc)" 2>&1 | tee build.log
+
+      # Raw, run 36385099961: the build SUCCEEDED, all 49 targets linked
+      #   [41/49] Linking CXX static library src/libllama.a
+      # and then verification failed with "no llama.cpp archives produced"
+      # because it looked in build/bin/. A cmake build writes archives next to
+      # their sources, so find them anywhere and print every .a when there is
+      # none. A verify step that asserts a hardcoded path is a guess.
+      - name: Package with headers
+        run: |
+          set -euo pipefail
+          mkdir -p dist/lib dist/include dist/ggml-include
+          FOUND=0
+          for S in $(find build -name '*.a' | sort); do
+            B="dist/lib/$(basename "$S")"
+            cp "$S" "$B"
+            bash "$GITHUB_WORKSPACE/.github/scripts/assert_arch_member.sh" "$B" "$(basename "$S")" "${{ matrix.expect }}"
+            echo "  $S -> $B ($(stat -c%s "$S") bytes)"
+            FOUND=$((FOUND+1))
+          done
           # THE ARCHITECTURE IS ASSERTED WHERE IT WENT WRONG.
           #
           # assert_arch_member.sh inspects the archives and PASSED on archives
@@ -549,47 +568,28 @@ jobs:
           WANT = {"arm64-v8a":"AArch64","armeabi-v7a":"ARM","x86_64":"x86-64","x86":"i386"}["${{ matrix.abi }}"]
           bad = 0
           for lib in ("libllama.a","libggml.a","libggml-cpu.a","libggml-base.a"):
-              p = "dist/lib/" + lib
-              d = open(p,"rb").read()
-              if d[:8] != b"!<arch>\n":
-                  print("  %-16s NOT AN AR ARCHIVE" % lib); bad += 1; continue
-              off, seen = 8, collections.Counter()
-              while off + 60 <= len(d):
-                  h = d[off:off+60]
-                  if h[58:60] != b"\x60\n": break
-                  nm = h[0:16].decode("ascii","replace").strip().rstrip("/")
-                  try: sz = int(h[48:58].decode().strip())
-                  except ValueError: break
-                  b = d[off+60:off+60+sz]
-                  if b[:4] == b"\x7fELF" and struct.unpack_from("<H", b, 18)[0] in MACH:
-                      seen[MACH[struct.unpack_from("<H", b, 18)[0]]] += 1
-                  off += 60 + sz + (sz % 2)
-              n = sum(seen.values())
-              print("  %-16s objects=%-5d %s" % (lib, n, dict(seen)))
-              if n == 0 or list(seen) != [WANT]:
-                  print("  %s: expected only %s objects, found %s" % (lib, WANT, dict(seen))); bad += 1
+          p = "dist/lib/" + lib
+          d = open(p,"rb").read()
+          if d[:8] != b"!<arch>\n":
+          print("  %-16s NOT AN AR ARCHIVE" % lib); bad += 1; continue
+          off, seen = 8, collections.Counter()
+          while off + 60 <= len(d):
+          h = d[off:off+60]
+          if h[58:60] != b"\x60\n": break
+          nm = h[0:16].decode("ascii","replace").strip().rstrip("/")
+          try: sz = int(h[48:58].decode().strip())
+          except ValueError: break
+          b = d[off+60:off+60+sz]
+          if b[:4] == b"\x7fELF" and struct.unpack_from("<H", b, 18)[0] in MACH:
+          seen[MACH[struct.unpack_from("<H", b, 18)[0]]] += 1
+          off += 60 + sz + (sz % 2)
+          n = sum(seen.values())
+          print("  %-16s objects=%-5d %s" % (lib, n, dict(seen)))
+          if n == 0 or list(seen) != [WANT]:
+          print("  %s: expected only %s objects, found %s" % (lib, WANT, dict(seen))); bad += 1
           sys.exit(1 if bad else 0)
           '
           echo "  every archive member is ${{ matrix.abi }} ELF"
-
-      # Raw, run 36385099961: the build SUCCEEDED, all 49 targets linked
-      #   [41/49] Linking CXX static library src/libllama.a
-      # and then verification failed with "no llama.cpp archives produced"
-      # because it looked in build/bin/. A cmake build writes archives next to
-      # their sources, so find them anywhere and print every .a when there is
-      # none. A verify step that asserts a hardcoded path is a guess.
-      - name: Package with headers
-        run: |
-          set -euo pipefail
-          mkdir -p dist/lib dist/include dist/ggml-include
-          FOUND=0
-          for S in $(find build -name '*.a' | sort); do
-            B="dist/lib/$(basename "$S")"
-            cp "$S" "$B"
-            bash "$GITHUB_WORKSPACE/.github/scripts/assert_arch_member.sh" "$B" "$(basename "$S")" "${{ matrix.expect }}"
-            echo "  $S -> $B ($(stat -c%s "$S") bytes)"
-            FOUND=$((FOUND+1))
-          done
           if [ "$FOUND" -eq 0 ]; then
             echo "no llama.cpp archives anywhere under build/; every .a that exists:"
             find build -name '*.a' | sort
