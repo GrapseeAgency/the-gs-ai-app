@@ -545,51 +545,24 @@ jobs:
           # cheapest thing to catch: one line of output, before an hour of compiling.
           # READ THE ARCHITECTURE OUT OF THE ARCHIVES.
           #
-          # The CMake-reported value is NOT evidence. CMAKE_SYSTEM_PROCESSOR is
-          # derived from -DANDROID_ABI, the variable this workflow just passed, so
-          # it reports whatever was asked for and confirms nothing about the bytes:
+          # A green android-deps shipped x86-64 objects labelled arm64-v8a, and
+          # four checks missed it: android-deps' own success,
+          # assert_arch_member.sh, CMAKE_SYSTEM_PROCESSOR (which reports whatever
+          # -DANDROID_ABI said), and a gate reading that same value. All four were
+          # true and none of them read the bytes.
           #
-          #   -- CMAKE_SYSTEM_PROCESSOR: aarch64      <- because we passed arm64-v8a
-          #   -- GGML_SYSTEM_ARCH:      ARM
+          # This one does, and it lives here because this is the step that copies
+          # the archives into dist/lib -- the previous version sat in the Build
+          # step, one step before the files it read existed:
+          #     FileNotFoundError: [Errno 2] No such file or directory:
+          #       'dist/lib/libllama.a'
           #
-          # That check was circular and I shipped it. This one parses each archive
-          # member's ELF header and requires the machine to match the ABI, so it can
-          # only pass if the objects really were built for the target.
-          #
-          # It is also the check that was already here and is sound --
-          # assert_arch_member.sh passed on these archives because they ARE aarch64:
-          #   libllama.a members=169  {'AArch64': 169}
-          # So the archives are correct and the remaining "is incompatible with
-          # aarch64linux" comes from the LINK side, not the archive side. This gate
-          # is kept because it is the one that would catch a genuinely wrong build.
-          python3 -c '
-          import struct, sys, collections
-          MACH = {0x03:"i386", 0x3e:"x86-64", 0x28:"ARM", 0xb7:"AArch64"}
-          WANT = {"arm64-v8a":"AArch64","armeabi-v7a":"ARM","x86_64":"x86-64","x86":"i386"}["${{ matrix.abi }}"]
-          bad = 0
-          for lib in ("libllama.a","libggml.a","libggml-cpu.a","libggml-base.a"):
-          p = "dist/lib/" + lib
-          d = open(p,"rb").read()
-          if d[:8] != b"!<arch>\n":
-          print("  %-16s NOT AN AR ARCHIVE" % lib); bad += 1; continue
-          off, seen = 8, collections.Counter()
-          while off + 60 <= len(d):
-          h = d[off:off+60]
-          if h[58:60] != b"\x60\n": break
-          nm = h[0:16].decode("ascii","replace").strip().rstrip("/")
-          try: sz = int(h[48:58].decode().strip())
-          except ValueError: break
-          b = d[off+60:off+60+sz]
-          if b[:4] == b"\x7fELF" and struct.unpack_from("<H", b, 18)[0] in MACH:
-          seen[MACH[struct.unpack_from("<H", b, 18)[0]]] += 1
-          off += 60 + sz + (sz % 2)
-          n = sum(seen.values())
-          print("  %-16s objects=%-5d %s" % (lib, n, dict(seen)))
-          if n == 0 or list(seen) != [WANT]:
-          print("  %s: expected only %s objects, found %s" % (lib, WANT, dict(seen))); bad += 1
-          sys.exit(1 if bad else 0)
-          '
-          echo "  every archive member is ${{ matrix.abi }} ELF"
+          # A script rather than `python3 -c` inline: a multi-line quoted python
+          # program inside a YAML literal block inside a shell run block is three
+          # layers of quoting, and it has now failed twice for reasons that had
+          # nothing to do with the archives.
+          python3 "$GITHUB_WORKSPACE/.github/scripts/assert_archive_arch.py" \
+            dist/lib "${{ matrix.abi }}"
           if [ "$FOUND" -eq 0 ]; then
             echo "no llama.cpp archives anywhere under build/; every .a that exists:"
             find build -name '*.a' | sort
