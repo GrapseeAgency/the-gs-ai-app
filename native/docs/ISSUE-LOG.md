@@ -15,12 +15,17 @@ Time is UTC.
 | 04:0x | x86_64 `libgs_ffi.so` publishes | **PASS** | `7723183` | run `36543916433`, job `109327377954` success |
 | 04:0x | armeabi-v7a / x86 `.so` publish | FAILING | `7723183` | run `36543916433`: `109327377609`, `109327377972` failure. 32-bit ABIs, not yet diagnosed |
 | — | arm64 device run (emulator) | NOT ATTEMPTED | — | needs KVM/TCG; see note below |
-| — | `a1` chat returns coherent English | NOT VERIFIED | `d35f6d4` | new assertions committed, never executed |
-| — | `a2` OCR returns `INV-4471` | NOT VERIFIED | `c9bafb9` | fixture generation committed, never executed |
+| 12:5x | `a1b` chat answers the question asked | **PASS** | `732bac9` | run `36566952196`: asked "What is the capital of France? Answer with one word." -> `Paris.` |
+| 12:5x | `a1` chat returns text (strong bar) | **PASS** | `732bac9` | run `36566952196`: `chat("hello") -> Hello! How can I assist you today?` |
+| 12:5x | `<|im_end|>` leaking into the reply | FIXED, UNVERIFIED | `732bac9` | `special=false` + strip; needs a run |
+| 12:5x | OCR fixture delivered to the app | FIXED, UNVERIFIED | `732bac9` | `run-as` into filesDir; needs a run. a2 has never seen the image |
+| 12:5x | arm64-v8a `.so` with chat template | **PASS** | `732bac9` | run `36561597743`, job `109327378295` equivalent: arm64-v8a success |
+| 12:5x | armeabi-v7a / x86 `.so` | FAILING | — | run `36561597743`. 32-bit ABIs, undiagnosed |
+
 | — | `a3` consent + `a4` resume + SHA-256 | PARTIAL | `d35f6d4` | a4 PASSED on x86_64 run `36515129722`; a3 SKIPPED |
 | — | `a5` prefer-local default OFF | **PASS** | `d35f6d4` | run `36515129722`, `a5_prefer_local_is_off_by_default` PASS |
 | — | `a0` `isAvailable == true` | **PASS** | `d35f6d4` | run `36515129722`: `selfCheck after init = context=present backend=available(llama.cpp)` |
-| — | `a1` chat non-empty (weak bar) | PASS (superseded) | `816d27f` | run `36515129722`: `chat -> , i have a question about the following code:` — a PROMPT FRAGMENT, not a reply |
+| — | `a1` chat non-empty (weak bar) | PASS (superseded) | `816d27f` | run `36515129722` prompt fragment; superseded by `a1b` above |
 
 ## BLOCKED
 
