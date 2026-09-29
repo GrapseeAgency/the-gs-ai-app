@@ -7,9 +7,8 @@ import com.grapsee.gsai.data.local.ModelCatalog
 import com.grapsee.gsai.data.local.ModelDownloader
 import com.grapsee.gsai.data.local.ModelStore
 import com.grapsee.gsai.native.GsNative
+import com.grapsee.gsai.native.GsNativeLoader
 import com.grapsee.gsai.ocr.MlKitOcr
-import com.grapsee.gsai.native.GsNative
-import com.grapsee.gsai.ocr.MlKitOcrLoader
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
