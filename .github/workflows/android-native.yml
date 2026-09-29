@@ -239,8 +239,47 @@ jobs:
 
       - name: Build libgs_ffi.so
         working-directory: native
+        env:
+          # THE NDK CLANG WRAPPER AS THE LINKER DRIVER, PER TRIPLE.
+          #
+          # rust-lld rejects VALID aarch64 Android objects:
+          #     ld: error: .../android-arm64-v8a/lib/libllama.a(llama.cpp.o)
+          #     is incompatible with aarch64linux
+          # The archives are not at fault. Parsed out of the package from run
+          # 36519820938: libllama.a objects=169 {'AArch64': 169}, and the member
+          # ld names is llama.cpp.o ELF64 LSB OSABI 0 REL AArch64 e_flags 0x0.
+          # "aarch64linux" is the collapsed triple rust-lld reports; it refuses
+          # an object whose flags the NDK's own driver accepts. The fix is the NDK
+          # driver, not the bytes.
+          #
+          # Environment variables, NOT native/.cargo/config.toml: that file is
+          # checked in and a hardcoded /mnt/new_volume/android-ndk/... path does
+          # not exist on a runner.
+          CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER: ${{ env.ANDROID_NDK_HOME }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang
+          CARGO_TARGET_ARMV7_LINUX_ANDROIDEABI_LINKER: ${{ env.ANDROID_NDK_HOME }}/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi24-clang
+          CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER: ${{ env.ANDROID_NDK_HOME }}/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android24-clang
+          CARGO_TARGET_I686_LINUX_ANDROID_LINKER: ${{ env.ANDROID_NDK_HOME }}/toolchains/llvm/prebuilt/linux-x86_64/bin/i686-linux-android24-clang
         run: |
           set -euo pipefail
+          # THE LINKER MUST EXIST AND BE THE RIGHT TRIPLE. A wrong path is not a
+          # link error, it is "linker not found" minutes in -- or worse, a silent
+          # fallback to rust-lld and this identical error all over again.
+          WANT_LINKER=""
+          case "${{ matrix.target }}" in
+            aarch64-linux-android)   WANT_LINKER="aarch64-linux-android24-clang" ;;
+            armv7-linux-androideabi) WANT_LINKER="armv7a-linux-androideabi24-clang" ;;
+            x86_64-linux-android)    WANT_LINKER="x86_64-linux-android24-clang" ;;
+            i686-linux-android)      WANT_LINKER="i686-linux-android24-clang" ;;
+          esac
+          LINKER="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/$WANT_LINKER"
+          echo "linker: $LINKER"
+          if [ ! -x "$LINKER" ]; then
+            echo "::error::$WANT_LINKER is not executable at $LINKER"
+            ls -l "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/" | sed -n '1,25p'
+            exit 1
+          fi
+          echo "  linker -dumpmachine: $("$LINKER" -dumpmachine)"
+
           # cargo-ndk sets CC_*_ANDROID_LINKER and friends for the targets it is
           # given. There is no `cargo ndk env` subcommand and no ndk-env file to
           # source: attempt 2 failed with
@@ -258,7 +297,11 @@ jobs:
           # the compiler. It is passed via RUSTFLAGS rather than CARGO_ENCODED_*
           # because it must apply to every target of this cross build, including
           # the C++ cdylib that cc-rs produced.
-          RUSTFLAGS="${{ env.RUSTFLAGS }} -C link-arg=-v" \
+          # -v captures the linker diagnostics; --allow-shlib-undefined stops a
+          # companion whose symbols resolve at load time being rejected at link
+          # time. RUSTFLAGS is EXTENDED, not overwritten: the previous form
+          # dropped anything a caller had set.
+          RUSTFLAGS="${{ env.RUSTFLAGS }} -C link-arg=-v -C link-arg=-Wl,--allow-shlib-undefined" \
             cargo ndk \
               -t ${{ matrix.target }} \
               -o "$GITHUB_WORKSPACE/dist/android/${{ matrix.abi }}" \
