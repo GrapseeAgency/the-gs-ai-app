@@ -38,6 +38,7 @@ Usage: make_invoice_png.py <out.png> ["<text>"] [--show]
 """
 import glob
 import os
+import subprocess
 import struct
 import sys
 import zlib
@@ -173,6 +174,79 @@ def render_bitmap(text, scale=8, pad=32, gap=3):
     return w, h, bytes(px)
 
 
+def try_awt(text):
+    """A real font via the JDK. Single-file source execution, Java 11+."""
+    src = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                       "MakeInvoicePng.java")
+    if not os.path.isfile(src):
+        raise RuntimeError("MakeInvoicePng.java is missing")
+    if not any(os.access(os.path.join(d, "java"), os.X_OK)
+               for d in os.environ.get("PATH", "").split(os.pathsep) if d):
+        raise RuntimeError("no java on PATH")
+    out = os.environ.get("GS_JAVA_PNG_OUT", "/tmp/_gs_invoice_awt.png")
+    r = subprocess.run(["java", src, out, text], capture_output=True, text=True)
+    if r.returncode != 0:
+        raise RuntimeError((r.stderr or "").strip().splitlines()[-1:][0]
+                           if r.stderr else "java exited %d" % r.returncode)
+    for line in r.stdout.splitlines():
+        if line.strip().startswith("renderer :"):
+            return line.split(":", 1)[1].strip(), read_png(out)
+    return "AWT", read_png(out)
+
+
+def try_pillow(text):
+    ttf = find_ttf()
+    if not ttf:
+        raise RuntimeError("no scalable TTF found")
+    label = "Pillow + %s at %dpt" % (os.path.basename(ttf), PIL_SIZE)
+    return label, render_pillow(text, ttf)
+
+
+def read_png(path):
+    """Decode a greyscale-or-RGB 8-bit PNG back to (w, h, greyscale bytes)."""
+    d = open(path, "rb").read()
+    w, h, depth, ctype = struct.unpack(">IIBB", d[16:26])
+    if depth != 8 or ctype not in (0, 2):
+        raise RuntimeError("unsupported PNG: depth=%d colourtype=%d" % (depth, ctype))
+    idat = b""
+    off = 8
+    while off < len(d):
+        ln = struct.unpack(">I", d[off:off + 4])[0]
+        tag = d[off + 4:off + 8]
+        if tag == b"IDAT":
+            idat += d[off + 8:off + 8 + ln]
+        off += 12 + ln
+    raw = zlib.decompress(idat)
+    bpp = 3 if ctype == 2 else 1
+    stride = w * bpp
+    out = bytearray(w * h)
+    prev = bytearray(stride)
+    pos = 0
+    for y in range(h):
+        f = raw[pos]; pos += 1
+        line = bytearray(raw[pos:pos + stride]); pos += stride
+        # PNG filters, so this is not a slice-and-hope.
+        for i in range(stride):
+            a = line[i - bpp] if i >= bpp else 0
+            b = prev[i]
+            c = prev[i - bpp] if i >= bpp else 0
+            if f == 1:
+                line[i] = (line[i] + a) & 0xFF
+            elif f == 2:
+                line[i] = (line[i] + b) & 0xFF
+            elif f == 3:
+                line[i] = (line[i] + ((a + b) >> 1)) & 0xFF
+            elif f == 4:
+                p = a + b - c
+                pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+                pr = a if (pa <= pb and pa <= pc) else (b if pb <= pc else c)
+                line[i] = (line[i] + pr) & 0xFF
+        for x in range(w):
+            out[y * w + x] = line[x * bpp]          # red channel: grey or RGB
+        prev = line
+    return w, h, bytes(out)
+
+
 def write_png(path, w, h, px):
     raw = bytearray()
     for y in range(h):
@@ -202,17 +276,30 @@ def main():
         sys.exit("no glyph for %r in the fallback font; the Pillow path can "
                  "still draw it" % missing)
 
-    ttf = find_ttf()
-    used = "fallback 5x7 bitmap"
-    if ttf:
+    # THE ORDER IS THE POINT.
+    #
+    #   1. AWT (the JDK). Guaranteed on an Android build machine, because gradle
+    #      needs it, and AWT ships scalable fonts with it. Raw evidence that the
+    #      two options below are not: run 36607856087 printed
+    #          Pillow path failed (No module named 'PIL'); using the fallback font
+    #      and the very first attempt printed
+    #          NOTE: no ImageMagick on this runner.
+    #   2. Pillow, if this machine happens to have it.
+    #   3. The 5x7 bitmap, which always works and whose V ML Kit misreads.
+    used = None
+    w = h = px = None
+    for name, fn in (("AWT", try_awt), ("Pillow", try_pillow)):
         try:
-            w, h, px = render_pillow(text, ttf)
-            used = "Pillow + %s at %dpt" % (os.path.basename(ttf), PIL_SIZE)
+            got = fn(text)
         except Exception as e:                       # noqa: BLE001
-            sys.stderr.write("Pillow path failed (%s); using the fallback font\n" % e)
-            w, h, px = render_bitmap(text)
-    else:
+            sys.stderr.write("%s path failed (%s)\n" % (name, e))
+            continue
+        if got:
+            used, (w, h, px) = got
+            break
+    if used is None:
         w, h, px = render_bitmap(text)
+        used = "fallback 5x7 bitmap"
 
     write_png(out, w, h, px)
     dark = sum(1 for v in px if v < 128)
