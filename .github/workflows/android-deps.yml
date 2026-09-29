@@ -524,18 +524,39 @@ jobs:
           # built for the wrong CPU, so whatever it checked was not sufficient.
           # CMake naming the wrong compiler is upstream of the archives and is the
           # cheapest thing to catch: one line of output, before an hour of compiling.
-          EXPECT="${{ matrix.target }}24-clang"
-          GOT=$(grep -aoE '[a-z0-9_]+-linux-android[0-9]+-clang' build.log | head -1 || true)
-          echo "expected driver: $EXPECT"
-          echo "driver CMake used: ${GOT:-<none>}"
-          if [ "$GOT" != "$EXPECT" ]; then
-            echo "::error::CMake selected '${GOT:-<none>}' for ABI ${{ matrix.abi }}, expected $EXPECT."
-            echo "  The bare NDK clang builds for the HOST. This job would have"
-            echo "  produced x86_64 archives labelled arm64-v8a and still gone green."
-            grep -aE 'Check for working C compiler|CMAKE_SYSTEM_PROCESSOR|GGML_SYSTEM_ARCH' build.log | sed -n '1,10p' || true
+          # ASSERT THE ARCHITECTURE, NOT THE DRIVER SPELLING.
+          #
+          # The first attempt here asserted the compiler BINARY name and failed on a
+          # correct build:
+          #     -- Check for working C compiler: .../bin/clang - skipped
+          #     -- CMAKE_SYSTEM_PROCESSOR: aarch64
+          #     -- GGML_SYSTEM_ARCH: ARM
+          #     driver CMake used: <none>
+          # With the NDK's own toolchain file the target is passed as
+          # --target=aarch64-linux-android24 to the UNPREFIXED clang, so CMake
+          # correctly reports bin/clang. Asserting the binary name would have
+          # rejected every correct build.
+          #
+          # CMAKE_SYSTEM_PROCESSOR and GGML_SYSTEM_ARCH are the values that
+          # actually decide the object architecture, and those are what is checked.
+          case "${{ matrix.abi }}" in
+            arm64-v8a)   WANT_PROC=aarch64;  WANT_GGML=ARM ;;
+            armeabi-v7a) WANT_PROC=armv7;    WANT_GGML=ARM ;;
+            x86_64)      WANT_PROC=x86_64;   WANT_GGML=x86 ;;
+            x86)         WANT_PROC=i686;     WANT_GGML=x86 ;;
+            *) echo "::error::no expected architecture for ABI ${{ matrix.abi }}"; exit 1 ;;
+          esac
+          GOT_PROC=$(grep -aoE 'CMAKE_SYSTEM_PROCESSOR: .*' build.log | head -1 | sed 's/.*: //' || true)
+          GOT_GGML=$(grep -aoE 'GGML_SYSTEM_ARCH: .*' build.log | head -1 | sed 's/.*: //' || true)
+          echo "abi ${{ matrix.abi }}: want processor=$WANT_PROC ggml=$WANT_GGML"
+          echo "            got  processor=${GOT_PROC:-<none>} ggml=${GOT_GGML:-<none>}"
+          if [ "$GOT_PROC" != "$WANT_PROC" ] || [ "$GOT_GGML" != "$WANT_GGML" ]; then
+            echo "::error::CMake configured for processor='${GOT_PROC:-<none>}' ggml='${GOT_GGML:-<none>}', expected '$WANT_PROC'/'$WANT_GGML'."
+            echo "  Archives built here would be host-architecture while labelled"
+            echo "  ${{ matrix.abi }}, and every job would still go green."
             exit 1
           fi
-          echo "  CMake selected the ${{ matrix.abi }} driver"
+          echo "  CMake configured the ${{ matrix.abi }} architecture"
 
       # Raw, run 36385099961: the build SUCCEEDED, all 49 targets linked
       #   [41/49] Linking CXX static library src/libllama.a
