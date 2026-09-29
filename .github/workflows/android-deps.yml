@@ -486,24 +486,24 @@ jobs:
           # so a stray bin/llama would not just cost disk, it would be handed to
           # rustc as a link input. Hence COMMON and UI off as well -- both are
           # ON by default at this commit too.
+          # THE NDK'S OWN TOOLCHAIN FILE, NOT A HAND-WRITTEN ONE.
+          #
+          # The hand-written file set CMAKE_SYSTEM_NAME and CMAKE_ANDROID_ARCH_ABI
+          # and CMake accepted all of it -- then selected the bare driver:
+          #     -- The C compiler identification is Clang 14.0.7
+          #     -- Check for working C compiler:
+          #        .../ndk/25.2.9519653/.../bin/clang - skipped
+          # The NDK's bare `clang` is a HOST driver. It takes its target from
+          # --target, and with none it builds for the build machine. So arm64-v8a
+          # produced x86_64 objects, every job went green, and the only place it
+          # surfaced was a cross-link from rustc twenty minutes later:
+          #     ld: error: .../android-arm64-v8a/lib/libllama.a(llama.cpp.o)
+          #     is incompatible with aarch64linux
+          #
+          # Setting an ABI variable in a hand-rolled file is not the same thing
+          # as using the NDK's file, which emits --target= and picks
+          # aarch64-linux-android24-clang.
           cmake -S src-llama -B build \
-            # THE NDK'S OWN TOOLCHAIN FILE, NOT A HAND-WRITTEN ONE.
-            #
-            # The hand-written file set CMAKE_SYSTEM_NAME and CMAKE_ANDROID_ARCH_ABI
-            # and CMake accepted all of it -- then selected the bare driver:
-            #     -- The C compiler identification is Clang 14.0.7
-            #     -- Check for working C compiler:
-            #        .../ndk/25.2.9519653/.../bin/clang - skipped
-            # The NDK's bare `clang` is a HOST driver. It takes its target from
-            # --target, and with none it builds for the build machine. So arm64-v8a
-            # produced x86_64 objects, every job went green, and the only place it
-            # surfaced was a cross-link from rustc twenty minutes later:
-            #     ld: error: .../android-arm64-v8a/lib/libllama.a(llama.cpp.o)
-            #     is incompatible with aarch64linux
-            #
-            # Setting an ABI variable in a hand-rolled file is not the same thing
-            # as using the NDK's file, which emits --target= and picks
-            # aarch64-linux-android24-clang.
             -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
             -DANDROID_ABI=${{ matrix.abi }} \
             -DANDROID_PLATFORM=android-${{ env.API }} \
