@@ -10,7 +10,8 @@ Time is UTC.
 | Time | Issue | Status | Commit | Evidence |
 |------|-------|--------|--------|----------|
 | — | iOS build + simulator tests | NOT STARTED | — | — |
-| 14:0x | fixture glyph `V` unreadable by ML Kit | OPEN | — | 5x7 V is ambiguous with U and Y; a bolding pass was attempted and reverted |
+| 14:0x | fixture glyph `V` unreadable by ML Kit | OPEN, 3 attempts | `ae4a909` | `INYOICE INY-4471` — every digit/dash/word exact. Wrong 3 ways: U-shape, Y-shape, and a bolding pass that was a no-op (`ae4a909`). A 5x7 V is ambiguous; the next lever is a bigger font, not a different V |
+| 14:0x | a3 download consent gate | SKIP | — | never fails, never passes; the reason is understood and unfixed |
 | — | dynamic feature module (`:ocr-fallback`) | BLOCKED (2/4 attempts) | — | see RESULTS-mobile-concurrency.md |
 | 04:0x | arm64-v8a `libgs_ffi.so` publishes | **PASS** | `7723183` | run `36543916433`, job `109327378295` success; `libgs_ffi.so` ELF64 `machine=AArch64`, 4,529,528 B |
 | 04:0x | x86_64 `libgs_ffi.so` publishes | **PASS** | `7723183` | run `36543916433`, job `109327377954` success |
