@@ -61,12 +61,32 @@ object ModelCatalog {
         id = "qwen2.5-1.5b-instruct-q4_k_m",
         displayName = "Qwen2.5 1.5B Instruct (Q4_K_M)",
         url = "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf",
-        // VERIFIED, not copied from a release page. sha256sum of the file this
-        // repo has been benchmarking against, 491,400,032 bytes:
-        //     74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db
-        // The same bytes are used on desktop and on device, so a desktop
-        // measurement transfers.
-        sha256 = "74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db",
+        // EMPTY, AND THAT IS THE HONEST VALUE. This entry previously carried
+        //
+        //     sha256 = "74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db"
+        //
+        // with the comment "VERIFIED, not copied from a release page ...
+        // 491,400,032 bytes ... The same bytes are used on desktop and on
+        // device, so a desktop measurement transfers."
+        //
+        // Those are the 0.5B model's bytes and the 0.5B model's digest, on the
+        // 1.5B model, whose `bytes` below is 1,122,816,512. A 1.05 GB file
+        // cannot hash to a 491 MB file's digest; the hash was copied with the
+        // comment from MODEL_0_5B.
+        //
+        // WHY THAT MATTERS AND NOT JUST COSMETICALLY. sha256 non-blank means
+        // mayDownload() ALLOWS the download (ModelStore:117). So on any device
+        // classified HIGH -- 4 GB of RAM and 8 cores -- the app would fetch
+        // 1.05 GB, fail the integrity check against a digest that belongs to a
+        // different file, and surface as a download that cannot complete. The
+        // empty value is treated as "cannot verify" and REFUSED, so a HIGH-tier
+        // device falls back instead.
+        //
+        // To fill this in, download the file and hash it, the same way the
+        // android-device job does for the 0.5B:
+        //     curl -L -o qwen2.5-1.5b-instruct-q4_k_m.gguf <url>
+        //     sha256sum qwen2.5-1.5b-instruct-q4_k_m.gguf
+        sha256 = "",
         bytes = 1_122_816_512L,
         minRamBytes = 4L * 1024 * 1024 * 1024,
     )
