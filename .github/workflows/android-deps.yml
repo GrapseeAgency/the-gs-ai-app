@@ -395,8 +395,75 @@ jobs:
           #   fatal: destination path 'src' already exists and is not an empty
           #   directory.
           # is what that produced (run 36383123086).
-          git clone --depth 1 --branch b4581 https://github.com/ggml-org/llama.cpp.git src-llama
+          # PINNED TO THE DESKTOP COMMIT, NOT A MOVING BRANCH.
+          #
+          # This used to be `--branch b4581`, which is b636228c0ad0db95bf73008094c6145a05615cf6.
+          # The desktop build uses GS_LLAMA_ROOT, and .cargo/config.toml:37 points it at
+          #     /mnt/new_volume/llm-workspace/llama.cpp
+          # whose HEAD is the commit below. The wrapper at
+          # native/cpp/llama_wrapper/llama_wrapper.cpp is written against THAT version,
+          # and the two disagree about the API. Raw, run 36460210545, the first time
+          # the wrapper was ever compiled for Android:
+          #
+          #   error: use of undeclared identifier 'llama_get_memory'
+          #          did you mean 'llama_get_model'?
+          #   error: use of undeclared identifier 'llama_memory_clear'
+          #   error: use of undeclared identifier 'llama_memory_seq_pos_max'
+          #          did you mean 'llama_kv_cache_seq_pos_max'?
+          #   error: use of undeclared identifier 'GGML_BACKEND_DEVICE_TYPE_IGPU'
+          #   error: cannot initialize a parameter of type 'struct llama_context *'
+          #          with an rvalue of type 'const struct llama_model *'
+          #   11 errors generated.
+          #
+          # Confirmed at the HEADER level, not inferred from the errors. Counting the
+          # symbols the wrapper needs in each tree's include/llama.h:
+          #
+          #   3018a11e79e489b657dbb77c95694889ccff92df  ->  4 matches
+          #   b636228c0ad0db95bf73008094c6145a05615cf6  ->  0 matches
+          #
+          # A shallow clone CANNOT take `--branch <sha>`, so this fetches the commit
+          # directly and detaches onto it.
+          LLAMA_SHA=3018a11e79e489b657dbb77c95694889ccff92df
+          git init -q src-llama
+          cd src-llama
+          git remote add origin https://github.com/ggml-org/llama.cpp.git
+          git fetch -q --depth 1 origin "$LLAMA_SHA"
+          git checkout -q --detach FETCH_HEAD
+          # --recurse-submodules is a NO-OP at this commit: there is no .gitmodules,
+          # ggml is an in-tree directory (git ls-tree shows it as a tree, not a
+          # 160000 gitlink). Kept because it costs nothing and because ggml WAS a
+          # submodule historically -- if that ever changes back, this step would
+          # otherwise build against an empty directory and fail obscurely.
+          git submodule update --init --recursive || true
+          cd - >/dev/null
+          GOT=$(cd src-llama && git rev-parse HEAD)
+          echo "llama.cpp pinned: $GOT"
           echo "llama.cpp: $(cd src-llama && git log -1 --format='%H (%ad)' --date=short)"
+          # ASSERT THE PIN TOOK. A wrong checkout here compiles the WRONG API and
+          # produces exactly the 11 errors above, twenty minutes later, in a
+          # different job. One line here names it immediately.
+          if [ "$GOT" != "$LLAMA_SHA" ]; then
+            echo "::error::llama.cpp is at $GOT, not $LLAMA_SHA. The wrapper and the headers will disagree."
+            exit 1
+          fi
+          # And assert the header actually carries the API, so a same-shaped but
+          # wrong-version tree cannot pass either.
+          for SYM in llama_get_memory llama_memory_clear llama_memory_seq_pos_max; do
+            if ! grep -q "$SYM" src-llama/include/llama.h; then
+              echo "::error::$SYM is absent from src-llama/include/llama.h at $GOT."
+              echo "The wrapper will not compile against this tree."
+              exit 1
+            fi
+            echo "  header has $SYM"
+          done
+          # ggml-backend.h carries the fourth symbol the wrapper needs. It lives in
+          # the ggml tree, not include/, so it is checked separately -- and its
+          # presence at 3018a11e7 is what makes GGML_BACKEND_DEVICE_TYPE_IGPU resolve.
+          if ! grep -q GGML_BACKEND_DEVICE_TYPE_IGPU src-llama/ggml/include/ggml-backend.h; then
+            echo "::error::GGML_BACKEND_DEVICE_TYPE_IGPU absent from src-llama/ggml/include/ggml-backend.h at $GOT"
+            exit 1
+          fi
+          echo "  header has GGML_BACKEND_DEVICE_TYPE_IGPU"
 
       - name: Build
         run: |
