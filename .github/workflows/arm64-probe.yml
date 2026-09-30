@@ -26,6 +26,16 @@ name: arm64-runner-probe
 
 on:
   workflow_dispatch:
+  # A push trigger on a path nothing touches, so the workflow is INDEXED by the
+  # API. With workflow_dispatch alone it never appeared in
+  #   GET /repos/.../actions/workflows
+  # across four checks over several minutes, and workflow_dispatch returned 404
+  # even though the file was committed and pushed (git ls-tree showed it). The
+  # filter matches nothing in practice, so this costs no runner time; what it
+  # buys is a workflow the API will let us dispatch.
+  push:
+    paths:
+      - '.github/workflows/arm64-probe.yml'
 
 permissions:
   contents: read
