@@ -447,10 +447,10 @@ claim about what it was asked to contain.
 | `36730369437` | `__chkstk_darwin` is only exported from iOS 12; rustc's floor for `aarch64-apple-ios` is 10 and nothing set it |
 | `36733985703` | `lipo -create` cannot merge two same-architecture archives — that is an archive job (`libtool -static`) |
 | `36735879525` | the symbol check named `llama_model_load` etc., which are C++ and therefore mangled at the pinned commit |
-| `36740298082` | `VAR=$(nm … \| wc -l)` under `set -e` killed the step, and `2>/dev/null` ate the reason |
+| `36740298082` | the bare assignment `VAR=$(nm … ; wc -l)` under `set -e` killed the step, and `2>/dev/null` ate the reason |
 | `36742545988` | `pipefail` + `grep -q` reported successful matches as misses — the check was non-deterministic |
 | `36745378533` | both simulator merges read an already-fat library, so a file called `-sim-arm64.a` contained x86_64 |
-| `36747684730` | `sed … \| head -12` under `set -e`: the diagnostic line killed the step while printing a diagnostic |
+| `36747684730` | `sed … ; head -12` under `set -e`: the diagnostic line killed the step while printing a diagnostic |
 | `36750432883` | the new gate itself imported `yaml`, which the macOS runner does not have |
 | `36751766601` | I had lowered the APP's iOS floor to 15.0 to fix the LIBRARY's, and `PhotosPickerItem` stopped compiling |
 
