@@ -1,4 +1,5 @@
 import XCTest
+@testable import GSApp
 
 #if canImport(GsFfi)
 import GsFfi
