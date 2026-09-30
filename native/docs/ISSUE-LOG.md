@@ -7,7 +7,31 @@ Branch: `native-runtime`. All commits pushed. Working copy `/tmp/opencode/gsai`
 
 Time is UTC.
 
-## THE WHOLE SUITE IS GREEN — 12/12
+## WHERE THE OPERATOR'S FIVE ITEMS STAND
+
+| # | Item | State | Evidence |
+| --- | --- | --- | --- |
+| 1 | iOS llama.cpp cross-compile | **DONE** | run `36759872954`, all three jobs green, **46 passed, 0 skipped**, `GsNative.chat -> Hello! How can I assist you today?` |
+| 2 | arm64 device run | **BLOCKED, with evidence** | three hosts, three measured reasons — see below |
+| 3 | a3 skip | **DONE** | `a3_download_refuses_without_consent_resumes_and_verifies` PASS, run `36763870230` |
+| 4 | Android test-suite gaps | **DONE** | run `36763870230`, **14/14**, zero skips, including the two routing tests |
+| 5 | dynamic feature module `:ocr-fallback` | **BLOCKED at one line** | AGP 8.5.2 `DynamicFeatureVariantImpl.kt:244`; the app build stays green |
+
+Runs behind those numbers, all on `native-runtime`:
+
+| Workflow | Head | Result |
+| --- | --- | --- |
+| `ios-native` | `76a48b2` | success — llama.cpp, xcframework, app + XCTests |
+| `android-device` | `18dff88` | success — 14/14 on an x86_64 emulator, API 30 |
+| `android-app` | `e712047` | success — compile + unit tests |
+
+**The one-line version:** the iOS engine now has llama.cpp compiled in and answers a
+prompt on a real simulator; Android is 14/14 with the two routing tests that found
+a real product bug; the arm64 run is impossible on every runner reachable, with
+three different measured reasons; and the OCR split is down to one question about
+why the base module does not register its own metadata producer.
+
+## THE SUITE IS GREEN — first as 12/12, now 14/14
 
 Run `36707513732`, x86_64 emulator, Android API 30. **Fourteen** tests, no
 failures, no skips, job green. (Re-confirmed after the ABI was made a parameter
