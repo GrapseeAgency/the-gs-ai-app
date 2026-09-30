@@ -646,12 +646,97 @@ jobs:
             fi
             rm -f "$NMERR"
 
+            # THE LINK CONTRACT, NOT LLAMA.CPP'S OWN API.
+            #
+            # This loop used to ask for llama_backend_init, llama_model_load and
+            # llama_free, and it could never have passed. Those are llama.cpp's
+            # own API, and at the pinned commit
+            # 3018a11e79e489b657dbb77c95694889ccff92df they are C++, so they are
+            # MANGLED in the archive:
+            #
+            #     _ZN6llama11model_loadE...      not      T _llama_model_load
+            #
+            # Only the subset llama.h exposes inside `extern "C"` has an
+            # unmangled name. So the check named three symbols outside that
+            # subset, and would have failed on every runner at every llama
+            # version where those three are C++.
+            #
+            # What the build actually promises is the extern "C" block the Rust
+            # side compiles against, native/crates/gs-ffi/src/mobile.rs:
+            #
+            #     fn gs_llama_available    fn gs_llama_create
+            #     fn gs_llama_backend_name fn gs_llama_generate
+            #     fn gs_mobile_backend_available  ...
+            #
+            # and run 36742545988 shows the first two in the merged archive as
+            #
+            #     0000000000002214 T _gs_llama_available
+            #     0000000000002220 T _gs_llama_backend_name
+            #
+            # so the symbols the build needs were exported all along. Asserting
+            # them is a STRONGER test than asserting llama.cpp internals, which
+            # nothing in this repository calls -- and gs_mobile_backend_available
+            # is the one function whose value decides "this build has a
+            # generation backend", which is the whole claim of the iOS work.
+            # NO PIPE, ON PURPOSE. This used to be
+            #
+            #     nm -gU "$OUT" 2>/dev/null | grep -qE " T _?${SYM}\$"
+            #
+            # in a step that opens with `set -euo pipefail`, and it was
+            # NON-DETERMINISTIC -- ten runs on the same archive, four symbols all
+            # present:
+            #
+            #     run  1: MISSING=' gs_llama_backend_name gs_llama_create'
+            #     run  2: MISSING=' gs_llama_create'
+            #     run  3: MISSING=' gs_llama_available'
+            #     run  5: MISSING=' gs_llama_backend_name gs_mobile_backend_available'
+            #     run  6: MISSING=''
+            #     run 10: MISSING=''
+            #
+            # `grep -q` exits on the first match, which closes the pipe; `nm` is
+            # still writing and takes SIGPIPE, exiting 141; `pipefail` makes the
+            # PIPELINE's status the last non-zero one, so a SUCCESSFUL match is
+            # reported as a MISS. Whether nm has filled the pipe buffer before
+            # grep leaves is a race, which is why the set of "missing" symbols
+            # changed every run -- always in the direction of present -> absent.
+            #
+            # So: nm runs ONCE, its output is captured, and each symbol is
+            # compared with bash pattern matching. No pipe, no SIGPIPE, nothing
+            # for pipefail to misreport, and the archive is read once instead of
+            # five times.
+            #
+            # FIELD-EXACT, not a substring, so `gs_llama_create` cannot be
+            # satisfied by `gs_llama_create_result`. A check that accepts a
+            # longer name will one day pass on the wrong symbol.
+            ALLSYM=$(nm -gU "$OUT" 2>>"$NMERR" || true)
             MISSING=""
-            for SYM in llama_backend_init llama_model_load llama_free; do
-              if ! nm -gU "$OUT" 2>/dev/null | grep -qE " T _?${SYM}\$"; then
-                MISSING="$MISSING $SYM"
-              fi
+            for SYM in gs_llama_available gs_llama_backend_name gs_llama_create \
+                      gs_mobile_backend_available; do
+              FOUND=no
+              while read -r _ADDR _TYPE NAME; do
+                case "$NAME" in
+                  "$SYM"|_"$SYM") FOUND=yes; break ;;
+                esac
+              done <<< "$ALLSYM"
+              [ "$FOUND" = yes ] || MISSING="$MISSING $SYM"
             done
+            # A FLOOR ON THE LLAMA SYMBOL COUNT, so "the wrapper is there but
+            # llama.cpp was never merged" cannot pass. Every named symbol above
+            # lives in libgs_llama.a, which is small; a wrapper-only archive would
+            # satisfy all four and then fail to link much later with an
+            # undefined llama.cpp symbol.
+            #
+            # 476 unmangled llama symbols is what a real merge produced
+            # (run 36742545988). The floor is 100 -- 21% of that -- and is
+            # deliberately loose: its job is to catch "llama.cpp is absent
+            # entirely", not to track a number that moves between llama releases.
+            # The count prints on every run, so a drift toward the floor is
+            # visible before it becomes a failure.
+            LLAMA_COUNT=$(printf '%s\n' "$ALLSYM" | grep -cE ' T _?llama' || true)
+            if [ "${LLAMA_COUNT:-0}" -lt 100 ]; then
+              MISSING="$MISSING (only ${LLAMA_COUNT:-0} llama symbols, floor is 100;"
+              MISSING="$MISSING a wrapper-only archive cannot pass this)"
+            fi
             if [ -n "$MISSING" ]; then
               echo "::error::$OUT is missing:$MISSING. The engine cannot initialise."
               # WHICH of the four possible causes this is, from the counts above.
@@ -663,7 +748,7 @@ jobs:
               # None of these is guessed at; the numbers decide.
               echo "  --- why, and the evidence ---"
               echo "  any llama symbol, any type, first few:"
-              nm "$OUT" 2>/dev/null | grep -i llama | sed -n '1,5p' | sed 's/^/    /'
+              printf '%s\n' "$ALLSYM" | grep -i llama | sed -n '1,5p' | sed 's/^/    /'
               echo "  members whose name mentions llama:"
               ar -t "$OUT" 2>/dev/null | grep -i llama | sed -n '1,5p' | sed 's/^/    /' || echo "    (none)"
               echo "  sizes of what went in, and what came out:"
