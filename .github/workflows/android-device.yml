@@ -167,10 +167,36 @@ jobs:
           fi
           echo "deps run: $DEPS_RUN_ID"
           mkdir -p native/prebuilts/android-$ABI /tmp/artifact
+          # A SCRIPT, NOT `python3 -c`.
+          #
+          # The inline version was single-quoted, so the shell never expanded
+          # $ABI and python compared the artifact name against the literal
+          # string "llamacpp-$ABI". The arm64 attempt then failed claiming an
+          # artifact was missing that the SAME step printed as available:
+          #
+          #     FAIL: the llamacpp-arm64-v8a artifact is not in run 36662206872.
+          #     Available:
+          #       llamacpp-arm64-v8a 20634675 bytes
+          #
+          # And making that a multi-line single-quoted string inside
+          # $( ... | ... ) broke the shell outright:
+          #
+          #     bash: line 46: syntax error near unexpected token `|'
+          #     while looking for matching `)'
+          #
+          # No comment may sit INSIDE the $( ) here. A backslash continuation
+          # runs into a `#` line and bash ends the command there, so the pipe
+          # below becomes a separate command and the substitution captures
+          # nothing -- which is exactly the error bash -n reported:
+          #
+          #     bash: line 40: syntax error near unexpected token `|'
+          #     while looking for matching `)'
+          #
+          # sys.argv, not interpolation, so quoting cannot matter.
           ARTIFACT_ID=$(
             curl -fsS -H "Authorization: Bearer $GH_TOKEN" \
               "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs/$DEPS_RUN_ID/artifacts" \
-            | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next((str(a["id"]) for a in d.get("artifacts",[]) if a["name"]=="llamacpp-$ABI"), ""))'
+            | python3 "$GITHUB_WORKSPACE/.github/scripts/pick_artifact_id.py" llamacpp "$ABI"
           )
           if [ -z "$ARTIFACT_ID" ]; then
             echo "FAIL: the llamacpp-$ABI artifact is not in run $DEPS_RUN_ID."
@@ -254,7 +280,23 @@ jobs:
           fi
           echo "native run: $NATIVE_RUN_ID"
           mkdir -p "android/app/src/main/jniLibs/$ABI" /tmp/so-artifact
-          ARTIFACT_ID=$(curl -fsS -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs/$NATIVE_RUN_ID/artifacts" | python3 -c 'import json,sys; a=json.load(sys.stdin)["artifacts"]; h=[x for x in a if x["name"]=="libgs_ffi-$ABI"]; print(h[0]["id"] if h else "")')
+          # Same fix as the llamacpp lookup above: $ABI as an argument, because
+          # inside these single quotes the shell would not expand it and python
+          # would have compared against the literal "libgs_ffi-$ABI". Found by
+          # sweeping every single-quoted string in the file for a $ that belongs
+          # in the middle of one.
+          # Same reason as the llamacpp lookup above, and the same two traps
+          # avoided: no comment inside the $( ), and no single-quoted python
+          # that would stop the shell expanding $ABI. This inline version
+          # compared the artifact name against the literal "libgs_ffi-$ABI".
+          #
+          # Found by sweeping every single-quoted string in this file for a $
+          # that belongs in the middle of one. That sweep now reports zero.
+          ARTIFACT_ID=$(
+            curl -fsS -H "Authorization: Bearer $GH_TOKEN" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs/$NATIVE_RUN_ID/artifacts" \
+            | python3 "$GITHUB_WORKSPACE/.github/scripts/pick_artifact_id.py" libgs_ffi "$ABI"
+          )
           if [ -z "$ARTIFACT_ID" ]; then
             echo "::error::no libgs_ffi-$ABI artifact in run $NATIVE_RUN_ID. An emulator of one ABI cannot load another ABI's .so, so this job cannot substitute. The build is wrong, not the run."
             exit 1
