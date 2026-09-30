@@ -38,8 +38,42 @@ jobs:
         run: |
           SDK_BUILDTOOLS="$ANDROID_HOME/build-tools/35.0.0"
           APK=app/build/outputs/apk/debug/app-debug.apk
-          "$SDK_BUILDTOOLS/aapt2" dump badging "$APK" | grep -q "package: name='com.grapsee.gsai'" || exit 1
-          "$SDK_BUILDTOOLS/apksigner" verify --print-certs "$APK" | grep -qi "b1ffd75dd410c84bd9467e418c419cd377d57569ae7ac5e26b778e6418b1a483" || exit 1
+          # `grep -q` IN A PIPELINE, IN A `|| exit 1` GATE, IS A LANDMINE.
+          #
+          # The originals were:
+          #
+          #     aapt2 dump badging "$APK" | grep -q "package: name='com.grapsee.gsai'" || exit 1
+          #     apksigner verify --print-certs "$APK" | grep -qi "<sha256>" || exit 1
+          #
+          # `grep -q` exits on the FIRST match, which closes the pipe. `aapt2` and
+          # `apksigner` are still writing, take SIGPIPE, and exit 141 -- and
+          # `pipefail` makes the PIPELINE's status the last non-zero one, so it is
+          # 141 rather than grep's 0. `|| exit 1` THEREFORE FIRES ON A
+          # SUCCESSFUL MATCH.
+          #
+          # So these gates reject a good APK, and only when the match happens early
+          # enough to win the race against the producer. Intermittent, and
+          # indistinguishable from a real signing failure. Found by
+          # .github/scripts/check_pipefail_traps.py, which this session had never
+          # run against this workflow.
+          #
+          # Both tools' full output is captured first, so there is no live process
+          # for grep to signal -- and the captures are printed, so a failure says
+          # WHAT the APK actually was rather than only that a gate tripped.
+          BADGING=$("$SDK_BUILDTOOLS/aapt2" dump badging "$APK" 2>&1 || true)
+          printf '%s\n' "$BADGING" | sed -n '1,6p' | sed 's/^/  badging: /'
+          if ! printf '%s\n' "$BADGING" | grep -q "package: name='com.grapsee.gsai'"; then
+            echo "::error::APK does not declare com.grapsee.gsai. aapt2 said:"
+            printf '%s\n' "$BADGING" | sed -n '1,20p' | sed 's/^/  /'
+            exit 1
+          fi
+          CERTS=$("$SDK_BUILTOOLS/apksigner" verify --print-certs "$APK" 2>&1 || true)
+          printf '%s\n' "$CERTS" | sed -n '1,6p' | sed 's/^/  certs: /'
+          if ! printf '%s\n' "$CERTS" | grep -qi "b1ffd75dd410c84bd9467e418c419cd377d57569ae7ac5e26b778e6418b1a483"; then
+            echo "::error::signing certificate is not b1ffd75dd410c84bd9467e418c419cd377d57569ae7ac5e26b778e6418b1a483. apksigner said:"
+            printf '%s\n' "$CERTS" | sed -n '1,20p' | sed 's/^/  /'
+            exit 1
+          fi
           unzip -p "$APK" 'classes*.dex' | grep -q "https://preview-chat-c945696f-6447-4dfa-b510-971d8b9eb5bf.space-z.ai" || { echo "FATAL: public origin missing from dex"; exit 1; }
           if unzip -p "$APK" 'classes*.dex' | grep -q "http://10.0.2.2:3000"; then echo "FATAL: emulator loopback leaked into build"; exit 1; fi
           echo "gates ok"

@@ -369,7 +369,11 @@ jobs:
             # waiting out the bound for a device that will never appear.
             if grep -q "is not supported by the QEMU2 emulator" "$LOG" 2>/dev/null; then
               echo "::error::the emulator refused this host, as it did on x86_64:"
-              grep -o "FATAL.*" "$LOG" | head -3 | sed 's/^/  /'
+              # `sed -n '1,3p'`, not `| head -3`, for the reason the ios-native
+              # file explains: head closes the pipe and the producer takes
+              # SIGPIPE, which under `set -euo pipefail` kills the step while it
+              # is printing its own error message.
+              grep -o "FATAL.*" "$LOG" | sed -n '1,3p' | sed 's/^/  /'
               break
             fi
             # A process that died leaves no device and no log growth. Say so now

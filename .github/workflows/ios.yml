@@ -65,7 +65,12 @@ jobs:
           echo "xcodebuild: $(xcodebuild -version | tr '\n' ' ')"
           echo "iOS SDK: $(xcrun --sdk iphoneos --show-sdk-version)"
           swift --version
-          echo "XCODE_VERSION=$(xcodebuild -version | head -1 | awk '{print $2}')" >> "$GITHUB_ENV"
+          # `sed -n '1p'`, not `| head -1`. head closes the pipe, xcodebuild
+          # takes SIGPIPE, and the nested command substitution cannot fail the
+          # enclosing echo -- so the visible symptom there is not a dead step but
+          # an EMPTY XCODE_VERSION written to the environment. A gate that reads
+          # it later then fails for a reason three steps away.
+          echo "XCODE_VERSION=$(xcodebuild -version | sed -n '1s/.*Xcode \(.*\)/\1/p')" >> "$GITHUB_ENV"
 
       - name: Static validation (supplementary — NOT a substitute for compilation)
         run: |
@@ -85,9 +90,21 @@ jobs:
           xcrun simctl list devices available
           # simctl device lines end with a trailing space: "  iPhone 16 Pro (UUID) (Shutdown) "
           # — the regex must tolerate it (fixed after run #1 failed exactly here).
-          NAME=$(xcrun simctl list devices available \
-            | sed -n 's/^[[:space:]]*\(iPhone[^()]*\) ([^)]*) ([^)]*)[[:space:]]*$/\1/p' \
-            | head -1 | xargs)
+          # NO `head` IN A PIPELINE. The original ended in
+          #
+          #     | head -1 | xargs)
+          #
+          # and `head -1` exits on the first match, closing the pipe; `sed` takes
+          # SIGPIPE and exits 141, and under `set -euo pipefail` the step dies
+          # there with nothing on stdout. `read` cannot be signalled, so the first
+          # match is taken with a loop and then the variable is trimmed in bash.
+          NAME=""
+          while IFS= read -r _CAND; do
+            [ -n "$_CAND" ] || continue
+            NAME="$(printf '%s' "$_CAND" | xargs)"
+            break
+          done < <(xcrun simctl list devices available 2>/dev/null \
+                   | sed -n 's/^[[:space:]]*\(iPhone[^()]*\) ([^)]*) ([^)]*)[[:space:]]*$/\1/p')
           if [ -z "$NAME" ]; then
             echo "::error::No available iPhone simulator found on runner image"
             exit 1
@@ -152,7 +169,7 @@ jobs:
         run: |
           APP_BUILT=$([ -d ios/build/DerivedData/Build/Products/Debug-iphonesimulator/App.app ] && echo "YES" || echo "NO")
           ARCHIVED=$([ -d ios/build/GSApp.xcarchive ] && echo "YES" || echo "NO")
-          TESTS=$(grep -Eo "Test Suite 'All tests' (passed|failed)" ios/build/xcodebuild-test.log 2>/dev/null | head -1 || echo "n/a")
+          TESTS=$(grep -Eo "Test Suite 'All tests' (passed|failed)" ios/build/xcodebuild-test.log 2>/dev/null | sed -n '1p' || echo "n/a")
           {
             echo "## iOS CI summary"
             echo ""

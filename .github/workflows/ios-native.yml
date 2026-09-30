@@ -80,6 +80,49 @@ jobs:
       - name: No comment inside a backslash continuation
         run: python3 .github/scripts/check_continuation_comments.py
 
+      # THE OTHER `bash -e` LANDMINE, AND IT HAS COST FOUR RUNS.
+      #
+      # GitHub runs a `run:` block as `bash -e {0}`. A pipeline whose consumer
+      # exits early -- `head -N`, `grep -q`, `grep -mN`, `tail -n +N` -- closes the
+      # pipe, the producer takes SIGPIPE and exits 141, and `pipefail` makes the
+      # PIPELINE's status 141 rather than the consumer's 0. Two consequences,
+      # both observed here:
+      #
+      #   * in a bare command, `-e` kills the step, and the only evidence is
+      #       sed: stdout: Broken pipe
+      #       ##[error]Process completed with exit code 1.
+      #     which names neither the line nor the cause. That is how run
+      #     36747684730 died with no `::error::` at all.
+      #
+      #   * inside an `if` CONDITION, where bash suspends `-e`, the step survives
+      #     but the STATUS is still wrong -- a successful match reads as a
+      #     failure. That made the symbol check non-deterministic: ten runs on one
+      #     archive with all four symbols present reported a different set of
+      #     "missing" symbols each time.
+      #
+      # Writing this check cost more than it should have, twice: the first version
+      # took YAML TEXT while its caller passed it a parsed document, so it raised
+      # on the first generator iteration and printed nothing -- and the review
+      # pipeline I ran it through was `| grep`, so the exit status came from grep
+      # and a crashed lint looked like a clean one. Hence the "lint its own exit
+      # status" note in the script, and hence this step reading $? directly.
+      #
+      # Exit codes: 1 = a bare pipeline can kill a step (FAIL), 2 = notes only,
+      # which are worth reading but are not build-breaking, 0 = clean. Anything
+      # else means the lint itself broke, and that is treated as a failure.
+      - name: No pipeline that can kill its own step
+        run: |
+          set -uo pipefail
+          RC=0
+          python3 "$GITHUB_WORKSPACE/.github/scripts/check_pipefail_traps.py" || RC=$?
+          case "$RC" in
+            0) echo "gate: clean" ;;
+            2) echo "gate: clean (notes above are not build-breaking)" ;;
+            *) echo "::error::a bare pipeline ends in an early-exiting consumer (exit $RC)"
+               echo "::error::or the lint itself failed, which is equally a stop."
+               exit 1 ;;
+          esac
+
       - name: Select Xcode
         run: |
           set -euo pipefail
@@ -705,7 +748,22 @@ jobs:
             set -o pipefail
             if [ -s "$NMERR" ]; then
               echo "  nm/ar said (kept, not discarded):"
-              sed 's/^/    /' "$NMERR" | head -12
+              # `sed -n '1,12p'`, NOT `| head -12`.
+              #
+              # This line is why run 36747684730 ended with
+              #
+              #     sed: stdout: Broken pipe
+              #     ##[error]Process completed with exit code 1.
+              #
+              # and no `::error::` line naming anything. `head -12` exits after
+              # twelve lines and closes the pipe, so `sed` takes SIGPIPE and
+              # exits 141, and the step runs under `set -euo pipefail` with -e
+              # already on from `bash -e {0}`.
+              #
+              # `head -N` and `sed -n '1,Np'` look interchangeable and are not:
+              # `head` STOPS READING, `sed -n '1,Np'` reads to the end and merely
+              # prints less. Under pipefail only the first can fail the pipeline.
+              sed -n '1,12p' "$NMERR" | sed 's/^/    /'
             else
               echo "  nm/ar said: nothing"
             fi
@@ -1236,7 +1294,14 @@ jobs:
           echo "=== build steps that ran ==="
           grep -cE '^ *[A-Z]?[a-z]*CompileSwiftSources' build-simulator.log || true
           echo "=== the product ==="
-          find ~/Library/Developer/Xcode/DerivedData -name '*.app' -maxdepth 4 2>/dev/null | head -3
+          # `sed -n '1,3p'`, not `| head -3`. This is a diagnostic line in the
+          # middle of a `set -euo pipefail` step, which is the worst place for one:
+          # head closes the pipe, find takes SIGPIPE and exits 141, and the step
+          # dies while printing a DIAGNOSTIC -- so the log ends with no product
+          # listed and an error that points at nothing. Found by
+          # .github/scripts/check_pipefail_traps.py.
+          find ~/Library/Developer/Xcode/DerivedData -name '*.app' -maxdepth 4 2>/dev/null \
+            | sed -n '1,3p'
 
       - name: Run the XCTests on a booted simulator
         run: |
