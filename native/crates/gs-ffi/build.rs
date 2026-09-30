@@ -294,6 +294,12 @@ fn main() {
             // `framework=` is the cargo spelling for -framework=.
             println!("cargo:rustc-link-lib=framework=Metal");
             println!("cargo:rustc-link-lib=framework=Foundation");
+            // Accelerate, for vDSP. ggml-cpu.a calls it UNCONDITIONALLY on Apple
+            // targets -- run 36725021214 left _vDSP_maxv, _vDSP_vadd, _vDSP_vmul,
+            // _vDSP_vsmul, _vDSP_vsub and others undefined, all referenced from
+            // libggml-cpu.a(ops.cpp.o). Accelerate is Apple's own vector library
+            // and is part of the OS, so this adds no size to the binary.
+            println!("cargo:rustc-link-lib=framework=Accelerate");
             // -ObjC++ links the Objective-C runtime those _OBJC_CLASS_$
             // references resolve through.
             println!("cargo:rustc-link-arg=-ObjC++");

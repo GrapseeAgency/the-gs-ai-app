@@ -315,7 +315,11 @@ jobs:
             SLICE="$1"; PKG="$2"; OUT="$3"
             echo "=== $SLICE + $PKG -> $OUT ==="
             ORDER=""
-            for NAME in llama ggml ggml-cpu ggml-base ggml-metal ggml-blas; do
+            # ggml-blas is deliberately absent: it is built with GGML_BLAS=OFF.
+            # Merging an archive that needs an external BLAS adds a second full
+            # backend to the binary for no benefit, and its cblas_* symbols are
+            # unresolved (run 36725021214).
+            for NAME in llama ggml ggml-cpu ggml-base ggml-metal; do
               [ -f "$PKG/lib/lib$NAME.a" ] && ORDER="$ORDER $PKG/lib/lib$NAME.a"
             done
             if [ -z "$ORDER" ]; then
@@ -1025,6 +1029,24 @@ jobs:
               -DLLAMA_BUILD_COMMON=OFF \
               -DLLAMA_BUILD_UI=OFF \
               -DGGML_LLAMAFILE=OFF \
+              # GGML_BLAS=OFF, and this is not cosmetic. Run 36725021214:
+              #
+              #   "_cblas_sgemm$NEWLAPACK$ILP64", referenced from
+              #      ggml_backend_blas_graph_compute in libggml-blas.a
+              #   "_vDSP_maxv", "_vDSP_vadd", "_vDSP_vdiv", "_vDSP_vmul",
+              #   "_vDSP_vsadd", "_vDSP_vsmsa", "_vDSP_vsmul", "_vDSP_vsub",
+              #      all referenced from libggml-cpu.a(ops.cpp.o)
+              #
+              # Two separate things in that list. libggml-blas.a needs an external
+              # BLAS, which Apple ships as Accelerate and which is an ALTERNATIVE
+              # to ggml's own CPU kernels, not a dependency of them. And the vDSP
+              # symbols are Accelerate's vector library, which ggml-cpu.a uses
+              # unconditionally on Apple targets.
+              #
+              # So BLAS off removes the first, and -framework Accelerate removes
+              # the second. Both, because leaving BLAS on means linking a second
+              # full backend into a phone binary for no benefit.
+              -DGGML_BLAS=OFF \
               -G Ninja 2>&1 | tee "configure-$TRIPLE.log"
             cmake --build "build-$TRIPLE" -j"$(sysctl -n hw.ncpu)" 2>&1 | tee "build-$TRIPLE.log"
             echo "=== archives for $TRIPLE ==="

@@ -94,7 +94,7 @@ targets:
         #
         # Foundation is explicit rather than implied because __CFConstantString-
         # ClassReference comes from CoreFoundation, which Foundation re-exports.
-        OTHER_LDFLAGS: "$(inherited) -lc++ -ObjC++ -framework Metal -framework Foundation"
+        OTHER_LDFLAGS: "$(inherited) -lc++ -ObjC++ -framework Metal -framework Foundation -framework Accelerate"
         CLANG_CXX_LANGUAGE_STANDARD: "c++17"
         # The app target's module name must be GSApp: AppTests does
         # `@testable import GSApp` (default module name would be "App" and
@@ -171,7 +171,7 @@ targets:
         #
         # Foundation is explicit rather than implied because __CFConstantString-
         # ClassReference comes from CoreFoundation, which Foundation re-exports.
-        OTHER_LDFLAGS: "$(inherited) -lc++ -ObjC++ -framework Metal -framework Foundation"
+        OTHER_LDFLAGS: "$(inherited) -lc++ -ObjC++ -framework Metal -framework Foundation -framework Accelerate"
         CLANG_CXX_LANGUAGE_STANDARD: "c++17"
     dependencies:
       - target: App
