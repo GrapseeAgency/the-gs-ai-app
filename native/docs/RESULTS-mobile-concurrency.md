@@ -411,6 +411,91 @@ Item 3's downloader — which does not exist yet.
 
 ---
 
+## arm64 device testing — hardware requirement
+
+**Status: the arm64 engine is built and verified statically. Executing it on arm64
+is not possible on any runner available to this repository, and the reason is
+hardware, not configuration.**
+
+This section exists so the gap is not mistaken for missing work. Every number below
+is from a run, and the three failures are three different hosts.
+
+### What IS proven for arm64
+
+The `arm64-v8a` shared object is built by the NDK and verified from its own bytes,
+not from a build log claiming success (run `36651304587`):
+
+| ABI | bytes | `file` says |
+| --- | --- | --- |
+| `arm64-v8a` | 4,562,904 | `ELF 64-bit LSB shared object, ARM aarch64, ... for Android 21, built by NDK r25c` |
+| `armeabi-v7a` | 3,504,900 | `ELF 32-bit LSB shared object, ARM, EABI5` |
+| `x86` | 5,746,332 | `ELF 32-bit LSB shared object, Intel i386` |
+| `x86_64` | 4,985,656 | `ELF 64-bit LSB shared object, x86-64` |
+
+Each publishes the ten `gs_ffi_mobile_*` entry points. So the arm64 binary exists,
+has the right architecture according to the ELF header, and exports the ABI the
+Java layer declares.
+
+### What is NOT proven for arm64
+
+**That the arm64 binary runs.** No arm64 instruction has been executed by this
+repository. The static verification above is real and it is not the same claim:
+`file` reads a header, and a header is not a run.
+
+### Why, with the three measured reasons
+
+| Run | Host | What it measured |
+| --- | --- | --- |
+| `36676280935` | `ubuntu-latest`, x86_64 | `FATAL \| Avd's CPU Architecture 'arm64' is not supported by the QEMU2 emulator on x86_64 host.` |
+| `36688288136` | `ubuntu-24.04-arm` | genuinely arm64 (`uname -m = aarch64`) and **no `/dev/kvm`** |
+| `36735804030` | `macos-15` | genuinely arm64, emulator launched, QEMU initialised, then `HVF error: HV_UNSUPPORTED` / `failed to initialize HVF: Invalid argument` |
+
+The first is the wrong architecture. The second and third are the RIGHT
+architecture with no accelerator, through two different kernel interfaces because
+they are two different operating systems — `/dev/kvm` on Linux, Hypervisor.framework
+on macOS. That is the finding: **the blocker is nested virtualisation, not arm64.**
+
+### What would close it
+
+Any one of these is sufficient, and nothing else is:
+
+1. **An arm64 Linux runner with KVM.** A hosted `ubuntu-*-arm` label that exposes
+   `/dev/kvm`. `ubuntu-24.04-arm` does not, which run `36688288136` measured rather
+   than assumed.
+2. **An Apple silicon Mac with Hypervisor.framework**, self-hosted or on a runner
+   that enables it. The macOS hosted runner reaches the emulator and QEMU but
+   reports `HV_UNSUPPORTED`, so the framework is not exposed to it.
+3. **A physical arm64 phone connected over adb.** `adb install` the APK, then run
+   the same instrumented suite via `adb shell am instrument`. This is the option
+   that also tests the real device rather than a virtualised one, and it is the
+   only one of the three that would exercise the arm64 GPU path.
+
+No self-hosted runner is configured for this repository today.
+
+### The x86_64 emulator results are the best available evidence for the runtime path
+
+And this is a claim about what the numbers do and do not cover, so it is worth
+being exact.
+
+The 14 tests that pass on the x86_64 emulator (run `36777497765`) execute the
+**same Rust and C++ code** as the arm64 build — `gs-ffi`, `gs-mobile`, the C
+wrapper, llama.cpp, and the whole `ChatRepository` routing layer above it. They
+differ in two respects and only two:
+
+- **CPU architecture.** AVX2 and friends are available to x86_64 and not to
+  arm64, so the SIMD kernels exercised are not the same kernels.
+- **The JNI boundary.** The native call is the same; the calling convention of the
+  host CPU is not.
+
+What the x86_64 run therefore establishes for arm64: the logic, the ABI, the
+routing, the failure classification, the model loading, real CPU decode producing
+real text, and OCR all work. What it does not establish: that the arm64 build of
+the same source performs, or starts, or does not hit an arm64-specific fault.
+
+**That is the honest position: the runtime behaviour is verified on one
+architecture and the arm64 binary is verified statically, and no claim is made
+that the two together verify arm64 execution.**
+
 ## What is NOT done
 
 Stated plainly rather than dressed up.
