@@ -613,7 +613,63 @@ class DeviceVerificationTest {
                         write("Content-Type: text/event-stream\r\n".toByteArray())
                         write("Transfer-Encoding: chunked\r\n\r\n".toByteArray())
                         flush()
-                        val frame = "data: {\"type\":\"delta\",\"text\":\"thinking\"}\n\n"
+                        // A "status" EVENT, not a "delta". The stream parser keys
+                        // on event.type:
+                        //
+                        //   ApiClient.kt:169
+                        //   "status" -> onStatus(event.data.orEmpty())
+                        //
+                        // and `status` is the one event that needs no payload
+                        // shape at all. My first frame was
+                        //
+                        //   data: {"type":"delta","text":"thinking"}
+                        //
+                        // whose type is not one this client dispatches on, so
+                        // NOTHING was parsed, `receivedAnyEvent` stayed false, and
+                        // classifySendFailure() returned
+                        //
+                        //   BackendError(0, null)          // ChatRepository.kt:77
+                        //
+                        // which is the `— GS backend error (HTTP 0) —` marker a8
+                        // then correctly complained about. Run 36723027782:
+                        //
+                        //   CannedResponderTest: -> — GS backend error (HTTP 0) —
+                        //   AssertionError: the fallback returned the backend
+                        //                   error marker instead of an answer
+                        //
+                        // The new assertion did its job; the SERVER was wrong.
+                        // THE WIRE FORMAT, READ FROM THE PARSER:
+                        //
+                        //   ApiClient.kt:96
+                        //     Wire format: `data: {"event":"delta","data":"..."}`
+                        //   ApiClient.kt:162   if (!trimmed.startsWith("data:")) continue
+                        //   ApiClient.kt:169   "status" -> onStatus(event.data.orEmpty())
+                        //
+                        // So the EVENT TYPE IS INSIDE THE JSON, not an `event:` SSE
+                        // line. My first attempt used
+                        //
+                        //   data: {"type":"delta","text":"thinking"}
+                        //
+                        // -- the wrong keys entirely -- and the second used
+                        //
+                        //   event: status\ndata: thinking
+                        //
+                        // which is a real SSE event name but this parser never
+                        // looks at one. Both produced nothing parseable, so
+                        // receivedAnyEvent stayed false and the turn was
+                        // classified BackendError(0, null) (ChatRepository.kt:77),
+                        // printing the very marker a8 asserts against. Run
+                        // 36723027782:
+                        //
+                        //   CannedResponderTest: -> - GS backend error (HTTP 0) -
+                        //   AssertionError: the fallback returned the backend
+                        //                   error marker instead of an answer
+                        //
+                        // "status" rather than "delta" because it needs no payload
+                        // shape, and it is enough: onStatus flips
+                        // receivedAnyEvent, which is what makes this a MID-STREAM
+                        // cut rather than a connection failure.
+                        val frame = "data: {\"event\":\"status\",\"data\":\"thinking\"}\n\n"
                         write("${frame.length.toString(16)}\r\n$frame\r\n".toByteArray())
                         flush()
                         // Closing here IS the cut: a chunked body that ends
