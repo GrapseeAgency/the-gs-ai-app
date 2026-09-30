@@ -984,28 +984,49 @@ jobs:
           # lipo -info is the check, and it is asserted per target: an archive
           # that does not exist is reported by `find` as no output at all, which
           # is easy to read as "nothing to do".
+          # `find`, NOT A GLOB. A cmake build writes each archive next to its
+          # SOURCE, not into one output directory, so the runner produced
+          #
+          #     build-arm64/ggml/src/libggml-base.a
+          #     build-arm64/ggml/src/libggml-cpu.a
+          #     build-arm64/ggml/src/libggml.a
+          #     build-arm64/src/libllama.a
+          #
+          # and `"$DIR"/*.a` matched NONE of them. Every one of those had just
+          # been built -- [209/209] Linking CXX static library src/libllama.a --
+          # so this was a check looking in the wrong place, not a build failure.
+          #
+          # BY NAME, NOT BY COUNT: four copies of one library would satisfy a
+          # count check and link nothing.
           check () {
             DIR="$1"; ARCH="$2"
             echo "=== $DIR ==="
-            N=0
-            for A in "$DIR"/*.a; do
-              [ -f "$A" ] || continue
-              N=$((N+1))
-              echo "  $(basename "$A")  $(stat -f%z "$A") bytes"
-              lipo -info "$A" || { echo "FAIL: lipo cannot read $A"; exit 1; }
-              lipo -info "$A" | grep -q "$ARCH" || {
-                echo "::error::$A does not contain $ARCH: $(lipo -info "$A")"; exit 1; }
-            done
-            if [ "$N" -lt 4 ]; then
-              echo "::error::$DIR has $N archive(s); llama needs llama, ggml, ggml-cpu and ggml-base at minimum."
+            MAP=$(find "$DIR" -name '*.a' | sort)
+            if [ -z "$MAP" ]; then
+              echo "::error::$DIR has no .a files at all:"
+              find "$DIR" -maxdepth 3 -type d | sed -n '1,20p' | sed 's/^/    /'
               exit 1
             fi
-            echo "  $N archives, all containing $ARCH"
+            echo "$MAP" | sed 's/^/    /'
+            N=$(echo "$MAP" | wc -l | tr -d ' ')
+            for NAME in llama ggml ggml-cpu ggml-base; do
+              A=$(echo "$MAP" | grep -E "/lib$NAME\.a$" | sed -n '1p')
+              if [ -z "$A" ]; then
+                echo "::error::$DIR has no lib$NAME.a. $MAP"
+                exit 1
+              fi
+              echo "  lib$NAME.a  $(stat -f%z "$A") bytes  $(lipo -info "$A" | tr -d '\n')"
+              lipo -info "$A" | grep -q "$ARCH" || {
+                echo "::error::$A does not contain $ARCH: $(lipo -info "$A")"
+                exit 1
+              }
+            done
+            echo "  $N archives; llama, ggml, ggml-cpu and ggml-base all present and $ARCH"
           }
           mkdir -p native/prebuilts/ios-arm64 native/prebuilts/ios-arm64-sim native/prebuilts/ios-x86_64-sim
-          check build-arm64 arm64
-          check build-iossim arm64
-          check build-x86_64 x86_64
+          check build-arm64   arm64
+          check build-iossim  arm64
+          check build-x86_64  x86_64
 
       - name: Package in the shape gs-ffi/build.rs requires
         run: |
@@ -1029,10 +1050,21 @@ jobs:
             DST="native/prebuilts/${PAIR##*:}"
             echo "=== $SRC -> $DST ==="
             mkdir -p "$DST/lib" "$DST/include" "$DST/ggml-include"
-            for A in "$SRC"/*.a; do
-              [ -f "$A" ] || continue
+            # find, for the same reason as the verify step above: the archives
+            # are at $SRC/ggml/src/libggml.a and $SRC/src/libllama.a, not at
+            # $SRC/*.a. A flat `for A in "$SRC"/*.a` copies nothing and the
+            # package then fails build.rs's include/llama.h or link check much
+            # later, naming neither.
+            N=0
+            while read -r A; do
               cp "$A" "$DST/lib/"
-            done
+              N=$((N+1))
+            done <<< "$(find "$SRC" -name '*.a')"
+            if [ "$N" -lt 4 ]; then
+              echo "::error::$DST got $N archive(s); llama needs at least libllama.a libggml.a libggml-cpu.a libggml-base.a"
+              exit 1
+            fi
+            echo "  copied $N archives"
             cp -r src-llama/include/. "$DST/include/"
             cp -r src-llama/ggml/include/. "$DST/include/"
             cp -r src-llama/ggml/include/. "$DST/ggml-include/"
