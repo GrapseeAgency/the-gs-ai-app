@@ -113,7 +113,7 @@ jobs:
           echo "built: $(lipo -info "$SRC")"
           lipo -info "$SRC" | grep -q 'arm64' || {
             echo "FAIL: device slice is not arm64"; exit 1; }
-          bash "$GITHUB_WORKSPACE/.github/scripts/assert_arch_member.sh" "$SRC" device
+          bash "$GITHUB_WORKSPACE/.github/scripts/assert_arch_member.sh" "$SRC" device arm64
 
       - name: Build and verify simulator slice (aarch64-apple-ios-sim)
         working-directory: native
@@ -127,7 +127,7 @@ jobs:
           echo "built: $(lipo -info "$SRC")"
           lipo -info "$SRC" | grep -q 'arm64' || {
             echo "FAIL: simulator slice is not arm64"; exit 1; }
-          bash "$GITHUB_WORKSPACE/.github/scripts/assert_arch_member.sh" "$SRC" simulator
+          bash "$GITHUB_WORKSPACE/.github/scripts/assert_arch_member.sh" "$SRC" simulator arm64
 
       # THE SIMULATOR IS NOT ALWAYS ARM64.
       #
@@ -163,7 +163,7 @@ jobs:
           echo "built: $(lipo -info "$SRC")"
           lipo -info "$SRC" | grep -q 'x86_64' || {
             echo "FAIL: x86_64 simulator slice reports the wrong architecture"; exit 1; }
-          bash "$GITHUB_WORKSPACE/.github/scripts/assert_arch_member.sh" "$SRC" x86_64
+          bash "$GITHUB_WORKSPACE/.github/scripts/assert_arch_member.sh" "$SRC" simulator-intel x86_64
 
       # ONE library for both simulator architectures. lipo joins the objects;
       # xcodebuild -create-xcframework then records SupportedArchitectures as
