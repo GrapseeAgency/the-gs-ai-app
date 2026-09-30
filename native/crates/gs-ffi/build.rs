@@ -260,6 +260,45 @@ fn main() {
         if !using_prebuilt && std::path::Path::new(&bin).is_dir() {
             println!("cargo:rustc-link-arg=-Wl,-rpath,{bin}");
         }
+
+        // SYSTEM FRAMEWORKS ON APPLE TARGETS.
+        //
+        // GGML_METAL is ON by default when llama.cpp is built for an Apple
+        // target, so the package contains libggml-metal.a, and every symbol THAT
+        // archive references belongs to a system framework. Raw, run 36705647392:
+        //
+        //   Undefined symbols for architecture arm64:
+        //     "_MTLCreateSystemDefaultDevice", referenced from
+        //        _ggml_metal_device_init in libggml-metal.a[3](ggml-metal-device.m.o)
+        //     "_OBJC_CLASS_$_MTLCompileOptions", ...
+        //     "_OBJC_CLASS_$_NSLock", ...
+        //     "_OBJC_CLASS_$_NSString", ...
+        //     "___CFConstantStringClassReference", ...
+        //
+        // NOT ONE llama_ or ggml_ symbol in that list, which IS the diagnosis:
+        // llama.cpp and ggml linked correctly and only the frameworks they call
+        // into are missing. A llama_ symbol there would have meant a different
+        // fix entirely.
+        //
+        // THIS BELONGS HERE AND NOT IN ios/project.yml. `cargo build` uses `cc`
+        // as the LINKER DRIVER --
+        //
+        //   error: linking with `cc` failed: exit status: 1
+        //
+        // -- and project.yml's OTHER_LDFLAGS only ever reaches xcodebuild. The
+        // first attempt put -framework Metal in project.yml, which made the
+        // XCODE flags right and left the CARGO link failing with exactly the
+        // same undefined symbols. Both links need it; they read it from
+        // different files.
+        if have_llama && cfg!(target_vendor = "apple") {
+            // `framework=` is the cargo spelling for -framework=.
+            println!("cargo:rustc-link-lib=framework=Metal");
+            println!("cargo:rustc-link-lib=framework=Foundation");
+            // -ObjC++ links the Objective-C runtime those _OBJC_CLASS_$
+            // references resolve through.
+            println!("cargo:rustc-link-arg=-ObjC++");
+            println!("cargo:warning=linking Metal and Foundation for an Apple target with llama.cpp");
+        }
     }
 
     // shared ABI: status codes, last-error, device gate
