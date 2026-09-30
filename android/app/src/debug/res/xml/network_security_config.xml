@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  PERMIT CLEARTEXT TO LOOPBACK, IN THE DEBUG BUILD ONLY.
+
+  Run 36770334063, and the reason b2 and a8 could not reach the test server is
+  worth writing down, because it is a false pass hiding inside two real passes:
+
+      Matrix b2 OFF/up -> — Offline — cannot reach GS. —
+      Matrix b2 server saw 0 message request(s)
+      Classify: mid-stream cut -> — Offline — cannot reach GS. —
+      Classify: server saw 0 request(s)
+
+  The server was never contacted. Not one `WireServer[...] <- POST .../messages`
+  line appears in the log, and the request counter is zero.
+
+  THE CAUSE. `targetSdk = 35` and NO `usesCleartextTraffic` and no network security
+  config, so Android's default applies: cleartext is BLOCKED from API 28 onward.
+  Every request to `http://127.0.0.1:<port>` is refused by policy before a socket
+  is opened. WireServer was answering nothing because it was never asked anything.
+
+  WHY THIS MATTERS MORE THAN THE TWO SKIPS. b1, b3 and a8's refused-connect case
+  still PASSED, and they would have passed with the server deleted. The tests say
+  "a dead port produces the offline label", and what they were really measuring was
+  "a cleartext request produces a network failure". Those coincide today, so the
+  tests are not wrong in their conclusion, but they are not testing what they
+  claim, and a
+  mid-stream cut was being asserted against a server that was never reached, which
+  is the same defect as a8 measuring its own harness for the fourth time.
+
+  So the fix is to make loopback cleartext actually work in the debug build, which
+  is what an instrumented test of a network path requires. Release is untouched:
+  this file is under src/debug, and a release APK keeps the platform default of
+  blocking cleartext, which is correct for a shipping app.
+
+  NOTE FOR THE NEXT PERSON EDITING THIS: XML forbids a doubled hyphen inside a
+  comment. Writing an em dash as two hyphens therefore makes the whole file
+  unparseable, and the error points at a column number and never mentions a
+  comment. That has now happened twice in this repository, in two different
+  manifests, and the second time it happened inside the very note warning about
+  it. Use a comma, a semicolon, or a real dash character.
+
+  The scope is loopback and the emulator's host alias only. This is not a blanket
+  `usesCleartextTraffic="true"`, which would permit cleartext to any host and
+  would be a real weakness if it ever reached a release build.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <!-- The host machine as seen from the Android emulator. -->
+        <domain includeSubdomains="false">10.0.2.2</domain>
+        <!-- Loopback, which is where the test server binds. -->
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">localhost</domain>
+    </domain-config>
+</network-security-config>
