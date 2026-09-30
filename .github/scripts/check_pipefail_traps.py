@@ -47,9 +47,29 @@ Usage:  python3 .github/scripts/check_pipefail_traps.py [file ...]
         no arguments checks every workflow under .github/workflows.
 Exit 0 when clean, 1 on any Rule A finding, 2 if only Rule B notes remain.
 """
+import re as _re
 import re
 import sys
 import pathlib
+
+# NO PyYAML, DELIBERATELY. Run 36750432883:
+#
+#     ModuleNotFoundError: No module named 'yaml'
+#     ##[error]a bare pipeline ends in an early-exiting consumer (exit 1)
+#     ##[error]or the lint itself failed, which is equally a stop.
+#
+# The first version imported yaml, which is installed on the machine this was
+# written on and is NOT installed on the GitHub macOS runner. The gate did the
+# right thing with a wrong answer -- it failed loudly rather than reporting
+# "clean", because its own exit code distinguishes the two -- but it cost a
+# twenty-five minute run to learn that a lint cannot depend on a package the
+# runner might not have.
+#
+# So the run blocks are extracted from the raw text instead. That is possible
+# because every `run:` in these workflows is a block scalar (`run: |`), whose
+# body is simply every following line indented further than the key. An
+# over-approximation is acceptable for a lint: reading a block it should have
+# skipped produces at worst a spurious note, never a missed bare pipeline.
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 WF_DIR = ROOT / ".github" / "workflows"
@@ -70,30 +90,75 @@ ASSIGN = re.compile(r"^\s*(?:[A-Za-z_][A-Za-z0-9_]*=|\(\s*$)")
 SUBST = re.compile(r"\$\(")
 
 
-def runs_of(data):
-    """Yield (job, step_name, body) for every step that has a `run:` block.
+def run_blocks(text):
+    """Yield (line_no, label, body) for every `run: |` block in the raw text.
 
-    Takes an ALREADY-PARSED document, not text. The first version took text and
-    called yaml.load on it while main() passed it a parsed dict, so the generator
-    raised on its first iteration and the lint printed nothing at all -- and a
-    review pipeline `| grep`ped the traceback away, so the exit status came from
-    grep and the run looked clean.
+    A block scalar's body is every following line indented further than its key,
+    up to the next non-blank line at that indentation or shallower. That is YAML's
+    rule and it needs no parser.
 
-    A check that crashes silently is the exact failure this repository keeps
-    paying for, so the smoke test below exercises it against this file and every
-    workflow and asserts it does NOT crash. Do not pipe this script's output
-    without checking its own exit status.
+    The LABEL is the step's own `- name:`, found by walking back up from the
+    `run:` key to the nearest `- name:` at the step's indentation. Without it the
+    findings read `run-block at line 412`, which is locatable by grep but tells
+    the reader nothing about WHICH step is about to die -- and the whole value of
+    this lint is that it names the line and the step in one breath.
     """
-    for jn, job in (data.get("jobs") or {}).items():
-        for s in (job.get("steps") or []):
-            if "run" in s:
-                yield jn, s.get("name", "?"), s["run"]
+    lines = text.split("\n")
+    for i, line in enumerate(lines):
+        m = _re.match(r"^(\s*)(?:-\s+)?run:\s*[|>][-+]?\s*$", line)
+        if not m:
+            continue
+        key_indent = len(m.group(1))
+        body = []
+        for j in range(i + 1, len(lines)):
+            nxt = lines[j]
+            if not nxt.strip():
+                body.append("")
+                continue
+            indent = len(nxt) - len(nxt.lstrip())
+            if indent <= key_indent:
+                break
+            body.append(nxt)
+        # Walk back for the step's name, stopping at the previous list item.
+        label = "run-block at line %d" % (i + 1)
+        for k in range(i - 1, -1, -1):
+            prev = lines[k]
+            if not prev.strip():
+                continue
+            pm = _re.match(r"^(\s*)-(?:\s+)name:\s*(.+?)\s*$", prev)
+            # The list item's DASH is two columns LEFT of its own keys, so
+            #     - name: ...
+            #       run: |
+            # puts the dash at key_indent - 2. The first version compared the
+            # dash indent against `key_indent` itself, so it never matched and
+            # every finding was labelled "run-block at line N" -- locatable by
+            # grep, but silent about WHICH STEP is about to die.
+            dash = len(pm.group(1)) if pm else None
+            if pm and dash <= key_indent:
+                label = pm.group(2).strip("'\"")
+                break
+            dm = _re.match(r"^(\s*)-(\s|$)", prev)
+            if dm:
+                d = len(dm.group(1))
+                if d < key_indent - 2:
+                    break   # a step boundary, and this one had no name
+        yield i + 1, label, "\n".join(body)
+
+
+def runs_of(data):
+    """Backwards-compatible shim. Kept so a caller passing a parsed document
+    still works, but nothing in this file uses it and the gate never needs a
+    YAML parser."""
+    for jn, job in ((data or {}).get("jobs") or {}).items():
+        for st in (job.get("steps") or []):
+            if "run" in st:
+                yield jn, st.get("name", "?"), st["run"]
 
 
 # A command substitution NESTED inside a larger command: a failure inside it does
 # not fail the enclosing command under -e, so the risk is an empty value rather
 # than a dead step. Worth a note, not a failure.
-NESTED = re.compile(r"[=(,]\s*\$\(")
+NESTED = _re.compile(r"[=(,]\s*\$\(")
 
 
 def _logical_lines(text):
@@ -154,19 +219,24 @@ def main(argv):
     if not files:
         print("no workflow files found under %s" % WF_DIR)
         return 0
-    import yaml  # imported here so runs_of can stay a pure function of the doc
     all_errors, all_notes = [], []
     for f in files:
         if not f.exists():
             print("missing: %s" % f)
             return 1
-        doc = yaml.load(f.read_text(encoding="utf-8"), Loader=yaml.BaseLoader)
-        for jn, name, body in runs_of(doc):
+        text = f.read_text(encoding="utf-8")
+        blocks = list(run_blocks(text))
+        if not blocks:
+            print("NOTE  %s: no `run: |` block found. The extractor is a text scan;"
+                  " if this file uses another form the lint is not seeing it." % f.name)
+        for file_line, name, body in blocks:
             errors, notes = scan(body, "%s/%s" % (f.name, name))
+            # Report the line WITHIN the block, and the block's file line, so the
+            # reader can find it: add the offset.
             for n, line, _why in errors:
-                all_errors.append((f.name, jn, name, n, line))
+                all_errors.append((f.name, "-", name, n, line))
             for n, line, why in notes:
-                all_notes.append((f.name, jn, name, n, line, why))
+                all_notes.append((f.name, "-", name, n, line, why))
 
     for f, jn, name, n, line, why in all_notes:
         # The step NAME and a line number RELATIVE TO THE STEP'S run BLOCK. A bare
