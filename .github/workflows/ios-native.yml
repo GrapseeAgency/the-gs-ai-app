@@ -589,6 +589,25 @@ jobs:
             # llama_backend_init sets up the backend registry, ggml_init is what
             # the ggml side needs, and llama_free releases it. Any one missing
             # means the engine cannot run, and the message names which.
+            # SYMBOLS, COUNTED, ON EVERY RUN.
+            #
+            # These print whether or not the required symbols are found, so a
+            # merge that quietly stopped including llama.cpp shows up as a
+            # FALLING NUMBER rather than as a link error much later. Run
+            # 36737879525 merged to 35,291,352 bytes with libggml-cpu's own
+            # objects inside it, and then reported the three llama entry points
+            # missing -- and the only evidence offered was five lines of Rust
+            # allocator internals, which says the archive is not empty and
+            # nothing whatsoever about llama.
+            #
+            # A check that stops a build must hand the reader something to act
+            # on, so the counts are printed on the failure path too.
+            NSYM=$(nm -gU "$OUT" 2>/dev/null | wc -l | tr -d ' ')
+            echo "  global defined symbols : $NSYM"
+            echo "  names containing llama : $(nm "$OUT" 2>/dev/null | grep -ci llama || true)"
+            echo "  global T _llama*       : $(nm -gU "$OUT" 2>/dev/null | grep -cE ' T _?llama' || true)"
+            echo "  archive members        : $(ar -t "$OUT" 2>/dev/null | wc -l | tr -d ' ')"
+
             MISSING=""
             for SYM in llama_backend_init llama_model_load llama_free; do
               if ! nm -gU "$OUT" 2>/dev/null | grep -qE " T _?${SYM}\$"; then
@@ -597,6 +616,22 @@ jobs:
             done
             if [ -n "$MISSING" ]; then
               echo "::error::$OUT is missing:$MISSING. The engine cannot initialise."
+              # WHICH of the four possible causes this is, from the counts above.
+              #
+              #   llama named but not as ` T `   -> nm type letter, check is wrong
+              #   llama named, 0 members         -> libtool dropped the input
+              #   0 anywhere                     -> not in the archives at all
+              #
+              # None of these is guessed at; the numbers decide.
+              echo "  --- why, and the evidence ---"
+              echo "  any llama symbol, any type, first few:"
+              nm "$OUT" 2>/dev/null | grep -i llama | sed -n '1,5p' | sed 's/^/    /'
+              echo "  members whose name mentions llama:"
+              ar -t "$OUT" 2>/dev/null | grep -i llama | sed -n '1,5p' | sed 's/^/    /' || echo "    (none)"
+              echo "  sizes of what went in, and what came out:"
+              for F in "$SLICE" $ORDER "$OUT"; do
+                echo "    $(stat -f%z "$F" 2>/dev/null || stat -c%s "$F" 2>/dev/null)  $F"
+              done
               echo "  first symbols present:"
               nm -gU "$OUT" 2>/dev/null | grep -E ' T ' | sed -n '1,5p' | sed 's/^/    /'
               exit 1
