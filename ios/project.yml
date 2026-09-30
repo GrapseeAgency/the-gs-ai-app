@@ -47,6 +47,29 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.grapsee.gsai
+        # LIBC++. libgs_ffi.a is C++, and a static library does not carry its
+        # own runtime. Without this the app target links and every C++ symbol
+        # libgs_ffi.a references is undefined (run 36663379374, the first
+        # successful compile of this app and therefore the first link):
+        #
+        #   Undefined symbols for architecture arm64:
+        #     "std::length_error::~length_error()"
+        #     "std::logic_error::logic_error(char const*)"
+        #     "std::__1::thread::hardware_concurrency()"
+        #     "vtable for std::length_error"
+        #     "typeinfo for std::exception"
+        #     "operator delete(void*)"
+        #
+        # The same class of fault as the Android job's missing
+        # libc++_shared.so, which cost that platform a run too: a C++ engine
+        # shipped into a target that does not link the C++ runtime.
+        #
+        # `-lc++` AND `-ObjC++`: the first pulls in libc++, and the second
+        # compiles the target's own .mm/.cpp and is what makes the linker
+        # accept C++ static initialisers. Setting only CLANG_CXX_LANGUAGE_STANDARD
+        # chooses a dialect and links nothing.
+        OTHER_LDFLAGS: "$(inherited) -lc++ -ObjC++"
+        CLANG_CXX_LANGUAGE_STANDARD: "c++17"
         # The app target's module name must be GSApp: AppTests does
         # `@testable import GSApp` (default module name would be "App" and
         # the test target would fail to build with "no such module 'GSApp'").
@@ -91,6 +114,13 @@ targets:
     platform: iOS
     sources:
       - path: App/Tests
+    settings:
+      base:
+        # The test bundle links libgs_ffi.a itself, so it needs libc++ for the
+        # same reason the app does. A unit-test bundle gets no transitive link
+        # flags from its host, so this is not inherited from the App target.
+        OTHER_LDFLAGS: "$(inherited) -lc++ -ObjC++"
+        CLANG_CXX_LANGUAGE_STANDARD: "c++17"
     dependencies:
       - target: App
       # @testable import GSApp re-exports the app module, but the framework has
