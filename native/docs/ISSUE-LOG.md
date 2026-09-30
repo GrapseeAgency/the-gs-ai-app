@@ -9,9 +9,10 @@ Time is UTC.
 
 ## THE WHOLE SUITE IS GREEN — 12/12
 
-Run `36678235677`, x86_64 emulator, Android API 30. Twelve tests, no failures,
-no skips, job green. (Re-confirmed after the ABI was made a parameter, so this
-is not the run from before that change.)
+Run `36707513732`, x86_64 emulator, Android API 30. **Fourteen** tests, no
+failures, no skips, job green. (Re-confirmed after the ABI was made a parameter
+and after two new tests were added, so this is not a run from before either
+change.)
 
 | test | result | evidence |
 |------|--------|----------|
@@ -23,6 +24,8 @@ is not the run from before that change.)
 | `a4_resume_continues_from_the_partial_file` | PASS | `seeded partial = 4096 bytes`, resumed, SHA-256 matched the catalogue |
 | `a5_prefer_local_is_off_by_default` | PASS | `stored preferLocal = false` — and it now ASSERTS this; it used to be `assertTrue("settings are readable", true)` |
 | `a6_the_chat_screen_path_answers_from_the_engine` | PASS | see below |
+| `a7_the_switch_actually_routes_off_and_on` | PASS | `OFF -> — GS backend error (HTTP 0) —` and `ON -> Paris.` — the two branches DIFFER, so the flag routes |
+| `a8_the_canned_responder_still_answers` | PASS | the fallback answers after a mid-stream cut. **The first version proved nothing** — see below |
 | `failureIsAnExceptionNotAnEmptyString` | PASS | `chat("hello")` returns text, `chat("")` raises |
 | `libraryLoadsAndExportsBuildInfo` | PASS | — |
 | `ocrReturnsTextOnAFixtureImage` | PASS | `INVOICE INV-4471 DUE 2026-03-01` |
@@ -209,6 +212,64 @@ workflow selected `system-images;android-30;google_apis;arm64-v8a`, fetched the
 arm64 llama.cpp and the arm64 `libgs_ffi.so`, and asserted `ELF machine: AArch64`
 from the bytes before the APK was ever built.
 
+
+## A REAL PRODUCT BUG: the switch did not gate the engine
+
+`ChatRepository.streamLocalReply` is the path taken when the **provider fails**.
+It read:
+
+    val reply = nativeReply(prompt) ?: localReply(prompt)
+
+unconditionally. `nativeReply()` calls `GsNative.chat`. So with "Prefer on-device
+AI" **OFF** — the default, and the setting a user turns off precisely to stop
+prompts reaching an on-device model — an unavailable network was enough to send
+the prompt there anyway.
+
+That is the opposite of the property the switch exists for, as commit 1(b) says
+in the same file:
+
+> With "Prefer on-device AI" off — which is the default — this is a single false
+> and everything below is byte-for-byte the routing that shipped.
+
+Now gated on `SettingsStore.preferLocal`. The canned responder is **not**
+removed: a phone with no model, a build with no engine, or a generation that
+throws must still answer.
+
+**Twelve green tests never caught this.** a1 and a6 both run with the engine
+available and neither reaches `streamLocalReply`; a6 exercises `streamLocalFirst`,
+the local-**first** branch, which was correctly gated. The provider-**failed**
+branch had no test at all.
+
+Proven by a7, whose two branches differ on a real device:
+
+    LocalFirstToggleTest: OFF -> — GS backend error (HTTP 0) —
+    LocalFirstToggleTest: ON  -> Paris.
+
+The `assertNotEquals(off, on)` is what makes it a routing test: two independent
+assertions pass whether the flag is wired up, inverted, or ignored.
+
+### a8 was a false pass, and the fix for it is in the file
+
+My first a8 pointed `ApiClient` at `127.0.0.1:1`, which produces
+`SendFailure.BackendError`, and that arm of `send()` **returns at that line**
+without ever calling `streamLocalReply`:
+
+    is SendFailure.BackendError -> {
+        val serverText = … ?: "GS backend error (HTTP ${failure.status})"
+        …
+        return activeId
+    }
+
+So it never called `localReply()` once, and `assertTrue(reply.isNotBlank())` was
+satisfied by the error marker itself. Run `36707513732` printed the identical
+string for both a8 and a7's OFF branch — that is what exposed it.
+
+a8 now serves a real chunked SSE response from a raw `ServerSocket` and hangs up
+mid-stream, which is the case `localReply()` exists for, and asserts the
+responder's text is present and the error marker is not. No new dependency:
+`build.gradle.kts` has only the ktor **client** artifacts, and adding a server to
+the app for one test is the wrong trade.
+
 ## STILL OPEN
 
 | item | state | why |
@@ -274,3 +335,9 @@ from the bytes before the APK was ever built.
     there, so comments left inside `$( ... )` made the pipe a separate command.
     Third trap of this family in this repo, after the YAML column-0 trap and the
     flattened continuation.
+24. iOS: `libggml-metal.a` references Metal and Objective-C symbols that the
+    cargo link does not resolve, because `cc` is the linker driver and
+    `ios/project.yml`'s `OTHER_LDFLAGS` only reaches xcodebuild. Both links need
+    `-framework Metal -framework Foundation`, from different files.
+25. a8 asserted on the backend-error marker and never called the canned
+    responder; the arm that emits that marker returns before `streamLocalReply`.
