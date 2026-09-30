@@ -15,7 +15,9 @@ import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import io.ktor.utils.io.readUTF8Line
+import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.isActive
 import kotlinx.serialization.json.Json
 
 /**
@@ -201,10 +203,35 @@ class ApiClient(
             val line = try {
                 channel.readUTF8Line()
             } catch (ce: CancellationException) {
-                // A cancelled turn is not a cut. Rethrowing keeps the coroutine's
-                // cancellation intact, and wrapping it would turn "the user
-                // navigated away" into a fake network event.
-                throw ce
+                // THE SUBTLE CASE, AND THE ONE THAT ALMOST CERTAINLY BIT RUN
+                // 36781918633, which still printed
+                //
+                //     Classify: mid-stream cut -> — GS backend error (HTTP 0) —
+                //     Classify: server saw 1 request(s)
+                //
+                // after the GsStreamCutException catch was added, so nothing was
+                // throwing as a plain Exception: the read was throwing a
+                // CancellationException.
+                //
+                // Ktor raises CancellationException when the PEER closes the
+                // channel mid-read. That is a transport failure wearing the
+                // costume of a cancellation, and the plain `catch (ce) { throw
+                // ce }` I wrote first rethrew it unchanged -- so the cut reached
+                // classifySendFailure as a CancellationException, matched none of
+                // the unreachable shapes, and fell through to the fabricated
+                // status. It reproduced the original bug exactly.
+                //
+                // SO DISCRIMINATE ON WHOSE CANCELLATION IT IS. A cancelled TURN
+                // cancels this coroutine's Job, so the context is NOT active and
+                // the rethrow is correct. A peer that dropped the connection
+                // leaves the Job running -- the user is still waiting -- so the
+                // context IS active and this is a cut.
+                //
+                // Either way the Job is untouched, so there is no case where the
+                // user's own cancellation is swallowed: `throw ce` still runs for
+                // it.
+                if (!coroutineContext.isActive) throw ce
+                throw GsStreamCutException(status = response.status.value, cause = ce)
             } catch (e: Exception) {
                 throw GsStreamCutException(status = response.status.value, cause = e)
             }

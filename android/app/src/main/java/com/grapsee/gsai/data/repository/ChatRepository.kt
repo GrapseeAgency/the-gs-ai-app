@@ -63,8 +63,24 @@ private sealed class SendFailure {
     object MidStreamCut : SendFailure()
     /** (b) TCP connect failed — genuinely unreachable. */
     object GenuineUnreachable : SendFailure()
-    /** (c) Server answered with an error status — carries its sanitized message. */
-    data class BackendError(val status: Int, val serverMessage: String?) : SendFailure()
+    /**
+     * (c) The request failed and there is no server message to show.
+     *
+     * [status] is 0 when NO HTTP status was ever received. A status code of 0
+     * does not exist, and it was being rendered to the user as "GS backend error
+     * (HTTP 0)" — a fabricated code describing a failure that did not happen.
+     * Run 36781918633 measured that string for a provider that had served one
+     * request and written one SSE delta.
+     *
+     * [localReason] is what actually went wrong, and it is what gets shown
+     * instead. Defaulted, so the server-message path is untouched.
+     */
+    data class BackendError(
+        val status: Int,
+        val serverMessage: String?,
+        /** The local cause, when there was no server message to show. */
+        val localReason: String? = null,
+    ) : SendFailure()
 }
 
 private fun classifySendFailure(e: Exception, receivedAnyEvent: Boolean): SendFailure {
@@ -91,7 +107,26 @@ private fun classifySendFailure(e: Exception, receivedAnyEvent: Boolean): SendFa
         e is SocketTimeoutException ||
         e.message?.contains("unresolved", ignoreCase = true) == true ||
         e.message?.contains("failed to connect", ignoreCase = true) == true
-    return if (unreachable) SendFailure.GenuineUnreachable else SendFailure.BackendError(0, null)
+    if (unreachable) return SendFailure.GenuineUnreachable
+
+    // NOT BackendError(0, null), and the reason is that "HTTP 0" is a status code
+    // that does not exist. Whatever arrives here is a failure with no HTTP status
+    // behind it, so the status is dropped and the CAUSE is carried instead.
+    //
+    // This is also what makes the case diagnosable rather than merely wrong. When
+    // a mid-stream cut was expected to be caught by GsStreamCutException and the
+    // run still printed "GS backend error (HTTP 0)", the string named nothing
+    // that could be acted on. It will now name the exception that arrived, which
+    // is either the answer or the next thing to look at.
+    //
+    // The message is truncated and newlines flattened: this is user-facing copy
+    // that lands in the transcript, and an exception message can be arbitrarily
+    // long and multi-line.
+    val cause = buildString {
+        append(e::class.java.simpleName)
+        e.message?.takeIf { it.isNotBlank() }?.let { append(": ").append(it) }
+    }.replace(Regex("\\s+"), " ").trim().take(120)
+    return SendFailure.BackendError(status = 0, serverMessage = null, localReason = cause)
 }
 
 class ChatRepository(
@@ -510,7 +545,13 @@ class ChatRepository(
                 // (3) BACKEND_ERROR — the server answered with an error
                 //     status: show the SERVER'S SANITIZED error message.
                 is SendFailure.BackendError -> {
+                    // The order is the point: a real server message wins, then the
+                    // local cause, and the fabricated "HTTP 0" is only reached when
+                    // there is neither — which after the change above cannot happen,
+                    // because status 0 always carries a localReason. The last line is
+                    // kept so the string cannot be empty, not because it is reachable.
                     val serverText = failure.serverMessage?.takeIf { it.isNotBlank() }
+                        ?: failure.localReason?.takeIf { it.isNotBlank() }
                         ?: "GS backend error (HTTP ${failure.status})"
                     val marker = "— $serverText —\n\n"
                     accumulated.append(marker)
