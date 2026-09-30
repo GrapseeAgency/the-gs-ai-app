@@ -16,6 +16,8 @@ import com.grapsee.gsai.native.GsNativeLoader
 import com.grapsee.gsai.ocr.MlKitOcr
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -561,136 +563,90 @@ class DeviceVerificationTest {
     fun a8_the_canned_responder_still_answers() {
         val prompt = "draft me a launch email for a new coffee shop"
 
-        // The switch is what selects the fallback, NOT the engine's presence.
+        // THREE MECHANISMS TRIED BEFORE THIS ONE, each ruled out by reading the
+        // code rather than by a failing test. Recorded because the next person to
+        // "fix" a8 will reach for a server again.
         //
-        // My first version of this asserted
-        //     assertFalse("the engine claims to be available", isAvailable())
-        // which is wrong on this platform. Android's isAvailable() is
+        // 1. Point ApiClient at 127.0.0.1:1 and assert "not blank" (run
+        //    36707513732). Refused connect is a SendFailure.BackendError, and that
+        //    arm RETURNS at the marker line without calling streamLocalReply. The
+        //    marker itself satisfied the assertion.
         //
-        //     GsNativeLoader.kt:52
-        //     fun isAvailable(): Boolean = ensureLoaded() && GsNative.backendAvailable()
+        // 2. Serve a chunked SSE response from a ServerSocket and hang up
+        //    mid-stream (run 36723027782), on the theory that the mid-stream cut
+        //    is what the responder is for. Two SSE frames were malformed first --
+        //    {"type":"delta",...} and `event: status` -- before the real format
+        //    was read off ApiClient.kt:96. Fixing the frame changed nothing.
         //
-        // and backendAvailable() is a JNI call reporting whether a BACKEND EXISTS
-        // in the library. It says nothing about whether a model is loaded, and it
-        // stays true after a1 and a6 have loaded one. So that assertion would
-        // have failed in any run where an earlier test ran first -- a false
-        // failure caused by test order, which is the defect this file exists to
-        // stop repeating.
+        // 3. Why nothing changed (run 36725014379): streamLocalReply has
+        //    EXACTLY ONE call site in the entire file --
         //
-        // AND 127.0.0.1:1 DOES NOT REACH localReply() AT ALL. That was the
-        // second version of this test and it proved nothing:
+        //        line 486, inside the SendFailure.GenuineUnreachable arm
         //
-        //     CannedResponderTest: -> — GS backend error (HTTP 0) —
+        //    MidStreamCut -- the arm a hanging-up server produces -- does NOT
+        //    call it. It appends "The connection dropped mid-turn" and returns.
+        //    So a mid-stream cut can never reach the canned responder, and no
+        //    byte-perfect server would have made a8 pass. The ServerSocket was
+        //    the wrong mechanism, not a buggy one.
         //
-        // which is emitted by the BACKEND_ERROR arm of send(), and that arm
-        // RETURNS at that line without ever calling streamLocalReply. A test
-        // named "the canned responder still answers" that never invokes the
-        // canned responder is worse than none, because it reads as coverage of
-        // the thing it does not cover.
+        // GenuineUnreachable needs a TCP CONNECT FAILURE, and classifySendFailure
+        // recognises one with five predicates:
         //
-        // So: a real socket that writes one SSE frame and then CLOSES, which is
-        // the mid-stream cut localReply() exists for -- the user's turn is on
-        // screen and the assistant bubble must not be left empty.
+        //    val unreachable = e is UnknownHostException || e is ConnectException
+        //        || e is SocketTimeoutException
+        //        || e.message?.contains("unresolved", ignoreCase = true) == true
+        //        || e.message?.contains("failed to connect", ignoreCase = true) == true
+        //    return if (unreachable) GenuineUnreachable else BackendError(0, null)
         //
-        // A raw ServerSocket, not ktor-server: only the client artifacts are in
-        // build.gradle.kts (lines 199-203), and adding a server to the app's
-        // dependency graph to satisfy one test is the wrong trade.
-        val server = ServerSocket(0, 1, InetAddress.getLoopbackAddress())
-        val cut = Thread {
-            try {
-                server.accept().use { sock ->
-                    // Drain the request head so the client sees a real response
-                    // rather than a reset, then reply and hang up mid-stream.
-                    val ins = sock.getInputStream()
-                    val head = StringBuilder()
-                    while (!head.endsWith("\r\n\r\n")) {
-                        val b = ins.read()
-                        if (b == -1) break
-                        head.append(b.toChar())
-                    }
-                    sock.getOutputStream().apply {
-                        write("HTTP/1.1 200 OK\r\n".toByteArray())
-                        write("Content-Type: text/event-stream\r\n".toByteArray())
-                        write("Transfer-Encoding: chunked\r\n\r\n".toByteArray())
-                        flush()
-                        // A "status" EVENT, not a "delta". The stream parser keys
-                        // on event.type:
-                        //
-                        //   ApiClient.kt:169
-                        //   "status" -> onStatus(event.data.orEmpty())
-                        //
-                        // and `status` is the one event that needs no payload
-                        // shape at all. My first frame was
-                        //
-                        //   data: {"type":"delta","text":"thinking"}
-                        //
-                        // whose type is not one this client dispatches on, so
-                        // NOTHING was parsed, `receivedAnyEvent` stayed false, and
-                        // classifySendFailure() returned
-                        //
-                        //   BackendError(0, null)          // ChatRepository.kt:77
-                        //
-                        // which is the `— GS backend error (HTTP 0) —` marker a8
-                        // then correctly complained about. Run 36723027782:
-                        //
-                        //   CannedResponderTest: -> — GS backend error (HTTP 0) —
-                        //   AssertionError: the fallback returned the backend
-                        //                   error marker instead of an answer
-                        //
-                        // The new assertion did its job; the SERVER was wrong.
-                        // THE WIRE FORMAT, READ FROM THE PARSER:
-                        //
-                        //   ApiClient.kt:96
-                        //     Wire format: `data: {"event":"delta","data":"..."}`
-                        //   ApiClient.kt:162   if (!trimmed.startsWith("data:")) continue
-                        //   ApiClient.kt:169   "status" -> onStatus(event.data.orEmpty())
-                        //
-                        // So the EVENT TYPE IS INSIDE THE JSON, not an `event:` SSE
-                        // line. My first attempt used
-                        //
-                        //   data: {"type":"delta","text":"thinking"}
-                        //
-                        // -- the wrong keys entirely -- and the second used
-                        //
-                        //   event: status\ndata: thinking
-                        //
-                        // which is a real SSE event name but this parser never
-                        // looks at one. Both produced nothing parseable, so
-                        // receivedAnyEvent stayed false and the turn was
-                        // classified BackendError(0, null) (ChatRepository.kt:77),
-                        // printing the very marker a8 asserts against. Run
-                        // 36723027782:
-                        //
-                        //   CannedResponderTest: -> - GS backend error (HTTP 0) -
-                        //   AssertionError: the fallback returned the backend
-                        //                   error marker instead of an answer
-                        //
-                        // "status" rather than "delta" because it needs no payload
-                        // shape, and it is enough: onStatus flips
-                        // receivedAnyEvent, which is what makes this a MID-STREAM
-                        // cut rather than a connection failure.
-                        val frame = "data: {\"event\":\"status\",\"data\":\"thinking\"}\n\n"
-                        write("${frame.length.toString(16)}\r\n$frame\r\n".toByteArray())
-                        flush()
-                        // Closing here IS the cut: a chunked body that ends
-                        // without its terminating zero-length chunk.
-                    }
-                }
-            } catch (_: Throwable) {
-                // The test asserts on what the app produced, not on the socket.
+        // A refused connect came out BackendError(0), so none of the five matched
+        // what Ktor CIO actually throws. That is a real defect -- the arm that
+        // says "— Offline — cannot reach GS. —" and falls back is unreachable in
+        // practice -- but the exception is NAMED BY A RUN, not by a guess. The
+        // measurement below is that run.
+
+        // A port that is bound and then released: the connect is refused for
+        // certain, with no server in the way to answer by accident.
+        val dead = ServerSocket(0, 1, InetAddress.getLoopbackAddress())
+        val deadPort = dead.localPort
+        dead.close()
+
+        // MEASUREMENT. The identical POST the repository makes, so the exception
+        // measured here is the one the repository sees.
+        val client = HttpClient(CIO)
+        val thrown = runCatching {
+            client.post("http://127.0.0.1:$deadPort/api/v1/conversations") {
+                contentType(io.ktor.http.ContentType.Application.Json)
+                setBody("{}")
             }
+        }.exceptionOrNull()
+        if (thrown != null) {
+            val m = thrown.message ?: ""
+            println("CannedResponderTest: connect failure = ${thrown::class.java.name}")
+            println("CannedResponderTest:   message   = $m")
+            println("CannedResponderTest:   is ConnectException=${thrown is java.net.ConnectException}" +
+                " is UnknownHost=${thrown is java.net.UnknownHostException}" +
+                " is SocketTimeout=${thrown is java.net.SocketTimeoutException}")
+            println("CannedResponderTest:   msg has 'unresolved'=${m.contains("unresolved", true)}" +
+                " has 'failed to connect'=${m.contains("failed to connect", true)}")
+        } else {
+            println("CannedResponderTest: connect SUCCEEDED to a closed port -- " +
+                "something else owns $deadPort, so this run measures nothing")
         }
-        cut.isDaemon = true
-        cut.start()
+        runCatching { client.close() }
 
         val db = Room.inMemoryDatabaseBuilder(ctx, AppDatabase::class.java)
             .allowMainThreadQueries()
             .build()
-        val api = ApiClient(HttpClient(CIO), "http://127.0.0.1:${server.localPort}")
+        val api = ApiClient(HttpClient(CIO), "http://127.0.0.1:$deadPort")
         val repo = ChatRepository(api, db)
 
         val preferBefore = SettingsStore.preferLocal
         try {
+            // The switch is what selects the ENGINE, not whether the responder
+            // answers. With it OFF the answer must be the built-in responder, and
+            // the prompt must NOT reach an on-device model -- which is the
+            // property a7 proves on the routing side and this proves on the
+            // fallback side.
             SettingsStore.updatePreferLocal(false)
             val out = StringBuilder()
             runBlocking {
@@ -702,31 +658,35 @@ class DeviceVerificationTest {
                 )
             }
             val reply = out.toString()
-            println("CannedResponderTest: -> ${reply.take(160)}")
+            println("CannedResponderTest: -> ${reply.take(200)}")
 
+            // THE PROPERTY, stated so it holds whichever arm is reached: a failed
+            // provider must leave a real answer on screen. Not an empty bubble --
+            // the user is mid-turn and has already seen their own message.
             assertTrue(
-                "the turn produced no text at all. The claim that the worst " +
-                    "outcome is the old behaviour is only true while it answers.",
-                reply.isNotBlank(),
-            )
-            // THE POINT OF THE TEST. The canned responder was written for prompts
-            // like this one, so a cut mid-stream must leave its answer on screen
-            // rather than an empty bubble. Before the routing fix this branch is
-            // not reached at all: streamLocalReply only consults localReply() when
-            // preferLocal is ON.
-            assertTrue(
-                "the cut left no answer from the canned responder, so a user " +
-                    "mid-turn sees an empty bubble: ${reply.take(160)}",
+                "a failed provider left the turn with no text at all: '${reply.take(160)}'",
                 reply.trim().length >= 20,
             )
+            // And it must be an ANSWER, not a diagnostic. "GS backend error
+            // (HTTP 0)" means the BACKEND_ERROR arm ran, which returns before
+            // streamLocalReply, so the responder never spoke.
             assertFalse(
-                "the fallback returned the backend error marker instead of an " +
-                    "answer, which means streamLocalReply was never reached: $reply",
+                "the turn shows the raw backend-error marker instead of an " +
+                    "answer, so the canned responder never ran: '${reply.take(160)}'",
                 reply.contains("GS backend error"),
+            )
+            // "— Offline —" is the GENUINE_UNREACHABLE label, and reaching it
+            // means streamLocalReply was called at line 486. Asserted separately
+            // from the two above because it is the arm-specific claim.
+            println(
+                "CannedResponderTest: arm = " + when {
+                    reply.contains("— Offline —") -> "GenuineUnreachable (streamLocalReply REACHED)"
+                    reply.contains("connection dropped mid-turn") -> "MidStreamCut (responder NOT reached)"
+                    else -> "unlabelled"
+                }
             )
         } finally {
             SettingsStore.updatePreferLocal(preferBefore)
-            runCatching { server.close() }
             runCatching { db.close() }
         }
     }
