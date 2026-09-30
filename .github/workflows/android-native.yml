@@ -44,7 +44,15 @@ jobs:
             triple: aarch64-linux-android
             target: aarch64-linux-android
           - abi: armeabi-v7a
-            triple: armv7a-linux-androideabi
+            # NOT armv7a-linux-androideabi. That is the Clang target
+            # triple; the sysroot DIRECTORY is named arm-linux-androideabi.
+            # The runner listed it for us, run 36648181332:
+            #     aarch64-linux-android  arm-linux-androideabi
+            #     i686-linux-android      x86_64-linux-android
+            # and then failed on the path we asked for instead:
+            #     ls: cannot access .../usr/lib/armv7a-linux-androideabi
+            #     ::error::libc++_shared.so still absent from the documented path
+            triple: arm-linux-androideabi
             target: armv7-linux-androideabi
           - abi: x86_64
             triple: x86_64-linux-android
@@ -222,8 +230,34 @@ jobs:
           for A in native/prebuilts/android-${{ matrix.abi }}/lib/*.a; do
             M=$(python3 -c 'import struct,sys
           d=open(sys.argv[1],"rb").read(); off=8; n=0; bad=0
-          MACH={0x03:"i386",0x3e:"x86-64",0x28:"ARM",0xb7:"AArch64"}
-          WANT={"arm64-v8a":"AArch64","armeabi-v7a":"ARM","x86_64":"x86-64","x86":"i686"}["${{ matrix.abi }}"]
+          # Compare e_machine NUMBERS, not names.
+          #
+          # These were two separate dicts -- MACH mapped e_machine to a name
+          # and WANT mapped the ABI to a name -- and the x86 entry disagreed:
+          #
+          #     MACH = {0x03: "i386",  0x3e: "x86-64",  0x28: "ARM",  0xb7: "AArch64"}
+          #     WANT = {..., "x86": "i686"}
+          #
+          # "i386" != "i686", so EVERY object in a correct x86 build was counted
+          # wrong. Raw, run 36648181332, job 109675949671:
+          #
+          #     libggml-base.a: 9 objects, 9 wrong-architecture
+          #     ::error::libggml-base.a in the x86 package is not x86
+          #
+          # and the artifact was fine. Downloaded and read directly:
+          #
+          #     libggml-base.a  objects=9    {i386: 9}
+          #     libggml-cpu.a   objects=14   {i386: 14}
+          #     libggml.a       objects=2    {i386: 2}
+          #     libllama.a      objects=169  {i386: 169}
+          #     every object in every archive under vx/lib is i386
+          #
+          # A check whose two halves can drift is the same defect as the
+          # CMAKE_SYSTEM_PROCESSOR gate it replaced, only inverted: that one
+          # could not fail, this one could only fail. One table, one
+          # comparison, and no name on either side of it.
+          E_MACHINE={"arm64-v8a":0xb7,"armeabi-v7a":0x28,"x86_64":0x3e,"x86":0x03}[sys.argv[2]]
+          NAMES={0x03:"i386",0x3e:"x86-64",0x28:"ARM",0xb7:"AArch64"}
           while off+60<=len(d):
               h=d[off:off+60]
               if h[58:60]!=b"\x60\n": break
@@ -232,11 +266,12 @@ jobs:
               b=d[off+60:off+60+sz]
               if b[:4]==b"\x7fELF":
                   n+=1
-                  if MACH.get(struct.unpack_from("<H",b,18)[0])!=WANT: bad+=1
+                  if struct.unpack_from("<H",b,18)[0]!=E_MACHINE: bad+=1
               off+=60+sz+(sz%2)
-          print("%d objects, %d wrong-architecture" % (n,bad))' "$A")
+          if n==0: print("0 objects -- not an ar archive, refusing to pass"); sys.exit(3)
+          print("%d objects, %d wrong-architecture (want %s)" % (n,bad,NAMES.get(E_MACHINE)))' "$A" "${{ matrix.abi }}")
             echo "  $(basename $A): $M"
-            case "$M" in *" 0 wrong-architecture") ;; *) echo "::error::$(basename $A) in the ${{ matrix.abi }} package is not ${{ matrix.abi }}: $M"; exit 1 ;; esac
+            case "$M" in *" 0 wrong-architecture (want "*) ;; *) echo "::error::$(basename $A) in the ${{ matrix.abi }} package is not ${{ matrix.abi }}: $M"; exit 1 ;; esac
           done
           test -f native/prebuilts/android-${{ matrix.abi }}/include/llama.h || {
             echo "FAIL: no include/llama.h in the prebuilt package"; exit 1; }
