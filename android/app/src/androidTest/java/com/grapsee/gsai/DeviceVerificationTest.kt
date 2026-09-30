@@ -649,6 +649,13 @@ class DeviceVerificationTest {
         val cut = WireServer.start(WireServer.MODE_CUT_MID_STREAM)
         val db2 = inMemoryDb()
         try {
+            // The harness proves it answers before its case concludes anything.
+            assertNotNull(
+                "the mid-stream-cut server did not answer a plain socket probe, " +
+                    "so the \"provider was reachable\" assertion below would be " +
+                    "measuring the harness rather than the product",
+                cut.assertReachable(),
+            )
             val reply = run(
                 ChatRepository(WireServer.apiFor(cut, "a8-cut-${UUID.randomUUID()}"), db2),
             )
@@ -684,6 +691,12 @@ class DeviceVerificationTest {
         val err = WireServer.start(WireServer.MODE_HTTP_500)
         val db3 = inMemoryDb()
         try {
+            // Every mode proves it answers before its case is allowed to conclude
+            // anything. See the note in b2.
+            assertNotNull(
+                "the 500 server did not answer a plain socket probe",
+                err.assertReachable(),
+            )
             val reply = run(
                 ChatRepository(WireServer.apiFor(err, "a8-500-${UUID.randomUUID()}"), db3),
             )
@@ -717,6 +730,10 @@ class DeviceVerificationTest {
         val quiet = WireServer.start(WireServer.MODE_CLEAN_BREAK)
         val db4 = inMemoryDb()
         try {
+            assertNotNull(
+                "the clean-break server did not answer a plain socket probe",
+                quiet.assertReachable(),
+            )
             val reply = run(
                 ChatRepository(WireServer.apiFor(quiet, "a8-clean-${UUID.randomUUID()}"), db4),
             )
@@ -966,6 +983,20 @@ class DeviceVerificationTest {
         try {
             SettingsStore.updatePreferLocal(false)
             assertFalse("the switch did not turn off", SettingsStore.preferLocal)
+
+            // THE HARNESS CHECKS ITSELF FIRST, before the product is asked to do
+            // anything. Runs 36770334063 and 36772124600 both reported
+            // "server saw 0 message request(s)" and both were read as a product
+            // failure when nothing had established the request left the process.
+            // If the server cannot be reached over a plain socket then it is the
+            // HARNESS that is broken, and saying so is the whole point: a test
+            // that cannot distinguish its own breakage from a product defect is
+            // worse than no test, because it reports a failure that is not there.
+            assertNotNull(
+                "the test server did not answer a plain socket probe, so this " +
+                    "harness is broken and any result from it would be meaningless",
+                server.assertReachable(),
+            )
 
             val repo = ChatRepository(
                 WireServer.apiFor(server, "b2-${UUID.randomUUID()}"),

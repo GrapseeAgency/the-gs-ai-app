@@ -122,22 +122,25 @@ class WireServer private constructor(
 
         fun start(mode: String): WireServer {
             val sock = ServerSocket(0, 8, LOOPBACK_V4)
-            // The EXPLICIT getter, not the `localAddress` property: run 36773797694
+            // Only the address ASKED for and the port ACTUALLY got, and no
+            // reported address. Two runs tried to read it and both failed to
+            // compile:
             //
             //   e: WireServer.kt:125:60 Unresolved reference 'localAddress'.
+            //   e: WireServer.kt:140:68 Unresolved reference 'getLocalAddress'.
             //
-            // while `localPort` on the line above it resolved fine, which is the
-            // confusing part. Both claims are printed because the one that matters
-            // is the address the socket ACTUALLY got, and the one I asked for is
-            // the thing that could be wrong:
+            // while sock.localPort, one line away, resolves fine -- and both are
+            // Java getters on the same object, which should mean the property
+            // syntax works for both or neither. Not worth a third theory.
             //
-            //   asked: the loopback address named above
-            //   got:   the address the socket reports
-            //
-            // If those ever differ, the difference IS the bug.
+            // What replaced it is better anyway: [assertReachable] PROVES the
+            // server answers by talking to it over a plain socket, so a broken
+            // harness fails as a harness failure instead of being read as a
+            // product one. That distinction is what this whole file has been
+            // fighting for, and printing an address never established it.
             println(
-                "WireServer[$mode] listening on port ${sock.localPort}; " +
-                    "asked for $LOOPBACK_V4, socket reports ${sock.getLocalAddress()}",
+                "WireServer[$mode] bound to $LOOPBACK_V4, listening on port " +
+                    "${sock.localPort} (use assertReachable() to prove it answers)",
             )
             val server = WireServer(sock)
             val loop = Thread {
@@ -207,6 +210,44 @@ class WireServer private constructor(
     val createRequests = AtomicInteger(0)
 
     fun port(): Int = socket.localPort
+
+    /**
+     * PROVE this server answers, by talking to it over a plain JDK socket.
+     *
+     * This exists because of two runs that read a product failure out of a broken
+     * harness. Both 36770334063 and 36772124600 produced
+     *
+     *     server saw 0 message request(s)
+     *
+     * and both were interpreted as "the network request was blocked" when nothing
+     * had established that the request left the process at all. A server that is
+     * running, bound to the wrong address family, and never asked looks EXACTLY
+     * like a product that cannot reach the network.
+     *
+     * So the harness checks itself first, with a bare `java.net.Socket` to
+     * 127.0.0.1 and a trivial HTTP GET. It uses nothing from the app -- no Ktor, no
+     * ApiClient, no ContentNegotiation -- because the question here is "is there
+     * anything listening at this address", and a client under test cannot answer
+     * that question about itself.
+     *
+     * Returns the status line it read, or null if the connection did not complete,
+     * so the caller can print what actually happened.
+     */
+    fun assertReachable(): String? = try {
+        Socket("127.0.0.1", port()).use { probe ->
+            probe.soTimeout = 5_000
+            probe.getOutputStream().apply {
+                write("GET /harness-probe HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n".toByteArray())
+                flush()
+            }
+            val line = probe.getInputStream().bufferedReader().readLine()
+            println("WireServer harness probe -> $line")
+            line
+        }
+    } catch (e: Exception) {
+        println("WireServer harness probe FAILED: ${e::class.java.name}: ${e.message}")
+        null
+    }
 
     fun stop() {
         runCatching { socket.close() }
