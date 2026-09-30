@@ -111,13 +111,67 @@ Check added after: every `gs_*` function the Swift bridge calls is declared in o
 of the two headers the xcframework publishes. That is what would have caught
 `gs_llama_free_text` before the build did.
 
+
+## iOS — the app builds, links, and its tests RUN
+
+Run `36671474326`, both jobs green. Before this session nothing in `ios/` had
+ever been compiled: `canImport(GsFfi)` was false, `probe()` returned
+`libraryMissing`, and that is a supported configuration, so it read green.
+
+The chain to get here, each run failing at the next thing:
+
+| run | what it showed |
+|-----|----------------|
+| `36659050115` | `xcode-select: invalid developer directory Xcode_16.2.app` — hardcoded, not on the image |
+| `36660102564` | slice check grepped `ios-simulator`; real name `ios-arm64-simulator`. Both slices WERE there |
+| `36662206901` | **first compile** — 4 pre-existing Swift bugs |
+| `36663379374` | **first link** — 21 undefined symbols, all libc++ |
+| `36664200219` | no x86_64 simulator slice; runner was Intel |
+| `36665244922` | `x86_64-apple-ios-sim` is not a Rust target |
+| `36666106903` | `assert_arch_member.sh` got a LABEL where the ARCH goes, so arch defaulted to arm64 |
+| `36667019000` | `ar` cannot read a fat archive |
+| `36667890600` | `lipo -thin` on a thin library is an error |
+| `36668750491` | xcframework **green + uploaded**; consumer job failed on a hardcoded slice name |
+| `36669723190` | app **compiles and links**; test bundle missing `@testable import GSApp` |
+| `36670596253` | 2 methods `throw XCTSkip` without `throws` |
+| `36671474326` | **all green** |
+
+All 7 GsNative tests, first execution ever:
+
+```
+passed  testFrameworkIsReachableOrAbsentCleanly          0.011s
+passed  testShutdownIsIdempotent                         0.002s
+skipped testChatReturnsNonEmptyText                      0.016s
+skipped testEmbedImageRejectsShortBuffer                 0.211s
+skipped testFailureThrowsRatherThanReturningEmptyString  0.004s
+skipped testOcrReturnsTextOnFixture                      0.002s
+skipped testSamePromptTwiceIsIdentical                   0.001s
+```
+
+Whole `AppTests` bundle: **40 passed, 0 failed, 5 skipped**.
+
+The 5 skips had a cause, in the log:
+
+    GsNativeLoader: native engine unavailable: no GsFfi framework:
+      framework imported but no build info
+
+`buildInfo` read `gs_last_error()` — the FAILURE channel — so it returned `""`
+whenever no error was pending, which on a healthy engine is always. The framework
+was imported and linked; the engine was told it was missing. `gs_mobile_build_info()`
+is the function for this and it is in `gs_mobile.h:95`, one of the two headers the
+xcframework publishes. Fixed in `8fa8792`.
+
+**That is why the job was green with 5 skips and not caught: the two tests that
+could run without an engine both passed.** A green job reported an engine that
+reported itself missing.
+
 ## STILL OPEN
 
 | item | state | why |
 |------|-------|-----|
 | arm64 **device** run | NOT ATTEMPTED | an `arm64-v8a` system image on an `x86_64` runner has no KVM. Every result above is x86_64, which is **not the shipping ABI**. No arm64 code path has ever executed. |
 | ~~`armeabi-v7a` / `x86`~~ | **CLOSED** | all four ABIs publish: run `36651304587`, verified from the ELF bytes below. |
-| iOS app + XCTests | IN PROGRESS | The xcframework builds green, and it is now linked by both targets with a `simulator-tests` job that runs the 7 XCTests. First real compile found 4 pre-existing Swift bugs; first link found 21 undefined libc++ symbols. Working through them run by run — see below. |
+| iOS app + XCTests | **GREEN, engine now reports itself present** | Run `36671474326`: both jobs pass, the app compiles and links against the xcframework, and all 7 GsNative tests execute for the first time. `buildInfo` read the error channel, so a healthy engine reported `libraryMissing` — fixed in `8fa8792`, awaiting the run that proves it. |
 | dynamic feature module | BLOCKED (2/4) | `:ocr-fallback` variant matching; `com.android.dynamic-feature` fixed the first error, the base-variant `applicationId` lookup has not |
 | frontend wiring (chat screen → `GsNative`) | TEST WRITTEN, NOT RUN | `a6_the_chat_screen_path_answers_from_the_engine` drives `ChatRepository.send` with the switch on and an undiallable base URL. Commit `ef8f6ce`/`28ec007`. Not yet executed. |
 | native OCR / Tesseract | NOT LINKED | `gs_mobile_ocr` is a stub: "no OCR engine is compiled into this mobile build". OCR ships through ML Kit in the app module, which is the decided primary. Tesseract is cross-compiled and verified but not in the `.so`. |
