@@ -263,13 +263,30 @@ jobs:
             # failed on `file` for the FILE TYPE. `ar t` succeeding is the
             # definitive test that the file is a real archive, and it is what
             # the member extraction uses anyway.
-            MEMBERS=$(ar t "$A" | sed -n '1,200p')
+            # ar CANNOT READ A FAT ARCHIVE. Raw, run 36667019000:
+            #     ar: .../dist/ios/simulator/libgs_ffi.a is a fat file
+            #       (use libtool(1) or lipo(1) and ar(1) on it)
+            #     ar: ...libgs_ffi.a: Inappropriate file type or format
+            #
+            # The simulator library is a lipo of arm64 + x86_64 since the Intel
+            # slice was added, so `ar t` on the whole file fails. Per-ARCHIVE,
+            # not per-FILE: lipo -thin extracts one slice to a temporary .a and
+            # ar can read that. The arm64 slice is used for the member checks
+            # because it is the one every iOS target can use.
+            THIN="$RUNNER_TEMP/thin-$LIB.a"
+            lipo "$A" -thin arm64 -output "$THIN"
+            MEMBERS=$(ar t "$THIN" | sed -n '1,200p')
             test -n "$MEMBERS" || { echo "FAIL: $LIB is not a readable ar archive"; exit 1; }
             echo "    members: $(printf '%s' "$MEMBERS" | wc -l | tr -d ' ')"
             # The Mach-O inside the archive must be the requested arch.
-            INNER=$(ar t "$A" | grep -v '^__' | sed -n '1p')
+            INNER=$(ar t "$THIN" | grep -v '^__' | sed -n '1p')
             echo "    member: $INNER"
             lipo -info "$A" || { echo "FAIL: lipo could not read $A"; exit 1; }
+            # The thin slice has to be a real, readable archive, or every `ar`
+            # below fails on a file that was never created.
+            test -s "$THIN" || { echo "FAIL: lipo -thin produced no $THIN"; exit 1; }
+            ar t "$THIN" >/dev/null 2>&1 \
+              || { echo "FAIL: the thin slice is not a readable ar archive"; exit 1; }
             # EVERY requested architecture must be present, not one of them.
             # `grep -q arm64` alone is satisfied by a library that has arm64 and
             # nothing else, which is the framework that failed to link.
