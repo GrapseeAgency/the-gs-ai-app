@@ -1297,6 +1297,211 @@ jobs:
           echo "targets:"
           xcodebuild -list -project GSApp.xcodeproj
 
+      # ==================================================================
+      # THE DEVICE BUILD, which did not exist and which a comment claimed
+      # could not.
+      # ==================================================================
+      #
+      # The simulator step above says, in a comment, that "the device slice
+      # needs a signing identity and a physical device". The first half of that
+      # is wrong in a way that cost a whole item of the plan, so it is worth
+      # being precise: a SIGNED app needs an identity, and an INSTALLED app
+      # needs a device. An UNSIGNED .app for `iphoneos` builds and links with
+      # CODE_SIGNING_ALLOWED=NO, exactly as the simulator build already does.
+      #
+      # So the device slice was never un-buildable here. What was missing was the
+      # build, and with it the only check that would catch a device-only link
+      # failure -- a simulator build cannot: the device and simulator slices have
+      # the same architecture (arm64) but DIFFERENT platforms, so a symbol
+      # resolved for iphonesimulator and not for iphoneos is invisible until a
+      # device build runs.
+      #
+      # What this asserts, from the built bytes:
+      #   1. the product exists and is under Debug-iphoneos, not -iphonesimulator
+      #   2. the executable is Mach-O arm64
+      #   3. GsNative.swift's UNGUARDED call compiled in, which it must, because
+      #      it is not inside any #if -- so the link is what proves GsFfi linked
+      #   4. the app actually contains the GsFfi framework
+      #   5. that framework's binary exports the gs_ffi symbols
+      #
+      # What it does NOT claim: a signed, installable .ipa. That needs a signing
+      # identity and a provisioning profile, and this repository has neither. The
+      # gap between "links for the device" and "installs on a device" is signing,
+      # and it is stated rather than papered over.
+      - name: Build the app for the DEVICE (aarch64-apple-ios, unsigned)
+        run: |
+          set -euo pipefail
+          cd ios
+          # `generic/platform=iOS` is the DEVICE platform; `generic/platform=iOS
+          # Simulator` is the other one, and mixing them up produces a green
+          # build of the wrong thing -- which is what this step exists to avoid.
+          xcodebuild build -project GSApp.xcodeproj -scheme GSApp \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY='' \
+            2>&1 | tee build-device.log
+
+          echo "=== the device product ==="
+          # `sed -n '1,3p'`, never `head`: see the note in the simulator step
+          # about SIGPIPE under `set -euo pipefail`. Found by
+          # .github/scripts/check_pipefail_traps.py.
+          find ~/Library/Developer/Xcode/DerivedData -name 'GSApp.app' -maxdepth 6 2>/dev/null \
+            | sed -n '1,4p'
+
+      - name: Assert the device app is aarch64 and links the engine
+        run: |
+          set -euo pipefail
+
+          # Resolve the product path from Xcode itself rather than guessing a
+          # depth. Run 36757667662 failed with "no GSApp.app in DerivedData"
+          # while the product was three levels deeper than the old `find`, and a
+          # guessed depth costs a 25-minute run every time it is wrong.
+          SETTINGS=$(xcodebuild -showBuildSettings \
+            -project ios/GSApp.xcodeproj -scheme GSApp \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            2>/dev/null)
+          HOW="xcodebuild -showBuildSettings"
+          # NO `exit` IN THE awk, and that is the whole point of the `seen` flag.
+          #
+          # The pattern copied from the simulator step is
+          #
+          #     awk -F' = ' '/ TARGET_BUILD_DIR /{print $2; exit}'
+          #
+          # whose `exit` closes the pipe, so `printf` can take SIGPIPE and exit
+          # 141; under pipefail that is the substitution's status, and
+          # BUILD_DIR=$(...) is an ASSIGNMENT, so `set -e` kills the step. It
+          # survives on the existing step only because that particular output
+          # happens to fit the 64K pipe buffer -- which is a property of the
+          # input, not a property of the code.
+          #
+          # Reading the whole input and printing the first match cannot SIGPIPE
+          # anything, and gives the same answer.
+          BUILD_DIR=$(printf '%s\n' "$SETTINGS" \
+            | awk -F' = ' '/ TARGET_BUILD_DIR /&&!seen {print $2; seen=1}')
+          [ -n "$BUILD_DIR" ] || {
+            echo "::error::TARGET_BUILD_DIR came back empty from $HOW"
+            exit 1
+          }
+          echo "  TARGET_BUILD_DIR = $BUILD_DIR"
+
+          APP="$BUILD_DIR/GSApp.app"
+          if [ ! -d "$APP" ]; then
+            APP=$(find ~/Library/Developer/Xcode/DerivedData -name 'GSApp.app' \
+              -path '*iphoneos*' -maxdepth 8 2>/dev/null | sed -n '1p')
+            echo "  (resolved by find instead: $APP)"
+          fi
+          # Asserted by DIRECTORY NAME, which is the thing that distinguishes a
+          # device product from a simulator one. Both slices are arm64, so `lipo`
+          # alone cannot tell them apart and would have passed a simulator build
+          # presented as a device build.
+          case "$APP" in
+            *Debug-iphoneos/*|*Release-iphoneos/*) echo "  device product: YES" ;;
+            *) echo "::error::GSApp.app is not a Debug-iphoneos/Release-iphoneos"
+               echo "::error::product -- so this step did not build the DEVICE"
+               echo "::error::slice. A simulator product is also arm64, so the"
+               echo "::error::architecture check below would PASS it. The directory"
+               echo "::error::name is what distinguishes the two."
+               exit 1 ;;
+          esac
+
+          EXE="$APP/GSApp"
+          [ -f "$EXE" ] || { echo "::error::no GSApp executable in $APP"; exit 1; }
+
+          # The executable must be Mach-O arm64. `file`, because on a Mach-O the
+          # same `file -b` behaviour that cost runs on Linux archives does not
+          # apply -- but assert the words, not just the exit status, because a
+          # successful `file` on the wrong architecture is still a wrong build.
+          FILEOUT=$(file -b "$EXE")
+          echo "  executable: $FILEOUT"
+          case "$FILEOUT" in
+            *"Mach-O 64-bit executable arm64"*) echo "  arch: arm64" ;;
+            *) echo "::error::GSApp is not a Mach-O arm64 executable: $FILEOUT"
+               exit 1 ;;
+          esac
+
+          # The framework must be INSIDE the app. A build that linked GsFfi from
+          # somewhere else, or that silently fell back to the pure-Swift stub,
+          # would both produce a .app; only this catches it.
+          FW="$APP/Frameworks/GsFfi.framework"
+          if [ ! -d "$FW" ]; then
+            echo "::error::no GsFfi.framework inside the DEVICE .app at $APP"
+            echo "::error::so the engine did not link for the device, whatever"
+            echo "::error::the app binary's own arch says."
+            exit 1
+          fi
+          echo "  framework: $FW"
+
+          # And the framework binary must export the engine. Same rule as the
+          # merge step: `nm` succeeding is a claim, the SYMBOLS are the fact.
+          FWBIN="$FW/GsFfi"
+          [ -f "$FWBIN" ] || { echo "::error::no binary at $FWBIN"; exit 1; }
+          NAMES=$(nm -gU "$FWBIN" 2>/dev/null || true)
+          MISSING=""
+          for S in gs_ffi_mobile_backend_available gs_ffi_mobile_chat \
+                   gs_ffi_mobile_load_model gs_ffi_mobile_build_info; do
+            # BASH'S OWN MATCHER, AND NO PIPELINE.
+            #
+            # The line this replaces was:
+            #
+            #     printf '%s\n' "$NAMES" | grep -q "[[:space:]]_$S\$" || MISSING="$MISSING $S"
+            #
+            # and it is WRONG IN BOTH DIRECTIONS, which is worse than useless in a
+            # symbol check. `grep -q` exits as soon as it matches, `printf` takes
+            # SIGPIPE and exits 141, and `pipefail` reports that as the pipeline's
+            # status -- so `|| MISSING=...` fires and appends a symbol that WAS
+            # FOUND. Found by .github/scripts/check_pipefail_traps.py, which is
+            # the second time that lint has caught a defect in code written after
+            # it existed, and both times in a check whose whole job is to be sure
+            # about symbols.
+            #
+            # `[[ ... =~ ... ]]` runs in the shell: no pipe, no producer, no
+            # early-exiting consumer, and nothing to SIGPIPE. That is the whole
+            # point -- a subprocess here reintroduces exactly the failure being
+            # fixed, and `grep -c` does not escape it either, because a pipe is a
+            # pipe whatever the consumer does with its input.
+            #
+            # The pattern is anchored at BOTH ends: nm prints "<addr> <type>
+            # _<name>", so the match must start at a line boundary and end after
+            # the name. Without the trailing anchor, gs_ffi_mobile_chat would be
+            # "found" by gs_ffi_mobile_chat_v2, which is the failure mode a
+            # symbol check has least excuse for.
+            # THE IDIOM IS: build the pattern in a variable, expand it UNQUOTED,
+            # and escape the anchor as \$. Verified against six shapes of real
+            # nm output before going in, because a symbol check built from an
+            # untested regex is a guess with a pass/fail interface.
+            #
+            #   all four present                    -> MISSING=[]
+            #   chat renamed to chat_v2             -> MISSING=[ gs_ffi_mobile_chat]
+            #   present only as a PREFIX, _..._extra -> MISSING=[ ...available ]
+            #   empty nm output                     -> MISSING=[ all four ]
+            #   symbol as the last line, no newline  -> MISSING=[ the other three ]
+            #   address column only, no symbols      -> MISSING=[ all four ]
+            #
+            # Case 3 is the one that matters most: without the trailing anchor,
+            # `_gs_ffi_mobile_backend_available_extra` would satisfy a check for
+            # `_gs_ffi_mobile_backend_available`.
+            RE="[[:space:]]_${S}([[:space:]]|\$)"
+            if [[ ! "$NAMES" =~ $RE ]]; then
+              MISSING="$MISSING $S"
+            fi
+          done
+          if [ -n "$MISSING" ]; then
+            echo "::error::the DEVICE framework exports none of:$MISSING"
+            echo "::error::`nm -gU` returned $(printf '%s\n' "$NAMES" | wc -l | tr -d ' ') line(s),"
+            echo "::error::so either the symbols are absent or nm could not read it."
+            exit 1
+          fi
+          echo "  gs_ffi symbols present in the DEVICE framework"
+
+          echo "=== DEVICE BUILD VERIFIED ==="
+          echo "  $APP"
+          echo "  arm64 Mach-O, GsFfi.framework inside, gs_ffi symbols exported"
+          echo "  NOT verified: a signed .ipa. That needs an identity this repo"
+          echo "  does not have, and the gap between linking for a device and"
+          echo "  installing on one is signing."
+
       - name: Build the app for the simulator
         run: |
           set -euo pipefail
