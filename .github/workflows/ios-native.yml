@@ -944,17 +944,38 @@ jobs:
           # backend the platform ships, and the TESTS assert on what the engine
           # reports, which is the only thing that can actually be checked.
           cat <<'TABLE'
-            target                 arch   sysroot
-            aarch64-apple-ios      arm64  iphoneos
-            aarch64-apple-ios-sim  arm64  iphonesimulator
-            x86_64-apple-ios       x86_64 iphonesimulator
+            triple                 dir                            arch   sysroot
+            aarch64-apple-ios      build-aarch64-apple-ios        arm64  iphoneos
+            aarch64-apple-ios-sim  build-aarch64-apple-ios-sim    arm64  iphonesimulator
+            x86_64-apple-ios       build-x86_64-apple-ios         x86_64 iphonesimulator
           TABLE
 
-          while read -r ARCH SYSROOT; do
-            [ -n "$ARCH" ] || continue
-            echo "=== $ARCH ($SYSROOT) ==="
-            rm -rf "build-$ARCH"
-            cmake -S src-llama -B "build-$ARCH" \
+          # THE DIRECTORY IS NAMED FROM THE TRIPLE, NOT FROM THE ARCH.
+          #
+          # The first version keyed it on ARCH alone, and two of the three rows
+          # share an architecture:
+          #
+          #     arm64  iphoneos
+          #     arm64  iphonesimulator      <- same arch, DIFFERENT platform
+          #     x86_64 iphonesimulator
+          #
+          # so the second `rm -rf "build-arm64"` deleted the DEVICE build before
+          # anything verified it, and the verify step then looked for
+          # build-iossim, a name the loop never produced:
+          #
+          #     === build-arm64 ===
+          #     6 archives; llama, ggml, ggml-cpu and ggml-base all present
+          #     === build-iossim ===
+          #     find: build-iossim: No such file or directory
+          #
+          # And iphoneos and iphonesimulator are not interchangeable even at the
+          # same architecture: a device slice linked into a simulator build is a
+          # load failure at run time with no build error at all.
+          while read -r TRIPLE ARCH SYSROOT; do
+            [ -n "$TRIPLE" ] || continue
+            echo "=== $TRIPLE ($ARCH, $SYSROOT) ==="
+            rm -rf "build-$TRIPLE"
+            cmake -S src-llama -B "build-$TRIPLE" \
               -DCMAKE_SYSTEM_NAME=iOS \
               -DCMAKE_OSX_ARCHITECTURES="$ARCH" \
               -DCMAKE_OSX_SYSROOT="$SYSROOT" \
@@ -968,10 +989,10 @@ jobs:
               -DLLAMA_BUILD_COMMON=OFF \
               -DLLAMA_BUILD_UI=OFF \
               -DGGML_LLAMAFILE=OFF \
-              -G Ninja 2>&1 | tee "configure-$ARCH.log"
-            cmake --build "build-$ARCH" -j"$(sysctl -n hw.ncpu)" 2>&1 | tee "build-$ARCH.log"
-            echo "=== archives for $ARCH ==="
-            find "build-$ARCH" -name '*.a' | sort
+              -G Ninja 2>&1 | tee "configure-$TRIPLE.log"
+            cmake --build "build-$TRIPLE" -j"$(sysctl -n hw.ncpu)" 2>&1 | tee "build-$TRIPLE.log"
+            echo "=== archives for $TRIPLE ==="
+            find "build-$TRIPLE" -name '*.a' | sort
           done <<'TARGETS'
             arm64  iphoneos
             arm64  iphonesimulator
@@ -1024,9 +1045,9 @@ jobs:
             echo "  $N archives; llama, ggml, ggml-cpu and ggml-base all present and $ARCH"
           }
           mkdir -p native/prebuilts/ios-arm64 native/prebuilts/ios-arm64-sim native/prebuilts/ios-x86_64-sim
-          check build-arm64   arm64
-          check build-iossim  arm64
-          check build-x86_64  x86_64
+          check build-aarch64-apple-ios      arm64
+          check build-aarch64-apple-ios-sim  arm64
+          check build-x86_64-apple-ios       x86_64
 
       - name: Package in the shape gs-ffi/build.rs requires
         run: |
@@ -1043,9 +1064,9 @@ jobs:
           # produced
           #   native/prebuilts/android-x86_64/include/llama.h:4:10: fatal
           #   error: 'ggml.h' file not found
-          for PAIR in "build-arm64:ios-arm64" \
-                      "build-iossim:ios-arm64-sim" \
-                      "build-x86_64:ios-x86_64-sim"; do
+          for PAIR in "build-aarch64-apple-ios:ios-arm64" \
+                      "build-aarch64-apple-ios-sim:ios-arm64-sim" \
+                      "build-x86_64-apple-ios:ios-x86_64-sim"; do
             SRC="${PAIR%%:*}"
             DST="native/prebuilts/${PAIR##*:}"
             echo "=== $SRC -> $DST ==="
