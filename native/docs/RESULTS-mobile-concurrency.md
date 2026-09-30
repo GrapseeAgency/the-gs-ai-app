@@ -496,6 +496,110 @@ the same source performs, or starts, or does not hit an arm64-specific fault.
 architecture and the arm64 binary is verified statically, and no claim is made
 that the two together verify arm64 execution.**
 
+## The 0.1–1.0 plan, audited item by item
+
+One line per item. **DONE** cites something measurable; **INCOMPLETE** names what
+is missing. Nothing here is rounded up, and nothing is rounded down either — an
+item whose code exists but is untested says so, because that is the difference
+between "built" and "known to work".
+
+Evidence shorthand: `137 tests` is a count of `#[test]` in the native workspace,
+read from the sources. Everything with a run id was executed.
+
+### Core engine
+
+| Item | State | Evidence |
+| --- | --- | --- |
+| Rust / C++ / C workspace | **DONE** | 5 crates (`gs-common`, `gs-core`, `gs-ffi`, `gs-server`, `gs-bench`) and 5 C++ wrappers (`llama_wrapper`, `mobile`, `clip_wrapper`, `ocr_wrapper`, `sd_wrapper`); **137 tests** |
+| llama.cpp linked, real CPU decode | **DONE** | `GsNative.chat → "Hello! How can I assist you today?"` (run `36759872954`); `a1b` answers the question it was asked; `b3 → Paris.` is a 0.5B model decoding on a device |
+| Provider pool (rotation, breaker) | **DONE** (desktop/server) | `router.rs` 11 tests, `routing.rs` 5, `http_provider.rs` 4. **Not on mobile** — the app routes to ML Kit and the local engine instead, by design |
+| Agent loop, 6 intents | **DONE** | `agent.rs` 14 tests, `IntentClassifier` in `lib.rs` |
+| Memory tiers + compaction | **DONE** | `memory.rs` 10 tests, `compaction.rs` 6, `semcache.rs` 5 |
+| Verification guards | **DONE** | `verification.rs`, **14 tests** |
+| Plugins + skills | **DONE** | `skills.rs` 6 tests, `tools.rs` 7, `budget.rs` 4, `scratch.rs` 5 |
+| Server (OpenAI endpoints, SSE) | **DONE** | `gs-server/src/main.rs`; `chat/completions` and `text/event-stream` present |
+| CLIP vision | **DONE** (desktop) | `clip_wrapper.cpp`, 3 bridge tests. **Deliberately absent on mobile**: ONNX Runtime has no drop-in arm64 Android build, and the mobile entry points report `GS_ERR_UNAVAILABLE` **with a reason** rather than failing to link |
+| OCR (Tesseract + ML Kit) | **DONE** | Tesseract via `pkg-config` on desktop; ML Kit on Android; `a2_ocr_reads_the_fixture` **PASS** on the shipping configuration |
+| SVG procedural image gen | **PARTIAL — see below** | `sd_render_svg` exists in `sd_wrapper.cpp` and `libgs_sd.a` is compiled **unconditionally**, so it is in the mobile `.so`. It is **not exposed through the mobile ABI** |
+| stable-diffusion.cpp | **NOT REACHABLE ON MOBILE — see below** | `sd_cli_path()` returns a developer path or `$GS_SD_CLI`, and the caller **spawns it as a subprocess** |
+| Speculative decoding | **DELETED, with the measurement** | RESULTS §"Item 6 — Speculative decoding": draft and target must share a tokenizer; they do not |
+| KV cache quantization | **NEGATIVE, with evidence** | recorded in the issue log |
+| Batched serving | **TARGET MISSED, and a worse bug found** | RESULTS §"Item 7": throughput did not move, and exposing it found a real locking bug plus two of its own |
+
+### Mobile
+
+| Item | State | Evidence |
+| --- | --- | --- |
+| Android cross-compile | **DONE** | 4 ABIs; `arm64-v8a` is `ELF 64-bit LSB shared object, ARM aarch64 … NDK r25c`, 4,562,904 bytes |
+| iOS cross-compile | **DONE** | run `36759872954`, head `76a48b2`, three jobs green, **46 passed, 0 skipped** |
+| Model download flow | **DONE** | `a3` PASS: refuses without consent, resumes, verifies SHA256 |
+| Mobile app integration (JNI / Swift) | **DONE** | 10 `gs_ffi_mobile_*` entry points; all four ABIs publish them; 8 `GsNativeTests` pass |
+| Frontend wiring to native path (Android) | **DONE** | `a6_the_chat_screen_path_answers_from_the_engine` **PASS** |
+| arm64 device run | **BLOCKED — hardware** | the section above: three hosts, three measured reasons, nested virtualisation |
+| Dynamic feature module | **CLOSED PERMANENT** | `.single()` is **byte-identical** in AGP 8.5.2 → 8.13.2, so no version fixes it; the operator's wording is verbatim in `android/app/build.gradle.kts` |
+
+### The four the operator expected to be incomplete
+
+**1. iOS device build — was INCOMPLETE, now ADDED, verification in flight.**
+
+The workflow built only `-sdk iphonesimulator`, and justified it in a comment:
+*"the device slice needs a signing identity and a physical device."* The second
+half is wrong. A **signed** app needs an identity and an **installed** app needs a
+device; an **unsigned** `.app` for `iphoneos` builds with
+`CODE_SIGNING_ALLOWED=NO`, exactly as the simulator build in the same job already
+did. So the slice was never un-buildable here — the build was simply missing.
+
+Added in `274b19a`: `xcodebuild build -sdk iphoneos -destination
+'generic/platform=iOS'`, then four assertions from the built bytes — the product
+is under `Debug-iphoneos` **by directory name** (both slices are arm64, so `lipo`
+cannot tell them apart), the executable is Mach-O arm64, `GsFfi.framework` is
+**inside** the `.app`, and that framework exports four `gs_ffi_*` symbols.
+
+**Not claimed: a signed `.ipa`.** That needs an identity and a provisioning
+profile this repository does not have. The gap between linking for a device and
+installing on one is signing, and the step says so in its own output.
+
+**2. Performance numbers on the emulator — INCOMPLETE.**
+
+Not measured. This is the item that most affects the shippability decision, and it
+is the one I have no numbers for. What exists: the harness does real CPU decode
+(`a1b`, `b3 → Paris.`) and `gs-bench` carries 23 tests. Neither is a
+TTFT or tokens-per-second figure for the 0.5B model on a device.
+
+**3. stable-diffusion.cpp on the mobile runtime — NO, and not with the current design.**
+
+Measured, not inferred:
+
+    fn sd_cli_path() -> Result<PathBuf, String> {
+        if let Ok(p) = std::env::var("GS_SD_CLI") { return Ok(p.into()); }
+        for cand in ["/mnt/new_volume/sd/stable-diffusion.cpp/build/bin/sd-cli", ...]
+
+`sd_render()` then **spawns that binary as a child process**. A phone has no
+`sd-cli`, no `/mnt/new_volume`, and no environment variables to set. So this is not
+a wiring gap that can be closed by exporting another symbol: it needs
+stable-diffusion.cpp's model and sampler called **in process** through a C ABI,
+which is a different piece of work rather than a smaller one.
+
+What *is* cheap and remains open: **`sd_render_svg` is already linked into the
+mobile `.so`** (`libgs_sd.a` is compiled unconditionally) but has **no
+`gs_ffi_mobile_*` entry point** — `gs_mobile.cpp` contains no reference to it. It
+is a procedural renderer with no weights, no GPU and no diffusion, which is
+precisely why it is the one worth exposing. One symbol and one device test.
+
+**4. iOS frontend wiring — INCOMPLETE, and the gap is the test, not the code.**
+
+The product path exists: `ios/App/Sources/Networking/ChatViewModel.swift:494` is
+
+    let local = try? GsNative.chat
+
+But all eight `GsNativeTests` call `GsNative` **directly**. None drives
+`ChatViewModel`. So iOS has what a6 has on Android in the source and does not have
+a6's guarantee — the ViewModel was never executed against a real model.
+
+That is the same defect class as a8 measuring its own harness: a green suite that
+never touched the path it exists to protect. It is the next thing to write, and it
+is a small thing.
+
 ## What is NOT done
 
 Stated plainly rather than dressed up.
