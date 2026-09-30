@@ -1,0 +1,92 @@
+name: arm64-runner-probe
+
+# A PROBE, NOT A WORKFLOW. It exists to answer one question with a fact instead
+# of an assumption: can this repository use an arm64 Linux runner, and does that
+# runner have what the Android emulator needs?
+#
+# Why this is a question at all. The arm64 DEVICE run was attempted once
+# (36676280935) and the emulator refused to start:
+#
+#     FATAL | Avd's CPU Architecture 'arm64' is not supported by the QEMU2
+#            emulator on x86_64 host. System image must match the host architecture.
+#
+# /dev/kvm exists on the x86_64 runner and works, and that is the whole problem:
+# KVM accelerates a guest of the HOST's architecture, it does not translate
+# between them. arm64 on x86_64 needs full software emulation, which QEMU2 does
+# not offer.
+#
+# So the fix is a different HOST, not a different flag. actions/runner-images
+# lists ubuntu-24.04-arm and ubuntu-26.04-arm, and this repository is public
+# ("GitHub Actions is free for public repositories"), so arm64 runners should be
+# available on the free plan. "Should be" is exactly the kind of claim this
+# repository has been bitten by, so this job prints the answer.
+#
+# DELETE THIS WORKFLOW once android-device runs on arm64 for real. It proves a
+# runner exists; it is not evidence that the engine works.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: is an arm64 runner available, and can it host the emulator?
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 10
+    steps:
+      - name: The architecture, unedited
+        run: |
+          set -euo pipefail
+          echo "uname -m  = $(uname -m)"
+          echo "uname -r  = $(uname -r)"
+          echo "arch      = $(dpkg --print-architecture 2>/dev/null || echo '?')"
+          test "$(uname -m)" = aarch64 || {
+            echo "::error::this runner is $(uname -m), not aarch64; the label resolved to something else."
+            exit 1
+          }
+
+      - name: KVM is present and usable
+        run: |
+          set -euo pipefail
+          # THE THING THAT DECIDES ITEM 2. On the x86_64 runner this existed and
+          # was irrelevant; here it is the reason the attempt can work at all.
+          if [ ! -e /dev/kvm ]; then
+            echo "::error::/dev/kvm is absent on this arm64 runner too, so an arm64 guest still cannot be accelerated."
+            exit 1
+          fi
+          ls -l /dev/kvm
+          echo "kvm group members: $(id -nG | tr ' ' '\n' | grep -c '^kvm$' || true)"
+
+          # /dev/kvm existing is not the same as it working. Try to OPEN it.
+          # A node that exists but cannot be opened produces an emulator that
+          # refuses to start, which is the x86_64 failure all over again.
+          if ! head -c 0 /dev/kvm 2>/dev/null; then
+            echo "::error::/dev/kvm cannot be opened by this user; hardware acceleration is unusable."
+            exit 1
+          fi
+          echo "VERIFIED: /dev/kvm exists and opened"
+
+      - name: The Android SDK, and whether the arm64 system image installs
+        run: |
+          set -euo pipefail
+          # The image is what the emulator refused to run. If it installs here,
+          # then it is the HOST that was the limit and not the image.
+          SDK="$HOME/android-sdk"
+          mkdir -p "$SDK/cmdline-tools"
+          # Already on the image? The runner image includes the Android SDK for
+          # exactly this reason.
+          if ! command -v sdkmanager >/dev/null 2>&1; then
+            echo "sdkmanager not on PATH; looking in the usual places"
+            find /usr/local/lib/android /opt/android-sdk "$HOME/android-sdk" \
+                 -name sdkmanager -type f 2>/dev/null | sed -n '1,3p' || true
+          fi
+          SDKMANAGER=$(command -v sdkmanager || true)
+          if [ -z "$SDKMANAGER" ]; then
+            echo "::warning::no sdkmanager on this image; the emulator step is left to a later, better-equipped job."
+            exit 0
+          fi
+          echo "sdkmanager: $SDKMANAGER"
+          echo "ANDROID_HOME=${ANDROID_HOME:-unset}"
+          "$SDKMANAGER" --list_installed 2>/dev/null | sed -n '1,20p' || true
