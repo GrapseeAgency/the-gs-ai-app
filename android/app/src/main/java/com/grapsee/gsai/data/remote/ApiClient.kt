@@ -15,6 +15,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import io.ktor.utils.io.readUTF8Line
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.Json
 
 /**
@@ -23,6 +24,39 @@ import kotlinx.serialization.json.Json
  * message (the backend's userFacingTurnError text) so the repository can label
  * the failure with the real reason instead of a fake "unreachable" claim.
  */
+/**
+ * The provider answered with 2xx and its body then DIED.
+ *
+ * Added for run 36779646507, which measured a user-visible lie:
+ *
+ *     Classify: mid-stream cut    -> — GS backend error (HTTP 0) —
+ *     Classify: server saw 1 request(s)
+ *
+ * One request WAS served and one SSE delta WAS written by the server, so the
+ * backend was reachable and had begun answering. The user was shown "GS backend
+ * error (HTTP 0)" — a status code that does not exist, describing a failure that
+ * did not happen, for a provider that was talking.
+ *
+ * WHY THE OLD CODE COULD NOT SEE IT. `classifySendFailure` decided between
+ * MidStreamCut and BackendError on `receivedAnyEvent`, which flips when a delta
+ * reaches the UI. On an abrupt close CIO discards the partial chunked buffer, so
+ * the frame that arrived is never completed into a line, the callback never runs,
+ * and the flag stays false. The information that distinguishes the two cases --
+ * did the response headers arrive, and were they 2xx -- was true and available
+ * here, and was simply not being passed on. A 750ms pause before the close (the
+ * honest shape of a mid-stream cut) did not help, which is what established that
+ * this is a wall and not a race.
+ *
+ * So the signal is taken at the one place that has it. A failure to READ THE NEXT
+ * LINE, after a 2xx, is a cut by definition: the provider accepted the request and
+ * the answer stopped arriving. Nothing else in this function can raise that.
+ */
+class GsStreamCutException(
+    /** The 2xx status whose body was cut, so a caller can log what arrived. */
+    val status: Int,
+    cause: Throwable,
+) : Exception("provider stream cut after HTTP $status", cause)
+
 class GsBackendException(
     val status: Int,
     /** Sanitized server error text, or null when the body carried none. */
@@ -158,7 +192,23 @@ class ApiClient(
         }
         val channel = response.bodyAsChannel()
         while (!channel.isClosedForRead) {
-            val line = channel.readUTF8Line() ?: break
+            // THE CUT IS DETECTED HERE, and only here. Everything above this line
+            // either connected or did not; everything below it parses and
+            // dispatches what the read returned. Failing to read the NEXT line
+            // after a 2xx means the provider accepted the request and stopped
+            // answering, which is GsStreamCutException's definition. See the class
+            // doc for the run that measured why this had to be said explicitly.
+            val line = try {
+                channel.readUTF8Line()
+            } catch (ce: CancellationException) {
+                // A cancelled turn is not a cut. Rethrowing keeps the coroutine's
+                // cancellation intact, and wrapping it would turn "the user
+                // navigated away" into a fake network event.
+                throw ce
+            } catch (e: Exception) {
+                throw GsStreamCutException(status = response.status.value, cause = e)
+            }
+            if (line == null) break
             val trimmed = line.trim()
             if (!trimmed.startsWith("data:")) continue
             val payload = trimmed.removePrefix("data:").trim()

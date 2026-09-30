@@ -15,6 +15,7 @@ import com.grapsee.gsai.data.remote.AttachmentDto
 import com.grapsee.gsai.data.remote.ConversationDto
 import com.grapsee.gsai.data.remote.GsApiJson
 import com.grapsee.gsai.data.remote.GsBackendException
+import com.grapsee.gsai.data.remote.GsStreamCutException
 import com.grapsee.gsai.data.remote.MessageDto
 import com.grapsee.gsai.data.remote.MessageSourceDto
 import com.grapsee.gsai.data.remote.UpdateConversationRequest
@@ -68,6 +69,22 @@ private sealed class SendFailure {
 
 private fun classifySendFailure(e: Exception, receivedAnyEvent: Boolean): SendFailure {
     if (receivedAnyEvent) return SendFailure.MidStreamCut
+    // A 2xx whose body then died. Classified BEFORE the unreachable check below,
+    // because a cut is not unreachable: the backend accepted the request and began
+    // answering, so "— Offline — cannot reach GS. —" would be false, and
+    // BackendError(0, null) would invent a status code that does not exist.
+    //
+    // Run 36779646507 measured exactly that user-visible string for a provider
+    // that had served one request and written one SSE delta:
+    //
+    //     Classify: mid-stream cut    -> — GS backend error (HTTP 0) —
+    //     Classify: server saw 1 request(s)
+    //
+    // `receivedAnyEvent` could not catch it, because CIO discards the partial
+    // chunked buffer when the peer closes, so the delta never completes into a
+    // line and the callback that would flip the flag never runs. The signal has to
+    // come from where the fact is, which is the read.
+    if (e is GsStreamCutException) return SendFailure.MidStreamCut
     if (e is GsBackendException) return SendFailure.BackendError(e.status, e.serverMessage)
     val unreachable = e is UnknownHostException ||
         e is ConnectException ||
