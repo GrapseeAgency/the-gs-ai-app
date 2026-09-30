@@ -66,8 +66,31 @@ public final class GsNative {
     }
 
     /// Build identification, for matching a crash report to a commit.
+    ///
+    /// `gs_mobile_build_info`, NOT `gs_last_error`. This read the ERROR channel
+    /// as though it were a build identifier:
+    ///
+    ///     guard let p = gs_last_error() else { return "" }
+    ///
+    /// which returns "" whenever no error is pending, which is the normal case.
+    /// So buildInfo was empty on a healthy engine, and GsNativeLoader.probe()
+    /// then reported
+    ///
+    ///     "framework imported but no build info"
+    ///
+    /// and took the `libraryMissing` branch -- on run 36671474326, with the
+    /// framework linked correctly and the app running. Every engine-backed test
+    /// skipped as a result, and the two that could run passed anyway, so a green
+    /// job was reporting an engine that reported itself missing.
+    ///
+    /// gs_last_error() carries the last FAILURE's message and is the right thing
+    /// for makeError, which is what it was presumably copied from. The ABI has a
+    /// purpose-built accessor for this and it is in the header the xcframework
+    /// publishes: `const char* gs_mobile_build_info(void)`, returning e.g.
+    /// "gs-ffi 0.1.0 +llama" -- the same string the Android side prints in
+    /// selfCheck.
     public static var buildInfo: String {
-        guard let p = gs_last_error() else { return "" }
+        guard let p = gs_mobile_build_info() else { return "" }
         return String(cString: p)
     }
 
