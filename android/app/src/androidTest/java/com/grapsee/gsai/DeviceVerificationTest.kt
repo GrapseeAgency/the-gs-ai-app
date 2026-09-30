@@ -558,7 +558,15 @@ class DeviceVerificationTest {
             // a5 asserts the switch is off. If this does not run, a5 fails and
             // says so, which is the intended coupling rather than a silent leak.
             SettingsStore.updatePreferLocal(preferLocalBefore)
-            runCatching { ModelStore.removeInstalled() }
+            // NOT removeInstalled(). That is File(p).delete() -- it destroys the
+            // 491 MB GGUF. JUnit's method order is not source order, so if a6
+            // ran first and deleted it, a1/a1b/a2 would fail on "no model on the
+            // device" and this test would have destroyed the evidence for every
+            // other test in the file. Clean up the RECORD, not the file.
+            //
+            // refreshInstalled() re-derives installedPath from what is actually
+            // on disk, which is exactly the restore and deletes nothing.
+            runCatching { ModelStore.refreshInstalled() }
             runCatching { GsNativeLoader.release() }
             runCatching { db.close() }
         }
