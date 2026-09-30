@@ -878,11 +878,47 @@ jobs:
           # A shallow clone CANNOT take `--branch <sha>`, so fetch the commit
           # directly and detach onto it.
           LLAMA_SHA=3018a11e79e489b657dbb77c95694889ccff92df
-          git init -q src-llama
+
+          # THE CACHE RESTORES A WORKING TREE, NOT AN EMPTY DIRECTORY. So every
+          # step here has to survive running against an existing clone. Run
+          # 36704297294 proved it:
+          #
+          #     error: remote origin already exists.
+          #     ##[error]Process completed with exit code 3.
+          #
+          # `git init` is fine on an existing repo, but `git remote add origin`
+          # is not, and the cache hit meant the clone step was the second run
+          # against the same tree. `set -e` turned that into a failed job with
+          # nothing built -- a cache that costs you a run the first time it hits
+          # is worse than no cache.
+          #
+          # So: reuse the tree if the cache restored one, and only fetch when the
+          # commit is not already present. `git remote set-url` is idempotent
+          # where `add` is not.
+          if [ ! -d src-llama/.git ]; then
+            git init -q src-llama
+          fi
           cd src-llama
-          git remote add origin https://github.com/ggml-org/llama.cpp.git
-          git fetch -q --depth 1 origin "$LLAMA_SHA"
-          git checkout -q --detach FETCH_HEAD
+          # `set-url` fails on a tree with NO remote ("No such remote 'origin'")
+          # and `add` fails on a tree that HAS one ("remote origin already
+          # exists"). A cache hit gives the second case and a cold start gives
+          # the first, so both are handled. Tested both ways:
+          #
+          #   add on an existing remote -> error: remote origin already exists.
+          #   set-url, twice            -> ok, ok
+          #   set-url on no remote      -> error: No such remote 'origin'
+          if git remote get-url origin >/dev/null 2>&1; then
+            git remote set-url origin https://github.com/ggml-org/llama.cpp.git
+          else
+            git remote add origin https://github.com/ggml-org/llama.cpp.git
+          fi
+          if ! git cat-file -e "$LLAMA_SHA^{commit}" 2>/dev/null; then
+            echo "fetching $LLAMA_SHA"
+            git fetch -q --depth 1 origin "$LLAMA_SHA"
+          else
+            echo "$LLAMA_SHA already in the restored clone; skipping the fetch"
+          fi
+          git checkout -q --detach "$LLAMA_SHA"
           git submodule update --init --recursive || true
           cd - >/dev/null
           GOT=$(cd src-llama && git rev-parse HEAD)
