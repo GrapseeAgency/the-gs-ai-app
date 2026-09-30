@@ -43,7 +43,20 @@ public enum GsNativeLoader {
     private static let stateLock = NSLock()
     nonisolated(unsafe) private static var cached: Result = .untried
 
-    private enum Result {
+    /// Cached probe outcome: `.untried` until the first resolve, then one of
+    /// the three answers, cached so a missing framework is not re-probed on
+    /// every keystroke.
+    ///
+    /// `: Equatable` because `isAvailable` compares a `Result` to `.ready`
+    /// (run 36662206901, first build of this app ever):
+    ///     GsNativeLoader.swift:56:25: error: binary operator '==' cannot be
+    ///       applied to two 'GsNativeLoader.Result'
+    ///
+    /// `Reason` was already `Equatable`, which is all a derived conformance
+    /// needs -- the associated value is the only thing that has to compare, and
+    /// a `.ready`/`.untried` case has none. Synthesising is the whole fix; hand
+    /// writing `==` here would be a second definition to keep in step.
+    private enum Result: Equatable {
         case untried
         case ready
         case failed(Reason)
@@ -54,7 +67,7 @@ public enum GsNativeLoader {
     /// about to decide where a reply comes from.
     public static var isAvailable: Bool {
         guard resolve() == .ready else { return false }
-        return GsNative.backendAvailable && GsNative.loadedModelPath != nil
+        return GsNative.backendAvailable && GsNative.loadedModel != nil
     }
 
     /// Why the engine is unavailable. `nil` when it is available.
@@ -63,7 +76,7 @@ public enum GsNativeLoader {
         case .untried: resolve(); return unavailableReason
         case .ready:
             if !GsNative.backendAvailable { return .noBackend }
-            if GsNative.loadedModelPath == nil { return .noModel }
+            if GsNative.loadedModel == nil { return .noModel }
             return nil
         case .failed(let r): return r
         }
@@ -101,7 +114,7 @@ public enum GsNativeLoader {
     /// For a diagnostics screen.
     public static var describe: String {
         if isAvailable {
-            return "native engine ready (\(GsNative.loadedModelPath ?? "?"))"
+            return "native engine ready (\(GsNative.loadedModel ?? "?"))"
         }
         return "native engine unavailable: \(unavailableReason?.detail ?? "unknown")"
     }

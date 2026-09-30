@@ -96,7 +96,25 @@ public final class GsNative {
         let ctx = try requireContext("chat")
         let out = prompt.withCString { gs_mobile_chat(ctx, $0, maxTokens, 0.2) }
         guard let out else { throw makeError("chat") }
-        defer { gs_llama_free_text(out) }
+        // gs_free_string, NOT gs_llama_free_text.
+        //
+        // This never compiled until the xcframework was actually linked
+        // (run 36662206901, first build of this app ever):
+        //     GsNative.swift:99:17: error: cannot find 'gs_llama_free_text' in scope
+        //
+        // gs_llama_free_text exists -- but it is an INTERNAL C++ symbol declared
+        // in native/cpp/llama_wrapper/llama_wrapper.h:125, defined in batch.cpp,
+        // and it is not part of the mobile C ABI. The xcframework ships exactly
+        // two headers, gs_abi.h and gs_mobile.h, and neither mentions it, so it
+        // was never reachable from Swift. Reaching into the wrapper's internals
+        // from the iOS bridge would couple the app to a file the module does not
+        // publish.
+        //
+        // gs_free_string is the ABI's own convention, documented at gs_abi.h:53:
+        //   "Generic owned-string release. Every gs_free_* in other headers
+        //    forwards here so callers only need one free convention."
+        // So this is the intended call, not a workaround.
+        defer { gs_free_string(out) }
         return String(cString: out)
     }
 
