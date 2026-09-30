@@ -56,8 +56,18 @@ import java.util.concurrent.atomic.AtomicInteger
  */
 class WireServer private constructor(
     private val socket: ServerSocket,
-    private val acceptLoop: Thread,
 ) {
+    /**
+     * The accept loop, assigned by [start].
+     *
+     * It is NOT a constructor parameter. The first version took a `Thread` and
+     * passed `Thread()` as a placeholder, because the loop is only created once
+     * the socket exists and then has to be stored -- so the placeholder was a
+     * dummy that existed only to make the type checker happy, and a reader had to
+     * work out that it was never used. A `var` with no initial value says the
+     * same thing without the lie.
+     */
+    private var acceptLoop: Thread? = null
     companion object {
         /** A complete stream: status, a delta, a done event, and the terminating chunk. */
         const val MODE_FULL = "full"
@@ -87,7 +97,7 @@ class WireServer private constructor(
 
         fun start(mode: String): WireServer {
             val sock = ServerSocket(0, 8, InetAddress.getLoopbackAddress())
-            val server = WireServer(sock, Thread())
+            val server = WireServer(sock)
             val loop = Thread {
                 while (!sock.isClosed) {
                     val s = try {
@@ -110,7 +120,7 @@ class WireServer private constructor(
             }
             loop.isDaemon = true
             loop.start()
-            return server.also { it.acceptLoopRef = loop }
+            return server.also { it.acceptLoop = loop }
         }
 
         fun apiFor(server: WireServer, sessionId: String): ApiClient =
@@ -148,8 +158,6 @@ class WireServer private constructor(
         }
     }
 
-    private var acceptLoopRef: Thread = acceptLoop
-
     /** How many times a message stream was requested. Zero means no turn ever
      *  reached the network, which is how "prefer-local short-circuited" is
      *  MEASURED rather than inferred from the answer's text. */
@@ -160,7 +168,7 @@ class WireServer private constructor(
 
     fun stop() {
         runCatching { socket.close() }
-        runCatching { acceptLoopRef.interrupt() }
+        runCatching { acceptLoop?.interrupt() }
     }
 
     private fun handle(s: Socket, mode: String) {
@@ -202,12 +210,12 @@ class WireServer private constructor(
                 out.flush()
                 when (mode) {
                     MODE_FULL -> {
-                        chunk(out, frame("status", "composing"))
-                        chunk(out, frame("delta", NETWORK_MARKER))
+                        chunk(out, frame("status", "composing"), mode)
+                        chunk(out, frame("delta", NETWORK_MARKER), mode)
                         val done = """{"id":"srv-msg-1","conversationId":"$CONV_ID",""" +
                             """"role":"assistant","content":"$NETWORK_MARKER",""" +
                             """"createdAt":"2026-01-01T00:00:01Z"}"""
-                        chunk(out, frame("done", done))
+                        chunk(out, frame("done", done), mode)
                         // The terminating zero-length chunk: a COMPLETE stream, as
                         // opposed to a cut.
                         out.write("0\r\n\r\n".toByteArray())
@@ -220,7 +228,7 @@ class WireServer private constructor(
                     // MidStreamCut exists for, and it differs from a refusal in the
                     // way that matters: the provider WAS reachable.
                     MODE_CUT_MID_STREAM -> {
-                        chunk(out, frame("delta", "HALF A SE"))
+                        chunk(out, frame("delta", "HALF A SE"), mode)
                         println("WireServer[$mode] -> one delta, then CLOSING WITH NO TERMINATING CHUNK")
                     }
 
@@ -236,9 +244,16 @@ class WireServer private constructor(
         }
     }
 
-    private fun chunk(out: BufferedOutputStream, text: String) {
+    /** `mode` is passed in because the log line is the only thing that needs it,
+     *  and it is a local of handle() -- a companion function cannot see it. The
+     *  first version referenced it from here and kotlinc said
+     *  `Unresolved reference 'mode'`. */
+    private fun chunk(out: BufferedOutputStream, text: String, mode: String) {
         val b = text.toByteArray()
-        out.write(("%x\r\n" % b.size).toByteArray())
+        // Integer.toHexString, not Python's "%x" % n -- Kotlin has no % format
+        // operator, and `Unresolved reference 'rem' for operator '%'` is what that
+        // typo looks like when it reaches kotlinc.
+        out.write((Integer.toHexString(b.size) + "\r\n").toByteArray())
         out.write(b)
         out.write("\r\n".toByteArray())
         out.flush()
