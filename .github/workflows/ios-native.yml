@@ -65,8 +65,22 @@ jobs:
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
             | sh -s -- -y --profile minimal --default-toolchain stable
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
-          rustup target add aarch64-apple-ios aarch64-apple-ios-sim \
-                          x86_64-apple-ios x86_64-apple-ios-sim
+          # x86_64-apple-ios, NOT x86_64-apple-ios-sim. There is no "-sim"
+          # variant of that triple: an Intel iOS simulator is x86_64 running iOS,
+          # which is the same target as the device triple with a different
+          # platform at link time. Run 36665244922:
+          #     error: toolchain 'stable-aarch64-apple-darwin' does not support
+          #       target 'x86_64-apple-ios-sim'
+          # Confirmed against a real toolchain, not assumed:
+          #     rustc --print target-list | grep apple-ios
+          #       aarch64-apple-ios        aarch64-apple-ios-macabi
+          #       aarch64-apple-ios-sim    arm64e-apple-ios
+          #       armv7s-apple-ios         i386-apple-ios
+          #       x86_64-apple-ios         x86_64-apple-ios-macabi
+          # Only aarch64 has a separate -sim triple, because Apple Silicon
+          # simulators share the device's arm64 code with only the platform
+          # differing.
+          rustup target add aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
           rustc --version
           rustc --print target-list | grep -E '^(aarch64|x86_64)-apple-ios' || true
 
@@ -139,12 +153,12 @@ jobs:
       #
       # -target aarch64-apple-ios (the DEVICE slice) is left arm64-only: an iOS
       # device is arm64 and has been since iPhone 5s.
-      - name: Build and verify simulator slice (x86_64-apple-ios-sim)
+      - name: Build and verify simulator slice (x86_64-apple-ios)
         working-directory: native
         run: |
           set -euo pipefail
-          cargo build --release -p gs-ffi --lib --target x86_64-apple-ios-sim
-          SRC="target/x86_64-apple-ios-sim/release/libgs_ffi.a"
+          cargo build --release -p gs-ffi --lib --target x86_64-apple-ios
+          SRC="target/x86_64-apple-ios/release/libgs_ffi.a"
           test -f "$SRC" || { echo "MISSING: $SRC"; exit 1; }
           echo "built: $(lipo -info "$SRC")"
           lipo -info "$SRC" | grep -q 'x86_64' || {
@@ -159,7 +173,7 @@ jobs:
         run: |
           set -euo pipefail
           ARM="$GITHUB_WORKSPACE/native/target/aarch64-apple-ios-sim/release/libgs_ffi.a"
-          X86="$GITHUB_WORKSPACE/native/target/x86_64-apple-ios-sim/release/libgs_ffi.a"
+          X86="$GITHUB_WORKSPACE/native/target/x86_64-apple-ios/release/libgs_ffi.a"
           test -f "$ARM" || { echo "MISSING: $ARM"; exit 1; }
           test -f "$X86" || { echo "MISSING: $X86"; exit 1; }
           mkdir -p "$GITHUB_WORKSPACE/dist/ios/simulator"
