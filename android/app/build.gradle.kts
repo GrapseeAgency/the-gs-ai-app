@@ -95,13 +95,70 @@ android {
     //   versionCode          73 on the base
     //   namespace            com.grapsee.gsai.ocrfallback, a subpackage of the id
     //
-    // So this is AGP looking up something I cannot see from the outside, and the
-    // next move is to READ the line rather than guess a sixth configuration. Not
-    // from memory: DynamicFeatureVariantImpl.kt:244, and which collection it reads.
+    // ================================================================
+    // PERMANENTLY OFF, and a version bump is measurably not the fix.
+    // ================================================================
     //
-    // The app build is worth more than the module, and a split that does not
-    // resolve is not worth an APK that does. That was true four attempts ago and
-    // it is true now.
+    // WHY NOT BUMP AGP. The failure is a `.single()` on an empty collection, so
+    // the only question that matters is whether any release changed that line. The
+    // sources jar for each version was fetched from Google's Maven and the
+    // function read, rather than a changelog sentence being taken on trust:
+    //
+    //     8.5.2   .single()=1   artifact.elements.map { ModuleMetadata.load(it.single().asFile) })
+    //     8.7.3   .single()=1   (identical)
+    //     8.9.2   .single()=1   (identical)
+    //     8.11.1  .single()=1   (identical)
+    //     8.12.3  .single()=1   (identical)
+    //     8.13.2  .single()=1   (identical)
+    //
+    // Byte-identical across six releases. The code that throws is the same code in
+    // all of them, so no version fixes THIS failure. A bump could only help if a
+    // later AGP registered the producer task differently, which I could not find
+    // in the `gradle` artifact and could not settle without six blind 25-minute
+    // runs -- so that is not claimed either way.
+    //
+    // THE EXACT BUG, for anyone with a newer AGP to try:
+    //
+    //     Failed to calculate the value of property 'applicationId'.
+    //     > Collection is empty.
+    //     at com.android.build.api.variant.impl.DynamicFeatureVariantImpl
+    //          $instantiateBaseModuleMetadata$1.transform(DynamicFeatureVariantImpl.kt:244)
+    //
+    //     private fun instantiateBaseModuleMetadata(...) = artifact.elements.map {
+    //         ModuleMetadata.load(it.single().asFile) }
+    //
+    // The base module never registers its `write<Variant>BaseModuleMetadata`
+    // producer, so the split's compile classpath has no BASE_MODULE_METADATA
+    // artifact and `.single()` throws.
+    //
+    // WHAT IS IN PLACE AND STAYS. The module is no longer a sketch:
+    //   * android/ocr-fallback/src/main/AndroidManifest.xml, with <dist:module
+    //     dist:instant="false">, <dist:on-demand/>, dist:fusing include="true",
+    //     and no applicationId -- it did not exist at all, and its absence was
+    //     this same error
+    //   * its dependencies, ML Kit and feature-delivery, which it also lacked and
+    //     could not have compiled without
+    //   * minSdk 26 on both modules, :ocr-fallback in settings.gradle.kts
+    // Those are correct and are not reverted by leaving the line off. Only the
+    // base's registration is missing, and that is AGP's half.
+    //
+    // THE OPERATOR'S WORDING, verbatim so it cannot be paraphrased into optimism:
+    //
+    //     OCR fallback on de-Googled devices requires a manual build with the
+    //     module enabled until AGP fixes the metadata producer.
+    //
+    // THE ENGINEERING CALL, which is separate from the evidence. The fallback is a
+    // CONVENIENCE for devices with no Google Play Services -- GrapheneOS,
+    // de-Googled LineageOS, Huawei after 2019. It is not the primary path: ML Kit
+    // is bundled and is what ~99% of devices use, and a2_ocr_reads_the_fixture
+    // passes on the shipping configuration. So leaving the split off costs a
+    // feature on ~1% of devices, and enabling it costs an APK that does not build.
+    //
+    // DO NOT RETRY BY CHANGING THE SPLIT. Five attempts are recorded above and four
+    // of them were the split's configuration. The remaining question is the base
+    // module's variant not seeing `dynamicFeatures` at all, and the evidence for
+    // that is the ABSENCE of the producer task in the graph -- not another error
+    // message, which is what four of the five attempts chased.
     // dynamicFeatures += setOf(":ocr-fallback")
 
     defaultConfig {
