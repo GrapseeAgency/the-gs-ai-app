@@ -26,6 +26,17 @@ name: arm64-runner-probe
 
 on:
   workflow_dispatch:
+    inputs:
+      host:
+        description: "Which host to probe. ubuntu-24.04-arm has no /dev/kvm (run 36688288136); macos-15 is arm64 with hardware virtualization for an arm64 guest."
+        required: false
+        default: "macos-15"
+        type: choice
+        options:
+          - macos-15
+          - macos-latest
+          - ubuntu-24.04-arm
+          - ubuntu-latest
   # A push trigger on a path nothing touches, so the workflow is INDEXED by the
   # API. With workflow_dispatch alone it never appeared in
   #   GET /repos/.../actions/workflows
@@ -42,28 +53,40 @@ permissions:
 
 jobs:
   probe:
-    name: is an arm64 runner available, and can it host the emulator?
-    runs-on: ubuntu-24.04-arm
-    timeout-minutes: 10
+    name: can ${{ inputs.host || 'macos-15' }} host an arm64 emulator?
+    # ubuntu-24.04-arm IS a real arm64 runner -- run 36688288136 printed
+    #   uname -m = aarch64, arch = arm64
+    # -- and it has NO /dev/kvm, so it cannot accelerate an arm64 guest either.
+    # Two attempts have now measured that rather than assumed it.
+    runs-on: ${{ inputs.host || 'macos-15' }}
+    timeout-minutes: 15
     steps:
       - name: The architecture, unedited
         run: |
           set -euo pipefail
-          echo "uname -m  = $(uname -m)"
-          echo "uname -r  = $(uname -r)"
-          echo "arch      = $(dpkg --print-architecture 2>/dev/null || echo '?')"
-          test "$(uname -m)" = aarch64 || {
-            echo "::error::this runner is $(uname -m), not aarch64; the label resolved to something else."
-            exit 1
-          }
+          echo "uname -m = $(uname -m)"
+          echo "uname -r = $(uname -r)"
+          case "$(uname -m)" in
+            aarch64|arm64) echo "ARCH: arm64" ;;
+            *) echo "::error::this runner is $(uname -m), not arm64; the label resolved to something else."; exit 1 ;;
+          esac
 
       - name: KVM is present and usable
         run: |
           set -euo pipefail
           # THE THING THAT DECIDES ITEM 2. On the x86_64 runner this existed and
           # was irrelevant; here it is the reason the attempt can work at all.
+          # /dev/kvm IS THE LINUX ACCELERATOR. On macOS the equivalent is
+          # Hypervisor.framework, and there is no /dev/kvm to look for -- so a
+          # missing node here is a fact about the OS, not a failure, and the
+          # probe continues to the thing that actually decides it.
+          if [ "$(uname)" != Linux ]; then
+            echo "not Linux: acceleration is Hypervisor.framework, not /dev/kvm."
+            echo "continuing -- the emulator step below is what decides."
+            exit 0
+          fi
           if [ ! -e /dev/kvm ]; then
-            echo "::error::/dev/kvm is absent on this arm64 runner too, so an arm64 guest still cannot be accelerated."
+            echo "::error::/dev/kvm is absent on this arm64 runner, so an arm64 guest cannot be accelerated."
             exit 1
           fi
           ls -l /dev/kvm
@@ -78,25 +101,87 @@ jobs:
           fi
           echo "VERIFIED: /dev/kvm exists and opened"
 
-      - name: The Android SDK, and whether the arm64 system image installs
+      - name: Boot an arm64 emulator, or say why not
         run: |
-          set -euo pipefail
-          # The image is what the emulator refused to run. If it installs here,
-          # then it is the HOST that was the limit and not the image.
-          SDK="$HOME/android-sdk"
-          mkdir -p "$SDK/cmdline-tools"
-          # Already on the image? The runner image includes the Android SDK for
-          # exactly this reason.
+          set -uo pipefail
+          # THE ONLY QUESTION THAT MATTERS, ASKED DIRECTLY.
+          #
+          # Everything before this step was scaffolding: the architecture, the
+          # accelerator, the SDK contents. None of those prove an arm64 emulator
+          # can start. This creates an AVD, launches it, and waits for a real
+          # boot, with a bound so it reports instead of hanging.
+          #
+          # The x86_64 runner failed exactly here, and the message names the
+          # host/architecture mismatch:
+          #
+          #     FATAL | Avd's CPU Architecture 'arm64' is not supported by the
+          #            QEMU2 emulator on x86_64 host.
+          #
+          # So success is the absence of that line PLUS a booted device. A probe
+          # that only checked `uname -m` would have PASSED on the x86_64 runner
+          # while the emulator could not start, which is the false pass this
+          # repository keeps paying for.
+
           if ! command -v sdkmanager >/dev/null 2>&1; then
-            echo "sdkmanager not on PATH; looking in the usual places"
-            find /usr/local/lib/android /opt/android-sdk "$HOME/android-sdk" \
-                 -name sdkmanager -type f 2>/dev/null | sed -n '1,3p' || true
-          fi
-          SDKMANAGER=$(command -v sdkmanager || true)
-          if [ -z "$SDKMANAGER" ]; then
-            echo "::warning::no sdkmanager on this image; the emulator step is left to a later, better-equipped job."
+            echo "::warning::no sdkmanager on PATH; cannot test the emulator here."
+            echo "  ANDROID_HOME=${ANDROID_HOME:-unset} ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-unset}"
             exit 0
           fi
-          echo "sdkmanager: $SDKMANAGER"
-          echo "ANDROID_HOME=${ANDROID_HOME:-unset}"
-          "$SDKMANAGER" --list_installed 2>/dev/null | sed -n '1,20p' || true
+          echo "sdkmanager: $(command -v sdkmanager)"
+          echo "emulator  : $(command -v emulator || echo 'not on PATH')"
+
+          IMG="system-images;android-30;google_apis;arm64-v8a"
+          echo "installing $IMG"
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          if ! sdkmanager --install "$IMG" "emulator" "platform-tools" >/dev/null 2>&1; then
+            echo "::warning::could not install $IMG on this host."
+            exit 0
+          fi
+          echo "installed: $(ls "$(dirname "$(dirname "$(command -v sdkmanager)")")"/system-images/android-30/google_apis 2>/dev/null || echo '?')"
+
+          AVD_NAME=arm64probe
+          echo no | avdmanager create avd --force -n "$AVD_NAME" \
+            --package "$IMG" --device 'Nexus 6' >/dev/null 2>&1 || {
+            echo "::warning::avdmanager could not create the AVD on this host."
+            exit 0
+          }
+          avdmanager list avd | sed -n '1,20p' || true
+
+          LOG=/tmp/emulator.log
+          echo "launching; log -> $LOG"
+          emulator -avd "$AVD_NAME" -no-window -no-snapshot -noaudio \
+            -no-boot-anim -gpu swiftshader_indirect -cores 4 -memory 2048 \
+            > "$LOG" 2>&1 &
+          PID=$!
+
+          # BOUNDED. 20 minutes is the budget the brief set for the arm64
+          # attempt, and this is the step that spends it.
+          BOOTED=no
+          for i in $(seq 1 60); do
+            if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; then
+              BOOTED=yes
+              echo "BOOTED after $((i * 20))s"
+              break
+            fi
+            # The x86_64 failure is FATAL and immediate, so detect it rather than
+            # waiting 20 minutes for a device that will never appear.
+            if grep -q "is not supported by the QEMU2 emulator" "$LOG" 2>/dev/null; then
+              echo "::error::the emulator refused this host, as it did on x86_64:"
+              grep -o "FATAL.*" "$LOG" | head -3 | sed 's/^/  /'
+              break
+            fi
+            sleep 20
+          done
+
+          echo "=== emulator log (tail) ==="
+          tail -25 "$LOG" | sed 's/^/  /'
+          kill "$PID" 2>/dev/null || true
+
+          if [ "$BOOTED" = yes ]; then
+            echo "VERIFIED: an arm64-v8a emulator BOOTS on $(uname -m)"
+            echo "  abi   : $(adb shell getprop ro.product.cpu.abi 2>/dev/null | tr -d '\r')"
+            echo "  model : $(adb shell getprop ro.product.model 2>/dev/null | tr -d '\r')"
+            exit 0
+          fi
+          echo "::error::no arm64 emulator boot on this host. See the log above for the reason."
+          exit 1
