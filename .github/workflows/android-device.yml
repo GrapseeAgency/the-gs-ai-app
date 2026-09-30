@@ -42,6 +42,14 @@ on:
         description: "android-deps run id (blank = the latest successful one)"
         required: false
         default: ""
+      abi:
+        description: "Emulator ABI. x86_64 runs natively on a linux runner; arm64-v8a needs KVM for a foreign guest and may not boot."
+        required: false
+        default: "x86_64"
+        type: choice
+        options:
+          - x86_64
+          - arm64-v8a
   # Fires when android-deps FINISHES, not in parallel with it. The tests need the
   # llamacpp-x86_64 artifact to exist, and a path-filtered push trigger races it:
   # the device job starts while the cross-compile is still running, cannot find
@@ -62,9 +70,34 @@ env:
 
 jobs:
   instrumented:
-    name: instrumented tests (emulator, x86_64, API 30)
+    # Not hardcoded, and that is the point. The ABI appears in five places
+    # below -- the system image, the jniLibs directory, the artifact name, the
+    # emulator arch and the job name -- and they used to be five copies of the
+    # literal "x86_64". The same class of mistake that shipped x86-64 objects
+    # labelled arm64-v8a in the deps job.
+    #
+    # Defaults to x86_64 because that is what a linux runner can actually
+    # emulate. arm64-v8a is selectable and will be attempted once; whether it
+    # boots is a property of the runner, not of this file.
+    name: instrumented tests (emulator, ${{ inputs.abi || 'x86_64' }}, API 30)
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    # ABI AT JOB LEVEL, NOT PER STEP.
+    #
+    # Each `run:` block is a fresh shell, so a variable set in one step does not
+    # survive into the next. Three steps use $ABI and only the first declared it,
+    # so those three would have expanded to an empty string and produced
+    #     native/prebuilts/android-/
+    #     android/app/src/main/jniLibs//libgs_ffi.so
+    # -- paths that look plausible, are wrong, and fail much later as a missing
+    # artifact rather than as a bad substitution.
+    #
+    # Declaring it once here means there is a single definition and a single
+    # default, and every step inherits it. The per-step `ABI=` assignments that
+    # already existed are left in place; they set the same value from the same
+    # expression and cost nothing.
+    env:
+      ABI: ${{ inputs.abi || 'x86_64' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -96,7 +129,9 @@ jobs:
           # compileSdk 35 to build the app; the EMULATOR is API 30 because that is
           # the oldest image the runner's acceleration supports well, and the
           # app's minSdk is 26 so API 30 is in range.
-          sdkmanager --install "platforms;android-35" "build-tools;35.0.0" "platform-tools" "system-images;android-30;google_apis;x86_64" >/dev/null
+          ABI="${{ inputs.abi || 'x86_64' }}"
+          echo "emulator ABI: $ABI"
+          sdkmanager --install "platforms;android-35" "build-tools;35.0.0" "platform-tools" "system-images;android-30;google_apis;$ABI" >/dev/null
           echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
           echo "$SDK/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
@@ -108,6 +143,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           DEPS_RUN_ID: ${{ github.event.inputs.deps_run_id || github.event.workflow_run.id }}
         run: |
+          echo "emulator ABI: $ABI"
           set -euo pipefail
           # Downloaded from THE SPECIFIC RUN that triggered this one, via the REST
           # API rather than `gh run download` (which only ever sees the latest run
@@ -130,14 +166,14 @@ jobs:
             echo "dispatch: using the latest successful android-deps run"
           fi
           echo "deps run: $DEPS_RUN_ID"
-          mkdir -p native/prebuilts/android-x86_64 /tmp/artifact
+          mkdir -p native/prebuilts/android-$ABI /tmp/artifact
           ARTIFACT_ID=$(
             curl -fsS -H "Authorization: Bearer $GH_TOKEN" \
               "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs/$DEPS_RUN_ID/artifacts" \
-            | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next((str(a["id"]) for a in d.get("artifacts",[]) if a["name"]=="llamacpp-x86_64"), ""))'
+            | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next((str(a["id"]) for a in d.get("artifacts",[]) if a["name"]=="llamacpp-$ABI"), ""))'
           )
           if [ -z "$ARTIFACT_ID" ]; then
-            echo "FAIL: the llamacpp-x86_64 artifact is not in run $DEPS_RUN_ID."
+            echo "FAIL: the llamacpp-$ABI artifact is not in run $DEPS_RUN_ID."
             echo "      Available:"
             curl -fsS -H "Authorization: Bearer $GH_TOKEN" \
               "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs/$DEPS_RUN_ID/artifacts" \
@@ -168,13 +204,13 @@ jobs:
             T=$(find /tmp/artifact/x -name '*.tar.gz' | sed -n '1p')
             if [ -n "$T" ]; then
               echo "zip contained a tarball: $T"
-              tar -xzf "$T" -C native/prebuilts/android-x86_64
+              tar -xzf "$T" -C native/prebuilts/android-$ABI
             else
-              cp -r /tmp/artifact/x/. native/prebuilts/android-x86_64/
+              cp -r /tmp/artifact/x/. native/prebuilts/android-$ABI/
             fi
           elif tar -tzf /tmp/artifact/llamacpp.zip >/dev/null 2>&1; then
             echo "gzip: untarring"
-            tar -xzf /tmp/artifact/llamacpp.zip -C native/prebuilts/android-x86_64
+            tar -xzf /tmp/artifact/llamacpp.zip -C native/prebuilts/android-$ABI
           else
             echo "FAIL: the artifact is neither a zip nor a gzip tarball"
             file /tmp/artifact/llamacpp.zip
@@ -182,16 +218,16 @@ jobs:
             exit 1
           fi
           echo "=== prebuilt contents ==="
-          find native/prebuilts/android-x86_64 -type f | sort | sed -n '1,30p'
-          test -f native/prebuilts/android-x86_64/include/llama.h || {
+          find native/prebuilts/android-$ABI -type f | sort | sed -n '1,30p'
+          test -f native/prebuilts/android-$ABI/include/llama.h || {
             echo "FAIL: no include/llama.h in the prebuilt package"; exit 1; }
-          test -d native/prebuilts/android-x86_64/lib || {
+          test -d native/prebuilts/android-$ABI/lib || {
             echo "FAIL: no lib/ in the prebuilt package"; exit 1; }
-          echo "total: $(du -sh native/prebuilts/android-x86_64 | cut -f1)"
+          echo "total: $(du -sh native/prebuilts/android-$ABI | cut -f1)"
           # The archives must be x86_64, not arm64. The emulator is x86_64 and an
           # arm64 .so is rejected by the linker, which turns every test into a
           # SKIP rather than a FAIL.
-          for a in native/prebuilts/android-x86_64/lib/*.a; do
+          for a in native/prebuilts/android-$ABI/lib/*.a; do
             echo "  $(basename "$a"): $(file -b "$a")"
           done
 
@@ -200,6 +236,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           NATIVE_RUN_ID: ${{ github.event.inputs.native_run_id || '' }}
         run: |
+          echo "emulator ABI: $ABI"
           # WITHOUT THIS THE APK SHIPS NO NATIVE LIBRARY AT ALL. Raw, run 36420986162,
           # which for the first time actually executed a test:
           #     java.lang.AssertionError: libgs_ffi.so did not load.
@@ -216,13 +253,13 @@ jobs:
             echo "dispatch: using the latest successful android-native run"
           fi
           echo "native run: $NATIVE_RUN_ID"
-          mkdir -p android/app/src/main/jniLibs/x86_64 /tmp/so-artifact
-          ARTIFACT_ID=$(curl -fsS -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs/$NATIVE_RUN_ID/artifacts" | python3 -c 'import json,sys; a=json.load(sys.stdin)["artifacts"]; h=[x for x in a if x["name"]=="libgs_ffi-x86_64"]; print(h[0]["id"] if h else "")')
+          mkdir -p "android/app/src/main/jniLibs/$ABI" /tmp/so-artifact
+          ARTIFACT_ID=$(curl -fsS -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs/$NATIVE_RUN_ID/artifacts" | python3 -c 'import json,sys; a=json.load(sys.stdin)["artifacts"]; h=[x for x in a if x["name"]=="libgs_ffi-$ABI"]; print(h[0]["id"] if h else "")')
           if [ -z "$ARTIFACT_ID" ]; then
-            echo "::error::no libgs_ffi-x86_64 artifact in run $NATIVE_RUN_ID. An x86_64 emulator cannot load an arm64 .so, so this job cannot substitute another ABI. The build is wrong, not the run."
+            echo "::error::no libgs_ffi-$ABI artifact in run $NATIVE_RUN_ID. An emulator of one ABI cannot load another ABI's .so, so this job cannot substitute. The build is wrong, not the run."
             exit 1
           fi
-          echo "libgs_ffi-x86_64 artifact id: $ARTIFACT_ID"
+          echo "libgs_ffi-$ABI artifact id: $ARTIFACT_ID"
           curl -fsSL -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip" -o /tmp/so-artifact/a.zip
           python3 -c 'import zipfile; zipfile.ZipFile("/tmp/so-artifact/a.zip").extractall("/tmp/so-artifact/x")'
           SO=$(find /tmp/so-artifact/x -name 'libgs_ffi.so' -type f | head -1 || true)
@@ -231,7 +268,7 @@ jobs:
             find /tmp/so-artifact/x -type f | sed -n '1,20p'
             exit 1
           fi
-          cp "$SO" android/app/src/main/jniLibs/x86_64/libgs_ffi.so
+          cp "$SO" android/app/src/main/jniLibs/$ABI/libgs_ffi.so
           # SAFETY NET, not the fix. android-native now links libc++ statically and
           # FAILS ITS OWN BUILD if a libc++_shared DT_NEEDED survives, so this
           # should find nothing. If it does, the companion is placed anyway so the
@@ -242,20 +279,34 @@ jobs:
           COMPANION=$(find /tmp/so-artifact/x -name 'libc++_shared.so' -type f | head -1 || true)
           if [ -n "$COMPANION" ]; then
             echo "NOTE: placing companion $(basename "$COMPANION")"
-            cp "$COMPANION" android/app/src/main/jniLibs/x86_64/libc++_shared.so
+            cp "$COMPANION" android/app/src/main/jniLibs/$ABI/libc++_shared.so
           else
             echo "companion: none needed"
           fi
-          ls -l android/app/src/main/jniLibs/x86_64/
+          ls -l android/app/src/main/jniLibs/$ABI/
           # Prove the ELF machine is x86-64 BEFORE the APK is built. A wrong-ABI .so is
           # accepted by the build and rejected by the linker on device, where it looks
           # exactly like a missing file -- the ambiguity this step exists to remove.
-          MACHINE=$(python3 -c 'import struct; d=open("android/app/src/main/jniLibs/x86_64/libgs_ffi.so","rb").read(20); m=struct.unpack_from("<H",d,18)[0]; print({0x3e:"x86-64",0x28:"arm",0xb7:"aarch64",0x03:"i386"}.get(m,hex(m)))')
-          echo "ELF machine: $MACHINE"
-          if [ "$MACHINE" != "x86-64" ]; then
-            echo "::error::libgs_ffi.so is $MACHINE, not x86-64. The linker would reject it here."
-            exit 1
-          fi
+          # A SCRIPT, NOT `python3 -c`. An inline body here puts `import struct`
+          # at column 0, which ends the YAML block scalar and leaves the rest of
+          # the file to parse as mapping keys:
+          #     yaml.scanner.ScannerError: while scanning a simple key
+          #       in ".github/workflows/android-device.yml", line 279, column 1
+          #     could not find expected ':'
+          # Third time in this repository. The script also carries the ABI table,
+          # so the ABI->machine mapping exists in exactly one place.
+          #
+          # The comparison used to be against the literal "x86-64" whatever the
+          # ABI was, which would have rejected a correct arm64 .so. And it is
+          # spelled differently again from android-native.yml's table, which
+          # compared "i386" against "i686" and so failed every correct x86 build.
+          # Three spellings of the same idea; one now.
+          MACHINE=$(python3 "$GITHUB_WORKSPACE/.github/scripts/elf_machine.py" \
+            "android/app/src/main/jniLibs/$ABI/libgs_ffi.so")
+          echo "ELF machine: $MACHINE  (ABI $ABI)"
+          python3 "$GITHUB_WORKSPACE/.github/scripts/elf_machine.py" \
+            "android/app/src/main/jniLibs/$ABI/libgs_ffi.so" "$ABI" \
+            || { echo "::error::the linker would reject this .so on a $ABI emulator"; exit 1; }
 
       - name: Fetch the 0.5B model and verify its checksum
         run: |
@@ -292,7 +343,7 @@ jobs:
         with:
           api-level: 30
           target: google_apis
-          arch: x86_64
+          arch: ${{ inputs.abi || 'x86_64' }}
           profile: Nexus 6
           # A cold-boot profile. snapshot and headless are on by default.
           # -cores 4 -memory 3072: android-emulator-runner creates the AVD with
@@ -322,6 +373,7 @@ jobs:
       - name: Report what actually ran
         if: always()
         run: |
+          echo "emulator ABI: $ABI"
           set -euo pipefail
           echo "=== instrumented test summary ==="
           for f in android/app/build/reports/androidTests/connected/*/index.html; do
@@ -336,8 +388,8 @@ jobs:
           done
           {
             echo "### android-device"
-            echo "emulator: API 30, google_apis, x86_64"
-            echo "NOTE: an x86_64 emulator is not a phone. Timings here are a floor."
+            echo "emulator: API 30, google_apis, $ABI"
+            echo "NOTE: an $ABI emulator is not a phone. Timings here are a floor."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload logcat, test results and screenshots
