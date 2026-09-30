@@ -110,6 +110,26 @@ jobs:
       # Exit codes: 1 = a bare pipeline can kill a step (FAIL), 2 = notes only,
       # which are worth reading but are not build-breaking, 0 = clean. Anything
       # else means the lint itself broke, and that is treated as a failure.
+      # THE APP'S DEPLOYMENT FLOOR IS A DIFFERENT NUMBER FROM THE LIBRARY'S.
+      #
+      # Run 36751766601 was the first run to reach the app build, and it failed:
+      #
+      #   AttachmentSheetView.swift:34:38: error:
+      #     'PhotosPickerItem' is only available in iOS 16.0 or newer
+      #   ** BUILD FAILED **
+      #
+      # because 2ccb3a7 set IPHONEOS_DEPLOYMENT_TARGET to 15.0 for the CARGO link's
+      # __chkstk_darwin, in a project.yml line that had not existed before -- so
+      # xcodebuild's own default of 16.0+ was silently replaced by 15.0 and the
+      # app's own Swift stopped compiling. The library floor stays 15.0; the app
+      # floor is 16.0; they are independent.
+      #
+      # This reads the floors the Swift source actually uses and fails if the
+      # declared one is lower. A comment could not have prevented that, because a
+      # number cannot be wrong about itself -- only a comparison can.
+      - name: The app's deployment floor covers what the source needs
+        run: python3 .github/scripts/check_ios_deployment_target.py
+
       - name: No pipeline that can kill its own step
         run: |
           set -uo pipefail

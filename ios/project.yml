@@ -11,18 +11,45 @@ settings:
     # marker, never compiler-validated) hard-errors on every xcodebuild:
     # "SWIFT_VERSION '5.9' is unsupported". Swift-5 mode is the intended mode.
     SWIFT_VERSION: "5.0"
-    # THE SAME NUMBER THE NATIVE LIBRARY IS BUILT WITH, ON PURPOSE.
+    # THE APP'S FLOOR: 16.0, AND IT IS NOT THE LIBRARY'S NUMBER.
     #
-    # xcodebuild was picking its own default here, which made the deployment
-    # target a second, invisible per-binary setting: the cargo link said
-    # arm64-apple-ios10.0.0 (run 36730369437) and the app said whatever the
-    # installed Xcode defaulted to. One value, stated, in both links.
+    # This line said "15.0" until run 36751766601, which was the first run to get
+    # as far as building the app:
     #
-    # 15.0 because the static archives are configured with
-    # -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0, and 12 is where __chkstk_darwin starts
-    # being exported. Anything in [12, 15] links; 15 is the value that matches
-    # the archives and needs no reasoning later.
-    IPHONEOS_DEPLOYMENT_TARGET: "15.0"
+    #   AttachmentSheetView.swift:34:38: error:
+    #     'PhotosPickerItem' is only available in iOS 16.0 or newer
+    #   AttachmentSheetView.swift:276:45: error:
+    #     'PhotosPickerItem' is only available in iOS 16.0 or newer
+    #   ** BUILD FAILED **
+    #
+    # A regression I introduced. 2ccb3a7 set this to 15.0 to fix an undefined
+    # __chkstk_darwin in the CARGO link, and because the line had not existed
+    # before, xcodebuild's own default -- 16.0 or higher -- was silently replaced
+    # by 15.0. So a change aimed at the native library lowered the APP by a whole
+    # version and broke the app's own Swift.
+    #
+    # The two numbers are for two different things and conflating them is the bug:
+    #
+    #   THE LIBRARY  needs >= 12, because __chkstk_darwin is only exported from
+    #                libSystem from iOS 12.0 onward, and 15.0 because that is what
+    #                the prebuilt archives are configured with. That is the
+    #                job-level IPHONEOS_DEPLOYMENT_TARGET in ios-native.yml, and it
+    #                stays 15.0.
+    #   THE APP       needs >= 16, because PhotosPickerItem is PhotosUI, iOS 16.0.
+    #                That is this line.
+    #
+    # A library built for 15.0 links perfectly well into an app whose floor is 16,
+    # so the floors are independent and the app's is the higher of the two. 16.0
+    # is chosen as the minimum the source actually requires rather than the
+    # highest version available, because a floor nobody needs is a floor that
+    # needlessly excludes devices.
+    #
+    # Asserted, not just documented:
+    #   .github/scripts/check_ios_deployment_target.py
+    # reads the floors the Swift source actually uses and fails if this value is
+    # below the highest of them. A comment could not have stopped this -- a number
+    # cannot be wrong about itself, only a comparison can.
+    IPHONEOS_DEPLOYMENT_TARGET: "16.0"
     DEVELOPMENT_TEAM: ""
     CODE_SIGN_STYLE: Automatic
     CODE_SIGNING_ALLOWED: "NO"
