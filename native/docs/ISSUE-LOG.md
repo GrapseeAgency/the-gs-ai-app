@@ -165,11 +165,54 @@ xcframework publishes. Fixed in `8fa8792`.
 could run without an engine both passed.** A green job reported an engine that
 reported itself missing.
 
+
+## arm64 device run — attempted, and it is a hard limit
+
+Run `36676280935`, the one attempt the brief authorised. Everything before the
+emulator worked, and each step is its own evidence:
+
+    emulator ABI: arm64-v8a
+    total: 102M                                     <- arm64 llama.cpp fetched
+    libgs_ffi-arm64-v8a artifact id: 11074441047
+    ELF machine: AArch64  (ABI arm64-v8a)           <- the shipping .so, from bytes
+    sha256: 74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db
+    [checksum matched the catalogue]
+
+Then the emulator, in its own words:
+
+    Android emulator version 37.1.11.0 (build_id 15917651)
+    FATAL | Avd's CPU Architecture 'arm64' is not supported by the QEMU2
+           emulator on x86_64 host. System image must match the host architecture.
+    [command].../emulator -port 5554 -avd test ...
+    adb: device 'emulator-5554' not found
+    error: could not connect to TCP port 5554: Connection refused
+
+This is not a misconfiguration and no flag fixes it. `/dev/kvm` EXISTS on the
+runner and is usable:
+
+    crw-rw-rw- 1 root kvm 10, 232 Sep 30 06:03 /dev/kvm
+    disable Linux hardware acceleration: false
+
+and that is exactly the point. KVM accelerates a guest of the HOST's
+architecture; it is not an architecture translator. arm64 on an x86_64 host needs
+full software emulation, and Google's QEMU2 emulator refuses rather than crawling.
+
+**So: no arm64 code path has ever executed, and cannot on this runner.** To run
+it, an arm64 host is required -- an arm64 GitHub runner, or any Apple Silicon Mac
+with the Android emulator. The `.so` is verified correct from its ELF bytes and
+the C/Rust is identical across ABIs, but that is an argument, not a measurement,
+and it is recorded as one.
+
+What the attempt did establish: the ABI parameterisation works end to end. The
+workflow selected `system-images;android-30;google_apis;arm64-v8a`, fetched the
+arm64 llama.cpp and the arm64 `libgs_ffi.so`, and asserted `ELF machine: AArch64`
+from the bytes before the APK was ever built.
+
 ## STILL OPEN
 
 | item | state | why |
 |------|-------|-----|
-| arm64 **device** run | NOT ATTEMPTED | an `arm64-v8a` system image on an `x86_64` runner has no KVM. Every device result is x86_64, which is **not the shipping ABI**. No arm64 code path has ever *executed*, though all four `.so` now build. |
+| arm64 **device** run | **ATTEMPTED — impossible on this runner** | Run `36676280935`. The whole arm64 pipeline works; the emulator refuses to start: `FATAL: Avd's CPU Architecture 'arm64' is not supported by the QEMU2 emulator on x86_64 host.` Needs an arm64 host. See below. |
 | ~~`armeabi-v7a` / `x86`~~ | **CLOSED** | all four ABIs publish: run `36651304587`, verified from the ELF bytes below. |
 | iOS app + XCTests | GREEN | Runs `36671474326` / `36673059524`: the app compiles and links against the xcframework and all 7 tests execute (40 passed, 0 failed, 5 skipped). **The iOS engine is portable-only** — `GS_LLAMA_PREBUILT` is set for Android only, so `gs_mobile_backend_available` is `return 0` by design and the 5 backend tests skip honestly. iOS cannot answer a prompt yet. |
 | dynamic feature module | BLOCKED (2/4) | `:ocr-fallback` variant matching; `com.android.dynamic-feature` fixed the first error, the base-variant `applicationId` lookup has not |
