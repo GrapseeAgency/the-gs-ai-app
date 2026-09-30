@@ -618,7 +618,7 @@ class DeviceVerificationTest {
         fun run(repo: ChatRepository): String = turn(repo, prompt)
 
         // --- (b) GenuineUnreachable: a port nothing is listening on -----------
-        val dead = java.net.ServerSocket(0, 1, java.net.InetAddress.getLoopbackAddress())
+        val dead = java.net.ServerSocket(0, 1, java.net.InetAddress.getByName("127.0.0.1"))
         val deadPort = dead.localPort
         dead.close()
         val db1 = inMemoryDb()
@@ -917,7 +917,7 @@ class DeviceVerificationTest {
 
             // 127.0.0.1:1 is the discard port: nothing listens, so the connect is
             // refused for certain, with no server in the way to answer by accident.
-            val dead = java.net.ServerSocket(0, 1, java.net.InetAddress.getLoopbackAddress())
+            val dead = java.net.ServerSocket(0, 1, java.net.InetAddress.getByName("127.0.0.1"))
             val port = dead.localPort
             dead.close()
             val repo = ChatRepository(
@@ -1011,7 +1011,7 @@ class DeviceVerificationTest {
             SettingsStore.updatePreferLocal(true)
             assertTrue("the switch did not turn on", SettingsStore.preferLocal)
 
-            val dead = java.net.ServerSocket(0, 1, java.net.InetAddress.getLoopbackAddress())
+            val dead = java.net.ServerSocket(0, 1, java.net.InetAddress.getByName("127.0.0.1"))
             val port = dead.localPort
             dead.close()
             val repo = ChatRepository(

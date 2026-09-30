@@ -95,8 +95,34 @@ class WireServer private constructor(
 
         private const val CONV_ID = "srv-conv-1"
 
+        /**
+         * The loopback address to BIND, resolved deliberately.
+         *
+         * `InetAddress.getLoopbackAddress()` returns IPv6 `::1` on a great many
+         * Android devices, and `ServerSocket(0, 8, that)` then binds `[::1]:port`
+         * while the client dials `127.0.0.1:port`. Those are different addresses,
+         * so the socket exists, the bind succeeds, and no connection ever arrives.
+         *
+         * That is exactly what runs 36770334063 and 36772124600 showed:
+         *
+         *     Matrix b2 server saw 0 message request(s)
+         *     Classify: server saw 0 request(s)
+         *
+         * with no exception from the bind and no line from the request handler --
+         * a server that is running, bound, and never asked. And it is
+         * indistinguishable from the case it was mistaken for, because a refused
+         * connect and a connect to the wrong family both surface as
+         * `GenuineUnreachable`.
+         *
+         * So the address is named rather than asked for, and the address actually
+         * bound is PRINTED at startup. A server that cannot be reached must say
+         * where it is listening, or the next person repeats this.
+         */
+        private val LOOPBACK_V4: InetAddress = InetAddress.getByName("127.0.0.1")
+
         fun start(mode: String): WireServer {
-            val sock = ServerSocket(0, 8, InetAddress.getLoopbackAddress())
+            val sock = ServerSocket(0, 8, LOOPBACK_V4)
+            println("WireServer[$mode] listening on ${sock.localAddress}:${sock.localPort}")
             val server = WireServer(sock)
             val loop = Thread {
                 while (!sock.isClosed) {
