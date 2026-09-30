@@ -25,7 +25,7 @@ change.)
 | `a5_prefer_local_is_off_by_default` | PASS | `stored preferLocal = false` — and it now ASSERTS this; it used to be `assertTrue("settings are readable", true)` |
 | `a6_the_chat_screen_path_answers_from_the_engine` | PASS | see below |
 | `a7_the_switch_actually_routes_off_and_on` | PASS | `OFF -> — GS backend error (HTTP 0) —` and `ON -> Paris.` — the two branches DIFFER, so the flag routes |
-| `a8_the_canned_responder_still_answers` | PASS | the fallback answers after a mid-stream cut. **The first version proved nothing** — see below |
+| `a8_the_canned_responder_still_answers` | PASS | `arm = GenuineUnreachable (streamLocalReply REACHED)` — the canned responder ran. **Three earlier versions proved nothing**; see below |
 | `failureIsAnExceptionNotAnEmptyString` | PASS | `chat("hello")` returns text, `chat("")` raises |
 | `libraryLoadsAndExportsBuildInfo` | PASS | — |
 | `ocrReturnsTextOnAFixtureImage` | PASS | `INVOICE INV-4471 DUE 2026-03-01` |
@@ -323,6 +323,50 @@ Three harnesses, one identical output:
 A marker that appears for three unrelated reasons is a marker telling you about
 the test. Both routing tests now use `gsHttpClient(...)`, the app's own factory.
 
+## a8 PASSES, AND IT TOOK THREE WRONG MECHANISMS TO GET THERE
+
+Run `36732807926`. Fourteen tests, no failures, no skips. The line that matters:
+
+    CannedResponderTest: arm = GenuineUnreachable (streamLocalReply REACHED)
+
+`streamLocalReply` has exactly one call site in the whole file — line 486, in the
+`GenuineUnreachable` arm — and this run reached it. `localReply` ran. The canned
+responder is proven, on a device, in the branch it exists for.
+
+a7 changed shape too, and the change is the proof that the harness was the
+problem:
+
+| | OFF branch | ON branch |
+| --- | --- | --- |
+| before (`36732807926`'s predecessor) | `— GS backend error (HTTP 0) —` | `Paris.` |
+| after | `— Offline — cannot reach GS. —` | `Paris.` |
+
+`ON` is unchanged because it comes from `streamLocalFirst`, which never touches
+the network. `OFF` is now the string the product actually emits.
+
+The three wrong harnesses, all of which printed the identical marker and all of
+which looked like the same product defect:
+
+1. **`127.0.0.1:1`.** Connection refused is a `SendFailure.BackendError`, and
+   that arm returns at the marker line without ever calling `streamLocalReply`.
+2. **A `ServerSocket` hanging up mid-stream.** This is the case the responder
+   exists for, and it is the wrong one: `MidStreamCut` does not call
+   `streamLocalReply` either. It appends "The connection dropped mid-turn".
+3. **A bare `HttpClient(CIO)`.** The app's real client installs
+   `ContentNegotiation { json(GsApiJson) }`, and `sendMessageStream` sends
+   `setBody(SendMessageRequest(...))`. With nothing to serialize that class with,
+   the request failed **before it connected**, so the exception was not a
+   `ConnectException` and the turn was classified `BackendError(0, null)`.
+
+What exonerated the product was measuring the failure instead of interpreting it:
+
+    CannedResponderTest: connect failure = java.net.ConnectException
+    CannedResponderTest:   is ConnectException=true
+
+against code that says `e is ConnectException` ⇒ `GenuineUnreachable`. Two
+predicates, same expression, opposite results — so the repository was not
+throwing the exception the test was throwing.
+
 ## STILL OPEN
 
 | item | state | why |
@@ -419,3 +463,11 @@ the test. Both routing tests now use `gsHttpClient(...)`, the app's own factory.
     `setBody(SendMessageRequest(...))` had no `ContentNegotiation` to serialize
     it and the request failed before connecting. The product's
     `classifySendFailure` was correct throughout.
+32. The arm64 probe ran `$ANDROID_HOME/tools/emulator` — the Android SDK Tools
+    layout removed in 2017 — so the emulator derived its Qt library path as
+    `../emulator/lib64/qt/lib` relative to the checkout's parent and died before
+    QEMU ran. The architecture was never tested in that run.
+33. GitHub executes `run:` blocks as `bash -e {0}`, so a step's own
+    `set -uo pipefail` ADDS to an `-e` that is already on. `adb` inside an `if`
+    condition is safe; `adb` in a bare assignment terminates the shell, which is
+    what killed the poll loop on its first iteration.
