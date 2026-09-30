@@ -273,8 +273,30 @@ jobs:
             # not per-FILE: lipo -thin extracts one slice to a temporary .a and
             # ar can read that. The arm64 slice is used for the member checks
             # because it is the one every iOS target can use.
-            THIN="$RUNNER_TEMP/thin-$LIB.a"
-            lipo "$A" -thin arm64 -output "$THIN"
+            # ONLY IF IT IS FAT. `lipo -thin` on a thin library is itself an
+            # error (run 36667890600):
+            #     fatal error: lipo: input file (.../device/libgs_ffi.a) must be
+            #       a fat file when the -thin option is specified
+            # The device slice has been arm64-only all along, so it is thin. The
+            # simulator one is fat since the Intel slice was added. So ask lipo
+            # what it has and only thin a fat file.
+            THIN="$A"
+            # Match "Architectures in the FAT FILE:", NOT the bare substring
+            # "fat file" -- lipo prints "Non-fat file: ... is architecture: arm64"
+            # for a thin library, which CONTAINS "fat file" and would send a
+            # thin file down the -thin path that just failed on the device
+            # slice. Caught by running the pattern against lipo's own output
+            # before dispatching.
+            case "$(lipo -info "$A" 2>/dev/null || true)" in
+              *"Architectures in the fat file"*)
+                THIN="$RUNNER_TEMP/thin-$LIB.a"
+                lipo "$A" -thin arm64 -output "$THIN"
+                echo "    fat; extracted arm64 to $THIN"
+                ;;
+              *)
+                echo "    thin; reading it directly"
+                ;;
+            esac
             MEMBERS=$(ar t "$THIN" | sed -n '1,200p')
             test -n "$MEMBERS" || { echo "FAIL: $LIB is not a readable ar archive"; exit 1; }
             echo "    members: $(printf '%s' "$MEMBERS" | wc -l | tr -d ' ')"
