@@ -286,6 +286,43 @@ would otherwise find two changes they were not told about.
 The rule going forward: commit one concern at a time, with explicit paths, never
 `git add -A` on a branch where three unrelated things are in flight.
 
+## THE PRODUCT WAS NEVER BROKEN: `classifySendFailure` is correct
+
+a8 spent three runs printing the same string, `— GS backend error (HTTP 0) —`,
+and three times it looked like the same product defect. It was not. Run
+`36730290869`'s measurement settles it:
+
+    CannedResponderTest: connect failure = java.net.ConnectException
+    CannedResponderTest:   is ConnectException=true
+
+and `classifySendFailure` is:
+
+    val unreachable = e is UnknownHostException || e is ConnectException || ...
+    return if (unreachable) GenuineUnreachable else BackendError(0, null)
+
+A `ConnectException` reaches `GenuineUnreachable`, whose arm emits
+`— Offline — cannot reach GS. —`. The string the run printed is emitted by the
+`else`. So `unreachable` was **false** in the repository's path while the same
+predicate was **true** in the test's.
+
+The difference was the test's own client. a8 built `HttpClient(CIO)` with no
+plugins; the app's real one (`di/ServiceLocator.kt:40`) installs
+`ContentNegotiation { json(GsApiJson) }`, and `sendMessageStream` sends
+`setBody(SendMessageRequest(...))`. With nothing to serialize that
+`@Serializable` class with, the request fails **before it connects**, and the
+exception is not a `ConnectException`.
+
+Three harnesses, one identical output:
+
+| # | Harness | Why it never reached `localReply` |
+| --- | --- | --- |
+| 1 | `127.0.0.1:1` | `BACKEND_ERROR` returns before `streamLocalReply` |
+| 2 | `ServerSocket` hanging up mid-stream | `MidStreamCut` never calls `streamLocalReply`; one call site, at line 486 |
+| 3 | bare `HttpClient(CIO)` | the request never reaches the network |
+
+A marker that appears for three unrelated reasons is a marker telling you about
+the test. Both routing tests now use `gsHttpClient(...)`, the app's own factory.
+
 ## STILL OPEN
 
 | item | state | why |
@@ -369,3 +406,16 @@ The rule going forward: commit one concern at a time, with explicit paths, never
     needs a context, `isAvailable` reports the framework, `initialize` needs a
     GGUF, so a portable iOS build was indistinguishable from a llama one and
     every engine-backed test skipped on both.
+29. The iOS cargo link asked for `__chkstk_darwin`, which libSystem only exports
+    from iOS 12.0 onward, while rustc's built-in floor for `aarch64-apple-ios` is
+    10.0 and nothing here set it. `IPHONEOS_DEPLOYMENT_TARGET=15.0` in three
+    places now, and asserted with `rustc --print deployment-target`.
+30. The first version of that assertion FAILED OPEN: rustc prints
+    `IPHONEOS_DEPLOYMENT_TARGET=10.0`, and stripping only `iOS ` left
+    `IPHONEOS_DEPLOYMENT_TARGET=10`, so `[ ... -lt 12 ]` errored to exit 2 and
+    the check accepted a 10.0 build. A check that fails open is worse than none,
+    because it is reported as a pass.
+31. a7 and a8 built `HttpClient(CIO)` with no plugins, so
+    `setBody(SendMessageRequest(...))` had no `ContentNegotiation` to serialize
+    it and the request failed before connecting. The product's
+    `classifySendFailure` was correct throughout.
