@@ -994,9 +994,9 @@ jobs:
             echo "=== archives for $TRIPLE ==="
             find "build-$TRIPLE" -name '*.a' | sort
           done <<'TARGETS'
-            arm64  iphoneos
-            arm64  iphonesimulator
-            x86_64 iphonesimulator
+            aarch64-apple-ios       arm64  iphoneos
+            aarch64-apple-ios-sim   arm64  iphonesimulator
+            x86_64-apple-ios        x86_64 iphonesimulator
           TARGETS
 
       - name: Verify each target's archives, from the bytes
