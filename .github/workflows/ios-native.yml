@@ -27,6 +27,10 @@ env:
 jobs:
   build:
     name: xcframework
+    # NEEDS THE LLAMA PACKAGES. This job sets GS_LLAMA_PREBUILT for the
+    # cargo build, which is what defines GS_LLAMA_HAVE_LLAMA and therefore
+    # what makes gs_mobile_backend_available() able to return 1.
+    needs: [llama-ios]
     runs-on: macos-latest
     steps:
       - name: Check out
@@ -58,6 +62,12 @@ jobs:
           xcodebuild -version
           xcrun --sdk iphoneos --show-sdk-version
           xcrun --sdk iphonesimulator --show-sdk-version
+
+      - name: Fetch the llama.cpp packages for this target
+        uses: actions/download-artifact@v4
+        with:
+          name: llamacpp-ios
+          path: native/prebuilts
 
       - name: Install Rust targets
         run: |
@@ -102,6 +112,31 @@ jobs:
         working-directory: native
         run: |
           set -euo pipefail
+          # THE VARIABLE THAT MAKES THE ENGINE EXIST ON iOS.
+          #
+          # gs-ffi/build.rs defines GS_LLAMA_HAVE_LLAMA -- the macro
+          # gs_mobile_backend_available() keys off -- only when
+          # GS_LLAMA_PREBUILT points at a directory containing include/llama.h.
+          # Android sets it (android-native.yml:295). iOS never did, so:
+          #
+          #     GsNativeLoader: native engine unavailable: this build has no
+          #                     generation backend
+          #
+          # which is true, and the five engine-backed XCTests skip on it while
+          # the job stays green.
+          #
+          # Asserted here rather than trusted: a missing or mis-shaped package
+          # produces a build that links and then reports no backend, which is
+          # the worst combination -- it looks installed and does nothing.
+          GS_LLAMA_PREBUILT="$GITHUB_WORKSPACE/native/prebuilts/ios-arm64"
+          test -f "$GS_LLAMA_PREBUILT/include/llama.h" || {
+            echo "FAIL: no include/llama.h under $GS_LLAMA_PREBUILT"
+            echo "package contents:"; ls -A "$GS_LLAMA_PREBUILT" 2>/dev/null | sed -n '1,8p'
+            exit 1
+          }
+          echo "GS_LLAMA_PREBUILT=$GS_LLAMA_PREBUILT"
+          ls -1 "$GS_LLAMA_PREBUILT/lib" || true
+          export GS_LLAMA_PREBUILT
           cargo build --release -p gs-ffi --lib --target aarch64-apple-ios
           SRC="target/aarch64-apple-ios/release/libgs_ffi.a"
           test -f "$SRC" || { echo "MISSING: $SRC"; exit 1; }
@@ -119,6 +154,31 @@ jobs:
         working-directory: native
         run: |
           set -euo pipefail
+          # THE VARIABLE THAT MAKES THE ENGINE EXIST ON iOS.
+          #
+          # gs-ffi/build.rs defines GS_LLAMA_HAVE_LLAMA -- the macro
+          # gs_mobile_backend_available() keys off -- only when
+          # GS_LLAMA_PREBUILT points at a directory containing include/llama.h.
+          # Android sets it (android-native.yml:295). iOS never did, so:
+          #
+          #     GsNativeLoader: native engine unavailable: this build has no
+          #                     generation backend
+          #
+          # which is true, and the five engine-backed XCTests skip on it while
+          # the job stays green.
+          #
+          # Asserted here rather than trusted: a missing or mis-shaped package
+          # produces a build that links and then reports no backend, which is
+          # the worst combination -- it looks installed and does nothing.
+          GS_LLAMA_PREBUILT="$GITHUB_WORKSPACE/native/prebuilts/ios-arm64-sim"
+          test -f "$GS_LLAMA_PREBUILT/include/llama.h" || {
+            echo "FAIL: no include/llama.h under $GS_LLAMA_PREBUILT"
+            echo "package contents:"; ls -A "$GS_LLAMA_PREBUILT" 2>/dev/null | sed -n '1,8p'
+            exit 1
+          }
+          echo "GS_LLAMA_PREBUILT=$GS_LLAMA_PREBUILT"
+          ls -1 "$GS_LLAMA_PREBUILT/lib" || true
+          export GS_LLAMA_PREBUILT
           cargo build --release -p gs-ffi --lib --target aarch64-apple-ios-sim
           SRC="target/aarch64-apple-ios-sim/release/libgs_ffi.a"
           test -f "$SRC" || { echo "MISSING: $SRC"; exit 1; }
@@ -157,6 +217,31 @@ jobs:
         working-directory: native
         run: |
           set -euo pipefail
+          # THE VARIABLE THAT MAKES THE ENGINE EXIST ON iOS.
+          #
+          # gs-ffi/build.rs defines GS_LLAMA_HAVE_LLAMA -- the macro
+          # gs_mobile_backend_available() keys off -- only when
+          # GS_LLAMA_PREBUILT points at a directory containing include/llama.h.
+          # Android sets it (android-native.yml:295). iOS never did, so:
+          #
+          #     GsNativeLoader: native engine unavailable: this build has no
+          #                     generation backend
+          #
+          # which is true, and the five engine-backed XCTests skip on it while
+          # the job stays green.
+          #
+          # Asserted here rather than trusted: a missing or mis-shaped package
+          # produces a build that links and then reports no backend, which is
+          # the worst combination -- it looks installed and does nothing.
+          GS_LLAMA_PREBUILT="$GITHUB_WORKSPACE/native/prebuilts/ios-x86_64-sim"
+          test -f "$GS_LLAMA_PREBUILT/include/llama.h" || {
+            echo "FAIL: no include/llama.h under $GS_LLAMA_PREBUILT"
+            echo "package contents:"; ls -A "$GS_LLAMA_PREBUILT" 2>/dev/null | sed -n '1,8p'
+            exit 1
+          }
+          echo "GS_LLAMA_PREBUILT=$GS_LLAMA_PREBUILT"
+          ls -1 "$GS_LLAMA_PREBUILT/lib" || true
+          export GS_LLAMA_PREBUILT
           cargo build --release -p gs-ffi --lib --target x86_64-apple-ios
           SRC="target/x86_64-apple-ios/release/libgs_ffi.a"
           test -f "$SRC" || { echo "MISSING: $SRC"; exit 1; }
@@ -216,6 +301,107 @@ jobs:
             '    export *' \
             '}' > "$MM"
           cat "$MM"
+
+          # FATTEN EACH SLICE WITH LLAMA.CPP FIRST. A static archive does not
+          # carry its dependencies with it, and libgs_ffi.a now references
+          # llama_*, ggml_* and ggml_* symbols. Shipping it alone produces an app
+          # that builds and then cannot generate -- "it looks installed and does
+          # nothing", which is the exact failure GS_LLAMA_HAVE_LLAMA exists to
+          # prevent.
+          #
+          # ORDER: llama needs ggml, ggml needs ggml-cpu and ggml-base. Alphabetical
+          # is the reverse (build.rs says so, having been bitten).
+          fatten () {
+            SLICE="$1"; PKG="$2"; OUT="$3"
+            echo "=== $SLICE + $PKG -> $OUT ==="
+            ORDER=""
+            for NAME in llama ggml ggml-cpu ggml-base ggml-metal ggml-blas; do
+              [ -f "$PKG/lib/lib$NAME.a" ] && ORDER="$ORDER $PKG/lib/lib$NAME.a"
+            done
+            if [ -z "$ORDER" ]; then
+              echo "::error::no llama.cpp archives under $PKG/lib -- the engine would link without a backend."
+              ls -1 "$PKG/lib" 2>/dev/null || true
+              exit 1
+            fi
+            echo "  merging:$ORDER"
+            # Refuse to read and write the same file. lipo opens the output for
+            # writing before it has read the inputs, so this truncates the
+            # archive being copied and reports success.
+            [ "$SLICE" != "$OUT" ] || {
+              echo "::error::fatten would read and write the same file: $SLICE"
+              exit 1
+            }
+            lipo -create "$SLICE" $ORDER -output "$OUT"
+            echo "  $(lipo -info "$OUT")"
+            # And assert the merged archive really is bigger than the input,
+            # which catches an empty or truncated merge that lipo reports as
+            # success.
+            IN=$(stat -f%z "$SLICE")
+            MERGED=$(stat -f%z "$OUT")
+            echo "  $IN bytes -> $MERGED bytes"
+            if [ "$MERGED" -le "$IN" ]; then
+              echo "::error::$OUT is not larger than $SLICE ($MERGED <= $IN); the merge did nothing."
+              exit 1
+            fi
+            # THE SYMBOLS THE WHOLE CHANGE EXISTS FOR. Asserted on the merged
+            # archive, because a build that links without a backend reports
+            # "no generation backend" at run time and never at link time.
+            #
+            # BOTH UNDERSCORE SPELLINGS, MATCHED BY REGEX. The first version
+            # grepped for ' T _llama_model_load' -- the Mach-O spelling -- and
+            # checked against a locally built ELF archive, where nm prints
+            # "T llama_model_load" with no underscore:
+            #
+            #     $ nm -gU m.a | grep -c ' T _llama_model_load'
+            #     0
+            #
+            # so the check would have FAILED a perfectly good merge on any
+            # runner whose nm did not add the underscore. Matched on the symbol
+            # name with the underscore optional, which covers Mach-O and ELF.
+            #
+            # Four symbols, not one: llama_model_load initialises the backend,
+            # llama_backend_init sets up the backend registry, ggml_init is what
+            # the ggml side needs, and llama_free releases it. Any one missing
+            # means the engine cannot run, and the message names which.
+            MISSING=""
+            for SYM in llama_backend_init llama_model_load llama_free; do
+              if ! nm -gU "$OUT" 2>/dev/null | grep -qE " T _?${SYM}\$"; then
+                MISSING="$MISSING $SYM"
+              fi
+            done
+            if [ -n "$MISSING" ]; then
+              echo "::error::$OUT is missing:$MISSING. The engine cannot initialise."
+              echo "  first symbols present:"
+              nm -gU "$OUT" 2>/dev/null | grep -E ' T ' | sed -n '1,5p' | sed 's/^/    /'
+              exit 1
+            fi
+            echo "  symbols present: llama_backend_init, llama_model_load, llama_free"
+          }
+
+          # A DIFFERENT OUTPUT PATH. The first version of this was
+          #     fatten .../device/libgs_ffi.a  ...  .../device/libgs_ffi.a
+          # -- reading and writing the same file. lipo -create opens the output
+          # for writing before it finishes reading the inputs, so this truncates
+          # the archive it is copying. The result is a "successful" lipo and an
+          # empty or half-written library, which fails later as undefined symbols
+          # and names nothing.
+          fatten "$GITHUB_WORKSPACE/dist/ios/device/libgs_ffi.a" \
+                 "$GITHUB_WORKSPACE/native/prebuilts/ios-arm64" \
+                 "$GITHUB_WORKSPACE/dist/ios/device/libgs_ffi-merged.a"
+          mv "$GITHUB_WORKSPACE/dist/ios/device/libgs_ffi-merged.a" \
+             "$GITHUB_WORKSPACE/dist/ios/device/libgs_ffi.a"
+          # The simulator slice is ALREADY fat across arm64 and x86_64, so the
+          # llama archives must be too, and both simulators need their own.
+          fatten "$GITHUB_WORKSPACE/dist/ios/simulator/libgs_ffi.a" \
+                 "$GITHUB_WORKSPACE/native/prebuilts/ios-arm64-sim" \
+                 "$GITHUB_WORKSPACE/dist/ios/simulator/libgs_ffi-sim-arm64.a"
+          fatten "$GITHUB_WORKSPACE/dist/ios/simulator/libgs_ffi.a" \
+                 "$GITHUB_WORKSPACE/native/prebuilts/ios-x86_64-sim" \
+                 "$GITHUB_WORKSPACE/dist/ios/simulator/libgs_ffi-sim-x86_64.a"
+          lipo -create \
+            "$GITHUB_WORKSPACE/dist/ios/simulator/libgs_ffi-sim-arm64.a" \
+            "$GITHUB_WORKSPACE/dist/ios/simulator/libgs_ffi-sim-x86_64.a" \
+            -output "$GITHUB_WORKSPACE/dist/ios/simulator/libgs_ffi.a"
 
           xcodebuild -create-xcframework \
             -library  "$GITHUB_WORKSPACE/dist/ios/device/libgs_ffi.a" \
@@ -647,4 +833,223 @@ jobs:
             ios/build-simulator.log
             ios/test-simulator.log
           if-no-files-found: warn
+          retention-days: 14
+
+  # THE IOS ENGINE IS PORTABLE-ONLY TODAY, AND THIS IS WHY.
+  #
+  # gs_mobile_backend_available() is a #ifdef on GS_LLAMA_HAVE_LLAMA, and
+  # build.rs defines that only when GS_LLAMA_PREBUILT points at a directory with
+  # include/llama.h. That variable was set for Android (android-native.yml:295)
+  # and NEVER for iOS, so every iOS build reported:
+  #
+  #     GsNativeLoader: native engine unavailable: this build has no
+  #                     generation backend
+  #
+  # which is TRUE. The five engine-backed XCTests skip on it, honestly, and the
+  # job is green while the engine cannot answer a prompt.
+  #
+  # SAME PIN AS ANDROID. The wrapper compiles against one specific llama.cpp, and
+  # the wrong one fails with the 11 errors recorded in android-deps.yml:
+  # llama_get_memory, llama_memory_clear, llama_memory_seq_pos_max,
+  # GGML_BACKEND_DEVICE_TYPE_IGPU. Asserted here by reading the header, not by
+  # trusting the checkout.
+  llama-ios:
+    name: llama.cpp for iOS (device + both simulator archs)
+    runs-on: macos-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache the llama.cpp clone
+        uses: actions/cache@v4
+        with:
+          # Keyed on the PIN, so changing the pin cannot serve a stale tree.
+          path: src-llama
+          key: llama-ios-3018a11e79e489b657dbb77c95694889ccff92df
+
+      - name: Fetch llama.cpp at the pinned commit
+        run: |
+          set -euo pipefail
+          # NOT "src": the repository root already contains one, and
+          #   fatal: destination path 'src' already exists and is not an empty
+          #   directory.
+          # is what that produced.
+          #
+          # A shallow clone CANNOT take `--branch <sha>`, so fetch the commit
+          # directly and detach onto it.
+          LLAMA_SHA=3018a11e79e489b657dbb77c95694889ccff92df
+          git init -q src-llama
+          cd src-llama
+          git remote add origin https://github.com/ggml-org/llama.cpp.git
+          git fetch -q --depth 1 origin "$LLAMA_SHA"
+          git checkout -q --detach FETCH_HEAD
+          git submodule update --init --recursive || true
+          cd - >/dev/null
+          GOT=$(cd src-llama && git rev-parse HEAD)
+          echo "llama.cpp pinned: $GOT"
+          if [ "$GOT" != "$LLAMA_SHA" ]; then
+            echo "::error::llama.cpp is at $GOT, not $LLAMA_SHA. The wrapper and the headers will disagree."
+            exit 1
+          fi
+
+          # ASSERT THE PIN TOOK, AT THE HEADER LEVEL. A wrong tree compiles the
+          # WRONG API and fails twenty minutes later in a different job with an
+          # error that names no cause. Counting the symbols the wrapper needs:
+          #   3018a11e7 -> 4 matches
+          #   b636228c   -> 0 matches   (the old `--branch b4581` pin)
+          for SYM in llama_get_memory llama_memory_clear llama_memory_seq_pos_max; do
+            if ! grep -q "$SYM" src-llama/include/llama.h; then
+              echo "::error::$SYM is absent from include/llama.h at $GOT. The wrapper will not compile against this tree."
+              exit 1
+            fi
+            echo "  header has $SYM"
+          done
+          if ! grep -q GGML_BACKEND_DEVICE_TYPE_IGPU src-llama/ggml/include/ggml-backend.h; then
+            echo "::error::GGML_BACKEND_DEVICE_TYPE_IGPU absent at $GOT"
+            exit 1
+          fi
+          echo "  header has GGML_BACKEND_DEVICE_TYPE_IGPU"
+
+      - name: Build all three targets
+        run: |
+          set -euo pipefail
+          # THREE TARGETS, ONE LOOP, AND THE TABLE IS PRINTED FIRST.
+          #
+          # aarch64-apple-ios        the device. An iOS device is arm64 and has
+          #                           been since the iPhone 5s.
+          # aarch64-apple-ios-sim    the Apple Silicon simulator.
+          # x86_64-apple-ios         the Intel simulator. NOT OPTIONAL: the
+          #                           macos-latest image was an Intel runner on run
+          #                           36664200219, which produced
+          #                             ld: found architecture 'arm64',
+          #                               required architecture 'x86_64'
+          #                           and turned every gs_* into an undefined
+          #                           symbol. Both simulator slices are therefore
+          #                           built and lipos together, so the framework is
+          #                           correct on either kind of Mac.
+          #
+          # SAME FLAGS AS ANDROID-DEPS, because the wrapper does not care which
+          # platform it is on and a CLI target would be handed to rustc as a link
+          # input:
+          #   LLAMA_BUILD_APP / COMMON / UI are ON BY DEFAULT at this commit.
+          #   LLAMA_BUILD_APP ON built bin/llama and failed with
+          #     ld: error: unable to find library -lllama-server-impl
+          # GGML_LLAMAFILE=OFF because gs-ffi is C/Rust and a ggml file format
+          # reader is not part of it.
+          #
+          # GGML_METAL is left ON (the default on Apple silicon) rather than
+          # forced OFF. Nothing here can assert a GPU is present -- these are
+          # static archives linked into a library, and whether Metal is used at
+          # run time is ggml's decision on the device. So the build keeps the
+          # backend the platform ships, and the TESTS assert on what the engine
+          # reports, which is the only thing that can actually be checked.
+          cat <<'TABLE'
+            target                 arch   sysroot
+            aarch64-apple-ios      arm64  iphoneos
+            aarch64-apple-ios-sim  arm64  iphonesimulator
+            x86_64-apple-ios       x86_64 iphonesimulator
+          TABLE
+
+          while read -r ARCH SYSROOT; do
+            [ -n "$ARCH" ] || continue
+            echo "=== $ARCH ($SYSROOT) ==="
+            rm -rf "build-$ARCH"
+            cmake -S src-llama -B "build-$ARCH" \
+              -DCMAKE_SYSTEM_NAME=iOS \
+              -DCMAKE_OSX_ARCHITECTURES="$ARCH" \
+              -DCMAKE_OSX_SYSROOT="$SYSROOT" \
+              -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DBUILD_SHARED_LIBS=OFF \
+              -DLLAMA_BUILD_TESTS=OFF \
+              -DLLAMA_BUILD_EXAMPLES=OFF \
+              -DLLAMA_BUILD_SERVER=OFF \
+              -DLLAMA_BUILD_APP=OFF \
+              -DLLAMA_BUILD_COMMON=OFF \
+              -DLLAMA_BUILD_UI=OFF \
+              -DGGML_LLAMAFILE=OFF \
+              -G Ninja 2>&1 | tee "configure-$ARCH.log"
+            cmake --build "build-$ARCH" -j"$(sysctl -n hw.ncpu)" 2>&1 | tee "build-$ARCH.log"
+            echo "=== archives for $ARCH ==="
+            find "build-$ARCH" -name '*.a' | sort
+          done <<'TARGETS'
+            arm64  iphoneos
+            arm64  iphonesimulator
+            x86_64 iphonesimulator
+          TARGETS
+
+      - name: Verify each target's archives, from the bytes
+        run: |
+          set -euo pipefail
+          # lipo -info is the check, and it is asserted per target: an archive
+          # that does not exist is reported by `find` as no output at all, which
+          # is easy to read as "nothing to do".
+          check () {
+            DIR="$1"; ARCH="$2"
+            echo "=== $DIR ==="
+            N=0
+            for A in "$DIR"/*.a; do
+              [ -f "$A" ] || continue
+              N=$((N+1))
+              echo "  $(basename "$A")  $(stat -f%z "$A") bytes"
+              lipo -info "$A" || { echo "FAIL: lipo cannot read $A"; exit 1; }
+              lipo -info "$A" | grep -q "$ARCH" || {
+                echo "::error::$A does not contain $ARCH: $(lipo -info "$A")"; exit 1; }
+            done
+            if [ "$N" -lt 4 ]; then
+              echo "::error::$DIR has $N archive(s); llama needs llama, ggml, ggml-cpu and ggml-base at minimum."
+              exit 1
+            fi
+            echo "  $N archives, all containing $ARCH"
+          }
+          mkdir -p native/prebuilts/ios-arm64 native/prebuilts/ios-arm64-sim native/prebuilts/ios-x86_64-sim
+          check build-arm64 arm64
+          check build-iossim arm64
+          check build-x86_64 x86_64
+
+      - name: Package in the shape gs-ffi/build.rs requires
+        run: |
+          set -euo pipefail
+          # THE CONTRACT, from native/crates/gs-ffi/build.rs:
+          #   <root>/include/llama.h    line 105, the test that enables llama
+          #   <root>/ggml-include/      line 112, the PACKAGE ggml layout
+          #   <root>/lib/*.a            line 196, link-search
+          #
+          # ggml/include is ALSO copied into include/, because a build TREE puts
+          # the ggml headers there and build.rs adds both layouts. Copying both
+          # costs nothing and covers whichever shape is handed over -- the
+          # mistake android-deps made once, where adding only the build-tree path
+          # produced
+          #   native/prebuilts/android-x86_64/include/llama.h:4:10: fatal
+          #   error: 'ggml.h' file not found
+          for PAIR in "build-arm64:ios-arm64" \
+                      "build-iossim:ios-arm64-sim" \
+                      "build-x86_64:ios-x86_64-sim"; do
+            SRC="${PAIR%%:*}"
+            DST="native/prebuilts/${PAIR##*:}"
+            echo "=== $SRC -> $DST ==="
+            mkdir -p "$DST/lib" "$DST/include" "$DST/ggml-include"
+            for A in "$SRC"/*.a; do
+              [ -f "$A" ] || continue
+              cp "$A" "$DST/lib/"
+            done
+            cp -r src-llama/include/. "$DST/include/"
+            cp -r src-llama/ggml/include/. "$DST/include/"
+            cp -r src-llama/ggml/include/. "$DST/ggml-include/"
+            # The headers are the same for every target; copy them once from the
+            # source tree rather than three times from a build dir.
+            test -f "$DST/include/llama.h" || { echo "FAIL: no include/llama.h in $DST"; exit 1; }
+            test -f "$DST/ggml-include/ggml.h" || { echo "FAIL: no ggml-include/ggml.h in $DST"; exit 1; }
+            echo "  $(ls "$DST/lib" | wc -l | tr -d ' ') archives, $(ls "$DST/include" | wc -l | tr -d ' ') headers"
+            find "$DST" -type f | sort | sed -n '1,12p'
+          done
+          echo "=== all three packages ==="
+          du -sh native/prebuilts/ios-*
+
+      - name: Upload the three llama.cpp packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: llamacpp-ios
+          path: native/prebuilts/ios-*
+          if-no-files-found: error
           retention-days: 14
