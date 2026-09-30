@@ -477,6 +477,59 @@ provisioned. So all five are downstream of ONE missing thing: a 0.5B GGUF in the
 simulator's Application Support. No weights are in git, and there is no step that
 provisions one, which is the next thing to do.
 
+## THE iOS ENGINE ANSWERS A PROMPT
+
+Run `36759872954`, head `76a48b2`. **46 passed, 0 skipped** -- the five skips from
+the previous run are gone, and the three verbatim lines that matter:
+
+    GsNative.buildInfo -> gs-ffi 0.1.0 +llama
+    GsNative.chat -> Hello! How can I assist you today?
+    GsNativeLoader: native engine ready (/Users/runner/Library/Developer/CoreSimulator/
+      Devices/4E3A6BB3-.../data/Containers/Data/Application/15E02482-.../Library/...)
+
+All eight `GsNativeTests`, none skipped:
+
+    testBuildInfoNamesTheLlamaBackend              passed
+    testChatReturnsNonEmptyText                    passed
+    testEmbedImageRejectsShortBuffer               passed
+    testFailureThrowsRatherThanReturningEmptyString passed
+    testFrameworkIsReachableOrAbsentCleanly        passed
+    testOcrReturnsTextOnFixture                    passed
+    testSamePromptTwiceIsIdentical                 passed
+    testShutdownIsIdempotent                       passed
+
+`Hello! How can I assist you today?` is a real generation from a 0.5B model on the
+iOS simulator, and it is the claim that has been open since this branch started:
+the iOS build was portable-only, so `backendAvailable` was false, so the engine
+could not answer, so the tests skipped and the job was green anyway.
+
+`testSamePromptTwiceIsIdentical` passing is worth its own line, because it tests a
+bug that was real here once: the C layer appended a temperature stage to a sampler
+chain it never reset, so a REUSED context disagreed with itself while a fresh one
+was perfect. A determinism claim that only ever ran on a fresh context would not
+have caught it.
+
+The OCR fixture rendered with a real typeface, not the 5x7 fallback:
+
+    wrote .../invoice.png  1235x172  text='INVOICE INV-4471 DUE 2026-03-01'
+    renderer : AWT SansSerif 64pt
+    ink      : 16118 px (7.6% of the page)
+    fixture signature: 89504e470d0a1a0a
+
+which is why using the existing renderer instead of the one I had just written was
+worth the minute it cost: the naive 5x7 version at scale 3 had a documented history
+of reading `INVOICE INV-4471` as `IMJOICE IMYAA71 DUE 2926-03-g1`.
+
+### The model is verified twice, in two places
+
+    bytes: 491400032 (want 491400032)
+    sha256: 74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db
+    VERIFIED: 0.5B model is the bytes and the hash android-device measures
+
+size before hash, so a truncated download is named as truncated; and the hash is
+re-read from the copy inside the container, because the file that has to be right
+is the one the test opens, not the one that was downloaded.
+
 ## STILL OPEN
 
 | item | state | why |
@@ -596,3 +649,10 @@ provisions one, which is the next thing to do.
 37. I lowered the app's iOS deployment floor from xcodebuild's default (16.0+) to
     15.0 while fixing the library's, and `PhotosPickerItem` stopped compiling.
     The two floors are independent; a library built for 15.0 links into a 16.0 app.
+39. Item 1 is COMPLETE: run 36759872954, all three iOS jobs green, 46 passed and
+    0 skipped, `GsNative.chat -> Hello! How can I assist you today?` from the 0.5B
+    model on the simulator. The build reports `gs-ffi 0.1.0 +llama`, so it is no
+    longer portable-only, and the engine answers.
+40. Item 2 is BLOCKED with three measured reasons, one per host. Item 3 (a3) is
+    done. Item 4 is done: 14/14 on Android with a7 and a8 passing. Item 5, the
+    dynamic feature module, is the only one of the operator's five still open.
