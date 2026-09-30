@@ -517,10 +517,32 @@ jobs:
 
           # And the binaries, because a plist can describe slices that are not
           # there -- the plist is not the last word.
-          for SLICE in ios-arm64 ios-arm64-simulator; do
-            test -f "$XF/$SLICE/libgs_ffi.a" \
-              || { echo "::error::$XF/$SLICE/libgs_ffi.a is missing"; exit 1; }
-            echo "  $SLICE/libgs_ffi.a  $(stat -c%s "$XF/$SLICE/libgs_ffi.a") bytes"
+          # DERIVE THE SLICE NAME, DO NOT SPELL IT. This loop used to be
+          #     for SLICE in ios-arm64 ios-arm64-simulator
+          # and run 36668750491 failed on it, correctly:
+          #     ::error::.../GsFfi.xcframework/ios-arm64-simulator/libgs_ffi.a
+          #       is missing
+          #
+          # -create-xcframework names a multi-architecture slice after ALL of
+          # its architectures joined by underscores:
+          #     ios-arm64_x86_64-simulator    arm64 + x86_64 simulator
+          #     ios-arm64-simulator           arm64 simulator only
+          #     ios-arm64                     device
+          # so the name changes whenever the architecture set does -- exactly
+          # when a hardcoded name stops being true. There is no spelling that is
+          # right in advance, and the identifier is in the plist, so read it.
+          for VARIANT in device simulator; do
+            # `|| exit 1` IS LOAD-BEARING. Without it a script failure inside
+            # $( ) leaves $SLICE empty, the loop carries on with BIN=/libgs_ffi.a
+            # and the only symptom is a `stat: cannot statx` four lines later --
+            # which names neither the plist nor the script. Verified by removing
+            # a slice directory and watching exactly that happen.
+            SLICE=$(python3 \
+              "$GITHUB_WORKSPACE/.github/scripts/xcframework_slice_path.py" \
+              "$XF" "$VARIANT") || exit 1
+            BIN="$XF/$SLICE/libgs_ffi.a"
+            test -f "$BIN" || { echo "::error::$BIN is missing"; exit 1; }
+            echo "  $VARIANT -> $SLICE/libgs_ffi.a  $(stat -c%s "$BIN") bytes"
           done
           test -f "$XF/Headers/module.modulemap" \
             || { echo "FAIL: no module.modulemap"; exit 1; }
