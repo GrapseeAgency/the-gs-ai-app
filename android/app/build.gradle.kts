@@ -71,24 +71,38 @@ android {
     // are recorded; the app build is worth more than the module, so this is
     // left off until the base-variant lookup is understood.
     //
-    // BACK ON, because the split now has the file it was missing.
+    // STILL OFF after the fifth attempt. Run 36764251868:
     //
-    // It was commented out because the module could not resolve, and a split
-    // that will not resolve takes the WHOLE app build down with it -- a worse
-    // outcome than not having the module. The cause was never the Kotlin DSL:
+    //   Failed to calculate the value of property 'applicationId'.
+    //   > Collection is empty.
+    //   at com.android.build.api.variant.impl.DynamicFeatureVariantImpl
+    //        $instantiateBaseModuleMetadata$1.transform(DynamicFeatureVariantImpl.kt:244)
     //
-    //   * android/ocr-fallback/src/main/AndroidManifest.xml DID NOT EXIST, so the
-    //     split had no <dist:module> and
-    //       Failed to calculate ... property 'applicationId'. Collection is empty.
-    //     was the empty split variant, not a missing base-module id.
-    //   * the module declared core-ktx and nothing else, while OcrEngine.kt
-    //     imports ML Kit and feature-delivery, so it could not have compiled
-    //     either. The manifest task failed first and hid it.
+    // The manifest and the dependencies were the right two fixes and both STAY --
+    // they were genuinely missing, and the module cannot compile without them. The
+    // split is wired in now, which the log proves: :ocr-fallback:generateDebugFeature
+    // TransitiveDeps is in the task graph. So the split is no longer failing to
+    // resolve; it is failing inside AGP's own base-metadata lookup, and every
+    // configuration axis I can check from here already agrees:
     //
-    // Both are fixed. If this line ever takes the app build down again, comment it
-    // out and say WHICH of the two it was -- the app build is worth more than the
-    // module, and a split that does not resolve is not worth an APK that does.
-    dynamicFeatures += setOf(":ocr-fallback")
+    //   dynamicFeatures      declared, and effective (its tasks are in the graph)
+    //   split manifest       present, with <dist:module>, on-demand, fusing
+    //   split dependencies   ML Kit + feature-delivery + gms.tasks, all in the
+    //                        catalog and all already used by the base
+    //   buildTypes           debug and release on BOTH modules, no flavors anywhere
+    //   minSdk               26 on both, which is the other thing Play refuses over
+    //   applicationId        set on the base, absent on the split (correct)
+    //   versionCode          73 on the base
+    //   namespace            com.grapsee.gsai.ocrfallback, a subpackage of the id
+    //
+    // So this is AGP looking up something I cannot see from the outside, and the
+    // next move is to READ the line rather than guess a sixth configuration. Not
+    // from memory: DynamicFeatureVariantImpl.kt:244, and which collection it reads.
+    //
+    // The app build is worth more than the module, and a split that does not
+    // resolve is not worth an APK that does. That was true four attempts ago and
+    // it is true now.
+    // dynamicFeatures += setOf(":ocr-fallback")
 
     defaultConfig {
         applicationId = "com.grapsee.gsai"
