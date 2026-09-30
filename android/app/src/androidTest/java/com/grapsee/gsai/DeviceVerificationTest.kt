@@ -570,186 +570,175 @@ class DeviceVerificationTest {
      * business answering specially, and that it is NOT the model's answer -- so
      * the two paths are distinguishable and neither can stand in for the other.
      */
+    /**
+     * WHICH FAILURE ARM each backend behaviour produces, asserted on the arm's own
+     * string rather than on the reply.
+     *
+     * Replaces a8_the_canned_responder_still_answers, which measured the wrong
+     * thing three times and printed `— GS backend error (HTTP 0) —` for all three:
+     * a dead port (that arm RETURNS before streamLocalReply), a mid-stream cut
+     * (MidStreamCut never calls streamLocalReply -- one call site, line 486, in
+     * GenuineUnreachable), and a bare HttpClient (no ContentNegotiation, so the
+     * request failed before connecting and the exception was not a
+     * ConnectException). The product was correct in all three cases.
+     *
+     * The reply is an indirect signal and a bad one: five mis-set-ups produced the
+     * same string. What matters is the CLASSIFICATION, and the three arms are
+     * distinguished by strings the source emits itself:
+     *
+     *     GenuineUnreachable -> "— Offline — cannot reach GS. —"
+     *     MidStreamCut       -> "connection dropped mid-turn"
+     *     BackendError       -> "— GS backend error (HTTP 500) —"
+     *
+     * This is an indirect read and is labelled as such. What makes it trustworthy
+     * is that the three are mutually exclusive and each is asserted against the
+     * arm that emits it in the source, not against a comment.
+     */
     @Test
-    fun a8_the_canned_responder_still_answers() {
-        val prompt = "draft me a launch email for a new coffee shop"
+    fun a8_each_backend_behaviour_maps_to_its_own_failure_arm() {
+        val model = findModel()
+        assertNotNull("no model on the device", model)
+        assertTrue(
+            "GsNativeLoader.initWith failed",
+            GsNativeLoader.initWith(model!!.absolutePath),
+        )
+        SettingsStore.init(ctx)
+        ModelStore.init(ctx)
+        ModelStore.recordInstalled(model, ModelCatalog.MODEL_0_5B.id)
 
-        // THREE MECHANISMS TRIED BEFORE THIS ONE, each ruled out by reading the
-        // code rather than by a failing test. Recorded because the next person to
-        // "fix" a8 will reach for a server again.
-        //
-        // 1. Point ApiClient at 127.0.0.1:1 and assert "not blank" (run
-        //    36707513732). Refused connect is a SendFailure.BackendError, and that
-        //    arm RETURNS at the marker line without calling streamLocalReply. The
-        //    marker itself satisfied the assertion.
-        //
-        // 2. Serve a chunked SSE response from a ServerSocket and hang up
-        //    mid-stream (run 36723027782), on the theory that the mid-stream cut
-        //    is what the responder is for. Two SSE frames were malformed first --
-        //    {"type":"delta",...} and `event: status` -- before the real format
-        //    was read off ApiClient.kt:96. Fixing the frame changed nothing.
-        //
-        // 3. Why nothing changed (run 36725014379): streamLocalReply has
-        //    EXACTLY ONE call site in the entire file --
-        //
-        //        line 486, inside the SendFailure.GenuineUnreachable arm
-        //
-        //    MidStreamCut -- the arm a hanging-up server produces -- does NOT
-        //    call it. It appends "The connection dropped mid-turn" and returns.
-        //    So a mid-stream cut can never reach the canned responder, and no
-        //    byte-perfect server would have made a8 pass. The ServerSocket was
-        //    the wrong mechanism, not a buggy one.
-        //
-        // GenuineUnreachable needs a TCP CONNECT FAILURE, and classifySendFailure
-        // recognises one with five predicates:
-        //
-        //    val unreachable = e is UnknownHostException || e is ConnectException
-        //        || e is SocketTimeoutException
-        //        || e.message?.contains("unresolved", ignoreCase = true) == true
-        //        || e.message?.contains("failed to connect", ignoreCase = true) == true
-        //    return if (unreachable) GenuineUnreachable else BackendError(0, null)
-        //
-        // A refused connect came out BackendError(0), so none of the five matched
-        // what Ktor CIO actually throws. That is a real defect -- the arm that
-        // says "— Offline — cannot reach GS. —" and falls back is unreachable in
-        // practice -- but the exception is NAMED BY A RUN, not by a guess. The
-        // measurement below is that run.
+        val prompt = "What is the capital of France? Answer with one word."
+        val preferBefore = SettingsStore.preferLocal
 
-        // A port that is bound and then released: the connect is refused for
-        // certain, with no server in the way to answer by accident.
-        val dead = ServerSocket(0, 1, InetAddress.getLoopbackAddress())
+        // The switch is OFF for the whole test. The fallback chain under test is
+        // the provider-FAILED path, and with the switch on, streamLocalFirst
+        // answers before any of these servers is contacted -- which is a different
+        // test, and one that already exists (b3, b4).
+        SettingsStore.updatePreferLocal(false)
+
+        fun run(repo: ChatRepository): String = turn(repo, prompt)
+
+        // --- (b) GenuineUnreachable: a port nothing is listening on -----------
+        val dead = java.net.ServerSocket(0, 1, java.net.InetAddress.getLoopbackAddress())
         val deadPort = dead.localPort
         dead.close()
-
-        // MEASUREMENT. The identical POST the repository makes, so the exception
-        // measured here is the one the repository sees.
-        //
-        // Inside `runBlocking`, and that is not incidental. `runCatching` is
-        // inline but its block is `() -> R`, not `suspend () -> R`, so a suspend
-        // call inside it only compiles when the inline lands in a suspend
-        // context. Run 36728958062, on the first attempt at this block:
-        //
-        //   e: DeviceVerificationTest.kt:617:20 Suspend function
-        //      'suspend fun HttpClient.post(...)' should be called only from a
-        //      coroutine or another suspend function
-        //
-        // The SAME client the repository will use, so this measures the
-        // repository's path rather than a near-miss of it. That distinction is
-        // the entire subject of the test -- see the ApiClient below.
-        val client = gsHttpClient("a8-probe-${UUID.randomUUID()}")
-        val thrown = runBlocking {
-            runCatching {
-                client.post("http://127.0.0.1:$deadPort/api/v1/conversations") {
-                    // `contentType` is an extension on HttpMessageBuilder in
-                    // io.ktor.http, which is why the qualified
-                    // `io.ktor.http.ContentType.Application.Json` resolved while
-                    // this call did not until it was imported:
-                    //
-                    //   e: DeviceVerificationTest.kt:618:17 Unresolved reference
-                    //      'contentType'
-                    //
-                    contentType(ContentType.Application.Json)
-                    setBody("{}")
-                }
-            }.exceptionOrNull()
-        }
-        if (thrown != null) {
-            val m = thrown.message ?: ""
-            println("CannedResponderTest: connect failure = ${thrown::class.java.name}")
-            println("CannedResponderTest:   message   = $m")
-            println("CannedResponderTest:   is ConnectException=${thrown is java.net.ConnectException}" +
-                " is UnknownHost=${thrown is java.net.UnknownHostException}" +
-                " is SocketTimeout=${thrown is java.net.SocketTimeoutException}")
-            println("CannedResponderTest:   msg has 'unresolved'=${m.contains("unresolved", true)}" +
-                " has 'failed to connect'=${m.contains("failed to connect", true)}")
-        } else {
-            println("CannedResponderTest: connect SUCCEEDED to a closed port -- " +
-                "something else owns $deadPort, so this run measures nothing")
-        }
-        runCatching { client.close() }
-
-        val db = Room.inMemoryDatabaseBuilder(ctx, AppDatabase::class.java)
-            .allowMainThreadQueries()
-            .build()
-        // THE APP'S CLIENT. `gsHttpClient` is internal to the app module and
-        // androidTest compiles as its friend, so the real configuration is
-        // available here -- and using it is the point:
-        //
-        //   di/ServiceLocator.kt:40
-        //     install(ContentNegotiation) { json(GsApiJson) }
-        //     install(HttpRequestRetry)   { retryOnServerErrors(1) ... }
-        //     install(HttpTimeout)        { requestTimeoutMillis = 120_000 ... }
-        //
-        // sendMessageStream sends `setBody(SendMessageRequest(...))`, a
-        // @Serializable data class. With no ContentNegotiation nothing can
-        // serialize it, so the request fails BEFORE it connects, and the thrown
-        // exception is not a ConnectException. classifySendFailure then takes
-        //
-        //   return if (unreachable) GenuineUnreachable else BackendError(0, null)
-        //
-        // the else branch, and the turn shows "— GS backend error (HTTP 0) —".
-        // Run 36730290869 measured the bare client directly and got
-        //
-        //   connect failure = java.net.ConnectException
-        //   is ConnectException=true
-        //
-        // which is how the product code was exonerated. A test that rolls its
-        // own client measures a configuration nobody ships.
-        val api = ApiClient(
-            gsHttpClient("a8-${UUID.randomUUID()}"),
-            "http://127.0.0.1:$deadPort"
-        )
-        val repo = ChatRepository(api, db)
-
-        val preferBefore = SettingsStore.preferLocal
+        val db1 = inMemoryDb()
         try {
-            // The switch is what selects the ENGINE, not whether the responder
-            // answers. With it OFF the answer must be the built-in responder, and
-            // the prompt must NOT reach an on-device model -- which is the
-            // property a7 proves on the routing side and this proves on the
-            // fallback side.
-            SettingsStore.updatePreferLocal(false)
-            val out = StringBuilder()
-            runBlocking {
-                repo.send(
-                    conversationId = null,
-                    content = prompt,
-                    onConversationResolved = { _ -> },
-                    onDelta = { out.append(it) }
-                )
-            }
-            val reply = out.toString()
-            println("CannedResponderTest: -> ${reply.take(200)}")
-
-            // THE PROPERTY, stated so it holds whichever arm is reached: a failed
-            // provider must leave a real answer on screen. Not an empty bubble --
-            // the user is mid-turn and has already seen their own message.
+            val reply = run(
+                ChatRepository(
+                    ApiClient(
+                        gsHttpClient("a8-dead-${UUID.randomUUID()}"),
+                        "http://127.0.0.1:$deadPort",
+                    ),
+                    db1,
+                ),
+            )
+            println("Classify: refused connect   -> ${reply.take(120)}")
             assertTrue(
-                "a failed provider left the turn with no text at all: '${reply.take(160)}'",
-                reply.trim().length >= 20,
-            )
-            // And it must be an ANSWER, not a diagnostic. "GS backend error
-            // (HTTP 0)" means the BACKEND_ERROR arm ran, which returns before
-            // streamLocalReply, so the responder never spoke.
-            assertFalse(
-                "the turn shows the raw backend-error marker instead of an " +
-                    "answer, so the canned responder never ran: '${reply.take(160)}'",
-                reply.contains("GS backend error"),
-            )
-            // "— Offline —" is the GENUINE_UNREACHABLE label, and reaching it
-            // means streamLocalReply was called at line 486. Asserted separately
-            // from the two above because it is the arm-specific claim.
-            println(
-                "CannedResponderTest: arm = " + when {
-                    reply.contains("— Offline —") -> "GenuineUnreachable (streamLocalReply REACHED)"
-                    reply.contains("connection dropped mid-turn") -> "MidStreamCut (responder NOT reached)"
-                    else -> "unlabelled"
-                }
+                "a refused TCP connect must be classified GenuineUnreachable, whose " +
+                    "arm emits the offline label. Instead: ${reply.take(160)}",
+                reply.contains("— Offline —"),
             )
         } finally {
-            SettingsStore.updatePreferLocal(preferBefore)
-            runCatching { db.close() }
+            runCatching { db1.close() }
         }
+
+        // --- (a) MidStreamCut: reachable, streamed, then died ------------------
+        // This is the case that ISN'T offline, and the one that matters most: the
+        // provider was there and then stopped. Treating it as "offline" is the
+        // false label the FORENSIC AUDIT [5] comment in send() is about.
+        val cut = WireServer.start(WireServer.MODE_CUT_MID_STREAM)
+        val db2 = inMemoryDb()
+        try {
+            val reply = run(
+                ChatRepository(WireServer.apiFor(cut, "a8-cut-${UUID.randomUUID()}"), db2),
+            )
+            println("Classify: mid-stream cut    -> ${reply.take(120)}")
+            println("Classify: server saw ${cut.messageRequests.get()} request(s)")
+            assertTrue(
+                "the server served ${cut.messageRequests.get()} request(s), so the " +
+                    "provider WAS reachable and this cannot be an offline label",
+                cut.messageRequests.get() >= 1,
+            )
+            assertFalse(
+                "a MID-STREAM CUT is not an offline event and must not be labelled " +
+                    "as one. The provider answered and then stopped, so claiming " +
+                    "\"— Offline — cannot reach GS. —\" tells the user their network " +
+                    "is down when it was not. Got: ${reply.take(160)}",
+                reply.contains("— Offline —"),
+            )
+            assertTrue(
+                "the turn produced neither the mid-stream label nor a real answer, " +
+                    "so some arm neither of the two handled it. Got: " +
+                    "${reply.take(160)}",
+                reply.contains("connection dropped mid-turn")
+                    || reply.trim().length >= 20,
+            )
+        } finally {
+            runCatching { cut.stop() }
+            runCatching { db2.close() }
+        }
+
+        // --- (c) BackendError: the server answered 500 ------------------------
+        // Distinct from both of the above, and the one that must NOT be dressed up
+        // as "offline": the server was up and said no.
+        val err = WireServer.start(WireServer.MODE_HTTP_500)
+        val db3 = inMemoryDb()
+        try {
+            val reply = run(
+                ChatRepository(WireServer.apiFor(err, "a8-500-${UUID.randomUUID()}"), db3),
+            )
+            println("Classify: HTTP 500          -> ${reply.take(120)}")
+            assertTrue(
+                "a 500 from the provider must be classified BackendError, whose arm " +
+                    "emits the server's sanitized status and must NOT be called " +
+                    "offline. Got: ${reply.take(160)}",
+                reply.contains("GS backend error (HTTP 500)"),
+            )
+            assertFalse(
+                "an HTTP 500 is the server answering, so labelling it \"— Offline —\" " +
+                    "is a lie the FORENSIC AUDIT [5] comment exists to prevent. " +
+                    "Got: ${reply.take(160)}",
+                reply.contains("— Offline —"),
+            )
+        } finally {
+            runCatching { err.stop() }
+            runCatching { db3.close() }
+        }
+
+        // --- (d) Clean break: a 200 with no events, closed cleanly ------------
+        // The fourth mode, and the one that is easiest to get wrong precisely
+        // because nothing failed. No exception, no events, no done event: the
+        // channel closed mid-turn. send() has a separate branch for it --
+        //
+        //     if (doneMessage == null && accumulated.isEmpty()) { recoverLatest... }
+        //
+        // -- and it must NOT be reported as an offline network, because no
+        // network claim was ever made and none can be supported.
+        val quiet = WireServer.start(WireServer.MODE_CLEAN_BREAK)
+        val db4 = inMemoryDb()
+        try {
+            val reply = run(
+                ChatRepository(WireServer.apiFor(quiet, "a8-clean-${UUID.randomUUID()}"), db4),
+            )
+            println("Classify: 200, no events   -> '${reply.take(80)}'")
+            println("Classify: server saw ${quiet.messageRequests.get()} request(s)")
+            assertTrue(
+                "the provider answered 200, so this turn reached the network",
+                quiet.messageRequests.get() >= 1,
+            )
+            assertFalse(
+                "a clean break with a 200 is not an offline event. The provider was " +
+                    "reachable and answered, so \"— Offline — cannot reach GS. —\" " +
+                    "is a claim about the network that nothing here supports. " +
+                    "Got: ${reply.take(160)}",
+                reply.contains("— Offline —"),
+            )
+        } finally {
+            runCatching { quiet.stop() }
+            runCatching { db4.close() }
+        }
+
+        SettingsStore.updatePreferLocal(preferBefore)
     }
 
     @Test
@@ -859,4 +848,239 @@ class DeviceVerificationTest {
             runCatching { db.close() }
         }
     }
+    // ------------------------------------------------------------------
+    // The switch x network matrix. Four cases, four markers, one per source.
+    // See the class-level note in WireServer.kt for why the network needs a
+    // server that actually answers.
+    // ------------------------------------------------------------------
+
+    /** Loads the model and the stores every one of the four needs. */
+    private fun prepareMatrix(): java.io.File {
+        val model = findModel()
+        assertNotNull(
+            "no model on the device, so the ON cases cannot be compared. This is " +
+                "a FAILURE, not a skip: a routing matrix that cannot reach its own " +
+                "ON branch proves nothing about the OFF branch either.",
+            model,
+        )
+        val m = model!!
+        assertTrue("GsNativeLoader.initWith failed", GsNativeLoader.initWith(m.absolutePath))
+        assumeTrue(
+            "no generation backend in this build, so the model's own answer " +
+                "cannot be recognised and the matrix would be vacuous. selfCheck: " +
+                GsNative.selfCheck(),
+            GsNativeLoader.isAvailable(),
+        )
+        SettingsStore.init(ctx)
+        ModelStore.init(ctx)
+        ModelStore.recordInstalled(m, ModelCatalog.MODEL_0_5B.id)
+        return m
+    }
+
+    /** One send through a real ChatRepository, returning everything it emitted. */
+    private fun turn(
+        repo: ChatRepository,
+        content: String,
+    ): String {
+        val out = StringBuilder()
+        runBlocking {
+            repo.send(
+                conversationId = null,
+                content = content,
+                onConversationResolved = { _ -> },
+                onDelta = { out.append(it) },
+            )
+        }
+        return out.toString()
+    }
+
+    private fun inMemoryDb() =
+        Room.inMemoryDatabaseBuilder(ctx, AppDatabase::class.java)
+            .allowMainThreadQueries()
+            .build()
+
+    /** The prompt every case uses: the model answers "Paris", the others cannot. */
+    private val matrixPrompt = "What is the capital of France? Answer with one word."
+
+    @Test
+    fun b1_prefer_off_network_dead_uses_the_canned_responder() {
+        prepareMatrix()
+        val db = inMemoryDb()
+        // THE APP'S CLIENT, via gsHttpClient, for the reason a8 records: a bare
+        // HttpClient cannot serialize SendMessageRequest, so the request fails
+        // before it connects and the turn is classified BackendError rather than
+        // GenuineUnreachable.
+        val before = SettingsStore.preferLocal
+        try {
+            SettingsStore.updatePreferLocal(false)
+            assertFalse("the switch did not turn off", SettingsStore.preferLocal)
+
+            // 127.0.0.1:1 is the discard port: nothing listens, so the connect is
+            // refused for certain, with no server in the way to answer by accident.
+            val dead = java.net.ServerSocket(0, 1, java.net.InetAddress.getLoopbackAddress())
+            val port = dead.localPort
+            dead.close()
+            val repo = ChatRepository(
+                ApiClient(gsHttpClient("b1-${UUID.randomUUID()}"), "http://127.0.0.1:$port"),
+                db,
+            )
+            val reply = turn(repo, matrixPrompt)
+            println("Matrix b1 OFF/dead -> ${reply.take(180)}")
+
+            // POSITIVE assertions. The turn produced the honest offline label...
+            assertTrue(
+                "with the provider unreachable the turn should open with the " +
+                    "offline label, which is what proves it took the " +
+                    "GenuineUnreachable arm. Got: ${reply.take(160)}",
+                reply.contains("— Offline —"),
+            )
+            // ...and then the CANNED RESPONDER answered, at real length.
+            val afterLabel = reply.substringAfter("— Offline —")
+            assertTrue(
+                "the canned responder produced nothing after the offline label, so " +
+                    "a user with no network would see a bare notice: " +
+                    "${afterLabel.take(120)}",
+                afterLabel.trim().length >= 20,
+            )
+            // THE ASSERTION THIS CASE EXISTS FOR. Not a negation on its own -- the
+            // two above already prove the turn produced a real answer -- but the
+            // discriminator: the model must not have been consulted.
+            assertFalse(
+                "with preferLocal OFF the reply came from the on-device model " +
+                    "anyway. The switch is not gating the engine on the " +
+                    "provider-failed path. Got: ${reply.take(160)}",
+                reply.contains("Paris"),
+            )
+        } finally {
+            SettingsStore.updatePreferLocal(before)
+            runCatching { db.close() }
+        }
+    }
+
+    @Test
+    fun b2_prefer_off_network_up_uses_the_network() {
+        prepareMatrix()
+        val db = inMemoryDb()
+        val server = WireServer.start(WireServer.MODE_FULL)
+        val before = SettingsStore.preferLocal
+        try {
+            SettingsStore.updatePreferLocal(false)
+            assertFalse("the switch did not turn off", SettingsStore.preferLocal)
+
+            val repo = ChatRepository(
+                WireServer.apiFor(server, "b2-${UUID.randomUUID()}"),
+                db,
+            )
+            val reply = turn(repo, matrixPrompt)
+            println("Matrix b2 OFF/up -> ${reply.take(180)}")
+            println("Matrix b2 server saw ${server.messageRequests.get()} message request(s)")
+
+            // THE NETWORK ANSWERED, and its marker is a string nothing else can
+            // produce. This is the case that had no test at all.
+            assertTrue(
+                "with the network reachable and preferLocal OFF the reply must be " +
+                    "the provider's. Neither the model (\"Paris\") nor the canned " +
+                    "responder can produce '${WireServer.NETWORK_MARKER}'. " +
+                    "The server served ${server.messageRequests.get()} request(s). " +
+                    "Got: ${reply.take(160)}",
+                reply.contains(WireServer.NETWORK_MARKER),
+            )
+            assertTrue(
+                "the turn never reached the provider, so the network path is " +
+                    "untested rather than working",
+                server.messageRequests.get() >= 1,
+            )
+            assertFalse(
+                "the on-device model was consulted even though the provider " +
+                    "answered and preferLocal is OFF. Got: ${reply.take(160)}",
+                reply.contains("Paris"),
+            )
+        } finally {
+            SettingsStore.updatePreferLocal(before)
+            runCatching { server.stop() }
+            runCatching { db.close() }
+        }
+    }
+
+    @Test
+    fun b3_prefer_on_network_dead_uses_the_model() {
+        prepareMatrix()
+        val db = inMemoryDb()
+        val before = SettingsStore.preferLocal
+        try {
+            SettingsStore.updatePreferLocal(true)
+            assertTrue("the switch did not turn on", SettingsStore.preferLocal)
+
+            val dead = java.net.ServerSocket(0, 1, java.net.InetAddress.getLoopbackAddress())
+            val port = dead.localPort
+            dead.close()
+            val repo = ChatRepository(
+                ApiClient(gsHttpClient("b3-${UUID.randomUUID()}"), "http://127.0.0.1:$port"),
+                db,
+            )
+            val reply = turn(repo, matrixPrompt)
+            println("Matrix b3 ON/dead -> ${reply.take(180)}")
+
+            // POSITIVE: the model's own answer. localReply has no France branch, so
+            // "Paris" can only have come from the engine.
+            assertTrue(
+                "with preferLocal ON the on-device model must answer even with no " +
+                    "network. localReply cannot produce \"Paris\". " +
+                    "Got: ${reply.take(160)}",
+                reply.contains("Paris"),
+            )
+        } finally {
+            SettingsStore.updatePreferLocal(before)
+            runCatching { db.close() }
+        }
+    }
+
+    @Test
+    fun b4_prefer_on_network_up_uses_the_model() {
+        prepareMatrix()
+        val db = inMemoryDb()
+        val server = WireServer.start(WireServer.MODE_FULL)
+        val before = SettingsStore.preferLocal
+        try {
+            SettingsStore.updatePreferLocal(true)
+            assertTrue("the switch did not turn on", SettingsStore.preferLocal)
+
+            val repo = ChatRepository(
+                WireServer.apiFor(server, "b4-${UUID.randomUUID()}"),
+                db,
+            )
+            val reply = turn(repo, matrixPrompt)
+            println("Matrix b4 ON/up -> ${reply.take(180)}")
+            println("Matrix b4 server saw ${server.messageRequests.get()} message request(s)")
+
+            assertTrue(
+                "prefer-local means PREFER local: with the switch on and the " +
+                    "network reachable, the model must still answer. " +
+                    "Got: ${reply.take(160)}",
+                reply.contains("Paris"),
+            )
+            // THE HALF THAT ACTUALLY PROVES "PREFER". The model's marker alone
+            // would also be produced if the network had simply answered. Zero
+            // message requests is what shows the local-first path short-circuited
+            // the turn before any HTTP call -- which is the behaviour, and the
+            // reason this case is separate from b2.
+            assertEquals(
+                "with preferLocal ON the turn must not reach the provider at all: " +
+                    "streamLocalFirst answers before any network call, so " +
+                    "${WireServer.NETWORK_MARKER} must be absent. Got: " +
+                    "${reply.take(160)}",
+                0,
+                server.messageRequests.get(),
+            )
+            assertFalse(
+                "the provider answered even though preferLocal is ON: ${reply.take(160)}",
+                reply.contains(WireServer.NETWORK_MARKER),
+            )
+        } finally {
+            SettingsStore.updatePreferLocal(before)
+            runCatching { server.stop() }
+            runCatching { db.close() }
+        }
+    }
+
 }
