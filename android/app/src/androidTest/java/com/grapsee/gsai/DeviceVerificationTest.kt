@@ -5,6 +5,7 @@ import androidx.room.Room
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.grapsee.gsai.data.SettingsStore
+import com.grapsee.gsai.di.gsHttpClient
 import com.grapsee.gsai.data.local.AppDatabase
 import com.grapsee.gsai.data.local.ModelCatalog
 import com.grapsee.gsai.data.local.ModelDownloader
@@ -33,6 +34,7 @@ import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.net.InetAddress
 import java.net.ServerSocket
+import java.util.UUID
 import java.security.MessageDigest
 
 /**
@@ -489,7 +491,14 @@ class DeviceVerificationTest {
         val db = Room.inMemoryDatabaseBuilder(ctx, AppDatabase::class.java)
             .allowMainThreadQueries()
             .build()
-        val api = ApiClient(HttpClient(CIO), "http://127.0.0.1:1")
+        // THE APP'S CLIENT, NOT A BARE ONE. See a8 for the full story: with no
+        // ContentNegotiation, `setBody(SendMessageRequest(...))` cannot be
+        // serialized, the request fails before it connects, and the turn is
+        // classified BackendError(0, null) rather than GenuineUnreachable. The
+        // assertion below is unaffected -- `on` is "Paris." from
+        // streamLocalFirst, which never touches the network -- but the string
+        // this test prints should be one the product would actually produce.
+        val api = ApiClient(gsHttpClient("a7-${UUID.randomUUID()}"), "http://127.0.0.1:1")
         val repo = ChatRepository(api, db)
 
         val prompt = "What is the capital of France? Answer with one word."
@@ -624,7 +633,10 @@ class DeviceVerificationTest {
         //      'suspend fun HttpClient.post(...)' should be called only from a
         //      coroutine or another suspend function
         //
-        val client = HttpClient(CIO)
+        // The SAME client the repository will use, so this measures the
+        // repository's path rather than a near-miss of it. That distinction is
+        // the entire subject of the test -- see the ApiClient below.
+        val client = gsHttpClient("a8-probe-${UUID.randomUUID()}")
         val thrown = runBlocking {
             runCatching {
                 client.post("http://127.0.0.1:$deadPort/api/v1/conversations") {
@@ -659,7 +671,34 @@ class DeviceVerificationTest {
         val db = Room.inMemoryDatabaseBuilder(ctx, AppDatabase::class.java)
             .allowMainThreadQueries()
             .build()
-        val api = ApiClient(HttpClient(CIO), "http://127.0.0.1:$deadPort")
+        // THE APP'S CLIENT. `gsHttpClient` is internal to the app module and
+        // androidTest compiles as its friend, so the real configuration is
+        // available here -- and using it is the point:
+        //
+        //   di/ServiceLocator.kt:40
+        //     install(ContentNegotiation) { json(GsApiJson) }
+        //     install(HttpRequestRetry)   { retryOnServerErrors(1) ... }
+        //     install(HttpTimeout)        { requestTimeoutMillis = 120_000 ... }
+        //
+        // sendMessageStream sends `setBody(SendMessageRequest(...))`, a
+        // @Serializable data class. With no ContentNegotiation nothing can
+        // serialize it, so the request fails BEFORE it connects, and the thrown
+        // exception is not a ConnectException. classifySendFailure then takes
+        //
+        //   return if (unreachable) GenuineUnreachable else BackendError(0, null)
+        //
+        // the else branch, and the turn shows "— GS backend error (HTTP 0) —".
+        // Run 36730290869 measured the bare client directly and got
+        //
+        //   connect failure = java.net.ConnectException
+        //   is ConnectException=true
+        //
+        // which is how the product code was exonerated. A test that rolls its
+        // own client measures a configuration nobody ships.
+        val api = ApiClient(
+            gsHttpClient("a8-${UUID.randomUUID()}"),
+            "http://127.0.0.1:$deadPort"
+        )
         val repo = ChatRepository(api, db)
 
         val preferBefore = SettingsStore.preferLocal
