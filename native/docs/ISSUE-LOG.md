@@ -9,8 +9,9 @@ Time is UTC.
 
 ## THE WHOLE SUITE IS GREEN — 12/12
 
-Run `36658400508`, x86_64 emulator, Android API 30. Twelve tests, no failures,
-no skips, job green.
+Run `36678235677`, x86_64 emulator, Android API 30. Twelve tests, no failures,
+no skips, job green. (Re-confirmed after the ABI was made a parameter, so this
+is not the run from before that change.)
 
 | test | result | evidence |
 |------|--------|----------|
@@ -40,7 +41,7 @@ device's own words:
 
     FrontendWiringTest: asked     -> capital of France
     FrontendWiringTest: replied   -> Paris.
-    FrontendWiringTest: converse  -> local-f160688f-1b0d-4f25-8464-c1d1dae92190
+    FrontendWiringTest: converse  -> local-0893dde7-ebaa-4e87-89ef-f87bc56cbc5c
     FrontendWiringTest: persisted -> [user, assistant]
 
 `Paris.` can only come from the on-device model: the built-in canned responder
@@ -261,3 +262,15 @@ from the bytes before the APK was ever built.
 20. iOS: `GS_LLAMA_PREBUILT` is set for Android and never for iOS, so the iOS
     engine is portable-only and `noBackend` is correct. Recorded as a gap, not
     hidden behind a green job.
+21. The device workflow's artifact lookups compared against the LITERAL string
+    "llamacpp-$ABI" / "libgs_ffi-$ABI" -- they were inside single quotes, so the
+    shell never expanded `$ABI`. The lookup could never match, for any ABI. The
+    arm64 run reported an artifact missing while printing it as available, in the
+    same step.
+22. `ABI` was used in three steps that did not declare it. Each `run:` block is a
+    fresh shell, so those three would have expanded to empty and produced
+    `native/prebuilts/android-/` and `jniLibs//libgs_ffi.so`.
+23. A backslash continuation that runs into a `#` comment line ends the command
+    there, so comments left inside `$( ... )` made the pipe a separate command.
+    Third trap of this family in this repo, after the YAML column-0 trap and the
+    flattened continuation.
