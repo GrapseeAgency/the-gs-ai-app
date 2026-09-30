@@ -68,7 +68,33 @@ targets:
         # compiles the target's own .mm/.cpp and is what makes the linker
         # accept C++ static initialisers. Setting only CLANG_CXX_LANGUAGE_STANDARD
         # chooses a dialect and links nothing.
-        OTHER_LDFLAGS: "$(inherited) -lc++ -ObjC++"
+        # -lc++ -ObjC++ -framework Metal -framework Foundation
+        #
+        # The first two were there because libgs_ffi.a is C++ (run 36663379374,
+        # 21 undefined libc++ symbols). Metal and Foundation are there because
+        # GGML_METAL is ON by default on Apple silicon, so llama.cpp builds
+        # libggml-metal.a, and every symbol IT references is a system framework
+        # symbol. Run 36689648561:
+        #
+        #   Undefined symbols for architecture arm64:
+        #     "_MTLCreateSystemDefaultDevice", referenced from
+        #        _ggml_metal_device_init in libggml-metal.a[3](ggml-metal-device.m.o)
+        #     "_OBJC_CLASS_$_MTLCompileOptions", ...
+        #     "_OBJC_CLASS_$_NSLock", ...
+        #     "_OBJC_CLASS_$_MTLCaptureManager", ...
+        #     "___CFConstantStringClassReference", ...
+        #     "___chkstk_darwin", ...
+        #
+        # 11 ObjC/Metal references plus CoreFoundation and one stack-check
+        # helper, and NOT ONE llama_ or ggml_ symbol -- so llama.cpp itself
+        # linked correctly and only the system frameworks are missing.
+        #
+        # -ObjC++ is what makes the linker accept those at all: it links the
+        # Objective-C runtime and the framework search.
+        #
+        # Foundation is explicit rather than implied because __CFConstantString-
+        # ClassReference comes from CoreFoundation, which Foundation re-exports.
+        OTHER_LDFLAGS: "$(inherited) -lc++ -ObjC++ -framework Metal -framework Foundation"
         CLANG_CXX_LANGUAGE_STANDARD: "c++17"
         # The app target's module name must be GSApp: AppTests does
         # `@testable import GSApp` (default module name would be "App" and
@@ -119,7 +145,33 @@ targets:
         # The test bundle links libgs_ffi.a itself, so it needs libc++ for the
         # same reason the app does. A unit-test bundle gets no transitive link
         # flags from its host, so this is not inherited from the App target.
-        OTHER_LDFLAGS: "$(inherited) -lc++ -ObjC++"
+        # -lc++ -ObjC++ -framework Metal -framework Foundation
+        #
+        # The first two were there because libgs_ffi.a is C++ (run 36663379374,
+        # 21 undefined libc++ symbols). Metal and Foundation are there because
+        # GGML_METAL is ON by default on Apple silicon, so llama.cpp builds
+        # libggml-metal.a, and every symbol IT references is a system framework
+        # symbol. Run 36689648561:
+        #
+        #   Undefined symbols for architecture arm64:
+        #     "_MTLCreateSystemDefaultDevice", referenced from
+        #        _ggml_metal_device_init in libggml-metal.a[3](ggml-metal-device.m.o)
+        #     "_OBJC_CLASS_$_MTLCompileOptions", ...
+        #     "_OBJC_CLASS_$_NSLock", ...
+        #     "_OBJC_CLASS_$_MTLCaptureManager", ...
+        #     "___CFConstantStringClassReference", ...
+        #     "___chkstk_darwin", ...
+        #
+        # 11 ObjC/Metal references plus CoreFoundation and one stack-check
+        # helper, and NOT ONE llama_ or ggml_ symbol -- so llama.cpp itself
+        # linked correctly and only the system frameworks are missing.
+        #
+        # -ObjC++ is what makes the linker accept those at all: it links the
+        # Objective-C runtime and the framework search.
+        #
+        # Foundation is explicit rather than implied because __CFConstantString-
+        # ClassReference comes from CoreFoundation, which Foundation re-exports.
+        OTHER_LDFLAGS: "$(inherited) -lc++ -ObjC++ -framework Metal -framework Foundation"
         CLANG_CXX_LANGUAGE_STANDARD: "c++17"
     dependencies:
       - target: App
