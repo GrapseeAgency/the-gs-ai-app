@@ -1323,6 +1323,162 @@ jobs:
           find ~/Library/Developer/Xcode/DerivedData -name '*.app' -maxdepth 4 2>/dev/null \
             | sed -n '1,3p'
 
+      # THE FIVE SKIPS TRACED TO ONE MISSING THING, AND THIS IS IT.
+      #
+      # Run 36753918296 had the iOS job green and `buildInfo -> gs-ffi 0.1.0 +llama`,
+      # which proves the build CONTAINS llama.cpp, and still could not prove the
+      # engine ANSWERS a prompt, because:
+      #
+      #   testChatReturnsNonEmptyText                      skipped   no GGUF
+      #   testSamePromptTwiceIsIdentical                   skipped   no GGUF
+      #   testFailureThrowsRatherThanReturningEmptyString  skipped   isAvailable
+      #   testEmbedImageRejectsShortBuffer                 skipped   isAvailable
+      #   testOcrReturnsTextOnFixture                      skipped   no fixture
+      #
+      # The last three are downstream of the first two, not independent:
+      # `isAvailable` is `ensureLoaded() && GsNative.backendAvailable()`, and
+      # backendAvailable is guarded by `guard let context`, so it is FALSE on a
+      # perfectly good build until a model is loaded. So one 0.5B GGUF makes four of
+      # the five runnable, and a fixture PNG makes the fifth.
+      #
+      # No weights in git and no step that fetched one, which is exactly why "the
+      # build has llama" and "the engine answered" have been separate claims.
+      - name: Provision the model and the OCR fixture the five skipped tests need
+        run: |
+          set -uo pipefail
+
+          UDID=$(xcrun simctl list devices available -j \
+                 | python3 "$GITHUB_WORKSPACE/.github/scripts/pick_simulator_udid.py") || {
+            echo "::error::no usable iPhone simulator on this runner"
+            xcrun simctl list devices available || true
+            exit 1
+          }
+          echo "simulator udid: $UDID"
+          # Already-booted is a success, not a failure: this step may not be the
+          # first thing to touch the device.
+          xcrun simctl boot "$UDID" 2>/dev/null || true
+          xcrun simctl bootstatus "$UDID" -b || {
+            echo "::error::the simulator did not finish booting"
+            exit 1
+          }
+
+          WORK="$RUNNER_TEMP/provision"
+          mkdir -p "$WORK"
+          GGUF="$WORK/qwen2.5-0.5b-instruct-q4_k_m.gguf"
+          URL="https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf"
+          WANT_SHA="74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db"
+          WANT_BYTES="491400032"
+
+          # CACHED BETWEEN RUNS, and the cache key includes the hash being asked
+          # for, so a changed model can never be served from a stale entry.
+          echo "::group::fetch the model"
+          if [ -f "$GGUF" ] \
+             && [ "$(stat -f%z "$GGUF" 2>/dev/null || stat -c%s "$GGUF")" = "$WANT_BYTES" ]; then
+            echo "already fetched and the right size; the hash is re-checked below"
+          else
+            curl -fL --retry 3 --retry-delay 5 -o "$GGUF" "$URL" || {
+              echo "::error::could not download $URL"
+              exit 1
+            }
+          fi
+          # SIZE FIRST, THEN HASH. A truncated download has a wrong length, and
+          # saying so is more useful than a hash mismatch with no explanation.
+          GOT_BYTES=$(stat -f%z "$GGUF" 2>/dev/null || stat -c%s "$GGUF")
+          echo "bytes: $GOT_BYTES (want $WANT_BYTES)"
+          if [ "$GOT_BYTES" != "$WANT_BYTES" ]; then
+            echo "::error::the download is $GOT_BYTES bytes, not $WANT_BYTES."
+            echo "::error::Truncated, so the hash would fail for no informative reason."
+            exit 1
+          fi
+          GOT_SHA=$(shasum -a 256 "$GGUF" | awk '{print $1}')
+          echo "sha256: $GOT_SHA"
+          if [ "$GOT_SHA" != "$WANT_SHA" ]; then
+            echo "::error::sha256 is $GOT_SHA, not $WANT_SHA"
+            exit 1
+          fi
+          echo "VERIFIED: 0.5B model is the bytes and the hash android-device measures"
+          echo "::endgroup::"
+
+          echo "::group::write the OCR fixture"
+          # THE RENDERER THAT ALREADY EXISTS, and the text it already defaults to.
+          #
+          # I first wrote a second one -- a 5x7 bitmap font at scale 3, gap 1 --
+          # before looking for an existing one. Deleting that was the right call,
+          # because .github/scripts/make_invoice_png.py has already been through
+          # four revisions against a real OCR engine, and its own header records
+          # what the naive version gets wrong:
+          #
+          #   * glyphs stored as 35-character strings, ten of the wrong length, so
+          #     slicing into rows shifted them and ML Kit read
+          #         IMJOICE IMYAA71 DUE 2926-03-g1
+          #   * spacing: scale=6/gap=2 merged strokes ("4471" -> "447"); gap=4
+          #     read as a space ("4 471"); gap=3 with scale=8 fixed every digit
+          #   * a 5x7 "V" is genuinely ambiguous and read as "Y", giving
+          #         INYOICE INY-4471 DUE 2026-03-01
+          #
+          # So my scale-3/gap-1 version would have produced a fixture that OCR
+          # misreads, on the platform where the point is to prove OCR reads it.
+          # Its DEFAULT_TEXT is the very string the Android fixture asserts
+          # verbatim, so the two platforms stay comparable.
+          #
+          # It tries a real typeface first and falls back to the 5x7 font, and it
+          # prints which path ran -- a fixture that silently degrades is a fixture
+          # nobody can reason about.
+          python3 "$GITHUB_WORKSPACE/.github/scripts/make_invoice_png.py" \
+            "$WORK/invoice.png" "INVOICE INV-4471 DUE 2026-03-01" || {
+            echo "::error::the fixture renderer failed"
+            exit 1
+          }
+          # Read the signature back, so "we wrote a file" is not the claim --
+          # "the file is a PNG" is.
+          FIX_SIG=$(python3 -c "import sys;print(open(sys.argv[1],'rb').read(8).hex())" "$WORK/invoice.png")
+          echo "fixture signature: $FIX_SIG (want 89504e470d0a1a0a)"
+          if [ "$FIX_SIG" != "89504e470d0a1a0a" ]; then
+            echo "::error::the fixture is not a PNG"
+            exit 1
+          fi
+          echo "::endgroup::"
+
+          echo "::group::install the app and put both where the tests look"
+          APP=$(find ~/Library/Developer/Xcode/DerivedData -name 'GSApp.app' -maxdepth 4 2>/dev/null \
+                | sed -n '1,3p')
+          if [ -z "$APP" ]; then
+            echo "::error::no GSApp.app in DerivedData, so there is no container to provision"
+            find ~/Library/Developer/Xcode/DerivedData -name '*.app' -maxdepth 4 2>/dev/null \
+              | sed -n '1,3p' | sed 's/^/  /'
+            exit 1
+          fi
+          echo "app: $APP"
+          xcrun simctl install "$UDID" "$APP" || {
+            echo "::error::simctl install failed"
+            exit 1
+          }
+          BUNDLE_ID=com.grapsee.gsai
+          CONTAINER=$(xcrun simctl get_app_container "$UDID" "$BUNDLE_ID" data) || {
+            echo "::error::no data container for $BUNDLE_ID"
+            exit 1
+          }
+          # `create: false` in the test means the directory must already EXIST or
+          # FileManager.url returns nil and every model-backed test skips no
+          # matter what was copied in. So it is created here, explicitly.
+          SUPPORT="$CONTAINER/Library/Application Support"
+          mkdir -p "$SUPPORT"
+          cp "$GGUF" "$SUPPORT/qwen2.5-0.5b-instruct-q4_k_m.gguf"
+          cp "$WORK/invoice.png" "$SUPPORT/invoice.png"
+          echo "container: $CONTAINER"
+          echo "Application Support now holds:"
+          ls -l "$SUPPORT" | sed 's/^/  /'
+          # Read the copied file's hash back from ITS final location, not from the
+          # staging copy: the thing that must be right is the file the test opens.
+          FINAL_SHA=$(shasum -a 256 "$SUPPORT/qwen2.5-0.5b-instruct-q4_k_m.gguf" | awk '{print $1}')
+          echo "model in the container: $FINAL_SHA"
+          if [ "$FINAL_SHA" != "$WANT_SHA" ]; then
+            echo "::error::the copy in the container does not match the verified download"
+            exit 1
+          fi
+          echo "::endgroup::"
+          echo "$UDID" > "$RUNNER_TEMP/provisioned_udid"
+
       - name: Run the XCTests on a booted simulator
         run: |
           set -euo pipefail

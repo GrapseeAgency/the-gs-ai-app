@@ -123,3 +123,8 @@ native/prebuilts/
 # Object files: cc writes these next to the source in a manual in-tree build.
 *.o
 *.obj
+
+# Python bytecode from the lints in .github/scripts/. Not a build output to ship,
+# and it appeared because the lints import each other while being run locally.
+__pycache__/
+*.pyc
