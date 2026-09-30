@@ -101,6 +101,27 @@ jobs:
           fi
           echo "VERIFIED: /dev/kvm exists and opened"
 
+      # THE TEN MINUTES THAT WERE NOT ABOUT THE QUESTION.
+      #
+      # Run 36728988366 spent 14:25:20 -> 14:40:46 on this host and was cancelled
+      # by the platform at 15m26s, of which roughly ten minutes was downloading
+      # and unzipping the same 490 MB system image:
+      #
+      #     [=========  ] 100% Unzipping... arm64-v8a/data/system
+      #
+      # That is the same bytes on every run and has nothing to do with whether an
+      # arm64 emulator boots. So they are cached, and the cache key includes the
+      # runner's architecture: an arm64 image unpacked on an x86_64 host is a
+      # different tree, and reusing one across architectures would be its own
+      # false pass.
+      - name: Cache the Android SDK, so the boot is not the download
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Android/sdk
+            ~/.android
+          key: arm64-probe-${{ runner.os }}-${{ runner.arch }}-sysimg-android-30-google_apis-arm64-v8a
+
       - name: Boot an arm64 emulator, or say why not
         run: |
           set -uo pipefail
@@ -165,7 +186,21 @@ jobs:
             echo "::error::could not install $IMG on this host; the emulator was NOT tested."
             exit 1
           fi
-          echo "installed: $(ls "$(dirname "$(dirname "$(command -v sdkmanager)")")"/system-images/android-30/google_apis 2>/dev/null || echo '?')"
+          # ASK THE SDK. The previous line counted dirnames --
+          #     "$(dirname "$(dirname "$(command -v sdkmanager)")")"/system-images/...
+          # -- and sdkmanager sits at $ANDROID_HOME/cmdline-tools/latest/bin, so
+          # two dirnames land on cmdline-tools/latest and the ls found nothing.
+          # That is what printed:
+          #     installed: ?
+          # `?` here is a broken diagnostic, not a missing image: the AVD was
+          # created from it moments later. `--list_installed` is the SDK's own
+          # answer and cannot be wrong about its own layout.
+          echo "sdkmanager --list_installed | grep 'system-images;android-30':"
+          sdkmanager --list_installed 2>/dev/null | grep 'system-images;android-30' | sed 's/^/  /' || true
+          if ! sdkmanager --list_installed 2>/dev/null | grep -q "$IMG"; then
+            echo "::error::$IMG is not in --list_installed, so the AVD would be built on nothing."
+            exit 1
+          fi
 
           AVD_NAME=arm64probe
           echo no | avdmanager create avd --force -n "$AVD_NAME" \
@@ -182,23 +217,50 @@ jobs:
             > "$LOG" 2>&1 &
           PID=$!
 
-          # BOUNDED. 20 minutes is the budget the brief set for the arm64
-          # attempt, and this is the step that spends it.
+          # BOUNDED, AND THE BOUND IS ONE THIS JOB CAN SURVIVE.
+          #
+          # 12 minutes, polling every 10s. The old bound was 20 minutes at 20s
+          # intervals, and run 36728988366 was cancelled by the platform at
+          # 15m26s wall clock -- so the loop that produces the verdict was never
+          # able to finish. A bound longer than the job's life is not a bound,
+          # it is a way of guaranteeing no answer.
+          #
+          # The number is not the interesting part. `sys.boot_completed = 1` is,
+          # and the loop exits the instant it sees it, so a fast boot costs one
+          # poll either way.
+          #
+          # EVERY POLL PRINTS. The old loop was silent for up to 20 minutes, so a
+          # cancelled run and a hung run looked identical in the log. Now a job
+          # that dies mid-loop still leaves behind how far the boot got, which is
+          # the difference between "cancelled" and "known".
           BOOTED=no
-          for i in $(seq 1 60); do
-            if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; then
+          POLLS=72
+          for i in $(seq 1 "$POLLS"); do
+            ELAPSED=$((i * 10))
+            PROP=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+            DEVS=$(adb devices 2>/dev/null | grep -c 'device$' || true)
+            printf '  t=%4ss  adb devices=%s  sys.boot_completed=%s\n' \
+              "$ELAPSED" "$DEVS" "${PROP:-<empty>}"
+            if [ "$PROP" = "1" ]; then
               BOOTED=yes
-              echo "BOOTED after $((i * 20))s"
+              echo "BOOTED after ${ELAPSED}s"
               break
             fi
             # The x86_64 failure is FATAL and immediate, so detect it rather than
-            # waiting 20 minutes for a device that will never appear.
+            # waiting out the bound for a device that will never appear.
             if grep -q "is not supported by the QEMU2 emulator" "$LOG" 2>/dev/null; then
               echo "::error::the emulator refused this host, as it did on x86_64:"
               grep -o "FATAL.*" "$LOG" | head -3 | sed 's/^/  /'
               break
             fi
-            sleep 20
+            # A process that died leaves no device and no log growth. Say so now
+            # rather than after 12 minutes of silence.
+            if ! kill -0 "$PID" 2>/dev/null; then
+              echo "::error::the emulator process exited before booting. Its whole log:"
+              sed 's/^/  /' "$LOG" | tail -40
+              break
+            fi
+            sleep 10
           done
 
           echo "=== emulator log (tail) ==="
