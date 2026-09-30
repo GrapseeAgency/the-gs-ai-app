@@ -79,13 +79,45 @@ blamed on:
 3. The x86 arch gate compared `MACH[0x03]=="i386"` against `WANT["x86"]=="i686"`.
    **A check that could only fail**: 9 objects, 9 wrong, on a correct build.
 
+
+## iOS — first ever build of the app
+
+Nothing here had run before commit `17ad0b5`. `ios-native` built a green
+`GsFfi.xcframework` and stopped; `ios/project.yml` never referenced it, so
+`canImport(GsFfi)` was false in every build and `GsNativeLoader.probe()` returned
+`.failed(.libraryMissing(...))` — a supported configuration and a green result.
+
+| run | what happened |
+|-----|---------------|
+| `36659050115` | `xcode-select: error: invalid developer directory Xcode_16.2.app` — I hardcoded a toolchain the image does not have |
+| `36660102564` | slice check grepped for `ios-simulator`; the real name is `ios-arm64-simulator`. Both slices were present |
+| `36662206901` | **first compile.** 5 errors, all pre-existing, never compiled before |
+| `36663379374` | compiles clean; **first link**: 21 undefined symbols, all libc++ |
+| `d3f8033` | added `-lc++ -ObjC++` to both targets. not yet run |
+
+The four Swift bugs the first compile found, none of them new code:
+
+- `gs_llama_free_text` is an **internal C++ symbol** in `llama_wrapper.h`, not
+  part of the mobile ABI. The xcframework publishes only `gs_abi.h` and
+  `gs_mobile.h`, neither of which declares it. The ABI's own `gs_free_string` is
+  the correct call (`gs_abi.h:53`: "Every `gs_free_*` in other headers forwards
+  here so callers only need one free convention").
+- `GsNative.loadedModelPath`, three sites, all the wrong receiver. The member is
+  on `GsNativeLoader`; inside `GsNativeLoader` the call must be `GsNative.loadedModel`.
+- `private enum Result` was not `Equatable`, so `guard resolve() == .ready`
+  could not compile. `Reason` already was, so the conformance is derivable.
+
+Check added after: every `gs_*` function the Swift bridge calls is declared in one
+of the two headers the xcframework publishes. That is what would have caught
+`gs_llama_free_text` before the build did.
+
 ## STILL OPEN
 
 | item | state | why |
 |------|-------|-----|
 | arm64 **device** run | NOT ATTEMPTED | an `arm64-v8a` system image on an `x86_64` runner has no KVM. Every result above is x86_64, which is **not the shipping ABI**. No arm64 code path has ever executed. |
 | ~~`armeabi-v7a` / `x86`~~ | **CLOSED** | all four ABIs publish: run `36651304587`, verified from the ELF bytes below. |
-| iOS build + simulator tests | NOT STARTED | `ios-native` builds a green `GsFfi.xcframework` (run `36645304846`) but nothing links it: `ios/project.yml` never references it and no job builds the app. The 7 XCTests in `ios/App/Tests/GsNativeTests.swift` have never run. |
+| iOS app + XCTests | IN PROGRESS | The xcframework builds green, and it is now linked by both targets with a `simulator-tests` job that runs the 7 XCTests. First real compile found 4 pre-existing Swift bugs; first link found 21 undefined libc++ symbols. Working through them run by run — see below. |
 | dynamic feature module | BLOCKED (2/4) | `:ocr-fallback` variant matching; `com.android.dynamic-feature` fixed the first error, the base-variant `applicationId` lookup has not |
 | frontend wiring (chat screen → `GsNative`) | TEST WRITTEN, NOT RUN | `a6_the_chat_screen_path_answers_from_the_engine` drives `ChatRepository.send` with the switch on and an undiallable base URL. Commit `ef8f6ce`/`28ec007`. Not yet executed. |
 | native OCR / Tesseract | NOT LINKED | `gs_mobile_ocr` is a stub: "no OCR engine is compiled into this mobile build". OCR ships through ML Kit in the app module, which is the decided primary. Tesseract is cross-compiled and verified but not in the `.so`. |
