@@ -304,6 +304,62 @@ fn main() {
             // references resolve through.
             println!("cargo:rustc-link-arg=-ObjC++");
             println!("cargo:warning=linking Metal and Foundation for an Apple target with llama.cpp");
+
+            // THE DEPLOYMENT TARGET IS NOT OPTIONAL ON APPLE WITH LLAMA.
+            //
+            // Run 36730369437 failed with one undefined symbol:
+            //
+            //   ___chkstk_darwin, referenced from llama_batch_allocr::init(...)
+            //   in libllama.a[5](llama-batch.cpp.o)
+            //
+            // and the cause is in the link line rather than the symbol:
+            //
+            //   "cc" ... -lSystem -lc -lm -target arm64-apple-ios10.0.0
+            //
+            // 10.0 is rustc's built-in floor for aarch64-apple-ios, not a
+            // choice anyone here made. __chkstk_darwin is the stack-probe helper
+            // libSystem exports for apps built against iOS 12 and later; at 10.0
+            // the linker is asked for a symbol the deployment target says cannot
+            // exist, and the error names the symbol without saying why.
+            //
+            // Checked HERE, in the build script, because the workflow assertion
+            // only exists on CI. A developer cross-compiling on a Mac hits the
+            // identical link error with no workflow to have warned them, and the
+            // build script is the one place both paths go through.
+            if cfg!(target_os = "ios") {
+                // CARGO_CFG_TARGET_OS is "ios" for both iphoneos and
+                // iphonesimulator; SIMULATOR is the discriminator, and neither
+                // needs a different floor.
+                let want = std::env::var("IPHONEOS_DEPLOYMENT_TARGET").unwrap_or_default();
+                if want.is_empty() {
+                    panic!(
+                        "GS_LLAMA_PREBUILT is set and this is an iOS target, but \
+                         IPHONEOS_DEPLOYMENT_TARGET is not.\n\
+                         rustc's floor for aarch64-apple-ios is 10.0, and llama.cpp \
+                         needs __chkstk_darwin, which libSystem only exports from \
+                         iOS 12.0 onward. Without this the link fails with one \
+                         undefined symbol whose name says nothing about deployment \
+                         targets.\n\
+                         Set it, e.g.\n    \
+                         IPHONEOS_DEPLOYMENT_TARGET=15.0 cargo build --release \
+                         --target aarch64-apple-ios"
+                    );
+                }
+                let major: u32 = want
+                    .split('.')
+                    .next()
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0);
+                if major < 12 {
+                    panic!(
+                        "IPHONEOS_DEPLOYMENT_TARGET={want} is below the iOS 12.0 floor \
+                         for __chkstk_darwin, which libllama.a references. The link \
+                         will fail. Set it to 12.0 or higher; 15.0 is what the \
+                         prebuilt archives are configured with."
+                    );
+                }
+                println!("cargo:warning=iOS deployment target {want}, at or above the 12.0 floor");
+            }
         }
     }
 

@@ -23,6 +23,34 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   GS_ALLOW_MISSING_ONNX: "1"
+  # THE NUMBER IN THE LINK LINE, CHOSEN THIS TIME.
+  #
+  # Run 36730369437 came down to one undefined symbol:
+  #
+  #   Undefined symbols for architecture arm64:
+  #   "___chkstk_darwin", referenced from llama_batch_allocr::init(...) in
+  #   libllama.a[5](llama-batch.cpp.o)
+  #
+  # and the reason is in the invocation, not in the symbol:
+  #
+  #   "cc" ... -lSystem -lSystem -lc -lm -target arm64-apple-ios10.0.0
+  #
+  # iOS 10.0. __chkstk_darwin is the stack-probe helper libSystem exports for
+  # apps built against iOS 12 and later; before that it was an inline helper, so
+  # at a 10.0 deployment target the linker is being asked for a symbol that the
+  # deployment target says cannot exist.
+  #
+  # 10.0 was nobody's decision -- it is rustc's built-in floor for
+  # aarch64-apple-ios, and nothing here set it. rustc's own apple-ios docs:
+  #
+  #   The minimum supported version is iOS 10.0. This can be raised per-binary by
+  #   changing the deployment target. `rustc` respects the common environment
+  #   variables used by Xcode to do so, in this case IPHONEOS_DEPLOYMENT_TARGET.
+  #
+  # 15.0 rather than the 12.0 that would also work, because the archives were
+  # configured with -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0. One number, both places,
+  # so there is no version-skew question to answer later.
+  IPHONEOS_DEPLOYMENT_TARGET: "15.0"
 
 jobs:
   build:
@@ -153,6 +181,78 @@ jobs:
           echo "GS_LLAMA_PREBUILT=$GS_LLAMA_PREBUILT"
           ls -1 "$GS_LLAMA_PREBUILT/lib" || true
           export GS_LLAMA_PREBUILT
+
+          # ASSERT THE DEPLOYMENT TARGET RATHER THAN TRUSTING THE ENV VAR.
+          #
+          # An exported variable is a claim. `rustc --print deployment-target` is
+          # what the compiler actually selected, and this is the difference
+          # between "we set 15.0" and "the link line says 15.0". Run 36730369437
+          # is the case where the two disagreed: nothing set the variable, the
+          # link line quietly said 10.0, and the only symptom was one undefined
+          # symbol whose name says nothing about deployment targets.
+          # NOTE THE PREFIX. rustc does not print a bare "15.0". Measured on this
+          # host, with the variable unset:
+          #
+          #     $ rustc --print deployment-target --target aarch64-apple-ios
+          #     IPHONEOS_DEPLOYMENT_TARGET=10.0
+          #
+          # which is also the exact number that appeared in run 36730369437's
+          # link line, so the floor is confirmed rather than assumed.
+          GOT_DEPLOY=$(rustc --print deployment-target --target aarch64-apple-ios 2>/dev/null || echo '<unknown>')
+          echo "rustc --print deployment-target = $GOT_DEPLOY"
+          echo "IPHONEOS_DEPLOYMENT_TARGET      = ${IPHONEOS_DEPLOYMENT_TARGET:-<unset>}"
+          # The pattern is QUOTED, and that is not cosmetic. An unquoted
+          # `<unknown>` in a `case` arm is a SYNTAX error in bash -- the `<` is
+          # parsed as a redirection operator even in pattern position:
+          #
+          #   $ bash -n t.sh
+          #   t.sh: line 3: syntax error near unexpected token `<'
+          #   t.sh: line 3: `  <unknown>)'
+          #   exit=2
+          #
+          # Quoted, the same file is exit=0. Found by `bash -n` over the run
+          # blocks, which is the check that earns its keep here.
+          case "$GOT_DEPLOY" in
+            "<unknown>")
+              echo "::error::rustc would not report a deployment target for aarch64-apple-ios."
+              exit 1
+              ;;
+          esac
+          # __chkstk_darwin is exported from iOS 12.0 onward, so 12 is the floor
+          # that matters, not the 15 we prefer.
+          #
+          # TWO PARSES WERE WRONG BEFORE THIS ONE, and the first is the dangerous
+          # kind. Stripping only `iOS ` off the front gives
+          # "IPHONEOS_DEPLOYMENT_TARGET=10", and then
+          #
+          #     [ "IPHONEOS_DEPLOYMENT_TARGET=10" -lt 12 ] 2>/dev/null
+          #
+          # makes bash print "integer expression expected" to stderr and exit
+          # non-zero -- so the `if` is FALSE and the check ACCEPTS. A 10.0 build
+          # passes. Measured, both parses, on real rustc output:
+          #
+          #     raw rustc output: [IPHONEOS_DEPLOYMENT_TARGET=10.0]
+          #     the WRONG parse:   extracted [IPHONEOS_DEPLOYMENT_TARGET=10]
+          #                        -> ACCEPT  <-- FALSE PASS on a 10.0 build
+          #     the CORRECT parse: extracted [10]   -> REJECT (below 12)
+          #
+          # So the prefix is stripped explicitly, the result must be a bare
+          # integer, and the numeric test is NOT allowed to fail open.
+          DEPLOY_MAJOR=$(echo "$GOT_DEPLOY" | sed 's/^[A-Z_]*=//; s/^iOS *//; s/\..*//')
+          if ! printf '%s' "$DEPLOY_MAJOR" | grep -qE '^[0-9]+$'; then
+            echo "::error::could not read a version out of '$GOT_DEPLOY' (parsed '$DEPLOY_MAJOR')."
+            echo "::error::Refusing to pass a check whose input I could not parse."
+            exit 1
+          fi
+          if [ "$DEPLOY_MAJOR" -lt 12 ]; then
+            echo "::error::deployment target is $GOT_DEPLOY, and __chkstk_darwin is"
+            echo "::error::exported from iOS 12.0 onward. The link will fail with:"
+            echo "::error::  ___chkstk_darwin, referenced from libllama.a"
+            echo "::error::Set IPHONEOS_DEPLOYMENT_TARGET at the job level."
+            exit 1
+          fi
+          echo "VERIFIED: deployment target $GOT_DEPLOY, which is >= the iOS 12 floor for __chkstk_darwin"
+
           cargo build --release -p gs-ffi --lib --target aarch64-apple-ios
           SRC="target/aarch64-apple-ios/release/libgs_ffi.a"
           test -f "$SRC" || { echo "MISSING: $SRC"; exit 1; }
@@ -195,6 +295,78 @@ jobs:
           echo "GS_LLAMA_PREBUILT=$GS_LLAMA_PREBUILT"
           ls -1 "$GS_LLAMA_PREBUILT/lib" || true
           export GS_LLAMA_PREBUILT
+
+          # ASSERT THE DEPLOYMENT TARGET RATHER THAN TRUSTING THE ENV VAR.
+          #
+          # An exported variable is a claim. `rustc --print deployment-target` is
+          # what the compiler actually selected, and this is the difference
+          # between "we set 15.0" and "the link line says 15.0". Run 36730369437
+          # is the case where the two disagreed: nothing set the variable, the
+          # link line quietly said 10.0, and the only symptom was one undefined
+          # symbol whose name says nothing about deployment targets.
+          # NOTE THE PREFIX. rustc does not print a bare "15.0". Measured on this
+          # host, with the variable unset:
+          #
+          #     $ rustc --print deployment-target --target aarch64-apple-ios
+          #     IPHONEOS_DEPLOYMENT_TARGET=10.0
+          #
+          # which is also the exact number that appeared in run 36730369437's
+          # link line, so the floor is confirmed rather than assumed.
+          GOT_DEPLOY=$(rustc --print deployment-target --target aarch64-apple-ios 2>/dev/null || echo '<unknown>')
+          echo "rustc --print deployment-target = $GOT_DEPLOY"
+          echo "IPHONEOS_DEPLOYMENT_TARGET      = ${IPHONEOS_DEPLOYMENT_TARGET:-<unset>}"
+          # The pattern is QUOTED, and that is not cosmetic. An unquoted
+          # `<unknown>` in a `case` arm is a SYNTAX error in bash -- the `<` is
+          # parsed as a redirection operator even in pattern position:
+          #
+          #   $ bash -n t.sh
+          #   t.sh: line 3: syntax error near unexpected token `<'
+          #   t.sh: line 3: `  <unknown>)'
+          #   exit=2
+          #
+          # Quoted, the same file is exit=0. Found by `bash -n` over the run
+          # blocks, which is the check that earns its keep here.
+          case "$GOT_DEPLOY" in
+            "<unknown>")
+              echo "::error::rustc would not report a deployment target for aarch64-apple-ios."
+              exit 1
+              ;;
+          esac
+          # __chkstk_darwin is exported from iOS 12.0 onward, so 12 is the floor
+          # that matters, not the 15 we prefer.
+          #
+          # TWO PARSES WERE WRONG BEFORE THIS ONE, and the first is the dangerous
+          # kind. Stripping only `iOS ` off the front gives
+          # "IPHONEOS_DEPLOYMENT_TARGET=10", and then
+          #
+          #     [ "IPHONEOS_DEPLOYMENT_TARGET=10" -lt 12 ] 2>/dev/null
+          #
+          # makes bash print "integer expression expected" to stderr and exit
+          # non-zero -- so the `if` is FALSE and the check ACCEPTS. A 10.0 build
+          # passes. Measured, both parses, on real rustc output:
+          #
+          #     raw rustc output: [IPHONEOS_DEPLOYMENT_TARGET=10.0]
+          #     the WRONG parse:   extracted [IPHONEOS_DEPLOYMENT_TARGET=10]
+          #                        -> ACCEPT  <-- FALSE PASS on a 10.0 build
+          #     the CORRECT parse: extracted [10]   -> REJECT (below 12)
+          #
+          # So the prefix is stripped explicitly, the result must be a bare
+          # integer, and the numeric test is NOT allowed to fail open.
+          DEPLOY_MAJOR=$(echo "$GOT_DEPLOY" | sed 's/^[A-Z_]*=//; s/^iOS *//; s/\..*//')
+          if ! printf '%s' "$DEPLOY_MAJOR" | grep -qE '^[0-9]+$'; then
+            echo "::error::could not read a version out of '$GOT_DEPLOY' (parsed '$DEPLOY_MAJOR')."
+            echo "::error::Refusing to pass a check whose input I could not parse."
+            exit 1
+          fi
+          if [ "$DEPLOY_MAJOR" -lt 12 ]; then
+            echo "::error::deployment target is $GOT_DEPLOY, and __chkstk_darwin is"
+            echo "::error::exported from iOS 12.0 onward. The link will fail with:"
+            echo "::error::  ___chkstk_darwin, referenced from libllama.a"
+            echo "::error::Set IPHONEOS_DEPLOYMENT_TARGET at the job level."
+            exit 1
+          fi
+          echo "VERIFIED: deployment target $GOT_DEPLOY, which is >= the iOS 12 floor for __chkstk_darwin"
+
           cargo build --release -p gs-ffi --lib --target aarch64-apple-ios-sim
           SRC="target/aarch64-apple-ios-sim/release/libgs_ffi.a"
           test -f "$SRC" || { echo "MISSING: $SRC"; exit 1; }
