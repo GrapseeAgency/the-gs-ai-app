@@ -356,10 +356,46 @@ jobs:
           # framework builds for the simulator and then fails at runtime with a
           # dyld error about a missing architecture, which reads like a broken
           # build rather than a missing slice.
-          for WANT in "ios-arm64" "ios-simulator"; do
-            plutil -p "$XF/Info.plist" | grep -q "$WANT" \
-              || { echo "FAIL: no $WANT slice; a simulator run needs one"; exit 1; }
-            echo "  slice present: $WANT"
+          # A single-slice framework BUILDS for the simulator and then fails at
+          # runtime with a dyld error about a missing architecture, which reads
+          # like a broken build rather than a missing slice. So assert here.
+          #
+          # ON THE NAMES. This loop used to look for
+          #     ios-arm64   ios-simulator
+          # and the runner's own plist says (run 36660102564, job 109713131562):
+          #     "LibraryIdentifier"        => "ios-arm64-simulator"
+          #     "SupportedPlatform"        => "ios"
+          #     "SupportedPlatformVariant" => "simulator"
+          #
+          # "ios-simulator" appears NOWHERE in it. A simulator slice is named
+          # after its ARCHITECTURE: a 32-bit one is `ios-armv7-simulator`, an
+          # Intel-simulator build `ios-x86_64-simulator`. So grepping a fixed
+          # substring is correct for exactly the one ABI that happens to have
+          # been built, and wrong for every other -- a check that passes for the
+          # wrong reason, which is worse than one that fails.
+          #
+          # Read the PLIST, and read the field that means it:
+          # SupportedPlatformVariant is present for a simulator slice and absent
+          # for a device slice, on every ABI, with nothing to guess.
+          #
+          # A SCRIPT, not `python3 -c`. An inline python body inside a YAML
+          # `run: |` block puts `import json, sys` and `print(...)` at column 0,
+          # which ENDS the block scalar and leaves the rest of the file to parse
+          # as YAML mapping keys:
+          #     yaml.scanner.ScannerError: while scanning a simple key
+          #       in ".github/workflows/ios-native.yml", line 378, column 1
+          #     could not find expected ':'
+          # That happened here twice before this script existed.
+          plutil -extract AvailableLibraries json -o - "$XF/Info.plist" \
+            | python3 "$GITHUB_WORKSPACE/.github/scripts/xcframework_variants.py"
+          echo "  slice present: device and simulator"
+
+          # And the binaries, because a plist can describe slices that are not
+          # there -- the plist is not the last word.
+          for SLICE in ios-arm64 ios-arm64-simulator; do
+            test -f "$XF/$SLICE/libgs_ffi.a" \
+              || { echo "::error::$XF/$SLICE/libgs_ffi.a is missing"; exit 1; }
+            echo "  $SLICE/libgs_ffi.a  $(stat -c%s "$XF/$SLICE/libgs_ffi.a") bytes"
           done
           test -f "$XF/Headers/module.modulemap" \
             || { echo "FAIL: no module.modulemap"; exit 1; }
