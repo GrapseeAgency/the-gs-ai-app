@@ -210,9 +210,98 @@ jobs:
           }
           avdmanager list avd | sed -n '1,20p' || true
 
+          # WHICH EMULATOR, AND WHERE IT REALLY IS.
+          #
+          # Run 36733985703, the first run to fail for a readable reason rather
+          # than being cancelled:
+          #
+          #   ERROR: qt_setup.cpp:28: Qt library not found at ../emulator/lib64/qt/lib
+          #   Could not launch '/Users/runner/work/the-gs-ai-app/the-gs-ai-app/../emulator/qemu/darwin-x86_64/qemu-system-aarch64': No such file or directory
+          #
+          # The emulator locates its Qt libraries RELATIVE TO ITS OWN BINARY, and
+          # the path it derived was
+          #
+          #   /Users/runner/work/the-gs-ai-app/the-gs-ai-app/../emulator/...
+          #
+          # which is outside the SDK, in the parent of the checkout. So the binary
+          # that ran was not the SDK's own emulator. This step's own log named it:
+          #
+          #   emulator  : /Users/runner/Library/Android/sdk/tools/emulator
+          #
+          # `$ANDROID_HOME/tools/emulator` is the OBSOLETE Android SDK Tools
+          # layout, removed in 2017; the current one is
+          # `$ANDROID_HOME/emulator/emulator`. A bare `emulator` on PATH resolved
+          # to that leftover and the emulator followed it out of the SDK, so the
+          # Qt lookup failed before QEMU was ever involved and the architecture
+          # was never actually tested.
+          #
+          # The inventory below is deliberate. The second line of that failure
+          # mentioned `qemu/darwin-x86_64/qemu-system-aarch64` on an arm64 host,
+          # which may be fine under Rosetta, may be the only QEMU the image ships,
+          # or may be a wrapper failing to select an arm64 one. This run cannot
+          # tell, because the Qt failure comes first. Rather than guess, the step
+          # prints what is on disk, so the next iteration is decided by the disk.
+          echo "=== emulator inventory ==="
+          EMU=""
+          for CAND in "$ANDROID_HOME/emulator/emulator" \
+                      "$ANDROID_HOME/tools/emulator/emulator" \
+                      "$(command -v emulator 2>/dev/null || true)"; do
+            [ -n "$CAND" ] || continue
+            if [ -f "$CAND" ]; then
+              REAL=$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$CAND")
+              echo "  candidate: $CAND"
+              echo "     realpath: $REAL"
+              echo "     executable: $([ -x "$CAND" ] && echo yes || echo no)"
+              # WHERE THE Qt LIBRARIES MIGHT BE, CHECKED RATHER THAN GUESSED.
+              #
+              # 36733985703 printed one path:
+              #
+              #   Qt library not found at ../emulator/lib64/qt/lib
+              #
+              # and deriving the SDK root from that one line is guesswork -- the
+              # message is relative and the run that produced it had the WRONG
+              # root, which is the whole bug. So every layout the emulator has
+              # plausibly used is checked and all of them are printed, and a
+              # candidate is selected if ANY of them is present. If none is, the
+              # inventory says so instead of the step dying inside QEMU.
+              FOUND_QT=""
+              for QT in "$(dirname "$REAL")/lib64/qt/lib" \
+                        "$(dirname "$REAL")/../lib64/qt/lib" \
+                        "$(dirname "$REAL")/../emulator/lib64/qt/lib" \
+                        "$ANDROID_HOME/emulator/lib64/qt/lib"; do
+                if [ -d "$QT" ]; then FOUND_QT="$QT"; fi
+                echo "     qt? $QT -> $([ -d "$QT" ] && echo PRESENT || echo missing)"
+              done
+              if [ -z "$EMU" ] && [ -n "$FOUND_QT" ]; then
+                EMU="$CAND"
+                echo "     SELECTED (first candidate with its Qt libraries present)"
+              fi
+            else
+              echo "  candidate: $CAND  (not a file)"
+            fi
+          done
+          echo "=== qemu directories under the SDK ==="
+          for D in "$ANDROID_HOME/emulator/qemu"/*/; do
+            [ -d "$D" ] || continue
+            echo "  $(basename "$D")  qemu-system-aarch64: $([ -x "$D/qemu-system-aarch64" ] && echo yes || echo no)"
+          done
+          echo "=== end inventory ==="
+          if [ -z "$EMU" ]; then
+            echo "::error::no emulator binary on this host has its Qt libraries beside it."
+            echo "::error::The inventory above says which paths were tried and what each one lacks."
+            exit 1
+          fi
+
+          # The emulator also looks for AVDs relative to its own location unless
+          # told otherwise, and it is not run from the SDK's directory here.
+          export ANDROID_EMULATOR_HOME="$HOME/.android"
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+
           LOG=/tmp/emulator.log
-          echo "launching; log -> $LOG"
-          emulator -avd "$AVD_NAME" -no-window -no-snapshot -noaudio \
+          echo "launching $EMU ; log -> $LOG"
+          # ABSOLUTE PATH, always. A bare name goes through PATH and the Qt
+          # lookup follows whatever PATH pointed at, which is the entire bug.
+          "$EMU" -avd "$AVD_NAME" -no-window -no-snapshot -noaudio \
             -no-boot-anim -gpu swiftshader_indirect -cores 4 -memory 2048 \
             > "$LOG" 2>&1 &
           PID=$!
