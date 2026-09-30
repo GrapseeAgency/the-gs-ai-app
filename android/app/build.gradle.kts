@@ -71,7 +71,24 @@ android {
     // are recorded; the app build is worth more than the module, so this is
     // left off until the base-variant lookup is understood.
     //
-    // dynamicFeatures += setOf(":ocr-fallback")
+    // BACK ON, because the split now has the file it was missing.
+    //
+    // It was commented out because the module could not resolve, and a split
+    // that will not resolve takes the WHOLE app build down with it -- a worse
+    // outcome than not having the module. The cause was never the Kotlin DSL:
+    //
+    //   * android/ocr-fallback/src/main/AndroidManifest.xml DID NOT EXIST, so the
+    //     split had no <dist:module> and
+    //       Failed to calculate ... property 'applicationId'. Collection is empty.
+    //     was the empty split variant, not a missing base-module id.
+    //   * the module declared core-ktx and nothing else, while OcrEngine.kt
+    //     imports ML Kit and feature-delivery, so it could not have compiled
+    //     either. The manifest task failed first and hid it.
+    //
+    // Both are fixed. If this line ever takes the app build down again, comment it
+    // out and say WHICH of the two it was -- the app build is worth more than the
+    // module, and a split that does not resolve is not worth an APK that does.
+    dynamicFeatures += setOf(":ocr-fallback")
 
     defaultConfig {
         applicationId = "com.grapsee.gsai"

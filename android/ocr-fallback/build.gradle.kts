@@ -95,6 +95,28 @@ dependencies {
     // version catalog. Removed rather than added, because the module does not
     // need it.)
     implementation(libs.androidx.core.ktx)
+
+    // THE DEPENDENCIES THIS MODULE'S OWN SOURCE IMPORTS, which were never
+    // declared. OcrEngine.kt is 310 lines and uses:
+    //
+    //   com.google.mlkit.vision.common.InputImage
+    //   com.google.mlkit.vision.text.TextRecognition
+    //   com.google.mlkit.vision.text.latin.TextRecognizerOptions
+    //   com.google.android.gms.tasks.Task
+    //   com.google.android.play.core.splitinstall.*
+    //
+    // so the module could not have compiled in ANY state. The four recorded
+    // attempts never found out, because they were all failing in
+    // `processDebugMainManifest`, which runs long before Kotlin compiles -- a
+    // compile error was sitting behind a manifest error the whole time.
+    //
+    // Every alias is already in the catalog and already used by the base module
+    // (app/build.gradle.kts:163-165), so this introduces no version decision and
+    // no new download: the same ML Kit the primary path uses, and the same
+    // feature-delivery that installs the split.
+    implementation(libs.mlkit.text.recognition)
+    implementation(libs.play.core)
+    implementation(libs.play.core.ktx)
 }
 
 /**

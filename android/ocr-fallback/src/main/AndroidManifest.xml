@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  THE MANIFEST THIS MODULE HAS NEVER HAD.
+
+  android/ocr-fallback/src/main/AndroidManifest.xml did not exist, and its absence
+  is the whole of:
+
+      Failed to calculate the value of task
+        ':ocr-fallback:processDebugMainManifest' property 'applicationId'.
+          > Failed to calculate the value of property 'applicationId'.
+            > Collection is empty.
+
+  A split with no manifest has no <dist:module>, so there is nothing for AGP to
+  attach the base module's applicationId to, hence "Collection is empty". The
+  base module's id is not missing; it is set in app/build.gradle.kts. What is
+  empty is the split's own variant. The recorded reading of that error, written
+  into the base module's comments, was that "AGP is looking the id up on the BASE
+  module's variant and not finding it", and it is a plausible reading that four
+  Gradle-level fixes were spent on before the file was found to be absent.
+
+  Each line below is load-bearing, and none of them is decoration:
+
+    dist:instant="false"   on-demand, not install-time. This is the entire point
+                           of the module: Tesseract plus traineddata is 27 MB for
+                           the ~1% of Android devices with no Play Services.
+    dist:title             required by Play. A LITERAL, not a string resource,
+                           because a resource would need a res/values file this
+                           module does not have, and the resulting failure is a
+                           resource-merge error that never mentions the split.
+    <dist:on-demand/>      the delivery mode, matching dist:instant.
+    dist:fusing include    the module's assets and jniLibs become part of the base
+                           APK once installed. This is the mechanism that lands
+                           jniLibs/<abi> and assets/tessdata, and it is why a
+                           module that installs without it is worse than no
+                           module at all: the user was told a download would give
+                           them OCR, they downloaded it, and they get a blank
+                           result with no error.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:dist="http://schemas.android.com/apk/distribution">
+
+    <dist:module
+        dist:instant="false"
+        dist:title="OCR fallback">
+        <dist:delivery>
+            <dist:on-demand />
+        </dist:delivery>
+        <dist:fusing dist:include="true" />
+    </dist:module>
+
+    <!-- A split is a library: no applicationId, no versionCode, no launcher. -->
+    <application />
+</manifest>
