@@ -122,7 +122,23 @@ class WireServer private constructor(
 
         fun start(mode: String): WireServer {
             val sock = ServerSocket(0, 8, LOOPBACK_V4)
-            println("WireServer[$mode] listening on ${sock.localAddress}:${sock.localPort}")
+            // The EXPLICIT getter, not the `localAddress` property: run 36773797694
+            //
+            //   e: WireServer.kt:125:60 Unresolved reference 'localAddress'.
+            //
+            // while `localPort` on the line above it resolved fine, which is the
+            // confusing part. Both claims are printed because the one that matters
+            // is the address the socket ACTUALLY got, and the one I asked for is
+            // the thing that could be wrong:
+            //
+            //   asked: the loopback address named above
+            //   got:   the address the socket reports
+            //
+            // If those ever differ, the difference IS the bug.
+            println(
+                "WireServer[$mode] listening on port ${sock.localPort}; " +
+                    "asked for $LOOPBACK_V4, socket reports ${sock.getLocalAddress()}",
+            )
             val server = WireServer(sock)
             val loop = Thread {
                 while (!sock.isClosed) {
