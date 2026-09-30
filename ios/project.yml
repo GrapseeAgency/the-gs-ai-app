@@ -18,6 +18,29 @@ targets:
   App:
     type: application
     platform: iOS
+    # THE XcFRAMEWORK. Until this line existed, `canImport(GsFfi)` was false in
+    # every build, so the whole native bridge compiled to its #else branch:
+    #
+    #     return .failed(.libraryMissing("GsFfi not linked into this target"))
+    #
+    # and the seven XCTests in App/Tests/GsNativeTests.swift had never been run
+    # by anything, because no CI job built the app at all. ios-native builds a
+    # green GsFfi.xcframework and stops there.
+    #
+    # A static library, so `embed` must stay off: a framework marked for
+    # embedding is copied into the bundle at runtime, and a STATIC library has
+    # nothing to copy. Xcode's "Do Not Embed" is the correct setting here, and
+    # getting it wrong fails at the copy step with a framework-type error that
+    # names neither cause.
+    #
+    # XcodeGen emits a project even when this path is absent (the file is only
+    # resolved at build time), so a clean checkout still generates. The CI job
+    # that builds the app places the xcframework here first and asserts it
+    # exists; the app without it builds exactly as it did before -- portable,
+    # and reporting `libraryMissing` with a reason.
+    dependencies:
+      - framework: Frameworks/GsFfi.xcframework
+        embed: false
     sources:
       - path: App/Sources
       - path: App/Assets.xcassets
@@ -70,6 +93,13 @@ targets:
       - path: App/Tests
     dependencies:
       - target: App
+      # @testable import GSApp re-exports the app module, but the framework has
+      # to be linkable by the TEST bundle too: GsNativeTests calls
+      # GsNative.backendAvailable and GsNative.chat directly, and a symbol that
+      # resolves only in the host app fails the link with
+      #   undefined symbol: _gs_ffi_mobile_chat
+      - framework: Frameworks/GsFfi.xcframework
+        embed: false
 schemes:
   GSApp:
     build:

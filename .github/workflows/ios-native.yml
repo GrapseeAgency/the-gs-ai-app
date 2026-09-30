@@ -262,3 +262,142 @@ jobs:
             dist/ios/GsFfi.xcframework/Headers/*
           if-no-files-found: error
           retention-days: 14
+
+  # THE APP HAS NEVER BEEN BUILT. Until this job, ios-native ended at
+  # "Upload xcframework": nothing downloaded it, ios/project.yml did not
+  # reference it, so `canImport(GsFfi)` was false in every build and
+  #
+  #     GsNativeLoader.probe() -> .failed(.libraryMissing("GsFfi not linked
+  #                                                        into this target"))
+  #
+  # which is a supported configuration and a green result. A green job that
+  # proves the library exists is not a job that proves the app uses it.
+  #
+  # `needs: build` is the whole point: it consumes that artifact the same way a
+  # developer would after `ios-native` publishes one. The job id is `build`; the
+  # STEP inside it is called "xcframework", and confusing the two is how a
+  # `needs:` silently names a job that does not exist:
+  #     Invalid job, xcframework is not a valid job name
+  simulator-tests:
+    name: app + XCTests (iOS simulator)
+    needs: build
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: |
+          set -euo pipefail
+          # Newest stable Xcode available on the runner, so a deprecation in
+          # project.yml surfaces here rather than on a maintainer's machine.
+          sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
+          xcodebuild -version
+          swift --version
+
+      - name: Install xcodegen
+        run: |
+          set -euo pipefail
+          # The .xcodeproj is generated and never committed (ios/.gitignore), so
+          # the generator is not optional.
+          brew install xcodegen
+          xcodegen --version
+
+      - name: Download the xcframework from this run
+        uses: actions/download-artifact@v4
+        with:
+          name: GsFfi.xcframework
+          path: ios/Frameworks/GsFfi.xcframework
+
+      - name: The framework landed, and it has both slices
+        run: |
+          set -euo pipefail
+          # Assert the download rather than trusting the step. A download that
+          # yields an empty directory fails later as
+          # "framework not found GsFfi", which names neither upload nor extract.
+          XF=ios/Frameworks/GsFfi.xcframework
+          test -d "$XF" || { echo "FAIL: $XF was not downloaded"; exit 1; }
+          find "$XF" -type f | sort
+          echo "=== Info.plist says which slices exist ==="
+          plutil -p "$XF/Info.plist"
+          # One slice for the device, one for the simulator. A single-slice
+          # framework builds for the simulator and then fails at runtime with a
+          # dyld error about a missing architecture, which reads like a broken
+          # build rather than a missing slice.
+          for WANT in "ios-arm64" "ios-simulator"; do
+            plutil -p "$XF/Info.plist" | grep -q "$WANT" \
+              || { echo "FAIL: no $WANT slice; a simulator run needs one"; exit 1; }
+            echo "  slice present: $WANT"
+          done
+          test -f "$XF/Headers/module.modulemap" \
+            || { echo "FAIL: no module.modulemap"; exit 1; }
+          cat "$XF/Headers/module.modulemap"
+
+      - name: Generate the Xcode project
+        run: |
+          set -euo pipefail
+          cd ios
+          xcodegen generate
+          test -d GSApp.xcodeproj || { echo "FAIL: xcodegen produced no project"; exit 1; }
+          echo "targets:"
+          xcodebuild -list -project GSApp.xcodeproj
+
+      - name: Build the app for the simulator
+        run: |
+          set -euo pipefail
+          cd ios
+          # -sdk iphonesimulator, because the only slice we can RUN is the
+          # simulator one; the device slice needs a signing identity and a
+          # physical device.
+          #
+          # `canImport(GsFfi)` is asserted by the build itself: GsNative.swift
+          # calls gs_ffi_mobile_backend_available() UNGUARDED, so if the module
+          # were missing the compile would fail with "cannot find 'GsFfi' in
+          # scope" rather than quietly compiling the fallback branch. That is
+          # deliberate -- see the note in project.yml.
+          xcodebuild build             -project GSApp.xcodeproj             -scheme GSApp             -sdk iphonesimulator             -destination 'generic/platform=iOS Simulator'             CODE_SIGNING_ALLOWED=NO             2>&1 | tee build-simulator.log
+          echo "=== build steps that ran ==="
+          grep -cE '^ *[A-Z]?[a-z]*CompileSwiftSources' build-simulator.log || true
+          echo "=== the product ==="
+          find ~/Library/Developer/Xcode/DerivedData -name '*.app' -maxdepth 4 2>/dev/null | head -3
+
+      - name: Run the XCTests on a booted simulator
+        run: |
+          set -euo pipefail
+          cd ios
+          # A named device, not "generic": xcodebuild test needs a concrete
+          # simulator to install into, and `generic` cannot host a test run.
+          # iPhone 16 is present on macos-latest; if a runner image changes,
+          # the failure names the missing destination explicitly.
+          set -a; source "$GITHUB_ENV" || true; set +a
+          xcodebuild test             -project GSApp.xcodeproj             -scheme GSApp             -destination 'platform=iOS Simulator,name=iPhone 16'             CODE_SIGNING_ALLOWED=NO             2>&1 | tee test-simulator.log
+
+          # A zero exit is not the evidence. xcodebuild has returned 0 from runs
+          # that executed nothing, so the log is read for the per-test lines and
+          # the count is printed. If every test skipped, that is a SKIP not a
+          # PASS and it must not be reported as one.
+          echo "=== per-test results ==="
+          grep -E "Test Case .* (passed|failed|skipped)" test-simulator.log || true
+          PASSED=$(grep -c "Test Case .* passed" test-simulator.log || true)
+          FAILED=$(grep -c "Test Case .* failed" test-simulator.log || true)
+          SKIPPED=$(grep -c "Test Case .* skipped" test-simulator.log || true)
+          echo "passed=$PASSED failed=$FAILED skipped=$SKIPPED"
+          if [ "$FAILED" -ne 0 ]; then
+            echo "::error::$FAILED test(s) failed"
+            exit 1
+          fi
+          if [ "$PASSED" -eq 0 ]; then
+            echo "::error::0 tests passed. The model-backed tests skip without a GGUF and the rest need the framework; a green run that executed nothing is not a pass."
+            exit 1
+          fi
+          echo "VERIFIED: $PASSED passed, $SKIPPED skipped on the iOS simulator"
+
+      - name: Upload the logs and the xcframework test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-simulator-logs
+          path: |
+            ios/build-simulator.log
+            ios/test-simulator.log
+          if-no-files-found: warn
+          retention-days: 14
