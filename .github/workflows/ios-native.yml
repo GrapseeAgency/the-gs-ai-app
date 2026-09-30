@@ -288,11 +288,44 @@ jobs:
       - name: Select Xcode
         run: |
           set -euo pipefail
-          # Newest stable Xcode available on the runner, so a deprecation in
-          # project.yml surfaces here rather than on a maintainer's machine.
-          sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
+          # DISCOVER, DO NOT PIN. The first version of this step was
+          #     sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
+          # and the image does not have it (run 36659050115):
+          #     xcode-select: error: invalid developer directory
+          #       '/Applications/Xcode_16.2.app/Contents/Developer'
+          #
+          # A hardcoded Xcode path is a claim about the runner image that
+          # nothing checks, and the runner image changes. The `build` job above
+          # already solves this by listing /Applications and falling back to the
+          # image default, so this does the same thing rather than inventing a
+          # second convention.
+          echo "=== available Xcodes ==="
+          ls -1d /Applications/Xcode*.app 2>/dev/null || echo "(none listed)"
+          SELECTED=""
+          for V in 16.2 16.1 15.4; do
+            if [ -d "/Applications/Xcode_${V}.app" ]; then
+              SELECTED="/Applications/Xcode_${V}.app"
+              break
+            fi
+          done
+          if [ -n "$SELECTED" ]; then
+            echo "pinned: $SELECTED"
+            echo "DEVELOPER_DIR=$SELECTED" >> "$GITHUB_ENV"
+          else
+            echo "no pinned Xcode present; using the image default"
+            echo "default: $(xcode-select -p)"
+          fi
+          # And assert it works, because `xcodebuild -version` failing three
+          # steps later would be reported as a test failure.
           xcodebuild -version
           swift --version
+          # The simulator run needs these to exist. A destination that is not
+          # installed fails as "Unable to find a destination", which does not
+          # say that a whole runtime is missing.
+          echo "=== simulator runtimes ==="
+          xcrun simctl list runtimes available || true
+          xcrun simctl list devicetypes | grep -i 'iPhone 16' || \
+            echo "NOTE: no iPhone 16 device type; the destination will need adjusting"
 
       - name: Install xcodegen
         run: |
@@ -364,12 +397,43 @@ jobs:
         run: |
           set -euo pipefail
           cd ios
-          # A named device, not "generic": xcodebuild test needs a concrete
-          # simulator to install into, and `generic` cannot host a test run.
-          # iPhone 16 is present on macos-latest; if a runner image changes,
-          # the failure names the missing destination explicitly.
-          set -a; source "$GITHUB_ENV" || true; set +a
-          xcodebuild test             -project GSApp.xcodeproj             -scheme GSApp             -destination 'platform=iOS Simulator,name=iPhone 16'             CODE_SIGNING_ALLOWED=NO             2>&1 | tee test-simulator.log
+          # A destination that is actually INSTALLED, not a name typed from
+          # memory. A destination that does not exist fails as
+          #     Unable to find a destination matching the provided destination
+          #     specifier
+          # which names neither the missing device type nor the missing runtime.
+          # The first version of this step hardcoded `name=iPhone 16` on the
+          # same unfounded assumption as the hardcoded Xcode path, so both of the
+          # things that identify the machine are now discovered.
+          #
+          # A UDID, not a name: two runners with different device sets would
+          # otherwise resolve one name to different hardware.
+          #
+          # A SCRIPT, not `python3 -c`. Inline python inside a YAML `run: |`
+          # block is how the previous attempt broke this file: a body line at
+          # column 0 ends the block scalar and the remainder parses as YAML
+          # mapping keys --
+          #     yaml.scanner.ScannerError: while scanning a simple key
+          #       in ".github/workflows/ios-native.yml", line 413, column 1
+          #     could not find expected ':'
+          set -uo pipefail
+          UDID=$(xcrun simctl list devices available -j \
+                 | python3 "$GITHUB_WORKSPACE/.github/scripts/pick_simulator_udid.py") || {
+            echo "FAIL: no usable iPhone simulator on this runner"
+            xcrun simctl list devices available || true
+            xcrun simctl list runtimes available || true
+            exit 1
+          }
+          echo "simulator udid: $UDID"
+          xcrun simctl list devices available | grep -F "$UDID" || true
+          set -euo pipefail
+
+          xcodebuild test \
+            -project GSApp.xcodeproj \
+            -scheme GSApp \
+            -destination "id=$UDID" \
+            CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee test-simulator.log
 
           # A zero exit is not the evidence. xcodebuild has returned 0 from runs
           # that executed nothing, so the log is read for the per-test lines and
