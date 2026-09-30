@@ -18,6 +18,8 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
+import io.ktor.http.ContentType
+import io.ktor.http.contentType
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -612,13 +614,33 @@ class DeviceVerificationTest {
 
         // MEASUREMENT. The identical POST the repository makes, so the exception
         // measured here is the one the repository sees.
+        //
+        // Inside `runBlocking`, and that is not incidental. `runCatching` is
+        // inline but its block is `() -> R`, not `suspend () -> R`, so a suspend
+        // call inside it only compiles when the inline lands in a suspend
+        // context. Run 36728958062, on the first attempt at this block:
+        //
+        //   e: DeviceVerificationTest.kt:617:20 Suspend function
+        //      'suspend fun HttpClient.post(...)' should be called only from a
+        //      coroutine or another suspend function
+        //
         val client = HttpClient(CIO)
-        val thrown = runCatching {
-            client.post("http://127.0.0.1:$deadPort/api/v1/conversations") {
-                contentType(io.ktor.http.ContentType.Application.Json)
-                setBody("{}")
-            }
-        }.exceptionOrNull()
+        val thrown = runBlocking {
+            runCatching {
+                client.post("http://127.0.0.1:$deadPort/api/v1/conversations") {
+                    // `contentType` is an extension on HttpMessageBuilder in
+                    // io.ktor.http, which is why the qualified
+                    // `io.ktor.http.ContentType.Application.Json` resolved while
+                    // this call did not until it was imported:
+                    //
+                    //   e: DeviceVerificationTest.kt:618:17 Unresolved reference
+                    //      'contentType'
+                    //
+                    contentType(ContentType.Application.Json)
+                    setBody("{}")
+                }
+            }.exceptionOrNull()
+        }
         if (thrown != null) {
             val m = thrown.message ?: ""
             println("CannedResponderTest: connect failure = ${thrown::class.java.name}")

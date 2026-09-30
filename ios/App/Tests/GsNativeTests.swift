@@ -70,6 +70,71 @@ final class GsNativeTests: XCTestCase {
         }
     }
 
+    /// The iOS build must have llama.cpp COMPILED IN, and this is the only signal
+    /// that says so.
+    ///
+    /// Why a new test rather than tightening an existing one. Everything else here
+    /// that could tell portable from llama needs a loaded context:
+    ///
+    ///   * ``GsNative.backendAvailable`` is guarded by ``guard let context`` and
+    ///     returns false on a correct build that has no model provisioned.
+    ///   * ``GsNativeLoader.isAvailable`` reports the FRAMEWORK, and the portable
+    ///     framework imports and probes fine.
+    ///   * ``initialize(modelPath:)`` needs a GGUF, and no weights are in git.
+    ///
+    /// So on a clean checkout every one of those is either false or skipping, and
+    /// a portable iOS build was indistinguishable from a llama one. Runs
+    /// 36671474326 and 36673059524 are the shape of that: green, with every
+    /// engine-backed test skipped.
+    ///
+    /// ``gs_mobile_build_info`` is the exception. It is a compile-time constant:
+    ///
+    ///     static std::string info = std::string("gs-ffi ") + GS_MOBILE_VERSION;
+    ///     #ifdef GS_MOBILE_HAVE_LLAMA
+    ///         info += " +llama";
+    ///     #else
+    ///         info += " portable";
+    ///     #endif
+    ///
+    /// (gs_mobile.cpp:190) -- so it answers with no context, no model and no
+    /// network, which is exactly what a CI runner has.
+    ///
+    /// NOT a skip. `XCTSkip("portable builds are supported")` would pass on both
+    /// a portable build and a llama build and so distinguish nothing. The claim
+    /// under test is that the iOS build HAS llama, so a portable build must fail
+    /// here rather than be excused.
+    func testBuildInfoNamesTheLlamaBackend() {
+        let info = GsNative.buildInfo
+        print("GsNative.buildInfo -> \(info)")
+
+        // Empty is its own failure and has a known cause: the reader used to be
+        // gs_last_error(), the FAILURE channel, which returns "" whenever no
+        // error is pending -- i.e. on every healthy engine. Fixed in 8fa8792.
+        XCTAssertFalse(
+            info.isEmpty,
+            "gs_mobile_build_info() returned empty. The Swift reader must be the " +
+                "build-info accessor, not gs_last_error(), which is the failure " +
+                "channel and is empty on a working engine.")
+        XCTAssertTrue(
+            info.contains("+llama"),
+            """
+            the iOS build reports no llama backend: "\(info)".
+            GS_LLAMA_PREBUILT was not set for this cargo build, so build.rs did not \
+            define GS_LLAMA_HAVE_LLAMA and gs-ffi compiled portable. The \
+            cross-compile job being green is not sufficient -- it proves the \
+            archives were produced, not that the app links them.
+            """)
+        XCTAssertFalse(
+            info.contains("portable"),
+            "the iOS build is the portable one, which is the state this branch exists "
+                + "to end: \(info)")
+        // The version is in the same string, so a stub that returns "+llama" and
+        // nothing else cannot pass.
+        XCTAssertTrue(
+            info.hasPrefix("gs-ffi "),
+            "buildInfo should identify the library, got: \(info)")
+    }
+
     /// `shutdown` is idempotent: calling it with nothing loaded must not trap.
     /// A double free in native teardown is a crash, not a Swift error.
     func testShutdownIsIdempotent() {

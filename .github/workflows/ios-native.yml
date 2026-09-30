@@ -36,6 +36,22 @@ jobs:
       - name: Check out
         uses: actions/checkout@v4
 
+      # BEFORE ANYTHING EXPENSIVE, and before bash would happily accept the bug.
+      #
+      # Run 36728962757 lost this whole job to a syntax error wearing a flag's
+      # clothes:
+      #
+      #   .../_temp/a65912d8-....sh: line 96: -DGGML_BLAS=OFF: command not found
+      #
+      # because a `#` comment sat directly under a backslash continuation. bash
+      # read the line as a comment, dropped the backslash with it, ended the cmake
+      # command early, and then tried to RUN the next flag. `bash -n` accepts that
+      # file -- the truncated command is itself valid -- which is why it shipped
+      # and why it needs its own check. Ten seconds here against a 25-minute
+      # cross-compile.
+      - name: No comment inside a backslash continuation
+        run: python3 .github/scripts/check_continuation_comments.py
+
       - name: Select Xcode
         run: |
           set -euo pipefail
@@ -977,6 +993,39 @@ jobs:
           # GGML_LLAMAFILE=OFF because gs-ffi is C/Rust and a ggml file format
           # reader is not part of it.
           #
+          # GGML_BLAS=OFF, and this is not cosmetic. Run 36725021214 left two
+          # unrelated groups undefined at the iOS link:
+          #
+          #   "_cblas_sgemm$NEWLAPACK$ILP64", referenced from
+          #      ggml_backend_blas_graph_compute in libggml-blas.a
+          #   "_vDSP_maxv", "_vDSP_vadd", "_vDSP_vdiv", "_vDSP_vmul",
+          #   "_vDSP_vsadd", "_vDSP_vsmsa", "_vDSP_vsmul", "_vDSP_vsub",
+          #      all referenced from libggml-cpu.a(ops.cpp.o)
+          #
+          # Two different things. libggml-blas.a wants an external BLAS, which is
+          # an ALTERNATIVE to ggml's own CPU kernels rather than a dependency of
+          # them, and llama.cpp has no need of a second full backend in a phone
+          # binary. So the backend is not built. The vDSP symbols are Apple's
+          # vector library, which ggml-cpu.a calls UNCONDITIONALLY on Apple
+          # targets -- there is no flag for that, so
+          # native/crates/gs-ffi/build.rs links -framework Accelerate instead.
+          # Both, and they are not substitutes for one another.
+          #
+          # THIS COMMENT IS HERE, NOT INSIDE THE CMAKE CALL, BECAUSE OF RUN
+          # 36728962757:
+          #
+          #   .../_temp/a65912d8-....sh: line 96: -DGGML_BLAS=OFF: command not found
+          #   ##[error]Process failed with exit code 127.
+          #
+          # The flag was written directly below `-DGGML_LLAMAFILE=OFF \`. A `#`
+          # is not a continuation: bash reads the continued line, sees it starts
+          # with `#`, and treats the whole physical line as a comment -- discarding
+          # the trailing backslash with it. The cmake command therefore ended at
+          # -DGGML_LLAMAFILE=OFF, the next non-comment line was parsed as a
+          # command, and the flag never reached cmake at all. A flag with a
+          # comment wedged into a backslash continuation is a SYNTAX error wearing
+          # a flag's clothes.
+          #
           # GGML_METAL is left ON (the default on Apple silicon) rather than
           # forced OFF. Nothing here can assert a GPU is present -- these are
           # static archives linked into a library, and whether Metal is used at
@@ -1028,25 +1077,8 @@ jobs:
               -DLLAMA_BUILD_APP=OFF \
               -DLLAMA_BUILD_COMMON=OFF \
               -DLLAMA_BUILD_UI=OFF \
-              -DGGML_LLAMAFILE=OFF \
-              # GGML_BLAS=OFF, and this is not cosmetic. Run 36725021214:
-              #
-              #   "_cblas_sgemm$NEWLAPACK$ILP64", referenced from
-              #      ggml_backend_blas_graph_compute in libggml-blas.a
-              #   "_vDSP_maxv", "_vDSP_vadd", "_vDSP_vdiv", "_vDSP_vmul",
-              #   "_vDSP_vsadd", "_vDSP_vsmsa", "_vDSP_vsmul", "_vDSP_vsub",
-              #      all referenced from libggml-cpu.a(ops.cpp.o)
-              #
-              # Two separate things in that list. libggml-blas.a needs an external
-              # BLAS, which Apple ships as Accelerate and which is an ALTERNATIVE
-              # to ggml's own CPU kernels, not a dependency of them. And the vDSP
-              # symbols are Accelerate's vector library, which ggml-cpu.a uses
-              # unconditionally on Apple targets.
-              #
-              # So BLAS off removes the first, and -framework Accelerate removes
-              # the second. Both, because leaving BLAS on means linking a second
-              # full backend into a phone binary for no benefit.
               -DGGML_BLAS=OFF \
+              -DGGML_LLAMAFILE=OFF \
               -G Ninja 2>&1 | tee "configure-$TRIPLE.log"
             cmake --build "build-$TRIPLE" -j"$(sysctl -n hw.ncpu)" 2>&1 | tee "build-$TRIPLE.log"
             echo "=== archives for $TRIPLE ==="
