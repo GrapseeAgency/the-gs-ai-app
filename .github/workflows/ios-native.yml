@@ -602,11 +602,49 @@ jobs:
             #
             # A check that stops a build must hand the reader something to act
             # on, so the counts are printed on the failure path too.
-            NSYM=$(nm -gU "$OUT" 2>/dev/null | wc -l | tr -d ' ')
-            echo "  global defined symbols : $NSYM"
-            echo "  names containing llama : $(nm "$OUT" 2>/dev/null | grep -ci llama || true)"
-            echo "  global T _llama*       : $(nm -gU "$OUT" 2>/dev/null | grep -cE ' T _?llama' || true)"
-            echo "  archive members        : $(ar -t "$OUT" 2>/dev/null | wc -l | tr -d ' ')"
+            # NONE OF THESE MAY END THE STEP, AND NONE MAY DISCARD STDERR.
+            #
+            # This step opens with `set -euo pipefail`, and GitHub runs `run:`
+            # blocks as `bash -e {0}` anyway, so `-e` is on. `nm` on a 35 MB
+            # Mach-O static archive returns NON-ZERO when it cannot fully parse a
+            # member -- it still prints everything it did parse, but the status
+            # is 1 -- and a non-zero pipeline inside a bare ASSIGNMENT terminates
+            # the shell. With `2>/dev/null` on top, the reason is discarded in the
+            # same breath. Run 36740298082 is exactly that: the counters below were
+            # the first thing after the merge-size check, none of them printed, and
+            # the step ended with no `::error::` line at all --
+            #
+            #     26733808 bytes -> 35291352 bytes
+            #     Post job cleanup
+            #     ##[error]Process completed with exit code 1
+            #
+            # which is the signature of a command that failed without saying so.
+            # This is the same trap the arm64 probe hit, and the same trap the
+            # deployment-target parse nearly hit:
+            #
+            #     OLD form (in an `if` condition, where -e is suspended): survived
+            #     NEW form (in a bare assignment):                           exit 1
+            #
+            # `|| true` stops the step ending. Capturing nm's STDERR is the part
+            # that matters: nm's complaint about the member it could not parse IS
+            # the answer, and `2>/dev/null` was sending it to /dev/null one line
+            # before the shell exited. A check that throws away the evidence when
+            # it fails is not a check.
+            NMERR=$(mktemp)
+            set +o pipefail
+            NSYM=$(nm -gU "$OUT" 2>"$NMERR" | wc -l | tr -d ' ' || true)
+            echo "  global defined symbols : ${NSYM:-0}"
+            echo "  names containing llama : $(nm "$OUT" 2>>"$NMERR" | grep -ci llama || true)"
+            echo "  global T _llama*       : $(nm -gU "$OUT" 2>>"$NMERR" | grep -cE ' T _?llama' || true)"
+            echo "  archive members        : $(ar -t "$OUT" 2>>"$NMERR" | wc -l | tr -d ' ' || true)"
+            set -o pipefail
+            if [ -s "$NMERR" ]; then
+              echo "  nm/ar said (kept, not discarded):"
+              sed 's/^/    /' "$NMERR" | head -12
+            else
+              echo "  nm/ar said: nothing"
+            fi
+            rm -f "$NMERR"
 
             MISSING=""
             for SYM in llama_backend_init llama_model_load llama_free; do
