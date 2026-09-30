@@ -53,7 +53,7 @@ final class GsNativeTests: XCTestCase {
     /// This is the property the fallback chain rests on. A caller given `""`
     /// cannot distinguish "the model declined" from "there is no engine in this
     /// build" and renders a blank bubble instead of falling back.
-    func testFailureThrowsRatherThanReturningEmptyString() {
+    func testFailureThrowsRatherThanReturningEmptyString() throws {
         guard GsNativeLoader.isAvailable else {
             throw XCTSkip("no engine in this build: \(GsNativeLoader.unavailableReason?.detail ?? "")")
         }
@@ -80,7 +80,7 @@ final class GsNativeTests: XCTestCase {
     /// `embedImage` must reject a buffer that is too short rather than reading
     /// past its end. A native over-read is a memory-safety bug, not a wrong
     /// answer, so this is asserted at the API boundary.
-    func testEmbedImageRejectsShortBuffer() {
+    func testEmbedImageRejectsShortBuffer() throws {
         guard GsNativeLoader.isAvailable else {
             throw XCTSkip("no engine in this build")
         }
