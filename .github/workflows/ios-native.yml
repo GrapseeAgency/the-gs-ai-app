@@ -502,6 +502,77 @@ jobs:
           fatten () {
             SLICE="$1"; PKG="$2"; OUT="$3"
             echo "=== $SLICE + $PKG -> $OUT ==="
+
+            # THE TOOLS, RESOLVED FIRST because the guard below needs lipo and
+            # this function runs under `set -u`, so an unset $LIPO_BIN would
+            # abort the step rather than the guard failing informatively. Both
+            # are resolved with `xcrun --find` rather than by bare name: a bare
+            # name depends on what the runner's PATH holds, and a silently
+            # different lipo is a different program with the same name.
+            LIBTOOL_BIN="$(xcrun --find libtool 2>/dev/null || command -v libtool || true)"
+            LIPO_BIN="$(xcrun --find lipo 2>/dev/null || command -v lipo || true)"
+            [ -n "$LIBTOOL_BIN" ] || { echo "::error::no libtool on this runner"; exit 1; }
+            [ -n "$LIPO_BIN" ] || { echo "::error::no lipo on this runner"; exit 1; }
+
+            # THE INPUT MUST BE EXACTLY ONE ARCHITECTURE, AND THE RIGHT ONE.
+            #
+            # Run 36745378533 merged a FAT library -- the file a previous step had
+            # already lipos'd -- and produced a fat output while every check on
+            # that output passed:
+            #
+            #   members: Architectures in the fat file:
+            #            .../libgs_ffi-sim-arm64.a are: x86_64 arm64
+            #   archive members        : 0
+            #
+            # 62 MB, the right symbol count, the right four contract symbols, and
+            # a filename that lies. Every check here was about the OUTPUT. So the
+            # input is checked now, and it is checked two ways: exactly one
+            # architecture, and that architecture is the one this prebuilt package
+            # was compiled for.
+            set +o pipefail
+            # SPACES ARE PRESERVED, and that is load-bearing.
+            #
+            # `lipo -info` prints two shapes:
+            #
+            #     Non-fat file: /x/libgs_ffi.a is architecture: arm64
+            #     Architectures in the fat file: /x/a.a are: x86_64 arm64
+            #
+            # and the second has to come out as TWO whitespace-separated words,
+            # because `wc -w` is what counts the architectures. My first attempt
+            # ended the pipeline with `tr -d ' '`, which squeezed the pair into
+            # `x86_64arm64` -- one word, so `wc -w` reported 1 and the COUNT check
+            # did not fire. The fat input was still rejected, but by the string
+            # comparison failing to match `arm64`, which is luck rather than
+            # logic. Verified both ways:
+            #
+            #     with tr -d ' '   archs='x86_64arm64' count=1  -> count check misses it
+            #     with trimming    archs='x86_64 arm64'  count=2  -> count check catches it
+            #
+            # So: squeeze runs of spaces, then trim the ends, and never delete
+            # them. `wc -w` does not care about surrounding whitespace.
+            IN_ARCHS=$("$LIPO_BIN" -info "$SLICE" 2>/dev/null \
+                       | sed -e 's/.*are: //' -e 's/.*is architecture: //' -e 's/,//g' \
+                       | tr -s ' ' | sed -e 's/^ *//' -e 's/ *$//' || true)
+            set -o pipefail
+            IN_COUNT=$(printf '%s' "$IN_ARCHS" | wc -w | tr -d ' ')
+            # The package directory is named ios-<arch>[-sim]; take the arch out
+            # of it so the check needs no duplicated table that can drift.
+            PKG_ARCH=$(basename "$PKG" | sed 's/^ios-//; s/-sim$//')
+            echo "  input archs : ${IN_ARCHS:-<none>}   package expects: $PKG_ARCH"
+            if [ "${IN_COUNT:-0}" -ne 1 ]; then
+              echo "::error::$SLICE has ${IN_COUNT:-0} architectures (${IN_ARCHS:-none})."
+              echo "::error::A merge combines ONE architecture's archives. Merging a"
+              echo "::error::library that is already fat is what produced"
+              echo "::error::  'libgs_ffi-sim-arm64.a are: x86_64 arm64'"
+              echo "::error::in run 36745378533. Use the per-architecture cargo output:"
+              echo "::error::  native/target/<triple>/release/libgs_ffi.a"
+              exit 1
+            fi
+            if [ "$IN_ARCHS" != "$PKG_ARCH" ]; then
+              echo "::error::$SLICE is $IN_ARCHS but $PKG holds $PKG_ARCH objects."
+              echo "::error::Merging them yields a slice that is neither."
+              exit 1
+            fi
             ORDER=""
             # ggml-blas is deliberately absent: it is built with GGML_BLAS=OFF.
             # Merging an archive that needs an external BLAS adds a second full
@@ -537,14 +608,8 @@ jobs:
             # -- and that use is correct, because aarch64-apple-ios-sim and
             # x86_64-apple-ios really are different architectures.
             #
-            # Both tools are resolved explicitly rather than by bare name, for
-            # the same reason the emulator is: a bare name depends on what the
-            # runner's PATH happens to hold, and a silently different lipo is a
-            # different program with the same name.
-            LIBTOOL_BIN="$(xcrun --find libtool 2>/dev/null || command -v libtool || true)"
-            LIPO_BIN="$(xcrun --find lipo 2>/dev/null || command -v lipo || true)"
-            [ -n "$LIBTOOL_BIN" ] || { echo "::error::no libtool on this runner"; exit 1; }
-            [ -n "$LIPO_BIN" ] || { echo "::error::no lipo on this runner"; exit 1; }
+            # libtool and lipo are resolved with `xcrun --find` at the TOP of this
+            # function, where the single-architecture guard can use lipo too.
 
             rm -f "$OUT"
             "$LIBTOOL_BIN" -static -o "$OUT" "$SLICE" $ORDER
@@ -780,10 +845,33 @@ jobs:
              "$GITHUB_WORKSPACE/dist/ios/device/libgs_ffi.a"
           # The simulator slice is ALREADY fat across arm64 and x86_64, so the
           # llama archives must be too, and both simulators need their own.
-          fatten "$GITHUB_WORKSPACE/dist/ios/simulator/libgs_ffi.a" \
+          # THE PER-ARCHITECTURE CARGO OUTPUTS, NOT THE COMBINED LIBRARY.
+          #
+          # These two calls used to read `dist/ios/simulator/libgs_ffi.a`, which
+          # the previous step has ALREADY lipos into a single arm64+x86_64 fat
+          # file. So each merge took a fat input and produced a fat output, and
+          # the run named the evidence:
+          #
+          #   members: Architectures in the fat file:
+          #            .../libgs_ffi-sim-arm64.a are: x86_64 arm64
+          #   archive members        : 0
+          #
+          # `archive members: 0` is the tell -- `ar -t` lists nothing for a fat
+          # file. A file called `-sim-arm64.a` carrying x86_64 is a file whose
+          # name lies about its contents, and every check on it passed.
+          #
+          # The single-architecture cargo outputs are still on disk and are the
+          # real inputs. Merge the prebuilts into each of those, and join the two
+          # results ONCE at the end -- which is the only configuration lipo is
+          # for, and the only one the step below it can consume.
+          #
+          # The device slice never had this problem: it has no combine step, so
+          # its input is the cargo output directly. That is why the device
+          # passed its symbol check on this run and the simulator did not.
+          fatten "$GITHUB_WORKSPACE/native/target/aarch64-apple-ios-sim/release/libgs_ffi.a" \
                  "$GITHUB_WORKSPACE/native/prebuilts/ios-arm64-sim" \
                  "$GITHUB_WORKSPACE/dist/ios/simulator/libgs_ffi-sim-arm64.a"
-          fatten "$GITHUB_WORKSPACE/dist/ios/simulator/libgs_ffi.a" \
+          fatten "$GITHUB_WORKSPACE/native/target/x86_64-apple-ios/release/libgs_ffi.a" \
                  "$GITHUB_WORKSPACE/native/prebuilts/ios-x86_64-sim" \
                  "$GITHUB_WORKSPACE/dist/ios/simulator/libgs_ffi-sim-x86_64.a"
           lipo -create \
