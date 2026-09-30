@@ -1440,15 +1440,52 @@ jobs:
           echo "::endgroup::"
 
           echo "::group::install the app and put both where the tests look"
-          APP=$(find ~/Library/Developer/Xcode/DerivedData -name 'GSApp.app' -maxdepth 4 2>/dev/null \
-                | sed -n '1,3p')
-          if [ -z "$APP" ]; then
-            echo "::error::no GSApp.app in DerivedData, so there is no container to provision"
-            find ~/Library/Developer/Xcode/DerivedData -name '*.app' -maxdepth 4 2>/dev/null \
-              | sed -n '1,3p' | sed 's/^/  /'
+          # WHERE THE APP IS, ASKED RATHER THAN GUESSED.
+          #
+          # The first version used
+          #
+          #     find ~/Library/Developer/Xcode/DerivedData -name 'GSApp.app' -maxdepth 4
+          #
+          # and run 36757667662 failed with "no GSApp.app in DerivedData" while the
+          # app was there, one directory deeper:
+          #
+          #     DerivedData/Build-<hash>/Build/Products/Debug-iphonesimulator/GSApp.app
+          #
+          # Five levels, not four -- the <hash> directory is the one I forgot. A
+          # hardcoded depth is the same mistake as a hardcoded `name=iPhone 16` or a
+          # hardcoded /Applications/Xcode_16.2.app, and all three have cost runs
+          # here. Every one of them is a question the toolchain answers.
+          #
+          # So ask it. -showBuildSettings is authoritative AND destination-aware,
+          # which matters because the products directory differs between a device
+          # build and a simulator build and this runs against a simulator.
+          #
+          # The find is kept as a fallback, and the step says which one it used.
+          # # A silent fallback is what made this hard to diagnose: the log said
+          # # "no GSApp.app" with no hint that a depth had been guessed.
+          cd "$GITHUB_WORKSPACE/ios"
+          SETTINGS=$(xcodebuild -showBuildSettings \
+                       -project GSApp.xcodeproj -scheme GSApp \
+                       -destination "id=$UDID" 2>/dev/null || true)
+          APP=$(printf '%s\n' "$SETTINGS" \
+                | awk -F' = ' '/ BUILT_PRODUCTS_DIR /{d=$2} / FULL_PRODUCT_NAME /{n=$2}
+                               END{if(d && n) print d"/"n}')
+          HOW="xcodebuild -showBuildSettings"
+          if [ -z "$APP" ] || [ ! -d "$APP" ]; then
+            echo "  -showBuildSettings did not resolve a built product; falling back to find"
+            printf '%s\n' "$SETTINGS" | sed -n '1,25p' | sed 's/^/    /'
+            APP=$(find ~/Library/Developer/Xcode/DerivedData -name 'GSApp.app' -maxdepth 6 2>/dev/null \
+                  | sed -n '1,3p')
+            HOW="find -maxdepth 6 (FALLBACK)"
+          fi
+          if [ -z "$APP" ] || [ ! -d "$APP" ]; then
+            echo "::error::no built GSApp.app, so there is no container to provision"
+            echo "::error::$HOW found nothing. What is actually there:"
+            find ~/Library/Developer/Xcode/DerivedData -name '*.app' -maxdepth 6 2>/dev/null \
+              | sed -n '1,10p' | sed 's/^/  /'
             exit 1
           fi
-          echo "app: $APP"
+          echo "app: $APP   (from $HOW)"
           xcrun simctl install "$UDID" "$APP" || {
             echo "::error::simctl install failed"
             exit 1
