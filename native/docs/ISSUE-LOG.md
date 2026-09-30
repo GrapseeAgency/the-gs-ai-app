@@ -169,11 +169,11 @@ reported itself missing.
 
 | item | state | why |
 |------|-------|-----|
-| arm64 **device** run | NOT ATTEMPTED | an `arm64-v8a` system image on an `x86_64` runner has no KVM. Every result above is x86_64, which is **not the shipping ABI**. No arm64 code path has ever executed. |
+| arm64 **device** run | NOT ATTEMPTED | an `arm64-v8a` system image on an `x86_64` runner has no KVM. Every device result is x86_64, which is **not the shipping ABI**. No arm64 code path has ever *executed*, though all four `.so` now build. |
 | ~~`armeabi-v7a` / `x86`~~ | **CLOSED** | all four ABIs publish: run `36651304587`, verified from the ELF bytes below. |
-| iOS app + XCTests | **GREEN, engine now reports itself present** | Run `36671474326`: both jobs pass, the app compiles and links against the xcframework, and all 7 GsNative tests execute for the first time. `buildInfo` read the error channel, so a healthy engine reported `libraryMissing` — fixed in `8fa8792`, awaiting the run that proves it. |
+| iOS app + XCTests | GREEN | Runs `36671474326` / `36673059524`: the app compiles and links against the xcframework and all 7 tests execute (40 passed, 0 failed, 5 skipped). **The iOS engine is portable-only** — `GS_LLAMA_PREBUILT` is set for Android only, so `gs_mobile_backend_available` is `return 0` by design and the 5 backend tests skip honestly. iOS cannot answer a prompt yet. |
 | dynamic feature module | BLOCKED (2/4) | `:ocr-fallback` variant matching; `com.android.dynamic-feature` fixed the first error, the base-variant `applicationId` lookup has not |
-| frontend wiring (chat screen → `GsNative`) | TEST WRITTEN, NOT RUN | `a6_the_chat_screen_path_answers_from_the_engine` drives `ChatRepository.send` with the switch on and an undiallable base URL. Commit `ef8f6ce`/`28ec007`. Not yet executed. |
+| ~~frontend wiring (chat screen → `GsNative`)~~ | **CLOSED** | `a6` drives `ChatRepository.send` on the emulator: `replied -> Paris.`, `persisted -> [user, assistant]`. Run `36658400508`. |
 | native OCR / Tesseract | NOT LINKED | `gs_mobile_ocr` is a stub: "no OCR engine is compiled into this mobile build". OCR ships through ML Kit in the app module, which is the decided primary. Tesseract is cross-compiled and verified but not in the `.so`. |
 
 ## FIXED, in the order they were found
@@ -206,3 +206,15 @@ reported itself missing.
 16. `a6`'s own cleanup called `ModelStore.removeInstalled()`, which is
     `File(p).delete()`. It would have destroyed the 491 MB GGUF and taken a1,
     a1b and a2 down with it.
+17. iOS: `buildInfo` read `gs_last_error()` — the FAILURE channel — so it was
+    empty on a healthy engine and `probe()` reported a correctly linked
+    framework as missing. `gs_mobile_build_info()` is the right call.
+18. iOS: `GsNativeTests.swift` never had `@testable import GSApp`, so it could
+    not see the very types it tests. Every other test file had it.
+19. iOS: `assert_arch_member.sh` was handed a LABEL where the ARCHITECTURE goes,
+    so `EXPECT` silently defaulted to arm64 and a correct x86_64 build was
+    rejected. The two pre-existing call sites passed only because arm64 is the
+    default -- nothing was being checked.
+20. iOS: `GS_LLAMA_PREBUILT` is set for Android and never for iOS, so the iOS
+    engine is portable-only and `noBackend` is correct. Recorded as a gap, not
+    hidden behind a green job.
