@@ -27,6 +27,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import kotlinx.coroutines.runBlocking
 import java.io.File
+import java.net.InetAddress
+import java.net.ServerSocket
 import java.security.MessageDigest
 
 /**
@@ -563,7 +565,7 @@ class DeviceVerificationTest {
         //
         // My first version of this asserted
         //     assertFalse("the engine claims to be available", isAvailable())
-        // which is wrong on this platform: Android's isAvailable() is
+        // which is wrong on this platform. Android's isAvailable() is
         //
         //     GsNativeLoader.kt:52
         //     fun isAvailable(): Boolean = ensureLoaded() && GsNative.backendAvailable()
@@ -572,16 +574,63 @@ class DeviceVerificationTest {
         // in the library. It says nothing about whether a model is loaded, and it
         // stays true after a1 and a6 have loaded one. So that assertion would
         // have failed in any run where an earlier test ran first -- a false
-        // failure caused by test order, which is the exact defect this file has
-        // been fixing all along.
+        // failure caused by test order, which is the defect this file exists to
+        // stop repeating.
         //
-        // What actually routes to the fallback is SettingsStore.preferLocal,
-        // and that is what this test turns off.
+        // AND 127.0.0.1:1 DOES NOT REACH localReply() AT ALL. That was the
+        // second version of this test and it proved nothing:
+        //
+        //     CannedResponderTest: -> — GS backend error (HTTP 0) —
+        //
+        // which is emitted by the BACKEND_ERROR arm of send(), and that arm
+        // RETURNS at that line without ever calling streamLocalReply. A test
+        // named "the canned responder still answers" that never invokes the
+        // canned responder is worse than none, because it reads as coverage of
+        // the thing it does not cover.
+        //
+        // So: a real socket that writes one SSE frame and then CLOSES, which is
+        // the mid-stream cut localReply() exists for -- the user's turn is on
+        // screen and the assistant bubble must not be left empty.
+        //
+        // A raw ServerSocket, not ktor-server: only the client artifacts are in
+        // build.gradle.kts (lines 199-203), and adding a server to the app's
+        // dependency graph to satisfy one test is the wrong trade.
+        val server = ServerSocket(0, 1, InetAddress.getLoopbackAddress())
+        val cut = Thread {
+            try {
+                server.accept().use { sock ->
+                    // Drain the request head so the client sees a real response
+                    // rather than a reset, then reply and hang up mid-stream.
+                    val ins = sock.getInputStream()
+                    val head = StringBuilder()
+                    while (!head.endsWith("\r\n\r\n")) {
+                        val b = ins.read()
+                        if (b == -1) break
+                        head.append(b.toChar())
+                    }
+                    sock.getOutputStream().apply {
+                        write("HTTP/1.1 200 OK\r\n".toByteArray())
+                        write("Content-Type: text/event-stream\r\n".toByteArray())
+                        write("Transfer-Encoding: chunked\r\n\r\n".toByteArray())
+                        flush()
+                        val frame = "data: {\"type\":\"delta\",\"text\":\"thinking\"}\n\n"
+                        write("${frame.length.toString(16)}\r\n$frame\r\n".toByteArray())
+                        flush()
+                        // Closing here IS the cut: a chunked body that ends
+                        // without its terminating zero-length chunk.
+                    }
+                }
+            } catch (_: Throwable) {
+                // The test asserts on what the app produced, not on the socket.
+            }
+        }
+        cut.isDaemon = true
+        cut.start()
 
         val db = Room.inMemoryDatabaseBuilder(ctx, AppDatabase::class.java)
             .allowMainThreadQueries()
             .build()
-        val api = ApiClient(HttpClient(CIO), "http://127.0.0.1:1")
+        val api = ApiClient(HttpClient(CIO), "http://127.0.0.1:${server.localPort}")
         val repo = ChatRepository(api, db)
 
         val preferBefore = SettingsStore.preferLocal
@@ -597,47 +646,35 @@ class DeviceVerificationTest {
                 )
             }
             val reply = out.toString()
-            println("CannedResponderTest: -> ${reply.take(120)}")
+            println("CannedResponderTest: -> ${reply.take(160)}")
 
             assertTrue(
-                "the canned responder produced no text. The claim that the worst " +
+                "the turn produced no text at all. The claim that the worst " +
                     "outcome is the old behaviour is only true while it answers.",
                 reply.isNotBlank(),
             )
-            assertFalse(
-                "the fallback returned an error string rather than an answer: $reply",
-                reply.lowercase().contains("error:"),
+            // THE POINT OF THE TEST. The canned responder was written for prompts
+            // like this one, so a cut mid-stream must leave its answer on screen
+            // rather than an empty bubble. Before the routing fix this branch is
+            // not reached at all: streamLocalReply only consults localReply() when
+            // preferLocal is ON.
+            assertTrue(
+                "the cut left no answer from the canned responder, so a user " +
+                    "mid-turn sees an empty bubble: ${reply.take(160)}",
+                reply.trim().length >= 20,
             )
-            // An empty-ish placeholder is what a stubbed responder returns, and
-            // it is the failure mode this test exists to catch.
             assertFalse(
-                "the fallback looks like a placeholder rather than an answer: $reply",
-                reply.trim().length < 20,
+                "the fallback returned the backend error marker instead of an " +
+                    "answer, which means streamLocalReply was never reached: $reply",
+                reply.contains("GS backend error"),
             )
         } finally {
             SettingsStore.updatePreferLocal(preferBefore)
+            runCatching { server.close() }
             runCatching { db.close() }
         }
     }
 
-    /**
-     * The wiring test. Everything else in this file calls GsNative directly, and
-     * a green suite of direct calls is compatible with a shipping app in which
-     * the chat screen never reaches the engine at all -- which is the failure
-     * that matters, because the engine working is not the same claim as the
-     * user getting it.
-     *
-     * So this drives [ChatRepository.send], the function the screen actually
-     * calls, with the switch on, a model installed, and a base URL that cannot
-     * possibly be dialled. The local path answers "Paris."; the built-in canned
-     * responder has no France branch and falls through to one of three generic
-     * templates, and the provider path cannot reach 127.0.0.1:1. Every one of
-     * those three outcomes is distinguishable, so "Paris." is proof the engine
-     * answered and not a coincidence.
-     *
-     * The canned responder is NOT removed. This asserts the switch works, not
-     * that the fallback is gone.
-     */
     @Test
     fun a6_the_chat_screen_path_answers_from_the_engine() {
         val model = findModel()
