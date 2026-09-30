@@ -367,6 +367,54 @@ against code that says `e is ConnectException` ⇒ `GenuineUnreachable`. Two
 predicates, same expression, opposite results — so the repository was not
 throwing the exception the test was throwing.
 
+## BLOCKED, WITH EVIDENCE: the arm64 device run (item 2)
+
+Three distinct hosts, three distinct measured reasons. Each is a raw line from a
+run, and no two of them are the same failure — so this is not one blocker
+retried three times, it is the question answered on every runner that can be
+reached.
+
+| Run | Host | Result |
+| --- | --- | --- |
+| `36676280935` | `ubuntu-latest`, x86_64 | `FATAL \| Avd's CPU Architecture 'arm64' is not supported by the QEMU2 emulator on x86_64 host.` |
+| `36688288136` | `ubuntu-24.04-arm` | real arm64 (`uname -m = aarch64`) but **no `/dev/kvm`** |
+| `36735804030` | `macos-15`, arm64 | real arm64, emulator launched, QEMU acquired, then: `HVF error: HV_UNSUPPORTED` / `qemu-system-aarch64-headless: failed to initialize HVF: Invalid argument` |
+
+`ubuntu-24.04-arm` and `macos-15` are both genuinely arm64, and both are refused
+by the *hosted runner's* lack of nested virtualisation — `/dev/kvm` on Linux,
+Hypervisor.framework on macOS. The architecture was never the obstacle on either.
+There is no arm64 runner available to this repository that exposes an
+accelerator, so the arm64 emulator cannot boot anywhere reachable.
+
+### What the macOS probe had to fix before it could answer
+
+Three of those runs were cancelled or crashed before reaching a verdict, and each
+obstruction was a real defect in the probe rather than news about the runner:
+
+- **`36688948635` / `36688885249` — a false pass.** The boot step began
+  `if ! command -v sdkmanager; then ::warning::…; exit 0`, so a green job had
+  tested nothing. It now installs the SDK and exits 1 if it cannot.
+- **`36728988366` — cancelled at 15m26s**, after a 10-minute system-image
+  download, so the 20-minute boot loop could not fit. The SDK is now cached and
+  the bound is 12 minutes, and every poll prints.
+- **`36731431711` — the step killed itself.** GitHub runs `run:` blocks as
+  `bash -e {0}`, so `adb` in a bare assignment terminated the shell. Verified
+  against both shapes under `bash -e`.
+- **`36733985703` — the wrong emulator binary.** It resolved to
+  `$ANDROID_HOME/tools/emulator`, the SDK Tools layout removed in 2017, so the
+  emulator derived its Qt path as `../emulator/lib64/qt/lib` relative to the
+  checkout's parent and died before QEMU ran. Resolved explicitly now, and the
+  step inventories every candidate and every `qemu/*` directory.
+
+The inventory earned its place immediately. It showed the correct binary selected
+(`qt? …/emulator/lib64/qt/lib -> PRESENT`) and the 2017 leftover rejected
+(`qt? …/tools/lib64/qt/lib -> missing`), and it proved my first guess at the Qt
+path was wrong — I had derived `dirname(binary)/../lib64/qt/lib` from a single
+relative log line, and the real layout is `dirname(binary)/lib64/qt/lib`. So all
+four plausible locations are now probed and all of them printed. Checking the
+disk instead of deriving a path from one line is what turned "it crashed" into
+"Hypervisor.framework is unavailable".
+
 ## STILL OPEN
 
 | item | state | why |
@@ -471,3 +519,11 @@ throwing the exception the test was throwing.
     `set -uo pipefail` ADDS to an `-e` that is already on. `adb` inside an `if`
     condition is safe; `adb` in a bare assignment terminates the shell, which is
     what killed the poll loop on its first iteration.
+34. Item 2 is BLOCKED with evidence: `macos-15` gives `HV_UNSUPPORTED` from
+    Hypervisor.framework, `ubuntu-24.04-arm` has no `/dev/kvm`, and `x86_64`
+    rejects the architecture outright. No reachable arm64 runner exposes an
+    accelerator.
+35. `lipo -create` cannot merge two same-architecture static archives -- "have the
+    same architectures (arm64) and can't be in the same fat output file". The iOS
+    slice merge is an archive job (`libtool -static`); lipo is correct only for
+    the two-architecture simulator combine.
