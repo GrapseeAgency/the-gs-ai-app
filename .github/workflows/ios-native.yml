@@ -1347,8 +1347,8 @@ jobs:
           # `sed -n '1,3p'`, never `head`: see the note in the simulator step
           # about SIGPIPE under `set -euo pipefail`. Found by
           # .github/scripts/check_pipefail_traps.py.
-          find ~/Library/Developer/Xcode/DerivedData -name 'GSApp.app' -maxdepth 6 2>/dev/null \
-            | sed -n '1,4p'
+          find ~/Library/Developer/Xcode/DerivedData -name '*.app' \
+            -path '*iphoneos*' -maxdepth 6 2>/dev/null | sed -n '1,4p'
 
       - name: Assert the device app is aarch64 and links the engine
         run: |
@@ -1378,19 +1378,60 @@ jobs:
           #
           # Reading the whole input and printing the first match cannot SIGPIPE
           # anything, and gives the same answer.
-          BUILD_DIR=$(printf '%s\n' "$SETTINGS" \
-            | awk -F' = ' '/ TARGET_BUILD_DIR /&&!seen {print $2; seen=1}')
-          [ -n "$BUILD_DIR" ] || {
-            echo "::error::TARGET_BUILD_DIR came back empty from $HOW"
+          # THE PRODUCT IS App.app, NOT GSApp.app, AND THAT IS NOT AN OVERSIGHT.
+          #
+          # Run 36782878437 built the device slice SUCCESSFULLY and then failed my
+          # own assertion:
+          #
+          #     ** BUILD SUCCEEDED **
+          #     TARGET_BUILD_DIR = .../Build/Products/Debug-iphoneos
+          #     (resolved by find instead: )
+          #     ::error::GSApp.app is not a Debug-iphoneos/Release-iphoneos product
+          #
+          # with the real product in the same log, four hundred lines earlier:
+          #
+          #     Ld    .../Debug-iphoneos/App.app/App normal (in target 'App')
+          #     Touch .../Debug-iphoneos/App.app      (in target 'App')
+          #
+          # `GSApp` is the SCHEME and the MODULE name. The PRODUCT is `App`, and
+          # ios/project.yml says why, at the line that otherwise reads as an
+          # oversight:
+          #
+          #     # NOTE: PRODUCT_NAME deliberately left at the XcodeGen default
+          #     # ($(TARGET_NAME) = "App") -- overriding it desynchronises the
+          #     # auto-generated TEST_HOST for AppTests ("Could not find test host").
+          #
+          # So the name is ASKED FOR rather than assumed: BUILT_PRODUCTS_DIR plus
+          # FULL_PRODUCT_NAME, which is what the existing step uses for the same
+          # reason, and FULL_EXECUTABLE_NAME for the executable. A hardcoded .app
+          # name in an assertion about a build is a second thing that can be
+          # wrong, and this one was.
+          #
+          # No `exit` in the awk, so it reads the whole input and cannot SIGPIPE
+          # printf under pipefail -- which for APP=$(...) would kill the step.
+          APP=$(printf '%s\n' "$SETTINGS" \
+            | awk -F' = ' '/ BUILT_PRODUCTS_DIR /{d=$2}
+                           / FULL_PRODUCT_NAME /&&!seen {n=$2; seen=1}
+                           END{if(d && n) print d"/"n}')
+          EXE_NAME=$(printf '%s\n' "$SETTINGS" \
+            | awk -F' = ' '/ FULL_EXECUTABLE_NAME /&&!seen {print $2; seen=1}')
+          echo "  BUILT_PRODUCTS_DIR + FULL_PRODUCT_NAME -> ${APP:-<empty>}"
+          echo "  FULL_EXECUTABLE_NAME -> ${EXE_NAME:-<empty>}"
+
+          [ -n "$APP" ] && [ -n "$EXE_NAME" ] || {
+            echo "::error::$HOW did not resolve a product and an executable name."
+            echo "::error::first 25 lines of its output:"
+            printf '%s\n' "$SETTINGS" | sed -n '1,25p' | sed 's/^/    /'
             exit 1
           }
-          echo "  TARGET_BUILD_DIR = $BUILD_DIR"
-
-          APP="$BUILD_DIR/GSApp.app"
           if [ ! -d "$APP" ]; then
-            APP=$(find ~/Library/Developer/Xcode/DerivedData -name 'GSApp.app' \
-              -path '*iphoneos*' -maxdepth 8 2>/dev/null | sed -n '1p')
-            echo "  (resolved by find instead: $APP)"
+            echo "::error::$APP does not exist, so $HOW named a product that was"
+            echo "::error::never built. There is deliberately NO find fallback here:"
+            echo "::error::a fallback that silently resolves a DIFFERENT product is"
+            echo "::error::how a simulator build gets verified as a device build -- and"
+            echo "::error::the previous version's find did exactly that, returning empty"
+            echo "::error::and letting the step carry on with an empty path."
+            exit 1
           fi
           # Asserted by DIRECTORY NAME, which is the thing that distinguishes a
           # device product from a simulator one. Both slices are arm64, so `lipo`
@@ -1398,7 +1439,7 @@ jobs:
           # presented as a device build.
           case "$APP" in
             *Debug-iphoneos/*|*Release-iphoneos/*) echo "  device product: YES" ;;
-            *) echo "::error::GSApp.app is not a Debug-iphoneos/Release-iphoneos"
+            *) echo "::error::$APP is not a Debug-iphoneos/Release-iphoneos"
                echo "::error::product -- so this step did not build the DEVICE"
                echo "::error::slice. A simulator product is also arm64, so the"
                echo "::error::architecture check below would PASS it. The directory"
@@ -1406,8 +1447,8 @@ jobs:
                exit 1 ;;
           esac
 
-          EXE="$APP/GSApp"
-          [ -f "$EXE" ] || { echo "::error::no GSApp executable in $APP"; exit 1; }
+          EXE="$APP/$EXE_NAME"
+          [ -f "$EXE" ] || { echo "::error::no $EXE_NAME executable in $APP"; exit 1; }
 
           # The executable must be Mach-O arm64. `file`, because on a Mach-O the
           # same `file -b` behaviour that cost runs on Linux archives does not
@@ -1417,7 +1458,7 @@ jobs:
           echo "  executable: $FILEOUT"
           case "$FILEOUT" in
             *"Mach-O 64-bit executable arm64"*) echo "  arch: arm64" ;;
-            *) echo "::error::GSApp is not a Mach-O arm64 executable: $FILEOUT"
+            *) echo "::error::$EXE_NAME is not a Mach-O arm64 executable: $FILEOUT"
                exit 1 ;;
           esac
 
@@ -1679,12 +1720,19 @@ jobs:
           if [ -z "$APP" ] || [ ! -d "$APP" ]; then
             echo "  -showBuildSettings did not resolve a built product; falling back to find"
             printf '%s\n' "$SETTINGS" | sed -n '1,25p' | sed 's/^/    /'
-            APP=$(find ~/Library/Developer/Xcode/DerivedData -name 'GSApp.app' -maxdepth 6 2>/dev/null \
+            # `-name 'GSApp.app'` WAS HERE AND IT IS DEAD CODE. The product is
+            # `App.app` -- project.yml leaves PRODUCT_NAME at the XcodeGen default
+            # so the AppTests TEST_HOST resolves -- so this fallback could never
+            # have matched anything. The same wrong name my own step had, already
+            # shipped. `*.app` plus the simulator path, because this fallback
+            # exists to find a SIMULATOR product.
+            APP=$(find ~/Library/Developer/Xcode/DerivedData -name '*.app' \
+                  -path '*iphonesimulator*' -maxdepth 6 2>/dev/null \
                   | sed -n '1,3p')
             HOW="find -maxdepth 6 (FALLBACK)"
           fi
           if [ -z "$APP" ] || [ ! -d "$APP" ]; then
-            echo "::error::no built GSApp.app, so there is no container to provision"
+            echo "::error::no built App.app, so there is no container to provision"
             echo "::error::$HOW found nothing. What is actually there:"
             find ~/Library/Developer/Xcode/DerivedData -name '*.app' -maxdepth 6 2>/dev/null \
               | sed -n '1,10p' | sed 's/^/  /'
