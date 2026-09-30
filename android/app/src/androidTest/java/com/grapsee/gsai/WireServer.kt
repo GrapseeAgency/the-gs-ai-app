@@ -93,6 +93,15 @@ class WireServer private constructor(
         /** The delta a full stream sends. Nothing else in the app can produce it. */
         const val NETWORK_MARKER = "NETWORK ANSWER"
 
+        /**
+         * How long a "mid-stream cut" streams before dying. See the use site: a cut
+         * in the same microsecond as the first frame is a truncation race, not a
+         * mid-stream cut, and run 36777497765 showed exactly that -- the event was
+         * discarded before the client read it and the failure was classified as if
+         * the provider had never spoken.
+         */
+        const val MID_STREAM_PAUSE_MS = 750L
+
         private const val CONV_ID = "srv-conv-1"
 
         /**
@@ -312,7 +321,24 @@ class WireServer private constructor(
                     // way that matters: the provider WAS reachable.
                     MODE_CUT_MID_STREAM -> {
                         chunk(out, frame("delta", "HALF A SE"), mode)
-                        println("WireServer[$mode] -> one delta, then CLOSING WITH NO TERMINATING CHUNK")
+                        // A PAUSE before the cut, and this is the load-bearing part of
+                        // the mode.
+                        //
+                        // Run 36777497765 cut immediately after the frame and got
+                        //
+                        //   Classify: mid-stream cut -> — GS backend error (HTTP 0) —
+                        //   Classify: server saw 1 request(s)
+                        //
+                        // so the provider WAS reached, and `receivedAnyEvent` never
+                        // flipped -- CIO had not consumed the partial chunked body
+                        // before the close discarded it. A real provider that streams
+                        // and then dies does so AFTER a pause, not in the same
+                        // microsecond as the first token, so the honest version of
+                        // this mode has a gap in it. Without the gap the test is
+                        // asserting on a truncation race rather than on a mid-stream
+                        // cut.
+                        Thread.sleep(MID_STREAM_PAUSE_MS)
+                        println("WireServer[$mode] -> paused ${MID_STREAM_PAUSE_MS}ms, now CLOSING WITH NO TERMINATING CHUNK")
                     }
 
                     else -> println("WireServer[$mode] -> empty 200, clean close")

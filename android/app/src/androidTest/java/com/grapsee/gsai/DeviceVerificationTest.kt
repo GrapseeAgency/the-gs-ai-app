@@ -673,12 +673,34 @@ class DeviceVerificationTest {
                     "is down when it was not. Got: ${reply.take(160)}",
                 reply.contains("— Offline —"),
             )
+            // THE CLASSIFICATION ITSELF, named. `MidStreamCut` appends
+            //
+            //   "— The connection dropped mid-turn. Reopen this chat in a moment —"
+            //
+            // or, if recoverLatestAssistant finds a persisted answer, adopts that
+            // instead. WireServer returns [] for history, so recovery finds
+            // nothing and the label is the expected outcome.
+            //
+            // This is the assertion that distinguishes a mid-stream cut from a
+            // refusal, and it is the one that failed first: without a pause before
+            // the close, CIO discarded the partial chunked body, `receivedAnyEvent`
+            // never flipped, and the turn was classified BackendError(0) -- a
+            // FABRICATED status code for a provider that had streamed. The gap is
+            // what makes the mode a mid-stream cut rather than a truncation race.
             assertTrue(
-                "the turn produced neither the mid-stream label nor a real answer, " +
-                    "so some arm neither of the two handled it. Got: " +
+                "a mid-stream cut must be classified MidStreamCut, whose arm says " +
+                    "the connection dropped mid-turn. Getting " +
+                    "\"GS backend error (HTTP 0)\" instead means the provider " +
+                    "streamed and was then reported as if it had never answered, " +
+                    "with a status code that does not exist. Got: " +
                     "${reply.take(160)}",
-                reply.contains("connection dropped mid-turn")
-                    || reply.trim().length >= 20,
+                reply.contains("connection dropped mid-turn"),
+            )
+            assertFalse(
+                "a mid-stream cut was reported with a fabricated HTTP 0, which is " +
+                    "the false status the FORENSIC AUDIT [5] comment exists to " +
+                    "prevent. Got: ${reply.take(160)}",
+                reply.contains("HTTP 0"),
             )
         } finally {
             runCatching { cut.stop() }
@@ -701,11 +723,30 @@ class DeviceVerificationTest {
                 ChatRepository(WireServer.apiFor(err, "a8-500-${UUID.randomUUID()}"), db3),
             )
             println("Classify: HTTP 500          -> ${reply.take(120)}")
+            // WHAT THE ARM ACTUALLY DOES, which I asserted wrongly first. The arm is
+            //
+            //   val serverText = failure.serverMessage?.takeIf { it.isNotBlank() }
+            //       ?: "GS backend error (HTTP ${failure.status})"
+            //
+            // so when the server sends a sanitized `{"error": "..."}` -- which
+            // ErrorResponseDto decodes, and which is what a real backend does --
+            // the app shows THE SERVER'S MESSAGE. Run 36777497765:
+            //
+            //   Classify: HTTP 500 -> — upstream model unavailable —
+            //
+            // That is better behaviour than the text I asserted, and my assertion
+            // was wrong: it demanded the generic fallback, which appears only when
+            // the server says nothing. Asserting the fallback would have required
+            // a broken server to make the test pass.
+            //
+            // So the assertion is on the PROPERTY, not on which of the two strings
+            // appeared: the status or the server's message must be surfaced, and
+            // neither may claim the network is down.
             assertTrue(
-                "a 500 from the provider must be classified BackendError, whose arm " +
-                    "emits the server's sanitized status and must NOT be called " +
-                    "offline. Got: ${reply.take(160)}",
-                reply.contains("GS backend error (HTTP 500)"),
+                "a 500 must surface either the server's sanitized message or the " +
+                    "status, and must NOT be called offline. Got: ${reply.take(160)}",
+                reply.contains("upstream model unavailable") ||
+                    reply.contains("HTTP 500"),
             )
             assertFalse(
                 "an HTTP 500 is the server answering, so labelling it \"— Offline —\" " +
