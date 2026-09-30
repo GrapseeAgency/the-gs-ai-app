@@ -237,7 +237,37 @@ jobs:
           POLLS=72
           for i in $(seq 1 "$POLLS"); do
             ELAPSED=$((i * 10))
-            PROP=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+            # BOTH ASSIGNMENTS CARRY `|| true`, AND THAT IS THE WHOLE FIX.
+            #
+            # GitHub runs a `run:` block as `bash -e {0}`, so the `set -uo pipefail`
+            # at the top of this step ADDS -u and pipefail to an -e that is already
+            # switched on. The line reads like it is turning error handling on. It
+            # is not.
+            #
+            # bash SUSPENDS set -e for a command in an `if` CONDITION, which is why
+            # the old loop survived adb exiting non-zero:
+            #
+            #     if [ "$(adb shell getprop sys.boot_completed ...)" = "1" ]; then
+            #
+            # A bare ASSIGNMENT is not a condition, so -e applies to it and a
+            # non-zero pipeline terminates the shell. Before the emulator registers,
+            # `adb shell getprop` exits non-zero, so the first iteration killed the
+            # step. Run 36731431711 died 69 seconds in with no poll line printed and
+            # the emulator still running:
+            #
+            #     launching; log -> /tmp/emulator.log
+            #     ##[error]Process completed with exit code 1.
+            #     Terminate orphan process: pid (2005) (emulator)
+            #
+            # Reproduced with GitHub's own starting point:
+            #
+            #     OLD form (adb in an if condition):   survived
+            #     NEW form (adb in an assignment):     script exit=1
+            #
+            # `|| true` and NOT `set +e` around the loop. The loop's job is to
+            # survive a device that is not there yet; disabling error handling for
+            # twelve minutes would hide every other failure inside it.
+            PROP=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)
             DEVS=$(adb devices 2>/dev/null | grep -c 'device$' || true)
             printf '  t=%4ss  adb devices=%s  sys.boot_completed=%s\n' \
               "$ELAPSED" "$DEVS" "${PROP:-<empty>}"
