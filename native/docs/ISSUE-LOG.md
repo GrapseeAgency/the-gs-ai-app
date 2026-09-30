@@ -270,6 +270,22 @@ responder's text is present and the error marker is not. No new dependency:
 `build.gradle.kts` has only the ktor **client** artifacts, and adding a server to
 the app for one test is the wrong trade.
 
+## ONE COMMIT, THREE CHANGES: `eb6995a`
+
+`git add -A` put three unrelated fixes under a message that describes one of them,
+so this is the map of what is actually in it. Recorded because the commit message
+is not the whole record and a reader diffing `eb6995a` against its subject line
+would otherwise find two changes they were not told about.
+
+| Change | What it does |
+| --- | --- |
+| `fix(79)` | moves the `GGML_BLAS` comment out of the backslash-continued cmake command and adds `.github/scripts/check_continuation_comments.py`, which runs first in the `llama-ios` job |
+| a8 Kotlin | `runCatching` moved inside `runBlocking`, and `io.ktor.http.contentType` imported — the two errors run `36728958062` reported |
+| `test(80)` | `testBuildInfoNamesTheLlamaBackend`, the first assertion that the iOS build contains llama.cpp at all |
+
+The rule going forward: commit one concern at a time, with explicit paths, never
+`git add -A` on a branch where three unrelated things are in flight.
+
 ## STILL OPEN
 
 | item | state | why |
@@ -341,3 +357,15 @@ the app for one test is the wrong trade.
     `-framework Metal -framework Foundation`, from different files.
 25. a8 asserted on the backend-error marker and never called the canned
     responder; the arm that emits that marker returns before `streamLocalReply`.
+26. iOS `llama-ios` job lost 7 minutes to `bash -n`-invisible syntax: a `#`
+    comment directly under a `\` continuation, which bash reads as a comment and
+    thereby discards the backslash. `-DGGML_BLAS=OFF` was never passed to cmake.
+    Now linted, and the lint is verified against the failure.
+27. a8's measurement block did not compile: `runCatching`'s block is `() -> R`,
+    not `suspend () -> R`, and `contentType` is an `io.ktor.http` extension. A
+    file that only compiles on a 30-minute emulator workflow reports its compile
+    errors an hour after they are written.
+28. Nothing asserted that the iOS build contains llama.cpp. `backendAvailable`
+    needs a context, `isAvailable` reports the framework, `initialize` needs a
+    GGUF, so a portable iOS build was indistinguishable from a llama one and
+    every engine-backed test skipped on both.
