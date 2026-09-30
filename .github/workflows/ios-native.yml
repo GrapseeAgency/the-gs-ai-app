@@ -65,9 +65,10 @@ jobs:
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
             | sh -s -- -y --profile minimal --default-toolchain stable
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
-          rustup target add aarch64-apple-ios aarch64-apple-ios-sim
+          rustup target add aarch64-apple-ios aarch64-apple-ios-sim \
+                          x86_64-apple-ios x86_64-apple-ios-sim
           rustc --version
-          rustc --print target-list | grep -E '^aarch64-apple-ios' || true
+          rustc --print target-list | grep -E '^(aarch64|x86_64)-apple-ios' || true
 
       # ATTEMPT 7. The cross-compile itself works — lipo reports
       #   built: Non-fat file: target/aarch64-apple-ios/release/libgs_ffi.a
@@ -113,6 +114,64 @@ jobs:
           lipo -info "$SRC" | grep -q 'arm64' || {
             echo "FAIL: simulator slice is not arm64"; exit 1; }
           bash "$GITHUB_WORKSPACE/.github/scripts/assert_arch_member.sh" "$SRC" simulator
+
+      # THE SIMULATOR IS NOT ALWAYS ARM64.
+      #
+      # Run 36664200219 linked the app for
+      #     -target x86_64-apple-ios16.0-simulator
+      # on an Intel macos-latest runner, against an arm64-only xcframework:
+      #
+      #     ld: warning: ignoring file '.../libgs_ffi.a(...atomic_thread_fence.o)':
+      #       found architecture 'arm64', required architecture 'x86_64'
+      #     Undefined symbols for architecture x86_64:
+      #       "_gs_mobile_create"  "_gs_mobile_chat"  "_gs_free_string"  ...
+      #
+      # The whole .a is skipped, so every gs_* the bridge calls is undefined. It
+      # reads like a broken library; it is an arm64 library being offered to an
+      # x86_64 link.
+      #
+      # Two ways out: pin the runner to arm64, or build the slice. Pinning is a
+      # claim about macos-latest that has already been wrong once in this
+      # repository, so this builds BOTH simulator architectures and lipos them
+      # into the single library the xcframework advertises. That way the
+      # framework is correct on an Intel runner AND an Apple Silicon one, and
+      # neither choice has to be guessed.
+      #
+      # -target aarch64-apple-ios (the DEVICE slice) is left arm64-only: an iOS
+      # device is arm64 and has been since iPhone 5s.
+      - name: Build and verify simulator slice (x86_64-apple-ios-sim)
+        working-directory: native
+        run: |
+          set -euo pipefail
+          cargo build --release -p gs-ffi --lib --target x86_64-apple-ios-sim
+          SRC="target/x86_64-apple-ios-sim/release/libgs_ffi.a"
+          test -f "$SRC" || { echo "MISSING: $SRC"; exit 1; }
+          echo "built: $(lipo -info "$SRC")"
+          lipo -info "$SRC" | grep -q 'x86_64' || {
+            echo "FAIL: x86_64 simulator slice reports the wrong architecture"; exit 1; }
+          bash "$GITHUB_WORKSPACE/.github/scripts/assert_arch_member.sh" "$SRC" x86_64
+
+      # ONE library for both simulator architectures. lipo joins the objects;
+      # xcodebuild -create-xcframework then records SupportedArchitectures as
+      # [arm64, x86_64] for a single ios-arm64-simulator/ios-x86_64-simulator
+      # slice, which is exactly what a fat static library is for.
+      - name: Combine the simulator slices
+        run: |
+          set -euo pipefail
+          ARM="$GITHUB_WORKSPACE/native/target/aarch64-apple-ios-sim/release/libgs_ffi.a"
+          X86="$GITHUB_WORKSPACE/native/target/x86_64-apple-ios-sim/release/libgs_ffi.a"
+          test -f "$ARM" || { echo "MISSING: $ARM"; exit 1; }
+          test -f "$X86" || { echo "MISSING: $X86"; exit 1; }
+          mkdir -p "$GITHUB_WORKSPACE/dist/ios/simulator"
+          lipo -create "$ARM" "$X86" -output "$GITHUB_WORKSPACE/dist/ios/simulator/libgs_ffi.a"
+          echo "simulator lib is now: $(lipo -info "$GITHUB_WORKSPACE/dist/ios/simulator/libgs_ffi.a")"
+          # Assert BOTH architectures are really inside it. lipo -info prints
+          # what it read, and a library missing an architecture still links on
+          # the runner it was built for, which is how this went unnoticed.
+          lipo -info "$GITHUB_WORKSPACE/dist/ios/simulator/libgs_ffi.a" | grep -q 'arm64' \
+            || { echo "FAIL: combined simulator lib has no arm64"; exit 1; }
+          lipo -info "$GITHUB_WORKSPACE/dist/ios/simulator/libgs_ffi.a" | grep -q 'x86_64' \
+            || { echo "FAIL: combined simulator lib has no x86_64"; exit 1; }
 
       - name: Assemble the xcframework
         run: |
@@ -169,8 +228,15 @@ jobs:
           #     FAIL: device is not aarch64: Non-fat file: .../libgs_ffi.a
           #         is architecture: arm64
           #     ##[error]Process completed with exit code 1.
-          for pair in "device:arm64" "simulator:arm64"; do
-            LIB="${pair%%:*}"; ARCH="${pair##*:}"
+          # A comma-separated LIST of architectures per library, because the
+          # simulator one is now FAT. It was "simulator:arm64" until run
+          # 36664200219, which linked the app for x86_64-apple-ios-simulator on
+          # an Intel runner and got, for every gs_* the bridge calls:
+          #     ld: warning: ignoring file '.../libgs_ffi.a(...o)':
+          #       found architecture 'arm64', required architecture 'x86_64'
+          # A single-arch check would have kept passing that broken framework.
+          for pair in "device:arm64" "simulator:arm64,x86_64"; do
+            LIB="${pair%%:*}"; ARCHS="${pair##*:}"
             A="$GITHUB_WORKSPACE/dist/ios/$LIB/libgs_ffi.a"
             test -f "$A" || { echo "MISSING: $A"; exit 1; }
             echo "--- $LIB: $(file -b "$A")"
@@ -190,8 +256,14 @@ jobs:
             INNER=$(ar t "$A" | grep -v '^__' | sed -n '1p')
             echo "    member: $INNER"
             lipo -info "$A" || { echo "FAIL: lipo could not read $A"; exit 1; }
-            lipo -info "$A" | grep -q "$ARCH" || {
-              echo "FAIL: $LIB is not $ARCH: $(lipo -info "$A")"; exit 1; }
+            # EVERY requested architecture must be present, not one of them.
+            # `grep -q arm64` alone is satisfied by a library that has arm64 and
+            # nothing else, which is the framework that failed to link.
+            for ARCH in ${ARCHS//,/ }; do
+              lipo -info "$A" | grep -q "$ARCH" || {
+                echo "FAIL: $LIB is missing $ARCH: $(lipo -info "$A")"; exit 1; }
+              echo "    has $ARCH"
+            done
             # Symbols: an archive that exists but exports nothing is the exact
             # failure that was fixed for the .so, and it must be caught here too.
             #
