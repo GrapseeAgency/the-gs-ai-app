@@ -18,6 +18,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
@@ -444,6 +445,179 @@ class DeviceVerificationTest {
                 "in SettingsStore.kt:43 changed.",
             stored
         )
+    }
+
+    /**
+     * The OFF path, which a5 does not cover.
+     *
+     * a5 asserts the switch is off by default. That is half the property. The
+     * other half is what the app DOES when it is off, and it is the half that
+     * protects every existing user: with the switch off, routing must be exactly
+     * what it was before the engine existed.
+     *
+     * The canonical way to catch an accidental inversion is to assert the two
+     * branches produce DIFFERENT answers for the same input, because a test that
+     * only checks one side passes whether the flag is wired up or ignored
+     * entirely.
+     */
+    @Test
+    fun a7_the_switch_actually_routes_off_and_on() {
+        val model = findModel()
+        assertNotNull("no model on the device", model)
+        val m = model!!
+
+        assertTrue("init failed", GsNativeLoader.initWith(m.absolutePath))
+        assumeTrue(
+            "no generation backend, so the ON branch cannot be compared. " +
+                "selfCheck: " + GsNative.selfCheck(),
+            GsNativeLoader.isAvailable(),
+        )
+
+        SettingsStore.init(ctx)
+        ModelStore.init(ctx)
+        ModelStore.recordInstalled(m, ModelCatalog.MODEL_0_5B.id)
+
+        // A 127.0.0.1:1 ApiClient cannot answer. So the OFF path MUST fall
+        // through to the provider, which cannot succeed, and must produce the
+        // offline notice -- never the model's answer.
+        val db = Room.inMemoryDatabaseBuilder(ctx, AppDatabase::class.java)
+            .allowMainThreadQueries()
+            .build()
+        val api = ApiClient(HttpClient(CIO), "http://127.0.0.1:1")
+        val repo = ChatRepository(api, db)
+
+        val prompt = "What is the capital of France? Answer with one word."
+
+        fun sendOnce(): String {
+            val out = StringBuilder()
+            runBlocking {
+                repo.send(
+                    conversationId = null,
+                    content = prompt,
+                    onConversationResolved = { _ -> },
+                    onDelta = { out.append(it) }
+                )
+            }
+            return out.toString()
+        }
+
+        val onBefore = SettingsStore.preferLocal
+        try {
+            // --- OFF: must NOT be the model -----------------------------
+            SettingsStore.updatePreferLocal(false)
+            assertFalse("the switch did not turn off", SettingsStore.preferLocal)
+            val off = sendOnce()
+            println("LocalFirstToggleTest: OFF -> ${off.take(100)}")
+            assertFalse(
+                "with preferLocal OFF the reply came from the on-device engine " +
+                    "anyway. The switch is not routing. Got: ${off.take(160)}",
+                off.contains("Paris"),
+            )
+
+            // --- ON: must be the model ----------------------------------
+            SettingsStore.updatePreferLocal(true)
+            assertTrue("the switch did not turn on", SettingsStore.preferLocal)
+            val on = sendOnce()
+            println("LocalFirstToggleTest: ON  -> ${on.take(100)}")
+            assertTrue(
+                "with preferLocal ON the engine did not answer. Got: ${on.take(160)}",
+                on.contains("Paris"),
+            )
+
+            // The comparison that makes this a routing test rather than two
+            // independent assertions: if both branches behaved the same, the
+            // flag is not doing anything and both of the above would still pass.
+            assertNotEquals(
+                "the ON and OFF branches returned identical text, so the switch " +
+                    "is not routing at all: ${on.take(80)}",
+                off.trim(),
+                on.trim(),
+            )
+        } finally {
+            SettingsStore.updatePreferLocal(onBefore)
+            runCatching { ModelStore.refreshInstalled() }
+            runCatching { GsNativeLoader.release() }
+            runCatching { db.close() }
+        }
+    }
+
+    /**
+     * The canned responder must still be there.
+     *
+     * The whole safety argument for defaulting the switch OFF is that the worst
+     * outcome is the old behaviour, one round trip later. That is only true if
+     * localReply() still answers -- and it is a `private fun` in a repository
+     * that nothing has ever called in a test, so it could have been deleted,
+     * emptied, or broken by any change to the local path and every existing test
+     * would still pass.
+     *
+     * This asserts the fallback produces real text for a prompt the engine has no
+     * business answering specially, and that it is NOT the model's answer -- so
+     * the two paths are distinguishable and neither can stand in for the other.
+     */
+    @Test
+    fun a8_the_canned_responder_still_answers() {
+        val prompt = "draft me a launch email for a new coffee shop"
+
+        // The switch is what selects the fallback, NOT the engine's presence.
+        //
+        // My first version of this asserted
+        //     assertFalse("the engine claims to be available", isAvailable())
+        // which is wrong on this platform: Android's isAvailable() is
+        //
+        //     GsNativeLoader.kt:52
+        //     fun isAvailable(): Boolean = ensureLoaded() && GsNative.backendAvailable()
+        //
+        // and backendAvailable() is a JNI call reporting whether a BACKEND EXISTS
+        // in the library. It says nothing about whether a model is loaded, and it
+        // stays true after a1 and a6 have loaded one. So that assertion would
+        // have failed in any run where an earlier test ran first -- a false
+        // failure caused by test order, which is the exact defect this file has
+        // been fixing all along.
+        //
+        // What actually routes to the fallback is SettingsStore.preferLocal,
+        // and that is what this test turns off.
+
+        val db = Room.inMemoryDatabaseBuilder(ctx, AppDatabase::class.java)
+            .allowMainThreadQueries()
+            .build()
+        val api = ApiClient(HttpClient(CIO), "http://127.0.0.1:1")
+        val repo = ChatRepository(api, db)
+
+        val preferBefore = SettingsStore.preferLocal
+        try {
+            SettingsStore.updatePreferLocal(false)
+            val out = StringBuilder()
+            runBlocking {
+                repo.send(
+                    conversationId = null,
+                    content = prompt,
+                    onConversationResolved = { _ -> },
+                    onDelta = { out.append(it) }
+                )
+            }
+            val reply = out.toString()
+            println("CannedResponderTest: -> ${reply.take(120)}")
+
+            assertTrue(
+                "the canned responder produced no text. The claim that the worst " +
+                    "outcome is the old behaviour is only true while it answers.",
+                reply.isNotBlank(),
+            )
+            assertFalse(
+                "the fallback returned an error string rather than an answer: $reply",
+                reply.lowercase().contains("error:"),
+            )
+            // An empty-ish placeholder is what a stubbed responder returns, and
+            // it is the failure mode this test exists to catch.
+            assertFalse(
+                "the fallback looks like a placeholder rather than an answer: $reply",
+                reply.trim().length < 20,
+            )
+        } finally {
+            SettingsStore.updatePreferLocal(preferBefore)
+            runCatching { db.close() }
+        }
     }
 
     /**

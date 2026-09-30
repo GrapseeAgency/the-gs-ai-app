@@ -630,15 +630,38 @@ class ChatRepository(
     }
 
     private suspend fun streamLocalReply(prompt: String, onDelta: (String) -> Unit) {
-        // COMMIT 1 (a) of the mobile wiring: try the native engine first, and
-        // keep the existing responder for everything else.
+        // THE ENGINE IS ONLY CONSULTED IF THE USER ASKED FOR IT.
         //
-        // The ordering matters. The app still attempts the network before
-        // reaching this function — this is the failure path, not a local-first
-        // router — so a healthy app is unchanged. The responder below is NOT
-        // removed: a phone with no model, a build with no engine, or a
-        // generation that throws must still answer.
-        val reply = nativeReply(prompt) ?: localReply(prompt)
+        // This used to be
+        //
+        //     val reply = nativeReply(prompt) ?: localReply(prompt)
+        //
+        // unconditionally, and that is a product bug rather than a stylistic
+        // one. streamLocalReply is the path taken when the PROVIDER FAILED, so
+        // with the switch off -- the default -- a user who explicitly declined
+        // on-device AI still had their prompt handed to the local model the
+        // moment the network was unavailable.
+        //
+        // That contradicts the documented safety property, which is why the
+        // switch exists at all:
+        //
+        //   commit 1(b): with "Prefer on-device AI" off -- which is the default
+        //   -- this is a single false and everything below is byte-for-byte the
+        //   routing that shipped.
+        //
+        // And it is invisible to every existing test: a6 and a1 both run with the
+        // engine available and never exercise this function, so a green suite
+        // said nothing about it. a7_the_switch_actually_routes_off_and_on is the
+        // test that does, and it fails without this change.
+        //
+        // The responder is NOT removed. A phone with no model, a build with no
+        // engine, or a generation that throws must still answer -- so the
+        // fallback stays, it just respects the switch.
+        val reply = if (SettingsStore.preferLocal) {
+            nativeReply(prompt) ?: localReply(prompt)
+        } else {
+            localReply(prompt)
+        }
         reply.split(" ").forEachIndexed { index, word ->
             onDelta(if (index == 0) word else " $word")
             delay(26)
