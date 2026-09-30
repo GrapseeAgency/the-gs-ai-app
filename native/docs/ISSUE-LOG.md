@@ -415,6 +415,68 @@ four plausible locations are now probed and all of them printed. Checking the
 disk instead of deriving a path from one line is what turned "it crashed" into
 "Hypervisor.framework is unavailable".
 
+## ITEM 1 IS DONE: the iOS build has llama.cpp in it
+
+Run `36753918296`, head `fefa133`, **all three jobs green**:
+
+| Job | Result |
+| --- | --- |
+| `llama.cpp for iOS (device + both simulator archs)` | success |
+| `xcframework` | success |
+| `app + XCTests (iOS simulator)` | success |
+
+    passed=41 failed=0 skipped=5
+    VERIFIED: 41 passed, 5 skipped on the iOS simulator
+
+and the line that is the whole point of the item, from a test that EXECUTED:
+
+    Test Case '-[AppTests.GsNativeTests testBuildInfoNamesTheLlamaBackend]' started.
+    GsNative.buildInfo -> gs-ffi 0.1.0 +llama
+    Test Case '-[AppTests.GsNativeTests testBuildInfoNamesTheLlamaBackend]' passed (0.142 seconds).
+
+`+llama` rather than `portable`. That string is a compile-time constant
+(`gs_mobile.cpp:190`), so this is the build reporting what it contains, not a
+claim about what it was asked to contain.
+
+### Why it took eleven runs, and what each one was
+
+| Run | What it was |
+| --- | --- |
+| `36725021214` | `libggml-metal.a` needs `-framework Metal -framework Foundation`; both links, two files |
+| `36728962757` | `-DGGML_BLAS=OFF` never reached cmake: a `#` comment sat under a `\` continuation and bash discarded the backslash |
+| `36730369437` | `__chkstk_darwin` is only exported from iOS 12; rustc's floor for `aarch64-apple-ios` is 10 and nothing set it |
+| `36733985703` | `lipo -create` cannot merge two same-architecture archives — that is an archive job (`libtool -static`) |
+| `36735879525` | the symbol check named `llama_model_load` etc., which are C++ and therefore mangled at the pinned commit |
+| `36740298082` | `VAR=$(nm … \| wc -l)` under `set -e` killed the step, and `2>/dev/null` ate the reason |
+| `36742545988` | `pipefail` + `grep -q` reported successful matches as misses — the check was non-deterministic |
+| `36745378533` | both simulator merges read an already-fat library, so a file called `-sim-arm64.a` contained x86_64 |
+| `36747684730` | `sed … \| head -12` under `set -e`: the diagnostic line killed the step while printing a diagnostic |
+| `36750432883` | the new gate itself imported `yaml`, which the macOS runner does not have |
+| `36751766601` | I had lowered the APP's iOS floor to 15.0 to fix the LIBRARY's, and `PhotosPickerItem` stopped compiling |
+
+Two of those eleven were defects in the machinery written to detect defects in
+the machinery. Both are now lints that run before the cross-compile:
+`check_continuation_comments.py`, `check_pipefail_traps.py`, and
+`check_ios_deployment_target.py`.
+
+### What the 5 remaining skips need, and why they are honest
+
+    GsNativeTests testBuildInfoNamesTheLlamaBackend              passed
+    GsNativeTests testFrameworkIsReachableOrAbsentCleanly        passed
+    GsNativeTests testShutdownIsIdempotent                       passed
+    GsNativeTests testChatReturnsNonEmptyText                    skipped   no GGUF
+    GsNativeTests testSamePromptTwiceIsIdentical                 skipped   no GGUF
+    GsNativeTests testFailureThrowsRatherThanReturningEmptyString skipped  isAvailable
+    GsNativeTests testEmbedImageRejectsShortBuffer               skipped   isAvailable
+    GsNativeTests testOcrReturnsTextOnFixture                    skipped   no fixture
+
+Three of them skip on a model, and two skip on `isAvailable`, which is
+`ensureLoaded() && GsNative.backendAvailable()` — and `backendAvailable` is
+guarded by `guard let context`, so it is false on a correct build with no model
+provisioned. So all five are downstream of ONE missing thing: a 0.5B GGUF in the
+simulator's Application Support. No weights are in git, and there is no step that
+provisions one, which is the next thing to do.
+
 ## STILL OPEN
 
 | item | state | why |
@@ -527,3 +589,10 @@ disk instead of deriving a path from one line is what turned "it crashed" into
     same architectures (arm64) and can't be in the same fat output file". The iOS
     slice merge is an archive job (`libtool -static`); lipo is correct only for
     the two-architecture simulator combine.
+36. The five remaining iOS skips are all downstream of one missing thing: no step
+    provisions a 0.5B GGUF into the simulator's Application Support, and
+    `GsNativeLoader.isAvailable` is false without one even though the build now
+    reports `+llama`.
+37. I lowered the app's iOS deployment floor from xcodebuild's default (16.0+) to
+    15.0 while fixing the library's, and `PhotosPickerItem` stopped compiling.
+    The two floors are independent; a library built for 15.0 links into a 16.0 app.
