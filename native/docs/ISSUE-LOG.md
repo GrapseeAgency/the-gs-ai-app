@@ -29,15 +29,44 @@ failures, no skips, and the job is green.
 **arm64-v8a `libgs_ffi.so` publishes**: ELF64 `machine=AArch64`, 4,529,528 B
 (run `36561597743`). Same chat template, same `<|im_end|>` strip.
 
+## ALL FOUR ABIs PUBLISH — verified from the bytes
+
+Run `36651304587`, four green jobs. Not taken from the job status: every
+artifact was downloaded and its ELF header read.
+
+| ABI | bytes | `file -b` |
+|-----|-------|-----------|
+| `arm64-v8a` | 4,562,904 | `ELF 64-bit LSB shared object, ARM aarch64, ... for Android 21, built by NDK r25c` |
+| `armeabi-v7a` | 3,504,900 | `ELF 32-bit LSB shared object, ARM, EABI5 version 1, ... NDK r25c` |
+| `x86` | 5,746,332 | `ELF 32-bit LSB shared object, Intel i386, ... NDK r25c` |
+| `x86_64` | 4,985,656 | `ELF 64-bit LSB shared object, x86-64, ... NDK r25c` |
+
+All four export the same ten `gs_ffi_mobile_*` symbols and carry llama.cpp
+(`strings` finds `llama.cpp` 13–14 times per binary), and each ships a
+`libc++_shared.so` whose machine matches its own ABI — the last point is the
+same class of bug that just cost two 32-bit runs.
+
+**Three separate faults, none of them the linker** that `36561597743` was
+blamed on:
+
+1. The 32-bit archives **were never built** — the llamacpp matrix had two
+   entries, not four. `FAIL: the llamacpp-armeabi-v7a artifact is not in run …`
+2. The sysroot **directory** for 32-bit ARM is `arm-linux-androideabi`. The
+   workflow asked for `armv7a-linux-androideabi`, which is the Clang *target*
+   triple. The runner printed its own sysroot listing to prove it:
+   `aarch64-linux-android  arm-linux-androideabi  i686-linux-android  x86_64-linux-android`
+3. The x86 arch gate compared `MACH[0x03]=="i386"` against `WANT["x86"]=="i686"`.
+   **A check that could only fail**: 9 objects, 9 wrong, on a correct build.
+
 ## STILL OPEN
 
 | item | state | why |
 |------|-------|-----|
 | arm64 **device** run | NOT ATTEMPTED | an `arm64-v8a` system image on an `x86_64` runner has no KVM. Every result above is x86_64, which is **not the shipping ABI**. No arm64 code path has ever executed. |
-| `armeabi-v7a` / `x86` `.so` | FAILING | run `36561597743`. 32-bit ABIs, undiagnosed. |
-| iOS build + simulator tests | NOT STARTED | never attempted |
+| ~~`armeabi-v7a` / `x86`~~ | **CLOSED** | all four ABIs publish: run `36651304587`, verified from the ELF bytes below. |
+| iOS build + simulator tests | NOT STARTED | `ios-native` builds a green `GsFfi.xcframework` (run `36645304846`) but nothing links it: `ios/project.yml` never references it and no job builds the app. The 7 XCTests in `ios/App/Tests/GsNativeTests.swift` have never run. |
 | dynamic feature module | BLOCKED (2/4) | `:ocr-fallback` variant matching; `com.android.dynamic-feature` fixed the first error, the base-variant `applicationId` lookup has not |
-| frontend wiring (chat screen → `GsNative`) | NOT VERIFIED | the engine works and the tests call it directly; no test taps the real UI |
+| frontend wiring (chat screen → `GsNative`) | TEST WRITTEN, NOT RUN | `a6_the_chat_screen_path_answers_from_the_engine` drives `ChatRepository.send` with the switch on and an undiallable base URL. Commit `ef8f6ce`/`28ec007`. Not yet executed. |
 | native OCR / Tesseract | NOT LINKED | `gs_mobile_ocr` is a stub: "no OCR engine is compiled into this mobile build". OCR ships through ML Kit in the app module, which is the decided primary. Tesseract is cross-compiled and verified but not in the `.so`. |
 
 ## FIXED, in the order they were found
@@ -62,3 +91,11 @@ failures, no skips, and the job is green.
 - It was claimed that `assert_arch_member.sh` was defective. It was right — the archives it checked were a *different artifact* from the one the linker read, and the earlier inspection used the wrong artifact ID.
 - A `CMAKE_SYSTEM_PROCESSOR` gate was shipped. It is derived from `-DANDROID_ABI`, so it reports whatever was asked for and cannot fail. Replaced by `.github/scripts/assert_archive_arch.py`, tested in both directions against real artifacts.
 - It was asserted that Pillow would be on the runner. It is not: `Pillow path failed (No module named 'PIL'); using the fallback font`.
+14. The 32-bit ABIs were blocked by three faults in sequence — a two-entry
+    matrix, `armv7a-linux-androideabi` used as a sysroot *directory*, and an x86
+    gate comparing `"i386"` to `"i686"` that could only report failure.
+15. `a5_prefer_local_is_off_by_default` asserted `assertTrue("settings are
+    readable", true)` — a test that could not fail, in a suite reported 11/11.
+16. `a6`'s own cleanup called `ModelStore.removeInstalled()`, which is
+    `File(p).delete()`. It would have destroyed the 491 MB GGUF and taken a1,
+    a1b and a2 down with it.
