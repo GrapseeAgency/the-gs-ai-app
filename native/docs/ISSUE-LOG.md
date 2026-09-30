@@ -7,10 +7,10 @@ Branch: `native-runtime`. All commits pushed. Working copy `/tmp/opencode/gsai`
 
 Time is UTC.
 
-## THE WHOLE SUITE IS GREEN — 11/11
+## THE WHOLE SUITE IS GREEN — 12/12
 
-Run `36643948566`, x86_64 emulator, Android API 30. `Starting 11 tests`, no
-failures, no skips, and the job is green.
+Run `36658400508`, x86_64 emulator, Android API 30. Twelve tests, no failures,
+no skips, job green.
 
 | test | result | evidence |
 |------|--------|----------|
@@ -20,11 +20,32 @@ failures, no skips, and the job is green.
 | `a2_ocr_reads_the_fixture` | PASS | `ocr -> INVOICE INV-4471 DUE 2026-03-01` |
 | `a3_download_refuses_without_consent_resumes_and_verifies` | PASS | `Refused(reason=on-device AI has not been enabled)` then `Allowed(model=...qwen2.5-0.5b...)` |
 | `a4_resume_continues_from_the_partial_file` | PASS | `seeded partial = 4096 bytes`, resumed, SHA-256 matched the catalogue |
-| `a5_prefer_local_is_off_by_default` | PASS | `stored preferLocal = false` |
+| `a5_prefer_local_is_off_by_default` | PASS | `stored preferLocal = false` — and it now ASSERTS this; it used to be `assertTrue("settings are readable", true)` |
+| `a6_the_chat_screen_path_answers_from_the_engine` | PASS | see below |
 | `failureIsAnExceptionNotAnEmptyString` | PASS | `chat("hello")` returns text, `chat("")` raises |
 | `libraryLoadsAndExportsBuildInfo` | PASS | — |
 | `ocrReturnsTextOnAFixtureImage` | PASS | `INVOICE INV-4471 DUE 2026-03-01` |
 | `shutdownIsIdempotent` | PASS | — |
+
+## THE CHAT SCREEN REACHES THE ENGINE — `a6`
+
+This is the claim the rest of the file exists to support, and until run
+`36658400508` nothing tested it: a1/a1b call `GsNative.chat` directly, and they
+would pass unchanged in an app whose chat screen had been left unwired.
+
+`a6` drives `ChatRepository.send` — the function the screen calls — with
+`preferLocal` on, a model installed, and an `ApiClient` pointed at
+`http://127.0.0.1:1`, so the provider path cannot answer and cannot hang. The
+device's own words:
+
+    FrontendWiringTest: asked     -> capital of France
+    FrontendWiringTest: replied   -> Paris.
+    FrontendWiringTest: converse  -> local-f160688f-1b0d-4f25-8464-c1d1dae92190
+    FrontendWiringTest: persisted -> [user, assistant]
+
+`Paris.` can only come from the on-device model: the built-in canned responder
+has no France branch and falls through to one of three generic templates, none
+of which contain the word. The canned responder is untouched and still there.
 
 **arm64-v8a `libgs_ffi.so` publishes**: ELF64 `machine=AArch64`, 4,529,528 B
 (run `36561597743`). Same chat template, same `<|im_end|>` strip.
