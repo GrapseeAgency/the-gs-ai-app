@@ -523,7 +523,41 @@ jobs:
               echo "::error::fatten would read and write the same file: $SLICE"
               exit 1
             }
-            lipo -create "$SLICE" $ORDER -output "$OUT"
+            # libtool -static, NOT lipo -create. See the long note below; the
+            # short version is that lipo builds a UNIVERSAL file from slices of
+            # DIFFERENT architectures and refuses same-architecture inputs:
+            #
+            #   fatal error: lipo: .../libgs_ffi.a and .../libllama.a have the
+            #   same architectures (arm64) and can't be in the same fat output
+            #   file                                          (run 36735809161)
+            #
+            # Folding several single-architecture static archives into one is an
+            # ARCHIVE MERGE, which is libtool's job on Apple platforms. lipo is
+            # still used one step later, to combine the two simulator libraries
+            # -- and that use is correct, because aarch64-apple-ios-sim and
+            # x86_64-apple-ios really are different architectures.
+            #
+            # Both tools are resolved explicitly rather than by bare name, for
+            # the same reason the emulator is: a bare name depends on what the
+            # runner's PATH happens to hold, and a silently different lipo is a
+            # different program with the same name.
+            LIBTOOL_BIN="$(xcrun --find libtool 2>/dev/null || command -v libtool || true)"
+            LIPO_BIN="$(xcrun --find lipo 2>/dev/null || command -v lipo || true)"
+            [ -n "$LIBTOOL_BIN" ] || { echo "::error::no libtool on this runner"; exit 1; }
+            [ -n "$LIPO_BIN" ] || { echo "::error::no lipo on this runner"; exit 1; }
+
+            rm -f "$OUT"
+            "$LIBTOOL_BIN" -static -o "$OUT" "$SLICE" $ORDER
+            [ -f "$OUT" ] || { echo "::error::libtool produced no $OUT"; exit 1; }
+            # The merge is asserted FROM THE RESULT, not assumed: an output that
+            # silently contained only its first input would look like success
+            # until something failed to link much later.
+            echo "  members: $("$LIPO_BIN" -info "$OUT" 2>/dev/null | tr '\n' ' ')"
+            echo "  bytes  : $(stat -f%z "$OUT" 2>/dev/null || stat -c%s "$OUT" 2>/dev/null)"
+            if ! "$LIPO_BIN" -info "$OUT" >/dev/null 2>&1; then
+              echo "::error::$OUT is not a readable archive after the merge."
+              exit 1
+            fi
             echo "  $(lipo -info "$OUT")"
             # And assert the merged archive really is bigger than the input,
             # which catches an empty or truncated merge that lipo reports as
@@ -572,11 +606,15 @@ jobs:
 
           # A DIFFERENT OUTPUT PATH. The first version of this was
           #     fatten .../device/libgs_ffi.a  ...  .../device/libgs_ffi.a
-          # -- reading and writing the same file. lipo -create opens the output
+          # -- reading and writing the same file. The merge tool opens the output
           # for writing before it finishes reading the inputs, so this truncates
-          # the archive it is copying. The result is a "successful" lipo and an
+          # the archive it is copying. The result is a "successful" merge and an
           # empty or half-written library, which fails later as undefined symbols
           # and names nothing.
+          #
+          # (It was `lipo -create` when this was written. It is `libtool -static`
+          # now, for the same reason the merge needs one at all -- see the note
+          # about lipo above -- and the hazard is identical, so the guard stays.)
           fatten "$GITHUB_WORKSPACE/dist/ios/device/libgs_ffi.a" \
                  "$GITHUB_WORKSPACE/native/prebuilts/ios-arm64" \
                  "$GITHUB_WORKSPACE/dist/ios/device/libgs_ffi-merged.a"
@@ -1204,6 +1242,42 @@ jobs:
           # run time is ggml's decision on the device. So the build keeps the
           # backend the platform ships, and the TESTS assert on what the engine
           # reports, which is the only thing that can actually be checked.
+          # WHY libtool AND NOT lipo, IN FULL, BECAUSE lipo LOOKS RIGHT.
+          #
+          # `lipo -create A B -output C` is how you build a universal file from
+          # slices of DIFFERENT architectures. It refuses same-architecture
+          # inputs, because a fat file of two slices that agree on architecture
+          # has nothing to discriminate:
+          #
+          #     fatal error: lipo: .../dist/ios/device/libgs_ffi.a and
+          #     .../native/prebuilts/ios-arm64/lib/libllama.a have the same
+          #     architectures (arm64) and can't be in the same fat output file
+          #                                                        (36735809161)
+          #
+          # So the fatten step was never going to work for ANY slice. It was
+          # unreachable rather than correct: until 36735809161 the cargo link
+          # failed first -- Metal, then Accelerate, then __chkstk_darwin -- and
+          # the xcframework job never reached this line. A step that has never
+          # executed is not a step that works, which is why the verify steps
+          # around it read architectures out of the bytes rather than trusting
+          # that the merge happened.
+          #
+          # Folding several single-architecture static archives into one is an
+          # ARCHIVE MERGE, and on Apple platforms that is libtool's operation:
+          #
+          #     libtool -static -o OUT IN1 IN2 IN3
+          #
+          # Per slice, then the one legitimate lipo use afterwards:
+          #
+          #     device      libtool -static   arm64 archives   -> arm64
+          #     sim arm64   libtool -static   arm64 archives   -> arm64
+          #     sim x86_64  libtool -static   x86_64 archives  -> x86_64
+          #     simulator   lipo -create      the two above    -> fat, two archs
+          #
+          # That last one is correct precisely because aarch64-apple-ios-sim and
+          # x86_64-apple-ios ARE different architectures. Which is the
+          # distinction this whole note exists to keep straight.
+
           cat <<'TABLE'
             triple                 dir                            arch   sysroot
             aarch64-apple-ios      build-aarch64-apple-ios        arm64  iphoneos
