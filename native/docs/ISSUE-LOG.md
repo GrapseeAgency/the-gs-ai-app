@@ -530,6 +530,68 @@ size before hash, so a truncated download is named as truncated; and the hash is
 re-read from the copy inside the container, because the file that has to be right
 is the one the test opens, not the one that was downloaded.
 
+## ITEM 5: the split is unblocked to one specific question, and the app still builds
+
+`dynamicFeatures` is OFF. Two things were genuinely fixed and both STAY, because
+they were real and the module cannot work without them:
+
+| Was | Now |
+| --- | --- |
+| `android/ocr-fallback/src/main/AndroidManifest.xml` did not exist | present, with `<dist:module dist:instant="false">`, `<dist:on-demand/>`, `dist:fusing include="true"`, and no `applicationId` |
+| `dependencies { implementation(core-ktx) }` only | plus `mlkit.text.recognition`, `play.core`, `play.core.ktx` — every alias already used by the base |
+| `dynamicFeatures += setOf(":ocr-fallback")` | off, with the reason below |
+
+The module could not have compiled in ANY state, which is why the four recorded
+attempts never found out: they all failed in `processDebugMainManifest`, which
+runs long before Kotlin compiles, so a compile error sat behind a manifest error
+the whole time.
+
+### The remaining question, narrowed to one line
+
+Run `36764251868` fails with the same message, and the AGP **8.5.2 sources** say
+what it means. `DynamicFeatureVariantImpl.kt:230-245`:
+
+    val artifact = variantDependencies.getArtifactFileCollection(
+        ConsumedConfigType.COMPILE_CLASSPATH, ArtifactScope.PROJECT,
+        AndroidArtifacts.ArtifactType.BASE_MODULE_METADATA)
+    ...
+    artifact.elements.map { ModuleMetadata.load(it.single().asFile) }   // line 244
+
+`it.single()` on an EMPTY collection. So the message is not about an
+`applicationId`, and the base's id is plainly set at `build.gradle.kts:94`. The
+collection is the set of `BASE_MODULE_METADATA` artifacts **the base produced**,
+and there are none — because the task that produces it,
+`writeDebugBaseMetadata`, appears **nowhere in the 45 tasks** the run executed:
+
+    :app:checkDebugAarMetadata, :app:compileDebugKotlin, :app:packageDebugResources,
+    :ocr-fallback:processDebugMainManifest, :ocr-fallback:processManifestDebugForFeature,
+    ... 45 tasks, no writeDebugBaseMetadata
+
+So the split's tasks reached the graph through the ordinary project dependency
+(`:app:checkDebugLibraries` puts the split on the compile classpath), NOT through
+`dynamicFeatures` registering the split. The question is no longer "what is the
+split missing" but "why does the base's variant not see `dynamicFeatures`", and
+the `No matching variant` error from the four earlier attempts was the same
+invisible wiring seen from a different task.
+
+Ruled out, from the same run, so the next attempt does not repeat any of it:
+split manifest, split dependencies, `buildTypes` on both modules, no flavors
+anywhere, `minSdk` 26 on both, `applicationId` on the base, `versionCode` 73,
+`namespace` a subpackage, `:ocr-fallback` in `settings.gradle.kts`.
+
+**One piece of evidence I over-read, recorded because the next person will too:**
+`:ocr-fallback:generateDebugFeatureTransitiveDeps` being in the task graph is
+NOT proof the split was registered — that task is created by the split's OWN
+plugin, so it appears whether or not the base registered anything. Reading a task
+list as proof of a wiring relationship is the same error as reading a name as
+proof of a value.
+
+### The app build is green, and that is the priority
+
+`android-app` is **success** on `e712047`, and `android-device` is **success**
+with **14/14** on `18dff88`. A split that does not resolve is not worth an APK
+that does, and that was true four attempts ago.
+
 ## STILL OPEN
 
 | item | state | why |
@@ -656,3 +718,12 @@ is the one the test opens, not the one that was downloaded.
 40. Item 2 is BLOCKED with three measured reasons, one per host. Item 3 (a3) is
     done. Item 4 is done: 14/14 on Android with a7 and a8 passing. Item 5, the
     dynamic feature module, is the only one of the operator's five still open.
+41. Item 5, `:ocr-fallback`, is BLOCKED at one specific line. The split is now
+    manifest-complete and dependency-complete; `dynamicFeatures` is off because
+    the base's variant does not see it, so it never registers
+    `writeDebugBaseMetadata`, so `DynamicFeatureVariantImpl.kt:244` calls
+    `.single()` on an empty collection. `android-app` stays green.
+42. Do not re-open item 5 by changing the split's configuration again. The next
+    move is to find why the BASE's variant does not pick up `dynamicFeatures`, and
+    the evidence to work from is the absence of the producer task in the graph, not
+    another error message.
