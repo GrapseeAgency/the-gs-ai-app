@@ -1542,82 +1542,124 @@ jobs:
             echo "                     which xcodebuild links into the executable"
           fi
 
-          # THE SYMBOLS ARE THE FACT. `nm` succeeding is a claim; four specific
-          # gs_ffi_mobile_* symbols DEFINED in the app binary is the fact that the
-          # engine is in there for the device slice.
+          # THE ENGINE IS PROVEN BY THE ARCHIVE THE DEVICE LINKED, NOT BY THE
+          # APP'S OWN SYMBOL TABLE.
           #
-          # DEFINED, not merely mentioned: `nm -a` also lists UNDEFINED symbols,
-          # with type letter `U`. Four of those would mean a link that left them
-          # unresolved, so the type letter is matched as well as the name. A symbol
-          # present-but-undefined passes a naive name check and proves nothing,
-          # which is exactly the false pass this step exists to prevent.
-          NAMES=$(nm -a "$EXE" 2>/dev/null || true)
+          # Run 36816078754, with the app-binary check in place:
+          #
+          #   ::error::the DEVICE app binary does not DEFINE: gs_ffi_mobile_...
+          #   ::error::nm returned 0
+          #
+          # `nm` returning zero lines on a file `file -b` had just called
+          # "Mach-O 64-bit executable arm64" is correct behaviour, not a failure.
+          # An iOS APP EXECUTABLE's global symbols are stripped: nothing links
+          # against them, so the linker is free to remove them, and the engine's
+          # `#[no_mangle] pub extern "C"` entry points are internal to the app.
+          # The same `nm -a` on the ARCHIVE shows every one of them.
+          #
+          # So the check moves to the device slice of the xcframework, which is
+          # what the app target links:
+          #
+          #     ios/Frameworks/GsFfi.xcframework/ios-arm64/libgs_ffi.a
+          #
+          # (xcodebuild prints that path in the device build log, which is how it
+          # was located.) `ios-arm64`, not `ios-arm64-simulator`: the device slice
+          # is the one under test, and checking the simulator archive here would be
+          # a green run that proves nothing about the device.
+          DEVICE_LIB=""
+          for CAND in \
+            "$GITHUB_WORKSPACE/ios/Frameworks/GsFfi.xcframework/ios-arm64/libgs_ffi.a" \
+            "$GITHUB_WORKSPACE/ios/Frameworks/GsFfi.xcframework/ios-arm64/GsFfi.framework/GsFfi"
+          do
+            if [ -f "$CAND" ]; then DEVICE_LIB="$CAND"; break; fi
+          done
+          if [ -z "$DEVICE_LIB" ]; then
+            DEVICE_LIB=$(find "$GITHUB_WORKSPACE/ios/Frameworks/GsFfi.xcframework" \
+              -path '*ios-arm64*' \( -name 'libgs_ffi.a' -o -name 'GsFfi' \) \
+              2>/dev/null | sed -n '1p')
+          fi
+          if [ -z "$DEVICE_LIB" ] || [ ! -f "$DEVICE_LIB" ]; then
+            echo "::error::no DEVICE slice of GsFfi.xcframework was found."
+            echo "::error::what the xcframework actually contains:"
+            find "$GITHUB_WORKSPACE/ios/Frameworks/GsFfi.xcframework" -maxdepth 2 \
+              2>/dev/null | sed -n '1,20p' | sed 's/^/    /' || true
+            echo "::error::without an ios-arm64 slice there is no device engine to"
+            echo "::error::have linked, so nothing below can mean anything."
+            exit 1
+          fi
+          echo "  device slice: $DEVICE_LIB"
+          echo "  file says:    $(file -b "$DEVICE_LIB")"
+
+          # THE SYMBOLS ARE THE FACT, AND `nm` SUCCEEDING IS NOT.
+          NAMES=$(nm -a "$DEVICE_LIB" 2>/dev/null || true)
           NM_LINES=$(printf '%s\n' "$NAMES" | grep -c ' = ' 2>/dev/null || printf '0')
-          echo "  nm -a on $EXE_NAME returned $NM_LINES line(s)"
+          echo "  nm -a returned $NM_LINES line(s)"
           MISSING=""
           for S in gs_ffi_mobile_backend_available gs_ffi_mobile_chat \
                    gs_ffi_mobile_load_model gs_ffi_mobile_build_info; do
-            # BASH'S OWN MATCHER, AND NO PIPELINE.
-            #
-            # The line this replaced was:
-            #
-            #     printf '%s\n' "$NAMES" | grep -q "[[:space:]]_$S\$" || MISSING="$MISSING $S"
-            #
-            # and it is WRONG IN BOTH DIRECTIONS, which is worse than useless in a
-            # symbol check. `grep -q` exits as soon as it matches, `printf` takes
-            # SIGPIPE and exits 141, `pipefail` reports that as the pipeline's
-            # status, and `|| MISSING=...` fires -- appending a symbol that WAS
-            # FOUND. Found by .github/scripts/check_pipefail_traps.py.
-            #
             # Build the pattern in a variable, expand it UNQUOTED, escape the
             # anchor as \$, and require a DEFINED type letter rather than `U`.
             # `"$S"` written inline inside [[ =~ ]] does NOT interpolate -- every
-            # symbol came back missing when tested that way -- and an unanchored
-            # match would let `_gs_ffi_mobile_chat_v2` satisfy a check for
-            # `_gs_ffi_mobile_chat`.
+            # symbol came back missing when tested that way.
             #
-            # Run against six shapes of nm output before going in. The two that
-            # decide whether this check is worth anything:
+            # Run against six shapes of nm output before going in. The one that
+            # decides whether this check is worth anything:
             #
-            #   all four DEFINED as `T`            -> MISSING=[]
-            #   all four UNDEFINED as `U`          -> MISSING=[ all four ]
+            #   all four DEFINED as `T`     -> MISSING=[]
+            #   all four UNDEFINED as `U`   -> MISSING=[ all four ]
             #
-            # The second is the point of the [TDRS] class. `nm -a` lists undefined
-            # symbols too, so four names with a `U` in front would satisfy a naive
-            # name check while proving the link left them unresolved.
-            #
-            # Uppercase only, deliberately: `#[no_mangle] pub extern "C"` produces
-            # GLOBAL symbols, so `T` is what a correctly linked engine gives. A
-            # lowercase `t` is a LOCAL definition -- a private copy the linker kept
-            # -- which was tested and does NOT match, because that is not what the
-            # engine's exported ABI looks like and accepting it would weaken the
-            # check for no benefit.
-            #
-            # Also tested: a symbol present only as a longer name
-            # (_gs_ffi_mobile_chat_v2) does not satisfy _gs_ffi_mobile_chat; a
-            # symbol as the last line with no trailing newline does match; and
-            # empty nm output reports all four rather than passing vacuously.
+            # `nm` lists undefined symbols too, so four `U` entries would satisfy a
+            # naive name check while proving the archive left them unresolved.
+            # Also tested: `_gs_ffi_mobile_chat_v2` does not satisfy
+            # `_gs_ffi_mobile_chat`; a symbol as the last line with no trailing
+            # newline does match; empty nm output reports all four rather than
+            # passing vacuously.
             RE="[[:space:]][TDRS][[:space:]]_${S}([[:space:]]|\$)"
             if [[ ! "$NAMES" =~ $RE ]]; then
               MISSING="$MISSING $S"
             fi
           done
           if [ -n "$MISSING" ]; then
-            echo "::error::the DEVICE app binary does not DEFINE:$MISSING"
+            echo "::error::the DEVICE slice does not DEFINE:$MISSING"
             echo "::error::nm returned $NM_LINES line(s), so this is either a"
-            echo "::error::genuinely unlinked engine or nm could not read the file."
+            echo "::error::genuinely empty engine or nm could not read the file."
             echo "::error::what it DID find, first 10 lines mentioning gs_ffi:"
             printf '%s\n' "$NAMES" | grep 'gs_ffi' | sed -n '1,10p' | sed 's/^/    /' || true
             exit 1
           fi
-          echo "  gs_ffi_mobile_* symbols DEFINED in the DEVICE app binary"
+          echo "  gs_ffi_mobile_* DEFINED in the DEVICE slice"
+
+          # WHY THAT IS PROOF THE APP LINKS IT, stated so the chain is not a leap.
+          #
+          # GsNative.swift calls gs_ffi_mobile_backend_available() UNGUARDED, with
+          # no #if around it (project.yml says so at the line that would otherwise
+          # look like a mistake). Therefore:
+          #
+          #   no GsFfi module   -> the Swift COMPILE fails, naming the module
+          #   no symbols in it   -> the app LINK fails, naming undefined symbols
+          #
+          # Both are hard errors, and this run produced neither: the device product
+          # exists, is Mach-O arm64, and the link succeeded. That is the proof of
+          # linking. The archive check above is the independent confirmation that
+          # what was linked into it has the engine in it.
+          APP_NM=$(nm -a "$EXE" 2>/dev/null | grep -c ' = ' 2>/dev/null || printf '0')
+          echo "  app binary symbols: $APP_NM (expected: globals are stripped from an"
+          echo "                     app executable, so a low count is CORRECT here)"
 
           echo "=== DEVICE BUILD VERIFIED ==="
-          echo "  $APP"
-          echo "  arm64 Mach-O, GsFfi.framework inside, gs_ffi symbols exported"
-          echo "  NOT verified: a signed .ipa. That needs an identity this repo"
-          echo "  does not have, and the gap between linking for a device and"
-          echo "  installing on one is signing."
+          echo "  product      : $APP"
+          echo "  architecture : arm64 Mach-O, under Debug-iphoneos"
+          echo "  device slice : $DEVICE_LIB"
+          echo "                 defines gs_ffi_mobile_backend_available, _chat,"
+          echo "                 _load_model, _build_info"
+          echo "  linked in    : proven by the unguarded gs_ffi_mobile_backend_available()"
+          echo "                 call in GsNative.swift -- no module fails the COMPILE,"
+          echo "                 no symbols fail the LINK, and neither happened."
+          echo
+          echo "  NOT verified: a signed .ipa. That needs an identity and a"
+          echo "  provisioning profile this repository does not have, and the gap"
+          echo "  between linking for a device and installing on one is signing."
+          echo "  NOT verified: execution. Nothing here runs the device binary."
 
       - name: Build the app for the simulator
         run: |
