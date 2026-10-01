@@ -56,14 +56,6 @@ fn set_err(msg: &str) {
         unsafe { gs_set_error(c.as_ptr()) };
     }
 }
-// The status codes come from sd_bridge, which copies them from gs_abi.h. They
-// were previously undefined HERE, which only showed up as a compile error after
-// the first use was written -- jni.rs had no GS_ERR_* of its own because every
-// entry point it had returned a pointer or a string instead.
-use crate::sd_bridge::{
-    GS_ERR_INVALID_ARG, GS_ERR_UNAVAILABLE, GS_OK,
-};
-
 /// The one process-wide context. A phone app is a single user, and a per-call
 /// context would re-load the weights on every message.
 ///
@@ -503,17 +495,48 @@ pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_renderSvg(
     crate::sd_bridge::render_svg_via_ffi(&spec, &out)
 }
 
+/// The shared error channel, as a String.
+///
+/// Every other entry point throws with its reason attached, so this is not needed
+/// for them. It is needed for the two places a throw would be wrong: a probe that
+/// is SUPPOSED to fail (does this model exist? is this backend linked?) has no
+/// business throwing, and a caller that caught and discarded an exception has lost
+/// the only useful part of it.
+#[no_mangle]
+pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_lastError(
+    env: JNIEnv,
+    _class: JClass,
+) -> jstring {
+    let p = unsafe { gs_last_error() };
+    let msg = if p.is_null() {
+        String::new()
+    } else {
+        unsafe { std::ffi::CStr::from_ptr(p) }.to_string_lossy().into_owned()
+    };
+    match env.new_string(msg) {
+        Ok(s) => s.into_raw(),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+extern "C" {
+    fn gs_last_error() -> *const std::ffi::c_char;
+}
+
 #[no_mangle]
 pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_sdCreate(
     env: JNIEnv,
     _class: JClass,
     model_path: JString,
 ) -> jlong {
-    let p = match env.get_string(&model_path) {
-        Ok(s) => s,
+    // `let p: String` and `.into()`: JavaStr Derefs to str, so to_string_lossy()
+    // does not exist on it. That was one of the eight errors, and it was in the
+    // one entry point whose whole job is to turn a Java string into a path.
+    let p: String = match env.get_string(&model_path) {
+        Ok(s) => s.into(),
         Err(_) => return 0,
     };
-    let path = std::path::PathBuf::from(p.to_string_lossy().into_owned());
+    let path = std::path::PathBuf::from(p);
     // load() rather than a raw pointer: it validates and reports the reason, and
     // the pointer it returns is the same one the raw call would give.
     match crate::sd_bridge::SdModel::load(&path) {
@@ -531,7 +554,7 @@ pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_sdAvailable(
     _class: JClass,
     handle: jlong,
 ) -> jint {
-    match unsafe { crate::sd_bridge::SdModel::borrowed(handle as usize) } {
+    match unsafe { crate::sd_bridge::SdModel::borrowed(handle) } {
         Some(m) => m.can_generate() as jint,
         None => 0,
     }
@@ -543,7 +566,7 @@ pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_sdBackendName(
     _class: JClass,
     handle: jlong,
 ) -> jstring {
-    let name = match unsafe { crate::sd_bridge::SdModel::borrowed(handle as usize) } {
+    let name = match unsafe { crate::sd_bridge::SdModel::borrowed(handle) } {
         Some(m) => m.backend_name(),
         None => "none".to_string(),
     };
@@ -556,7 +579,7 @@ pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_sdBackendName(
 #[allow(clippy::too_many_arguments)]
 #[no_mangle]
 pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_sdGenerate(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _class: JClass,
     handle: jlong,
     prompt: JString,
@@ -566,22 +589,37 @@ pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_sdGenerate(
     steps: jint,
     out_path: JString,
 ) -> jint {
-    let mut m = match unsafe { crate::sd_bridge::SdModel::borrowed_mut(handle as usize) } {
+    let mut m = match unsafe { crate::sd_bridge::SdModel::borrowed_mut(handle) } {
         Some(m) => m,
         None => return GS_ERR_INVALID_ARG,
     };
-    let pr = match env.get_string(&prompt) {
-        Ok(s) => s.to_string(),
+    let pr: String = match env.get_string(&prompt) {
+        Ok(s) => s.into(),
         Err(_) => return GS_ERR_INVALID_ARG,
     };
-    let ng = match env.get_string(&negative_prompt) {
-        Ok(s) => s.to_string(),
+    let ng: String = match env.get_string(&negative_prompt) {
+        Ok(s) => s.into(),
         Err(_) => String::new(),
     };
-    let op = match env.get_string(&out_path) {
-        Ok(s) => s.to_string(),
+    let op: String = match env.get_string(&out_path) {
+        Ok(s) => s.into(),
         Err(_) => return GS_ERR_INVALID_ARG,
     };
+    // THROWS, and this is the second version.
+    //
+    // The first returned GS_ERR_UNAVAILABLE and wrote the reason to the shared
+    // channel, which a Kotlin caller would have had to know to go and read. But
+    // GsNative.kt states the rule this file was ignoring:
+    //
+    //   "Failure is an exception, never an empty string. A caller that gets ""
+    //    cannot tell ... Anything that can fail returns a value or throws."
+    //
+    // And an int is not a failure a caller can act on: GS_ERR_UNAVAILABLE covers
+    // "no library linked", "no checkpoint" and "bad prompt", which are three
+    // different bugs on a phone. The reason is the whole value.
+    //
+    // lastError() exists for the cases where throwing is wrong -- a probe that is
+    // SUPPOSED to fail -- and this is not one of them.
     match m.generate(
         &pr,
         &ng,
@@ -593,6 +631,7 @@ pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_sdGenerate(
         Ok(_) => GS_OK,
         Err(e) => {
             set_err(&e);
+            throw(&mut env, "sdGenerate", e);
             GS_ERR_UNAVAILABLE
         }
     }
@@ -609,6 +648,6 @@ pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_sdFree(
     // method rather than defended here, because defending it would mean guessing
     // which of two frees is the mistake.
     if handle != 0 {
-        drop(unsafe { crate::sd_bridge::SdModel::from_owned(handle as usize) });
+        drop(unsafe { crate::sd_bridge::SdModel::from_owned(handle) });
     }
 }

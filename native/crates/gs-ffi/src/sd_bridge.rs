@@ -324,8 +324,14 @@ impl SdModel {
     ///
     /// `from_owned` then reconstructs the Box and dropping it runs `Drop`, which
     /// frees the C context -- so exactly one free happens, on exactly one path.
-    pub fn into_handle(self) -> usize {
-        Box::into_raw(Box::new(self)) as usize
+    ///
+    /// Returns `i64`, not `usize`, because the value is about to cross into Java
+    /// as a `jlong`. Returning usize made every caller convert, and the conversion
+    /// the compiler suggested -- try_into().unwrap() -- panics on a 32-bit ABI if
+    /// a pointer ever does not fit, which is a phone-shaped panic reached by a
+    /// lint suggestion.
+    pub fn into_handle(self) -> i64 {
+        Box::into_raw(Box::new(self)) as i64
     }
 
     /// BORROW a handle a foreign caller holds. The caller keeps ownership, so the
@@ -340,7 +346,7 @@ impl SdModel {
     /// # Safety
     /// `handle` must be a pointer this library produced and not yet freed, and the
     /// caller must not free it while the returned borrow lives.
-    pub unsafe fn borrowed(handle: usize) -> Option<&'static SdModel> {
+    pub unsafe fn borrowed(handle: i64) -> Option<&'static SdModel> {
         if handle == 0 {
             return None;
         }
@@ -356,7 +362,7 @@ impl SdModel {
     ///
     /// # Safety
     /// As `borrowed`.
-    pub unsafe fn borrowed_mut(handle: usize) -> Option<&'static mut SdModel> {
+    pub unsafe fn borrowed_mut(handle: i64) -> Option<&'static mut SdModel> {
         if handle == 0 {
             return None;
         }
@@ -368,7 +374,7 @@ impl SdModel {
     /// # Safety
     /// `handle` must be a pointer this library produced, not yet freed, and must
     /// not be used afterwards.
-    pub unsafe fn from_owned(handle: usize) -> Option<SdModel> {
+    pub unsafe fn from_owned(handle: i64) -> Option<SdModel> {
         if handle == 0 {
             return None;
         }

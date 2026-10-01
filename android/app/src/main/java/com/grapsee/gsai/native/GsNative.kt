@@ -77,4 +77,90 @@ object GsNative {
 
     /** Release the process-wide context. Safe to call when nothing was loaded. */
     external fun shutdown()
+
+    // -----------------------------------------------------------------------
+    // Image generation. IN-PROCESS -- no subprocess anywhere on this path, and
+    // there is no sd-cli to find on a phone.
+    //
+    // TWO ROUTES, NOT ONE, because they have different requirements and
+    // conflating them is how "image generation" becomes an untestable claim:
+    //
+    //   renderSvg   no weights, no GPU, no diffusion. Works in EVERY build.
+    //   sdGenerate  real diffusion. Needs the library AND a checkpoint.
+    //
+    // -----------------------------------------------------------------------
+
+    /**
+     * Render an SVG diagram from a flat JSON spec. Needs no weights, no GPU and no
+     * diffusion, so it works in every build of the library, including the portable
+     * one with no backend at all.
+     *
+     * Throws [GsNativeException] on failure rather than returning false, per rule 1
+     * above.
+     */
+    external fun renderSvg(specJson: String, outPath: String)
+
+    /**
+     * Load a diffusion model and return a handle, or 0 when it could not be loaded.
+     *
+     * 0 rather than an exception, because a caller ASKED a question by calling
+     * this -- "is there a usable model here?" -- and the answer is allowed to be no.
+     * [lastError] says why. Every other call in this file throws on failure
+     * because a failure there is unexpected; here it is the expected outcome.
+     *
+     * A handle is a pointer, and it is freed by [sdFree] and by nothing else.
+     * Dropping it without calling that leaks a model context -- for diffusion
+     * that is gigabytes, not bytes.
+     */
+    external fun sdCreate(modelPath: String): Long
+
+    /**
+     * Whether diffusion can actually run on this handle.
+     *
+     * False means either the library is not linked or the checkpoint is absent,
+     * and [sdBackendName] says which. Those are opposite problems with opposite
+     * fixes, so the boolean is never the whole answer.
+     */
+    external fun sdAvailable(handle: Long): Boolean
+
+    /**
+     * Which backend answered: `"sd.cpp"`, or `"sd.cpp:not-compiled"` when the
+     * library is absent from this build. Never empty -- a string that says nothing
+     * is worse than one that says this.
+     */
+    external fun sdBackendName(handle: Long): String
+
+    /**
+     * Generate one image and WRITE IT AS A PNG to [outPath].
+     *
+     * Throws [GsNativeException] with the reason on failure, and **writes no file
+     * when it fails**. That is not an implementation detail to be careful with: a
+     * caller that decodes the PNG cannot tell a real generation from a grey
+     * rectangle, and a grey rectangle that always appears is worse than no image
+     * at all because it satisfies every check that only asks whether a file
+     * appeared.
+     */
+    external fun sdGenerate(
+        handle: Long,
+        prompt: String,
+        negativePrompt: String,
+        width: Int,
+        height: Int,
+        steps: Int,
+        outPath: String,
+    )
+
+    /**
+     * Free a handle from [sdCreate]. Consumes it: calling this twice with the same
+     * value is a use-after-free, so null the field after calling.
+     */
+    external fun sdFree(handle: Long)
+
+    /**
+     * The last native error for this thread, or `""` when none is pending.
+     *
+     * For the calls that deliberately do not throw -- [sdCreate] returning 0, and
+     * anything a caller caught and discarded.
+     */
+    external fun lastError(): String
 }
