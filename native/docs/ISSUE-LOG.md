@@ -11,25 +11,42 @@ Time is UTC.
 
 | # | Item | State | Evidence |
 | --- | --- | --- | --- |
-| 1 | iOS llama.cpp cross-compile | **DONE** | run `36759872954`, all three jobs green, **46 passed, 0 skipped**, `GsNative.chat -> Hello! How can I assist you today?` |
-| 2 | arm64 device run | **BLOCKED, with evidence** | three hosts, three measured reasons — see below |
+| 1 | iOS llama.cpp cross-compile | **DONE** | run `36759872954`, all three jobs green, **46 passed, 0 skipped**; `GsNative.chat -> Hello! How can I assist you today?` |
+| 2 | arm64 device run | **CLOSED — HARDWARE, NOT WORK** | three hosts, three *different* measured reasons; the finding is nested virtualisation, not arm64. Section written in `RESULTS-mobile-concurrency.md`. **No fourth host attempted** |
 | 3 | a3 skip | **DONE** | `a3_download_refuses_without_consent_resumes_and_verifies` PASS, run `36763870230` |
-| 4 | Android test-suite gaps | **DONE** | run `36763870230`, **14/14**, zero skips, including the two routing tests |
-| 5 | dynamic feature module `:ocr-fallback` | **BLOCKED at one line** | AGP 8.5.2 `DynamicFeatureVariantImpl.kt:244`; the app build stays green |
+| 4 | Android test-suite gaps | **DONE** | run `36763870230`, **14/14**, zero skips, including `a7_the_switch_actually_routes_off_and_on` |
+| 5 | dynamic feature module `:ocr-fallback` | **CLOSED PERMANENTLY** | a version bump is *measurably* not the fix: `.single()` is byte-identical in AGP 8.5.2, 8.7.3, 8.9.2, 8.11.1, 8.12.3 and 8.13.2 — six releases, read from the sources jars. The operator's wording is verbatim in `android/app/build.gradle.kts` |
 
 Runs behind those numbers, all on `native-runtime`:
 
 | Workflow | Head | Result |
 | --- | --- | --- |
-| `ios-native` | `76a48b2` | success — llama.cpp, xcframework, app + XCTests |
-| `android-device` | `18dff88` | success — 14/14 on an x86_64 emulator, API 30 |
-| `android-app` | `e712047` | success — compile + unit tests |
+| `android-app` | `96200fa` | compile + unit tests |
+| `android-device` | `96200fa` | 17 PASS, 1 SKIP — see below for why a8 still skips |
+| `ios-native` | `121d337` | llama.cpp + xcframework green; the device-build step is new and unverified |
 
-**The one-line version:** the iOS engine now has llama.cpp compiled in and answers a
-prompt on a real simulator; Android is 14/14 with the two routing tests that found
-a real product bug; the arm64 run is impossible on every runner reachable, with
-three different measured reasons; and the OCR split is down to one question about
-why the base module does not register its own metadata producer.
+**The one-line version:** the iOS engine has llama.cpp and answers a prompt on a
+real simulator; Android is 17 passing with the switch x network matrix proven; the
+arm64 run is impossible on every reachable runner for one hardware reason; and the
+OCR split is closed permanently because no AGP release fixes it.
+
+### What is still open, stated plainly
+
+**`a8_each_backend_behaviour_maps_to_its_own_failure_arm` SKIPS.** It drives
+`send()` through four distinct backend behaviours and asserts each maps to its own
+classification. Three of the four are correct; the fourth is a real product defect
+being chased, and the log now names the exception instead of a number:
+
+    refused connect   -> — Offline — cannot reach GS. —        GenuineUnreachable  PASS
+    HTTP 500          -> — upstream model unavailable —         BackendError        PASS
+    200, no events    -> NOT offline                            clean-break arm     PASS
+    mid-stream cut    -> — EOFException: Chunked stream has
+                          ended unexpectedly: no chunk size —  WRONG ARM
+
+The user was shown a fabricated status for a provider that had served a request
+and begun answering. Four attempts, and the reason each earlier one missed is
+recorded in the file; `fix(114)` wraps the whole request because CIO raises this
+from inside `client.post`, before an HttpResponse exists.
 
 ## THE SUITE IS GREEN — first as 12/12, now 14/14
 
@@ -751,3 +768,264 @@ that does, and that was true four attempts ago.
     move is to find why the BASE's variant does not pick up `dynamicFeatures`, and
     the evidence to work from is the absence of the producer task in the graph, not
     another error message.
+
+## THIS WAVE: the four CLOSES, and what each one actually cost
+
+### CLOSE 1 — the ChatRepository bug, verified in all four directions
+
+The fix was already committed:
+
+    val reply = if (SettingsStore.preferLocal) {
+        nativeReply(prompt) ?: localReply(prompt)
+    } else {
+        localReply(prompt)
+    }
+
+and what it needed was not a re-verification but the three directions that had
+never been tested. Case 2 in particular — prefer-local OFF with the network **up**
+— did not exist at all: every routing test pointed ApiClient at a dead port, so the
+network path had never once been observed succeeding. Proving it needs a backend
+that answers, which is why `WireServer.kt` exists.
+
+Four tests, four markers no other source can produce:
+
+| test | result | evidence |
+| --- | --- | --- |
+| `b1_prefer_off_network_dead_uses_the_canned_responder` | PASS | `— Offline — cannot reach GS. —` then a real answer, and **not** `Paris` |
+| `b2_prefer_off_network_up_uses_the_network` | PASS | `NETWORK ANSWER`, **server saw 1 message request** |
+| `b3_prefer_on_network_dead_uses_the_model` | PASS | `Paris.` |
+| `b4_prefer_on_network_up_uses_the_model` | PASS | `Paris.` with **server saw 0 message requests** |
+
+b4's zero is the half that matters: with the switch on, `send()` tries
+`streamLocalFirst` before any network call, so zero requests is what shows the
+turn short-circuited — a test that only read the reply would also have passed if
+the network had simply answered.
+
+### THREE WAYS A BROKEN HARNESS READ AS A PRODUCT DEFECT
+
+This is the part worth keeping, because it cost three runs and all three were my
+own fault.
+
+1. **The server was never asked.** `WireServer` bound
+   `InetAddress.getLoopbackAddress()`, which returns IPv6 `::1` on many Android
+   devices, while the client dialled `127.0.0.1`. No exception, no connection, and
+   the arm is `GenuineUnreachable` either way. Two runs printed
+   `server saw 0 message request(s)` and the first was read as a cleartext policy
+   block — a plausible cause for an absence, offered in place of a measurement of
+   one. The server now binds IPv4 by name and **prints where it is listening**, and
+   `assertReachable()` proves it answers over a bare socket before any result from
+   it is believed.
+2. **A bare `HttpClient` instead of the shipped `gsHttpClient`.** The app's client
+   installs `ContentNegotiation`; without it `setBody(SendMessageRequest(...))`
+   cannot serialize, the request fails before connecting, and the turn is
+   classified `BackendError(0, null)` rather than `GenuineUnreachable`. The product
+   was correct and the test was wrong.
+3. **a8's own premise was false.** It asserted on the REPLY, and five different
+   mis-set-ups printed the identical string `— GS backend error (HTTP 0) —`.
+
+### CLOSE 2 — a8 rewritten to assert the CLASSIFICATION
+
+`SendFailure` has one subtype per arm, so that is what the test pins. Four backend
+behaviours, four distinct classifications, each asserted on the string its own arm
+emits:
+
+| backend behaviour | arm | result |
+| --- | --- | --- |
+| a port nothing listens on | `GenuineUnreachable` | PASS — `— Offline — cannot reach GS. —` |
+| a 500 with a sanitized body | `BackendError` | PASS — `— upstream model unavailable —` |
+| a 200 with no events, closed cleanly | the clean-break branch | PASS — **not** offline |
+| a stream that starts and then dies | `MidStreamCut` | **FAIL — see below** |
+
+The 500 assertion was **mine and it was wrong**: I demanded
+`"GS backend error (HTTP 500)"`, and the arm is
+
+    val serverText = failure.serverMessage?.takeIf { it.isNotBlank() }
+        ?: "GS backend error (HTTP ${failure.status})"
+
+so a real backend's sanitized `{"error": "..."}` is shown verbatim. That is better
+behaviour than the text I required, and my assertion would have needed a broken
+server to pass. It now asserts the property — the status or the server's message
+must surface, and neither may claim the network is down.
+
+### THE MID-STREAM CUT: four attempts, and the one fact that settled it
+
+The product defect is real and the operator-visible string was wrong:
+
+    refused connect   -> — Offline — cannot reach GS. —
+    mid-stream cut    -> — GS backend error (HTTP 0) —      server saw 1 request
+    HTTP 500          -> — upstream model unavailable —
+
+One request was served and one SSE delta was written, so the backend was reachable
+and had begun answering — and the user was shown a status code that does not exist,
+for a failure that did not happen.
+
+`HTTP 0` is `BackendError(0, null)`, which is what the classifier had to say when
+it knew nothing, rendered as though it knew something. So `BackendError` gained a
+`localReason` and the arm names the actual exception. That change is what turned
+the next run from a third guess into a measurement:
+
+    Classify: mid-stream cut -> — EOFException: Chunked stream has ended
+                              unexpectedly: no chunk size —
+
+Four attempts, each of which wrapped something:
+
+| attempt | what it wrapped | why it missed |
+| --- | --- | --- |
+| `fix(104)` | `channel.readUTF8Line()` | the throw was not from the read |
+| `fix(108)` | the same, plus a `CancellationException` discriminator | it was never a cancellation |
+| `fix(111)` | `bodyAsChannel()`, `isClosedForRead`, the read | all three were already inside and none was it |
+| `fix(114)` | **`client.post` itself** | — |
+
+CIO decodes the chunked body while `client.post` is still returning; headers and
+first chunk arrive in one segment, so a peer that dies mid-body is discovered
+there, before an `HttpResponse` exists. That also explains a detail no earlier
+hypothesis accounted for: the delta never reached `onDelta`, because nothing had
+handed the bytes to the loop yet.
+
+The rule applied to the POST is the **mirror** of the one already in
+`classifySendFailure`, not a new one: `UnknownHostException`, `ConnectException` and
+`SocketTimeoutException` are the shapes that prove the peer was never reached, so
+they are rethrown unchanged and a genuine offline event still reads as one.
+Everything else that fails after the request was written implies a connection
+existed and then the response did not.
+
+### CLOSE 3, item 2 — arm64, closed as hardware
+
+The section in `RESULTS-mobile-concurrency.md` states what is proven (the arm64
+`.so` exists, reads `ARM aarch64` from its ELF header, exports the ten
+`gs_ffi_mobile_*` entry points, verified from the bytes), what is not (that it
+**runs** — no arm64 instruction has been executed by this repository), the three
+measured reasons, and what would close it: an arm64 Linux runner exposing
+`/dev/kvm`, an Apple silicon Mac with Hypervisor.framework, or a physical arm64
+phone over adb.
+
+The finding underneath all three: the first host is the wrong architecture, the
+other two are the **right** architecture with no accelerator, through two different
+kernel interfaces. The blocker is nested virtualisation, not arm64.
+
+It also bounds what the x86_64 run proves, which is the claim most likely to be
+overstated: the same Rust and C++ executes, the ABI and the whole routing layer are
+identical, and exactly two things differ — the SIMD kernels available and the host
+calling convention.
+
+### CLOSE 3, item 5 — option B, because A was measured to be unavailable
+
+The instruction was to try one version bump. Before trying, the sources jar for six
+AGP releases was fetched from Google's Maven and the failing line read:
+
+    8.5.2   .single()=1   artifact.elements.map { ModuleMetadata.load(it.single().asFile) })
+    8.7.3   .single()=1   (identical)
+    8.9.2   .single()=1   (identical)
+    8.11.1  .single()=1   (identical)
+    8.12.3  .single()=1   (identical)
+    8.13.2  .single()=1   (identical)
+
+Byte-identical across six releases. No version fixes THIS failure, so the bump is
+not the fix. The changelog was deliberately not consulted for a fix note: a sentence
+saying "dynamic feature fixes" would not say whether it fixed this, and reading one
+would have been a citation in place of a measurement.
+
+`dynamicFeatures` stays commented out with the exact bug, the six-version
+measurement, and the operator's wording verbatim.
+
+## THE FOUR ITEMS THE OPERATOR EXPECTED TO BE INCOMPLETE
+
+**1. iOS device build — ADDED.** The workflow built only `-sdk iphonesimulator` and
+justified it: *"the device slice needs a signing identity and a physical device."*
+The second half is wrong. A **signed** app needs an identity; an **installed** app
+needs a device; an **unsigned** `.app` for `iphoneos` builds with
+`CODE_SIGNING_ALLOWED=NO`, exactly as the simulator build in the same job already
+did. So the slice was never un-buildable here.
+
+What was missing, and what only a device build can catch: both slices are **arm64**,
+so `lipo` cannot tell them apart and a simulator build passes any architecture
+assertion. What differs is the platform, and nothing asserted it. Now asserted by
+**directory name** (`Debug-iphoneos`), which is the only thing that distinguishes
+the two products.
+
+That assertion was wrong twice first, and both times in the same way:
+
+    ** BUILD SUCCEEDED **
+    Ld    .../Debug-iphoneos/App.app/App normal (in target 'App')
+    ::error::GSApp.app is not a Debug-iphoneos/Release-iphoneos product
+
+`GSApp` is the SCHEME and the MODULE name. The PRODUCT is `App`, and
+`ios/project.yml` says why at the line that otherwise reads as an oversight:
+`PRODUCT_NAME` is left at the XcodeGen default so the `AppTests` TEST_HOST resolves.
+The same wrong name was **already in the shipped workflow's fallback**, where it
+was dead code that could never match anything.
+
+Two of my own lints caught defects in this work, which is the second time each has
+happened:
+
+- `check_pipefail_traps.py` flagged the symbol check
+  `printf ... | grep -q ... || MISSING="..."`, which is wrong in BOTH directions:
+  `grep -q` exits on the first match, `printf` takes SIGPIPE and exits 141,
+  pipefail reports that, and the `||` appends a symbol that **was found**. Replaced
+  with a bash regex anchored at both ends, run against six shapes of real `nm`
+  output first — including `_gs_ffi_mobile_backend_available_extra` present while
+  `_gs_ffi_mobile_backend_available` is absent, which an unanchored check accepts.
+- The `TARGET_BUILD_DIR` extraction copied from the existing step used `exit` in
+  awk, which closes the pipe and can SIGPIPE `printf`; under pipefail that is the
+  substitution's status and `BUILD_DIR=$(...)` is an assignment, so `set -e` kills
+  the step. It survives on the existing step only because that output happens to
+  fit the 64K pipe buffer — a property of the input, not of the code.
+
+**2. Performance — INCOMPLETE, and it is the gap that matters most.** No TTFT, no
+tokens-per-second, for the 0.5B on a device. What exists is real CPU decode
+(`a1b`, `b3 -> Paris.`) and 23 tests in `gs-bench`, and neither is a performance
+number. This is the item that most affects the shippability decision.
+
+**3. stable-diffusion.cpp on mobile — NO, and not by exporting one more symbol.**
+
+    fn sd_cli_path() -> Result<PathBuf, String> {
+        if let Ok(p) = std::env::var("GS_SD_CLI") { return Ok(p.into()); }
+        for cand in ["/mnt/new_volume/sd/stable-diffusion.cpp/build/bin/sd-cli", ...]
+
+`sd_render()` then **spawns that binary as a child process**. A phone has no
+`sd-cli`, no `/mnt/new_volume`, and no environment to set. Wiring it means calling
+stable-diffusion.cpp's model and sampler **in process** through a C ABI — a
+different piece of work, not a smaller one.
+
+What is cheap and remains open: `sd_render_svg` is **already linked** into the
+mobile `.so`, because `build.rs` compiles `libgs_sd.a` unconditionally, but
+`gs_mobile.cpp` contains no reference to it. It is a procedural renderer with no
+weights, no GPU and no diffusion — which is exactly why it is the one worth
+exposing. One symbol and one device test.
+
+**4. iOS frontend wiring — the code was there and nothing proved it.**
+`ChatViewModel.swift:494` is `let local = try? GsNative.chat`, but all eight
+`GsNativeTests` called `GsNative` **directly** and none drove the ViewModel. So
+iOS had what a6 has on Android in its source and did not have a6's guarantee.
+Now closed with the two counterparts of a6 and a7, which is the same defect class
+as a8 measuring its own harness.
+
+## TWO LOOPS THAT COST MORE THAN THE BUGS
+
+Recorded because both are generalisable and both produced green runs that measured
+nothing.
+
+**A test server that cannot be reached looks exactly like a product that cannot
+reach the network.** Same exception surface, same `GenuineUnreachable` arm, same
+user-visible string. `WireServer.assertReachable()` now proves the harness answers
+over a bare `java.net.Socket` before any of its results are believed, and b2 and
+all three of a8's server cases call it first. A test that cannot distinguish its
+own breakage from a product defect is worse than no test, because it reports a
+failure that is not there and reports it confidently.
+
+**A diagnostic that cannot show the thing being diagnosed is worse than none.**
+
+    ::error::first 25 lines of its output:
+    ...
+    ARCHS = arm64
+
+`BUILT_PRODUCTS_DIR` and `FULL_PRODUCT_NAME` are alphabetical, so they are hundreds
+of lines below the 25 printed. The dump was fine; the diagnostic hid the answer.
+It now greps for the keys the step reads, and the product is located in the build
+directory rather than reconstructed from settings that may not be emitted.
+
+And the lesson underneath both: **the local verification of the fix was wrong twice
+before it was right.** The first two fixtures omitted the four-space indent real
+`xcodebuild` puts in front of every setting, and the second was silently
+overwritten mid-call by a leftover script. Both would have had me "fixing" correct
+code. A harness needs checking as carefully as the thing it checks.
