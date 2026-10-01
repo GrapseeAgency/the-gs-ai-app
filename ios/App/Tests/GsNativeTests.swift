@@ -230,6 +230,17 @@ final class GsNativeTests: XCTestCase {
     /// row that is not `last` -- the local path appends the user row and then the
     /// assistant row, and an assertion on `last` alone would miss a reply written
     /// somewhere else.
+    ///
+    /// @MainActor, and not decoratively. Run 36825039431:
+    ///
+    ///     Main actor-isolated property 'messages' can not be referenced from a
+    ///       nonisolated context
+    ///
+    /// ChatViewModel's `messages` and `draft` are MainActor-isolated, so a helper
+    /// that reads them has to be MainActor too. Calling it from the @MainActor
+    /// test methods would have been fine either way; the helper's OWN isolation is
+    /// what the compiler checks.
+    @MainActor
     private func transcript(_ vm: ChatViewModel) -> String {
         vm.messages.map(\.content).joined(separator: "\n")
     }
