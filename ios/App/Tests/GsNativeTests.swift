@@ -200,4 +200,116 @@ final class GsNativeTests: XCTestCase {
         XCTAssertFalse(text.lowercased().contains("unavailable"),
                        "returned an unavailability marker: \(text)")
     }
+    // MARK: - The chat SCREEN path, not GsNative directly
+    //
+    // Everything above calls GsNative. These two drive ChatViewModel.send, which
+    // is what the user actually touches, and they are the iOS counterpart of a6
+    // and a7 on Android.
+
+    /// Loads the model and asserts the engine is really there, so a later
+    /// assertion cannot be satisfied vacuously.
+    private func loadEngineOrSkip() throws {
+        guard let model = deviceModel() else {
+            throw XCTSkip("no model provisioned; set GS_TEST_MODEL or place a GGUF in "
+                          + "Application Support")
+        }
+        XCTAssertTrue(
+            GsNativeLoader.initialize(modelPath: model),
+            "GsNativeLoader.initialize returned false for \(model)")
+        XCTAssertTrue(GsNativeLoader.isAvailable,
+                      "isAvailable is false immediately after a successful initialize, so "
+                      + "later assertions would be measuring nothing")
+        try XCTSkipUnless(GsNative.backendAvailable, "no generation backend in this build")
+    }
+
+    /// The prompt both tests use. The 0.5B answers it with one word.
+    private let screenPrompt =
+        "What is the capital of France? Answer with one word."
+
+    /// Every message the view model has, joined, so a single assertion can see a
+    /// row that is not `last` -- the local path appends the user row and then the
+    /// assistant row, and an assertion on `last` alone would miss a reply written
+    /// somewhere else.
+    private func transcript(_ vm: ChatViewModel) -> String {
+        vm.messages.map(\.content).joined(separator: "\n")
+    }
+
+    /// iOS's a6: with the switch on, `send()` must answer from the ENGINE.
+    @MainActor
+    func testTheChatScreenAnswersFromTheEngine() throws {
+        try loadEngineOrSkip()
+
+        let store = SettingsStore.shared
+        let before = store.preferLocal
+        defer { store.preferLocal = before }
+        store.preferLocal = true
+        XCTAssertTrue(store.preferLocal, "the switch did not turn on")
+
+        let vm = ChatViewModel(conversationID: nil)
+        vm.draft = screenPrompt
+        vm.send()
+
+        let text = transcript(vm)
+        print("iOS a6 transcript -> \(text.prefix(160))")
+
+        // The turn produced both rows, so the path ran to its end rather than
+        // returning early.
+        XCTAssertTrue(
+            vm.messages.contains { $0.role == "user" && $0.content.contains("France") },
+            "no user row was appended, so send() never reached the local path: \(text)")
+        let assistant = vm.messages.last { $0.role == "assistant" }
+        XCTAssertNotNil(assistant, "no assistant row at all: \(text)")
+
+        // THE ASSERTION THAT MATTERS. "Paris" is the model's own answer and
+        // nothing else on this path can produce it, so this is positive evidence
+        // that GsNative.chat ran and its text reached the screen.
+        XCTAssertTrue(
+            text.contains("Paris"),
+            "ChatViewModel.send did not put the engine's answer on screen. "
+            + "The call site exists at ChatViewModel.swift:494 and the suite had "
+            + "never executed it. Got: \(text)")
+
+        // And the row is finished, not left mid-stream: finalizeLocal ran.
+        XCTAssertFalse(
+            assistant?.isStreaming ?? true,
+            "the assistant row is still streaming, so finalizeLocal did not run")
+    }
+
+    /// iOS's a7, and the same claim the Android bug fix turned on: with the switch
+    /// OFF -- the default -- the engine must NOT be consulted.
+    ///
+    /// This is not an absence-only assertion. The network path cannot succeed in
+    /// this test environment, so what is asserted is that no message anywhere
+    /// carries the model's marker: the engine was not reached at all.
+    @MainActor
+    func testTheChatScreenLeavesTheEngineAloneWhenTheSwitchIsOff() throws {
+        try loadEngineOrSkip()
+
+        let store = SettingsStore.shared
+        let before = store.preferLocal
+        defer { store.preferLocal = before }
+        store.preferLocal = false
+        XCTAssertFalse(store.preferLocal, "the switch did not turn off")
+
+        let vm = ChatViewModel(conversationID: nil)
+        vm.draft = screenPrompt
+        vm.send()
+
+        // The local path is synchronous, so if it had run, its answer would be
+        // written by now. The network path starts a Task, so nothing is waited on
+        // here -- which is fine, because the claim is about the ENGINE.
+        let text = transcript(vm)
+        print("iOS a7 transcript -> \(text.prefix(160))")
+        XCTAssertFalse(
+            text.contains("Paris"),
+            "with preferLocal OFF the engine answered anyway. The switch is not "
+            + "gating the engine on ChatViewModel.swift:493. Got: \(text)")
+
+        // The user row is appended by both paths, so its presence proves send()
+        // ran rather than the test measuring an untouched view model.
+        XCTAssertTrue(
+            vm.messages.contains { $0.role == "user" && $0.content.contains("France") },
+            "send() did not append a user row at all: \(text)")
+    }
+
 }
