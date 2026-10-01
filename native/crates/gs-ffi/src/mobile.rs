@@ -105,6 +105,12 @@ pub extern "C" fn gs_ffi_mobile_should_use_local(max_params: u64) -> c_int {
     unsafe { gs_mobile_should_use_local(max_params) }
 }
 
+/// An image-generation handle. Opaque on the C side, never dereferenced here.
+#[repr(C)]
+pub struct GS_MobileImg {
+    _private: [u8; 0],
+}
+
 #[repr(C)]
 pub struct GS_MobileCtx {
     _private: [u8; 0],
@@ -122,6 +128,26 @@ extern "C" {
         temperature: f32,
     ) -> *mut c_char;
     fn gs_mobile_ocr(ctx: *mut GS_MobileCtx, image_path: *const c_char) -> *mut c_char;
+
+    // Image generation, IN-PROCESS. Nothing here spawns a process; see
+    // sd_bridge.rs, whose no_subprocess_remains_in_this_file test reads its own
+    // source to keep it that way.
+    fn gs_mobile_sd_create(model_path: *const c_char) -> *mut GS_MobileImg;
+    fn gs_mobile_sd_set_options(img: *mut GS_MobileImg, threads: c_int, cfg_scale: f32) -> c_int;
+    fn gs_mobile_sd_available(img: *mut GS_MobileImg) -> c_int;
+    fn gs_mobile_sd_backend_name(img: *mut GS_MobileImg) -> *const c_char;
+    #[allow(clippy::too_many_arguments)]
+    fn gs_mobile_sd_generate(
+        img: *mut GS_MobileImg,
+        prompt: *const c_char,
+        negative_prompt: *const c_char,
+        width: c_int,
+        height: c_int,
+        steps: c_int,
+        output_path: *const c_char,
+    ) -> c_int;
+    fn gs_mobile_sd_free(img: *mut GS_MobileImg);
+    fn gs_mobile_render_svg(spec_json: *const c_char, output_path: *const c_char) -> c_int;
     fn gs_mobile_embed_dim(ctx: *mut GS_MobileCtx) -> c_int;
     fn gs_mobile_embed_image(
         ctx: *mut GS_MobileCtx,
@@ -348,6 +374,74 @@ pub fn build_info() -> String {
         if p.is_null() { String::new() } else { CStr::from_ptr(p).to_string_lossy().into_owned() }
     })
     .unwrap_or_default()
+}
+
+// ---------------------------------------------------------------------------
+// The image-generation surface, exported so a cdylib keeps it ALIVE.
+//
+// `#[no_mangle] pub extern "C"` is not decoration. A cdylib only exports what the
+// linker sees referenced, so a C++ translation unit nothing in Rust names is
+// dropped -- which is how the first libgs_ffi.so was 423 KB and exported no gs_
+// symbol at all. Naming them is what keeps them.
+// ---------------------------------------------------------------------------
+
+#[no_mangle]
+pub extern "C" fn gs_ffi_mobile_sd_create(model_path: *const c_char) -> *mut GS_MobileImg {
+    unsafe { gs_mobile_sd_create(model_path) }
+}
+
+#[no_mangle]
+pub extern "C" fn gs_ffi_mobile_sd_set_options(
+    img: *mut GS_MobileImg,
+    threads: c_int,
+    cfg_scale: f32,
+) -> c_int {
+    unsafe { gs_mobile_sd_set_options(img, threads, cfg_scale) }
+}
+
+/// 1 when diffusion can run. The REASON is a separate call, and it has to be:
+/// "the library is not linked" and "there is no checkpoint" are opposite problems
+/// with opposite fixes, and one number cannot say which.
+#[no_mangle]
+pub extern "C" fn gs_ffi_mobile_sd_available(img: *mut GS_MobileImg) -> c_int {
+    unsafe { gs_mobile_sd_available(img) }
+}
+
+#[no_mangle]
+pub extern "C" fn gs_ffi_mobile_sd_backend_name(img: *mut GS_MobileImg) -> *const c_char {
+    unsafe { gs_mobile_sd_backend_name(img) }
+}
+
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn gs_ffi_mobile_sd_generate(
+    img: *mut GS_MobileImg,
+    prompt: *const c_char,
+    negative_prompt: *const c_char,
+    width: c_int,
+    height: c_int,
+    steps: c_int,
+    output_path: *const c_char,
+) -> c_int {
+    unsafe {
+        gs_mobile_sd_generate(img, prompt, negative_prompt, width, height, steps, output_path)
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn gs_ffi_mobile_sd_free(img: *mut GS_MobileImg) {
+    unsafe { gs_mobile_sd_free(img) }
+}
+
+/// The procedural renderer. Needs no weights, no GPU and no diffusion, so it works
+/// in every build. Exported because it is the only image path claimable on a
+/// device with no checkpoint present.
+#[no_mangle]
+pub extern "C" fn gs_ffi_mobile_render_svg(
+    spec_json: *const c_char,
+    output_path: *const c_char,
+) -> c_int {
+    unsafe { gs_mobile_render_svg(spec_json, output_path) }
 }
 
 #[cfg(test)]
