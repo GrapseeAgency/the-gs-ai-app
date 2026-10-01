@@ -383,6 +383,34 @@ jobs:
             "android/app/src/main/jniLibs/$ABI/libgs_ffi.so" "$ABI" \
             || { echo "::error::the linker would reject this .so on a $ABI emulator"; exit 1; }
 
+          # THE KOTLIN CAN BE NEWER THAN THE LIBRARY, AND IT LOOKED LIKE SIXTEEN
+          # BUGS.
+          #
+          # Run 36868936414 installed a .so from an android-native run whose commit
+          # predated initTuned. The library loaded, the emulator booted, the 491 MB
+          # model downloaded and checksum-verified, and then:
+          #
+          #   Tests 23/23 completed (16 failed)
+          #   perf_...swept_in_one_run    FAILED  (all 12 configs rejected)
+          #   a1 a1b a2 a3 a6 a7 b1 b2 b3 b4 c2 a0, GsNativeTest x2   FAILED
+          #
+          # Fifteen of those sixteen said exactly one thing:
+          #
+          #   GsNativeException: no native context; call init(modelPath) first
+          #
+          # which points at the MODEL. The one line that named the cause was in a
+          # logcat artifact, after a 25-minute emulator run:
+          #
+          #   No implementation found for boolean
+          #     com.grapsee.gsai.native.GsNative.initTuned(java.lang.String, int, int)
+          #
+          # So the two are compared BEFORE anything runs. Cheap, and it turns a
+          # cascade into one named symbol.
+          echo "=== does every Kotlin external fun exist in this .so? ==="
+          bash "$GITHUB_WORKSPACE/.github/scripts/check_jni_matches_kt.sh" \
+            "android/app/src/main/jniLibs/$ABI/libgs_ffi.so" \
+            android/app/src/main/java
+
       - name: Fetch the 0.5B model and verify its checksum
         run: |
           set -euo pipefail
