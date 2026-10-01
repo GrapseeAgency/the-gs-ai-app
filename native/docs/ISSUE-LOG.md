@@ -155,6 +155,171 @@ HV_UNSUPPORTED` either way — and both are set by the HOST, not by QEMU.
 What does **not** change: no arm64 instruction has been executed by this
 repository.
 
+## A REAL PRODUCT BUG, AND THE FALSE PASS THAT LET IT LIVE
+
+`gs_sd_render_svg` — the procedural renderer, the path the dossier uses for
+diagrams and charts — **never read the key of a field.** Every row it drew was
+labelled with the *previous value*, and one field was silently dropped.
+
+Found by `c0_the_procedural_path_writes_a_real_svg_on_the_device`, run
+`36868936414`, on the device:
+
+    java.lang.AssertionError: the SVG is missing "inference", so the spec was not
+    rendered. A file that exists but omits what was asked for is the same failure
+    as no file, wearing a different hat.
+
+### Reproduced locally, before fixing
+
+The real function was lifted out of the file into a harness and run, rather than
+reasoned about. For the spec a test sends:
+
+    {"title":"Engine Wiring","width":"800","height":"400",
+     "layer1":"orchestration","layer2":"inference"}
+
+it produced:
+
+    <text ...>Engine Wiring: 800</text>
+    <text ...>400: orchestration</text>
+
+`inference` is absent, and neither row carries its own key.
+
+### The cause
+
+The loop searched for `:` **first**, which lands `p` on the *value's* opening
+quote, and then took everything from there to the next quote as the key:
+
+    while ((p = spec.find(':', p)) != std::string::npos) {
+        ++p;
+        ...
+        const std::string k = spec.substr(p + 1, e - p - 1);
+
+So `k` is the value. Every row was labelled with the previous value, and the last
+pair was consumed looking for a value it never found.
+
+**The row count was correct throughout.** That is why nothing noticed: the only
+test covering this function asserted the file was non-empty.
+
+### The fix, and the nine shapes it was checked against
+
+The loop now walks quoted strings — `"key"` `:` `"value"` — and advances past the
+value's closing quote, so no pair is read twice and none is consumed and lost.
+
+| input | before | after |
+| --- | --- | --- |
+| the spec c0 sent | `Engine Wiring: 800` / `400: orchestration` | `layer1: orchestration` / `layer2: inference` |
+| three fields, no title | `1: 2` — **two fields lost** | `a: 1` / `b: 2` / `c: 3` |
+| unquoted value | **nothing rendered**, a field lost | `b: 2` |
+| value containing a colon | `T: x:y` | `a: x:y` / `b: 2` |
+| single quotes, spaces after `:`, trailing junk, empty value | all mislabelled | all correct |
+
+Every shape is equal or better.
+
+### The test that could not catch it, and why
+
+`the_procedural_path_renders_without_any_model` used **the same spec** and asserted:
+
+    assert!(s.contains("orchestration"), "field must be rendered");
+
+which **passed against the broken parser**, because the broken row was
+
+    <text ...>400: orchestration</text>
+
+The value IS present — in the wrong row, paired with the previous value instead of
+with its own key. **The defect is a one-position shift, and a one-position shift
+is invisible to any check that looks at one side of the pair.**
+
+It now asserts the pair *and* the row count, with the rendered rows printed on
+failure. Both directions verified against the real harness output:
+
+    BUGGY  'layer1: orchestration'  False    FIXED  True
+    BUGGY  'layer2: inference'      False    FIXED  True
+    BUGGY  row count: 2                       FIXED  row count: 2
+
+The count is 2 in **both**, which is the point: a count alone would have passed
+against the bug, exactly as the value-presence check did.
+
+This is the clearest instance so far of the rule this repository keeps re-learning:
+*asserting that a value appears is not the same as asserting that it is paired
+with the right key.*
+
+## A VERSION SKEW THAT PRESENTED AS SIXTEEN BUGS
+
+Run `36868936414` installed a `.so` from an android-native run whose commit
+predated `initTuned`. The library loaded, the emulator booted, the 491 MB model
+downloaded and checksum-verified, and then:
+
+    Tests 23/23 completed (16 failed)
+    perf_...swept_in_one_run    FAILED  (all 12 configs rejected)
+    a1 a1b a2 a3 a6 a7 b1 b2 b3 b4 c2 a0, GsNativeTest x2   FAILED
+
+**Fifteen of the sixteen said exactly one thing:**
+
+    GsNativeException: no native context; call init(modelPath) first
+
+which points at the *model*. The sweep test had caught that `initTuned` threw,
+recorded `initTuned failed` for all twelve configurations and left no context — so
+the fifteen were a consequence, not sixteen findings.
+
+The line that named the cause was in a logcat artifact, after a 25-minute run:
+
+    No implementation found for boolean
+      com.grapsee.gsai.native.GsNative_initTuned(java.lang.String, int, int)
+
+Two fixes:
+
+  * **`check_jni_matches_kt.sh`** now compares every Kotlin `external fun` against
+    the `.so` **before** the emulator boots. It fails closed in three *named*
+    ways — `nm` cannot read the file, the `.so` has no JNI layer at all, no Kotlin
+    sources found — because a gate whose own failure is a silent abort or a false
+    accusation is worse than no gate. Its first version was tested against a text
+    file, `nm` said "file format not recognized", the pipeline swallowed the
+    status, and it reported **every** symbol missing with a straight face.
+
+  * **The sweep test restores the shipping default context before its own
+    assertions**, and `a0` now establishes its own instead of inheriting one. A
+    test that ends by destroying shared state turns the suite red, because
+    instrumentation chooses the order.
+
+## TWO LINTS, BOTH OF WHICH HAD TO BE WRONG FIRST
+
+**`check_kt_braces.py`** — a brace-balance lint, wired into `android-app`.
+
+Three hand-checks of ONE Kotlin file's brace balance each gave a **different wrong
+answer**:
+
+  1. `s.count('{')` vs `s.count('}')` — reported IMBALANCED on a file the build had
+     compiled, because a JSON spec inside a string contributes one of each.
+     "Fixing" it would have meant adding a brace: the worst response to a broken
+     check.
+  2. Per-line scanning — a Kotlin `"..."` literal may span **lines**.
+  3. No `/* */` or `'c'` handling — still wrong.
+  4. Comments, both string forms and char literals handled — **still wrong**, on
+     `AttachmentUploader.kt`, which the build compiles:
+
+         "filename=\"${displayName.replace(\"\", "")}\""
+
+     `${` is **code**. The braces and quotes inside it are real. A scanner that
+     treats the whole literal as opaque mis-lexes everything after the first inner
+     quote.
+
+  5. Templates lexed as code — **still wrong** on `AuthScreen.kt`, which is
+     Compose: `"${if (x) { a } else { b }}"` — the `}` closing the `if` block was
+     mistaken for the `}` ending the template. Template-local nesting is now
+     counted.
+
+Verified in **both** directions: eleven fixtures (line/block comments, a
+triple-quoted literal spanning lines, escaped quotes, a `'{'` char literal, a
+template with a nested `if/else`, a template containing a string literal, missing
+brace, extra brace, unterminated string, unterminated template) and **all 99**
+Kotlin sources in the tree, every one of which the build compiles. That is the
+reference this is calibrated against, and the failure message says so — treating a
+red lint as a fact about the *file* is how a broken check gets "fixed" by breaking
+the code.
+
+And once more: **the fixture was wrong before the check was.** The extra-brace
+fixture was first written as `class C { fun i() { } }`, which is *balanced*, and
+the lint correctly said ok.
+
 ## A GATE THAT WAS GOING QUIETLY LOOSE
 
 `[ "$N" -ge 8 ]` against an ABI of **TEN** symbols was already 2 under. Adding seven
