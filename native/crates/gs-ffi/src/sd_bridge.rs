@@ -67,12 +67,14 @@ mod tests {
 // gs_sd_* because stable-diffusion.cpp's own public API is sd_* -- new_sd_ctx,
 // free_sd_ctx, generate_image. A wrapper that declared `sd_create` in the same
 // translation unit as that header is a duplicate-symbol link error waiting for a
-// name to converge, and the near-misses compile.
 /// Status codes, copied from native/cpp/include/gs_abi.h rather than invented
-/// here. They are the values the C library returns, so a caller comparing
-/// against the header's enum and a caller comparing against these agree. GS_OK is
-/// 0 so any negative return is a failure without a comparison.
-pub const GS_OK: c_int = 0;
+/// here, so a caller comparing against the header's enum and a caller comparing
+/// against these agree.
+///
+/// GS_OK is declared at the TOP of this file and is deliberately not repeated:
+/// the first version of this block declared it again and the compiler answered
+/// `the name GS_OK is defined multiple times`. That is the cheapest possible way
+/// to learn that a file already had one, and it is worth the two lines it cost.
 pub const GS_ERR_INVALID_ARG: c_int = -1;
 pub const GS_ERR_NO_MEMORY: c_int = -2;
 pub const GS_ERR_IO: c_int = -3;
@@ -83,14 +85,37 @@ pub const GS_ERR_GENERATION: c_int = -5;
 /// only have the cdylib (the JNI layer). The direct FFI call is the same
 /// function; going through the shim keeps there being exactly one exported name
 /// for it, which is what the ABI gate checks.
-pub fn render_svg_via_ffi(spec: &std::ffi::CStr, out: &std::ffi::CStr) -> c_int {
-    unsafe { gs_ffi_render_svg(spec.as_ptr(), out.as_ptr()) }
+///
+/// Takes `&str` and does the `CString` conversion here, deliberately. The first
+/// version of the JNI caller built the `CString` itself and then passed
+/// `CStr::from_bytes_with_nul(c.as_bytes()).unwrap()` -- and a `CString` NEVER
+/// carries its own NUL in `as_bytes()`, so that unwrap could only ever panic, on
+/// every call, in a `extern "system"` function. Making the parameter `&str` means
+/// the terminator is this function's problem and the caller cannot get it wrong.
+pub fn render_svg_via_ffi(spec: &str, out: &str) -> c_int {
+    let spec_c = match std::ffi::CString::new(spec) {
+        Ok(c) => c,
+        Err(_) => return GS_ERR_INVALID_ARG,
+    };
+    let out_c = match std::ffi::CString::new(out) {
+        Ok(c) => c,
+        Err(_) => return GS_ERR_INVALID_ARG,
+    };
+    unsafe { gs_ffi_mobile_render_svg(spec_c.as_ptr(), out_c.as_ptr()) }
 }
 
 extern "C" {
     /// The exported shim, so there is one name for this operation rather than
     /// one per caller path.
-    fn gs_ffi_render_svg(spec_json: *const c_char, output_path: *const c_char) -> c_int;
+    ///
+    /// Named from mobile.rs rather than invented: the first version of this
+    /// declaration was `gs_ffi_render_svg`, which no translation unit defines. An
+    /// extern declaration of a nonexistent symbol is not a compile error -- it is
+    /// an undefined reference at link time, and on any platform where it happens
+    /// to resolve it is a call to whatever is at that address. A typo in a symbol
+    /// name is the same class of defect as a typo in a symbol name anywhere
+    /// else, and it fails later and less clearly every time.
+    fn gs_ffi_mobile_render_svg(spec_json: *const c_char, output_path: *const c_char) -> c_int;
 
     fn gs_sd_create(model_path: *const c_char) -> *mut GS_SD_CTX;
     fn gs_sd_set_options(

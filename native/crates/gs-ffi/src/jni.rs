@@ -24,10 +24,38 @@
 use std::sync::Mutex;
 
 use jni::objects::{JByteArray, JClass, JString};
-use jni::sys::{jboolean, jfloatArray, jint, jobject, JNI_FALSE, JNI_TRUE};
+use jni::sys::{
+    jboolean, jfloatArray, jint, jobject, jlong, jstring, JNI_FALSE, JNI_TRUE,
+};
 use jni::JNIEnv;
 
 use crate::mobile::{self, MobileCtx};
+
+// The status codes come from sd_bridge, which COPIES them from gs_abi.h rather
+// than declaring its own. jni.rs had no GS_ERR_* imported at all before this,
+// because every entry point it had returned a pointer or a string and never had
+// a failure to describe; the first version of the image block used them and
+// would not have compiled. Reading the values out of gs_abi.h and writing them
+// here is a duplicate to keep the two from drifting, and it is a deliberate one:
+// the alternative is a build dependency on a header this file cannot see.
+use crate::sd_bridge::{GS_ERR_INVALID_ARG, GS_ERR_UNAVAILABLE, GS_OK};
+
+extern "C" {
+    fn gs_set_error(msg: *const std::ffi::c_char);
+}
+
+/// Write a reason into the shared error channel, so a failure from a JNI entry
+/// point is READABLE from the Kotlin side instead of being a bare integer.
+///
+/// sdGenerate is the first entry point here that has a failure worth describing,
+/// and it is the only one whose caller cannot get any context from the return
+/// value: GS_ERR_UNAVAILABLE covers "no library", "no checkpoint" and "bad
+/// prompt", which are three different bugs on a phone.
+fn set_err(msg: &str) {
+    if let Ok(c) = std::ffi::CString::new(msg) {
+        unsafe { gs_set_error(c.as_ptr()) };
+    }
+}
 // The status codes come from sd_bridge, which copies them from gs_abi.h. They
 // were previously undefined HERE, which only showed up as a compile error after
 // the first use was written -- jni.rs had no GS_ERR_* of its own because every
@@ -454,26 +482,25 @@ pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_renderSvg(
     // The procedural renderer needs no weights, no GPU and no diffusion, so it is
     // available in EVERY build. It is the only image path that can be claimed on
     // a device with no checkpoint present.
-    let spec = match env.get_string(&spec_json) {
-        Ok(s) => s,
+    // `s.into()` is this file's own idiom for JavaStr -> String, at lines 141, 276
+    // and 308. The first version of this block called `.as_bytes()`, which does
+    // not exist on JavaStr in jni 0.21: it Derefs to str, so `.into()` and
+    // `.to_string()` are the spellings that compile. Copying the neighbours is
+    // what made this a one-line fix instead of a search.
+    let spec: String = match env.get_string(&spec_json) {
+        Ok(s) => s.into(),
         Err(_) => return GS_ERR_INVALID_ARG,
     };
-    let out = match env.get_string(&out_path) {
-        Ok(s) => s,
+    let out: String = match env.get_string(&out_path) {
+        Ok(s) => s.into(),
         Err(_) => return GS_ERR_INVALID_ARG,
     };
-    let spec_c = match std::ffi::CString::new(spec.as_bytes()) {
-        Ok(c) => c,
-        Err(_) => return GS_ERR_INVALID_ARG,
-    };
-    let out_c = match std::ffi::CString::new(out.as_bytes()) {
-        Ok(c) => c,
-        Err(_) => return GS_ERR_INVALID_ARG,
-    };
-    crate::sd_bridge::render_svg_via_ffi(
-        std::ffi::CStr::from_bytes_with_nul(spec_c.as_bytes()).unwrap(),
-        std::ffi::CStr::from_bytes_with_nul(out_c.as_bytes()).unwrap(),
-    )
+    // &str, not &CStr, and there is no unwrap here: render_svg_via_ffi owns the
+    // NUL. The previous version did `CStr::from_bytes_with_nul(c.as_bytes())
+    // .unwrap()` on a CString, whose as_bytes() never contains a NUL -- so that
+    // unwrap was a panic on every single call, inside an extern "system"
+    // function. See the function's own comment.
+    crate::sd_bridge::render_svg_via_ffi(&spec, &out)
 }
 
 #[no_mangle]
