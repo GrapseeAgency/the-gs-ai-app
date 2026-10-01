@@ -66,7 +66,12 @@ internal class Elf64(private val bytes: ByteArray) {
     val isElf64: Boolean = bytes.size > 6 &&
         bytes[0] == 0x7F.toByte() && bytes[1] == 'E'.code.toByte() &&
         bytes[2] == 'L'.code.toByte() && bytes[3] == 'F'.code.toByte() &&
-        bytes[4] == 2 // EI_CLASS: 2 = ELFCLASS64
+        // `.toInt()` because bytes[] is Byte and Kotlin will not compare a Byte to an
+        // Int literal -- it says so:
+        //     Elf64.kt:69:9 Operator '==' cannot be applied to 'kotlin.Byte' and
+        //     'kotlin.Int'
+        // which is the correct complaint and the cheapest possible way to find it.
+        bytes[4].toInt() == 2 // EI_CLASS: 2 = ELFCLASS64
 
     // ELF64 header, little-endian, byte offsets. Written out rather than skipped
     // past, because the first version of this read e_shoff at 16 -- which is
@@ -155,7 +160,10 @@ internal class Elf64(private val bytes: ByteArray) {
         if (entsize < 24) return emptyList<Pair<String, Boolean>>()
         val count = dynsym.size / entsize
         val out = ArrayList<Pair<String, Boolean>>(count.toInt())
-        for (i in 0 until count) {
+        // `count.toInt()`, because `until` is Int-only and count is Long. Caught by
+        // reading the file against the type signatures rather than by finding out
+        // in a run, after the Byte/Int comparison above cost one.
+        for (i in 0 until count.toInt()) {
             val off = (dynsym.offset + i * entsize).toInt()
             if (off + 24 > bytes.size) break
             buf.position(off)
