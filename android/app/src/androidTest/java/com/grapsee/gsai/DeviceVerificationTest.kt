@@ -109,6 +109,25 @@ class DeviceVerificationTest {
                 "artifact is not in jniLibs, or its ABI does not match this device.",
             GsNativeLoader.isLibraryLoaded(),
         )
+
+        // ESTABLISHES ITS OWN CONTEXT, which it did not until run 36868936414
+        // proved that relying on whatever an earlier test left behind is a
+        // dependency on an order instrumentation chooses:
+        //
+        //   GsNativeException: GsNative.backendAvailable: no native context;
+        //     call init(modelPath) first
+        //
+        // twenty-six seconds after perf_...swept_in_one_run ended by calling
+        // GsNative.shutdown(). A test that inherits shared state is one `shut
+        // down` away from failing for a reason that has nothing to do with it.
+        //
+        // And this is the FIRST test alphabetically, so it had been getting away
+        // with running before anything had initialised -- which means it was only
+        // ever passing because some other test happened to sort later.
+        findModel()?.let { model ->
+            GsNativeLoader.initWith(model.absolutePath)
+        }
+
         val check = GsNative.selfCheck()
         println("GsNativeTest: selfCheck = $check")
         assertNotNull("selfCheck returned null", check)
@@ -1660,7 +1679,43 @@ class DeviceVerificationTest {
                 rows += Row(nCtx, nThreads, ttft, total, t49, text1.length, text49.length, why.isEmpty(), why)
             }
         }
-        GsNative.shutdown()
+
+        // RESTORE THE SHIPPING DEFAULT BEFORE ASSERTING, OR THE ASSERTIONS RUN
+        // IN A BROKEN PROCESS.
+        //
+        // GsNative.shutdown() clears a PROCESS-WIDE context, so for the rest of
+        // this instrumentation run the engine is gone. Everything else in this
+        // class runs in the same process, in an order instrumentation does not
+        // choose -- and run 36868936414 got exactly that:
+        //
+        //   perf_...swept_in_one_run          FAILED  (all 12 configs rejected)
+        //   a1_chat_returns_real_text         FAILED
+        //   b1 ... b4, a6, a7, a2, a0, a1b    FAILED
+        //   c2                              FAILED
+        //   GsNativeTest x2                  FAILED
+        //   Tests 23/23 completed (16 failed)
+        //
+        // Fifteen of those sixteen said
+        //
+        //   GsNativeException: no native context; call init(modelPath) first
+        //
+        // so one test that ended by destroying shared state turned the suite red.
+        //
+        // init() is the SHIPPING configuration -- 2048 and 4 -- which is the point:
+        // the sweep moves it to twelve other values, and the process is put back
+        // exactly where it started rather than at whatever the last row happened
+        // to leave. This runs before the assertions on purpose; a test that
+        // verifies state it has already broken is not verifying anything.
+        val restored = try {
+            GsNativeLoader.initWith(m.absolutePath)
+        } catch (t: Throwable) {
+            println("LEVERS could not restore the default context: ${t.message}")
+            false
+        }
+        println(
+            "LEVERS restored the default context (init, 2048/4): $restored  " +
+                "backendAvailable=${GsNativeLoader.isAvailable()}",
+        )
 
         println("=== ITEM 3 TABLE: TTFT and decode rate, 0.5B, this emulator ===")
         println(String.format("  %-8s %-10s %10s %10s %10s", "n_ctx", "n_threads", "TTFT ms", "tok/s", "spread"))

@@ -54,6 +54,43 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      # Braces balance, which sounds like something the compiler does and does.
+      # It does -- but three separate attempts to check one Kotlin file's balance
+      # by hand each gave a DIFFERENT WRONG ANSWER first:
+      #
+      #   s.count('{') vs s.count('}')     IMBALANCED on a file the build had
+      #                                    compiled, because a JSON spec inside
+      #                                    a string contributes one of each and
+      #                                    the totals land differently
+      #   a per-line scanner               still wrong, because a Kotlin "..."
+      #                                    literal may span LINES
+      #   no /* */ or 'c' handling        still wrong
+      #
+      # So the only way to hand-count a 1500-line file with JSON in it is to read
+      # it, and "I read it and it looks fine" is a guess wearing the costume of a
+      # check. The scanner is verified in BOTH directions against fixtures, and
+      # reports a file the compiler accepted as the SCANNER's failure -- because
+      # a 1500-line Kotlin file with JSON in it is not exactly short, and an
+      # automated check that is never wrong about clean files is a check nobody
+      # has watched fail.
+      #
+      # It does not replace the compiler. Ten seconds here against a build that
+      # would find the same thing in five minutes, and the value is that the
+      # wrong answer never gets acted on.
+      - name: Braces balance in every Kotlin source
+        run: |
+          set -euo pipefail
+          mapfile -t KT < <(
+            find android/app/src ios -name '*.kt' -o -name '*.kts' 2>/dev/null | sort
+          )
+          echo "checking ${#KT[@]} Kotlin source(s)"
+          test "${#KT[@]}" -gt 0 || {
+            echo "FAIL: found no Kotlin sources; the find pattern is wrong and this"
+            echo "FAIL: step would pass by checking nothing."
+            exit 1
+          }
+          python3 .github/scripts/check_kt_braces.py "${KT[@]}"
+
       - name: Install the Android SDK
         run: |
           set -euo pipefail
