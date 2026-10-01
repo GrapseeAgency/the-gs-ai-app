@@ -13,6 +13,17 @@ on:
     branches: [native-runtime]
     paths:
       - 'native/**'
+      # ios/** WAS MISSING, and the omission is the same class of bug as a check
+      # that cannot fail: this job builds the iOS app, links the device slice and
+      # runs the app's XCTests, and none of that was re-run when the app or its
+      # tests changed. Commit 434d35c -- an @MainActor fix to
+      # ios/App/Tests/GsNativeTests.swift, which made the Swift compile succeed --
+      # pushed green with NO run at all. The previous green would have had to be
+      # believed.
+      #
+      # A workflow that verifies a directory it does not watch verifies it by
+      # accident, and only as often as someone remembers to dispatch it.
+      - 'ios/**'
       - '.github/workflows/ios-native.yml'
       - '.cargo/config.toml'
 
