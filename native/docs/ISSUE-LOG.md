@@ -21,32 +21,82 @@ Runs behind those numbers, all on `native-runtime`:
 
 | Workflow | Head | Result |
 | --- | --- | --- |
-| `android-app` | `96200fa` | compile + unit tests |
-| `android-device` | `96200fa` | 17 PASS, 1 SKIP — see below for why a8 still skips |
-| `ios-native` | `121d337` | llama.cpp + xcframework green; the device-build step is new and unverified |
+| `android-device` | `96200fa` | **success — 18 PASS, 0 SKIP, 0 FAIL** on an x86_64 emulator |
+| `android-app` | `96200fa` | success — compile + unit tests |
+| `android-native` | `820db89` | success |
+| `ios-native` | `a9a31fa` | llama.cpp + xcframework green; the DEVICE app build is new and unverified |
 
 **The one-line version:** the iOS engine has llama.cpp and answers a prompt on a
-real simulator; Android is 17 passing with the switch x network matrix proven; the
+real simulator; Android is **18/18 with nothing skipped**, the switch x network
+matrix is proven in all four directions, and a reachable provider that dies
+mid-answer is now labelled as such instead of with a fabricated HTTP status; the
 arm64 run is impossible on every reachable runner for one hardware reason; and the
 OCR split is closed permanently because no AGP release fixes it.
 
-### What is still open, stated plainly
+**Still open:** the two honest gaps, both recorded rather than worked around —
+**performance numbers** on an emulator (no TTFT, no tok/s for the 0.5B, and it is
+the item that most affects the shippability decision) and **stable-diffusion on the
+mobile runtime** (structurally unreachable, because `sd_render()` spawns `sd-cli` as
+a subprocess from a developer-machine path). Both are in the plan audit in
+`RESULTS-mobile-concurrency.md`.
 
-**`a8_each_backend_behaviour_maps_to_its_own_failure_arm` SKIPS.** It drives
-`send()` through four distinct backend behaviours and asserts each maps to its own
-classification. Three of the four are correct; the fourth is a real product defect
-being chased, and the log now names the exception instead of a number:
+## THE DEVICE SUITE IS FULLY GREEN: 18 PASS, 0 SKIP, 0 FAIL
 
-    refused connect   -> — Offline — cannot reach GS. —        GenuineUnreachable  PASS
-    HTTP 500          -> — upstream model unavailable —         BackendError        PASS
-    200, no events    -> NOT offline                            clean-break arm     PASS
-    mid-stream cut    -> — EOFException: Chunked stream has
-                          ended unexpectedly: no chunk size —  WRONG ARM
+Run `36814985859`, head `96200fa`. **Every test passes and nothing skips** — which
+is the condition item 3 was opened for, and a8 is the last holdout.
 
-The user was shown a fabricated status for a provider that had served a request
-and begun answering. Four attempts, and the reason each earlier one missed is
-recorded in the file; `fix(114)` wraps the whole request because CIO raises this
-from inside `client.post`, before an HttpResponse exists.
+`a8_each_backend_behaviour_maps_to_its_own_failure_arm` drives `send()` through
+four distinct backend behaviours and asserts each maps to its own classification.
+All four are now distinct, and the third is the product defect that took four
+attempts to close:
+
+| backend behaviour | arm | the string the arm emits |
+| --- | --- | --- |
+| a port nothing listens on | `GenuineUnreachable` | `— Offline — cannot reach GS. —` |
+| a stream that starts and dies | **`MidStreamCut`** | `— The connection dropped mid-turn while GS was working…` |
+| a 500 with a sanitized body | `BackendError` | `— upstream model unavailable —` |
+| a 200 with no events | the clean-break branch | `''` — empty, and **not** offline |
+
+Before `fix(114)` the second row read:
+
+    mid-stream cut -> — GS backend error (HTTP 0) —      server saw 1 request
+
+A provider that had served a request and begun answering, reported to the user with
+a status code that does not exist, for a failure that did not happen. It now says
+the connection dropped mid-turn, which is what happened.
+
+**Why it took four attempts, since the shape of it is the point.** Each attempt
+wrapped a different operation and each looked correct:
+
+| attempt | wrapped | why it missed |
+| --- | --- | --- |
+| `fix(104)` | `channel.readUTF8Line()` | the throw was not from the read |
+| `fix(108)` | the same, plus a `CancellationException` discriminator | it was never a cancellation |
+| `fix(111)` | `bodyAsChannel()`, `isClosedForRead`, the read | all three were inside and none was it |
+| `fix(114)` | **`client.post` itself** | — |
+
+CIO decodes the chunked body while `client.post` is still returning; headers and
+first chunk arrive in one segment, so a peer that dies mid-body is discovered
+there, before an `HttpResponse` exists. The detail that finally made it diagnosable
+was that the delta **never reached `onDelta`** — nothing had handed the bytes to
+the loop yet — which was consistent with that and unexplained by every earlier
+hypothesis.
+
+Two changes made the diagnosis possible rather than merely correct, and both are
+worth more than the fix:
+
+- **`BackendError` gained a `localReason`.** `HTTP 0` is `BackendError(0, null)` —
+  what the classifier had to say when it knew nothing, rendered as though it knew
+  something. Naming the actual exception is both the right thing to show a user and
+  the only reason the next run produced evidence instead of another guess.
+- **`GsStreamCutException.status` became `Int?`.** When the cut surfaces from
+  `client.post` there is no status, and a `0` here would have reintroduced the same
+  fabricated code through the exception's own constructor.
+
+The rule applied to the POST is the **mirror** of the one already in
+`classifySendFailure`, not a new one: `UnknownHostException`, `ConnectException` and
+`SocketTimeoutException` are the shapes that prove the peer was never reached, so
+they are rethrown unchanged and a genuine offline event still reads as one.
 
 ## THE SUITE IS GREEN — first as 12/12, now 14/14
 
