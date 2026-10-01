@@ -1590,10 +1590,88 @@ jobs:
           echo "  device slice: $DEVICE_LIB"
           echo "  file says:    $(file -b "$DEVICE_LIB")"
 
-          # THE SYMBOLS ARE THE FACT, AND `nm` SUCCEEDING IS NOT.
-          NAMES=$(nm -a "$DEVICE_LIB" 2>/dev/null || true)
+          # READER FIRST. THIS IS THE SAME TRAP THIS REPOSITORY HAS ALREADY
+          # PAID FOR, AND I PAID FOR IT AGAIN.
+          #
+          # Run 36818412286:
+          #
+          #   device slice: .../GsFfi.xcframework/ios-arm64/libgs_ffi.a
+          #   file says:    current ar archive
+          #   nm -a returned 0
+          #   0 line(s)
+          #   what it DID find: gs_ffi.4bcw9oj14ij4g00piikfoot1n.rcgu.o:
+          #
+          # An archive with a real engine in it, reporting zero symbols, with a
+          # reader failure swallowed by `2>/dev/null`.
+          #
+          # .github/scripts/count_exported_symbols.sh has this written down, with
+          # the raw error:
+          #
+          #   nm: error: .../libgs_ffi.a(gs_ffi...rcgu.o): Unknown attribute kind
+          #     (105)
+          #     (Producer: 'LLVM22.1.8-rust-1.98.1-stable'
+          #      Reader: 'LLVM APPLE_1_2100.1.1.101_0')
+          #
+          # Xcode 26.6's nm is NEWER than the Rust toolchain's LLVM and rejects the
+          # objects rather than degrading. And that script's docstring names my
+          # exact mistake: "nm -gU ... 2>/dev/null turned the failure into a count
+          # of 0 with no explanation". I used `nm -a ... 2>/dev/null || true`.
+          #
+          # The reader that emitted the objects is the one that can read them, so
+          # this uses llvm-nm from the Rust toolchain -- and says so here, because
+          # the next reader of this step will reach for `nm` and get a green answer
+          # that means nothing.
+          SYSROOT="$(rustc --print sysroot)"
+          LLVM_NM="$(find "$SYSROOT" -name 'llvm-nm' -type f 2>/dev/null | sed -n '1p')"
+          if [ -z "$LLVM_NM" ]; then
+            echo "::error::no llvm-nm in the Rust sysroot ($SYSROOT), so the device"
+            echo "::error::slice cannot be read. Apple's nm is not a substitute here:"
+            echo "::error::it rejects the objects rustc emits and reports 0."
+            exit 1
+          fi
+          echo "  reader: $LLVM_NM"
+
+          # THE REPOSITORY'S OWN COUNTER IS THE GATE, because it already fails on
+          # exactly the case that bit this: a reader that cannot read the archive.
+          #
+          # Its stdout is the count and its STDERR is the reader diagnostics --
+          # deliberately loud, because "a toolchain that cannot read its own build
+          # output is worth knowing about even when a workaround exists, because
+          # the next thing to use nm -- a link check, a size report, a crash triage
+          # -- will hit it again". So stderr is shown and stdout is the count,
+          # rather than merging the two streams and hoping `tail -1` lands on the
+          # right one.
+          CNT_ERR=$(mktemp)
+          if COUNT=$(bash "$GITHUB_WORKSPACE/.github/scripts/count_exported_symbols.sh" \
+                       "$DEVICE_LIB" gs_ffi_mobile 2>"$CNT_ERR"); then
+            echo "  gs_ffi_mobile_* exported (repo's own counter): $COUNT"
+            echo "  --- its reader diagnostics ---"
+            sed 's/^/    /' "$CNT_ERR" | sed -n '1,6p'
+          else
+            echo "::error::the repository's own symbol counter could not read the"
+            echo "::error::device slice, which is the reader-failure case and not an"
+            echo "::error::empty archive. Its diagnostics:"
+            sed 's/^/    /' "$CNT_ERR" | sed -n '1,12p'
+            rm -f "$CNT_ERR"
+            exit 1
+          fi
+          rm -f "$CNT_ERR"
+
+          # THE SYMBOLS ARE THE FACT, AND A READER RETURNING NOTHING IS NOT IT.
+          NAMES=$("$LLVM_NM" --defined-only --extern-only "$DEVICE_LIB" 2>/dev/null || true)
           NM_LINES=$(printf '%s\n' "$NAMES" | grep -c ' = ' 2>/dev/null || printf '0')
-          echo "  nm -a returned $NM_LINES line(s)"
+          echo "  llvm-nm --defined-only --extern-only returned $NM_LINES line(s)"
+          if [ "$NM_LINES" -lt 1 ]; then
+            echo "::error::llvm-nm returned nothing for the device slice."
+            echo "::error::Before concluding the archive is empty, note that this"
+            echo "::error::exact failure -- a reader returning zero on a populated"
+            echo "::error::archive -- is what a wrong-reader bug looks like, and it"
+            echo "::error::has happened here before. Run the reader unsuppressed:"
+            echo "::error::    $LLVM_NM --defined-only --extern-only $DEVICE_LIB"
+            echo "::error::and report what it says."
+            exit 1
+          fi
+
           MISSING=""
           for S in gs_ffi_mobile_backend_available gs_ffi_mobile_chat \
                    gs_ffi_mobile_load_model gs_ffi_mobile_build_info; do
@@ -1608,12 +1686,11 @@ jobs:
             #   all four DEFINED as `T`     -> MISSING=[]
             #   all four UNDEFINED as `U`   -> MISSING=[ all four ]
             #
-            # `nm` lists undefined symbols too, so four `U` entries would satisfy a
-            # naive name check while proving the archive left them unresolved.
-            # Also tested: `_gs_ffi_mobile_chat_v2` does not satisfy
-            # `_gs_ffi_mobile_chat`; a symbol as the last line with no trailing
-            # newline does match; empty nm output reports all four rather than
-            # passing vacuously.
+            # `--defined-only --extern-only` already excludes `U`, so that case is
+            # belt-and-braces rather than expected here. Also tested:
+            # `_gs_ffi_mobile_chat_v2` does not satisfy `_gs_ffi_mobile_chat`; a
+            # symbol as the last line with no trailing newline does match; empty
+            # output reports all four rather than passing vacuously.
             RE="[[:space:]][TDRS][[:space:]]_${S}([[:space:]]|\$)"
             if [[ ! "$NAMES" =~ $RE ]]; then
               MISSING="$MISSING $S"
@@ -1621,28 +1698,13 @@ jobs:
           done
           if [ -n "$MISSING" ]; then
             echo "::error::the DEVICE slice does not DEFINE:$MISSING"
-            echo "::error::nm returned $NM_LINES line(s), so this is either a"
-            echo "::error::genuinely empty engine or nm could not read the file."
-            echo "::error::what it DID find, first 10 lines mentioning gs_ffi:"
+            echo "::error::llvm-nm returned $NM_LINES line(s) and the reader is the"
+            echo "::error::Rust toolchain's own, so this is a real absence rather than"
+            echo "::error::a reader problem. What it DID find, first 10 gs_ffi lines:"
             printf '%s\n' "$NAMES" | grep 'gs_ffi' | sed -n '1,10p' | sed 's/^/    /' || true
             exit 1
           fi
           echo "  gs_ffi_mobile_* DEFINED in the DEVICE slice"
-
-          # WHY THAT IS PROOF THE APP LINKS IT, stated so the chain is not a leap.
-          #
-          # GsNative.swift calls gs_ffi_mobile_backend_available() UNGUARDED, with
-          # no #if around it (project.yml says so at the line that would otherwise
-          # look like a mistake). Therefore:
-          #
-          #   no GsFfi module   -> the Swift COMPILE fails, naming the module
-          #   no symbols in it   -> the app LINK fails, naming undefined symbols
-          #
-          # Both are hard errors, and this run produced neither: the device product
-          # exists, is Mach-O arm64, and the link succeeded. That is the proof of
-          # linking. The archive check above is the independent confirmation that
-          # what was linked into it has the engine in it.
-          APP_NM=$(nm -a "$EXE" 2>/dev/null | grep -c ' = ' 2>/dev/null || printf '0')
           echo "  app binary symbols: $APP_NM (expected: globals are stripped from an"
           echo "                     app executable, so a low count is CORRECT here)"
 
