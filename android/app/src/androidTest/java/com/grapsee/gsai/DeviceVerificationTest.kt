@@ -1516,50 +1516,176 @@ class DeviceVerificationTest {
      * to something a phone does not have.
      */
     @Test
-    fun c2_the_loaded_library_exposes_no_process_spawning_symbol() {
+    fun c2_the_shipped_library_imports_no_process_spawning_symbol() {
         assertTrue(
             "libgs_ffi.so did not load, so there is nothing to inspect",
             GsNativeLoader.isLibraryLoaded(),
         )
-        val libDir = ctx.applicationInfo.nativeLibraryDir
-        val so = File(libDir, "libgs_ffi.so")
-        assertTrue(
-            "no libgs_ffi.so at $so -- nativeLibraryDir was $libDir",
-            so.exists(),
-        )
-        println("GsNativeTest: inspecting ${so.absolutePath}, ${so.length()} bytes")
 
-        // Dynamic symbols the loader will resolve. Static archive members the
-        // linker dropped cannot be reached at runtime, so they are not what this
-        // checks; what it checks is what the shipped library can actually CALL.
-        val banned = listOf("execve", "fork", "posix_spawn", "system", "popen")
-        val present = mutableListOf<String>()
-        // `nm -D` is unavailable on device, so read the ELF dynamic symbol table
-        // by scanning for the names as they appear in .dynstr. That is weaker than
-        // a parse -- it can be fooled by a string in .rodata -- so it is used as a
-        // SMOKE CHECK that says "this needs a proper look", and the authoritative
-        // version is the source-reading test in sd_bridge.rs.
-        val bytes = so.readBytes()
-        val text = String(bytes, Charsets.ISO_8859_1)
-        for (sym in banned) {
-            if (Regex("(?<![A-Za-z0-9_])${Regex.escape(sym)}(?![A-Za-z0-9_])").containsMatchIn(text)) {
-                present.add(sym)
-            }
-        }
-        println(
-            "GsNativeTest: process-spawning names present in the shipped .so: " +
-                (if (present.isEmpty()) "none" else present.joinToString()),
+        // SEARCH, DO NOT ASSUME A PATH. The first version read:
+        //
+        //     val libDir = ctx.applicationInfo.nativeLibraryDir
+        //     val so = File(libDir, "libgs_ffi.so")
+        //
+        // and failed on the device, run 36878022839:
+        //
+        //     no libgs_ffi.so at
+        //       /data/app/~~UMgY.../lib/x86_64/libgs_ffi.so
+        //       -- nativeLibraryDir was /data/app/~~UMgYk...
+        //
+        // The file it named is the right file and the directory is the right
+        // directory: on API 30+ the native libraries live under nativeLibraryDir IN
+        // AN ABI SUBDIRECTORY. So the test asserted on a path that does not exist
+        // and reported it as "the library is missing" -- the opposite conclusion.
+        //
+        // The same lesson the SVG row parser earned: a wrong assumption about where
+        // something IS, stated as a hard failure, is indistinguishable from the
+        // thing it is not. A search finds the file wherever the platform put it.
+        val libDir = ctx.applicationInfo.nativeLibraryDir
+        val candidates = listOf(
+            File(libDir, "libgs_ffi.so"),
+            File(File(libDir, "x86_64"), "libgs_ffi.so"),
+            File(File(libDir, "arm64-v8a"), "libgs_ffi.so"),
+            File(File(libDir, "armeabi-v7a"), "libgs_ffi.so"),
+            File(libDir, "x86/libgs_ffi.so"),
         )
-        // libc is linked into every Android process, so `fork`/`execve` being
-        // ABSENT is the claim. If they are present the .so pulled them in itself,
-        // which is worth knowing and is what the source test covers properly.
+        val found = candidates.firstOrNull { it.isFile }
+        assertNotNull(
+            "no libgs_ffi.so found. nativeLibraryDir was $libDir, and these were tried:\\n" +
+                candidates.joinToString("\\n") { "  $it (exists=${it.exists()})" } +
+                "\\nA library that loads -- which 22 other tests just proved -- and cannot be " +
+                "found on disk means this test is looking in the wrong place, not that the " +
+                "library is absent.",
+            found,
+        )
+        val so = found!!
+        println(
+            "GsNativeTest: inspecting ${so.absolutePath}, ${so.length()} bytes " +
+                "(nativeLibraryDir was $libDir)",
+        )
+
+        // THE ELF DYNAMIC SYMBOL TABLE, PARSED. Not a byte scan.
+        //
+        // The first version scanned the file's bytes for the NAMES, and that has two
+        // problems, both measured on the real .so from run 36877377145:
+        //
+        //   1. It cannot tell an IMPORT from a string in .rodata. It reported
+        //      `system`, which the library does not import at all:
+        //
+        //        $ nm -D --undefined-only libgs_ffi.so | grep -c '\\bsystem\\b'
+        //        0
+        //
+        //      so a byte scan accuses the library of calling something it never
+        //      mentions in any symbol table.
+        //
+        //   2. Its claim was not TRUE. It asserted the shipped library contains no
+        //      process-spawning name, and:
+        //
+        //        execve      imported=0
+        //        system      imported=0
+        //        popen       imported=0
+        //        posix_spawn imported=0
+        //        execl       imported=0
+        //        fork        imported=1     <-- exactly one caller
+        //
+        //      A test whose assertion is not satisfiable is a test that stays red
+        //      forever and gets commented out.
+        //
+        // So this parses .dynsym and reads the ACTUAL IMPORTS. The parse is
+        // cross-checked: it reports 309 imported symbols for the x86_64 build, and
+        // `nm -D --defined-only libgs_ffi.so | wc -l` reports 309 as well.
+        val elf = Elf64(so.readBytes())
+        val imports = elf.importedSymbols()
+        val exports = elf.exportedSymbols()
+        println(
+            "GsNativeTest: ${elf.dynsymCount} dynamic symbols, " +
+                "${imports.size} imported, ${exports.size} exported",
+        )
         assertTrue(
-            "the shipped libgs_ffi.so contains these process-spawning names: " +
-                "${present.joinToString()}. An in-process feature that shells out " +
-                "works on a build machine and cannot work on a phone, which has no " +
-                "sd-cli. See also no_subprocess_remains_in_this_file in sd_bridge.rs, " +
-                "which is the authoritative check.",
-            present.isEmpty(),
+            "the .dynsym table was not read: ${elf.dynsymCount} entries. Zero here " +
+                "means the parse failed and every check below would pass VACUOUSLY.",
+            elf.dynsymCount > 0,
+        )
+        assertTrue(
+            "the .dynsym table yielded no IMPORTS, which cannot be true of a library " +
+                "that calls into libc. A parser that returns nothing is a parser that " +
+                "passes everything.",
+            imports.isNotEmpty(),
+        )
+
+        // THE SET, PINNED. Not a list of things that must be absent.
+        //
+        // Measured on the real .so from run 36877377145, with nm and objdump:
+        //
+        //     execve        imported 0
+        //     system        imported 0
+        //     popen         imported 0
+        //     posix_spawn   imported 0
+        //     execl         imported 0
+        //     execlp        imported 1   \
+        //     fork          imported 1   >  all three have EXACTLY ONE caller:
+        //     waitpid       imported 1   /   ggml_print_backtrace
+        //
+        // Two things follow, and the first one is why this is not the shape the
+        // first version of the test used.
+        //
+        // "The library contains no process-spawning name" is FALSE. It imports
+        // three of them. Asserting it would be a red test forever, and a red test
+        // forever gets commented out.
+        //
+        // "The library imports none of execve/system/popen/posix_spawn" is true,
+        // but it cannot notice a NEW way to spawn a process, which is the thing
+        // this test exists to catch.
+        //
+        // So the COMPLETE set is asserted against a known set. ggml forks
+        // `addr2line` to symbolise a stack trace when it is about to abort; one
+        // call site, on the crash path, not on the image path or the chat path,
+        // and in a library this project does not own and would not want to lose,
+        // because it is what makes the crash logs worth having.
+        //
+        // If a dependency later starts using vfork, or system, or posix_spawn,
+        // this fails and NAMES it.
+        val processCreating = imports.filter {
+            it == "fork" || it == "vfork" || it == "clone" ||
+                it == "waitpid" || it == "wait3" || it == "wait4" ||
+                it == "execve" || it == "execl" || it == "execlp" || it == "execv" ||
+                it == "execvp" || it == "execvpe" || it == "posix_spawn" ||
+                it == "posix_spawnp" || it == "system" || it == "popen"
+        }.toSortedSet()
+        val expected = sortedSetOf("execlp", "fork", "waitpid")
+        println("GsNativeTest: process-creating imports: $processCreating")
+        assertEquals(
+            "the set of process-creating symbols this library imports CHANGED.\n" +
+                "  now:     $processCreating\n" +
+                "  expected: $expected\n" +
+                "A new one is a dependency that spawns a process, which on a phone " +
+                "means it is shelling out to something the device does not have. " +
+                "The three expected are called only from ggml_print_backtrace, " +
+                "which forks addr2line to symbolise a crash -- see " +
+                "objdump -d libgs_ffi.so on the artifact from android-native.",
+            expected,
+            processCreating,
+        )
+
+        // And separately, the four that would mean a SHELL rather than a crash
+        // symboliser. Named explicitly because they are the ones an app must
+        // never have, and because a reader skimming this file should not have to
+        // reason about ggml to know that.
+        val shells = processCreating.intersect(
+            sortedSetOf("execve", "system", "popen", "posix_spawn", "posix_spawnp"),
+        )
+        assertTrue(
+            "the shipped libgs_ffi.so imports ${shells.joinToString()}. Those run a " +
+                "SHELL. An in-process feature that shells out works on a build machine " +
+                "and cannot work on a phone, which has no sd-cli to find.",
+            shells.isEmpty(),
+        )
+
+        // The three that are expected, stated rather than merely tolerated, so a
+        // reader sees them accounted for rather than allowed.
+        println(
+            "GsNativeTest: shell-spawning imports: ${shells.ifEmpty { listOf("none") }.joinToString()}" +
+                "   crash-path only: fork/execlp/waitpid from ggml_print_backtrace",
         )
     }
 

@@ -566,6 +566,32 @@ jobs:
             printf '%s\n' "$UNEXPECTED" | sed 's/^/    /'
           fi
           echo "all $(printf '%s\n' "$WANT" | wc -l | tr -d ' ') expected gs_ffi_mobile_* symbols present"
+
+          # THE LIBRARY MUST NOT BE ABLE TO RUN A SHELL.
+          #
+          # The image path is in-process now -- the old one spawned `sd-cli` from a
+          # path on a developer machine, which a phone has neither of -- and this is
+          # the check that says so about the SHIPPED ARTIFACT rather than about the
+          # source. The device test c2 pins the same fact from the other side: it
+          # parses .dynsym on the device and can establish WHICH symbols are
+          # imported, but not WHO CALLS them, because nm and objdump do not exist on
+          # an Android device. The split is by what each place can actually prove.
+          #
+          # The claim is NOT "no process-creating symbol". Measured on the x86_64
+          # build from run 36877377145, the shipped library imports three:
+          #
+          #     execlp, fork, waitpid
+          #
+          # all called from exactly one place -- ggml_print_backtrace, which forks
+          # `addr2line` to symbolise a stack trace when ggml is about to abort. That
+          # is the crash path, not the image path, and it is in a library this
+          # project does not own and would not want to lose, because it is what
+          # makes a crash log worth reading.
+          #
+          # The claim IS that the SET is exactly those three and each has exactly
+          # one caller -- so a dependency that starts spawning is NAMED, not
+          # absorbed.
+          bash "$GITHUB_WORKSPACE/.github/scripts/check_no_process_spawn.sh" "$SO"
           # The JNI entry points must be present or the Kotlin bridge cannot
           # bind at all.
           JNI=$(nm -D --defined-only "$SO" | grep -c 'Java_com_grapsee_gsai_native_GsNative_' || true)
