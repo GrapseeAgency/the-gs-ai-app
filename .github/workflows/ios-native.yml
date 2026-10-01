@@ -1590,85 +1590,62 @@ jobs:
           echo "  device slice: $DEVICE_LIB"
           echo "  file says:    $(file -b "$DEVICE_LIB")"
 
-          # READER FIRST. THIS IS THE SAME TRAP THIS REPOSITORY HAS ALREADY
-          # PAID FOR, AND I PAID FOR IT AGAIN.
+          # THE REPOSITORY OWNS THE READER, AND I DO NOT GET TO PICK IT.
           #
-          # Run 36818412286:
+          # Two attempts to pick it myself, both wrong:
           #
-          #   device slice: .../GsFfi.xcframework/ios-arm64/libgs_ffi.a
-          #   file says:    current ar archive
-          #   nm -a returned 0
-          #   0 line(s)
-          #   what it DID find: gs_ffi.4bcw9oj14ij4g00piikfoot1n.rcgu.o:
+          #   run 36818412286  `nm -a`      -> 0 symbols, reader failure swallowed
+          #   run 36819532571  find "$SYSROOT" -name llvm-nm
+          #     ::error::no llvm-nm in the Rust sysroot
+          #       (/Users/runner/.rustup/toolchains/stable-aarch64-apple-darwin)
           #
-          # An archive with a real engine in it, reporting zero symbols, with a
-          # reader failure swallowed by `2>/dev/null`.
+          # llvm-nm is not in the plain sysroot. It ships in the `llvm-tools`
+          # component, which count_exported_symbols.sh knows to install and which
+          # I did not. So the discovery is re-implemented, wrongly, on top of a
+          # script that already does it correctly.
           #
-          # .github/scripts/count_exported_symbols.sh has this written down, with
-          # the raw error:
-          #
-          #   nm: error: .../libgs_ffi.a(gs_ffi...rcgu.o): Unknown attribute kind
-          #     (105)
-          #     (Producer: 'LLVM22.1.8-rust-1.98.1-stable'
-          #      Reader: 'LLVM APPLE_1_2100.1.1.101_0')
-          #
-          # Xcode 26.6's nm is NEWER than the Rust toolchain's LLVM and rejects the
-          # objects rather than degrading. And that script's docstring names my
-          # exact mistake: "nm -gU ... 2>/dev/null turned the failure into a count
-          # of 0 with no explanation". I used `nm -a ... 2>/dev/null || true`.
-          #
-          # The reader that emitted the objects is the one that can read them, so
-          # this uses llvm-nm from the Rust toolchain -- and says so here, because
-          # the next reader of this step will reach for `nm` and get a green answer
-          # that means nothing.
-          SYSROOT="$(rustc --print sysroot)"
-          LLVM_NM="$(find "$SYSROOT" -name 'llvm-nm' -type f 2>/dev/null | sed -n '1p')"
-          if [ -z "$LLVM_NM" ]; then
-            echo "::error::no llvm-nm in the Rust sysroot ($SYSROOT), so the device"
-            echo "::error::slice cannot be read. Apple's nm is not a substitute here:"
-            echo "::error::it rejects the objects rustc emits and reports 0."
-            exit 1
-          fi
-          echo "  reader: $LLVM_NM"
-
-          # THE REPOSITORY'S OWN COUNTER IS THE GATE, because it already fails on
-          # exactly the case that bit this: a reader that cannot read the archive.
-          #
-          # Its stdout is the count and its STDERR is the reader diagnostics --
-          # deliberately loud, because "a toolchain that cannot read its own build
-          # output is worth knowing about even when a workaround exists, because
-          # the next thing to use nm -- a link check, a size report, a crash triage
-          # -- will hit it again". So stderr is shown and stdout is the count,
-          # rather than merging the two streams and hoping `tail -1` lands on the
-          # right one.
+          # So: run the script, take the reader IT used off its own stderr, and
+          # do not re-derive anything. Its stdout is the count; its stderr is the
+          # reader diagnostics, which it prints deliberately loudly because "a
+          # toolchain that cannot read its own build output is worth knowing about
+          # even when a workaround exists, because the next thing to use nm -- a
+          # link check, a size report, a crash triage -- will hit it again".
           CNT_ERR=$(mktemp)
-          if COUNT=$(bash "$GITHUB_WORKSPACE/.github/scripts/count_exported_symbols.sh" \
-                       "$DEVICE_LIB" gs_ffi_mobile 2>"$CNT_ERR"); then
-            echo "  gs_ffi_mobile_* exported (repo's own counter): $COUNT"
-            echo "  --- its reader diagnostics ---"
-            sed 's/^/    /' "$CNT_ERR" | sed -n '1,6p'
-          else
+          if ! COUNT=$(bash "$GITHUB_WORKSPACE/.github/scripts/count_exported_symbols.sh" \
+                        "$DEVICE_LIB" gs_ffi_mobile 2>"$CNT_ERR"); then
             echo "::error::the repository's own symbol counter could not read the"
-            echo "::error::device slice, which is the reader-failure case and not an"
+            echo "::error::device slice. That is the reader-failure case and NOT an"
             echo "::error::empty archive. Its diagnostics:"
             sed 's/^/    /' "$CNT_ERR" | sed -n '1,12p'
             rm -f "$CNT_ERR"
             exit 1
           fi
+          echo "  gs_ffi_mobile_* exported (repo's own counter): $COUNT"
+
+          LLVM_NM=$(sed -n 's/^reader: //p' "$CNT_ERR" | sed -n '1p')
+          echo "  --- its reader diagnostics ---"
+          sed 's/^/    /' "$CNT_ERR" | sed -n '1,6p'
           rm -f "$CNT_ERR"
+          if [ -z "$LLVM_NM" ] || [ ! -x "$LLVM_NM" ]; then
+            echo "::error::the counter ran but did not report which reader it used"
+            echo "::error::(\"$LLVM_NM\"), so there is no reader to verify names with."
+            echo "::error::Not falling back to Apple's nm: it rejects these objects"
+            echo "::error::and reports 0, which is the bug this step already hit once."
+            exit 1
+          fi
+          echo "  reader: $LLVM_NM"
 
           # THE SYMBOLS ARE THE FACT, AND A READER RETURNING NOTHING IS NOT IT.
           NAMES=$("$LLVM_NM" --defined-only --extern-only "$DEVICE_LIB" 2>/dev/null || true)
           NM_LINES=$(printf '%s\n' "$NAMES" | grep -c ' = ' 2>/dev/null || printf '0')
-          echo "  llvm-nm --defined-only --extern-only returned $NM_LINES line(s)"
+          echo "  reader --defined-only --extern-only returned $NM_LINES line(s)"
           if [ "$NM_LINES" -lt 1 ]; then
-            echo "::error::llvm-nm returned nothing for the device slice."
+            echo "::error::the reader returned nothing for the device slice."
             echo "::error::Before concluding the archive is empty, note that this"
             echo "::error::exact failure -- a reader returning zero on a populated"
             echo "::error::archive -- is what a wrong-reader bug looks like, and it"
-            echo "::error::has happened here before. Run the reader unsuppressed:"
+            echo "::error::has happened here. Run it unsuppressed and report:"
             echo "::error::    $LLVM_NM --defined-only --extern-only $DEVICE_LIB"
-            echo "::error::and report what it says."
             exit 1
           fi
 
@@ -1698,9 +1675,9 @@ jobs:
           done
           if [ -n "$MISSING" ]; then
             echo "::error::the DEVICE slice does not DEFINE:$MISSING"
-            echo "::error::llvm-nm returned $NM_LINES line(s) and the reader is the"
-            echo "::error::Rust toolchain's own, so this is a real absence rather than"
-            echo "::error::a reader problem. What it DID find, first 10 gs_ffi lines:"
+            echo "::error::the reader returned $NM_LINES line(s) and it is the one the"
+            echo "::error::repository's own counter used, so this is a real absence"
+            echo "::error::rather than a reader problem. What it DID find, first 10:"
             printf '%s\n' "$NAMES" | grep 'gs_ffi' | sed -n '1,10p' | sed 's/^/    /' || true
             exit 1
           fi
