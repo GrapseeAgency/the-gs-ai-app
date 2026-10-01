@@ -1609,7 +1609,7 @@ class DeviceVerificationTest {
                 val label = "n_ctx=$nCtx n_threads=$nThreads"
                 GsNative.shutdown()
                 val ok = try {
-                    GsNativeLoader.ensureLoaded() && GsNative.initTuned(
+                    GsNativeLoader.isLibraryLoaded() && GsNative.initTuned(
                         m.absolutePath, nCtx, nThreads,
                     )
                 } catch (t: Throwable) {
@@ -1669,12 +1669,12 @@ class DeviceVerificationTest {
                 println(String.format("  %-8d %-10d %10s %10s   %s", r.nCtx, r.nThreads, "-", "-", r.why))
                 continue
             }
-            val perToken = (r.t49 - r.ttft).toDouble() / 48.0
+            val perToken = (r.t49 - r.ttftMs).toDouble() / 48.0
             val tps = if (perToken > 0) 1000.0 / perToken else 0.0
             println(
                 String.format(
                     "  %-8d %-10d %10d %10.2f %10d",
-                    r.nCtx, r.nThreads, r.ttft, tps, r.t49All.max() - r.t49All.min(),
+                    r.nCtx, r.nThreads, r.ttftMs, tps, r.t49All.max() - r.t49All.min(),
                 ),
             )
         }
@@ -1695,7 +1695,7 @@ class DeviceVerificationTest {
         assertTrue(
             "every usable configuration reported TTFT > 0 and tok/s > 0.5, which is " +
                 "not a decode rate. usable=$usable",
-            usable.all { it.ttft > 0 && it.t49 > it.ttft },
+            usable.all { it.ttftMs > 0 && it.t49 > it.ttftMs },
         )
 
         // The default is printed LAST and flagged, so the table says what the
