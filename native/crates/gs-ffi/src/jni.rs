@@ -28,6 +28,13 @@ use jni::sys::{jboolean, jfloatArray, jint, jobject, JNI_FALSE, JNI_TRUE};
 use jni::JNIEnv;
 
 use crate::mobile::{self, MobileCtx};
+// The status codes come from sd_bridge, which copies them from gs_abi.h. They
+// were previously undefined HERE, which only showed up as a compile error after
+// the first use was written -- jni.rs had no GS_ERR_* of its own because every
+// entry point it had returned a pointer or a string instead.
+use crate::sd_bridge::{
+    GS_ERR_INVALID_ARG, GS_ERR_UNAVAILABLE, GS_OK,
+};
 
 /// The one process-wide context. A phone app is a single user, and a per-call
 /// context would re-load the weights on every message.
@@ -422,4 +429,159 @@ pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_shutdown(
     _class: JClass,
 ) {
     set_global(None);
+}
+
+// ---------------------------------------------------------------------------
+// Image generation, IN-PROCESS.
+//
+// The handles are jlong rather than jobject because they are C pointers, and a
+// Java object would imply a lifecycle this layer does not own: the pointer is
+// freed by the explicit free method and by nothing else, so a Kotlin caller that
+// drops the handle without calling it leaks a model context -- which for a
+// diffusion model is gigabytes, not bytes.
+//
+// The device test asserts BOTH halves of that: that a handle works, and that
+// generate() on an unavailable backend writes no file.
+// ---------------------------------------------------------------------------
+
+#[no_mangle]
+pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_renderSvg(
+    env: JNIEnv,
+    _class: JClass,
+    spec_json: JString,
+    out_path: JString,
+) -> jint {
+    // The procedural renderer needs no weights, no GPU and no diffusion, so it is
+    // available in EVERY build. It is the only image path that can be claimed on
+    // a device with no checkpoint present.
+    let spec = match env.get_string(&spec_json) {
+        Ok(s) => s,
+        Err(_) => return GS_ERR_INVALID_ARG,
+    };
+    let out = match env.get_string(&out_path) {
+        Ok(s) => s,
+        Err(_) => return GS_ERR_INVALID_ARG,
+    };
+    let spec_c = match std::ffi::CString::new(spec.as_bytes()) {
+        Ok(c) => c,
+        Err(_) => return GS_ERR_INVALID_ARG,
+    };
+    let out_c = match std::ffi::CString::new(out.as_bytes()) {
+        Ok(c) => c,
+        Err(_) => return GS_ERR_INVALID_ARG,
+    };
+    crate::sd_bridge::render_svg_via_ffi(
+        std::ffi::CStr::from_bytes_with_nul(spec_c.as_bytes()).unwrap(),
+        std::ffi::CStr::from_bytes_with_nul(out_c.as_bytes()).unwrap(),
+    )
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_sdCreate(
+    env: JNIEnv,
+    _class: JClass,
+    model_path: JString,
+) -> jlong {
+    let p = match env.get_string(&model_path) {
+        Ok(s) => s,
+        Err(_) => return 0,
+    };
+    let path = std::path::PathBuf::from(p.to_string_lossy().into_owned());
+    // load() rather than a raw pointer: it validates and reports the reason, and
+    // the pointer it returns is the same one the raw call would give.
+    match crate::sd_bridge::SdModel::load(&path) {
+        Ok(m) => m.into_handle(),
+        // The reason is in the shared channel. Deliberately NOT turned into a
+        // Java exception here: the device test asserts on the empty-handle +
+        // readable-reason pair, which is the contract the C ABI states.
+        Err(_) => 0,
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_sdAvailable(
+    _env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+) -> jint {
+    match unsafe { crate::sd_bridge::SdModel::borrowed(handle as usize) } {
+        Some(m) => m.can_generate() as jint,
+        None => 0,
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_sdBackendName(
+    env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+) -> jstring {
+    let name = match unsafe { crate::sd_bridge::SdModel::borrowed(handle as usize) } {
+        Some(m) => m.backend_name(),
+        None => "none".to_string(),
+    };
+    match env.new_string(name) {
+        Ok(s) => s.into_raw(),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+#[no_mangle]
+pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_sdGenerate(
+    env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    prompt: JString,
+    negative_prompt: JString,
+    width: jint,
+    height: jint,
+    steps: jint,
+    out_path: JString,
+) -> jint {
+    let mut m = match unsafe { crate::sd_bridge::SdModel::borrowed_mut(handle as usize) } {
+        Some(m) => m,
+        None => return GS_ERR_INVALID_ARG,
+    };
+    let pr = match env.get_string(&prompt) {
+        Ok(s) => s.to_string(),
+        Err(_) => return GS_ERR_INVALID_ARG,
+    };
+    let ng = match env.get_string(&negative_prompt) {
+        Ok(s) => s.to_string(),
+        Err(_) => String::new(),
+    };
+    let op = match env.get_string(&out_path) {
+        Ok(s) => s.to_string(),
+        Err(_) => return GS_ERR_INVALID_ARG,
+    };
+    match m.generate(
+        &pr,
+        &ng,
+        width as i32,
+        height as i32,
+        steps as i32,
+        std::path::Path::new(&op),
+    ) {
+        Ok(_) => GS_OK,
+        Err(e) => {
+            set_err(&e);
+            GS_ERR_UNAVAILABLE
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_sdFree(
+    _env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+) {
+    // Consumes the handle, so a second call with the same jlong is a use-after-free
+    // that the Kotlin side prevents by nulling the field. Documented on the Kotlin
+    // method rather than defended here, because defending it would mean guessing
+    // which of two frees is the mistake.
+    if handle != 0 {
+        drop(unsafe { crate::sd_bridge::SdModel::from_owned(handle as usize) });
+    }
 }

@@ -68,7 +68,30 @@ mod tests {
 // free_sd_ctx, generate_image. A wrapper that declared `sd_create` in the same
 // translation unit as that header is a duplicate-symbol link error waiting for a
 // name to converge, and the near-misses compile.
+/// Status codes, copied from native/cpp/include/gs_abi.h rather than invented
+/// here. They are the values the C library returns, so a caller comparing
+/// against the header's enum and a caller comparing against these agree. GS_OK is
+/// 0 so any negative return is a failure without a comparison.
+pub const GS_OK: c_int = 0;
+pub const GS_ERR_INVALID_ARG: c_int = -1;
+pub const GS_ERR_NO_MEMORY: c_int = -2;
+pub const GS_ERR_IO: c_int = -3;
+pub const GS_ERR_UNAVAILABLE: c_int = -4;
+pub const GS_ERR_GENERATION: c_int = -5;
+
+/// The procedural renderer through the exported mobile symbol, for callers that
+/// only have the cdylib (the JNI layer). The direct FFI call is the same
+/// function; going through the shim keeps there being exactly one exported name
+/// for it, which is what the ABI gate checks.
+pub fn render_svg_via_ffi(spec: &std::ffi::CStr, out: &std::ffi::CStr) -> c_int {
+    unsafe { gs_ffi_render_svg(spec.as_ptr(), out.as_ptr()) }
+}
+
 extern "C" {
+    /// The exported shim, so there is one name for this operation rather than
+    /// one per caller path.
+    fn gs_ffi_render_svg(spec_json: *const c_char, output_path: *const c_char) -> c_int;
+
     fn gs_sd_create(model_path: *const c_char) -> *mut GS_SD_CTX;
     fn gs_sd_set_options(
         ctx: *mut GS_SD_CTX,
@@ -261,6 +284,73 @@ impl SdModel {
             ));
         }
         Ok(out_path.to_path_buf())
+    }
+}
+
+impl SdModel {
+    /// Hand the handle to a foreign caller as an integer, BY BOXING THE STRUCT.
+    ///
+    /// Not `self.ctx as usize`. That returns the C context pointer, and the
+    /// borrow helpers below cast the integer back to a `*const SdModel` -- so the
+    /// two disagree about what the integer IS, and the first call through a
+    /// borrowed handle would reinterpret a C pointer as a Rust value. Boxing
+    /// makes the integer mean one thing: a pointer to the Rust struct, which owns
+    /// the C pointer.
+    ///
+    /// `from_owned` then reconstructs the Box and dropping it runs `Drop`, which
+    /// frees the C context -- so exactly one free happens, on exactly one path.
+    pub fn into_handle(self) -> usize {
+        Box::into_raw(Box::new(self)) as usize
+    }
+
+    /// BORROW a handle a foreign caller holds. The caller keeps ownership, so the
+    /// value is dropped immediately and the C context is NOT freed.
+    ///
+    /// This is deliberately separate from the owning constructor. A single
+    /// `from_raw` that took ownership would free the context when the returned
+    /// value went out of scope -- which for a JNI handle is the end of the call,
+    /// so the second call on the same handle would be a use-after-free. Two
+    /// functions, named for what they do to ownership, cannot be confused.
+    ///
+    /// # Safety
+    /// `handle` must be a pointer this library produced and not yet freed, and the
+    /// caller must not free it while the returned borrow lives.
+    pub unsafe fn borrowed(handle: usize) -> Option<&'static SdModel> {
+        if handle == 0 {
+            return None;
+        }
+        Some(&*(handle as *const SdModel))
+    }
+
+    /// BORROW a handle mutably, for the one operation that changes it.
+    ///
+    /// generate() fills the model's RNG state and its sampler history, so it needs
+    /// `&mut`. Split out from `borrowed` rather than made one `&mut` function so
+    /// the read-only paths cannot accidentally take a mutable borrow and the
+    /// ownership question stays visible at each call site.
+    ///
+    /// # Safety
+    /// As `borrowed`.
+    pub unsafe fn borrowed_mut(handle: usize) -> Option<&'static mut SdModel> {
+        if handle == 0 {
+            return None;
+        }
+        Some(&mut *(handle as *mut SdModel))
+    }
+
+    /// TAKE OWNERSHIP of a handle, for the one call that frees it.
+    ///
+    /// # Safety
+    /// `handle` must be a pointer this library produced, not yet freed, and must
+    /// not be used afterwards.
+    pub unsafe fn from_owned(handle: usize) -> Option<SdModel> {
+        if handle == 0 {
+            return None;
+        }
+        // Box::from_raw, not a struct literal: the handle IS a boxed SdModel, so
+        // reconstructing anything else reads the wrong bytes. Dropping the returned
+        // value runs Drop, which frees the C context.
+        Some(*Box::from_raw(handle as *mut SdModel))
     }
 }
 
