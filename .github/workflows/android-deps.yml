@@ -714,8 +714,27 @@ jobs:
           # directory, so the whole project fails to configure -- and the error
           # names a missing CMakeLists rather than an unfetched submodule, which
           # is a genuinely misleading message.
+          # PINNED. It was `git clone --depth 1` of HEAD, which means the archive
+          # package can change underneath a later build with no diff anywhere --
+          # and the whole point of this package is to be consumed by a compiled
+          # against, which is a claim about specific bytes.
+          #
+          # 3f8527a46c54ecf4cb4ed6003da8e8982283c73c, 2026-09-27, which is the
+          # commit that BUILT in run 36824978668 and produced the archives this
+          # change is written against. Its API is sd_* -- new_sd_ctx,
+          # free_sd_ctx, sd_img_gen_params_init, generate_image -- and NOT
+          # stable_diffusion_*, which an earlier reading of that project's docs
+          # would have produced.
+          SD_SHA=3f8527a46c54ecf4cb4ed6003da8e8982283c73c
           git clone --depth 1 --recurse-submodules --shallow-submodules \
             https://github.com/leejet/stable-diffusion.cpp.git src-sd
+          git -C src-sd fetch --depth 1 origin "$SD_SHA"
+          git -C src-sd checkout --detach "$SD_SHA"
+          echo "checked out $(git -C src-sd rev-parse HEAD)"
+          test "$(git -C src-sd rev-parse HEAD)" = "$SD_SHA" || {
+            echo "FAIL: checkout did not land on the pinned sha"
+            exit 1
+          }
           test -f src-sd/ggml/CMakeLists.txt || {
             echo "FAIL: src-sd/ggml/CMakeLists.txt is missing; the submodule is not fetched"
             ls -la src-sd/ggml | sed -n '1,10p'
@@ -773,6 +792,37 @@ jobs:
             exit 1
           fi
           echo "archives found: $FOUND"
+
+          # THE HEADERS. The package was ARCHIVES ONLY, so there was no way to
+          # compile anything against it -- which is why gs_wrapper.cpp could not
+          # call the library API and why the only route to an image was spawning
+          # sd-cli.
+          #
+          # include/stable-diffusion.h is the whole public surface: 20,473 bytes,
+          # one file, needs only <stdbool.h> <stddef.h> <stdint.h> <string.h>.
+          # Those four are the NDK's, so nothing else has to travel.
+          mkdir -p dist/include
+          if [ ! -f src-sd/include/stable-diffusion.h ]; then
+            echo "FAIL: src-sd/include/stable-diffusion.h is absent, so the"
+            echo "FAIL: package would still be archives-only and uncompilable."
+            ls -la src-sd/include | sed -n '1,10p'
+            exit 1
+          fi
+          cp src-sd/include/stable-diffusion.h dist/include/
+          echo "packaged header: $(wc -c < dist/include/stable-diffusion.h) bytes"
+          # Assert the symbols the consumer is written against are actually IN
+          # the header, so a future upstream rename fails HERE rather than as a
+          # confusing compile error in a different repository.
+          for SYM in new_sd_ctx free_sd_ctx sd_ctx_params_init \
+                     sd_img_gen_params_init generate_image; do
+            if ! grep -q "$SYM" dist/include/stable-diffusion.h; then
+              echo "FAIL: the packaged header does not declare $SYM."
+              echo "FAIL: the sd_wrapper is written against it, so this is a"
+              echo "FAIL: hard break and must be re-read, not worked around."
+              exit 1
+            fi
+            echo "  header declares $SYM"
+          done
           du -sh dist
           tar -czf stablediffusion-arm64.tar.gz -C dist .
           ls -la stablediffusion-arm64.tar.gz
