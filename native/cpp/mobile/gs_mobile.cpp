@@ -19,8 +19,26 @@
 
 #ifdef GS_MOBILE_HAVE_LLAMA
 #include "llama_wrapper.h"
-#include "gs_sd_wrapper.h"
 #endif
+
+// UNCONDITIONAL, and it was not, which cost run 36852700499:
+//
+//   gs_mobile.cpp:270:17: error: 'gs_sd_ctx_t' was not declared in this scope
+//   gs_mobile.cpp:279:12: error: 'gs_sd_render_svg' was not declared
+//
+// The include had been placed inside the #ifdef GS_MOBILE_HAVE_LLAMA block,
+// because that is where the line above it lives and a text edit followed the
+// neighbour rather than the dependency.
+//
+// Nothing here is conditional on llama. The image path is its own backend with
+// its own gate -- GS_SD_HAVE_SDCPP, which is decided in build.rs -- and the
+// procedural renderer needs no model, no GPU and no diffusion at all.
+//
+// WHICH IS EXACTLY WHY THE CONDITIONAL WAS WRONG IN THE OTHER DIRECTION TOO: a
+// PORTABLE build is the one that most needs these symbols, because it is the
+// build where the sd.cpp library is absent and gs_sd_generate has to report that
+// honestly rather than not existing.
+#include "gs_sd_wrapper.h"
 
 namespace {
 // Writes through the shared channel so gs_last_error() actually reports it.
