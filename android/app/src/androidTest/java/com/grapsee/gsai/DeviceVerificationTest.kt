@@ -1155,4 +1155,152 @@ class DeviceVerificationTest {
         }
     }
 
+    // ------------------------------------------------------------------
+    // PERFORMANCE: the numbers the shippability decision needs.
+    //
+    // The mobile surface has no timing accessor and no token count, so these are
+    // derived from TWO measured points using the budget that already bounds
+    // generation: t(n) = TTFT + n * per_token, and the slope from two budgets is
+    // the per-token cost exactly. No tokenizer, no new export, no ABI bump.
+    // ------------------------------------------------------------------
+
+    /**
+     * Times [GsNative.chatWithBudget] for [budget] tokens, [repeats] times, and
+     * returns the times in milliseconds.
+     *
+     * The MINIMUM is returned as the headline: this runs on a shared emulator, and
+     * the least-contaminated sample is the one worth reporting. The spread is
+     * printed so the noise is visible rather than hidden.
+     */
+    private fun timeBudget(
+        budget: Int,
+        repeats: Int,
+        out: (String) -> Unit,
+    ): Pair<List<Long>, String> {
+        val times = ArrayList<Long>(repeats)
+        var last = ""
+        repeat(repeats) { i ->
+            val t0 = System.nanoTime()
+            val text = GsNative.chatWithBudget(perfPrompt, budget)
+            val dt = (System.nanoTime() - t0) / 1_000_000
+            times += dt
+            last = text
+            out("  budget=$budget run=$i -> ${dt}ms, ${text.length} chars")
+        }
+        return Pair(times, last)
+    }
+
+    /**
+     * A prompt that will not emit EOS inside the budget. A model asked a question
+     * answers it and stops, which would make the budget meaningless.
+     */
+    private val perfPrompt =
+        "Count from 1 to 60 in decimal, one number per line, and nothing else. " +
+            "Do not stop early. Do not add any commentary."
+
+    /**
+     * TTFT and decode rate for the 0.5B model, on this device, through the real
+     * engine.
+     *
+     * Published numbers, which is the point: the plan's "Performance" item asked
+     * for exactly these and they did not exist.
+     */
+    @Test
+    fun perf_the_0_5b_reports_a_measurable_decode_rate() {
+        val model = findModel()
+        assertNotNull(
+            "no model on the device, so there is no rate to report. This is a FAILURE, " +
+                "not a skip: a performance test that skips reports nothing, and the " +
+                "operator's decision needs a number.",
+            model,
+        )
+        val m = model!!
+        assertTrue("GsNativeLoader.initWith failed", GsNativeLoader.initWith(m.absolutePath))
+        assertTrue(
+            "no generation backend, so nothing would be timed. selfCheck: " +
+                GsNative.selfCheck(),
+            GsNativeLoader.isAvailable(),
+        )
+        println("PERF model: ${m.name} (${m.length()} bytes)")
+
+        // A WARM-UP GENERATION, discarded. The first call pays for whatever the
+        // backend defers to first use -- buffer allocation, a first-touch page
+        // fault storm on a freshly mmapped model. Timing it would fold a one-off
+        // into the number reported as steady state, and the operator would read it
+        // as the device's speed.
+        val warmMs = (System.nanoTime() / 1_000_000.toLong()).let { t0 ->
+            GsNative.chatWithBudget(perfPrompt, 8)
+            System.nanoTime() / 1_000_000 - t0
+        }
+        println("PERF warm-up (8 tokens, discarded): ${warmMs}ms")
+
+        // Two budgets, far apart so the slope is well conditioned: 49 tokens
+        // against 1 gives 48 token-intervals instead of 30.
+        val repeats = 3
+        val (low, lowText) = timeBudget(1, repeats) { println("PERF $it") }
+        val (high, highText) = timeBudget(49, repeats) { println("PERF $it") }
+
+        // THE BUDGET MUST BE HONOURED, OR THE SLOPE IS AN ARTEFACT.
+        //
+        // If the model emits EOS early, both calls return the same short text, the
+        // difference between them is noise, and the "decode rate" is two identical
+        // generations divided by 48. That is the worst outcome available: a
+        // real-looking figure with no meaning, which is checked here BEFORE
+        // anything is reported.
+        //
+        // Compared as LENGTHS rather than against a fixed char count. An earlier
+        // version asserted `text.length >= budget * 2`, which is a false failure
+        // waiting to happen: a one-token completion can legitimately be a single
+        // character, and a test that cannot fail for a good reason should not be
+        // asserting a magic number.
+        assertTrue(
+            "the 1-token and 49-token budgets produced ${lowText.length} and " +
+                "${highText.length} chars, so the budget is not what bounds this " +
+                "generation and the rate derived from them is an artefact of two " +
+                "near-identical calls. The prompt is: ${perfPrompt.take(60)}",
+            highText.length > lowText.length + 20,
+        )
+        println("PERF budget honoured: 1 token -> ${lowText.length} chars, " +
+            "49 tokens -> ${highText.length} chars")
+
+        val tLow = low.min()
+        val tHigh = high.min()
+        val perTokenMs = (tHigh - tLow).toDouble() / 48.0
+        val tps = if (perTokenMs > 0) 1000.0 / perTokenMs else 0.0
+        // t(1) = TTFT + 1 token, so the intercept is the latency to first token.
+        val ttftMs = tLow - perTokenMs
+
+        println("=== PERFORMANCE, 0.5B on this device ===")
+        println("  budget  1 token : min ${tLow}ms  all $low")
+        println("  budget 49 tokens: min ${tHigh}ms  all $high")
+        println("  per token       : ${"%.1f".format(perTokenMs)} ms")
+        println("  decode rate     : ${"%.2f".format(tps)} tok/s")
+        println("  TTFT            : ${"%.0f".format(ttftMs)} ms")
+        println("  48-token spread : ${tHigh - tLow}ms")
+
+        // THE SPREAD IS REPORTED BESIDE THE NUMBER, because a single figure from
+        // a shared emulator means nothing without it.
+        val highSpread = (high.max() - high.min()).coerceAtLeast(1)
+        println("  49-token spread : ${highSpread}ms across $repeats runs")
+
+        assertTrue(
+            "the per-token cost came out as ${"%.3f".format(perTokenMs)}ms, which is " +
+                "not a decode rate a device can produce. A t(1) of ${tLow}ms and a " +
+                "t(49) of ${tHigh}ms means the two points measure the same thing and " +
+                "the slope is an artefact.",
+            perTokenMs > 0.0,
+        )
+        assertTrue(
+            "measured ${"%.2f".format(tps)} tok/s, which is not a plausible decode " +
+                "rate for a 0.5B on any CPU. The measurement is wrong, not the device.",
+            tps > 0.5,
+        )
+        assertTrue(
+            "the 49-token run varied by ${highSpread}ms across $repeats runs, which " +
+                "is ${highSpread * 100 / (tHigh - tLow).coerceAtLeast(1)}% of the " +
+                "48-token spread the rate is derived from. The number is noise.",
+            highSpread * 4 < (tHigh - tLow),
+        )
+    }
+
 }
