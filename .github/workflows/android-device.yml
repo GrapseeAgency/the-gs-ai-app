@@ -199,11 +199,44 @@ jobs:
             | python3 "$GITHUB_WORKSPACE/.github/scripts/pick_artifact_id.py" llamacpp "$ABI"
           )
           if [ -z "$ARTIFACT_ID" ]; then
+            # AN EMPTY LIST AND A FAILED LISTING LOOK IDENTICAL. Run 36866081875:
+            #
+            #   FAIL: the llamacpp-arm64-v8a artifact is not in run 36865379622.
+            #   Available:
+            #
+            # and then nothing. The cause was that 36865379622 is an
+            # android-APP run, which produces no artifacts at all -- so the
+            # comprehension above ran correctly and printed nothing, and a message
+            # with a bare "Available:" header is exactly what a BROKEN listing
+            # would also print. I read that as the listing having a syntax error,
+            # and nearly wrote that into a commit message; it does not.
+            #
+            # So the three causes are now distinguished, because they need three
+            # different fixes and "the artifact is missing" distinguishes none:
+            #
+            #   zero artifacts       -> the wrong run id was passed
+            #   artifacts, no $ABI   -> wrong ABI, or that job has not finished
+            #   artifacts, expired   -> re-run android-deps (14-day retention)
             echo "FAIL: the llamacpp-$ABI artifact is not in run $DEPS_RUN_ID."
-            echo "      Available:"
-            curl -fsS -H "Authorization: Bearer $GH_TOKEN" \
+            ART_JSON=$(mktemp)
+            if curl -fsS -H "Authorization: Bearer $GH_TOKEN" \
               "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs/$DEPS_RUN_ID/artifacts" \
-              | python3 -c 'import json,sys; [print("       ",a["name"],a["size_in_bytes"],"bytes") for a in json.load(sys.stdin).get("artifacts",[])]' 
+              -o "$ART_JSON"; then
+              ART_COUNT=$(python3 -c "import json;print(len(json.load(open('$ART_JSON')).get('artifacts',[])))")
+              if [ "$ART_COUNT" -eq 0 ]; then
+                echo "      That run has NO artifacts at all."
+                echo "      deps_run_id must be an android-deps run. An android-app or"
+                echo "      android-native run has none, and produces this same message."
+              else
+                echo "      That run has $ART_COUNT artifact(s); none is named llamacpp-$ABI:"
+                python3 -c "import json;[print('        ',a['name'],a['size_in_bytes'],'bytes') for a in json.load(open('$ART_JSON')).get('artifacts',[])]"
+                echo "      Either the ABI is wrong, or android-deps has not finished"
+                echo "      that job, or the artifact expired."
+              fi
+            else
+              echo "      The artifacts API could not be read for that run at all."
+            fi
+            rm -f "$ART_JSON"
             echo "      Without it the app is portable-only and these tests cannot"
             echo "      test generation at all."
             exit 1
