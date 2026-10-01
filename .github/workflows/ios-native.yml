@@ -1636,8 +1636,34 @@ jobs:
           echo "  reader: $LLVM_NM"
 
           # THE SYMBOLS ARE THE FACT, AND A READER RETURNING NOTHING IS NOT IT.
-          NAMES=$("$LLVM_NM" --defined-only --extern-only "$DEVICE_LIB" 2>/dev/null || true)
-          NM_LINES=$(printf '%s\n' "$NAMES" | grep -c ' = ' 2>/dev/null || printf '0')
+          #
+          # `grep -c` prints 0 AND exits 1 when nothing matches, so
+          #
+          #     NM_LINES=$(... | grep -c ' = ' 2>/dev/null || printf '0')
+          #
+          # produced the TWO-LINE string "0\n0". Then `[ "$NM_LINES" -lt 1 ]` failed
+          # to parse, an `if` condition that errors is FALSE, and the guard this
+          # line was protecting was skipped without a word. Demonstrated locally:
+          #
+          #     NM_LINES = [0
+          #     0]
+          #     GUARD SILENTLY SKIPPED -- [ ] errored
+          #
+          # Two bugs in one line: a counting idiom that emits a value on both
+          # paths, and a numeric test that fails OPEN when its argument is not a
+          # number. The first version of this also grepped for ' = ', which is
+          # xcodebuild -showBuildSettings syntax and appears nowhere in nm output.
+          #
+          # So: one value, from one path, and the guard validated before it
+          # compares.
+          NM_LINES=$(printf '%s\n' "$NAMES" | grep -c . || true)
+          case "$NM_LINES" in
+            ''|*[!0-9]*)
+              echo "::error::the symbol line count came out as [$NM_LINES], which is"
+              echo "::error::not a number, so no comparison against it means anything."
+              exit 1
+              ;;
+          esac
           echo "  reader --defined-only --extern-only returned $NM_LINES line(s)"
           if [ "$NM_LINES" -lt 1 ]; then
             echo "::error::the reader returned nothing for the device slice."
@@ -1649,9 +1675,37 @@ jobs:
             exit 1
           fi
 
+          # ALL TEN, AND THE LIST IS READ FROM THE SOURCE RATHER THAN REMEMBERED.
+          #
+          # The previous version checked four names and one of them --
+          # gs_ffi_mobile_load_model -- DOES NOT EXIST. grep over
+          # native/crates/gs-ffi/src/mobile.rs:
+          #
+          #     $ grep -c 'gs_ffi_mobile_load_model' native/crates/gs-ffi/src/mobile.rs
+          #     0
+          #
+          # I wrote it from memory. It was caught only because the repository's own
+          # counter was printing 10 while my check was missing one of four -- the
+          # counter is what turned a wrong assertion into a visible disagreement
+          # instead of a search for a reader bug that did not exist.
+          #
+          # Model loading is gs_ffi_mobile_create; there is no load_model entry
+          # point, on any ABI. The complete set, from the source:
+          #
+          #   abi_version backend_available build_info chat create
+          #   embed_dim embed_image free ocr should_use_local
           MISSING=""
-          for S in gs_ffi_mobile_backend_available gs_ffi_mobile_chat \
-                   gs_ffi_mobile_load_model gs_ffi_mobile_build_info; do
+          for S in gs_ffi_mobile_abi_version \
+                   gs_ffi_mobile_backend_available \
+                   gs_ffi_mobile_build_info \
+                   gs_ffi_mobile_chat \
+                   gs_ffi_mobile_create \
+                   gs_ffi_mobile_embed_dim \
+                   gs_ffi_mobile_embed_image \
+                   gs_ffi_mobile_free \
+                   gs_ffi_mobile_ocr \
+                   gs_ffi_mobile_should_use_local
+          do
             # Build the pattern in a variable, expand it UNQUOTED, escape the
             # anchor as \$, and require a DEFINED type letter rather than `U`.
             # `"$S"` written inline inside [[ =~ ]] does NOT interpolate -- every
@@ -1660,14 +1714,14 @@ jobs:
             # Run against six shapes of nm output before going in. The one that
             # decides whether this check is worth anything:
             #
-            #   all four DEFINED as `T`     -> MISSING=[]
-            #   all four UNDEFINED as `U`   -> MISSING=[ all four ]
+            #   all DEFINED as `T`     -> MISSING=[]
+            #   all UNDEFINED as `U`   -> MISSING=[ all of them ]
             #
             # `--defined-only --extern-only` already excludes `U`, so that case is
             # belt-and-braces rather than expected here. Also tested:
             # `_gs_ffi_mobile_chat_v2` does not satisfy `_gs_ffi_mobile_chat`; a
             # symbol as the last line with no trailing newline does match; empty
-            # output reports all four rather than passing vacuously.
+            # output reports all ten rather than passing vacuously.
             RE="[[:space:]][TDRS][[:space:]]_${S}([[:space:]]|\$)"
             if [[ ! "$NAMES" =~ $RE ]]; then
               MISSING="$MISSING $S"
@@ -1681,7 +1735,7 @@ jobs:
             printf '%s\n' "$NAMES" | grep 'gs_ffi' | sed -n '1,10p' | sed 's/^/    /' || true
             exit 1
           fi
-          echo "  gs_ffi_mobile_* DEFINED in the DEVICE slice"
+          echo "  all ten gs_ffi_mobile_* DEFINED in the DEVICE slice"
           echo "  app binary symbols: $APP_NM (expected: globals are stripped from an"
           echo "                     app executable, so a low count is CORRECT here)"
 
