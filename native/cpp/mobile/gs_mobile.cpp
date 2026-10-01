@@ -19,6 +19,7 @@
 
 #ifdef GS_MOBILE_HAVE_LLAMA
 #include "llama_wrapper.h"
+#include "gs_sd_wrapper.h"
 #endif
 
 namespace {
@@ -200,6 +201,82 @@ const char* gs_mobile_build_info(void) {
     info += " +ocr";
 #endif
     return info.c_str();
+}
+
+/* ---------------------------------------------------------------------------
+ * Image generation, IN-PROCESS.
+ *
+ * These exist because the C ABI was reachable only from C++ inside this library.
+ * Everything else here goes through gs_ffi_* wrappers in Rust, and routing the
+ * mobile surface through gs_mobile.cpp keeps every backend-dependent call behind
+ * one portable file, which is what the other four backends already do.
+ *
+ * The ordering question this avoids: Rust calling gs_sd_* directly would need
+ * libgs_sd.a positioned against libgs_ffi.a. It does not need to be -- a static
+ * archive's consumer there is the Rust object that is the link entry point, not
+ * another archive -- but keeping the mobile surface in C++ means nobody has to
+ * re-derive that to change it.
+ *
+ * WHAT THIS DOES NOT DO: spawn anything. There is no subprocess route left on any
+ * path, and no_subprocess_remains_in_this_file in sd_bridge.rs reads its own
+ * source to keep it that way.
+ * ------------------------------------------------------------------------- */
+
+/* An image-generation handle. Opaque; the caller only passes it back. */
+typedef struct gs_mobile_img {
+    void* ctx;        /* gs_sd_ctx_t* */
+} gs_mobile_img_t;
+
+gs_mobile_img_t* gs_mobile_sd_create(const char* model_path) {
+    gs_sd_ctx_t* c = gs_sd_create(model_path);
+    if (!c) return nullptr;   /* the reason is in gs_last_error() */
+    gs_mobile_img_t* h = (gs_mobile_img_t*)calloc(1, sizeof(gs_mobile_img_t));
+    if (!h) { gs_sd_free(c); return nullptr; }
+    h->ctx = c;
+    return h;
+}
+
+int32_t gs_mobile_sd_set_options(gs_mobile_img_t* img, int32_t threads, float cfg_scale) {
+    if (!img) return GS_ERR_INVALID_ARG;
+    return gs_sd_set_options((gs_sd_ctx_t*)img->ctx, threads, cfg_scale);
+}
+
+/* 1 when diffusion can run, 0 when it cannot. The two reasons -- no library linked,
+ * and no weights -- stay DISTINGUISHABLE, because gs_sd_backend_name() says which,
+ * and they are opposite problems with opposite fixes. */
+int32_t gs_mobile_sd_available(gs_mobile_img_t* img) {
+    if (!img) return 0;
+    return gs_sd_available((gs_sd_ctx_t*)img->ctx);
+}
+
+const char* gs_mobile_sd_backend_name(gs_mobile_img_t* img) {
+    if (!img) return "none";
+    return gs_sd_backend_name((gs_sd_ctx_t*)img->ctx);
+}
+
+/* Writes a PNG. Never writes a placeholder on failure -- see the C ABI header. */
+int32_t gs_mobile_sd_generate(gs_mobile_img_t* img,
+                              const char* prompt,
+                              const char* negative_prompt,
+                              int32_t width, int32_t height, int32_t steps,
+                              const char* output_path) {
+    if (!img) return GS_ERR_INVALID_ARG;
+    return gs_sd_generate((gs_sd_ctx_t*)img->ctx, prompt, negative_prompt,
+                          width, height, steps, output_path);
+}
+
+void gs_mobile_sd_free(gs_mobile_img_t* img) {
+    if (!img) return;
+    gs_sd_free((gs_sd_ctx_t*)img->ctx);
+    free(img);
+}
+
+/* The procedural renderer. Needs no weights, no GPU and no diffusion, so it works
+ * in EVERY build -- including the ones where sd.cpp is not linked at all. This is
+ * what lets "the app can generate an image" be a claim that does not depend on a
+ * 2.3 GB checkpoint having been downloaded. */
+int32_t gs_mobile_render_svg(const char* spec_json, const char* output_path) {
+    return gs_sd_render_svg(spec_json, output_path);
 }
 
 }  // extern "C"

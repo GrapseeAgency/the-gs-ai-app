@@ -94,6 +94,32 @@ int32_t gs_mobile_should_use_local(uint64_t max_params);
 /* Build identification, so a shipped binary can be matched to a commit. */
 const char* gs_mobile_build_info(void);
 
+/* ---------------------------------------------------------------------------
+ * Image generation, IN-PROCESS. Declared here so the definitions in
+ * gs_mobile.cpp are not unprototyped, and so Rust's extern block has a header to
+ * be written against rather than a set of names copied out of a .cpp.
+ *
+ * The diffusion handle and the procedural renderer are separate on purpose.
+ * gs_mobile_render_svg needs no weights, no GPU and no diffusion, so it works in
+ * EVERY build; the sd_* entry points need the library AND a checkpoint, and report
+ * which of the two is missing rather than collapsing them.
+ * ------------------------------------------------------------------------- */
+typedef struct gs_mobile_img gs_mobile_img_t;
+
+gs_mobile_img_t* gs_mobile_sd_create(const char* model_path);
+int32_t gs_mobile_sd_set_options(gs_mobile_img_t* img, int32_t threads, float cfg_scale);
+int32_t gs_mobile_sd_available(gs_mobile_img_t* img);
+const char* gs_mobile_sd_backend_name(gs_mobile_img_t* img);
+int32_t gs_mobile_sd_generate(gs_mobile_img_t* img,
+                              const char* prompt,
+                              const char* negative_prompt,
+                              int32_t width, int32_t height, int32_t steps,
+                              const char* output_path);
+void gs_mobile_sd_free(gs_mobile_img_t* img);
+
+/* Always available. No model, no GPU, no diffusion. */
+int32_t gs_mobile_render_svg(const char* spec_json, const char* output_path);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
