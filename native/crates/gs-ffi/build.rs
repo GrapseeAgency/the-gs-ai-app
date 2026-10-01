@@ -485,7 +485,7 @@ fn main() {
         );
     }
     sd_build
-        .file(cpp.join("sd_wrapper").join("sd_wrapper.cpp"))
+        .file(cpp.join("sd_wrapper").join("gs_sd_wrapper.cpp"))
         .warnings(true)
         .compile("gs_sd");
 

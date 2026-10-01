@@ -63,7 +63,7 @@ mod tests {
 // The diffusion path, IN-PROCESS
 // ---------------------------------------------------------------------------
 
-// The C ABI. Read from native/cpp/sd_wrapper/sd_wrapper.h, and every name is
+// The C ABI. Read from native/cpp/sd_wrapper/gs_sd_wrapper.h, and every name is
 // gs_sd_* because stable-diffusion.cpp's own public API is sd_* -- new_sd_ctx,
 // free_sd_ctx, generate_image. A wrapper that declared `sd_create` in the same
 // translation unit as that header is a duplicate-symbol link error waiting for a
