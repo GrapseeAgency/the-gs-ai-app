@@ -24,7 +24,7 @@ Runs behind those numbers, all on `native-runtime`:
 | `android-device` | `96200fa` | **success — 18 PASS, 0 SKIP, 0 FAIL** on an x86_64 emulator |
 | `android-app` | `96200fa` | success — compile + unit tests |
 | `android-native` | `820db89` | success |
-| `ios-native` | `a9a31fa` | llama.cpp + xcframework green; the DEVICE app build is new and unverified |
+| `ios-native` | `c12e866` | success — **48 tests, 0 failures**, plus the DEVICE app build verified from its bytes |
 
 **The one-line version:** the iOS engine has llama.cpp and answers a prompt on a
 real simulator; Android is **18/18 with nothing skipped**, the switch x network
@@ -33,12 +33,74 @@ mid-answer is now labelled as such instead of with a fabricated HTTP status; the
 arm64 run is impossible on every reachable runner for one hardware reason; and the
 OCR split is closed permanently because no AGP release fixes it.
 
-**Still open:** the two honest gaps, both recorded rather than worked around —
-**performance numbers** on an emulator (no TTFT, no tok/s for the 0.5B, and it is
-the item that most affects the shippability decision) and **stable-diffusion on the
-mobile runtime** (structurally unreachable, because `sd_render()` spawns `sd-cli` as
-a subprocess from a developer-machine path). Both are in the plan audit in
-`RESULTS-mobile-concurrency.md`.
+## iOS IS GREEN WITH A DEVICE BUILD, 48 TESTS, 0 FAILURES
+
+Run `36828234718`, head `c12e866`, all three jobs green.
+
+    Executed 48 tests, with 0 failures (0 unexpected) in 359.878 seconds
+
+**48, up from 46.** The two new ones are the iOS counterpart of a6 and a7 — the
+first tests that ever drove `ChatViewModel`:
+
+    testTheChatScreenAnswersFromTheEngine                 passed (51.606 seconds)
+    testTheChatScreenLeavesTheEngineAloneWhenTheSwitchIsOff  passed (0.004 seconds)
+
+51.6 seconds is a real 0.5B generation through the ViewModel, and 0.004 seconds is
+the switch being off and the engine correctly never being consulted.
+
+### The device build, verbatim from the run
+
+    === DEVICE BUILD VERIFIED ===
+      product      : .../Build/Products/Debug-iphoneos/App.app
+      architecture : arm64 Mach-O, under Debug-iphoneos
+      device slice : .../GsFfi.xcframework/ios-arm64/libgs_ffi.a
+      defines all ten gs_ffi_mobile_* entry points:
+      abi_version, backend_available, build_info, chat,
+      create, embed_dim, embed_image, free, ocr,
+      should_use_local
+      linked in    : proven by the unguarded gs_ffi_mobile_backend_available()
+      call in GsNative.swift -- no module fails the COMPILE,
+      no symbols fail the LINK, and neither happened.
+
+      NOT verified: a signed .ipa. That needs an identity and a
+      provisioning profile this repository does not have, and the gap
+      between linking for a device and installing on one is signing.
+      NOT verified: execution. Nothing here runs the device binary.
+
+`ios-arm64`, never `ios-arm64-simulator` — checking the simulator archive would be
+a green run that proves nothing about the device.
+
+### And the trigger had a hole of its own
+
+Commit `434d35c` — an `@MainActor` fix to `ios/App/Tests/GsNativeTests.swift` — was
+pushed and **no run happened**, because the path filter was `native/**`,
+`.github/workflows/ios-native.yml`, `.cargo/config.toml` and not `ios/**`. A job
+that builds the iOS app, links the device slice and runs the app's XCTests was not
+triggered by a change to the iOS app or its tests. Three of the seven device-build
+failures were found by dispatching by hand.
+
+A workflow that verifies a directory it does not watch verifies it by accident, and
+only as often as someone remembers. `ios/**` is in the filter now.
+
+**Still open, and both are honest gaps rather than work in progress:**
+
+**Performance is measured but the device is not.** 12.15 tok/s decode and 4808 ms
+TTFT for the 0.5B at Q4_K_M, from `perf_the_0_5b_reports_a_measurable_decode_rate`
+— derived from two budgets, with the budget's honouring verified first and the
+spread published beside the number. **These are a lower bound, not a phone
+prediction:** x86_64 emulator, CPU-only llama.cpp, no NPU, no GPU delegate. The
+4808 ms TTFT is the figure to weigh, and whether a real phone moves it enough is
+the measurement that cannot be taken here, for the same nested-virtualisation reason
+as the arm64 run.
+
+**stable-diffusion on the mobile runtime is not wired and cannot be wired as
+written.** `sd_render()` spawns `sd-cli` as a subprocess from
+`/mnt/new_volume/sd/...` or `$GS_SD_CLI`. A phone has neither. Doing it properly
+means calling stable-diffusion.cpp's model and sampler in process through a C ABI.
+The one closable piece — `sd_render_svg`, which is *already linked* into the mobile
+`.so` because `build.rs` compiles `libgs_sd.a` unconditionally — needs four layers
+and a **static link-order change**, since `libgs_sd.a` currently precedes
+`libgs_mobile.a`. Sized as open work in the plan audit rather than claimed.
 
 ## THE DEVICE SUITE IS FULLY GREEN: 18 PASS, 0 SKIP, 0 FAIL
 
