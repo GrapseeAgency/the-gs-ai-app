@@ -372,12 +372,119 @@ fn main() {
         .warnings(true)
         .compile("gs_abi");
 
-    // sd_wrapper: procedural path always, diffusion when GS_SD_ROOT is set
-    cc::Build::new()
+    // ---------------------------------------------------------------------
+    // sd_wrapper: procedural path ALWAYS, diffusion when the sd.cpp package is
+    // supplied. NO SUBPROCESS. The previous route was to spawn `sd-cli` from a
+    // path on a developer machine, which a phone has neither of.
+    //
+    // GS_SD_PREBUILT is a PACKAGE DIRECTORY, the same shape as GS_LLAMA_PREBUILT,
+    // and android-deps.yml's `stablediffusion` job produces it:
+    //
+    //     include/stable-diffusion.h
+    //     lib/libstable-diffusion.a  lib/libggml.a  lib/libggml-cpu.a
+    //     lib/libggml-base.a
+    //
+    // The header is the part that was MISSING. The job has been succeeding and
+    // producing 17.7 MB, and the package was ARCHIVES ONLY -- so there was no way
+    // to compile against it, which is precisely why this wrapper could not call
+    // the library and why the C ABI's own comment said the honest state is
+    // "unavailable".
+    //
+    // THE LINK ORDER IS LOAD-BEARING AND IT IS NOT THE ORDER ONE ASSUMES.
+    // libgs_sd.a references BOTH gs_set_error (in libgs_abi.a, compiled above)
+    // AND new_sd_ctx/free_sd_ctx/generate_image (in the sd.cpp archives). A
+    // static consumer must precede what it consumes, so the sd.cpp archives must
+    // be emitted BEFORE gs_sd -- not after it, and not after gs_mobile. Getting
+    // this wrong produces a wall of undefined `sd_*` symbols that names neither
+    // the cause nor the file.
+    println!("cargo:rerun-if-env-changed=GS_SD_PREBUILT");
+    let sd_prebuilt = std::env::var("GS_SD_PREBUILT").ok().map(std::path::PathBuf::from);
+    let mut have_sd = false;
+    if let Some(root) = &sd_prebuilt {
+        let hdr = root.join("include").join("stable-diffusion.h");
+        let libs = root.join("lib");
+        if hdr.exists() && libs.is_dir() {
+            let sd_lib = libs.join("libstable-diffusion.a");
+            if !sd_lib.exists() {
+                panic!(
+                    "GS_SD_PREBUILT={} has the header but no libstable-diffusion.a, so \
+                     it is not the package android-deps.yml produces. contents of {}: {:?}",
+                    root.display(), libs.display(),
+                    std::fs::read_dir(&libs).map(|rd| rd.filter_map(|e| e.ok())
+                        .map(|e| e.file_name()).collect::<Vec<_>>()).unwrap_or_default()
+                );
+            }
+
+            // The sd.cpp archives, in DEPENDENCY order, and each name is asserted
+            // to exist so a missing one names itself instead of surfacing later
+            // as an undefined symbol in a different crate.
+            //
+            //    stable-diffusion -> ggml -> ggml-cpu -> ggml-base
+            //
+            // Alphabetical gives base, cpu, ggml, stable-diffusion, which is
+            // exactly backwards. The same mistake is already recorded twice in
+            // this file -- the `lib` prefix on archive stems, and llama's own
+            // ordering -- so it is enumerated rather than sorted.
+            const SD_DEP_ORDER: &[&str] =
+                &["stable-diffusion", "ggml", "ggml-cpu", "ggml-base"];
+            println!("cargo:rustc-link-search=native={}", libs.display());
+            let mut linked = 0usize;
+            for name in SD_DEP_ORDER {
+                let p = libs.join(format!("lib{name}.a"));
+                if !p.exists() {
+                    panic!(
+                        "GS_SD_PREBUILT={} is missing lib{name}.a. The package must \
+                         contain stable-diffusion, ggml, ggml-cpu and ggml-base. \
+                         found: {:?}",
+                        root.display(),
+                        std::fs::read_dir(&libs).map(|rd| rd.filter_map(|e| e.ok())
+                            .map(|e| e.file_name()).collect::<Vec<_>>()).unwrap_or_default()
+                    );
+                }
+                println!("cargo:rustc-link-lib=static={name}");
+                linked += 1;
+            }
+            println!(
+                "cargo:warning=linking stable-diffusion.cpp in-process from {} \
+                 ({linked} archives, dependency order). No subprocess is involved.",
+                root.display()
+            );
+            have_sd = true;
+        } else {
+            println!(
+                "cargo:warning=GS_SD_PREBUILT={} has no include/stable-diffusion.h, \
+                 so the diffusion path stays procedural-only. Expected the package \
+                 android-deps.yml's `stablediffusion` job produces.",
+                root.display()
+            );
+        }
+    }
+
+    let mut sd_build = cc::Build::new();
+    sd_build
         .cpp(true)
         .std("c++17")
         .include(&inc)
-        .include(cpp.join("sd_wrapper"))
+        .include(cpp.join("sd_wrapper"));
+    if have_sd {
+        // The define the wrapper keys off. Without it the #if branch compiles the
+        // honest "not-compiled" path, which reports GS_ERR_UNAVAILABLE and writes
+        // nothing -- so a build that cannot generate is visibly unable rather
+        // than quietly returning a placeholder image.
+        sd_build
+            .define("GS_SD_HAVE_SDCPP", None)
+            .include(sd_prebuilt.as_ref().unwrap().join("include"));
+        println!("cargo:rustc-cfg=gs_sd_sdcpp");
+        println!("cargo:rustc-check-cfg=cfg(gs_sd_sdcpp)");
+        println!("cargo:warning=sd.cpp IS linked: gs_sd_generate will do real diffusion");
+    } else {
+        println!(
+            "cargo:warning=portable sd_wrapper: procedural path only. \
+             gs_sd_generate reports GS_ERR_UNAVAILABLE with the reason; \
+             gs_sd_render_svg needs no weights and does work."
+        );
+    }
+    sd_build
         .file(cpp.join("sd_wrapper").join("sd_wrapper.cpp"))
         .warnings(true)
         .compile("gs_sd");

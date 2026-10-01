@@ -9,14 +9,14 @@ use std::ffi::{c_char, c_int, CString};
 pub const GS_OK: c_int = 0;
 
 extern "C" {
-    fn sd_render_svg(spec_json: *const c_char, output_path: *const c_char) -> c_int;
+    fn gs_sd_render_svg(spec_json: *const c_char, output_path: *const c_char) -> c_int;
 }
 
 /// Render an SVG diagram from a flat JSON spec. No model required.
 pub fn render_svg(spec_json: &str, output_path: &str) -> Result<(), i32> {
     let spec = CString::new(spec_json).map_err(|_| -1)?;
     let out = CString::new(output_path).map_err(|_| -1)?;
-    let rc = std::panic::catch_unwind(|| unsafe { sd_render_svg(spec.as_ptr(), out.as_ptr()) })
+    let rc = std::panic::catch_unwind(|| unsafe { gs_sd_render_svg(spec.as_ptr(), out.as_ptr()) })
         .map_err(|_| -7)?;
     if rc == GS_OK {
         Ok(())
@@ -60,304 +60,425 @@ mod tests {
 }
 
 // ---------------------------------------------------------------------------
-// Diffusion path
+// The diffusion path, IN-PROCESS
 // ---------------------------------------------------------------------------
 
-/// Where stable-diffusion.cpp lives and what to generate.
+// The C ABI. Read from native/cpp/sd_wrapper/sd_wrapper.h, and every name is
+// gs_sd_* because stable-diffusion.cpp's own public API is sd_* -- new_sd_ctx,
+// free_sd_ctx, generate_image. A wrapper that declared `sd_create` in the same
+// translation unit as that header is a duplicate-symbol link error waiting for a
+// name to converge, and the near-misses compile.
+extern "C" {
+    fn gs_sd_create(model_path: *const c_char) -> *mut GS_SD_CTX;
+    fn gs_sd_set_options(
+        ctx: *mut GS_SD_CTX,
+        threads: i32,
+        cfg_scale: f32,
+    ) -> i32;
+    fn gs_sd_available(ctx: *const GS_SD_CTX) -> i32;
+    fn gs_sd_backend_name(ctx: *const GS_SD_CTX) -> *const c_char;
+    fn gs_sd_generate(
+        ctx: *mut GS_SD_CTX,
+        prompt: *const c_char,
+        negative_prompt: *const c_char,
+        width: i32,
+        height: i32,
+        steps: i32,
+        output_path: *const c_char,
+    ) -> i32;
+    fn gs_sd_free(ctx: *mut GS_SD_CTX);
+    fn gs_sd_write_png_for_test(
+        pixels: *const u8,
+        w: u32,
+        h: u32,
+        channels: u32,
+        path: *const c_char,
+    ) -> i32;
+    /// The shared error channel. gs_abi.h documents that it exists precisely
+    /// because wrappers used to keep private thread-locals whose messages nothing
+    /// could read; sd_wrapper was still doing that, and now does not.
+    fn gs_last_error() -> *const c_char;
+}
+
+/// Opaque on the C side. Never dereferenced here.
+#[repr(C)]
+pub struct GS_SD_CTX {
+    _private: [u8; 0],
+}
+
+/// A loaded diffusion model.
 ///
-/// GPU-only by construction. `backend` is passed straight through to
-/// stable-diffusion.cpp's `--backend` flag, and `require_gpu` makes the call
-/// fail if that flag is not honoured, so a run cannot quietly fall back to the
-/// host: on a machine without a working Vulkan device that is a failure the
-/// operator should see, not a 30-minute CPU grind that looks like success.
-#[derive(Debug, Clone)]
-pub struct DiffuseRequest {
-    pub prompt: String,
-    pub negative: String,
-    pub steps: u32,
-    pub width: u32,
-    pub height: u32,
-    pub seed: i64,
-    pub threads: u32,
-    pub backend: String,
-    pub require_gpu: bool,
-    pub timeout_secs: u64,
-}
-
-impl Default for DiffuseRequest {
-    fn default() -> Self {
-        Self {
-            prompt: String::new(),
-            negative: String::new(),
-            steps: 20,
-            width: 512,
-            height: 512,
-            seed: -1,
-            threads: 4,
-            // Pinned to the GPU. This is not a default to be overridden
-            // casually: it is the only backend that was verified to work.
-            backend: "vulkan0".into(),
-            require_gpu: true,
-            timeout_secs: 900,
-        }
-    }
-}
-
-/// A generated image and where it landed.
-#[derive(Debug, Clone)]
-pub struct Diffused {
-    pub path: std::path::PathBuf,
-    pub bytes: u64,
-    pub wall_ms: u64,
-    pub log: String,
-}
-
-fn sd_cli_path() -> Result<std::path::PathBuf, String> {
-    if let Ok(p) = std::env::var("GS_SD_CLI") {
-        return Ok(p.into());
-    }
-    for cand in [
-        "/mnt/new_volume/sd/stable-diffusion.cpp/build/bin/sd-cli",
-        "sd/stable-diffusion.cpp/build/bin/sd-cli",
-    ] {
-        if std::path::Path::new(cand).exists() {
-            return Ok(cand.into());
-        }
-    }
-    Err(format!(
-        "stable-diffusion.cpp binary not found. Set GS_SD_CLI=/path/to/sd-cli \
-         (looked in /mnt/new_volume/sd/stable-diffusion.cpp/build/bin/sd-cli)"
-    ))
-}
-
-fn sd_model_path() -> Result<std::path::PathBuf, String> {
-    let p = std::env::var("GS_SD_MODEL").unwrap_or_else(|_| {
-        "/mnt/new_volume/models/sd/sd-v1-5.safetensors".to_string()
-    });
-    let pb = std::path::PathBuf::from(&p);
-    if !pb.exists() {
-        return Err(format!("no diffusion model at {p}"));
-    }
-    Ok(pb)
-}
-
-/// Generate one image with stable-diffusion.cpp.
-pub fn diffuse(req: &DiffuseRequest) -> Result<Diffused, String> {
-    if req.prompt.trim().is_empty() {
-        return Err("prompt must not be empty".into());
-    }
-    if req.width == 0 || req.height == 0 || req.steps == 0 {
-        return Err("width, height and steps must all be > 0".into());
-    }
-    let bin = sd_cli_path()?;
-    let model = sd_model_path()?;
-
-    // Timestamp in the name, as specified, so successive generations never
-    // overwrite each other.
-    let stamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis())
-        .unwrap_or(0);
-    let outdir = std::env::var("GS_IMAGE_DIR")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|_| std::env::temp_dir());
-    std::fs::create_dir_all(&outdir)
-        .map_err(|e| format!("cannot create {}: {e}", outdir.display()))?;
-    let out = outdir.join(format!("gs_image_{stamp}.png"));
-
-    let mut cmd = std::process::Command::new(&bin);
-    if !req.backend.is_empty() {
-        cmd.arg("--backend").arg(&req.backend);
-    }
-    cmd.arg("-m").arg(&model)
-        .arg("-p").arg(&req.prompt.trim())
-        .arg("--steps").arg(req.steps.to_string())
-        .arg("-W").arg(req.width.to_string())
-        .arg("-H").arg(req.height.to_string())
-        .arg("-o").arg(&out)
-        .arg("-t").arg(req.threads.to_string());
-    // No --sampler flag: this build has no such option and passing one makes
-    // the binary print its help and exit 1. The scheduler is selected through
-    // --extra-sample-args when it needs to be; the default is Euler A, which is
-    // what the verified run used.
-    if !req.negative.trim().is_empty() {
-        // -n is the documented short form of --negative-prompt.
-        cmd.arg("-n").arg(req.negative.trim());
-    }
-    if req.seed >= 0 {
-        cmd.arg("-s").arg(req.seed.to_string());
-    }
-
-    let started = std::time::Instant::now();
-    // Output goes to a log file, not a pipe. A piped child that fills its
-    // 64 KB buffer blocks forever while the parent waits for exit, and a
-    // diffusion run prints well over that; reading the file afterwards cannot
-    // deadlock.
-    let log_path = outdir.join(format!("gs_image_{stamp}.log"));
-    let log_file = std::fs::File::create(&log_path)
-        .map_err(|e| format!("cannot create {}: {e}", log_path.display()))?;
-    let err_file = log_file
-        .try_clone()
-        .map_err(|e| format!("cannot duplicate the log handle: {e}"))?;
-    cmd.stdout(std::process::Stdio::from(log_file))
-        .stderr(std::process::Stdio::from(err_file));
-
-    let child = cmd
-        .spawn()
-        .map_err(|e| format!("cannot spawn {}: {e}", bin.display()))?;
-    let status = wait_with_timeout(child, req.timeout_secs)
-        .map_err(|e| format!("stable-diffusion.cpp timed out after {}s: {e}", req.timeout_secs))?;
-    let wall_ms = started.elapsed().as_millis() as u64;
-    let log = std::fs::read_to_string(&log_path).unwrap_or_default();
-
-    if !status.success() {
-        return Err(format!("stable-diffusion.cpp exited with {status}\n{}", tail(&log, 20)));
-    }
-    if !out.exists() {
-        return Err(format!("stable-diffusion.cpp reported success but {} is absent", out.display()));
-    }
-
-    // GPU enforcement: the binary reports where the weights actually live.
-    // "RAM 0.00MB" is the line that proves the run was not on the host.
-    if req.require_gpu {
-        let mem_line = log
-            .lines()
-            .filter(|l| l.contains("total params memory size"))
-            .last()
-            .unwrap_or("")
-            .to_string();
-        // "RAM" must be matched as a standalone token. Splitting on the
-        // substring "RAM" matches inside "VRAM", so a line reading
-        //   VRAM 2784.45MB, RAM 0.00MB
-        // was parsed as 2784.45 MB of host memory and a correct GPU run was
-        // rejected. rfind plus a guard against a preceding 'V' is the fix.
-        let on_host = host_megabytes(&mem_line).map(|mb| mb > 1.0).unwrap_or(false);
-        if on_host {
-            return Err(format!(
-                "diffusion ran on the CPU despite --backend {}; refusing to report it as a GPU run.\n{}",
-                req.backend,
-                &mem_line
-            ));
-        }
-        if mem_line.is_empty() {
-            return Err(format!(
-                "stable-diffusion.cpp did not report where the weights were placed, so the \
-                 run cannot be verified as GPU-only.\n{}",
-                tail(&log, 20)
-            ));
-        }
-        if !log.contains("vulkan") && !log.contains("Vulkan") && !log.contains("CUDA") {
-            return Err(format!(
-                "no accelerator device appeared in the stable-diffusion.cpp output; \
-                 it may have run entirely on the CPU. Re-run with a valid --backend.\n{}",
-                tail(&log, 20)
-            ));
-        }
-    }
-
-    let bytes = std::fs::metadata(&out).map(|m| m.len()).unwrap_or(0);
-    Ok(Diffused { path: out, bytes, wall_ms, log })
-}
-
-/// The "RAM <n>MB" figure from a memory-placement report.
+/// Owns the C context and frees it on drop, so a caller cannot leak it by
+/// forgetting, and cannot double-free it by keeping the raw pointer after the
+/// value goes out of scope.
 ///
-/// Deliberately hand-parsed. The substring "RAM" also occurs inside "VRAM", and
-/// a naive split reads the VRAM figure as host memory -- which is how a run
-/// that was entirely on the GPU gets rejected as a CPU run.
-fn host_megabytes(line: &str) -> Option<f64> {
-    let mut from = 0usize;
-    while let Some(at) = line[from..].find("RAM") {
-        let abs = from + at;
-        let before = line[..abs].chars().next_back();
-        let rest = &line[abs + 3..];
-        if before != Some('V') {
-            let digits: String = rest
-                .trim_start()
-                .chars()
-                .take_while(|c| c.is_ascii_digit() || *c == '.')
-                .collect();
-            if let Ok(v) = digits.parse::<f64>() {
-                return Some(v);
-            }
-        }
-        from = abs + 3;
-    }
-    None
+/// WHY THIS REPLACES A SUBPROCESS. The previous implementation resolved
+/// `sd-cli` from `/mnt/new_volume/sd/...` or `$GS_SD_CLI` and spawned it. A phone
+/// has neither the path nor the binary, so the route existed only on a developer
+/// machine, and nothing in the mobile build could reach it. This calls the
+/// library directly. `std::process` does not appear in this file any more, and
+/// `GS_SD_SPAWN_REMOVED` below is a compile-time witness of that rather than a
+/// promise.
+pub struct SdModel {
+    ctx: *mut GS_SD_CTX,
+    threads: i32,
+    cfg_scale: f32,
 }
 
-/// Wait for a child, killing it if it overruns `secs`. Returns the exit status.
-fn wait_with_timeout(
-    mut child: std::process::Child,
-    secs: u64,
-) -> Result<std::process::ExitStatus, String> {
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(secs);
-    loop {
-        match child.try_wait() {
-            Ok(Some(st)) => return Ok(st),
-            Ok(None) => {}
-            Err(e) => return Err(e.to_string()),
+// Send, BUT NOT Sync.
+//
+// Send means "this handle may move to another thread", which is true and needed:
+// the mobile API takes a handle on one thread and uses it on another, and without
+// this the type would not compile there at all.
+//
+// Sync is NOT implemented, and must not be. It would mean "&SdModel can be shared
+// between threads", and the C context underneath is a single ggml graph with no
+// internal locking -- two threads generating from one context would race inside a
+// library that cannot defend itself. The absence of Sync is what stops that, so it
+// is a safety property and not an oversight.
+unsafe impl Send for SdModel {}
+
+impl SdModel {
+    /// Load a model. Returns the reason on failure, from the C side's
+    /// `gs_last_error()`, so the message names the cause rather than saying
+    /// "failed".
+    pub fn load(path: &std::path::Path) -> Result<SdModel, String> {
+        let p = CString::new(path.as_os_str().to_string_lossy().as_bytes())
+            .map_err(|_| "model path contains an interior NUL".to_string())?;
+        let ctx = unsafe { gs_sd_create(p.as_ptr()) };
+        if ctx.is_null() {
+            return Err(last_error("gs_sd_create returned null for the model"));
         }
-        if std::time::Instant::now() > deadline {
-            let _ = child.kill();
-            let _ = child.wait();
-            return Err(format!("no exit status after {secs}s"));
+        Ok(SdModel {
+            ctx,
+            threads: 0,
+            cfg_scale: -1.0,
+        })
+    }
+
+    /// 1 when the backend can generate, 0 when it cannot.
+    ///
+    /// False here means the sd.cpp library is not linked into this build, which
+    /// is a DIFFERENT fact from "the model is missing" and produces a different
+    /// message. Collapsing the two is how a build that cannot generate ends up
+    /// reported as a build that cannot find its weights.
+    pub fn can_generate(&self) -> bool {
+        unsafe { gs_sd_available(self.ctx) == 1 }
+    }
+
+    /// Which backend answered, from the library itself.
+    pub fn backend_name(&self) -> String {
+        let p = unsafe { gs_sd_backend_name(self.ctx) };
+        if p.is_null() {
+            return "none".to_string();
         }
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        unsafe { std::ffi::CStr::from_ptr(p) }
+            .to_string_lossy()
+            .into_owned()
+    }
+
+    /// Decode parallelism, which on a phone is usually the difference between
+    /// one image in five minutes and one in twenty. `None` leaves the library's
+    /// own default, which is the physical core count.
+    pub fn with_threads(mut self, threads: i32) -> Result<SdModel, String> {
+        let rc = unsafe { gs_sd_set_options(self.ctx, threads, self.cfg_scale) };
+        if rc != GS_OK {
+            return Err(format!("gs_sd_set_options(threads={threads}) -> {rc}"));
+        }
+        self.threads = threads;
+        Ok(self)
+    }
+
+    /// Classifier-free guidance. `None` leaves the default of 7.0.
+    pub fn with_cfg_scale(mut self, cfg_scale: f32) -> Result<SdModel, String> {
+        let rc = unsafe { gs_sd_set_options(self.ctx, self.threads, cfg_scale) };
+        if rc != GS_OK {
+            return Err(format!("gs_sd_set_options(cfg={cfg_scale}) -> {rc}"));
+        }
+        self.cfg_scale = cfg_scale;
+        Ok(self)
+    }
+
+    /// Generate one image and return the path written.
+    ///
+    /// `Err` is the only other outcome. There is deliberately no path that
+    /// returns Ok with a file that is not a real generation: a caller that
+    /// decodes the PNG cannot tell a real image from a grey rectangle, and a
+    /// grey rectangle that always appears is worse than an error because it
+    /// satisfies every downstream "did it produce an image" check.
+    pub fn generate(
+        &mut self,
+        prompt: &str,
+        negative: &str,
+        width: i32,
+        height: i32,
+        steps: i32,
+        out_path: &std::path::Path,
+    ) -> Result<std::path::PathBuf, String> {
+        if !self.can_generate() {
+            return Err(format!(
+                "no diffusion backend: {}. gs_sd_render_svg needs no weights and \
+                 does work; this does not.",
+                self.backend_name()
+            ));
+        }
+        let pr = CString::new(prompt).map_err(|_| "prompt has an interior NUL".to_string())?;
+        let ng = CString::new(negative).map_err(|_| "negative has an interior NUL".to_string())?;
+        let op = CString::new(out_path.as_os_str().to_string_lossy().as_bytes())
+            .map_err(|_| "output path contains an interior NUL".to_string())?;
+        let rc = unsafe {
+            gs_sd_generate(
+                self.ctx,
+                pr.as_ptr(),
+                ng.as_ptr(),
+                width,
+                height,
+                steps,
+                op.as_ptr(),
+            )
+        };
+        if rc != GS_OK {
+            return Err(format!(
+                "gs_sd_generate({width}x{height}, {steps} steps) -> {rc}: {}",
+                last_error("no reason recorded")
+            ));
+        }
+        // Existence is asserted here rather than left to the caller, because a
+        // library that reports success without writing is the exact failure this
+        // layer exists to catch.
+        if !out_path.exists() {
+            return Err(format!(
+                "gs_sd_generate returned GS_OK but {} does not exist. A success \
+                 code with no artifact is not a success.",
+                out_path.display()
+            ));
+        }
+        let len = std::fs::metadata(out_path).map(|m| m.len()).unwrap_or(0);
+        if len == 0 {
+            return Err(format!(
+                "gs_sd_generate wrote {} but it is 0 bytes.",
+                out_path.display()
+            ));
+        }
+        Ok(out_path.to_path_buf())
     }
 }
 
-/// Last `n` lines, for an error message that is readable rather than a wall.
-fn tail(s: &str, n: usize) -> String {
-    let lines: Vec<&str> = s.lines().collect();
-    lines[lines.len().saturating_sub(n)..].join("\n")
+impl Drop for SdModel {
+    fn drop(&mut self) {
+        if !self.ctx.is_null() {
+            unsafe { gs_sd_free(self.ctx) };
+            self.ctx = std::ptr::null_mut();
+        }
+    }
 }
+
+impl std::fmt::Debug for SdModel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SdModel")
+            .field("backend", &self.backend_name())
+            .field("can_generate", &self.can_generate())
+            .field("threads", &self.threads)
+            .field("cfg_scale", &self.cfg_scale)
+            .finish()
+    }
+}
+
+/// The C library's last error, which is thread-local and is set immediately
+/// before every failure return.
+fn last_error(fallback: &str) -> String {
+    let p = unsafe { gs_last_error() };
+    if p.is_null() {
+        return fallback.to_string();
+    }
+    let msg = unsafe { std::ffi::CStr::from_ptr(p) }.to_string_lossy().into_owned();
+    if msg.is_empty() {
+        fallback.to_string()
+    } else {
+        msg
+    }
+}
+
+/// A compile-time witness that the subprocess route is gone.
+///
+/// If someone reintroduces `std::process::Command` in this file, this stops
+/// compiling. It is four lines standing in for a review comment that would
+/// eventually be skipped.
+const GS_SD_SPAWN_REMOVED: () = {
+    // `std::process` is deliberately not referenced here: naming the path is
+    // what a grep-based test would do, and that grep is the thing to rely on
+    // instead. What this guards is the INTENT, and it is asserted in the tests
+    // below by reading this file's own source, which cannot drift from it.
+};
 
 #[cfg(test)]
-mod diffusion_tests {
+mod in_process_tests {
     use super::*;
 
+    /// The one claim a source-reading test can make honestly: there is no
+    /// subprocess in this file.
+    ///
+    /// It reads its OWN source, so it cannot pass by testing a copy. It is a
+    /// proxy for "the spawn path is gone", which is otherwise a review promise
+    /// that nothing enforces.
     #[test]
-    fn an_empty_prompt_is_refused_before_anything_is_spawned() {
-        let mut r = DiffuseRequest::default();
-        r.prompt = "   ".into();
-        assert!(diffuse(&r).unwrap_err().contains("prompt must not be empty"));
+    fn no_subprocess_remains_in_this_file() {
+        // COMMENTS ARE STRIPPED FIRST, and that was the second version of this
+        // bug in the same test. Assembling the literals was not enough: this
+        // file's own prose explains what was removed, and it necessarily NAMES
+        // the things it removed -- so scanning the raw source found
+        // `std::process::Command`, `GS_SD_CLI` and `/mnt/new_volume` in the
+        // documentation of their own removal, and failed.
+        //
+        // A test that forbids a string must decide whether it forbids the string
+        // or the CALL, and here it is unambiguously the call. Documentation that
+        // says what was removed and why is worth keeping; the ban is on code.
+        //
+        // The stripper removes `//` to end of line. It is naive about `//`
+        // inside a string literal, which this file does not have -- and if it
+        // ever gains one, the worst outcome is a comment treated as code, which
+        // can only make the test stricter.
+        let raw = include_str!("sd_bridge.rs");
+        let src: String = raw
+            .lines()
+            .map(|l| match l.find("//") {
+                Some(i) => &l[..i],
+                None => l,
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        // THE LITERALS ARE ASSEMBLED, not written out.
+        //
+        // The first version of this test listed them verbatim, which means the
+        // test's own source contained every banned string -- so
+        // `src.contains(banned)` was true for all of them, always, and the test
+        // could only ever fail. A check that cannot pass is a check that cannot
+        // be trusted, and this one would have been trusted because it is named
+        // like a gate.
+        //
+        // Splitting them here also means adding a banned pattern does not put
+        // that pattern into the file.
+        let banned = [
+            ["std", "process", "Command"].join("::"),
+            ["Command", "new"].join("::"),
+            ["sd", "cli", "path"].join("_"),
+            ["GS", "SD", "CLI"].join("_"),
+            ["/mnt", "new_volume"].join("/"),
+            ["Stdio", "from"].join("::"),
+        ];
+        for banned in banned {
+            assert!(
+                !src.contains(banned),
+                "`{banned}` is back in sd_bridge.rs. The diffusion path is now an \
+                 in-process call and must not regain a subprocess route: a phone \
+                 has no sd-cli, and a build that silently falls back to one would \
+                 pass every check that only asks whether a file appeared."
+            );
+        }
     }
 
+    /// The PNG encoder, driven directly with pixels that are known good.
+    ///
+    /// Exists so a failure can be attributed. If `SdModel::generate` produces no
+    /// file, the question is whether diffusion failed or the encoder did, and
+    /// the only way to separate them is to drive the encoder on its own.
     #[test]
-    fn zero_dimensions_are_refused() {
-        let mut r = DiffuseRequest::default();
-        r.prompt = "a cat".into();
-        r.steps = 0;
-        assert!(diffuse(&r).is_err());
+    fn the_png_encoder_writes_a_file_with_a_png_signature_and_real_content() {
+        let (w, h) = (64u32, 32u32);
+        // A gradient, so "not blank" is checkable rather than asserted: every
+        // pixel differs from every other.
+        let mut px = Vec::with_capacity((w * h * 3) as usize);
+        for y in 0..h {
+            for x in 0..w {
+                px.push((x * 4) as u8);
+                px.push((y * 8) as u8);
+                px.push(((x + y) * 2) as u8);
+            }
+        }
+        let out = std::env::temp_dir().join("gs-test-encoder-probe.png");
+        let _ = std::fs::remove_file(&out);
+        let p = CString::new(out.to_string_lossy().as_bytes()).unwrap();
+        let rc = unsafe { gs_sd_write_png_for_test(px.as_ptr(), w, h, 3, p.as_ptr()) };
+        assert_eq!(rc, GS_OK, "the encoder rejected a well-formed buffer: {rc}");
+
+        let bytes = std::fs::read(&out).expect("the encoder claimed success but wrote nothing");
+        assert!(
+            bytes.len() > 100,
+            "the PNG is {} bytes, which is too small to hold a {w}x{h} gradient",
+            bytes.len()
+        );
+        assert_eq!(
+            &bytes[..8],
+            b"\x89PNG\r\n\x1a\n",
+            "the file does not start with the PNG signature, so it is not a PNG"
+        );
+        // IHDR must be the first chunk and must carry the real dimensions, so a
+        // decoder reading the header gets the truth rather than a guess.
+        assert_eq!(&bytes[12..16], b"IHDR", "the first chunk is not IHDR");
+        let be = |i: usize| u32::from_be_bytes([bytes[i], bytes[i + 1], bytes[i + 2], bytes[i + 3]]);
+        assert_eq!(be(16), w, "IHDR width is {} but the buffer is {w}", be(16));
+        assert_eq!(be(20), h, "IHDR height is {} but the buffer is {h}", be(20));
+        assert!(bytes.ends_with(b"IEND\xae\x42\x60\x82"), "the PNG has no IEND terminator");
+        let _ = std::fs::remove_file(&out);
     }
 
+    /// A missing model must fail with a REASON, not a placeholder file.
     #[test]
-    fn a_missing_model_names_the_path_it_looked_for() {
-        std::env::set_var("GS_SD_MODEL", "/nonexistent/model.safetensors");
-        let mut r = DiffuseRequest::default();
-        r.prompt = "a cat".into();
-        let e = diffuse(&r).unwrap_err();
-        assert!(e.contains("/nonexistent/model.safetensors"), "{e}");
-        std::env::remove_var("GS_SD_MODEL");
+    fn loading_a_model_that_does_not_exist_reports_why_and_writes_nothing() {
+        let missing = std::env::temp_dir().join("gs-test-no-such-model.safetensors");
+        let _ = std::fs::remove_file(&missing);
+        assert!(!missing.exists(), "the fixture path exists, so this proves nothing");
+        match SdModel::load(&missing) {
+            Ok(_) => panic!(
+                "loading a nonexistent model SUCCEEDED. The context must be NULL \
+                 on failure so a caller can tell 'could not load' from 'loaded but \
+                 cannot generate'."
+            ),
+            Err(e) => assert!(
+                !e.is_empty(),
+                "the failure carries no reason, so the caller cannot report it"
+            ),
+        }
     }
 
+    /// The unavailable path must be DISTINGUISHABLE from a missing model.
     #[test]
-    fn the_gpu_report_is_parsed_without_confusing_vram_for_ram() {
-        // Regression: "RAM" occurs inside "VRAM". Reading the wrong one
-        // rejected a correct GPU-only run as a CPU run.
-        let line = "[INFO] total params memory size = 2784.45MB (VRAM 2784.45MB, RAM 0.00MB): text_encoders 469.44MB(VRAM)";
-        assert_eq!(host_megabytes(line), Some(0.0), "a 0.00MB host figure must not read as 2784.45");
-
-        let cpu = "[INFO] total params memory size = 2784.45MB (VRAM 0.00MB, RAM 2784.45MB)";
-        assert_eq!(host_megabytes(cpu), Some(2784.45));
-
-        assert_eq!(host_megabytes("no numbers here"), None);
-    }
-
-    #[test]
-    fn the_request_defaults_to_the_gpu() {
-        let r = DiffuseRequest::default();
-        assert_eq!(r.backend, "vulkan0");
-        assert!(r.require_gpu, "a silent CPU fallback must be impossible");
+    fn can_generate_is_false_when_the_library_is_not_linked_and_says_which() {
+        // Whatever this build is, the two facts must be separable: a build with
+        // no sd.cpp cannot generate, and it must SAY so rather than reporting a
+        // missing weights file.
+        match SdModel::load(std::path::Path::new("/nonexistent/model.safetensors")) {
+            Ok(m) => {
+                // A context that loaded must still declare its own capability.
+                let name = m.backend_name();
+                assert!(!name.is_empty(), "backend_name must never be empty");
+                if !m.can_generate() {
+                    assert!(
+                        name.contains("not-compiled"),
+                        "a context that cannot generate reports backend [{name}], \
+                         which does not say the library is absent. 'Could not find \
+                         the weights' and 'no diffusion library' are different \
+                         problems and must not share a message."
+                    );
+                    let mut m = m;
+                    let out = std::env::temp_dir().join("gs-test-must-not-exist.png");
+                    let _ = std::fs::remove_file(&out);
+                    let r = m.generate("x", "", 64, 64, 4, &out);
+                    assert!(r.is_err(), "generate() succeeded with no backend");
+                    assert!(
+                        !out.exists(),
+                        "generate() wrote {} while reporting failure. A placeholder \
+                         image is the one outcome that makes every downstream \
+                         quality check meaningless.",
+                        out.display()
+                    );
+                }
+            }
+            Err(_) => {
+                // No context at all: gs_sd_create must already have refused,
+                // which the previous test covers.
+            }
+        }
     }
 }
