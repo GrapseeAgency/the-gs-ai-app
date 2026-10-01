@@ -15,6 +15,9 @@ import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import io.ktor.utils.io.readUTF8Line
+import java.net.ConnectException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.isActive
@@ -54,10 +57,30 @@ import kotlinx.serialization.json.Json
  * the answer stopped arriving. Nothing else in this function can raise that.
  */
 class GsStreamCutException(
-    /** The 2xx status whose body was cut, so a caller can log what arrived. */
-    val status: Int,
+    /**
+     * The 2xx status whose body was cut, or null when no status was ever
+     * received.
+     *
+     * null is a real case, not a placeholder: Ktor's CIO engine can surface a
+     * truncated chunked body from inside `client.post` itself, before an
+     * HttpResponse exists. Run 36784781671 proved it -- after every transport
+     * operation was inside the guard, the exception still arrived at
+     * classifySendFailure unwrapped:
+     *
+     *     Classify: mid-stream cut ->
+     *       — EOFException: Chunked stream has ended unexpectedly: no chunk size —
+     *     Classify: server saw 1 request(s)
+     *
+     * So there was no status to report, and inventing 0 is the same fabricated
+     * code this whole change exists to remove.
+     */
+    val status: Int?,
     cause: Throwable,
-) : Exception("provider stream cut after HTTP $status", cause)
+) : Exception(
+    if (status != null) "provider stream cut after HTTP $status"
+    else "provider stream cut before a response status was read",
+    cause,
+)
 
 class GsBackendException(
     val status: Int,
@@ -171,16 +194,66 @@ class ApiClient(
         onClarifyEvent: (String) -> Unit = {},
         onResearchEvent: (String) -> Unit = {}
     ) {
-        val response = client.post("$root/conversations/$conversationId/messages") {
-            contentType(ContentType.Application.Json)
-            setBody(
-                SendMessageRequest(
-                    content = content,
-                    stream = true,
-                    attachments = attachments?.ifEmpty { null },
-                    mode = mode
+        // THE POST IS INSIDE THE GUARD TOO, AND IT IS WHERE THE CUT ACTUALLY
+        // SURFACES.
+        //
+        // Run 36784781671, after every transport operation was already wrapped:
+        //
+        //     Classify: mid-stream cut ->
+        //       — EOFException: Chunked stream has ended ended unexpectedly:
+        //         no chunk size —
+        //     Classify: server saw 1 request(s)
+        //
+        // Unwrapped again. So it was not the channel, not the isClosedForRead
+        // probe and not the read -- all three were inside the guard by then. CIO
+        // decodes the chunked body while `post` is still returning, and the
+        // headers and the first chunk arrive in one segment, so a peer that dies
+        // mid-body is discovered there. That also explains why the delta never
+        // reached onDelta: nothing had handed the bytes to this loop yet.
+        //
+        // Enumerating call sites is what failed twice. This wraps the whole
+        // request, so where CIO happens to notice no longer matters.
+        //
+        // THE RULE IS THE MIRROR OF classifySendFailure's. That function lists
+        // the failures which PROVE the peer was never reached: no DNS, no
+        // connect, no timeout. Those are rethrown unchanged, so a real offline
+        // event still reads as one. Everything else that fails after the
+        // request was written implies a connection existed and then the response
+        // did -- which is a cut, and is the honest label for it.
+        // A try EXPRESSION, so the response is the value rather than a `val`
+        // assigned inside the try. Both catch arms end in `throw`, so they are
+        // Nothing and the expression's type is HttpResponse -- which needs no
+        // appeal to the definite-assignment rule to compile. The `val line`
+        // read further down already uses this form for the same reason.
+        val response = try {
+            client.post("$root/conversations/$conversationId/messages") {
+                contentType(ContentType.Application.Json)
+                setBody(
+                    SendMessageRequest(
+                        content = content,
+                        stream = true,
+                        attachments = attachments?.ifEmpty { null },
+                        mode = mode
+                    )
                 )
-            )
+            }
+        } catch (ce: CancellationException) {
+            // A cancelled turn cancels this coroutine's Job; a peer that went away
+            // leaves it running while the user waits. Same discriminator as below.
+            if (!coroutineContext.isActive) throw ce
+            throw GsStreamCutException(status = null, cause = ce)
+        } catch (e: Exception) {
+            // REACHABILITY, NOT GUESSING. These three are the shapes that prove the
+            // peer was never contacted, and classifySendFailure already treats them
+            // as genuine offline. Rethrowing them unchanged keeps that decision in
+            // one place -- in the classifier -- instead of duplicating it here and
+            // letting the two copies drift.
+            if (e is UnknownHostException || e is ConnectException ||
+                e is SocketTimeoutException
+            ) {
+                throw e
+            }
+            throw GsStreamCutException(status = null, cause = e)
         }
         // FORENSIC AUDIT [5]: a non-2xx here is BACKEND_ERROR, not "offline".
         // Surface the server's sanitized error message instead of reading an
