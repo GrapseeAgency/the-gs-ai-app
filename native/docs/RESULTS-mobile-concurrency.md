@@ -559,12 +559,92 @@ cannot tell them apart), the executable is Mach-O arm64, `GsFfi.framework` is
 profile this repository does not have. The gap between linking for a device and
 installing on one is signing, and the step says so in its own output.
 
-**2. Performance numbers on the emulator — INCOMPLETE.**
+**2. Performance on the emulator — MEASURED.**
 
-Not measured. This is the item that most affects the shippability decision, and it
-is the one I have no numbers for. What exists: the harness does real CPU decode
-(`a1b`, `b3 → Paris.`) and `gs-bench` carries 23 tests. Neither is a
-TTFT or tokens-per-second figure for the 0.5B model on a device.
+Run `36816396522`, test `perf_the_0_5b_reports_a_measurable_decode_rate`, on an
+x86_64 emulator. Raw from the run:
+
+    PERF model: qwen2.5-0.5b-instruct-q4_k_m.gguf (491400032 bytes)
+    PERF warm-up (8 tokens, discarded): 5536ms
+    PERF   budget=1  run=0 -> 5024ms, 1 chars
+    PERF   budget=1  run=1 -> 5022ms, 1 chars
+    PERF   budget=1  run=2 -> 4890ms, 1 chars
+    PERF   budget=49 run=0 -> 9086ms, 49 chars
+    PERF   budget=49 run=1 -> 9103ms, 49 chars
+    PERF   budget=49 run=2 -> 8840ms, 49 chars
+    PERF budget honoured: 1 token -> 1 chars, 49 tokens -> 49 chars
+    === PERFORMANCE, 0.5B on this device ===
+      budget  1 token : min 4890ms  all [5024, 5022, 4890]
+      budget 49 tokens: min 8840ms  all [9086, 9103, 8840]
+      per token       : 82.3 ms
+      decode rate     : 12.15 tok/s
+      TTFT            : 4808 ms
+      48-token spread : 3950ms
+      49-token spread : 263ms across 3 runs
+
+**12.15 tok/s decode, 4808 ms to first token**, for a 0.5B instruct model at Q4_K_M
+on an x86_64 emulator.
+
+### How these were derived, because the method bounds how they can be read
+
+The mobile surface has **no timing accessor and no token count** — the ten
+`gs_ffi_mobile_*` entry points return a C string and nothing else. Adding one would
+mean a new export, a JNI method, a Swift method and an ABI version bump.
+
+Instead, `chatWithBudget(prompt, maxTokens)` already bounds generation exactly, and
+generation time is affine in the budget:
+
+    t(n) = TTFT + n * per_token
+
+so the **slope from two budgets is the per-token cost**:
+
+    tok/s = 48 / (t(49) − t(1)) = 48 / (8840 − 4890) = 12.15
+    TTFT  = t(1) − per_token    = 4890 − 82.3    = 4808 ms
+
+Two measured points rather than a tokenizer and an estimate. The affineness
+assumption is that each token is the same matmuls against a KV cache that only
+grows, which is not superlinear for one sequence — stated rather than hidden, and
+the test does not depend on it being exact: it reports a slope and says what it is a
+slope of.
+
+**The budget was verified as honoured before any number was reported.** The outputs
+were **1 character and 49 characters** — the model counts, one number per line, one
+token each. Had the model emitted EOS early, both calls would have returned the same
+short text and the "decode rate" would have been two identical generations divided
+by 48. That check runs first, because a real-looking figure derived from two
+identical measurements is the worst outcome available.
+
+A **warm-up generation is discarded** (5536 ms). The first call pays for whatever
+the backend defers to first use — buffer allocation and a first-touch page-fault
+storm over a freshly mmapped model. Timing it would fold a one-off into the figure
+published as steady state.
+
+The **minimum** of three runs is the headline, because this is a shared emulator and
+the minimum is the sample least contaminated by the other tenants. The spread is
+printed beside it (263 ms on a 3950 ms difference), and the test **fails** if that
+spread reaches a quarter of the difference the rate is derived from — so it reports
+noise as a failure rather than publishing it.
+
+### What these numbers do and do not support
+
+**They are a lower bound, not a phone prediction.** This is an x86_64 emulator with
+no hardware acceleration:
+
+- **No NPU, no Neural Engine, no GPU delegate.** llama.cpp here is CPU-only, so a
+  real iPhone or a Snapdragon with an NPU-backed delegate is a different machine.
+- **Emulated CPU.** x86_64 under TCG-style emulation is materially slower than
+  native execution of the same instructions.
+- **Shared runner.** The spread above shows the noise floor; it does not change the
+  minimum, but it does bound how precisely these figures can be quoted.
+
+**The 4808 ms TTFT is the operationally significant number, and it is the one to
+weigh.** At 12 tok/s a 49-token answer is 4 seconds of decode on top of it. A user
+waiting nearly five seconds for the first token will conclude the app is broken, and
+on this hardware that conclusion would be correct. What the numbers support is a
+statement about *shape*: the decode rate is usable for short answers, and the
+time-to-first-token is not. Whether a real phone moves TTFT enough to change that is
+exactly the measurement that cannot be taken here — for the same nested
+virtualisation reason as the arm64 run above.
 
 **3. stable-diffusion.cpp on the mobile runtime — NO, and not with the current design.**
 
