@@ -32,6 +32,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import kotlinx.coroutines.runBlocking
 import java.io.File
+import java.util.zip.ZipFile
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.util.UUID
@@ -1542,26 +1543,69 @@ class DeviceVerificationTest {
         // something IS, stated as a hard failure, is indistinguishable from the
         // thing it is not. A search finds the file wherever the platform put it.
         val libDir = ctx.applicationInfo.nativeLibraryDir
-        val candidates = listOf(
+        val diskCandidates = listOf(
             File(libDir, "libgs_ffi.so"),
             File(File(libDir, "x86_64"), "libgs_ffi.so"),
             File(File(libDir, "arm64-v8a"), "libgs_ffi.so"),
             File(File(libDir, "armeabi-v7a"), "libgs_ffi.so"),
-            File(libDir, "x86/libgs_ffi.so"),
         )
-        val found = candidates.firstOrNull { it.isFile }
-        assertNotNull(
-            "no libgs_ffi.so found. nativeLibraryDir was $libDir, and these were tried:\\n" +
-                candidates.joinToString("\\n") { "  $it (exists=${it.exists()})" } +
-                "\\nA library that loads -- which 22 other tests just proved -- and cannot be " +
-                "found on disk means this test is looking in the wrong place, not that the " +
-                "library is absent.",
-            found,
-        )
-        val so = found!!
-        println(
-            "GsNativeTest: inspecting ${so.absolutePath}, ${so.length()} bytes " +
-                "(nativeLibraryDir was $libDir)",
+        val onDisk = diskCandidates.firstOrNull { it.isFile }
+
+        // ON API 30+ THE LIBRARY IS NOT EXTRACTED TO DISK AT ALL.
+        //
+        // Run 36891447034 printed, in its own failure message:
+        //
+        //   no libgs_ffi.so found. nativeLibraryDir was
+        //     /data/app/~~53Uz.../com.grapsee.gsai-uXkJ.../lib/x86_64
+        //   and these were tried:
+        //     .../lib/x86_64/libgs_ffi.so
+        //     .../lib/x86_64/x86_64/libgs_ffi.so
+        //     ...
+        //
+        // Two mistakes inside one message. nativeLibraryDir ALREADY ends in the ABI
+        // directory on this API level, so the second candidate was
+        // .../lib/x86_64/x86_64/libgs_ffi.so -- the same mistake one level down
+        // rather than a correction of it.
+        //
+        // And the file is not there to be found at all: with non-legacy packaging the
+        // APK keeps the .so inside itself and the loader maps it straight out of the
+        // archive. nativeLibraryDir may name a directory that does not exist. Both
+        // earlier versions of this test looked only at the FILESYSTEM, so both could
+        // only ever fail -- and a test that can only fail is a test that gets deleted.
+        //
+        // So the library is read FROM THE APK, which is not a consolation prize: that
+        // is where the shipped bytes are, and the loader reads the very same entry.
+        val apk = ctx.applicationInfo.sourceDir
+        val abis = listOf("x86_64", "arm64-v8a", "armeabi-v7a", "x86")
+        val soBytes: ByteArray = if (onDisk != null) {
+            println(
+                "GsNativeTest: read ${onDisk.absolutePath} from disk, ${onDisk.length()} bytes",
+            )
+            onDisk.readBytes()
+        } else {
+            val entry = abis
+                .map { "lib/$it/libgs_ffi.so" }
+                .firstOrNull { candidate -> ZipFile(apk).use { it.getEntry(candidate) != null } }
+            assertNotNull(
+                "no libgs_ffi.so in the APK at $apk either.\n" +
+                    "  nativeLibraryDir was $libDir; on disk these were tried:\n" +
+                    diskCandidates.joinToString("\n") { "    $it (exists=${it.exists()})" } +
+                    "\n  and the APK was searched for lib/<abi>/libgs_ffi.so over $abis.\n" +
+                    "A library that loads -- which 22 other tests just proved -- and cannot be " +
+                    "found in EITHER place means this test is looking somewhere it cannot " +
+                    "look, not that the library is absent.",
+                entry,
+            )
+            val path = entry!!
+            ZipFile(apk).use { zf ->
+                zf.getInputStream(zf.getEntry(path)!!).readBytes().also {
+                    println(
+                        "GsNativeTest: read $path from the APK, ${it.size} bytes " +
+                            "(not extracted to $libDir)",
+                    )
+                }
+            }
+        }
         )
 
         // THE ELF DYNAMIC SYMBOL TABLE, PARSED. Not a byte scan.
@@ -1594,7 +1638,7 @@ class DeviceVerificationTest {
         // So this parses .dynsym and reads the ACTUAL IMPORTS. The parse is
         // cross-checked: it reports 309 imported symbols for the x86_64 build, and
         // `nm -D --defined-only libgs_ffi.so | wc -l` reports 309 as well.
-        val elf = Elf64(so.readBytes())
+        val elf = Elf64(soBytes)
         val imports = elf.importedSymbols()
         val exports = elf.exportedSymbols()
         println(
