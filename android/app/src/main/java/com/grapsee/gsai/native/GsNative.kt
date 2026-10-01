@@ -29,6 +29,24 @@ object GsNative {
      */
     external fun init(modelPath: String): Boolean
 
+    /**
+     * [init] with the context size and thread count specified.
+     *
+     * [init] passes 2048 and 4, hardcoded, and those are the two knobs a
+     * time-to-first-token measurement should move first: context size is how much
+     * KV cache is allocated and therefore how much memory is touched before the
+     * first token, and thread count is the decode parallelism.
+     *
+     * Named initTuned, NOT initWith, because GsNativeLoader.initWith(modelPath)
+     * already exists and means something else -- "load this path". A second
+     * initWith taking two extra arguments would read as that function with more
+     * parameters, and someone would call it expecting its caching behaviour.
+     *
+     * A separate name at all so the production entry point's ABI is untouched.
+     * The app calls [init]; benchmarks call this.
+     */
+    external fun initTuned(modelPath: String, nCtx: Int, nThreads: Int): Boolean
+
     /** 1 when a generation backend is compiled into this build. */
     external fun backendAvailable(): Boolean
 

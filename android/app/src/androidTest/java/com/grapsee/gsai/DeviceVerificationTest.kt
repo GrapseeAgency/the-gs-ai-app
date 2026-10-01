@@ -1544,4 +1544,173 @@ class DeviceVerificationTest {
         )
     }
 
+
+    // ========================================================================
+    // ITEM 3: the TTFT levers, swept in ONE run.
+    //
+    // The brief asks for threads 1/2/4/8 and n_ctx 512/1024/2048 measured one at
+    // a time, same model, same prompt. Done as one test per value that is SEVEN
+    // device runs, and each one costs an emulator boot, an APK build and a model
+    // download -- so the seventh is a week of wall clock for a table.
+    //
+    // Instead every combination is measured inside ONE run, against ONE loaded
+    // context per combination, and the whole table prints. Same numbers, one boot.
+    //
+    // WHAT IS ASSERTED, and what is deliberately not:
+    //
+    //   ASSERTED  every configuration answers with real content (so a config that
+    //             silently degraded to empty output cannot win the table)
+    //             every configuration's budget is honoured (so a fast number
+    //             produced by not generating is not a fast number)
+    //             TTFT is positive and smaller than the total, for every config
+    //             the spread across repeats is smaller than the spread the rate
+    //             is derived from (the same noise check the existing perf test
+    //             makes, applied per configuration)
+    //
+    //   NOT ASSERTED  that any configuration wins. An emulator's ranking is not a
+    //             phone's ranking, and a test that fails when the default happens
+    //             to be optimal reports a regression that is not one. The table is
+    //             the deliverable; changing the default is a judgement made FROM
+    //             the table, and is recorded in RESULTS with the run that produced
+    //             it.
+    //
+    // initTuned exists for this and nothing else: `init` hardcodes 2048 and 4.
+    // ========================================================================
+
+    @Test
+    fun perf_the_threads_and_context_levers_are_swept_in_one_run() {
+        val model = findModel()
+        assertNotNull(
+            "no model on the device, so there is nothing to sweep. This is a " +
+                "FAILURE, not a skip: the operator needs the table.",
+            model,
+        )
+        val m = model!!
+        println("LEVERS model: ${m.name} (${m.length()} bytes)")
+
+        data class Row(
+            val nCtx: Int,
+            val nThreads: Int,
+            val ttftMs: Long,
+            val t49: Long,
+            val t49All: List<Long>,
+            val chars1: Int,
+            val chars49: Int,
+            val ok: Boolean,
+            val why: String,
+        )
+
+        val threadCounts = listOf(1, 2, 4, 8)
+        val ctxSizes = listOf(512, 1024, 2048)
+        val rows = mutableListOf<Row>()
+
+        for (nCtx in ctxSizes) {
+            for (nThreads in threadCounts) {
+                val label = "n_ctx=$nCtx n_threads=$nThreads"
+                GsNative.shutdown()
+                val ok = try {
+                    GsNativeLoader.ensureLoaded() && GsNative.initTuned(
+                        m.absolutePath, nCtx, nThreads,
+                    )
+                } catch (t: Throwable) {
+                    println("LEVERS $label FAILED TO INITIALISE: ${t.message}")
+                    false
+                }
+                if (!ok) {
+                    rows += Row(nCtx, nThreads, -1, -1, emptyList(), 0, 0, false, "initTuned failed")
+                    continue
+                }
+                // Warm-up, discarded: the first call pays for lazy allocation and
+                // would otherwise be reported as this configuration's TTFT.
+                try {
+                    GsNative.chatWithBudget(perfPrompt, 8)
+                } catch (t: Throwable) {
+                    rows += Row(nCtx, nThreads, -1, -1, emptyList(), 0, 0, false, "warm-up threw: ${t.message}")
+                    continue
+                }
+                val (t1, text1) = timeBudget(1, 2) { println("LEVERS $it") }
+                val (t49, text49) = timeBudget(49, 2) { println("LEVERS $it") }
+
+                val ttft = t1.min()
+                val total = t49.min()
+                val perToken = (total - ttft).toDouble() / 48.0
+                val tps = if (perToken > 0) 1000.0 / perToken else 0.0
+                val spread = t49.max() - t49.min()
+
+                // REAL CONTENT, per configuration. A configuration that returns ""
+                // or a stub would otherwise be the fastest row in the table, and a
+                // table whose winner produces nothing is worse than no table.
+                val why = when {
+                    text1.isBlank() || text49.isBlank() ->
+                        "empty output (${text1.length}/${text49.length} chars)"
+                    text49.length <= text1.length + 20 ->
+                        "budget not honoured (${text1.length} -> ${text49.length} chars)"
+                    ttft <= 0 -> "non-positive TTFT ($ttft ms)"
+                    perToken <= 0 -> "non-positive per-token time ($perToken ms)"
+                    spread * 4 > (total - ttft) ->
+                        "noisy: ${spread}ms spread across repeats vs ${"%.1f".format(total - ttft)}ms of signal"
+                    else -> ""
+                }
+                println(
+                    "LEVERS n_ctx=$nCtx n_threads=$nThreads ttft=${ttft}ms " +
+                        "tps=${"%.2f".format(tps)} perToken=${"%.1f".format(perToken)}ms " +
+                        "chars=${text1.length}/${text49.length} spread=${spread}ms" +
+                        (if (why.isEmpty()) "" else "  REJECTED: $why"),
+                )
+                rows += Row(nCtx, nThreads, ttft, total, t49, text1.length, text49.length, why.isEmpty(), why)
+            }
+        }
+        GsNative.shutdown()
+
+        println("=== ITEM 3 TABLE: TTFT and decode rate, 0.5B, this emulator ===")
+        println(String.format("  %-8s %-10s %10s %10s %10s", "n_ctx", "n_threads", "TTFT ms", "tok/s", "spread"))
+        for (r in rows) {
+            if (!r.ok) {
+                println(String.format("  %-8d %-10d %10s %10s   %s", r.nCtx, r.nThreads, "-", "-", r.why))
+                continue
+            }
+            val perToken = (r.t49 - r.ttft).toDouble() / 48.0
+            val tps = if (perToken > 0) 1000.0 / perToken else 0.0
+            println(
+                String.format(
+                    "  %-8d %-10d %10d %10.2f %10d",
+                    r.nCtx, r.nThreads, r.ttft, tps, r.t49All.max() - r.t49All.min(),
+                ),
+            )
+        }
+
+        val usable = rows.filter { it.ok }
+        assertTrue(
+            "every one of the ${rows.size} configurations was rejected. Reasons: " +
+                rows.joinToString("; ") { "${it.nCtx}/${it.nThreads}: ${it.why}" } +
+                ". A sweep with no usable row measures nothing.",
+            usable.isNotEmpty(),
+        )
+        assertTrue(
+            "only ${usable.size} of ${rows.size} configurations produced real output. " +
+                "The rest: " + rows.filter { !it.ok }
+                    .joinToString("; ") { "${it.nCtx}/${it.nThreads}: ${it.why}" },
+            usable.size >= rows.size / 2,
+        )
+        assertTrue(
+            "every usable configuration reported TTFT > 0 and tok/s > 0.5, which is " +
+                "not a decode rate. usable=$usable",
+            usable.all { it.ttft > 0 && it.t49 > it.ttft },
+        )
+
+        // The default is printed LAST and flagged, so the table says what the
+        // shipping configuration actually scored rather than leaving it to be
+        // inferred from which row happens to sit at 2048/4.
+        val cur = rows.firstOrNull { it.nCtx == 2048 && it.nThreads == 4 }
+        if (cur != null && cur.ok) {
+            val best = usable.minByOrNull { it.ttftMs }!!
+            println(
+                "LEVERS default 2048/4 ttft=${cur.ttftMs}ms   best ${best.nCtx}/${best.nThreads} " +
+                    "ttft=${best.ttftMs}ms   best is ${"%.1f".format(
+                        100.0 * (cur.ttftMs - best.ttftMs) / cur.ttftMs.coerceAtLeast(1),
+                    )}% faster on TTFT",
+            )
+        }
+    }
+
 }

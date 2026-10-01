@@ -179,6 +179,46 @@ pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_init(
 
 /// 1 when a generation backend is compiled in. Kotlin checks this to decide
 /// whether local inference is worth attempting at all.
+/// `init` with the two knobs exposed, so a benchmark can vary them.
+///
+/// The one-argument `init` passes 2048 and 4, hardcoded, and that is what every
+/// number measured until now was measured AT. Those two are the first two levers a
+/// TTFT measurement should move, and neither was reachable from the host before
+/// this: `gs_mobile_create(model_path, n_ctx, n_threads)` has always taken them and
+/// nothing has ever passed anything else.
+///
+/// Kept as a SEPARATE name rather than changing init's signature: init is called
+/// by the loader and by the app, and a benchmark's need for two extra arguments is
+/// not a reason to touch the production entry point's ABI.
+#[no_mangle]
+pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_initTuned(
+    mut env: JNIEnv,
+    _class: JClass,
+    model_path: JString,
+    n_ctx: jint,
+    n_threads: jint,
+) -> jboolean {
+    guard!(env, "initTuned", JNI_FALSE, {
+        let path: String = match env.get_string(&model_path) {
+            Ok(s) => s.into(),
+            Err(e) => {
+                throw(&mut env, "initTuned", e);
+                return JNI_FALSE;
+            }
+        };
+        match MobileCtx::create(&path, n_ctx, n_threads) {
+            Ok(c) => {
+                set_global(Some(c));
+                JNI_TRUE
+            }
+            Err(e) => {
+                throw(&mut env, "initTuned", e);
+                JNI_FALSE
+            }
+        }
+    })
+}
+
 #[no_mangle]
 pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_backendAvailable(
     mut env: JNIEnv,
