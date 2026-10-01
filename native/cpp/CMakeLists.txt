@@ -42,7 +42,7 @@ else()
 endif()
 
 # ---- sd + ocr wrappers ---------------------------------------------------
-add_library(gs_sd STATIC sd_wrapper/sd_wrapper.cpp)
+add_library(gs_sd STATIC sd_wrapper/gs_sd_wrapper.cpp)
 target_link_libraries(gs_sd PUBLIC gs_abi)
 target_include_directories(gs_sd PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include

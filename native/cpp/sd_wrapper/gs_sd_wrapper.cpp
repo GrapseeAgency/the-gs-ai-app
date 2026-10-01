@@ -6,7 +6,7 @@
 // library is called directly here, through the pinned upstream header.
 //
 // Every symbol is gs_sd_* because upstream's own public API is sd_* -- see
-// sd_wrapper.h for why a collision is worse than a compile error.
+// gs_sd_wrapper.h for why a collision is worse than a compile error.
 //
 // TWO PATHS, AND THEY ARE NOT SUBSTITUTES:
 //
