@@ -707,6 +707,85 @@ That is the same defect class as a8 measuring its own harness: a green suite tha
 never touched the path it exists to protect. It is the next thing to write, and it
 is a small thing.
 
+## arm64 device runtime: closed, with the operator's two checks measured
+
+Item 2 was BLOCKED on three hosts. The operator asked for two more measurements
+before closing it, and both are now taken.
+
+### A. `ubuntu-24.04-arm64` — THE LABEL WAS WRONG, AND THE REAL ONE DOES NOT RUN
+
+**The earlier probe used a label that does not exist.** `actions/runner-images`
+lists the arm64 Linux images as:
+
+    [ubuntu-22.04-arm64]: images/ubuntu/Ubuntu2204-Arm64-Readme.md
+    [ubuntu-24.04-arm64]: images/ubuntu/Ubuntu2404-Arm64-Readme.md
+    [ubuntu-26.04-arm64]: images/ubuntu/Ubuntu2604-Arm64-Readme.md
+
+Run `36688288136` probed `ubuntu-24.04-arm` — no `64` — and reported
+`uname -m = aarch64` with `/dev/kvm` absent. So *something* arm64 resolved, and
+"the arm64 Linux runner has no KVM" was a measurement of the wrong label. It was
+additionally wrong on its own terms: with the switch OFF the probe takes
+`exit 0`, so a `::error::` line could only have come from a switch that was ON.
+
+**The correct label was added to the probe's `choice` list** (the old one kept, so
+the earlier evidence stays reproducible) and dispatched: run `36831713320`,
+`runs-on: ['ubuntu-24.04-arm64']`, created `2026-10-01T07:40:43Z`.
+
+**It has been queued for 4h51m and has never started a job.** Not failed —
+*queued*. The label exists; a runner is not being assigned.
+
+So the honest statement about A is narrower than either "it has no KVM" or "it
+works": **it was never measured, because the runner never arrived.** The old
+label's `/dev/kvm` reading is not evidence about the current public arm64 image
+in either direction.
+
+### B. `macos-15` — `kern.hv_support` DOES NOT EXIST
+
+The operator's check, added to the probe because it had never been asked for:
+
+    36832392187, macos-15-arm64, uname -m = arm64
+      sysctl kern.hv_support = unreadable
+
+and the first version of the step **suppressed stderr**, so `unreadable` could
+mean any of:
+
+    sysctl: unknown oid: kern.hv_support      the key does not exist
+    sysctl: kern.hv_support: permission denied
+    sysctl: command not found
+
+The step now reports stderr and distinguishes them, with a fourth verdict for
+`absent` — which is what it is. Either way the conclusion is the same and does not
+depend on which:
+
+    HVF error: HV_UNSUPPORTED
+    qemu-system-aarch64-headless: failed to initialize HVF: Invalid argument
+
+**Hypervisor.framework is not exposed to that VM.** Whether the key is absent or
+reads 0, the accelerator is absent, and both are set by the HOST rather than by
+QEMU — so no flag, image or runner configuration changes it.
+
+### Closed
+
+**arm64 device runtime requires a physical device connected via adb, or a dedicated
+bare-metal arm64 CI runner. Attempts on ubuntu-x86_64 (wrong arch),
+ubuntu-24.04-arm (no KVM), and macos-15 (HVF unsupported) all failed for reasons
+outside our control. All CI evidence is x86_64; the arm64 .so compiles and passes
+ELF verification but has never executed.**
+
+Two corrections to the evidence behind that sentence, both made by measuring:
+
+- `ubuntu-24.04-arm` was not the arm64 label, and its `/dev/kvm` reading was taken
+  with the gate OFF — which under the step's own logic cannot emit an error. The
+  real label, `ubuntu-24.04-arm64`, was dispatched and **queued for 4h51m without
+  ever running**, so the arm64 Linux host has not been measured at all.
+- `macos-15` is now known to lack `kern.hv_support` rather than merely reporting
+  `HV_UNSUPPORTED`, so the macOS verdict rests on a number rather than on a
+  symptom.
+
+What does NOT change: **no arm64 instruction has been executed by this
+repository**, and the arm64 `.so` remains statically verified only. The section
+above — what is proven, what is not, and what would close it — stands.
+
 ## What is NOT done
 
 Stated plainly rather than dressed up.
