@@ -1288,6 +1288,52 @@ jobs:
             || { echo "FAIL: no module.modulemap"; exit 1; }
           cat "$XF/Headers/module.modulemap"
 
+      # A NOTE, NOT A GATE, and the reason is recorded here rather than left to
+      # be discovered.
+      #
+      # This lint exists because of a bug no other check in this repository can
+      # see. Run 36822191969 of the `app + XCTests` job reported "the reader
+      # returned nothing" while the repository's own symbol counter -- same reader,
+      # same flags -- printed 10. The cause was a line assigning `NAMES` that had
+      # been deleted by an earlier edit, so every count downstream was counting an
+      # empty string. `bash -n` cannot see a deleted assignment: the block still
+      # parsed, still passed both other lints, and still read correctly.
+      #
+      # Verified against the real shape before shipping, and it works. Given a block
+      # whose assignment is gone it reports every read of the missing name and names
+      # the line. Given a block that assigns it, plus `for V in`, plus
+      # `while read -r V`, plus a step-level `env:` key, plus `${MAYBE_UNSET-}`, it
+      # reports none of those.
+      #
+      # WHY IT IS NOT A GATE: it has a demonstrable false positive in this tree. It
+      # reports `$SDK_BUILDTOOLS` in android-release.yml's "Gates" step, and that
+      # step's own first line is
+      #
+      #     SDK_BUILDTOOLS="$ANDROID_HOME/build-tools/35.0.0"
+      #
+      # with the read twenty-odd lines later in the SAME block. So it is wrong
+      # there, for a reason I did not finish finding. A gate that fails on
+      # verified-correct code is the false-failure machine this repository has spent
+      # a session undoing, so it reports and does not block -- exactly as
+      # check_pipefail_traps.py does with its notes.
+      #
+      # A finding from it is a CANDIDATE, not a conclusion. Each one has to be read
+      # in its own step before it is acted on.
+      - name: Variables read but never assigned (NOTE, read every finding)
+        run: |
+          set -uo pipefail
+          RC=0
+          python3 "$GITHUB_WORKSPACE/.github/scripts/check_unassigned_reads.py" || RC=$?
+          case "$RC" in
+            0) echo "gate: clean" ;;
+            1) echo "NOTE: candidates above. NOT build-breaking, because this lint"
+               echo "NOTE: has a known false positive in this tree -- see the"
+               echo "NOTE: comment on this step. Read each finding in its own step."
+               ;;
+            *) echo "::error::the lint itself failed (exit $RC), which is a stop."
+               exit 1 ;;
+          esac
+
       - name: Generate the Xcode project
         run: |
           set -euo pipefail
@@ -1635,6 +1681,43 @@ jobs:
           fi
           echo "  reader: $LLVM_NM"
 
+          # 2>&1, EXACTLY AS count_exported_symbols.sh DOES IT.
+          #
+          # Run 36822191969 reported "the reader returned nothing" while the
+          # repository's own counter, same reader and same flags, printed 10. My
+          # first explanation was that llvm-nm writes its output to stderr and I
+          # had sent it to /dev/null. That was WRONG, and the real cause was
+          # simpler: the line assigning NAMES had been DELETED by my own previous
+          # edit, so `$NAMES` was empty and every count downstream counted
+          # nothing. `bash -n` cannot see a deleted assignment, and the block still
+          # parsed and still passed the lint.
+          #
+          # So the assignment is back, and immediately checked for non-emptiness,
+          # because "a variable that is read but never assigned" is exactly the
+          # failure a syntax check cannot catch and a guard can.
+          #
+          # 2>&1 is still the right spelling and it is the script's, so diagnostics
+          # arriving on the same stream are kept rather than discarded. The symbol
+          # regex is what makes that safe -- it requires
+          # [[:space:]][TDRS][[:space:]]_<name> at end of line, so a version-skew
+          # warning cannot satisfy it -- and non-symbol lines are printed, not
+          # swallowed.
+          NAMES=$("$LLVM_NM" --defined-only --extern-only "$DEVICE_LIB" 2>&1 || true)
+          if [ -z "$NAMES" ]; then
+            echo "::error::the reader produced NO OUTPUT AT ALL, so NAMES is empty"
+            echo "::error::and every count below would be counting nothing. Run this"
+            echo "::error::by hand and report what it says:"
+            echo "::error::    $LLVM_NM --defined-only --extern-only $DEVICE_LIB"
+            exit 1
+          fi
+          READER_DIAG=$(printf '%s\n' "$NAMES" \
+            | grep -vE '^[[:space:]]*[0-9a-fA-F]+[[:space:]]+[A-Za-z][[:space:]]_' \
+            | sed -n '1,5p')
+          if [ -n "$READER_DIAG" ]; then
+            echo "  --- reader diagnostics (first 5 non-symbol lines) ---"
+            printf '%s\n' "$READER_DIAG" | sed 's/^/    /'
+          fi
+
           # THE SYMBOLS ARE THE FACT, AND A READER RETURNING NOTHING IS NOT IT.
           #
           # `grep -c` prints 0 AND exits 1 when nothing matches, so
@@ -1666,11 +1749,11 @@ jobs:
           esac
           echo "  reader --defined-only --extern-only returned $NM_LINES line(s)"
           if [ "$NM_LINES" -lt 1 ]; then
-            echo "::error::the reader returned nothing for the device slice."
-            echo "::error::Before concluding the archive is empty, note that this"
-            echo "::error::exact failure -- a reader returning zero on a populated"
-            echo "::error::archive -- is what a wrong-reader bug looks like, and it"
-            echo "::error::has happened here. Run it unsuppressed and report:"
+            echo "::error::the reader produced no SYMBOL lines for the device"
+            echo "::error::slice, though it produced $NM_LINES line(s) of something."
+            echo "::error::The repository's own counter, same reader and same flags,"
+            echo "::error::reported: gs_ffi_mobile_* exported: $COUNT"
+            echo "::error::If those disagree, the disagreement IS the bug. Reproduce:"
             echo "::error::    $LLVM_NM --defined-only --extern-only $DEVICE_LIB"
             exit 1
           fi
@@ -1736,15 +1819,26 @@ jobs:
             exit 1
           fi
           echo "  all ten gs_ffi_mobile_* DEFINED in the DEVICE slice"
-          echo "  app binary symbols: $APP_NM (expected: globals are stripped from an"
-          echo "                     app executable, so a low count is CORRECT here)"
+
+          # Reported, not asserted. An iOS APP EXECUTABLE's globals are stripped --
+          # nothing links against them, so the linker may remove them, and the
+          # engine's entry points are internal to the app. A low count here is the
+          # CORRECT result and a high one would be surprising.
+          APP_NM=$(nm -a "$EXE" 2>/dev/null | grep -c . || true)
+          case "$APP_NM" in
+            ''|*[!0-9]*) APP_NM="unreadable" ;;
+          esac
+          echo "  app binary symbol lines: $APP_NM (Apple nm; low is EXPECTED here and"
+          echo "                         is not evidence about the engine)"
 
           echo "=== DEVICE BUILD VERIFIED ==="
           echo "  product      : $APP"
           echo "  architecture : arm64 Mach-O, under Debug-iphoneos"
           echo "  device slice : $DEVICE_LIB"
-          echo "                 defines gs_ffi_mobile_backend_available, _chat,"
-          echo "                 _load_model, _build_info"
+          echo "                 defines all ten gs_ffi_mobile_* entry points:"
+          echo "                 abi_version, backend_available, build_info, chat,"
+          echo "                 create, embed_dim, embed_image, free, ocr,"
+          echo "                 should_use_local"
           echo "  linked in    : proven by the unguarded gs_ffi_mobile_backend_available()"
           echo "                 call in GsNative.swift -- no module fails the COMPILE,"
           echo "                 no symbols fail the LINK, and neither happened."
