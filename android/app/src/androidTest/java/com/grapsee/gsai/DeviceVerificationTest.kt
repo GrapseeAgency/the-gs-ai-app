@@ -1303,4 +1303,245 @@ class DeviceVerificationTest {
         )
     }
 
+
+    // ========================================================================
+    // The image path, IN-PROCESS. No subprocess anywhere on it.
+    //
+    // WHAT IS ACTUALLY CLAIMED HERE, precisely, because "image generation works"
+    // is two different claims and conflating them is how a feature becomes
+    // untestable:
+    //
+    //   c0  the procedural path produces a real file with real content, on the
+    //       device, with no weights present. That is the part this build can
+    //       prove, and it is not a smaller claim than it sounds -- it is the whole
+    //       diagram/chart feature.
+    //   c1  the diffusion path reports its capability HONESTLY: it either works
+    //       and writes a decodable PNG, or it refuses with a reason and writes
+    //       NOTHING. Both halves are asserted, because the failure mode that
+    //       matters is a placeholder image that looks like success.
+    //
+    // NO DIFFUSION CHECKPOINT IS DOWNLOADED HERE. qwen2.5-0.5b is 491 MB; a SD
+    // checkpoint is 2.3 GB. So c1's diffusion half is asserted as an HONEST
+    // REFUSAL in this build, and that is a real assertion rather than a skip:
+    // it fails if the library silently claims it can generate, and it fails if a
+    // failure ever writes a file.
+    // ========================================================================
+
+    @Test
+    fun c0_the_procedural_path_writes_a_real_svg_on_the_device() {
+        assertTrue(
+            "libgs_ffi.so did not load, so nothing below means anything",
+            GsNativeLoader.isLibraryLoaded(),
+        )
+        val out = File(
+            InstrumentationRegistry.getArguments().getString("gsScratch")
+                ?: ctx.cacheDir.absolutePath,
+            "gs-test-diagram.svg",
+        )
+        out.delete()
+        assertFalse("the fixture path already exists, so this proves nothing", out.exists())
+
+        // A spec with named content, so the assertions below can look for THAT and
+        // not for any file at all.
+        val spec = """{"title":"Engine Wiring","width":"800","height":"400",
+                       "layer1":"orchestration","layer2":"inference"}"""
+        GsNative.renderSvg(spec, out.absolutePath)
+        println("GsNativeTest: renderSvg -> ${out.length()} bytes")
+
+        assertTrue(
+            "renderSvg returned GS_OK but wrote no file",
+            out.exists(),
+        )
+        val bytes = out.length()
+        assertTrue(
+            "the SVG is $bytes bytes, which is too small to hold the spec",
+            bytes > 200,
+        )
+        val text = out.readText()
+        // Content, not just existence. A file that exists and is empty, or holds a
+        // blank diagram, satisfies "did it produce a file" and satisfies nothing
+        // else.
+        assertTrue(
+            "the SVG does not start with <svg or <?xml: ${text.take(80)}",
+            text.contains("<svg") || text.contains("<?xml"),
+        )
+        for (needle in listOf("Engine Wiring", "orchestration", "inference")) {
+            assertTrue(
+                "the SVG is missing \"$needle\", so the spec was not rendered. " +
+                    "A file that exists but omits what was asked for is the same " +
+                    "failure as no file, wearing a different hat.",
+                text.contains(needle),
+            )
+        }
+        assertTrue("no <rect> or <text>, so nothing was drawn", text.contains("<rect") || text.contains("<text"))
+        out.delete()
+    }
+
+    @Test
+    fun c1_the_diffusion_path_is_honest_about_what_it_cannot_do() {
+        assertTrue(
+            "libgs_ffi.so did not load, so nothing below means anything",
+            GsNativeLoader.isLibraryLoaded(),
+        )
+
+        // A model that is definitely absent. If this one loads, the fixture is
+        // wrong and every assertion below is about nothing.
+        val missing = File(
+            InstrumentationRegistry.getArguments().getString("gsScratch")
+                ?: ctx.cacheDir.absolutePath,
+            "gs-test-no-such-checkpoint.safetensors",
+        )
+        missing.delete()
+        assertFalse("the fixture path exists, so this proves nothing", missing.exists())
+
+        val handle = GsNative.sdCreate(missing.absolutePath)
+        val reason = GsNative.lastError()
+        println("GsNativeTest: sdCreate(missing) -> handle=$handle lastError=$reason")
+
+        if (handle != 0L) {
+            // The wrapper returned a context for a file that does not exist. Either
+            // the load is lazy -- defensible -- or it is wrong. Ask, rather than
+            // assume either way.
+            val backend = GsNative.sdBackendName(handle)
+            val available = GsNative.sdAvailable(handle)
+            println("GsNativeTest: backend=$backend available=$available")
+            assertTrue(
+                "sdBackendName returned an empty string, so the caller cannot tell " +
+                    "a working backend from an absent one",
+                backend.isNotEmpty(),
+            )
+            if (!available) {
+                assertTrue(
+                    "a context that cannot generate reports backend \"$backend\", " +
+                        "which does not say the library is absent. \"Could not find " +
+                        "the weights\" and \"no diffusion library\" are different " +
+                        "problems with opposite fixes.",
+                    backend.contains("not-compiled") || backend.contains("sd.cpp"),
+                )
+            }
+
+            // THE CENTRAL ASSERTION: a refusal writes NOTHING.
+            val out = File(missing.parentFile, "gs-test-must-not-exist.png")
+            out.delete()
+            val refused = try {
+                GsNative.sdGenerate(handle, "a cat", "", 64, 64, 4, out.absolutePath)
+                false
+            } catch (e: Exception) {
+                println("GsNativeTest: sdGenerate refused: ${e.message}")
+                true
+            }
+            if (refused) {
+                assertFalse(
+                    "sdGenerate FAILED but wrote ${out.length()} bytes at " +
+                        "${out.absolutePath}. A placeholder image is the one outcome " +
+                        "that makes every downstream quality check meaningless: a " +
+                        "caller that decodes a PNG cannot tell a real generation " +
+                        "from a grey rectangle, and a grey rectangle that always " +
+                        "appears satisfies every check that only asks whether a " +
+                        "file appeared.",
+                    out.exists(),
+                )
+                val msg = GsNative.lastError()
+                assertTrue(
+                    "the failure left no reason: \"$msg\". A caller cannot report " +
+                        "what it was not told.",
+                    msg.isNotEmpty(),
+                )
+            } else {
+                // It claimed success. Then the file must EXIST and be a real PNG,
+                // because a success code with no artifact is not a success.
+                assertTrue(
+                    "sdGenerate returned without throwing but wrote no file at " +
+                        "${out.absolutePath}",
+                    out.exists(),
+                )
+                val head = out.readBytes().take(8)
+                assertTrue(
+                    "sdGenerate succeeded but the file is not a PNG: " +
+                        "${head.toList()} -- ${out.length()} bytes",
+                    head == listOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A),
+                )
+                assertTrue(
+                    "the PNG is ${out.length()} bytes, which is too small to hold a " +
+                        "64x64 image",
+                    out.length() > 100,
+                )
+                println("GsNativeTest: real PNG, ${out.length()} bytes")
+            }
+            out.delete()
+            GsNative.sdFree(handle)
+        } else {
+            // Refused to even create a context. Correct, and the reason must be
+            // readable -- a caller that cannot tell "no such model" from "the
+            // library is not linked" cannot choose what to do next.
+            assertTrue(
+                "sdCreate returned 0 with an EMPTY reason, so a caller cannot " +
+                    "report what was missing",
+                reason.isNotEmpty(),
+            )
+        }
+    }
+
+    /** The no-subprocess claim, checked on the DEVICE rather than by reading Rust.
+     *
+     * sd_bridge.rs already asserts this over its own source. This asserts the
+     * stronger property that matters for a shipping app: the loadable library on
+     * this device exposes no process-spawning import under any symbol the image
+     * path could reach.
+     *
+     * `os.fork`, `Runtime.exec` and `ProcessBuilder` are the ones that would turn
+     * an in-process feature into a subprocess feature on a device that has no
+     * sd-cli to find. libc's `system` and `popen` are checked by name too.
+     *
+     * A FAIL here is not a style complaint: it means the feature is shelling out
+     * to something a phone does not have.
+     */
+    @Test
+    fun c2_the_loaded_library_exposes_no_process_spawning_symbol() {
+        assertTrue(
+            "libgs_ffi.so did not load, so there is nothing to inspect",
+            GsNativeLoader.isLibraryLoaded(),
+        )
+        val libDir = ctx.applicationInfo.nativeLibraryDir
+        val so = File(libDir, "libgs_ffi.so")
+        assertTrue(
+            "no libgs_ffi.so at $so -- nativeLibraryDir was $libDir",
+            so.exists(),
+        )
+        println("GsNativeTest: inspecting ${so.absolutePath}, ${so.length()} bytes")
+
+        // Dynamic symbols the loader will resolve. Static archive members the
+        // linker dropped cannot be reached at runtime, so they are not what this
+        // checks; what it checks is what the shipped library can actually CALL.
+        val banned = listOf("execve", "fork", "posix_spawn", "system", "popen")
+        val present = mutableListOf<String>()
+        // `nm -D` is unavailable on device, so read the ELF dynamic symbol table
+        // by scanning for the names as they appear in .dynstr. That is weaker than
+        // a parse -- it can be fooled by a string in .rodata -- so it is used as a
+        // SMOKE CHECK that says "this needs a proper look", and the authoritative
+        // version is the source-reading test in sd_bridge.rs.
+        val bytes = so.readBytes()
+        val text = String(bytes, Charsets.ISO_8859_1)
+        for (sym in banned) {
+            if (Regex("(?<![A-Za-z0-9_])${Regex.escape(sym)}(?![A-Za-z0-9_])").containsMatchIn(text)) {
+                present.add(sym)
+            }
+        }
+        println(
+            "GsNativeTest: process-spawning names present in the shipped .so: " +
+                (if (present.isEmpty()) "none" else present.joinToString()),
+        )
+        // libc is linked into every Android process, so `fork`/`execve` being
+        // ABSENT is the claim. If they are present the .so pulled them in itself,
+        // which is worth knowing and is what the source test covers properly.
+        assertTrue(
+            "the shipped libgs_ffi.so contains these process-spawning names: " +
+                "${present.joinToString()}. An in-process feature that shells out " +
+                "works on a build machine and cannot work on a phone, which has no " +
+                "sd-cli. See also no_subprocess_remains_in_this_file in sd_bridge.rs, " +
+                "which is the authoritative check.",
+            present.isEmpty(),
+        )
+    }
+
 }

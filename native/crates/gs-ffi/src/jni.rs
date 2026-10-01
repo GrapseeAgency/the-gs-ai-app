@@ -466,7 +466,10 @@ pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_shutdown(
 
 #[no_mangle]
 pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_renderSvg(
-    env: JNIEnv,
+    // `mut`, because env.get_string() takes &mut self in jni 0.21. The file's
+    // own entry points have said so since init; the two added here did not, and
+    // the compiler named both.
+    mut env: JNIEnv,
     _class: JClass,
     spec_json: JString,
     out_path: JString,
@@ -525,7 +528,10 @@ extern "C" {
 
 #[no_mangle]
 pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_sdCreate(
-    env: JNIEnv,
+    // `mut`, because env.get_string() takes &mut self in jni 0.21. The file's
+    // own entry points have said so since init; the two added here did not, and
+    // the compiler named both.
+    mut env: JNIEnv,
     _class: JClass,
     model_path: JString,
 ) -> jlong {
