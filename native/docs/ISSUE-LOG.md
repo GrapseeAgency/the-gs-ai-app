@@ -33,6 +33,228 @@ mid-answer is now labelled as such instead of with a fabricated HTTP status; the
 arm64 run is impossible on every reachable runner for one hardware reason; and the
 OCR split is closed permanently because no AGP release fixes it.
 
+## ITEM 1 OF THE NEW BRIEF — stable-diffusion.cpp, IN-PROCESS
+
+**The subprocess is gone.** The old route resolved `sd-cli` from
+`/mnt/new_volume/sd/...` or `$GS_SD_CLI` and spawned it. A phone has neither the
+path nor the binary.
+
+### The gate nobody checked was the headers
+
+The `stablediffusion` job in `android-deps.yml` had been **succeeding** and
+producing 17.7 MB, and the package was:
+
+    ./libggml-base.a   ./libstable-diffusion.a   ./libggml.a   ./libggml-cpu.a
+
+Archives and **no headers** — so nothing could be compiled against it, which is
+exactly why the wrapper could not call the library. `android-deps.yml` now copies
+`include/stable-diffusion.h` in, and **asserts the five symbols the consumer is
+written against are present**, so an upstream rename fails there rather than as a
+confusing compile error elsewhere:
+
+    new_sd_ctx  free_sd_ctx  sd_ctx_params_init  sd_img_gen_params_init
+    generate_image
+
+Also **pinned** to `3f8527a46c54ecf4cb4ed6003da8e8982283c73c` (2026-09-27). It was
+`git clone --depth 1` of HEAD, so the package could change under a later build with
+no diff anywhere. The checkout is verified to land on that sha.
+
+Verified from run `36832394895`, artifact `11147951401`: the packaged header is
+20,473 bytes and all five symbols are present.
+
+### The API is not what the project's docs suggest
+
+Read from the pinned header, not from memory — and the naming has changed:
+
+    stable_diffusion_*   ->  0 occurrences in the current header
+
+The real names are `sd_*`: `new_sd_ctx`, `free_sd_ctx`, `sd_img_gen_params_init`,
+`generate_image`. Two consequences that would otherwise have been compile errors:
+
+  * sd.cpp's own symbols are `sd_*`, and this repository's wrapper already declared
+    `sd_create` / `sd_generate` / `sd_free` / `sd_context_t` / `sd_config_t`.
+    Including both headers is a namespace collision in one `extern "C"` block, and
+    the near-misses are worse than an error because they compile. **Every wrapper
+    symbol is now `gs_sd_*`** — the operator's name, and collision-free.
+  * `sd_guidance_params_t` has **no `scale` field**. It has `txt_cfg`, `img_cfg` and
+    `distilled_guidance`. The wrapper sets `txt_cfg`.
+
+There is also **no image writer** in the public header (`save_imatrix` is a
+calibration dump), so the PNG is encoded in `gs_sd_wrapper.cpp` — stored-deflate,
+correct CRCs and ADLER-32, ~100 lines, no dependency, which is one fewer shared
+library in every phone APK. It is exposed as `gs_sd_write_png_for_test` so a failure
+can be **attributed**: if generation produces no file, the question is whether
+diffusion failed or the encoder did.
+
+### A fourth private thread-local, which gs_abi.h already documents as a bug
+
+`gs_abi.h` records why the shared error channel exists:
+
+    "Added because the three wrappers each kept a PRIVATE thread_local ... so 43
+     writes in the llama wrapper and every mobile error were unreachable -- a
+     caller got "" for a failure that had a perfectly good explanation sitting in a
+     variable nothing read."
+
+**This file was still the fourth.** Every `sd_wrapper` failure set a private
+`s_err` that nothing read. `set_err` now calls `gs_set_error`.
+
+### No placebo, ever
+
+`gs_sd_generate` returns `GS_ERR_UNAVAILABLE` and writes **nothing** when the
+library is absent. `gs_sd_create` returns NULL rather than a context whose every
+call fails, so a caller can tell "could not load" from "loaded but cannot generate".
+The reason is that a test which decodes a PNG cannot tell a real generation from a
+grey rectangle, and a grey rectangle that always appears is worse than no image at
+all.
+
+### What the operator can check
+
+Seventeen `gs_ffi_mobile_*` entry points, confirmed read out of the real `.so`:
+
+    expected 17 symbols, found 17
+    all 17 expected gs_ffi_mobile_* symbols present
+
+from run `36859948614`, job `110361806080` (x86_64; all four ABI jobs green).
+
+**Three device tests** (`c0`, `c1`, `c2`) are written and the run id is passed as
+`native_run_id`. Their results are recorded below once the device job reports.
+
+## ITEM 2 OF THE NEW BRIEF — arm64, CLOSED, AND BOTH CHECKS CORRECTED THE EVIDENCE
+
+The operator asked for two measurements before closing it. Both found something
+wrong with what was there.
+
+**A. `ubuntu-24.04-arm64` — THE LABEL WAS WRONG, and the real one never ran.**
+Run `36688288136` probed `ubuntu-24.04-arm`, with no `64`. The official
+runner-images README lists the arm64 images as `ubuntu-22.04-arm64`,
+`ubuntu-24.04-arm64`, `ubuntu-26.04-arm64`. It was *additionally* wrong on its own
+terms: with the switch OFF the KVM step takes `exit 0`, so its `::error::` line
+cannot have come from that step at all.
+
+The real label was added to the probe (the old one kept, so the evidence stays
+reproducible) and dispatched: run `36831713320`, `runs-on: ['ubuntu-24.04-arm64']`,
+created `2026-10-01T07:40:43Z`, **queued for 4h51m and never started a job**. Not
+failed — queued. So the arm64 Linux host **has never been measured**, which is a
+narrower claim than either "no KVM" or "it works", and the honest one.
+
+**B. `macos-15` — `kern.hv_support` DOES NOT EXIST.** Run `36832392187`,
+macos-15-arm64. The probe had never asked; the operator's exact check is now a
+step. The first version suppressed stderr, so `unreadable` could have meant the key
+is absent, permission denied, or no `sysctl`. It now reports stderr and has a fourth
+verdict for `absent`. The conclusion does not depend on which — `HVF error:
+HV_UNSUPPORTED` either way — and both are set by the HOST, not by QEMU.
+
+**Closed with the operator's wording:**
+
+> arm64 device runtime requires a physical device connected via adb, or a dedicated
+> bare-metal arm64 CI runner. Attempts on ubuntu-x86_64 (wrong arch),
+> ubuntu-24.04-arm (no KVM), and macos-15 (HVF unsupported) all failed for reasons
+> outside our control. All CI evidence is x86_64; the arm64 .so compiles and passes
+> ELF verification but has never executed.
+
+What does **not** change: no arm64 instruction has been executed by this
+repository.
+
+## A GATE THAT WAS GOING QUIETLY LOOSE
+
+`[ "$N" -ge 8 ]` against an ABI of **TEN** symbols was already 2 under. Adding seven
+image-generation entry points made the ABI **SEVENTEEN** and the floor **NINE**
+under — a gate whose margin grows every time the thing it guards gets bigger.
+
+`android-native` now compares the **SET**: every symbol named, read out of the `.so`
+with `nm -D --defined-only`, compared with `comm`. Missing → `::error::` and
+`exit 1`. Unexpected → `::warning::`, **not** fatal, because an extra export is a
+compatibility question and failing on it would make the gate impossible to extend
+without editing the workflow first.
+
+Exercised locally in four directions before going in: all present, one missing, all
+missing, and one extra landing in `unexpected` rather than `missing`.
+
+## FIVE COMPILE ERRORS THAT WERE NOT FIVE DEFECTS
+
+Worth recording together, because four of the five were *not* the thing the compiler
+led with:
+
+  * `CStr::from_bytes_with_nul(c.as_bytes()).unwrap()` on a `CString` — a CString
+    never carries its own NUL in `as_bytes()`, so that unwrap was a **panic on every
+    call**, inside an `extern "system"` function. It compiles. It was not among the
+    six reported errors, because it is not an error. `render_svg_via_ffi` now takes
+    `&str` and owns the conversion, so the caller cannot get it wrong.
+  * `fn gs_ffi_render_svg` was **invented**. The shim is `gs_ffi_mobile_render_svg`.
+    An extern declaration of a nonexistent symbol is not a compile error — it is an
+    undefined reference at link time, and on a platform where it resolves it is a
+    call to whatever is at that address. Every extern the sd bridge declares is now
+    checked against a definition.
+  * `into_handle()` returned `usize` where the boundary wanted `jlong`. The
+    compiler's own suggestion was `try_into().unwrap()` — a panic on a 32-bit ABI if
+    a pointer does not fit, and 32-bit Android is one of the four ABIs shipped.
+  * `GS_OK` was imported **twice**, by the same author, in two edits, while fixing
+    six errors. The compiler said so.
+  * `env.get_string()` takes `&mut self` in jni 0.21, so every entry point that reads
+    a Java string takes `mut env`. Checked across the file, not the two lines: all
+    seven that call it bind it mutably.
+
+## A COMMIT MESSAGE THAT DESCRIBED A CHANGE IT DID NOT CONTAIN
+
+`c9bd2d7` said:
+
+    build.rs          .file(... "gs_sd_wrapper.cpp")
+    CMakeLists.txt    add_library(gs_sd STATIC sd_wrapper/gs_sd_wrapper.cpp)
+
+and contained **neither** — `git add -A native/cpp` staged the two files inside
+that directory and left the two outside it edited and uncommitted. The rename of the
+sources landed, so the commit looked complete and passed review of its own diff.
+
+It cost three runs to find:
+
+    cc1plus: fatal error: ../../cpp/sd_wrapper/sd_wrapper.cpp: No such file or
+      directory
+
+A commit message that describes a change the commit does not contain is worse than a
+wrong change, because the message is what the next reader trusts instead of
+re-deriving it. The check that would have caught it is cheap and now stated in the
+message: **a build script naming a file that is not there fails only at the next
+compile, on a runner, twenty minutes later.**
+
+## TWO BUILD SYSTEMS, AND ONLY ONE OF THEM BUILDS THE MOBILE LIBRARY
+
+Checked rather than assumed, when an include path had to be added:
+
+    $ grep -E '^add_library|^add_executable' native/cpp/CMakeLists.txt
+    10:add_library(gs_abi STATIC src/gs_abi.cpp)
+    17:add_library(gs_llama STATIC llama_wrapper/llama_wrapper.cpp)
+    45:add_library(gs_sd STATIC sd_wrapper/gs_sd_wrapper.cpp)
+    51:add_library(gs_ocr STATIC ocr_wrapper/ocr_wrapper.cpp)
+
+    $ grep -c gs_mobile native/cpp/CMakeLists.txt
+    0
+
+`gs_mobile.cpp` is built **exclusively** through `build.rs`. Each `cc::Build` has
+its own `-I` list, so the `sd_wrapper` directory was only on the `gs_sd` compile
+while `gs_mobile.cpp` included `gs_sd_wrapper.h` — and each `cc::Build` compiles one
+unit, so neither one could see the other's problem:
+
+    gs_mobile.cpp:41:10: fatal error: gs_sd_wrapper.h: No such file or directory
+
+That asymmetry is invisible until someone greps for it, which is why it is written
+down rather than fixed.
+
+## NO LINK-ORDER CHANGE WAS NEEDED, AND THAT IS WORTH RECORDING
+
+The brief said the link order needed changing, with `libgs_sd.a` before
+`libgs_mobile.a`. It already was, and that is not the load-bearing fact anyway:
+
+  * `libgs_sd.a` references `gs_set_error` (in `libgs_abi.a`, compiled above) and
+    the sd.cpp archives. A static consumer must precede what it consumes, so the
+    four sd.cpp archives are emitted **before** `gs_sd`, in dependency order:
+    `stable-diffusion -> ggml -> ggml-cpu -> ggml-base`. Alphabetical is
+    `base, cpu, ggml, stable-diffusion` — **exactly backwards**, the same mistake
+    already recorded twice in that file for llama. Each archive is asserted to
+    exist.
+  * The sd.cpp archives do **not** have to come after `libgs_ffi.a`. Their consumer
+    on that path is the Rust object that references them, which is the link entry
+    point, not another archive. So only the order **among** the archives matters.
+
 ## iOS IS GREEN WITH A DEVICE BUILD, 48 TESTS, 0 FAILURES
 
 Run `36828234718`, head `c12e866`, all three jobs green.
