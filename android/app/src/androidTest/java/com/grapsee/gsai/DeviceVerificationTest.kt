@@ -1606,7 +1606,6 @@ class DeviceVerificationTest {
                 }
             }
         }
-        )
 
         // THE ELF DYNAMIC SYMBOL TABLE, PARSED. Not a byte scan.
         //
