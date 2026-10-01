@@ -130,8 +130,38 @@ if [ -n "$MISSING" ]; then
   exit 1
 fi
 
-# AND EACH ONE HAS EXACTLY ONE CALL SITE, AND IT IS ggml_print_backtrace.
+# AND, WHERE objdump CAN READ THIS ARCHITECTURE, EACH ONE HAS EXACTLY ONE CALL SITE.
 #
+# THE CAPABILITY IS PROBED, NOT ASSUMED. Run 36889999626, android-native arm64-v8a:
+#
+#     process-creating imports: execlp fork waitpid
+#     objdump: can't disassemble for architecture UNKNOWN!
+#     FAIL: the symbols are imported but objdump found no PLT call to any of them.
+#     The imports are then dead weight rather than a live path, which is BETTER --
+#     but it means this .so is not the one that was measured.
+#
+# That message was a statement about the LIBRARY produced by a limitation of the
+# TOOL. The x86_64 runner's objdump cannot disassemble an aarch64 object at all; it
+# needs aarch64-linux-gnu-objdump or llvm-objdump. And the real finding was one line
+# above it, which the check had already established and the failure then buried:
+#
+#     process-creating imports: execlp fork waitpid
+#
+# -- identical to x86_64, which is the claim that matters and which needs no
+# disassembler at all.
+#
+# So: if objdump cannot read this architecture, say THAT, and stop. The import-set
+# assertion has already passed by this point and is not affected.
+if ! objdump -d --no-show-raw-insn "$SO" > /dev/null 2>&1; then
+  echo "  NOTE: objdump cannot disassemble this architecture"
+  echo "        (on an x86_64 runner, aarch64 needs aarch64-linux-gnu-objdump or"
+  echo "        llvm-objdump). The call-site attribution is SKIPPED rather than"
+  echo "        reported as a finding, because a tool that cannot read the file"
+  echo "        knows nothing about what is in it."
+  echo "  The import set above is still asserted, and needs no disassembler."
+  exit 0
+fi
+
 # ONE objdump pass. The symbol set goes in as a REGEX built here, not as a variable
 # iterated inside awk. The first version passed EXPECTED_ARR="$EXPECTED" and did
 # `for (e in EXPECTED_ARR)`, which is a SCALAR in awk and fatals:
