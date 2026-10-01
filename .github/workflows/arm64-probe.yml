@@ -135,6 +135,48 @@ jobs:
       # runner's architecture: an arm64 image unpacked on an x86_64 host is a
       # different tree, and reusing one across architectures would be its own
       # false pass.
+      # THE ONE NUMBER THE OPERATOR ASKED FOR, and the probe never measured it.
+      #
+      # Two macOS runs (36831549014, 36831680143, both on macos-15-arm64) reached
+      # the emulator and printed
+      #
+      #     HVF error: HV_UNSUPPORTED
+      #     qemu-system-aarch64-headless: failed to initialize HVF: Invalid argument
+      #
+      # which says the accelerator is unusable, and NOT WHY. On macOS the
+      # accelerator is Hypervisor.framework, and `sysctl kern.hv_support` is the
+      # single value that distinguishes "this VM has no nested virtualisation" from
+      # "QEMU is misconfigured". 1 means HVF can work and any failure is ours;
+      # 0 means the hypervisor is not exposed at all and no configuration will fix
+      # it. Without it, "HV_UNSUPPORTED" is a symptom being read for a cause --
+      # which is the mistake this repository has had to undo repeatedly.
+      - name: On macOS, ask the hypervisor directly
+        run: |
+          set -euo pipefail
+          if [ "$(uname -s)" != Darwin ]; then
+            echo "not Darwin: Hypervisor.framework does not apply."
+            echo "On Linux the equivalent is /dev/kvm, measured in the step above."
+            exit 0
+          fi
+          echo "  uname -s = $(uname -s)"
+          echo "  uname -m = $(uname -m)"
+          HV=$(sysctl -n kern.hv_support 2>/dev/null || echo "unreadable")
+          echo "  sysctl kern.hv_support = $HV"
+          case "$HV" in
+            1) echo "  VERDICT: Hypervisor.framework is AVAILABLE."
+               echo "  So an arm64 guest could be accelerated, and an HVF error" 
+               echo "  from QEMU is a configuration problem on this runner --" 
+               echo "  which is ours to fix." ;;
+            0) echo "  VERDICT: nested virtualisation is OFF in this VM."
+               echo "  kern.hv_support = 0 is set by the HOST, not by QEMU, so no"
+               echo "  flag, image or config on the runner can change it. This is"
+               echo "  the hardware wall, measured rather than inferred."
+               echo "  ::error::kern.hv_support = 0 -- HVF cannot work here." ;;
+            *) echo "  VERDICT: could not read kern.hv_support, so the accelerator"
+               echo "  state is UNKNOWN and must not be reported either way."
+               echo "  ::error::sysctl kern.hv_support returned [$HV]." ;;
+          esac
+
       - name: Cache the Android SDK, so the boot is not the download
         uses: actions/cache@v4
         with:
