@@ -35,6 +35,27 @@ on:
         options:
           - macos-15
           - macos-latest
+          # THE REAL LABEL IS ubuntu-24.04-arm64, and it was MISSING.
+          #
+          # Run 36688288136 probed "ubuntu-24.04-arm" and reported
+          #
+          #     uname -m = aarch64, arch = arm64
+          #     ::error::/dev/kvm is absent on this arm64 runner
+          #
+          # which was read as "the arm64 Linux runner has no KVM, so item 2 is a
+          # hardware wall". But actions/runner-images lists the arm64 labels as
+          #
+          #     [ubuntu-24.04-arm64]: images/ubuntu/Ubuntu2404-Arm64-Readme.md
+          #     [ubuntu-26.04-arm64]: images/ubuntu/Ubuntu2604-Arm64-Readme.md
+          #     [ubuntu-22.04-arm64]: images/ubuntu/Ubuntu2204-Arm64-Readme.md
+          #
+          # -- arm64, not -arm. So the earlier probe may have resolved a
+          # DIFFERENT image, or a legacy one, and "no /dev/kvm" was measured on
+          # something that is not the current public arm64 image.
+          #
+          # The old label stays in the list so that evidence stays reproducible;
+          # if both report no /dev/kvm then the conclusion holds for both.
+          - ubuntu-24.04-arm64
           - ubuntu-24.04-arm
           - ubuntu-latest
   # A push trigger on a path nothing touches, so the workflow is INDEXED by the
