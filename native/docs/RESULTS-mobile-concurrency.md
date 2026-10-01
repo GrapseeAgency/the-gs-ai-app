@@ -660,11 +660,38 @@ a wiring gap that can be closed by exporting another symbol: it needs
 stable-diffusion.cpp's model and sampler called **in process** through a C ABI,
 which is a different piece of work rather than a smaller one.
 
-What *is* cheap and remains open: **`sd_render_svg` is already linked into the
-mobile `.so`** (`libgs_sd.a` is compiled unconditionally) but has **no
-`gs_ffi_mobile_*` entry point** — `gs_mobile.cpp` contains no reference to it. It
-is a procedural renderer with no weights, no GPU and no diffusion, which is
-precisely why it is the one worth exposing. One symbol and one device test.
+### The one closable piece, and the part that is not obvious
+
+**`sd_render_svg` is already linked into the mobile `.so`.** `build.rs` compiles
+`libgs_sd.a` **unconditionally**, with the comment *"procedural path always,
+diffusion when GS_SD_ROOT is set"* — so the wrapper is in the binary on every ABI
+today. It simply has **no `gs_ffi_mobile_*` entry point**: `gs_mobile.cpp`
+contains no reference to it.
+
+It is a procedural renderer with no weights, no GPU and no diffusion, which is
+exactly why it is the one worth exposing rather than the diffusion path.
+
+**The non-obvious part is the static link order, and it is a real constraint
+rather than a detail.** For static archives a consumer must precede what it
+consumes, and `build.rs` compiles the archives in this order:
+
+    gs_llama  ->  gs_abi  ->  gs_sd  ->  gs_mobile  ->  gs_batch
+
+so `libgs_sd.a` is already **before** `libgs_mobile.a`. If `gs_mobile.cpp` started
+calling `sd_render_svg`, the linker would look for it in `libgs_sd.a`, not find it
+there because it had already been passed, and fail. The same class of bug is
+recorded twice in `build.rs` already — the `lib` prefix on archive stems, and
+alphabetical ordering of `llama`/`ggml`/`ggml-cpu`/`ggml-base` — both of which
+produced walls of undefined symbols rather than anything naming the cause.
+
+So the change is **not** "add one symbol". It is: move `gs_sd` after `gs_mobile` in
+`build.rs` (or force-load it), add the C entry point in `gs_mobile.cpp`, the
+`#[no_mangle]` wrapper in `gs-ffi/src/mobile.rs`, the JNI method in `jni.rs` and the
+`external fun` in `GsNative.kt`, then a device test. Four layers and a link-order
+change, which is why it is recorded as sized open work rather than claimed as done.
+
+It is also the only image capability that could be *fast enough to matter* on a
+phone, given the 4808 ms TTFT above.
 
 **4. iOS frontend wiring — INCOMPLETE, and the gap is the test, not the code.**
 
