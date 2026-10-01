@@ -1409,21 +1409,67 @@ jobs:
           #
           # No `exit` in the awk, so it reads the whole input and cannot SIGPIPE
           # printf under pipefail -- which for APP=$(...) would kill the step.
-          APP=$(printf '%s\n' "$SETTINGS" \
-            | awk -F' = ' '/ BUILT_PRODUCTS_DIR /{d=$2}
-                           / FULL_PRODUCT_NAME /&&!seen {n=$2; seen=1}
-                           END{if(d && n) print d"/"n}')
-          EXE_NAME=$(printf '%s\n' "$SETTINGS" \
-            | awk -F' = ' '/ FULL_EXECUTABLE_NAME /&&!seen {print $2; seen=1}')
-          echo "  BUILT_PRODUCTS_DIR + FULL_PRODUCT_NAME -> ${APP:-<empty>}"
-          echo "  FULL_EXECUTABLE_NAME -> ${EXE_NAME:-<empty>}"
-
-          [ -n "$APP" ] && [ -n "$EXE_NAME" ] || {
-            echo "::error::$HOW did not resolve a product and an executable name."
-            echo "::error::first 25 lines of its output:"
-            printf '%s\n' "$SETTINGS" | sed -n '1,25p' | sed 's/^/    /'
+          # THE PRODUCT IS FOUND IN THE BUILD DIRECTORY, NOT ASKED FOR BY NAME.
+          #
+          # Run 36784337230 printed this and failed:
+          #
+          #     ::error::xcodebuild -showBuildSettings did not resolve a product
+          #     ::error::and an executable name.
+          #     ::error::first 25 lines of its output:
+          #     Command line invocation:
+          #     /Applications/Xcode_26.6.app/.../xcodebuild -showBuildSettings ...
+          #     Build settings from command line:
+          #     SDKROOT = iphoneos26.5
+          #     ...
+          #     ARCHS = arm64
+          #
+          # A perfectly good settings dump -- and BOTH keys are alphabetical, so
+          # they are hundreds of lines BELOW the 25 this printed. The dump was
+          # never the problem; my diagnostic was, and it hid the answer that would
+          # have answered the question immediately.
+          #
+          # So two changes. The resolution no longer depends on two settings
+          # being EMITTED at all: TARGET_BUILD_DIR resolved fine on the previous run
+          # and is what the product directory actually is, and there is exactly one
+          # .app directly inside it. The executable name is taken from the bundle
+          # name -- the Apple convention, and what the log shows:
+          #
+          #     Ld    .../Debug-iphoneos/App.app/App normal (in target 'App')
+          #     Touch .../Debug-iphoneos/App.app      (in target 'App')
+          #
+          # FULL_EXECUTABLE_NAME is still consulted when present and when the file
+          # it names exists, because that is the authoritative answer; existence is
+          # what decides, not preference.
+          BUILD_DIR=$(printf '%s\n' "$SETTINGS" \
+            | awk -F' = ' '/ TARGET_BUILD_DIR /&&!seen {print $2; seen=1}')
+          [ -n "$BUILD_DIR" ] || {
+            echo "::error::$HOW returned no TARGET_BUILD_DIR."
+            echo "::error::the settings keys this step reads, from its own output:"
+            printf '%s\n' "$SETTINGS" \
+              | grep -E ' (TARGET_BUILD_DIR|BUILT_PRODUCTS_DIR|FULL_PRODUCT_NAME|FULL_EXECUTABLE_NAME|PRODUCT_NAME|TARGET_NAME|CONFIGURATION) = ' \
+              | sed 's/^/    /' || true
+            echo "::error::($(printf '%s\n' "$SETTINGS" | grep -c ' = ') settings lines total)"
             exit 1
           }
+          echo "  TARGET_BUILD_DIR = $BUILD_DIR"
+
+          APP=$(find "$BUILD_DIR" -maxdepth 1 -name '*.app' 2>/dev/null | sed -n '1p')
+          [ -n "$APP" ] || {
+            echo "::error::no .app directly inside $BUILD_DIR."
+            echo "::error::what IS in it:"
+            ls -1 "$BUILD_DIR" 2>/dev/null | sed -n '1,20p' | sed 's/^/    /' || true
+            exit 1
+          }
+          BASE=$(basename "$APP" .app)
+          EXE_NAME=$(printf '%s\n' "$SETTINGS" \
+            | awk -F' = ' '/ FULL_EXECUTABLE_NAME /&&!seen {print $2; seen=1}')
+          if [ -n "$EXE_NAME" ] && [ -f "$APP/$EXE_NAME" ]; then
+            echo "  executable name: FULL_EXECUTABLE_NAME = $EXE_NAME (file exists)"
+          else
+            EXE_NAME="$BASE"
+            echo "  executable name: derived from the bundle = $EXE_NAME"
+          fi
+          echo "  product = $APP"
           if [ ! -d "$APP" ]; then
             echo "::error::$APP does not exist, so $HOW named a product that was"
             echo "::error::never built. There is deliberately NO find fallback here:"
