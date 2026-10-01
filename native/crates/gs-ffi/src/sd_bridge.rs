@@ -44,8 +44,54 @@ mod tests {
                 f.read_to_string(&mut s).unwrap();
                 assert!(s.starts_with("<svg"), "must be an svg root");
                 assert!(s.contains("Architecture"), "title must appear");
-                assert!(s.contains("orchestration"), "field must be rendered");
                 assert!(s.trim_end().ends_with("</svg>"), "must be closed");
+
+                // THE KEY AND ITS VALUE, AS A PAIR. This is the assertion that was
+                // missing, and the reason the row parser could be wrong for the
+                // entire life of this file.
+                //
+                // What was here before:
+                //
+                //     assert!(s.contains("orchestration"), "field must be rendered");
+                //
+                // which PASSED against a parser that never read a key at all,
+                // because that parser rendered the row
+                //
+                //     <text ...>400: orchestration</text>
+                //
+                // -- the value IS present, as part of the wrong row, paired with
+                // the previous value instead of with its own key. Asserting that a
+                // value appears cannot tell a correct pair from a shifted one; the
+                // defect is a one-position shift, and a one-position shift is
+                // invisible to any check that looks at one side of the pair.
+                //
+                // Found by c0_the_procedural_path_writes_a_real_svg_on_the_device,
+                // run 36868936414, on a spec identical to this one:
+                //
+                //     AssertionError: the SVG is missing "inference", so the spec
+                //     was not rendered.
+                for (k, v) in [("layer1", "orchestration"), ("layer2", "inference")] {
+                    let pair = format!("{k}: {v}");
+                    assert!(
+                        s.contains(&pair),
+                        "the SVG does not contain the PAIR {pair:?}, so the row \
+                         parser is not pairing keys with their own values.\n\
+                         Rendered rows:\n{}",
+                        s.lines()
+                            .filter(|l| l.contains("<text"))
+                            .collect::<Vec<_>>()
+                            .join("\n")
+                    );
+                }
+
+                // And the row COUNT, which is the other half of the defect: the old
+                // parser produced the right NUMBER of rows with the wrong content in
+                // them, so a count alone would also have passed.
+                let rows = s.matches("<g><rect").count();
+                assert_eq!(
+                    rows, 2,
+                    "expected one row per remaining field (layer1, layer2), got {rows}"
+                );
                 let _ = std::fs::remove_file(&out);
             }
             Err(e) => panic!("procedural render failed: {e}"),

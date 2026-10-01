@@ -382,26 +382,51 @@ int32_t gs_sd_render_svg(const char* spec_json, const char* output_path) {
     std::fprintf(f, "  <text x=\"40\" y=\"60\" font-size=\"28\" font-weight=\"600\">%s</text>\n",
                  title.c_str());
 
-    // Render each remaining "label": "value" pair as a row.
+    // Render each remaining "key": "value" pair as a row.
+    //
+    // THE PREVIOUS VERSION NEVER READ THE KEY. It searched for ':' first, which
+    // lands it on the VALUE's opening quote, and then took everything between
+    // that quote and the next one as the key. So every row was labelled with the
+    // PREVIOUS VALUE, and one real pair was silently dropped -- the last one,
+    // consumed while looking for a value it never found. Run 36868936414, on the
+    // device, with the spec a test sent:
+    //
+    //     <text ...>Engine Wiring: 800</text>
+    //     <text ...>400: orchestration</text>
+    //
+    // and "inference" absent from a file that was supposed to contain it. The
+    // row COUNT was right, which is why nothing noticed for the life of this
+    // function: the only test covering it asserted the file was non-empty.
+    //
+    // THIS VERSION WALKS QUOTED STRINGS, so the key is read as a key:
+    //
+    //     "key"  ->  ':'  ->  whitespace  ->  "value"
+    //
+    // and advances p past the VALUE's closing quote, so no pair is consumed
+    // twice and none is consumed and lost.
     size_t p = 0;
     int row = 0;
-    while ((p = spec.find(':', p)) != std::string::npos) {
-        ++p;
-        while (p < spec.size() && spec[p] == ' ') ++p;
-        if (p >= spec.size() || spec[p] != '"') { ++p; continue; }
-        size_t e = spec.find('"', p + 1);
+    while ((p = spec.find('"', p)) != std::string::npos) {
+        const size_t key_open = p;
+        size_t e = spec.find('"', key_open + 1);
         if (e == std::string::npos) break;
-        const std::string k = spec.substr(p + 1, e - p - 1);
-        p = e + 1;
-        while (p < spec.size() && spec[p] != ':') ++p;
-        if (p >= spec.size()) break;
-        ++p;
-        while (p < spec.size() && spec[p] == ' ') ++p;
-        if (p >= spec.size() || (spec[p] != '"' && spec[p] != '\'')) continue;
-        const char q = spec[p];
-        size_t e2 = spec.find(q, p + 1);
+        const std::string k = spec.substr(key_open + 1, e - key_open - 1);
+
+        size_t q = e + 1;
+        while (q < spec.size() && (spec[q] == ' ' || spec[q] == '\t')) ++q;
+        if (q >= spec.size() || spec[q] != ':') { p = e + 1; continue; }
+        ++q;
+        while (q < spec.size() && (spec[q] == ' ' || spec[q] == '\t')) ++q;
+        // A key with no quoted value is not a row. Skip the key and carry on
+        // rather than breaking: one malformed pair should not cost every pair
+        // after it.
+        if (q >= spec.size() || (spec[q] != '"' && spec[q] != '\'')) { p = e + 1; continue; }
+
+        const char quote = spec[q];
+        const size_t e2 = spec.find(quote, q + 1);
         if (e2 == std::string::npos) break;
-        const std::string v = spec.substr(p + 1, e2 - p - 1);
+        const std::string v = spec.substr(q + 1, e2 - q - 1);
+
         if (k != "title" && k != "width" && k != "height" &&
             k != "background" && k != "foreground") {
             std::fprintf(f,
@@ -411,8 +436,10 @@ int32_t gs_sd_render_svg(const char* spec_json, const char* output_path) {
                 100 + row * 44, 40, 122 + row * 44, k.c_str(), v.c_str());
             ++row;
         }
-        p = e2;
+        // Past the value, so this pair is neither re-read nor lost.
+        p = e2 + 1;
     }
+
     std::fprintf(f, "</svg>\n");
     std::fclose(f);
     return GS_OK;
