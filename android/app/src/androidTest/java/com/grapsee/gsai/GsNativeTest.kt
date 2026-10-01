@@ -8,7 +8,6 @@ import com.grapsee.gsai.native.GsNativeException
 import com.grapsee.gsai.native.GsNativeLoader
 import com.grapsee.gsai.ocr.MlKitOcr
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Test
@@ -83,6 +82,16 @@ class GsNativeTest {
             return null
         }
 
+    /**
+     * Ordinary English words, for a LIVENESS check on generated text.
+     *
+     * "Not empty" cannot tell a working model from one that answers everything with
+     * a space, and a liveness guard that can pass on a dead engine is worse than no
+     * guard: it makes the real assertion underneath it meaningless.
+     */
+    private val COMMON_WORDS =
+        listOf("the", "is", "a", "i", "you", "hello", "answer", "and", "to", "of", "it", "in")
+
     private fun requireModel(): String {
         val p = deviceModel
         assumeTrue(
@@ -104,11 +113,29 @@ class GsNativeTest {
             GsNativeLoader.isLibraryLoaded(),
         )
         val info = GsNative.buildInfo()
-        assertNotNull(info)
-        assertTrue("buildInfo was empty", info.isNotBlank())
-        // Recorded rather than asserted to a literal: the string changes when
-        // backends change, and a test that pins it fails for a reason that has
-        // nothing to do with correctness.
+        // There USED to be an assertNotNull here and its import is now gone,
+        // because it was VACUOUS: buildInfo() is declared `: String`, so the
+        // compiler already guarantees it, and a check that cannot fail inside a
+        // test about export is decoration. What the test's name claims is that
+        // the library EXPORTS build info, and an exported string that is blank is
+        // not build info.
+        assertTrue(
+            "buildInfo was empty, so the exported string carries no information",
+            info.isNotBlank(),
+        )
+        // Not pinned to a literal -- the string changes when backends change, and a
+        // test that pins it fails for a reason unrelated to correctness -- but it
+        // IS pinned to STRUCTURE, which is the part that is a promise: the name and
+        // a dotted version, because a caller that prints this into a bug report has
+        // to be able to read a version out of it.
+        assertTrue(
+            "buildInfo does not name the library: \"$info\"",
+            info.contains("gs-ffi"),
+        )
+        assertTrue(
+            "buildInfo carries no version number: \"$info\"",
+            Regex("""\d+\.\d+""").containsMatchIn(info),
+        )
         println("GsNativeTest: build = $info, backendAvailable = ${GsNative.backendAvailable()}")
     }
 
@@ -127,7 +154,25 @@ class GsNativeTest {
 
         // A SUCCESS returns text.
         val ok = GsNative.chat("hello")
-        assertTrue("chat returned an empty string on a working engine", ok.isNotBlank())
+
+        // THIS HALF IS A LIVENESS GUARD, not the assertion. The test is about
+        // failure raising; this proves the engine is alive so that the throw below
+        // is evidence about an empty prompt rather than about a dead engine.
+        //
+        // Which means "not empty" is the wrong bar for it: a build that answered
+        // every prompt with a single space would satisfy isNotBlank() and make the
+        // throw below meaningless. It asserts ordinary English instead -- cheap
+        // here, and deliberately weaker than
+        // a1_chat_returns_real_text in DeviceVerificationTest.kt, which is the
+        // thorough version and does not need duplicating.
+        val words = ok.lowercase().split(Regex("[^a-z]+")).filter { it.isNotEmpty() }.toSet()
+        val hits = COMMON_WORDS.filter { words.contains(it) }
+        assertTrue(
+            "the engine answered \"hello\" with text containing no ordinary " +
+                "English word, so it is not alive and the throw below would prove " +
+                "nothing. Reply: $ok",
+            hits.isNotEmpty(),
+        )
         assertFalse(
             "chat returned an unavailability marker: $ok",
             ok.contains("unavailable", ignoreCase = true),
