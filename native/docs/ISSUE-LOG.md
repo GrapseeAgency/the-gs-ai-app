@@ -1079,3 +1079,77 @@ before it was right.** The first two fixtures omitted the four-space indent real
 `xcodebuild` puts in front of every setting, and the second was silently
 overwritten mid-call by a leftover script. Both would have had me "fixing" correct
 code. A harness needs checking as carefully as the thing it checks.
+
+## THE iOS DEVICE BUILD: SEVEN RUNS, SEVEN DIFFERENT CAUSES
+
+The operator's fourth item — "iOS device build (not just simulator)" — was
+INCOMPLETE because the workflow built only `-sdk iphonesimulator` and justified it:
+*"the device slice needs a signing identity and a physical device."* The second
+half of that is wrong. A **signed** app needs an identity; an **installed** app
+needs a device; an **unsigned** `.app` for `iphoneos` builds with
+`CODE_SIGNING_ALLOWED=NO`, exactly as the simulator build in the same job already
+did. The slice was never un-buildable here.
+
+What was missing, and what only a device build can catch: **both slices are
+arm64**, so `lipo` cannot tell them apart and a simulator build passes any
+architecture assertion. What differs is the platform, and nothing asserted it.
+
+Adding the build and the assertion took seven runs, and **no two failures had the
+same cause**:
+
+| run | what it reported | what was actually wrong |
+| --- | --- | --- |
+| `36782878437` | `GSApp.app is not a Debug-iphoneos product` | the PRODUCT is `App.app`. `GSApp` is the scheme and the module; `project.yml` leaves `PRODUCT_NAME` at the XcodeGen default so the `AppTests` TEST_HOST resolves |
+| `36784337230` | settings "did not resolve a product" | **my diagnostic** printed 25 of ~200 lines, and the keys are alphabetical, so they were hundreds of lines below what it printed |
+| `36814592966` | `no GsFfi.framework inside the DEVICE .app` | the xcframework is built with `-library`, so it is **static**; a static framework is linked in and deliberately never embedded |
+| `36816078754` | `nm` returned 0 on the app binary | an iOS **app executable's globals are stripped** — nothing links against them. Correct behaviour, wrong check |
+| `36818412286` | `nm` returned 0 on the archive | **wrong reader.** Xcode 26.6's `nm` rejects rustc's LLVM-22 objects and reports 0 |
+| `36819532571` | `no llvm-nm in the Rust sysroot` | **wrong discovery.** `llvm-nm` ships in the `llvm-tools` component, which `count_exported_symbols.sh` already installs |
+| `36820816726` | reader "returned nothing", counter said 10 | the `NAMES=$(...)` assignment had been **deleted by my own earlier edit** |
+
+Two of those seven were bugs I introduced into my own new code, and one of them was
+a mechanism the repository had already documented.
+
+### The two that are worth generalising
+
+**A mechanism with its failure mode already written down is not an invitation to
+reimplement it.** `count_exported_symbols.sh` carries the raw error:
+
+    nm: error: .../libgs_ffi.a(gs_ffi...rcgu.o): Unknown attribute kind (105)
+      (Producer: 'LLVM22.1.8-rust-1.98.1-stable'
+       Reader: 'LLVM APPLE_1_2100.1.1.101_0')
+
+and its docstring names my exact mistake in its own words: *"Earlier this same
+check hid the problem twice before: `nm -gU ... 2>/dev/null` turned the failure into
+a count of 0 with no explanation."* I used `nm -a ... 2>/dev/null || true`. I
+grepped for `nm `, read the fatten step, and did not read the comment block above
+the counter.
+
+**A deleted assignment is not a syntax error.** The `NAMES` and `APP_NM` lines were
+edited out while replacing the blocks around them; both variables were still read,
+`bash -n` was clean, both existing lints were clean, and the step ran to its own
+guard and reported a reader problem instead. `check_unassigned_reads.py` exists for
+that class — and is wired in as a **NOTE, not a gate**, because it has a
+demonstrable false positive in this tree: it reports `$SDK_BUILTOOLS` in
+android-release.yml's Gates step, whose own first line assigns it.
+
+That last one is the honest ending. Had I trusted the lint's output without reading
+the step it named, I would have "fixed" a working release gate.
+
+### What the device build is now asserted to be
+
+From the built bytes, and the log says which of these is which:
+
+1. the product is under `Debug-iphoneos` **by directory name** — the only thing
+   that distinguishes it from the simulator product, since both are arm64
+2. the executable is `Mach-O 64-bit executable arm64`
+3. the **device slice** `GsFfi.xcframework/ios-arm64/libgs_ffi.a` exists and
+   `llvm-nm --defined-only --extern-only` finds **all ten** `gs_ffi_mobile_*`
+   entry points in it — `ios-arm64`, never `ios-arm64-simulator`
+4. the app **links** it, proven by `GsNative.swift` calling
+   `gs_ffi_mobile_backend_available()` **unguarded**: no module fails the COMPILE,
+   no symbols fail the LINK, and neither happened
+
+And what is **not** claimed, printed in the step's own output: a signed `.ipa`
+(needs an identity and a provisioning profile this repository does not have), and
+**execution** — nothing here runs the device binary.
