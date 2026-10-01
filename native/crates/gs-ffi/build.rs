@@ -614,6 +614,17 @@ fn main() {
             .std("c++17")
             .include(&inc)
             .include(&mdir)
+            // gs_mobile.cpp includes "gs_sd_wrapper.h", so the sd_wrapper directory
+            // has to be on ITS include path. Run 36854175805:
+            //
+            //   gs_mobile.cpp:41:10: fatal error: gs_sd_wrapper.h: No such file or
+            //     directory
+            //
+            // because each cc::Build has its own -I list and the sd_wrapper one is
+            // only on the gs_sd compile. Adding an #include to a .cpp without
+            // adding the directory to the build that compiles it is a change that
+            // only fails at the compiler, on a runner.
+            .include(cpp.join("sd_wrapper"))
             // `cc::Build::define` prefixes the name itself, so passing
             // "GS_MOBILE_VERSION=\"0.1.0\"" produced -DGS_MOBILE_VERSION=GS_MOBILE_VERSION="0.1.0".
             // The value is a version string with dots, which the preprocessor

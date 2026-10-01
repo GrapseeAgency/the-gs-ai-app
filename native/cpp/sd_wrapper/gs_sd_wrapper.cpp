@@ -324,6 +324,11 @@ int32_t gs_sd_generate(gs_sd_ctx_t* ctx,
     if (rc != GS_OK) return rc;
     return GS_OK;
 #else
+    // Unused here and only here: without the library there is no sampler to give a
+    // negative prompt to. Said rather than left to -Wunused-parameter, because a
+    // warning that is expected and unexplained is a warning the next person
+    // silences by disabling the warning.
+    (void)negative_prompt;
     set_err("gs_sd_generate: stable-diffusion.cpp is not linked into this build");
     return GS_ERR_UNAVAILABLE;
 #endif
