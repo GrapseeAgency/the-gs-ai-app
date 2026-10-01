@@ -121,16 +121,57 @@ internal class Elf64(private val bytes: ByteArray) {
         val out = ArrayList<Section>(eShnum)
         for (i in 0 until eShnum) {
             buf.position((eShoff + i.toLong() * eShentsize).toInt())
-            out.add(
-                Section(
-                    nameOffset = buf.int,
-                    type = buf.int,
-                    offset = buf.long,
-                    size = buf.long,
-                    link = buf.int,
-                    entsize = buf.long,
-                )
-            )
+
+            // ALL TEN FIELDS, IN ORDER. This is the bug the device found.
+            //
+            // The previous version read only the six it wanted, sequentially:
+            //
+            //     nameOffset = buf.int    // +0  sh_name
+            //     type       = buf.int    // +4  sh_type
+            //     offset     = buf.long   // +8  sh_FLAGS
+            //     size       = buf.long   // +16 sh_addr
+            //     link       = buf.int    // +24 the LOW half of sh_offset
+            //     entsize    = buf.long   // +32 across sh_offset and sh_size
+            //
+            // because the fields it skipped sit BETWEEN the ones it read. A section
+            // header is 64 bytes:
+            //
+            //   +0  sh_name u32       +4  sh_type u32       +8  sh_flags u64
+            //   +16 sh_addr u64       +24 sh_offset u64     +32 sh_size u64
+            //   +40 sh_link u32       +44 sh_info u32       +48 sh_addralign u64
+            //   +56 sh_entsize u64
+            //
+            // Every read was in bounds and every type was correct, so it compiled and
+            // returned numbers. It returned the WRONG numbers: `offset` was sh_flags,
+            // a bitmask, so .shstrtab pointed into the middle of nothing and no
+            // section name ever matched ".dynsym".
+            //
+            // On the device, run 36900149051:
+            //
+            //     AssertionError: the .dynsym table was not read: 0 entries.
+            //     Zero here means the parse failed and every check below would pass
+            //     VACUOUSLY.
+            //
+            // That guard is the only reason this was caught at all: it turned a
+            // silent misparse into a named failure instead of a green run.
+            //
+            // The algorithm was verified against the real .so before the Kotlin was
+            // written -- as a Python port that used struct.unpack_from with EXPLICIT
+            // offsets, which is why IT was right and reported 344 entries. Sequential
+            // reads are where the correctness was lost, and nothing in the Kotlin
+            // hinted at it.
+            val nameOffset = buf.int // sh_name
+            val type = buf.int // sh_type
+            buf.long // sh_flags
+            buf.long // sh_addr
+            val offset = buf.long // sh_offset
+            val size = buf.long // sh_size
+            val link = buf.int // sh_link
+            buf.int // sh_info
+            buf.long // sh_addralign
+            val entsize = buf.long // sh_entsize
+
+            out.add(Section(nameOffset, type, offset, size, link, entsize))
         }
         require(eShstrndx in out.indices) { "e_shstrndx=$eShstrndx is out of range" }
         out
