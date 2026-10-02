@@ -2476,6 +2476,95 @@ jobs:
           printf 'iOS test arch (MEASURED by the test process): %s\n' "$RAN" >> "$GITHUB_STEP_SUMMARY"
           echo "VERIFIED: $PASSED passed, $SKIPPED skipped on the iOS simulator, arch=$RAN reported by the test process"
 
+      - name: Inventory the unsigned device App.app
+        run: |
+          set -uo pipefail
+          APP="${IOS_APP_PATH:-}"
+          if [ -z "$APP" ] || [ ! -d "$APP" ]; then
+            echo "::error::IOS_APP_PATH is unset or does not name a directory: '$APP'"
+            echo "::error::The device-build step sets it; if that step did not run, there"
+            echo "::error::is no device product and this inventory must not pass quietly."
+            exit 1
+          fi
+
+          echo "=== size ==="
+          du -sh "$APP"
+          du -sk "$APP" | awk '{printf "  %.2f MiB\n", $1/1024}'
+
+          echo
+          echo "=== bundle layout (top level) ==="
+          ls -la "$APP"
+
+          echo
+          echo "=== embedded frameworks ==="
+          if [ -d "$APP/Frameworks" ]; then
+            ls -la "$APP/Frameworks"
+          else
+            echo "  (no Frameworks directory)"
+          fi
+
+          echo
+          echo "=== EVERY Mach-O binary inside the bundle, and its architecture ==="
+          BAD=0
+          N=0
+          while IFS= read -r BIN; do
+            [ -f "$BIN" ] || continue
+            DESC=$(file -b "$BIN" 2>/dev/null || echo '<unreadable>')
+            case "$DESC" in
+              *Mach-O*)
+                N=$((N + 1))
+                LIPO=$(lipo -info "$BIN" 2>/dev/null || echo 'lipo: not fat')
+                printf '  %s\n      file: %s\n      lipo: %s\n' "${BIN#$APP/}" "$DESC" "$LIPO"
+                if printf '%s %s' "$DESC" "$LIPO" | grep -q 'arm64'; then
+                  echo "      -> arm64 OK"
+                else
+                  echo "      ::error::NOT arm64: ${BIN#$APP/} ($DESC)"
+                  BAD=$((BAD + 1))
+                fi
+                ;;
+              *) printf '  %-52s %s\n' "${BIN#$APP/}" "$DESC" ;;
+            esac
+          done < <(find "$APP" -type f \( -perm -111 -o -name '*.dylib' -o -path '*/Frameworks/*' \) 2>/dev/null | sort)
+          echo "  Mach-O binaries inspected: $N"
+          if [ "$BAD" -ne 0 ]; then
+            echo "::error::$BAD Mach-O binary/binaries inside the device bundle are not arm64."
+            exit 1
+          fi
+          if [ "$N" -eq 0 ]; then
+            echo "::error::no Mach-O binary was found inside the bundle, so asserting"
+            echo "::error::arm64 on the main executable proved nothing about any"
+            echo "::error::embedded binary. A green step here would be vacuous."
+            exit 1
+          fi
+
+          echo
+          echo "=== codesign --verify --deep, expected to FAIL on signing only ==="
+          CSOUT=$(codesign --verify --deep --verbose=4 "$APP" 2>&1) && CSRC=0 || CSRC=$?
+          echo "  codesign exit: $CSRC"
+          printf '%s\n' "$CSOUT" | sed 's/^/    /' | head -20
+          if [ "$CSRC" -eq 0 ]; then
+            echo "  (it passed; unusual for an unsigned bundle, and is reported as such)"
+          elif printf '%s' "$CSOUT" | grep -qiE 'not signed|no signature|unsigned'; then
+            echo "  VERIFIED: the only problem is the missing signature, which is"
+            echo "  VERIFIED: expected for an unsigned bundle, and every Mach-O binary"
+            echo "  VERIFIED: inside is a readable arm64."
+          else
+            echo "::error::codesign failed for a reason OTHER than a missing signature."
+            echo "::error::A broken bundle must not be filed under 'unsigned'."
+            exit 1
+          fi
+
+          echo
+          echo "=== device .app inventory COMPLETE ==="
+
+      - name: Upload the unsigned device App.app
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-device-app-unsigned
+          if-no-files-found: error
+          path: ${{ env.IOS_APP_PATH }}
+          retention-days: 7
       - name: Upload the logs and the xcframework test evidence
         if: always()
         uses: actions/upload-artifact@v4
