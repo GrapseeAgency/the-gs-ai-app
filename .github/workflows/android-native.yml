@@ -507,12 +507,23 @@ jobs:
           # A cdylib that exists but exports nothing loads and fails at the
           # first call, so the ABI is asserted, not assumed.
           N=$(nm -D --defined-only "$DEST/libgs_ffi.so" | grep -c 'gs_ffi_mobile_' || true)
-          echo "gs_ffi_mobile_* exported: $N"
-          # The floor matches the ABI rather than a number that used to be close.
-          # Seventeen now; the full per-symbol comparison is in the verify step
-          # below, because a floor count can pass with the WRONG symbols.
-          [ "$N" -ge 17 ] || {
-            echo "FAIL: the ABI has 17 gs_ffi_mobile_* entry points, got $N"; exit 1; }
+          ABI="$GITHUB_WORKSPACE/.github/scripts/gs_mobile_abi.txt"
+          WANT_N=$(grep -cve '^[[:space:]]*#' -e '^[[:space:]]*$' "$ABI")
+          echo "gs_ffi_mobile_* exported: $N, ABI declares: $WANT_N"
+          # The floor is DERIVED from the declared ABI, not written down beside
+          # it. It used to be a literal 17 with a comment saying it "matches the
+          # ABI", which it did not -- and a floor cannot notice a set growing, so
+          # it would have gone on passing at 17 while the ABI was 18.
+          #
+          # A floor is still the right check HERE because this is the cheap step
+          # that runs before the expensive one: a cdylib that exports nothing
+          # loads and then fails at the first call, and that deserves to fail
+          # fast. The floor cannot establish the ABI -- the full per-symbol
+          # comparison in the verify step below does that, from the same file.
+          [ "$N" -ge "$WANT_N" ] || {
+            echo "::error::the .so exports $N gs_ffi_mobile_* entry points; the ABI declares $WANT_N"
+            echo "::error::declared in $ABI -- add new symbols there, not to a number in this file"
+            exit 1; }
 
       - name: Verify the artifact
         run: |
@@ -539,15 +550,14 @@ jobs:
           # as a SET. Read from the source rather than remembered: the whole
           # stable-diffusion ABI was nearly misnamed as `stable_diffusion_*` when
           # the pinned upstream header was actually fetched.
-          EXPECTED_ABI="gs_ffi_mobile_abi_version gs_ffi_mobile_backend_available \
-            gs_ffi_mobile_build_info gs_ffi_mobile_chat gs_ffi_mobile_create \
-            gs_ffi_mobile_embed_dim gs_ffi_mobile_embed_image gs_ffi_mobile_free \
-            gs_ffi_mobile_ocr gs_ffi_mobile_should_use_local \
-            gs_ffi_mobile_sd_create gs_ffi_mobile_sd_set_options \
-            gs_ffi_mobile_sd_available gs_ffi_mobile_sd_backend_name \
-            gs_ffi_mobile_sd_generate gs_ffi_mobile_sd_free \
-            gs_ffi_mobile_render_svg"
-          WANT=$(printf '%s\n' $EXPECTED_ABI | sort -u)
+          # The SAME file the floor check read, so the two cannot disagree. The
+          # inline list this replaced was a second copy of the ABI in a
+          # different format, and the floor beside it was a third copy as a
+          # number -- three places to update, which is three chances to update
+          # two of them.
+          ABI="$GITHUB_WORKSPACE/.github/scripts/gs_mobile_abi.txt"
+          [ -r "$ABI" ] || { echo "::error::the ABI list $ABI is missing or unreadable"; exit 1; }
+          WANT=$(grep -ve '^[[:space:]]*#' -e '^[[:space:]]*$' "$ABI" | sed 's/^/gs_ffi_mobile_/' | sort -u)
           GOT=$(nm -D --defined-only "$SO" | grep -oE 'gs_ffi_mobile_[A-Za-z_0-9]+' | sort -u)
           echo "expected $(printf '%s\n' "$WANT" | wc -l | tr -d ' ') symbols, found $(printf '%s\n' "$GOT" | wc -l | tr -d ' ')"
           MISSING=$(comm -23 <(printf '%s\n' "$WANT") <(printf '%s\n' "$GOT"))
@@ -562,7 +572,7 @@ jobs:
             # not a broken build, and failing on it would make the gate
             # impossible to extend without editing this file first.
             echo "::warning::the .so exports gs_ffi_mobile_* symbols this check does"
-            echo "::warning::not know about -- add them to EXPECTED_ABI deliberately:"
+            echo "::warning::not know about -- add them to .github/scripts/gs_mobile_abi.txt deliberately:"
             printf '%s\n' "$UNEXPECTED" | sed 's/^/    /'
           fi
           echo "all $(printf '%s\n' "$WANT" | wc -l | tr -d ' ') expected gs_ffi_mobile_* symbols present"

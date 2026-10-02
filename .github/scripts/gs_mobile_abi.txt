@@ -1,0 +1,41 @@
+# The gs_ffi_mobile_* C ABI, one symbol per line.
+#
+# BOTH CHECKS IN android-native.yml READ THIS FILE: the cheap floor before the
+# build is verified, and the per-symbol set comparison after. They therefore
+# provably describe the same set, and a new symbol cannot be added to one and
+# forgotten in the other.
+#
+# ios-native.yml DOES NOT READ THIS FILE, on purpose. It pins a ten-symbol
+# SUBSET -- the non-diffusion surface, listed inline in that workflow. The iOS
+# DEVICE slice is not required to carry the sd_* entry points, so pointing its
+# check at the full list here would fail it for a reason that has nothing to do
+# with iOS. When the iOS slice does gain the SD symbols, move that list here
+# too; until then, the subset stays where the rule that explains it lives.
+#
+# The floor check used to be a literal `-ge 17` in the workflow with a comment
+# claiming it "matches the ABI". It did not, and it would have kept passing at 17
+# while the ABI was 18 -- a floor cannot notice a set growing. That is why the
+# count is now `wc -l` of this file rather than a number anyone has to remember
+# to bump.
+#
+# Names only. The `gs_` prefix is not repeated: these are suffixes, and the
+# checker concatenates it, so a line here can never disagree with the pattern it
+# is grepped for.
+abi_version
+backend_available
+build_info
+chat
+create
+create_tuned
+embed_dim
+embed_image
+free
+ocr
+should_use_local
+sd_create
+sd_set_options
+sd_available
+sd_backend_name
+sd_generate
+sd_free
+render_svg

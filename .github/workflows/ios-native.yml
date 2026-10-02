@@ -1794,6 +1794,7 @@ jobs:
                    gs_ffi_mobile_build_info \
                    gs_ffi_mobile_chat \
                    gs_ffi_mobile_create \
+                   gs_ffi_mobile_create_tuned \
                    gs_ffi_mobile_embed_dim \
                    gs_ffi_mobile_embed_image \
                    gs_ffi_mobile_free \

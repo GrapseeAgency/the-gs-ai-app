@@ -91,6 +91,22 @@ jobs:
           }
           python3 .github/scripts/check_kt_braces.py "${KT[@]}"
 
+      # The ABI is written down in TWO places that are not the same list on
+      # purpose: the full set in .github/scripts/gs_mobile_abi.txt, and an
+      # eleven-symbol non-diffusion subset inline in ios-native.yml, because the
+      # iOS device slice is not required to carry the sd_* entry points.
+      #
+      # "They are supposed to agree" was not enforced by anything, and the
+      # android-native floor was a hand-written `-ge 17` with a comment claiming
+      # it matched the ABI. It did not: it would have kept passing at 17 while the
+      # ABI was 18, because a floor cannot notice a set growing. The floor and the
+      # per-symbol comparison now both read the .txt, and this lint checks that
+      # the iOS subset is a real, non-empty subset of it.
+      - name: The two ABI lists agree
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/check_abi_lists_agree.py
+
       - name: Install the Android SDK
         run: |
           set -euo pipefail
