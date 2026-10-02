@@ -56,9 +56,36 @@ import json
 import sys
 
 
+def list_artifacts(path, prefix):
+    """Print the artifact list, for the three-cause diagnostic.
+
+    Sorted by name, because the diagnostic's whole job is to let a reader tell
+    "built under another name" from "not built at all", and an unsorted list makes
+    that a hunt. `prefix` is the annotation to put on each line, so the caller
+    can emit `::error::` annotations from a plain script.
+    """
+    try:
+        with open(path) as fh:
+            data = json.load(fh)
+    except Exception as e:  # noqa: BLE001
+        print("%scould not read %s as the artifacts list: %s" % (prefix, path, e),
+              file=sys.stderr)
+        return
+    artifacts = data.get("artifacts", []) if isinstance(data, dict) else []
+    if not artifacts:
+        print("%s(no artifacts at all in this run)" % prefix)
+        return
+    for a in sorted(artifacts, key=lambda x: x.get("name", "")):
+        print("%s    %-34s %10s bytes  expired=%s"
+              % (prefix, a.get("name", ""), a.get("size_in_bytes", "?"), a.get("expired")))
+
+
 def main(argv):
+    if len(argv) == 3 and argv[1] == "--list":
+        list_artifacts(argv[2], "::error::")
+        return 0
     if len(argv) != 3:
-        print("usage: print_artifact_id.py <artifacts.json> <name>", file=sys.stderr)
+        print("usage: print_artifact_id.py [--list] <artifacts.json> [name]", file=sys.stderr)
         return 0
     path, want = argv[1], argv[2]
     try:

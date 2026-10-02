@@ -384,12 +384,13 @@ jobs:
             # needs a different fix. The available list is printed so the reader
             # can tell "built under another name" from "not built at all".
             echo "::error::$WANT is not in deps run $DEPS_RUN_ID. Artifacts present:"
-            python3 -c '
-              import json,sys
-              d=json.load(open(sys.argv[1]))
-              for a in sorted(d.get("artifacts",[]), key=lambda x: x["name"]):
-                  print("::error::    %-34s %10s bytes  expired=%s" % (a["name"], a["size_in_bytes"], a.get("expired")))
-            ' "$LIST"
+            # --list, not another inline `python3 -c`. This one happens to work
+            # today, and that is exactly why it is going: its correctness depends
+            # on how YAML's block scalar happens to strip the indentation, which
+            # is not a property anyone can see in the file. See
+            # .github/scripts/print_artifact_id.py for the whole story.
+            python3 "$GITHUB_WORKSPACE/.github/scripts/print_artifact_id.py" \
+                    --list "$LIST"
             echo "::error::One of three things is true, and they need different fixes:"
             echo "::error::  1. android-deps.yml's stablediffusion job did not build this ABI."
             echo "::error::     It now builds a matrix of [arm64-v8a, x86_64] only, so"

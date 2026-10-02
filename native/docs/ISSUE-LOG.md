@@ -2403,3 +2403,86 @@ right answer and returned the wrong one, and this.
 
 Both are *narrow on purpose*. A narrow check that is right is worth more than a
 general one that is nearly right, and the general one has now failed six times.
+
+## THE THIRD INLINE-PYTHON TRAP, AND A MECHANISM I COULD NOT PIN DOWN
+
+The SD fetch step died at **parse time**, before executing a statement:
+
+```
+deps run: 36963660068, looking for artifact: stablediffusion-x86_64
+File "<string>", line 2
+import json,sys
+IndentationError: unexpected indent
+##[error]Process completed with exit code 1.
+```
+
+It had found the *right* deps run. The three-cause diagnostic it was written to
+print never ran — and a gate whose failure is a silent abort is the one thing its
+own header says is worse than no gate.
+
+### The mechanism, as far as I can actually establish it
+
+**I do not know why that program was an IndentationError, and I am not going to
+write down a confident-sounding reason.** What I can state as measured:
+
+| program | result |
+|---|---|
+| `python3 -c $'\n    x=1\n    print(x)'` | **accepted**, exit 0 |
+| `python3 -c $'x=1\n    y=2'` | **IndentationError**, exit 1 |
+
+So a leading newline followed by *consistently* indented lines is fine, and a
+**dedent** is what Python rejects. The CI log shows line 2 as `import json,sys`
+with **no** indent, which means the program python received had code on line 1 and
+an unindented `import` on line 2.
+
+My first explanation was that YAML's block scalar determines its own indent from
+the first non-empty line, so the empty line between the opening quote and the
+first statement keeps its indentation. **I then tested that and it did not
+reproduce** — the exact string that `yaml.safe_load` produces for that step runs
+correctly here. My test before that had extracted a *snippet* into a fresh script
+rather than going through the block scalar at all, so it proved nothing, and I
+nearly wrote the wrong mechanism into this log on the strength of it.
+
+What is left is: the shape is fragile, it fires on this runner, and it fires
+*before any statement runs*, so a gate containing it can die without printing its
+own diagnostic. That is sufficient reason to remove it, and insufficient reason
+to claim a cause.
+
+### The fix is the one the repository already established
+
+`ios-native.yml` records the same trap with a *different* symptom — a body line at
+column 0 **ended** the block scalar and the remainder parsed as YAML mapping keys
+— and fixed it with `pick_simulator_udid.py`. **A multi-line program inside a YAML
+`run: |` block is a file, not an argument.** Three instances, one fix, and the fix
+is a file.
+
+`.github/scripts/print_artifact_id.py` replaces both inline pythons in the step.
+It also fixes a second, quieter bug: it exits **0 in every case**, including "not
+found" and "the file is not JSON". The inline version's exit status was non-zero
+on a missing name, and `ID=$(...)` is an *assignment*, so `set -euo pipefail` would
+kill the step on the assignment rather than at the `if` written to handle exactly
+that.
+
+### What the replacement is verified against
+
+Run 36963660068's **real** artifact list:
+
+```
+stablediffusion-x86_64           -> id='11208263244'
+stablediffusion-arm64-v8a        -> id='11208957786'
+stablediffusion-arm64            -> id=''      <- the pre-matrix name
+stablediffusion-armeabi-v7a      -> id=''      <- legitimately not built
+```
+
+and the diagnostic, which is the reason it exists:
+
+```
+::error::    stablediffusion-arm64-v8a            17722133 bytes  expired=False
+::error::    stablediffusion-x86_64               17859809 bytes  expired=False
+```
+
+A reader who is being told "not in this run" can see, in two lines, whether the
+answer is **cause 1** (this ABI is not in the matrix) or **cause 3** (the run
+predates the matrix). That distinction is the entire value of the three-cause
+message, and an artifact list printed by a six-line inline python is one bad
+indentation away from not existing.
