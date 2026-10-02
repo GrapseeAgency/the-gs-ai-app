@@ -1142,37 +1142,57 @@ to disabled for every caller that had not opted in.
 
 ### LEVER 4 — quantisation: ALL FOUR rows, and the shipped default is the slowest
 
-Run **37005521803**, after the `while read` fix that had been silently preventing
-three of the four files from being downloaded at all. `qwen2.5-0.5b-instruct`,
-`perfPrompt`, CPU-only x86_64 emulator, `GGML_BLAS=OFF`.
+**Two independent runs, both with all four rows**, after the `while read` fix that
+had been silently preventing three of the four files from being downloaded at all.
+`qwen2.5-0.5b-instruct`, `perfPrompt`, CPU-only x86_64 emulator, `GGML_BLAS=OFF`.
 
-| quantisation | bytes | TTFT ms | tok/s | facts | rank by TTFT | rank by tok/s |
-|---|---:|---:|---:|---:|---:|---:|
-| **Q4_0** | 428,730,208 | **792** | **37.35** | 9/10 | 1 | 1 |
-| Q8_0 | 675,710,816 | 942 | 26.77 | 9/10 | 2 | 2 |
-| Q5_K_M | 522,186,592 | 3805 | 13.25 | 9/10 | 3 | 3 |
-| Q4_K_M *(shipped control)* | 491,400,032 | 4269 | 11.65 | 8/10 | 4 | 4 |
+| quantisation | bytes | TTFT ms<br>run 1 / run 2 | tok/s<br>run 1 / run 2 | facts<br>run 1 / run 2 | rank |
+|---|---:|---:|---:|---:|---:|
+| **Q4_0** | 428,730,208 | **792 / 788** | **37.35 / 45.76** | 9/10 · 9/10 | 1 |
+| Q8_0 | 675,710,816 | 942 / 871 | 26.77 / 39.93 | 9/10 · 9/10 | 2 |
+| Q5_K_M | 522,186,592 | 3805 / 3438 | 13.25 / 15.93 | 9/10 · 9/10 | 3 |
+| Q4_K_M *(shipped control)* | 491,400,032 | 4269 / 3830 | 11.65 / 14.63 | 8/10 · 8/10 | 4 |
 
-**Q4_0 dominates the shipped control on every axis measured:** 5.4x lower TTFT,
-3.2x the decode rate, one more fact correct, and 13% smaller on disk. Every
-comparison in this paragraph is **within this one run**, on one emulator, against
-one model file, so none of it depends on the cross-run drift described below.
+Runs **37005521803** and **37022078121**. The second run's `LEVERS4 measured 4 of
+4 quantisations` line is the new assertion doing its job: it is now impossible for
+a partial sweep to be reported as a measurement.
+
+**The ordering reproduced exactly, on both metrics, in both runs**, and the
+factuality scores are identical row for row:
+
+    TTFT rank   run 1: q4_0 < q8_0 < q5_k_m < q4_k_m
+    TTFT rank   run 2: q4_0 < q8_0 < q5_k_m < q4_k_m
+    tok/s rank  run 1: q4_0 < q8_0 < q5_k_m < q4_k_m
+    tok/s rank  run 2: q4_0 < q8_0 < q5_k_m < q4_k_m
+
+and the gap between the two legacy quantisations and the two K-quants:
+
+    run 1   fastest legacy  792 ms   slowest K-quant 4269 ms   5.39x
+    run 2   fastest legacy  788 ms   slowest K-quant 3830 ms   4.86x
+
+**Q4_0 dominates the shipped control on every axis measured:** 4.9x–5.4x lower
+TTFT, 3.1x the decode rate, one more fact correct, in **both** runs, and 13%
+smaller on disk. The fact scores and the rank order are identical across the two
+runs, so the claim does not rest on either run alone.
 
 ### Why this is a property of the quantisation and not of the host
 
-Every number in this table is suspect in isolation, because this emulator's host
-is shared and the previous run showed the same file swinging 39% on TTFT. What
-makes the *ordering* trustworthy is that three independent things agree and one
-independent thing disagrees:
+Every number in this table is suspect in isolation, because this emulator's host is
+shared and the same file has swung 39% on TTFT across three runs. What makes the
+*ordering* trustworthy is that four independent things agree and one disagrees:
 
-1. **TTFT and tok/s are measured by different code paths** — TTFT is load plus
-   prefill, tok/s is pure decode — and they produce the **identical four-way rank
-   order**. Contention does not sort two unrelated measurements the same way.
-2. **File size disagrees with that order.** By size the ranking is
+1. **The order reproduced across two independent runs**, on both metrics, with no
+   code change between them. A host-load effect does not reproduce a four-way
+   ordering twice.
+2. **TTFT and tok/s are measured by different code paths** — TTFT is load plus
+   prefill, tok/s is pure decode — and within each run they produce the **identical
+   four-way rank order**. Contention does not sort two unrelated measurements the
+   same way.
+3. **File size disagrees with that order.** By size the ranking is
    `q4_0 < q4_k_m < q5_k_m < q8_0`; by speed it is `q4_0 < q8_0 < q5_k_m < q4_k_m`.
    If this were a bandwidth or page-fault story the largest file would be
    slowest, and `q8_0` — 58% more bytes than `q4_0` — would be last. It is second.
-3. **The fastest row was measured first and cold**, so no warm-up explains it.
+4. **The fastest row was measured first and cold**, so no warm-up explains it.
 
 The coherent mechanism is the scalar unpacking path. `dequantize_row_q4_K` expands
 6-bit sub-blocks with per-32-element scale/min pairs, while `dequantize_row_q4` is
@@ -1181,23 +1201,39 @@ is a scale and a copy. With no BLAS and no vectorised kernel selected for the
 emulator's CPU variant, the two K-quants pay that cost on every token and the two
 legacy quants do not.
 
-### The absolute numbers carry about 40% and the ordering does not
+### The magnitudes drift, the ordering does not
 
-The same `q4_k_m` file, in two consecutive runs, same emulator, same model:
+`q4_k_m` across three runs, same file, same emulator, same model, no code change
+between them:
 
 | run | TTFT ms | tok/s |
 |---|---:|---:|
 | 36992620210 | 3067 | 17.87 |
 | 37005521803 | 4269 | 11.65 |
+| 37022078121 | 3830 | 14.63 |
 
-**TTFT moved +39% (3067 → 4269) and tok/s moved −35% (17.87 → 11.65), on one
-file, with no code change between the runs**, attributable to how loaded the
-shared runner host was. That is a 1.39x spread on TTFT and 1.53x on decode.
+That is a **1.39x spread on TTFT** and **1.53x on decode for one fixed file**,
+attributable to how loaded the shared runner host was.
 
-So **read the ordering and do not read the magnitudes.** Anyone who quotes
-"Q4_0 is 792 ms" as a performance figure is quoting a number with a band wider
-than the 1.39x the host imposed on a fixed file. What survives is that it is
-fastest, on two independent measurements, and by more than that spread.
+Per-file drift between the two four-row runs is not uniform, and the split matters:
+
+| quantisation | TTFT drift | tok/s drift |
+|---|---:|---:|
+| q4_0 | −0.5% | +22.5% |
+| q8_0 | −7.5% | +49.2% |
+| q5_k_m | −9.6% | +20.2% |
+| q4_k_m | −10.3% | +25.6% |
+
+**TTFT is reproducible to within about 10% between runs; tok/s is not, drifting up
+to 49%.** So a tok/s figure from this emulator is a statement about that run and
+nothing else, and Q4_0's decode-rate advantage over Q4_K_M should be read as an
+ordering that held twice rather than as a multiple to quote: it is 3.21x in one
+run and 3.13x in the other, which is agreement, not precision.
+
+What survives all of it: **Q4_0 was fastest in both runs on both metrics, by more
+than the drift on either.** Anyone who quotes "Q4_0 is 792 ms" as a performance
+figure is quoting a number whose band is wider than the 1.39x the host imposed on
+a fixed file.
 
 ### What this does and does not license
 
@@ -1217,8 +1253,8 @@ needs a run on the target architecture, which is the thing item 3 just closed.**
 With Q4_0 the measured short-prompt TTFT is **792 ms**, against the brief's
 **3000 ms**. Every previously measured configuration missed it by 1.5x or worse.
 **The long-prompt case has no Q4_0 measurement** — the 36.7 s figure is Q4_K_M at
-2255 characters — and extrapolating the 5.4x from a short prompt to a 500-token
-prefill would be inventing the number that matters most, so it is left
+2255 characters — and extrapolating the 4.9–5.4x from a short prompt to a
+500-token prefill would be inventing the number that matters most, so it is left
 unmeasured rather than guessed.
 
 The `9/10` is **FACTUALITY on five prompts with checkable answers** — Paris, 19,
@@ -1247,12 +1283,14 @@ The brief asks for **TTFT below 3000 ms**. Measured on this emulator:
 
 | prompt | quantisation | TTFT ms |
 |---|---|---:|
-| short (`perfPrompt`) | **Q4_0** | **792** — target met |
-| short (`perfPrompt`) | Q4_K_M *(shipped)* | 4269 – 4930 |
+| short (`perfPrompt`) | **Q4_0** | **788 – 792** — target met, both runs |
+| short (`perfPrompt`) | Q8_0 | 871 – 942 — target met, both runs |
+| short (`perfPrompt`) | Q4_K_M *(shipped)* | 3830 – 4930 |
 | 2255 characters (~500 tokens) | Q4_K_M only | 36745 – 77129 |
 
-The 792 ms is the only figure here under 3000 ms, and it was reached by changing
-**which quantisation is loaded**, not by moving any of the three runtime levers.
+**Both legacy quantisations are under the target in both runs, and neither K-quant
+is, in any run.** That was reached by changing **which quantisation is loaded**,
+not by moving any of the three runtime levers.
 The 500-token row has no Q4_0 measurement and is deliberately left blank rather
 than scaled up from the short prompt.
 
@@ -1262,8 +1300,9 @@ magnitude, and none of the three runtime levers moves it: batch size is flat, fl
 attention is 3%, prompt threads are already at their optimum.
 
 **Lever 4 is what moved it.** Switching quantisation from Q4_K_M to Q4_0 takes
-short-prompt TTFT from 4269–4930 ms to 792 ms — a 5.4x improvement, from a knob
-that was never turned, on a model this build already had the option to download.
+short-prompt TTFT from 4269–4930 ms to 788–792 ms — a 4.9–5.4x improvement, from
+a knob that was never turned, on a model this build already had the option to
+download.
 That is the finding of the exercise: the largest available win was not in
 `n_batch`, `flash_attn_type` or `n_threads_batch`, and none of those three was
 ever going to reach 3000 ms.
@@ -1275,7 +1314,7 @@ ever going to reach 3000 ms.
 | 3 | `n_batch` | any 256–1024 | 36685 | no effect (control row confirms) |
 | 5 | flash attention | `ENABLED` | 4417 | 3.2% faster, correctness held |
 | 7 | `n_threads_batch` | 4 | 36745 | already the default; now confirmed |
-| 4 | quantisation | **Q4_0** | **792** | 5.4x faster than the shipped default, and one fact better |
+| 4 | quantisation | **Q4_0** | **788–792** | 4.9–5.4x faster than the shipped default, in two runs, and one fact better |
 | 6 | speculative decoding | — | — | provably capped at 1.146x, and regresses TTFT |
 ---
 
@@ -1347,8 +1386,8 @@ measurements:
 
 A 500-token prefill takes **36.7 s** on the x86_64 emulator, and the only
 accelerator numbers this repository has produced are lever 5's **146 ms** and
-lever 4's **5.4x** — both on a short prompt, the latter from changing which file
-is loaded rather than from any runtime knob. **There is no measurement in this repository
+lever 4's **4.9–5.4x** — both on a short prompt, the latter from changing which
+file is loaded rather than from any runtime knob. **There is no measurement in this repository
 of what arm64 hardware would do**, and the honest reason is not a missing run: it
 is that no runner has ever been assigned to execute arm64 code here.
 
