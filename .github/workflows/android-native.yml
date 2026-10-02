@@ -357,11 +357,26 @@ jobs:
           LIST=$(mktemp)
           curl -fsS -H "Authorization: Bearer $GH_TOKEN" \
             "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs/$DEPS_RUN_ID/artifacts" -o "$LIST"
-          SD_ID=$(python3 -c '
-            import json,sys
-            d=json.load(open(sys.argv[1]))
-            print(next((str(a["id"]) for a in d.get("artifacts",[])
-                        if a["name"]==sys.argv[2]), ""))' "$LIST" "$WANT")
+          # A SCRIPT, NOT `python3 -c`, AND THIS IS THE THIRD TIME.
+          #
+          # The inline version died at parse time, before executing a statement:
+          #   File "<string>", line 2
+          #   import json,sys
+          #   IndentationError: unexpected indent
+          #   ##[error]Process completed with exit code 1.
+          #
+          # Inside a YAML `run: |` block the block indentation is stripped and
+          # what reaches the shell is a quoted string whose first line is empty
+          # and whose second is indented. `python3 -c` sees a program that begins
+          # with a newline and then an indented line.
+          #
+          # ios-native.yml records the same trap with a different symptom -- a
+          # body line at column 0 ENDED the block scalar and the remainder parsed
+          # as YAML mapping keys -- and fixed it the same way, with
+          # pick_simulator_udid.py. A multi-line program inside a YAML block
+          # scalar is a FILE, not an argument.
+          SD_ID=$(python3 "$GITHUB_WORKSPACE/.github/scripts/print_artifact_id.py" \
+                  "$LIST" "$WANT")
           echo "artifact id: ${SD_ID:-<none>}"
 
           if [ -z "$SD_ID" ]; then
