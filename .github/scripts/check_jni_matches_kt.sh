@@ -9,6 +9,20 @@
 #   No implementation found for boolean
 #     com.grapsee.gsai.native.GsNative.initTuned(java.lang.String, int, int)
 #
+# THE (String, int, int) ABOVE IS A VERBATIM QUOTE FROM THAT RUN, NOT THE CURRENT
+# SIGNATURE. initTuned now takes seven arguments -- (String, int, int, int, int,
+# int, int) -- because the performance levers were added to it. The quote is left
+# exactly as the runner printed it, because editing evidence is worse than
+# confusing evidence, but a reader who takes it for the current signature will
+# conclude the Kotlin and this script disagree when they do not.
+#
+# It also shows what the gate is FOR and is not for. Android's JNI resolver
+# matches a native method by NAME plus a mangled signature that includes the
+# argument types, so an arity change between the app and the .so produces
+# precisely this error. This gate checks that a JNI symbol EXISTS for each
+# Kotlin declaration; it does not compare arities, because the mangled name in the
+# .so is what carries the arity and reading it is a different check.
+#
 # Fifteen of the sixteen said only "no native context; call init(modelPath)
 # first", which points at the model rather than at the version. The one line that
 # named the cause was in a logcat artifact, after a 25-minute emulator run.
