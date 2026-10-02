@@ -72,6 +72,39 @@ echo "  llvm-nm: $("$llvm_nm" --version | sed -n '1,2p' | tr '\n' ' ')" >&2
 # that is reported as a failure rather than as a count of zero.
 if ! out="$("$llvm_nm" --defined-only --extern-only "$archive" 2>&1)"; then
   echo "FAIL: $llvm_nm could not read $archive" >&2
+
+  # A TOOLCHAIN SKEW READS LIKE A BROKEN ARCHIVE. Say which one it is.
+  #
+  # ios-native 37020835936, verbatim from the runner:
+  #
+  #   reader: .../toolchains/stable-aarch64-apple-darwin/.../llvm-nm
+  #   rustc : rustc 1.98.1 (48a229cea 2026-09-01)
+  #   .../llvm-nm: error: ...libgs_ffi.a(...rcgu.o): Not an int attribute
+  #     (Producer: 'LLVM23.1.1-rust-1.99.0-stable' Reader: 'LLVM 22.1.8-rust-1.98.1-stable')
+  #
+  # "Not an int attribute" names a property of the OBJECT. It is not one. llvm-nm
+  # prints the object format version it was produced by and the one it reads, and
+  # they differ by a major version. An older reader meeting a newer attribute
+  # kind fails exactly this way, so the message that looks like a corrupt
+  # archive is a statement about the READER.
+  #
+  # This is the eleventh time a tool's failure has been reported as a property of
+  # the artifact. It is worth detecting by NAME rather than leaving the next
+  # reader to work it out, because the error text points at the wrong file.
+  PRODUCER=$(printf '%s\n' "$out" | sed -n "s/.*Producer: '\([^']*\)'.*/\1/p" | sed -n '1p')
+  READER_V=$(printf '%s\n' "$out" | sed -n "s/.*Reader: '\([^']*\)'.*/\1/p" | sed -n '1p')
+  if [ -n "$PRODUCER" ] && [ -n "$READER_V" ] && [ "$PRODUCER" != "$READER_V" ]; then
+    echo "" >&2
+    echo "      THIS IS TOOLCHAIN SKEW, NOT A MALFORMED ARCHIVE." >&2
+    echo "      object produced by: $PRODUCER" >&2
+    echo "      read by          : $READER_V   (\"$llvm_nm\")" >&2
+    echo "      An LLVM reader older than the object cannot decode its attribute" >&2
+    echo "      kinds, and reports them as 'Not an int attribute'. The fix is to" >&2
+    echo "      BUILD and READ with the same toolchain -- see the --default-toolchain" >&2
+    echo "      pin in ios-native.yml, which is why producer and reader must not be" >&2
+    echo "      two independent resolutions of the word 'stable'." >&2
+  fi
+
   printf '%s\n' "$out" | sed -n '1,20p' >&2
   exit 1
 fi

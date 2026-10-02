@@ -52,6 +52,29 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  # THE ONE RUST TOOLCHAIN IN THE REPOSITORY, and it is a PIN for a reason.
+  #
+  # ios-native 37020835936, verbatim from the runner:
+  #
+  #   reader: .../toolchains/stable-aarch64-apple-darwin/.../llvm-nm
+  #   rustc : rustc 1.98.1 (48a229cea 2026-09-01)
+  #   llvm-nm: error: ...libgs_ffi.a(...rcgu.o): Not an int attribute
+  #     (Producer: 'LLVM23.1.1-rust-1.99.0-stable' Reader: 'LLVM 22.1.8-rust-1.98.1-stable')
+  #
+  # The xcframework was WRITTEN by one toolchain and READ by another, and the
+  # reader rejected the object format. `Not an int attribute` names the object.
+  # It is not a property of the object; it is the reader being older than what it
+  # reads. An unpinned `stable` is two independent resolutions of a moving word,
+  # and this repository runs three of them -- one in ios-native, two in
+  # android-native -- in jobs that do not share a runner.
+  #
+  # Which version is pinned matters less than the fact that ONE is pinned: with a
+  # single toolchain the producer and the reader are the same LLVM by
+  # construction, and the skew becomes impossible rather than merely unlikely.
+  #
+  # 1.98.1 is the version the runner actually resolved, so this is not a version
+  # anyone has to take on trust.
+  GS_RUST_TOOLCHAIN: '1.98.1'
   CARGO_TERM_COLOR: always
   CMDLINE_VERSION: 11076708
   NDK_VERSION: 25.2.9519653
@@ -103,16 +126,36 @@ jobs:
         working-directory: native
         run: |
           set -euo pipefail
+          # An empty $GS_RUST_TOOLCHAIN would be `--default-toolchain ""`, and
+          # rustup reads that as "no preference" and installs its own default --
+          # the unpinned resolution this pin exists to remove, restored silently
+          # and with a green step. So the value is checked before the install.
+          [ -n "${GS_RUST_TOOLCHAIN:-}" ] || {
+            echo "::error::GS_RUST_TOOLCHAIN is empty or unset. Refusing to install an"
+            echo "::error::unpinned toolchain, because that is the exact condition that"
+            echo "::error::produced 'Not an int attribute' on ios-native 37020835936."
+            exit 1
+          }
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-            | sh -s -- -y --profile minimal --default-toolchain stable
+            | sh -s -- -y --profile minimal --default-toolchain "$GS_RUST_TOOLCHAIN"
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
           cargo check -p gs-ffi --features jni-typecheck
 
       - name: Install Rust
         run: |
           set -euo pipefail
+          # An empty $GS_RUST_TOOLCHAIN would be `--default-toolchain ""`, and
+          # rustup reads that as "no preference" and installs its own default --
+          # the unpinned resolution this pin exists to remove, restored silently
+          # and with a green step. So the value is checked before the install.
+          [ -n "${GS_RUST_TOOLCHAIN:-}" ] || {
+            echo "::error::GS_RUST_TOOLCHAIN is empty or unset. Refusing to install an"
+            echo "::error::unpinned toolchain, because that is the exact condition that"
+            echo "::error::produced 'Not an int attribute' on ios-native 37020835936."
+            exit 1
+          }
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-            | sh -s -- -y --profile minimal --default-toolchain stable
+            | sh -s -- -y --profile minimal --default-toolchain "$GS_RUST_TOOLCHAIN"
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
           rustup target add ${{ matrix.target }}
           rustc --version

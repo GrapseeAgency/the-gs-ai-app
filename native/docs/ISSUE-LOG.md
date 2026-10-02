@@ -3143,3 +3143,84 @@ The green run was not wrong about anything it reported. It reported one correct
 number and called it four, and the three rows it dropped included the only one
 that would have answered the question. That is the hard version of a false pass:
 every gate individually reasonable, collectively misleading.
+
+
+---
+
+## "Not an int attribute" NAMED THE ARCHIVE. IT NAMED THE READER.
+
+`ios-native` **37020835936** red on at least three consecutive runs, and Item 4's
+arch assertion never executes because the job dies earlier. Verbatim from the
+runner:
+
+    reader: .../toolchains/stable-aarch64-apple-darwin/.../llvm-nm
+    rustc : rustc 1.98.1 (48a229cea 2026-09-01)
+    llvm-nm: error: .../libgs_ffi.a(...rcgu.o): Not an int attribute
+      (Producer: 'LLVM23.1.1-rust-1.99.0-stable' Reader: 'LLVM 22.1.8-rust-1.98.1-stable')
+
+The xcframework was **written by one toolchain and read by another**, and llvm-nm
+prints both versions in its own error. An older LLVM cannot decode a newer
+object's attribute kinds and reports them as `Not an int attribute`.
+
+That is a statement about the READER. The message points at the wrong file, and
+the eleventh instance of a tool's failure being reported as a property of the
+artifact -- the first where the toolchain printed the evidence itself.
+
+### The cause is a missing pin, and the fix does not need the mechanism
+
+Three sites run `sh -s -- -y --profile minimal --default-toolchain stable`: one in
+`ios-native.yml`, **two** in `android-native.yml`, in jobs that do not share a
+runner. Verified absent: no `rust-toolchain*` in the repository, no `toolchain`
+key in any `Cargo.toml`. `stable` is not a version, it is a promise that something
+will resolve it, three times, independently.
+
+Which version went which way, and why, **I could not pin down and have not
+recorded a mechanism for it.** With one toolchain the producer and the reader are
+the same LLVM by construction, so the skew becomes impossible rather than merely
+unlikely, and the answer is not needed:
+
+    GS_RUST_TOOLCHAIN: '1.98.1'      # workflow-level env, in BOTH workflows
+
+`1.98.1` is the version the runner actually resolved, per the log above.
+
+### `--default-toolchain ""` would have restored the bug silently
+
+An empty value makes rustup read "no preference" and install its own default --
+the unpinned resolution, with a green step. So all three sites refuse first, and
+the refusal names the condition rather than a symptom. Verified with only the
+installer stubbed:
+
+    ios-native      var=1.98.1   reaches the installer
+    ios-native      var=UNSET    ::error::GS_RUST_TOOLCHAIN is empty or unset
+    android-native  var=1.98.1   reaches the installer
+    android-native  var=UNSET    ::error::GS_RUST_TOOLCHAIN is empty or unset
+
+### Two mistakes of my own, both caught by the checks and not by reading
+
+I put the guard **between `curl ... \` and `| sh -s --`**, severing the pipe
+continuation so `| sh` became a command of its own; `bash -n` on the extracted
+step said `syntax error near unexpected token '|'`. I then wrote the `env:` entry
+at **column 0** inside a block whose keys are at column 2, and `yaml.safe_load`
+rejected the file. Both files were reverted and redone.
+
+### The diagnostic, so the next reader is not left guessing
+
+`count_exported_symbols.sh` now parses both versions out of llvm-nm's error and
+says what it is when they differ:
+
+    THIS IS TOOLCHAIN SKEW, NOT A MALFORMED ARCHIVE.
+    object produced by: LLVM23.1.1-rust-1.99.0-stable
+    read by          : LLVM 22.1.8-rust-1.98.1-stable
+
+Verified in both directions against the runner's real error text: fires on the
+skew, silent on `file format not recognized`, so a genuinely bad archive is still
+reported as a plain read failure.
+
+### What this unblocks
+
+Nothing yet, and that is worth saying. Item 4's answer -- the arch the iOS tests
+execute on -- is still **not measured**. This commit removes the reason the step
+never ran; the next `ios-native` run is what produces the number, and until that
+run is green the answer stands as the last recorded one: a **simulator**, on
+`macos-latest`, with the executable's slice asserted and the executing simulator's
+arch asserted separately.
