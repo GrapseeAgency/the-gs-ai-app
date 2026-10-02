@@ -1879,3 +1879,190 @@ and assert the length before using it.
 | lever 4 -- quantisation | not started; needs three more 500 MB downloads in the device job |
 | lever 6 -- speculative decoding | not started |
 | last CI | `android-native` **success** (36956136615); `android-app` failing on a Kotlin signature, fixed, not yet re-run |
+
+## ITEM 2'S PRECONDITION WAS BROKEN IN THREE PLACES, AND THE THIRD IS NOT A CONFIG BUG
+
+The brief asks for an SD checkpoint in the download flow, a separate consent, a
+separate storage path, and an on-device 512x512 PNG. The first of those needs the
+library linked, and it was not. `gs_sd_generate` had been answering
+`GS_ERR_UNAVAILABLE` and the honest reason was three links apart.
+
+### Link 1: the green build said so, in a line that had to be read twice
+
+`android-native` run **36956136615** at head 2188f66, all four ABIs, **success**.
+The build emits one of three lines depending on what it found:
+
+```
+(no) cargo:warning=linking stable-diffusion.cpp in-process from ...
+(no) cargo:warning=GS_SD_PREBUILT=... has no include/stable-diffusion.h
+YES cargo:warning=portable sd_wrapper: procedural path only.
+```
+
+The second line is the one that matters, and it is the one that is **absent**.
+`build.rs` only prints it when the variable is *present and its contents are
+wrong*. Neither branch printing means `GS_SD_PREBUILT` was never set at all — the
+`if let Some(root)` block was skipped and `have_sd` stayed `false`.
+
+A reader who stopped at "portable ... procedural path only" would conclude the
+package was missing. It was not missing. Nothing was pointing at it.
+
+### Link 2: the variable is set NOWHERE, in any workflow
+
+```
+$ grep -rn GS_SD_PREBUILT .github/workflows/
+(no output)
+```
+
+`build.rs` reads it, documents the exact package shape it expects, panics with a
+helpful message if the package is wrong, and prints a helpful message if the
+header is missing. All three of those are unreachable, because the variable is
+never assigned. The same shape as `GS_LLAMA_PREBUILT`, which *was* unset for a
+long time and shipped a portable-only `.so` while passing every symbol and size
+gate in the repository.
+
+### Link 3: the fetch step never downloaded it either
+
+The step is named "Fetch the cross-compiled llama.cpp for this ABI" and it fetches
+exactly one artifact, `llamacpp-<abi>`. `android-deps.yml`'s `stablediffusion` job
+had been building and uploading `stablediffusion-arm64` for weeks. Nothing consumed
+it.
+
+### Link 4 — the one that is NOT a configuration mistake
+
+**The stable-diffusion package is arm64-only, and the device job is x86_64.**
+
+| | |
+|---|---|
+| `android-deps.yml` workflow env | `ABI: arm64-v8a` |
+| `stablediffusion` job | no matrix; builds one ABI |
+| artifact name | the literal `stablediffusion-arm64` |
+| `android-device.yml` default `abi` | **`x86_64`** |
+
+So fixing links 1-3 would have produced a working arm64 `.so` and left the
+**x86_64** `.so — the one the emulator actually loads and the one every device
+test runs against — still portable-only. The build would have gone green and
+reported success at the thing it did not do.
+
+The toolchain file already reads `$ABI` from the environment, so an ABI axis is a
+matrix and a job-level `env`, not a rewrite. It builds `[arm64-v8a, x86_64]`:
+
+- **arm64-v8a** — real phones, the shipping target
+- **x86_64** — the only ABI `android-device.yml` runs, because it runs natively on
+  a linux runner; arm64 there needs KVM for a foreign guest, which is the
+  nested-virtualisation wall that has already blocked every arm64 device attempt
+
+`armeabi-v7a` and `x86` are deliberately **not** built. Their `.so` keeps today's
+honest state: the wrapper compiles in its portable branch and
+`gs_sd_generate` says `GS_ERR_UNAVAILABLE` with a reason.
+
+**A matrix that the toolchain file does not read produces two identical arm64
+archives under two different names**, and the second one is a lie the linker
+believes. So the job-level `env: ABI: ${{ matrix.abi }}` is load-bearing, not
+decoration.
+
+### The fetch step fails CLOSED for the two ABIs that need it
+
+`android-native` now downloads `stablediffusion-<abi>` and, when it is absent:
+
+- **fails** for `x86_64` and `arm64-v8a`, because a device test must not run
+  against a library that cannot generate — the same reasoning as the existing
+  llamacpp step, whose comment says *"the tests would then 'pass' by asserting
+  that nothing works, which is the opposite of what they are for"*
+- **warns and continues** for the other two, which have no package by design
+
+When it is absent, it prints the artifact list and names **three** causes with
+three different fixes, because "not found" is a symptom:
+
+1. the `stablediffusion` job did not build this ABI
+2. the job failed
+3. `deps_run_id` points at a run from *before* the matrix existed
+
+Cause 3 is the one that will actually bite first, and the list makes it visible
+at a glance. From the real artifact list of deps run 36957596213:
+
+```
+llamacpp-arm64-v8a               20634675 bytes
+llamacpp-armeabi-v7a             19285754 bytes
+llamacpp-x86                     19522105 bytes
+llamacpp-x86_64                  20348505 bytes
+onnxruntime-arm64                12528253 bytes
+stablediffusion-arm64            17722165 bytes
+tesseract-arm64                   3721224 bytes
+```
+
+`stablediffusion-arm64` is there and `stablediffusion-x86_64` is not. A reader can
+tell "built under the old name" from "not built at all" without opening a log.
+
+### The checkpoint: measured, not quoted
+
+Every size and digest was read from the Hugging Face API's blob metadata for the
+specific file, because an empty `sha256` in this codebase means the download is
+**refused** rather than performed unchecked, and a wrong one means a download
+that cannot complete.
+
+**Chosen: `akleine/sdxs-512` → `sdxs.safetensors`, 882,587,118 bytes,
+`sha256 6cca5bfd11b588cdfb4602018c7e623d24c95fdfdc5ab2d4b9e6978b3186980f`**
+
+| checkpoint | bytes | why not |
+|---|---:|---|
+| `akleine/sdxs-512` | 882,587,118 | **chosen** |
+| `concedo/sdxs-512-tinySDdistilled-GGUF` Q8_0 | ~716,000,000 | 23% smaller, but a third-party re-quantization, so the digest certifies a conversion rather than a release |
+| `akleine/sdxs-09` | 1,342,124,230 | 52% larger, same family |
+| `segmind/SSD-1B-A1111` | 4,465,700,000 | 5x the size |
+| `segmind/Segmind-Vega` | 3,293,400,000 | 3.7x the size |
+
+`docs/distilled_sd.md` at the pinned stable-diffusion.cpp commit lists this model
+under "SD1.x, SD2.x with tiny U-Nets" and gives the invocation with
+`--cfg-scale 1 --steps 1`, **both described as mandatory**. So `steps = 1` and
+`cfgScale = 1.0f` in the catalogue are *constraints of the checkpoint*, not
+tuning, and a test that passes 20 steps is not testing this model.
+
+The brief named SD 1.5 (4.27 GB) and SDXL-Turbo (6.9 GB) and asked for the
+smallest thing that produces recognizable images. 882 MB is still **larger than
+the 1.5B LLM** and 1.8x the 0.5B one, which is the whole reason diffusion gets
+its own consent rather than a second line in the existing one: a user who wants
+offline chat has not agreed to a second gigabyte.
+
+### One downloader, so the discipline transfers
+
+`ModelDownloader.download` read exactly four fields of `Model` — `id`, `url`,
+`sha256`, `bytes` — and nothing else. Those are now parameters of one private
+`downloadVerified`, and both `download(model, ...)` and
+`downloadCheckpoint(checkpoint, ...)` delegate to it. The body is unchanged.
+
+That is not refactoring for its own sake: the size check, the SHA-256 check, the
+resume logic, the "a partial larger than the real file is not a prefix of it"
+case and the refusal to fetch a file with no digest are the entire reason the LLM
+path is trustworthy, and an 882 MB checkpoint deserves them *more*. A second
+implementation would be a second place for the discipline to be forgotten.
+
+**While doing this I introduced a bug and my own check did not see it.** The
+replacement ran over a region that started *before* the two delegations, so it
+rewrote `id = model.id` into `id = id` in both of them — self-referential named
+arguments in the one function every LLM download goes through. It was caught by
+reading the diff, not by a check, because there was no check. The lesson recorded
+here is the one that generalises: **a scripted edit whose replacement region
+overlaps the text you just inserted will rewrite the text you just inserted.**
+
+### The test FAILS on a missing checkpoint rather than skipping
+
+`sd0_diffusion_generates_a_real_png_on_this_device` fails when the checkpoint is
+absent, and the message names both external causes. A skip would have been a green
+run that proved nothing, and 882 MB of CDN-dependent download makes "skip" the
+state it would drift into.
+
+It asserts four things separately, because they are four different defects:
+
+1. **`sdAvailable` is true.** The assertion that would have caught all four links
+   above. A `.so` can export all eighteen mobile symbols and still be unable to
+   generate.
+2. **The PNG decodes, at 512x512, with `BitmapFactory`.** A real decoder, not a
+   hand-rolled one, so a correct header with a wrong body is caught.
+3. **It is not blank** — three separate assertions, because uniform-grey, all-black
+   and all-white are different bugs. A uniform image decodes as a perfectly valid
+   PNG, which is why "the file exists" and "it decoded" cannot stand in for this.
+4. **Two different prompts produce measurably different images** (mean absolute
+   luminance difference >= 3.0). This is the one that catches a disconnected text
+   encoder, and **every other assertion in the test passes on a fixed grey
+   image** — so without it the test cannot tell a working pipeline from a
+   placeholder that happens to be textured.

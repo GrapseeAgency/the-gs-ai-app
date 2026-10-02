@@ -69,11 +69,63 @@ object ModelDownloader {
         dest: File,
         partial: File,
         onProgress: (Long, Long) -> Unit = { _, _ -> },
+    ): Result = downloadVerified(
+        id = model.id,
+        url = model.url,
+        expectedSha256 = model.sha256,
+        expectedBytes = model.bytes,
+        dest = dest,
+        partial = partial,
+        onProgress = onProgress,
+    )
+
+    /**
+     * The same verified download for a DIFFUSION checkpoint.
+     *
+     * This exists instead of a second downloader on purpose. The size check, the
+     * SHA-256 check, the resume logic, the "a partial larger than the real file
+     * is not a prefix of it" case, and the refusal to fetch a file with no digest
+     * are the whole reason the LLM path can be trusted at all, and a checkpoint
+     * that is 1.8x larger deserves them more, not less. A second implementation
+     * would be a second place for the discipline to be forgotten.
+     */
+    suspend fun downloadCheckpoint(
+        checkpoint: DiffusionCatalog.Checkpoint,
+        dest: File,
+        partial: File,
+        onProgress: (Long, Long) -> Unit = { _, _ -> },
+    ): Result = downloadVerified(
+        id = checkpoint.id,
+        url = checkpoint.url,
+        expectedSha256 = checkpoint.sha256,
+        expectedBytes = checkpoint.bytes,
+        dest = dest,
+        partial = partial,
+        onProgress = onProgress,
+    )
+
+    /**
+     * THE ONE PLACE A FILE IS FETCHED AND VERIFIED.
+     *
+     * The body was the old `download(model, ...)` verbatim; it reads exactly
+     * four fields of `Model` and nothing else, so taking them as parameters
+     * changes no logic in the body at all. `model` was never more than a bag of
+     * those four values, and requiring the whole `Model` was what stopped the
+     * diffusion weights from using this code.
+     */
+    private suspend fun downloadVerified(
+        id: String,
+        url: String,
+        expectedSha256: String,
+        expectedBytes: Long,
+        dest: File,
+        partial: File,
+        onProgress: (Long, Long) -> Unit,
     ): Result = withContext(Dispatchers.IO) {
         try {
-            if (model.sha256.isBlank()) {
+            if (expectedSha256.isBlank()) {
                 return@withContext Result.Failed(
-                    "no verified SHA-256 for ${model.id}; refusing to download an " +
+                    "no verified SHA-256 for ${id}; refusing to download an " +
                         "unverifiable model",
                     recoverable = false,
                 )
@@ -81,23 +133,23 @@ object ModelDownloader {
             dest.parentFile?.mkdirs()
 
             // Already there and already verified? Do not re-download 500 MB.
-            if (dest.isFile && dest.length() == model.bytes) {
-                if (sha256(dest) == model.sha256) {
+            if (dest.isFile && dest.length() == expectedBytes) {
+                if (sha256(dest) == expectedSha256) {
                     return@withContext Result.Complete(dest, resumed = false, bytes = dest.length())
                 }
-                Log.w(TAG, "${model.id} is present but its hash does not match; re-downloading")
+                Log.w(TAG, "${id} is present but its hash does not match; re-downloading")
                 dest.delete()
             }
 
             val haveBytes = if (partial.isFile) partial.length() else 0L
-            if (haveBytes > model.bytes) {
+            if (haveBytes > expectedBytes) {
                 // The partial is bigger than the real file, so it is not a
                 // prefix of it. Resuming would produce a corrupt result.
-                Log.w(TAG, "partial ($haveBytes) is larger than the model (${model.bytes}); restarting")
+                Log.w(TAG, "partial ($haveBytes) is larger than the model (${expectedBytes}); restarting")
                 partial.delete()
             }
 
-            val conn = open(model.url, haveBytes)
+            val conn = open(url, haveBytes)
             try {
                 val code = conn.responseCode
                 // 200 to a Range request means the server ignored the range and
@@ -109,7 +161,7 @@ object ModelDownloader {
                     partial.delete()
                 }
                 if (code != HttpURLConnection.HTTP_OK && code != HttpURLConnection.HTTP_PARTIAL) {
-                    return@withContext Result.Failed("HTTP $code from ${model.url}", recoverable = true)
+                    return@withContext Result.Failed("HTTP $code from ${url}", recoverable = true)
                 }
 
                 val declared = conn.contentLength.toLong()
@@ -143,18 +195,18 @@ object ModelDownloader {
                     raf.fd.sync()
                 }
 
-                if (partial.length() != model.bytes) {
+                if (partial.length() != expectedBytes) {
                     return@withContext Result.Failed(
-                        "incomplete: got ${partial.length()} of ${model.bytes} bytes",
+                        "incomplete: got ${partial.length()} of ${expectedBytes} bytes",
                         recoverable = true,
                     )
                 }
 
                 val actual = sha256(partial)
-                if (!actual.equals(model.sha256, ignoreCase = true)) {
+                if (!actual.equals(expectedSha256, ignoreCase = true)) {
                     partial.delete()
                     return@withContext Result.Failed(
-                        "SHA-256 mismatch: expected ${model.sha256}, got $actual. " +
+                        "SHA-256 mismatch: expected ${expectedSha256}, got $actual. " +
                             "The partial file has been deleted so the next attempt starts clean.",
                         recoverable = true,
                     )

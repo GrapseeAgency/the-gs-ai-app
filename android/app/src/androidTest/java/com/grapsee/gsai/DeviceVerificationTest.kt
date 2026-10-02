@@ -1,5 +1,7 @@
 package com.grapsee.gsai
 
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.os.Environment
 import androidx.room.Room
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -7,6 +9,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.di.gsHttpClient
 import com.grapsee.gsai.data.local.AppDatabase
+import com.grapsee.gsai.data.local.DiffusionCatalog
 import com.grapsee.gsai.data.local.ModelCatalog
 import com.grapsee.gsai.data.local.ModelDownloader
 import com.grapsee.gsai.data.local.ModelStore
@@ -2438,6 +2441,324 @@ class DeviceVerificationTest {
         } else {
             println("LEVERS7 only ${gen4.size} usable row(s) at n_threads=4; not comparable")
         }
+    }
+
+
+    // ========================================================================
+    // ITEM 2: DIFFUSION END TO END ON THE DEVICE.
+    //
+    // The bar, from the brief: a PNG on the device from a text prompt, no
+    // subprocess, no workspace dependencies. Each clause is asserted rather than
+    // assumed:
+    //
+    //   no subprocess      the library is linked IN-PROCESS, which
+    //                      sdAvailable() is what proves. A library that is absent
+    //                      makes sdAvailable false and sdCreate's handle report
+    //                      "sd.cpp:not-compiled" -- a .so can export all eighteen
+    //                      mobile symbols and still be unable to generate, which
+    //                      is exactly what android-native run 36956136615 shipped.
+    //   from a text prompt the prompt is asserted to have changed the output
+    //                      relative to a second, different prompt. One image
+    //                      proves the encoder works; two images with different
+    //                      content prove the CONDITIONING is wired up.
+    //   not blank          a uniform grey rectangle decodes as a valid PNG. The
+    //                      assertion is on pixel statistics, not on "the file
+    //                      exists" and not on "it decoded".
+    //
+    // WHY A MISSING CHECKPOINT FAILS THIS TEST RATHER THAN SKIPPING IT.
+    //
+    // A skip is a green run that tested nothing, and the operator's standing
+    // instruction is that this is worse than a red one. The suite is currently
+    // 23/23 with 0 skipped, and a skip added for an 882 MB download that a CDN
+    // failed to serve would quietly become the normal state of this test. So it
+    // fails, and the message names the run and the one external cause so the
+    // reader can tell an outage from a mistake.
+    // ========================================================================
+
+    @Test
+    fun sd0_diffusion_generates_a_real_png_on_this_device() {
+        val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+        val checkpoint = findCheckpoint(ctx)
+
+        // FAIL CLOSED, and say exactly which thing is missing.
+        assertNotNull(
+            "no diffusion checkpoint at ${DiffusionCatalog.SDXS_512.id}.safetensors " +
+                "in any readable directory. If android-device.yml reported " +
+                "GS_SD_ABSENT=true then the 882 MB download from Hugging Face " +
+                "failed and the diff is in that run's log; otherwise the push " +
+                "step's run-as copy failed and its output names why. This FAILS " +
+                "rather than skips on purpose: a skipped diffusion test is a " +
+                "green run that proved nothing.",
+            checkpoint,
+        )
+        val cp = checkpoint!!
+        assertEquals(
+            "the on-device checkpoint is ${cp.length()} bytes, not " +
+                "${DiffusionCatalog.SDXS_512.bytes}. A partial push would load and " +
+                "then fail ten minutes into a generation, blaming sd.cpp instead of adb.",
+            DiffusionCatalog.SDXS_512.bytes,
+            cp.length(),
+        )
+
+        // ---- the library is linked, which is the whole precondition ----
+        val handle = GsNative.sdCreate(cp.absolutePath)
+        assertNotEquals(
+            "gs_sd_create returned a null handle for a file that is present and " +
+                "the right size: ${GsNative.lastError()}",
+            0L,
+            handle,
+        )
+        val backend = GsNative.sdBackendName(handle)
+        println("SD0 backend: $backend")
+        assertTrue(
+            "sdBackendName is '$backend'. The library is NOT linked into this .so, " +
+                "so gs_sd_generate cannot run and every number below would be " +
+                "fabricated. The cause is upstream of this test: check that " +
+                "android-native exported GS_SD_PREBUILT and that the .so logs " +
+                "'linking stable-diffusion.cpp in-process' rather than " +
+                "'portable sd_wrapper: procedural path only'.",
+            GsNative.sdAvailable(handle),
+        )
+
+        val out = DiffusionCatalog.imageDestination(ctx, "sd0-a")
+        out.delete()
+        assertTrue(
+            "the image destination directory could not be created: $out",
+            out.parentFile?.isDirectory == true,
+        )
+
+        // ---- generate ----
+        // steps=1 and cfg=1.0 are CONSTRAINTS of SDXS-512, not tuning: upstream
+        // documents both as mandatory for this checkpoint. A test that passed 20
+        // steps would be measuring a different model, and one that passed 7.5
+        // guidance would be measuring garbage.
+        val promptA = "a photograph of a red barn in a green field, daylight"
+        val promptB = "a technical diagram of a bicycle drivetrain, white background"
+        val t0 = System.nanoTime() / 1_000_000
+        GsNative.sdGenerate(
+            handle,
+            promptA,
+            "",
+            512,
+            512,
+            DiffusionCatalog.SDXS_512.steps,
+            out.absolutePath,
+        )
+        val msA = System.nanoTime() / 1_000_000 - t0
+        GsNative.sdFree(handle)
+
+        // ---- the file is real ----
+        assertTrue(
+            "gs_sd_generate returned without throwing but wrote no file at $out. " +
+                "The ABI documents that it writes nothing on failure, so this is " +
+                "either a silent diffusion failure or a silent encoder failure; " +
+                "the two are separated by a2_svg_and_encoder_produce_distinct_bytes.",
+            out.isFile,
+        )
+        val bytes = out.length()
+        assertTrue(
+            "the PNG is $bytes bytes, which is too small to be a 512x512 image " +
+                "(a uniform one would still be a few KB, so this is truncation)",
+            bytes > 20_000,
+        )
+        println("SD0 generated $promptA -> $bytes bytes in ${msA}ms")
+
+        // ---- it decodes, with a REAL decoder ----
+        val bmp = BitmapFactory.decodeFile(out.absolutePath)
+        assertNotNull(
+            "the file is ${bytes} bytes and does not decode as an image. A PNG " +
+                "encoder that writes a correct header and a wrong body produces " +
+                "exactly this, and 'the file exists' would not have caught it.",
+            bmp,
+        )
+        assertEquals("PNG width", 512, bmp!!.width)
+        assertEquals("PNG height", 512, bmp.height)
+
+        // ---- IT IS NOT BLANK ----
+        // Three distinct ways a "successful" generation is still worthless, each
+        // with its own assertion, because they are different defects:
+        //   uniform colour  -> a grey rectangle, the placeholder failure
+        //   all black       -> a zeroed latent that never decoded
+        //   all white       -> a saturated latent
+        val stats = luminanceStats(bmp)
+        println(
+            "SD0 pixels: min=${stats.min} max=${stats.max} mean=" +
+                "%.1f sd=%.1f".format(stats.mean) + " sd=%.2f".format(stats.sd),
+        )
+        assertTrue(
+            "every one of ${stats.n} pixels is the same value (${stats.min}). A " +
+                "uniform image is what a placeholder returns and what a real " +
+                "generation never does; the PNG decoded, so nothing above could " +
+                "have caught it.",
+            stats.max - stats.min >= 16,
+        )
+        assertTrue(
+            "the image is uniform dark (min=${stats.min} max=${stats.max}), which " +
+                "is a zeroed latent rather than a generation",
+            stats.max >= 24,
+        )
+        assertTrue(
+            "the image is effectively uniform light (min=${stats.min} " +
+                "max=${stats.max} sd=${"%.2f".format(stats.sd)}), which is a " +
+                "saturated latent",
+            stats.sd >= 2.0,
+        )
+
+        // ---- THE PROMPT IS CONDITIONING, NOT DECORATION ----
+        // One image proves the encoder wrote something. Two DIFFERENT prompts
+        // producing the SAME pixels would mean the text encoder is disconnected,
+        // the prompt is ignored, or the checkpoint is not conditioning -- and all
+        // three are invisible to every other assertion here, because every one of
+        // them passes on a fixed grey image.
+        val outB = DiffusionCatalog.imageDestination(ctx, "sd0-b")
+        outB.delete()
+        val h2 = GsNative.sdCreate(cp.absolutePath)
+        assertNotEquals("gs_sd_create failed for the second prompt", 0L, h2)
+        val t1 = System.nanoTime() / 1_000_000
+        GsNative.sdGenerate(
+            h2,
+            promptB,
+            "",
+            512,
+            512,
+            DiffusionCatalog.SDXS_512.steps,
+            outB.absolutePath,
+        )
+        val msB = System.nanoTime() / 1_000_000 - t1
+        GsNative.sdFree(h2)
+
+        assertTrue(
+            "the second generation wrote no file at $outB: ${GsNative.lastError()}",
+            outB.isFile,
+        )
+        val bmpB = BitmapFactory.decodeFile(outB.absolutePath)
+        assertNotNull("the second PNG does not decode", bmpB)
+        assertEquals("second PNG width", 512, bmpB!!.width)
+        val statsB = luminanceStats(bmpB)
+        println(
+            "SD0 second prompt -> ${outB.length()} bytes in ${msB}ms, sd=" +
+                "%.2f".format(statsB.sd),
+        )
+        assertTrue(
+            "the second image is also uniform, so the FIRST image's statistics " +
+                "prove nothing about conditioning either",
+            statsB.max - statsB.min >= 16,
+        )
+
+        // DIFFERENT PIXELS, not merely different statistics. Comparing a mean
+        // would let a recolouring of the same composition pass; the prompts are
+        // for two unrelated subjects, so the images should share little.
+        val meanAbsDiff = meanAbsLuminanceDifference(bmp, bmpB)
+        println("SD0 mean |luminance difference| between the two prompts: %.2f".format(meanAbsDiff))
+        assertTrue(
+            "the two prompts produced near-identical images (mean |diff| = " +
+                "%.2f). The text encoder is not conditioning the output, which " +
+                "every other assertion in this test would pass: a fixed image " +
+                "is decodable, 512x512, non-uniform and non-black.".format(meanAbsDiff),
+            meanAbsDiff >= 3.0,
+        )
+
+        println("=== ITEM 2: diffusion on device ===")
+        println("  backend            : $backend")
+        println("  checkpoint         : ${DiffusionCatalog.SDXS_512.id}")
+        println("  steps / cfg        : ${DiffusionCatalog.SDXS_512.steps} / ${DiffusionCatalog.SDXS_512.cfgScale}")
+        println("  image              : 512x512, ${bytes} bytes")
+        println("  time per image     : ${msA}ms (second: ${msB}ms)")
+        println("  pixels min/max/sd  : ${stats.min}/${stats.max}/" + "%.2f".format(stats.sd))
+        println("  prompts differ by  : %.2f mean luminance".format(meanAbsDiff))
+    }
+
+    /** Luminance min/max/mean/sd over every pixel. Not a sample: 262144 is cheap. */
+    private data class LumStats(
+        val n: Int,
+        val min: Int,
+        val max: Int,
+        val mean: Double,
+        val sd: Double,
+    )
+
+    private fun luminanceStats(bmp: Bitmap): LumStats {
+        val w = bmp.width
+        val h = bmp.height
+        val px = IntArray(w * h)
+        bmp.getPixels(px, 0, w, 0, 0, w, h)
+        var min = 255
+        var max = 0
+        var sum = 0.0
+        val lum = IntArray(px.size)
+        for (i in px.indices) {
+            val p = px[i]
+            val l = (0.299 * ((p shr 16) and 0xFF) +
+                0.587 * ((p shr 8) and 0xFF) +
+                0.114 * (p and 0xFF)).toInt().coerceIn(0, 255)
+            lum[i] = l
+            if (l < min) min = l
+            if (l > max) max = l
+            sum += l
+        }
+        val mean = sum / px.size
+        var ss = 0.0
+        for (l in lum) ss += (l - mean) * (l - mean)
+        return LumStats(px.size, min, max, mean, kotlin.math.sqrt(ss / px.size))
+    }
+
+    /** Mean absolute luminance difference between two same-sized images. */
+    private fun meanAbsLuminanceDifference(a: Bitmap, b: Bitmap): Double {
+        require(a.width == b.width && a.height == b.height) {
+            "meanAbsLuminanceDifference needs equal sizes, got " +
+                "${a.width}x${a.height} and ${b.width}x${b.height}"
+        }
+        val w = a.width
+        val h = a.height
+        val pa = IntArray(w * h)
+        val pb = IntArray(w * h)
+        a.getPixels(pa, 0, w, 0, 0, w, h)
+        b.getPixels(pb, 0, w, 0, 0, w, h)
+        var total = 0.0
+        for (i in pa.indices) {
+            val la = (0.299 * ((pa[i] shr 16) and 0xFF) +
+                0.587 * ((pa[i] shr 8) and 0xFF) + 0.114 * (pa[i] and 0xFF))
+            val lb = (0.299 * ((pb[i] shr 16) and 0xFF) +
+                0.587 * ((pb[i] shr 8) and 0xFF) + 0.114 * (pb[i] and 0xFF))
+            total += kotlin.math.abs(la - lb)
+        }
+        return total / pa.size
+    }
+
+    /**
+     * The checkpoint, found the way the GGUF is found: by exact filename, in the
+     * directories the app can actually read.
+     *
+     * `getExternalFilesDir` and the app's private `filesDir` are both searched
+     * because the push step uses `run-as` to land it in the private dir, and
+     * `/sdcard` is searched because a human doing this by hand would put it
+     * there. `/sdcard` is EACCES for the app on API 30 (run 36420986162) and that
+     * is a per-file answer rather than a per-directory one, so it is worth
+     * probing.
+     *
+     * The extension is NOT the GGUF's. A `.safetensors` handed to
+     * `llama_model_load_from_file` reports a corrupt model, so the two files are
+     * never interchangeable and the search is by diffusion name only.
+     */
+    private fun findCheckpoint(ctx: android.content.Context): File? {
+        val name = DiffusionCatalog.SDXS_512.id + ".safetensors"
+        val arg = InstrumentationRegistry.getArguments().getString("gs_test_checkpoint")
+        if (!arg.isNullOrBlank()) {
+            val f = File(arg)
+            if (f.isFile && f.length() > 100_000_000L) return f
+        }
+        for (dir in listOf(
+            ctx.filesDir,
+            ctx.getExternalFilesDir(null),
+            ctx.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS),
+            File("/sdcard"),
+            File("/storage/emulated/0"),
+        )) {
+            if (dir == null) continue
+            val f = File(dir, name)
+            if (f.isFile && f.length() > 100_000_000L) return f
+        }
+        return null
     }
 
 }

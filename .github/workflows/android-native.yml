@@ -295,6 +295,175 @@ jobs:
           echo "GS_LLAMA_PREBUILT=$GITHUB_WORKSPACE/native/prebuilts/android-${{ matrix.abi }}" >> "$GITHUB_ENV"
           echo "GS_LLAMA_PREBUILT=$GITHUB_WORKSPACE/native/prebuilts/android-${{ matrix.abi }}"
 
+      # =========================================================================
+      # THE SAME BUG, TWICE, IN A SECOND VARIABLE.
+      #
+      # GS_LLAMA_PREBUILT was, for a long time, read by build.rs and set by nobody
+      # -- the library published PORTABLE-ONLY while exporting every symbol and
+      # passing every gate in this file. GS_SD_PREBUILT is the same shape and was
+      # still unset when this step was written.
+      #
+      # The evidence, from the green android-native run 36956136615 at head
+      # 2188f66. Only the third line appears; the other two are the ones that
+      # would have appeared if the variable had been set:
+      #
+      #     (no) cargo:warning=linking stable-diffusion.cpp in-process from ...
+      #     (no) cargo:warning=GS_SD_PREBUILT=... has no include/stable-diffusion.h
+      #     YES cargo:warning=portable sd_wrapper: procedural path only.
+      #
+      # The absence of the middle line is the diagnosis: build.rs only prints it
+      # when the variable is PRESENT and the contents are wrong. Neither branch
+      # printing means the variable was never set at all, so `have_sd` stayed
+      # false, GS_SD_HAVE_SDCPP was undefined, and gs_sd_generate returned
+      # GS_ERR_UNAVAILABLE.
+      #
+      # And nothing downloaded the artifact in the first place: the fetch step
+      # above pulls `llamacpp-<abi>` and only that.
+      # =========================================================================
+      - name: Fetch the cross-compiled stable-diffusion.cpp for this ABI
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPS_RUN_ID: ${{ github.event.inputs.deps_run_id || github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          ABI_NAME='${{ matrix.abi }}'
+          SD_ROOT="native/prebuilts/sd-android-$ABI_NAME"
+          WANT="stablediffusion-$ABI_NAME"
+
+          if [ -z "$DEPS_RUN_ID" ] || [ "$DEPS_RUN_ID" = "0" ]; then
+            DEPS_RUN_ID=$(
+              curl -fsS -H "Authorization: Bearer $GH_TOKEN" \
+                "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/workflows/android-deps.yml/runs" \
+              | python3 -c 'import json,sys; print(str(json.load(sys.stdin)["workflow_runs"][0]["id"]))'
+            )
+          fi
+          echo "deps run: $DEPS_RUN_ID, looking for artifact: $WANT"
+
+          LIST=$(mktemp)
+          curl -fsS -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs/$DEPS_RUN_ID/artifacts" -o "$LIST"
+          SD_ID=$(python3 -c '
+            import json,sys
+            d=json.load(open(sys.argv[1]))
+            print(next((str(a["id"]) for a in d.get("artifacts",[])
+                        if a["name"]==sys.argv[2]), ""))' "$LIST" "$WANT")
+          echo "artifact id: ${SD_ID:-<none>}"
+
+          if [ -z "$SD_ID" ]; then
+            # THREE NAMED CAUSES, because "not found" is a symptom and each cause
+            # needs a different fix. The available list is printed so the reader
+            # can tell "built under another name" from "not built at all".
+            echo "::error::$WANT is not in deps run $DEPS_RUN_ID. Artifacts present:"
+            python3 -c '
+              import json,sys
+              d=json.load(open(sys.argv[1]))
+              for a in sorted(d.get("artifacts",[]), key=lambda x: x["name"]):
+                  print("::error::    %-34s %10s bytes  expired=%s" % (a["name"], a["size_in_bytes"], a.get("expired")))
+            ' "$LIST"
+            echo "::error::One of three things is true, and they need different fixes:"
+            echo "::error::  1. android-deps.yml's stablediffusion job did not build this ABI."
+            echo "::error::     It now builds a matrix of [arm64-v8a, x86_64] only, so"
+            echo "::error::     armeabi-v7a and x86 legitimately have no such artifact."
+            echo "::error::  2. The job failed. Check its conclusion before assuming otherwise."
+            echo "::error::  3. deps_run_id points at a run from BEFORE that matrix existed,"
+            echo "::error::     when the artifact was named stablediffusion-arm64 for every ABI."
+            # x86_64 IS THE ABI THE DEVICE JOB RUNS, and the whole point of this
+            # step is that a device test must not run against a library that
+            # cannot generate. Failing closed HERE is what turns "the .so was
+            # portable-only" into a red job instead of a green job and a test that
+            # asserts nothing works.
+            if [ "$ABI_NAME" = "x86_64" ] || [ "$ABI_NAME" = "arm64-v8a" ]; then
+              echo "::error::$ABI_NAME needs this package; the .so would publish without it and"
+              echo "::error::every diffusion test on the device would assert against a build that"
+              echo "::error::cannot generate. Failing here instead."
+              exit 1
+            fi
+            echo "::warning::$ABI_NAME has no stable-diffusion package by design, so this .so"
+            echo "::warning::is PORTABLE-ONLY for diffusion: gs_sd_generate will return"
+            echo "::warning::GS_ERR_UNAVAILABLE and say so, and gs_sd_render_svg is unaffected."
+            echo "GS_SD_PREBUILT=" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          mkdir -p "$SD_ROOT" /tmp/sdartifact
+          curl -fsSL -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts/$SD_ID/zip" \
+            -o /tmp/sdartifact/sd.zip
+          ls -la /tmp/sdartifact/sd.zip
+          file /tmp/sdartifact/sd.zip
+          rm -rf /tmp/sdartifact/x && mkdir -p /tmp/sdartifact/x
+          unzip -o -q /tmp/sdartifact/sd.zip -d /tmp/sdartifact/x
+          T=$(find /tmp/sdartifact/x -name '*.tar.gz' | sed -n '1p')
+          if [ -n "$T" ]; then
+            echo "zip contained a tarball: $T"
+            tar -xzf "$T" -C "$SD_ROOT"
+          else
+            cp -r /tmp/sdartifact/x/. "$SD_ROOT"/
+          fi
+
+          echo "=== $SD_ROOT contents ==="
+          find "$SD_ROOT" -type f | sort | sed -n '1,30p' | sed 's/^/    /'
+
+          # THE HEADER IS THE PART build.rs ACTUALLY NEEDS, and the part that was
+          # missing for weeks while the job stayed green. Asserted here so its
+          # absence is a named failure at the fetch rather than a silent fall
+          # through to the portable branch.
+          test -f "$SD_ROOT/include/stable-diffusion.h" || {
+            echo "::error::$SD_ROOT has no include/stable-diffusion.h. build.rs will take the"
+            echo "::error::portable branch and gs_sd_generate will answer GS_ERR_UNAVAILABLE."
+            echo "::error::package contents:"; find "$SD_ROOT" -type f | sed 's/^/::error::    /'
+            exit 1
+          }
+          echo "header: $(wc -c < "$SD_ROOT/include/stable-diffusion.h") bytes"
+
+          # ALL FOUR ARCHIVES, because build.rs links them in a fixed order:
+          # stable-diffusion -> ggml -> ggml-cpu -> ggml-base. A missing base
+          # archive produces a wall of undefined ggml symbols that names neither
+          # the cause nor the file, so it is checked here where the cause is known.
+          MISSING=""
+          for A in libstable-diffusion libggml libggml-cpu libggml-base; do
+            test -f "$SD_ROOT/lib/lib$A.a" || MISSING="$MISSING $A.a"
+          done
+          if [ -n "$MISSING" ]; then
+            echo "::error::$SD_ROOT/lib is missing:$MISSING"
+            echo "::error::The link order is stable-diffusion, ggml, ggml-cpu, ggml-base; a"
+            echo "::error::missing member of that chain surfaces as undefined ggml symbols"
+            echo "::error::in the .so with nothing to name the cause."
+            echo "::error::present:"; ls -1 "$SD_ROOT/lib" 2>/dev/null | sed 's/^/::error::    /'
+            exit 1
+          fi
+          for A in "$SD_ROOT"/lib/*.a; do
+            echo "  $(basename "$A"): $(file -b "$A" | cut -c1-90)"
+          done
+
+          # SAME ARCHITECTURE GATE THE LLAMA ARCHIVES GET. An arm64 archive
+          # unpacked into an x86_64 build links into a .so the emulator refuses
+          # to load, and every device test becomes a skip rather than a failure.
+          case "$ABI_NAME" in
+            arm64-v8a)  NAMES="AArch64 aarch64" ;;
+            x86_64)     NAMES="X86-64 x86-64" ;;
+            armeabi-v7a) NAMES="ARM" ;;
+            x86)        NAMES="Intel 80386" ;;
+          esac
+          WANT_RE=$(printf '%s' "$NAMES" | tr ' ' '\n' | paste -sd'|')
+          BAD=0
+          for A in "$SD_ROOT"/lib/*.a; do
+            if file -b "$A" | grep -Eq "$WANT_RE"; then
+              echo "  OK   $(basename "$A") is $ABI_NAME"
+            else
+              echo "  WRONG $(basename "$A"): $(file -b "$A" | cut -c1-80)"
+              BAD=$((BAD+1))
+            fi
+          done
+          test "$BAD" -eq 0 || {
+            echo "::error::$BAD archive(s) in $SD_ROOT are not $ABI_NAME."
+            exit 1
+          }
+
+          echo "GS_SD_PREBUILT=$GITHUB_WORKSPACE/$SD_ROOT" >> "$GITHUB_ENV"
+          echo "GS_SD_PREBUILT=$GITHUB_WORKSPACE/$SD_ROOT"
+          echo "diffusion is IN-PROCESS for $ABI_NAME: no subprocess, no sd-cli"
+
       - name: Build libgs_ffi.so
         working-directory: native
         env:

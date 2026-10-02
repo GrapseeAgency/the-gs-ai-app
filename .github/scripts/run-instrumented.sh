@@ -171,6 +171,46 @@ else
 fi
 
 echo
+echo
+echo "=== 2d. the SDXS-512 diffusion checkpoint ==="
+# 882 MB, and the filename must be EXACTLY DiffusionCatalog.destination()'s
+# basename, because the device test looks it up by that name in the app's private
+# dir -- the same convention the GGUF uses, and the same reason: a test that
+# searches for a file whose name it computes is not searching for anything.
+#
+# The FILENAME IS NOT THE ONLY THING THAT HAS TO MATCH. A .safetensors handed to
+# llama_model_load_from_file produces a corrupt-model error, so the diffusion test
+# passes its own path to sdCreate and never lets the two look interchangeable.
+CHECKPOINT_NAME="sdxs-512-dreamshaper.safetensors"
+if [ "${GS_SD_ABSENT:-false}" = "true" ] || [ ! -f "$GITHUB_WORKSPACE/$CHECKPOINT_NAME" ]; then
+  echo "no verified checkpoint on the runner (GS_SD_ABSENT=${GS_SD_ABSENT:-unset})"
+  echo "the diffusion test will SKIP, loudly, rather than pass vacuously"
+else
+  echo "pushing $CHECKPOINT_NAME (882 MB on an emulator; this is slow)"
+  adb push "$GITHUB_WORKSPACE/$CHECKPOINT_NAME" /data/local/tmp/$CHECKPOINT_NAME
+  adb shell chmod 644 /data/local/tmp/$CHECKPOINT_NAME || true
+  # Same run-as route as the GGUF, for the same reason: /sdcard is EACCES on
+  # API 30 and the adb shell user cannot create the app's external dir.
+  adb shell run-as com.grapsee.gsai mkdir -p files 2>&1 | head -2
+  if adb shell run-as com.grapsee.gsai cp /data/local/tmp/$CHECKPOINT_NAME "files/$CHECKPOINT_NAME" 2>&1 | head -2; then
+    echo "checkpoint in the app private dir:"
+    adb shell run-as com.grapsee.gsai ls -la "files/$CHECKPOINT_NAME" 2>&1 | sed 's/^/    /'
+  else
+    echo "::warning::run-as copy of the checkpoint failed; the diffusion test will SKIP"
+  fi
+  # THE DEVICE COPY MUST BE THE SAME SIZE as the verified one. A truncated adb
+  # push that reports success would otherwise surface as a diffusion failure ten
+  # minutes later, pointing at stable-diffusion.cpp instead of at adb.
+  DSZ=$(adb shell run-as com.grapsee.gsai stat -c%s "files/$CHECKPOINT_NAME" 2>/dev/null | tr -d '\r' || echo 0)
+  case "${DSZ:-0}" in
+    882587118) echo "checkpoint size verified on the device: $DSZ" ;;
+    *) echo "::warning::on-device checkpoint size is '${DSZ:-0}', not 882587118."
+       echo "::warning::The diffusion test will SKIP rather than load a partial file." ;;
+  esac
+  # Free the copy the app cannot read, so the device does not carry it twice.
+  adb shell rm -f /data/local/tmp/$CHECKPOINT_NAME || true
+fi
+
 echo "=== 2c. the OCR fixture ==="
 # WITHOUT THIS THE OCR TEST CANNOT RUN, AND IT SKIPS RATHER THAN FAILS. Raw, run
 # 36545847058:

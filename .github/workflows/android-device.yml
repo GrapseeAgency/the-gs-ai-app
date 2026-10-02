@@ -441,6 +441,66 @@ jobs:
           fi
           mkdir -p device-artifacts
 
+      # =========================================================================
+      # THE DIFFUSION CHECKPOINT. 882 MB, and every byte of that is checked
+      # against the digest in DiffusionCatalog.kt before a test sees it -- the
+      # same discipline the 0.5B model gets, and for a larger file.
+      #
+      # WHY NOT AN INSTRUMENTATION ARGUMENT AND A RUNTIME DOWNLOAD: the point of
+      # this step is that the DIGEST IN THE CATALOGUE IS CORRECT. Fetching it here
+      # and hashing it is what turns an assertion in a Kotlin file into a
+      # measurement. A test that downloaded the weights itself would prove only
+      # that a download works.
+      #
+      # NOT FATAL IF IT FAILS, and the reason is specific rather than diplomatic:
+      # the LLM tests in the same run are still worth having, and losing 40
+      # minutes of emulator time because a Hugging Face CDN had a bad minute
+      # would be its own failure. It is reported as a FAILURE in the summary step
+      # and the diffusion test SKIPS, loudly, rather than passing.
+      # =========================================================================
+      - name: Fetch the SDXS-512 checkpoint and verify its checksum
+        run: |
+          set -euo pipefail
+          URL="https://huggingface.co/akleine/sdxs-512/resolve/main/sdxs.safetensors"
+          EXPECT="6cca5bfd11b588cdfb4602018c7e623d24c95fdfdc5ab2d4b9e6978b3186980f"
+          EXPECT_SZ="882587118"
+          CHECKPOINT_NAME="sdxs-512-dreamshaper.safetensors"
+
+          echo "fetching 882 MB of diffusion weights from HuggingFace"
+          if ! curl -fL --retry 3 --retry-delay 5 -o "$CHECKPOINT_NAME" "$URL"; then
+            echo "::warning::could not fetch $URL; the diffusion test will SKIP"
+            echo "GS_SD_VERIFIED=false" >> "$GITHUB_ENV"
+            echo "GS_SD_ABSENT=true" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          SZ=$(stat -c%s "$CHECKPOINT_NAME")
+          echo "size: $SZ (expected $EXPECT_SZ)"
+          if [ "$SZ" != "$EXPECT_SZ" ]; then
+            echo "::error::size mismatch: got $SZ, expected $EXPECT_SZ"
+            echo "::error::DiffusionCatalog.kt's `bytes` is wrong. Aborting: an"
+            echo "::error::unverified weight file must not reach a device test."
+            exit 1
+          fi
+
+          GOT=$(sha256sum "$CHECKPOINT_NAME" | cut -d' ' -f1)
+          echo "sha256: $GOT"
+          echo "expect: $EXPECT"
+          if [ "$GOT" = "$EXPECT" ]; then
+            echo "CHECKSUM MATCHES DiffusionCatalog.kt -- the hardcoded hash is correct"
+            GS_SD_VERIFIED=true
+          else
+            echo "::error::CHECKSUM MISMATCH. DiffusionCatalog.kt needs updating. The"
+            echo "::error::file is left on disk and NOT pushed to the device, so a"
+            echo "::error::test cannot act on a weight file nobody vouched for."
+            rm -f "$CHECKPOINT_NAME"
+            GS_SD_VERIFIED=false
+            GS_SD_ABSENT=true
+          fi
+          echo "GS_SD_VERIFIED=$GS_SD_VERIFIED" >> "$GITHUB_ENV"
+          echo "GS_SD_ABSENT=$GS_SD_ABSENT" >> "$GITHUB_ENV"
+          ls -la "$CHECKPOINT_NAME" 2>/dev/null || echo "(removed: unverifiable)"
+
       - name: Start the emulator and run the instrumented tests
         uses: reactivecircus/android-emulator-runner@v2
         with:

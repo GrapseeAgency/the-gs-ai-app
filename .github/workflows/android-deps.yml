@@ -681,6 +681,31 @@ jobs:
     # reference. Recorded so a sixth attempt starts there instead of repeating
     # these five.
     runs-on: ubuntu-latest
+    # TWO ABIS, NOT FOUR, AND THE REASON IS THE TEST RUNNER.
+    #
+    #   arm64-v8a  real phones; the shipping target
+    #   x86_64     the ONLY ABI android-device.yml runs, because it runs
+    #              natively on a linux runner. arm64-v8a there needs KVM for a
+    #              foreign guest, which is the nested-virtualisation wall that
+    #              has already blocked every arm64 device attempt.
+    #
+    # armeabi-v7a and x86 are deliberately absent. android-native builds a .so
+    # for all four, and for the two not listed here GS_SD_PREBUILT stays unset,
+    # so the wrapper compiles in its portable branch and gs_sd_generate reports
+    # GS_ERR_UNAVAILABLE with the reason -- which is the honest state, and is
+    # exactly what those ABIs do today. Building two extra copies of a heavy
+    # dependency to make a 32-bit .so carry an unusable feature is not a win.
+    strategy:
+      fail-fast: false
+      matrix:
+        abi: [arm64-v8a, x86_64]
+    # THE JOB-LEVEL ENV IS THE POINT. The workflow sets `ABI: arm64-v8a`
+    # globally, which is what pinned this job to one architecture; a matrix
+    # that the toolchain file does not read produces two identical arm64
+    # archives under two different names, and the second one would be a lie
+    # the linker would believe.
+    env:
+      ABI: ${{ matrix.abi }}
     steps:
       - uses: actions/checkout@v4
       - name: Install the NDK
@@ -696,6 +721,10 @@ jobs:
           {
             echo "set(CMAKE_SYSTEM_NAME Android)"
             echo "set(CMAKE_SYSTEM_VERSION $API)"
+            # $ABI must be the MATRIX value. It used to come from the
+            # workflow-level `env: ABI: arm64-v8a`, which meant this job could
+            # only ever build one architecture no matter what a matrix said --
+            # a matrix that does not reach the compiler is a comment.
             echo "set(CMAKE_ANDROID_ARCH_ABI $ABI)"
             echo "set(CMAKE_ANDROID_NDK $NDK)"
             echo "set(CMAKE_ANDROID_STL_TYPE c++_shared)"
@@ -824,11 +853,14 @@ jobs:
             echo "  header declares $SYM"
           done
           du -sh dist
-          tar -czf stablediffusion-arm64.tar.gz -C dist .
-          ls -la stablediffusion-arm64.tar.gz
+          # The name carries the ABI because there is more than one now. It was
+          # `stablediffusion-arm64` as a literal, which is the kind of name that is
+          # correct exactly once and silently wrong forever after.
+          tar -czf "stablediffusion-$ABI.tar.gz" -C dist .
+          ls -la "stablediffusion-$ABI.tar.gz"
       - uses: actions/upload-artifact@v4
         with:
-          name: stablediffusion-arm64
-          path: stablediffusion-arm64.tar.gz
+          name: stablediffusion-${{ matrix.abi }}
+          path: stablediffusion-${{ matrix.abi }}.tar.gz
           if-no-files-found: error
           retention-days: 14
