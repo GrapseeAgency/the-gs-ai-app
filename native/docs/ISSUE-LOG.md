@@ -2227,3 +2227,111 @@ prompt because `n_batch` is a prompt-processing knob; this table measures the
 short `perfPrompt` because the quantisation question is about the default chat
 path. Mixing the two would make the quantisation table incomparable with the
 batch table and with every other table in the file.
+
+## ITEM 1, LEVER 6: SPECULATIVE DECODING — WHAT THE CODE ACTUALLY IS, AND WHAT THE ARITHMETIC SAYS
+
+The brief: retry speculative decoding with a matching tokenizer, and "if it beats
+1.0x after the fix, restore the feature. If not, report the number and delete it
+permanently." Two things had to be established before spending a 53-minute device
+run on it, and neither needed a device.
+
+### The pinned llama.cpp has NO speculative API
+
+```
+$ grep -nE 'speculative|draft|n_draft' <llama.h @ 3018a11e79e489b657dbb77c95694889ccff92df>
+(no output)
+```
+
+Zero occurrences. So there is no upstream `llama_speculative_*` to lean on. That
+is consistent with the deleted implementation having been **hand-rolled** from
+`llama_decode` plus the greedy sampler, and the surviving comment block says so —
+it argues losslessness in terms of the greedy sampler and arithmetic, not in terms
+of an upstream API:
+
+> *Losslessness argument: with the greedy sampler we emit only tokens the main
+> model itself chose... The win is arithmetic, not magical.*
+
+### What survives is a half, and it is UNREACHABLE code
+
+| symbol | callers | in the header |
+|---|---:|---|
+| `spec_prefill_at` | **0** | n/a (`static`) |
+| `spec_prefill` | **0** | n/a (`static`) |
+| `gs_llama_prefill` | **0** | **no** |
+| `gs_prefill_at` | 1 | n/a (`static`) |
+| `gs_llama_n_ctx` | used | yes |
+
+The draft/verify loop, the draft context and the entry point are all gone.
+`gs_llama_create` is still the only context factory, so **no draft model is ever
+created**. Three of the four surviving functions have zero callers, and they
+compile and pass every gate, which is exactly why they were never noticed.
+
+`llama_bridge.rs` still documents a loop that is not there:
+
+> `/// Context size actually in force, used by the speculative loop.`
+
+And `run_spec.rs` is honest about the deletion, which is worth crediting:
+
+> *This used to be the speculative-decoding A/B harness. Speculative decoding was
+> DELETED -- the commit that removed it carries the measurement that justified it.*
+
+So the original diagnosis — *"the draft and target used different tokenizers"* —
+was correct, and the deletion was honest. What was left behind is three dead
+functions and a stale doc comment. **Item 5's "TODO or NOTE comment" audit, one
+instance, found by reading rather than by a device run.**
+
+### The brief's own fallback pair is the same SIZE, and the arithmetic has a ceiling
+
+The brief anticipates that no smaller same-family draft exists (Qwen2.5's smallest
+is 0.5B) and offers a same-size pair. The only such pair with a matching
+tokenizer is:
+
+| role | file | bytes |
+|---|---|---:|
+| target | `qwen2.5-0.5b-instruct-q4_k_m.gguf` | 491,400,032 |
+| draft | `qwen2.5-0.5b-instruct-q4_0.gguf` | 428,730,208 |
+
+Same architecture, same BPE, **c = draft/target = 0.8725**.
+
+For k drafted tokens, a draft pass each (cost `c` in units of one target pass) and
+one batched verification pass:
+
+```
+speedup(alpha, k) = (alpha*k + 1) / (k*c + 1)
+speedup > 1  <=>  alpha > c          (for k > 0)
+```
+
+- **break-even acceptance rate is `c` = 87.25%, independent of `k`**
+- **ceiling at 100% acceptance is `1/c` = 1.146x**
+
+| k | α=0.80 | α=0.875 | α=0.90 | α=0.95 | α=1.00 |
+|---:|---:|---:|---:|---:|---:|
+| 4 | 0.935 | 1.002 | 1.025 | 1.069 | 1.114 |
+| 16 | 0.922 | 1.003 | 1.029 | 1.083 | 1.136 |
+
+**So it is not automatically a loss, and my first derivation said it was.** The
+intermediate script asserted *"there is no positive integer k for which drafting
+pays for itself"* — while its own table printed `1.136x` three lines above. The
+condition I reached for (`c*k < 1`) was not the break-even condition; the
+break-even is `alpha > c`, which does not depend on `k` at all. The table was
+right and the conclusion was wrong, which is the same shape as every other
+time in this log where a stated conclusion outran the numbers under it.
+
+**Acceptance above 87.25% is genuinely plausible here**, and that is the one
+unmeasured quantity that is the entire experiment: a different *quantisation of
+the same model* is the highest-acceptance draft that can exist, because the draft
+is approximating the very distribution it is being used to verify.
+
+### But this is a THROUGHPUT lever and the number under test is TTFT
+
+Even at a perfect 1.146x, speculative decoding **adds a draft prefill before the
+first token is produced**. Time-to-first-token therefore gets *worse by
+construction*, whatever happens to tok/s.
+
+The brief's target is *"cut TTFT below 3000 ms"*. A lever with a +14.6% ceiling on
+throughput and a certain regression on TTFT is the wrong lever for that target,
+and saying so is more useful than measuring it. **Lever 6 is deferred, not
+deleted**, and the reason is written down: the honest result is *"a same-size pair
+cannot exceed 1.146x on throughput and regresses TTFT"*, which is derivable from
+two measured file sizes and one inequality. Restoring the feature would need a
+**smaller** same-tokenizer draft, and no such model is published for this family.
