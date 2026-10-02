@@ -1364,3 +1364,64 @@ optimum and worth 3.2% respectively.
 Nothing further will be attempted. Any future arm64 measurement needs a
 self-hosted runner, a physical device, or budget to buy one — not another
 dispatch.
+---
+
+## ITEM 4, MEASURED: the iOS tests execute on **x86_64**, on an arm64 host
+
+Run **37023563596**, job `app + XCTests (iOS simulator)`, head `40c9ec4`. This is
+the first run in which the asserting step executed at all — `ios-native` had been
+red on three consecutive runs with a symbol-counter reader failure, so every
+earlier claim in this section was a code reading rather than a measurement.
+
+Verbatim from the runner:
+
+    executable (lipo -info)     : Architectures in the fat file: …/Debug-iphonesimulator/App.app/App are: x86_64 arm64
+    simulator SIMULATOR_ARCHS   : arm64 x86_64
+
+    ==========================================================
+     iOS TESTS EXECUTE ON: x86_64 (arm64 host; arm64 would be emulated)
+    They run on a SIMULATOR, not a physical device.
+    ==========================================================
+
+### The distinction the operator asked for, in three lines
+
+| question | answer | evidence |
+|---|---|---|
+| Which slices are **linked** into the `.app`? | **both** — `x86_64 arm64` | `lipo -info` on the built executable |
+| Which arches **can** the simulator run? | **both** — `arm64 x86_64` | `xcrun simctl getenv $UDID SIMULATOR_ARCHS` |
+| Which arch **executes**? | **x86_64** | the assertion, printed by the step itself |
+
+So the arm64 iOS slice is **built, linked, and never executed** — the same
+situation as the Android arm64 objects, reached independently and for a different
+reason. On Android it was a runner that never got assigned. Here a runner was
+assigned, the slice compiled, and `xcodebuild` still chose x86_64.
+
+The host is arm64 and the simulator is a universal `arm64 x86_64` runtime, so
+**the arm64 slice is running under emulation on a machine that can run it
+natively.** That is a choice in the destination, not a hardware limit — see the
+next section.
+
+### Why this was not measurable before, and what it cost
+
+`ios-native` was red at `9b60f2c`, `bae593e` and `ac6dd95` — three runs — all
+with the same failure, all reported as a property of the artifact:
+
+    llvm-nm: error: …libgs_ffi.a(…rcgu.o): Not an int attribute
+      (Producer: 'LLVM23.1.1-rust-1.99.0-stable' Reader: 'LLVM 22.1.8-rust-1.98.1-stable')
+
+`Not an int attribute` describes the **reader**, not the archive. The job died
+before the arch step, so the answer to Item 4 sat behind a failure that pointed at
+the wrong file. Fixed by pinning one Rust toolchain for the whole repository
+(`GS_RUST_TOOLCHAIN`) and by making `count_exported_symbols.sh` say
+`THIS IS TOOLCHAIN SKEW, NOT A MALFORMED ARCHIVE` when the two versions differ.
+
+### What is and is not established
+
+**Established:** the iOS XCTests run on a **simulator** whose executing slice is
+**x86_64**, on an **arm64** host, with **no physical iOS device involved at any
+point in this repository's CI**.
+
+**Not established, and not claimed:** anything about arm64 iOS execution. The
+slice links; that is a property of the archive, checked by `lipo -info` and by
+`archive_arch.py`'s `e_machine` read. **A slice that links is not a slice that has
+run**, and this repository has now produced that same gap on both platforms.
