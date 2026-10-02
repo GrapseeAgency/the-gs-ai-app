@@ -255,8 +255,8 @@ impl MobileCtx {
         n_ubatch: i32,
         flash_attn: i32,
     ) -> Result<Self, MobileError> {
-        let p =
-            CString::new(model_path).map_err(|_| MobileError::InvalidArg("path contains NUL"))?;
+        let p = CString::new(model_path)
+            .map_err(|_| MobileError::InvalidArg("path contains NUL".to_string()))?;
         let raw = std::panic::catch_unwind(|| unsafe {
             gs_mobile_create_tuned(
                 p.as_ptr(),
