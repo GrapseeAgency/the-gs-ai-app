@@ -1192,16 +1192,28 @@ class DeviceVerificationTest {
      * the least-contaminated sample is the one worth reporting. The spread is
      * printed so the noise is visible rather than hidden.
      */
+    /**
+     * [prompt] exists so the batch and prompt-processing-thread levers can be
+     * measured on a LONG prompt. It defaults to [perfPrompt] so the existing
+     * two-argument calls are unchanged.
+     *
+     * This was added after a second, hand-rolled timing loop drifted into a
+     * `List<Pair<Long, Int>>` and then called `.min()` on it, which does not
+     * exist because Pair is not Comparable. Two timing helpers in one file is how
+     * they come to disagree about what a number means -- the compiler caught the
+     * type error, not the duplication, which is the part that is worth fixing.
+     */
     private fun timeBudget(
         budget: Int,
         repeats: Int,
         out: (String) -> Unit,
+        prompt: String = perfPrompt,
     ): Pair<List<Long>, String> {
         val times = ArrayList<Long>(repeats)
         var last = ""
         repeat(repeats) { i ->
             val t0 = System.nanoTime()
-            val text = GsNative.chatWithBudget(perfPrompt, budget)
+            val text = GsNative.chatWithBudget(prompt, budget)
             val dt = (System.nanoTime() - t0) / 1_000_000
             times += dt
             last = text
@@ -2040,26 +2052,19 @@ class DeviceVerificationTest {
                 continue
             }
             // One token, three repeats: TTFT is the thing being measured and a
-            // single sample of it is a sample of scheduler noise.
-            val ttfts = (0 until 3).map {
-                val t0 = System.nanoTime() / 1_000_000
-                val text = GsNative.chatWithBudget(longPrompt, 1)
-                val ms = System.nanoTime() / 1_000_000 - t0
-                println("LEVERS3 $label budget=1 -> ${ms}ms, ${text.length} chars")
-                ms
-            }
-            val t49 = (0 until 2).map {
-                val t0 = System.nanoTime() / 1_000_000
-                val text = GsNative.chatWithBudget(longPrompt, 49)
-                val ms = System.nanoTime() / 1_000_000 - t0
-                println("LEVERS3 $label budget=49 -> ${ms}ms, ${text.length} chars")
-                ms to text.length
-            }
+            // single sample of it is a sample of scheduler noise. timeBudget
+            // returns Pair(timings, lastText), so `ttfts` is a List<Long> and
+            // `chars` comes off the TEXT -- the previous version of this block
+            // returned Pair<Long,Int> per repeat and then called .min() on that
+            // list, which does not compile.
+            val (ttfts, text1) = timeBudget(1, 3, { println("LEVERS3 $label $it") }, longPrompt)
+            val (t49, text49) = timeBudget(49, 2, { println("LEVERS3 $label $it") }, longPrompt)
+
             val ttft = ttfts.min()
             val spread = ttfts.max() - ttfts.min()
             val perToken = (t49.min() - ttft).toDouble() / 48.0
             val tps = if (perToken > 0) 1000.0 / perToken else 0.0
-            val chars = t49.first().second
+            val chars = text49.length
 
             // REPEATS MUST AGREE, or the fastest row is the luckiest row.
             val why = when {
@@ -2067,6 +2072,7 @@ class DeviceVerificationTest {
                 spread * 2 > (t49.min() - ttft) ->
                     "noisy: ${spread}ms spread across 3 TTFT samples"
                 chars == 0 -> "no output at a 49-token budget"
+                text1.isBlank() -> "the 1-token budget produced no reply at all"
                 else -> ""
             }
             println(
@@ -2086,9 +2092,13 @@ class DeviceVerificationTest {
                 println(String.format("  %-9d %10s %10s   %s", r.nBatch, "-", "-", r.why))
                 continue
             }
-            val perToken = (r.t49 - r.ttft).toDouble() / 48.0
+            val perToken = (r.t49 - r.ttftMs).toDouble() / 48.0
             val tps = if (perToken > 0) 1000.0 / perToken else 0.0
-            println(String.format("  %-9d %10d %10.2f %10d", r.nBatch, r.ttft, tps, r.t49 - r.ttft))
+            println(
+                String.format(
+                    "  %-9d %10d %10.2f %10d", r.nBatch, r.ttftMs, tps, r.t49 - r.ttftMs,
+                ),
+            )
         }
         assertTrue(
             "all four batch sizes failed: " + rows.joinToString("; ") { "${it.nBatch}: ${it.why}" },

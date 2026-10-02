@@ -91,6 +91,31 @@ jobs:
           }
           python3 .github/scripts/check_kt_braces.py "${KT[@]}"
 
+      # A brace counter cannot see a missing field name, and a file-wide
+      # "is this field declared anywhere?" cannot either -- `ttft` IS declared,
+      # by two other row classes in the same file. The read has to be bound to
+      # the class in the scope that reads it, which is what this does.
+      #
+      # Added after android-app 36956809627 failed on
+      #   DeviceVerificationTest.kt:2089:39 Unresolved reference 'ttft'
+      # where BRow's field is ttftMs. Kotlin is the authority and it caught this
+      # in five minutes; this catches it without a round trip, and was itself
+      # verified by reintroducing the exact bug on a copy and confirming the
+      # script rejects it.
+      - name: Row field reads name fields the row declares
+        run: |
+          set -euo pipefail
+          mapfile -t KTT < <(
+            find android/app/src -name '*.kt' 2>/dev/null | sort
+          )
+          echo "checking ${#KTT[@]} Kotlin source(s) for unbound row field reads"
+          test "${#KTT[@]}" -gt 0 || {
+            echo "FAIL: found no Kotlin sources; the find pattern is wrong and this"
+            echo "FAIL: step would pass by checking nothing."
+            exit 1
+          }
+          python3 .github/scripts/check_row_fields.py "${KTT[@]}"
+
       # The ABI is written down in TWO places that are not the same list on
       # purpose: the full set in .github/scripts/gs_mobile_abi.txt, and an
       # eleven-symbol non-diffusion subset inline in ios-native.yml, because the
