@@ -2486,3 +2486,90 @@ answer is **cause 1** (this ABI is not in the matrix) or **cause 3** (the run
 predates the matrix). That distinction is the entire value of the three-cause
 message, and an artifact list printed by a six-line inline python is one bad
 indentation away from not existing.
+
+## THE SD PACKAGE WAS BUILT IN A SHAPE NOBODY CONSUMED, AND ITS OWN ARCH CHECK WAS `|| true`
+
+`android-native` run **36965589398** got further than ever and then failed on
+something that looks like a missing library and is not:
+
+```
+deps run: 36963660068, looking for artifact: stablediffusion-x86_64
+artifact id: 11208263244
+...
+=== native/prebuilts/sd-android-x86_64 contents ===
+native/prebuilts/sd-android-x86_64/include/stable-diffusion.h
+native/prebuilts/sd-android-x86_64/libggml-base.a
+native/prebuilts/sd-android-x86_64/libggml-cpu.a
+native/prebuilts/sd-android-x86_64/libggml.a
+native/prebuilts/sd-android-x86_64/libstable-diffusion.a
+header: 20473 bytes
+::error::native/prebuilts/sd-android-x86_64/lib is missing: libstable-diffusion.a ...
+::error::present:
+##[error]Process completed with exit code 2.
+```
+
+**The archives were in that listing.** Every one of them. They were at the package
+**root**; `build.rs` looks in `lib/`:
+
+```rust
+let libdir = std::path::Path::new(root).join("lib");          // build.rs:197
+let p = libs.join(format!("lib{name}.a"));                     // build.rs:429
+```
+
+and `android-deps.yml` wrote them as `B="dist/$(basename "$S")"` while writing the
+header to `dist/include/`. So the package was half in the documented shape. This
+is the **fourth** "a wrong assumption about where something IS" in this
+repository, and the fourth one I have made myself this session.
+
+### And the diagnostic that would have said so was cut off in its last line
+
+`ls -1 "$SD_ROOT/lib"` on a directory that does not exist exits 2. Under `set -e`
+the step died **there**, so the run ended with an empty `::error::present:` and
+exit 2 instead of my `exit 1`.
+
+The one line that names the actual fault — *the archives are at the root, not in
+`lib/`* — is the line that was cut, and the real listing was printed fourteen
+lines earlier where nobody was looking. The listing is now `find -maxdepth 2`, so
+it cannot fail, and it is verified against a package laid out the wrong way:
+
+```
+include/stable-diffusion.h
+libggml.a
+libggml-base.a
+libggml-cpu.a
+libstable-diffusion.a
+```
+
+### THE ARCH CHECK WAS RUNNING AND ITS RESULT WAS BEING THROWN AWAY
+
+```sh
+bash .../assert_arch_member.sh "$B" "$(basename "$S")" arm64 || true
+```
+
+Two faults in one line.
+
+1. **The expectation is the literal `arm64` on every leg of the matrix.** The
+   x86_64 build was being asserted to be arm64.
+2. **`|| true` discards the verdict.** So (1) was invisible, and the
+   `stablediffusion (x86_64)` job reported **success** having verified nothing
+   about its own architecture.
+
+`llamacpp`'s equivalent is the correct shape and has always worked:
+
+```sh
+bash .../assert_arch_member.sh "$B" "$(basename "$S")" "${{ matrix.expect }}"
+```
+
+no `|| true`, and an `expect` column in the matrix. **A check whose result is
+discarded is not a check, and this one was actively concealing a check that was
+checking the wrong thing.** The matrix now carries `expect` and the `|| true` is
+gone, so the x86_64 leg will fail if it is not x86_64.
+
+### `armeabi-v7a` and `x86` now SUCCEED, and that is the fail-closed design working
+
+Both have no stable-diffusion package by design. The fetch step warns, sets
+`GS_SD_PREBUILT=` empty, and continues — so their `.so` compiles in the portable
+branch and `gs_sd_generate` answers `GS_ERR_UNAVAILABLE` with a reason, which is
+the honest state. `x86_64` and `arm64-v8a` **fail closed**, because a device test
+must not run against a library that cannot generate. Two green, two red, and the
+split is the one that was specified rather than the one that was convenient.

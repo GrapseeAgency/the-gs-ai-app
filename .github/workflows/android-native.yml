@@ -460,7 +460,29 @@ jobs:
             echo "::error::The link order is stable-diffusion, ggml, ggml-cpu, ggml-base; a"
             echo "::error::missing member of that chain surfaces as undefined ggml symbols"
             echo "::error::in the .so with nothing to name the cause."
-            echo "::error::present:"; ls -1 "$SD_ROOT/lib" 2>/dev/null | sed 's/^/::error::    /'
+            # GUARDED, AND IT COST THE DIAGNOSTIC ITSELF. `ls -1 "$SD_ROOT/lib"` on
+            # a directory that does not exist exits 2, `set -e` killed the step
+            # there, and the run ended:
+            #
+            #     ::error::present:
+            #     ##[error]Process completed with exit code 2.
+            #
+            # -- an EMPTY listing and exit 2 instead of my `exit 1`. The one line
+            # that would have said "the archives are at the package ROOT, not in
+            # lib/" is the line that was cut off, and the real listing was
+            # printed fourteen lines earlier:
+            #
+            #     native/prebuilts/sd-android-x86_64/include/stable-diffusion.h
+            #     native/prebuilts/sd-android-x86_64/libggml-base.a
+            #     native/prebuilts/sd-android-x86_64/libggml-cpu.a
+            #     native/prebuilts/sd-android-x86_64/libggml.a
+            #     native/prebuilts/sd-android-x86_64/libstable-diffusion.a
+            #
+            # A diagnostic that dies before its last line is the failure mode this
+            # step's own header calls worse than no gate.
+            echo "::error::present under $SD_ROOT (top level, then lib/):"
+            find "$SD_ROOT" -maxdepth 2 \( -name '*.a' -o -name '*.h' \) \
+              | sed "s#^$SD_ROOT/##" | sort | sed 's/^/::error::    /'
             exit 1
           fi
           for A in "$SD_ROOT"/lib/*.a; do

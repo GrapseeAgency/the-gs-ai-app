@@ -698,7 +698,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        abi: [arm64-v8a, x86_64]
+        # `expect` is the spelling assert_arch_member.sh and `file` use, which is
+        # NOT the ABI name: Mach-O says "arm64", the ABI is "arm64-v8a". llamacpp's
+        # matrix carries the same pair and has always passed it explicitly.
+        include:
+          - abi: arm64-v8a
+            expect: arm64
+          - abi: x86_64
+            expect: x86_64
     # THE JOB-LEVEL ENV IS THE POINT. The workflow sets `ABI: arm64-v8a`
     # globally, which is what pinned this job to one architecture; a matrix
     # that the toolchain file does not read produces two identical arm64
@@ -804,15 +811,37 @@ jobs:
       - name: Verify and package
         run: |
           set -euo pipefail
-          mkdir -p dist
+          # include/ AND lib/, WHICH IS THE SHAPE build.rs DOCUMENTS AND THE
+          # SHAPE THE CONSUMER ACTUALLY LOOKS IN.
+          #
+          # This wrote the archives to the package ROOT:
+          #     B="dist/$(basename "$S")"
+          # and the header to dist/include/, so the package was
+          #     include/stable-diffusion.h
+          #     libggml.a  libggml-base.a  libggml-cpu.a  libstable-diffusion.a
+          # while build.rs, the wrapper's own header comment and the fetch step all
+          # expect lib/libstable-diffusion.a. The consumer's error is therefore
+          # about a directory that is one level away from the right one:
+          #     ::error::native/prebuilts/sd-android-x86_64/lib is missing:
+          #     libstable-diffusion.a libggml.a libggml-cpu.a libggml-base
+          #     ::error::present:            <- and the listing is EMPTY
+          # run 36965589398. The archives were there, in the listing directly above.
+          mkdir -p dist/lib dist/include
           FOUND=0
           # find, not a hardcoded build/bin path. Same defect as llama.cpp in the
           # same run: a cmake build writes archives next to their sources.
           for S in $(find build -name '*.a' | sort); do
-            B="dist/$(basename "$S")"
+            B="dist/lib/$(basename "$S")"
             cp "$S" "$B"
-            bash "$GITHUB_WORKSPACE/.github/scripts/assert_arch_member.sh" "$B" "$(basename "$S")" arm64 || true
-            echo "  $S -> $B ($(stat -c%s "$S") bytes)"
+            # NO `|| true`. It was there, and it is why the next problem was
+            # invisible: this passed the literal `arm64` for EVERY archive on the
+            # x86_64 leg, and the `|| true` discarded the verdict. A check whose
+            # result is thrown away is not a check, and this one was hiding a
+            # check that was checking the wrong thing. llamacpp's equivalent
+            # passes ${{ matrix.expect }} with no || true, and has always worked.
+            bash "$GITHUB_WORKSPACE/.github/scripts/assert_arch_member.sh" \
+              "$B" "$(basename "$S")" "${{ matrix.expect }}"
+            echo "  $S -> $B ($(stat -c%s "$S") bytes) expect=${{ matrix.expect }}"
             FOUND=$((FOUND+1))
           done
           if [ "$FOUND" -eq 0 ]; then
