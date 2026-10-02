@@ -47,12 +47,23 @@ gs_mobile_ctx_t* gs_mobile_create(const char* model_path, int32_t n_ctx, int32_t
  * because they were hardcoded in llama_wrapper.cpp: the prompt-processing batch,
  * the micro-batch, and flash attention.
  *
- * Every one of them takes 0 for "the value this build already used", which is NOT
- * the same as zero -- n_batch 0 would mean "process nothing". gs_mobile_create
- * above is exactly this call with 0, 0, 0, and it delegates rather than repeating
- * the defaults, so there is one place they are written down. */
+ * SENTINELS DIFFER, AND THE DIFFERENCE IS THE POINT:
+ *
+ *   n_batch         0 -> 512      (0 would mean "process nothing")
+ *   n_ubatch        0 -> 512      (idem)
+ *   flash_attn     <0 -> AUTO     (an enum: -1 AUTO, 0 DISABLED, 1 ENABLED)
+ *   n_threads_batch <0 -> library default  (0 would mean "zero batch threads")
+ *
+ * Three fields take 0 for "as before" and one takes a NEGATIVE, because a 0
+ * thread count is a value a caller would plausibly type by accident and a 0 batch
+ * size is not. Writing the same sentinel everywhere would be tidier and wrong.
+ *
+ * gs_mobile_create above is exactly this call with 0, 0, -1, 0, 0, -1, and it
+ * delegates rather than repeating the defaults, so there is one place they are
+ * written down. */
 gs_mobile_ctx_t* gs_mobile_create_tuned(const char* model_path,
                                         int32_t n_ctx, int32_t n_threads,
+                                        int32_t n_threads_batch,
                                         int32_t n_batch, int32_t n_ubatch,
                                         int32_t flash_attn);
 

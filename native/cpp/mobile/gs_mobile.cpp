@@ -58,6 +58,11 @@ struct gs_mobile_ctx {
     int32_t n_batch = 0;
     int32_t n_ubatch = 0;
     int32_t flash_attn = 0;
+    // -1, NOT 0: negative leaves llama_context_default_params() alone, and 0 here
+    // would ask llama.cpp for zero threads. The other three use 0-means-default
+    // because a zero size is not a value anyone types by accident; a zero thread
+    // count is.
+    int32_t n_threads_batch = -1;
     std::string model_path;
     bool has_model = false;
 #ifdef GS_MOBILE_HAVE_LLAMA
@@ -69,6 +74,7 @@ extern "C" {
 
 gs_mobile_ctx_t* gs_mobile_create_tuned(const char* model_path,
                                         int32_t n_ctx, int32_t n_threads,
+                                        int32_t n_threads_batch,
                                         int32_t n_batch, int32_t n_ubatch,
                                         int32_t flash_attn) {
     try {
@@ -77,7 +83,12 @@ gs_mobile_ctx_t* gs_mobile_create_tuned(const char* model_path,
         if (n_threads > 0) ctx->n_threads = n_threads;
         ctx->n_batch = n_batch > 0 ? n_batch : 0;
         ctx->n_ubatch = n_ubatch > 0 ? n_ubatch : 0;
-        ctx->flash_attn = flash_attn != 0 ? 1 : 0;
+        // flash_attn is an ENUM, so it is passed through rather than reduced to a
+        // flag. -1 (AUTO) is the value this build used before, by never assigning
+        // the field at all, and reducing it to 0/1 would throw that away and pin
+        // the kernel to DISABLED for every caller that had not opted in.
+        ctx->flash_attn = flash_attn < 0 ? -1 : (flash_attn > 0 ? 1 : 0);
+        ctx->n_threads_batch = n_threads_batch < 0 ? -1 : n_threads_batch;
         if (model_path && *model_path) {
             ctx->model_path = model_path;
             // Presence is checked, not opened. A model that ships in app storage
@@ -98,6 +109,7 @@ gs_mobile_ctx_t* gs_mobile_create_tuned(const char* model_path,
             cfg.n_batch   = ctx->n_batch;
             cfg.n_ubatch  = ctx->n_ubatch;
             cfg.flash_attn = ctx->flash_attn;
+            cfg.n_threads_batch = ctx->n_threads_batch;
             ctx->llama = gs_llama_create(&cfg);
             if (!ctx->llama) {
                 set_err(std::string("llama load failed: ") + gs_last_error());
@@ -115,7 +127,7 @@ gs_mobile_ctx_t* gs_mobile_create_tuned(const char* model_path,
 
 /* The three-knob-free form, delegating so the defaults live in ONE place. */
 gs_mobile_ctx_t* gs_mobile_create(const char* model_path, int32_t n_ctx, int32_t n_threads) {
-    return gs_mobile_create_tuned(model_path, n_ctx, n_threads, 0, 0, 0);
+    return gs_mobile_create_tuned(model_path, n_ctx, n_threads, -1, 0, 0, -1);
 }
 
 void gs_mobile_free(gs_mobile_ctx_t* ctx) {

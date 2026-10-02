@@ -83,7 +83,34 @@ typedef struct {
      */
     int32_t     n_batch;
     int32_t     n_ubatch;
-    int32_t     flash_attn;  /* nonzero -> enable flash attention. */
+
+    /* Flash attention. This is an ENUM in llama_context_params, not a bool, and
+     * the mapping is the upstream one rather than a truthiness test:
+     *
+     *     LLAMA_FLASH_ATTN_TYPE_AUTO     = -1
+     *     LLAMA_FLASH_ATTN_TYPE_DISABLED =  0
+     *     LLAMA_FLASH_ATTN_TYPE_ENABLED  =  1
+     *
+     * AUTO is what llama_context_default_params() carries, so a negative value
+     * means "leave it on the library default" and preserves the behaviour this
+     * build had before the field was ever assigned. */
+    int32_t     flash_attn;
+
+    /* THREADS FOR PROMPT PROCESSING, which is a DIFFERENT FIELD from n_threads.
+     * n_threads is generation; n_threads_batch is batch processing, and batch
+     * processing is what the time-to-first-token is made of.
+     *
+     * THE SENTINEL IS ASYMMETRIC WITH THE OTHER THREE, DELIBERATELY:
+     *
+     *     >= 0  set it to exactly this
+     *     <  0   leave llama_context_default_params()'s value alone
+     *
+     * A 0 here is not "off", it is "the library default", so there is no 0-means-
+     * off reading to confuse it with -- and forcing 0 would ask llama.cpp for
+     * zero batch threads. The other three fields use 0-means-default because
+     * zero is not a plausible value for a size; 0 IS plausible-looking for a
+     * thread count, which is exactly why it is not the sentinel here. */
+    int32_t     n_threads_batch;
 } llama_config_t;
 
 } /* extern "C" -- reopened below */

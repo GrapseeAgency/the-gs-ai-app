@@ -50,18 +50,35 @@ object GsNative {
      * that were previously hardcoded in the wrapper and therefore unmeasurable:
      * the prompt-processing batch, the micro-batch, and flash attention.
      *
-     * Each of the last three takes 0 for "the value this build already used",
-     * which is NOT zero -- a batch of 0 would mean "process nothing". [init] is
-     * this call with 0, 0, 0.
+     * The sentinels DIFFER, and using the wrong one is a real fault rather than
+     * a no-op:
+     *
+     * | param | sentinel for "as this build already was" | passing 0 instead means |
+     * |---|---|---|
+     * | [nBatch] | 0 | 0 |
+     * | [nUbatch] | 0 | 0 |
+     * | [nThreadsBatch] | **-1** | zero batch threads |
+     * | [flashAttn] | **-1** | `DISABLED` (not `AUTO`) |
      *
      * [nBatch] is the TTFT knob for a long prompt: it is how many prompt tokens go
      * to `llama_decode` at once. [nUbatch] bounds a single graph and must not
      * exceed [nBatch] (the C++ side clamps rather than letting ggml abort).
+     *
+     * [nThreadsBatch] is NOT [nThreads]. `n_threads` is generation; `n_threads_batch`
+     * is batch processing, and batch processing is what time-to-first-token is
+     * made of. Negative leaves the library default in place.
+     *
+     * [flashAttn] is an enum, not a boolean: -1 `AUTO`, 0 `DISABLED`, 1 `ENABLED`.
+     * `AUTO` is what `llama_context_default_params()` carries, so -1 preserves the
+     * behaviour this build had before the field was ever assigned.
+     *
+     * [init] is this call with `0, -1, 0, 0, -1`.
      */
     external fun initTuned(
         modelPath: String,
         nCtx: Int,
         nThreads: Int,
+        nThreadsBatch: Int,
         nBatch: Int,
         nUbatch: Int,
         flashAttn: Int,

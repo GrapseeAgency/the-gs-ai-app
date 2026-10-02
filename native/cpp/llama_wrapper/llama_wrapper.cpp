@@ -119,11 +119,56 @@ gs_llama_ctx* gs_llama_create(const llama_config_t* config) {
         cp.n_batch   = config->n_batch   > 0 ? config->n_batch   : 512;
         cp.n_ubatch  = config->n_ubatch  > 0 ? config->n_ubatch  : 512;
         if (cp.n_ubatch > cp.n_batch) cp.n_ubatch = cp.n_batch;
-        // Flash attention. UNSET before, so it inherited whatever
-        // llama_context_default_params() happened to carry. Now explicit, because
-        // "unset" is not a measurement: it means the default changed underneath a
-        // number nobody wrote down.
-        cp.flash_attn = config->flash_attn != 0;
+        // PROMPT-PROCESSING THREADS, WHICH ARE NOT THE SAME KNOB.
+        //
+        // cp.n_threads is "number of threads to use for GENERATION" and
+        // cp.n_threads_batch is "number of threads to use for BATCH PROCESSING"
+        // -- two separate fields in llama_context_params, and prompt processing is
+        // what TTFT is. This file set n_threads and never touched n_threads_batch,
+        // so prompt processing ran on whatever llama_context_default_params()
+        // happened to carry (GGML_DEFAULT_N_THREADS) while generation ran on the
+        // measured value.
+        //
+        // That makes the earlier "4 threads is optimal, 8 is 70x worse" table a
+        // statement about GENERATION threads only. It is a real result and it
+        // still stands, but it cannot have been a result about prompt processing,
+        // because prompt processing was never given the number.
+        //
+        // n_threads_batch < 0 leaves the library default ALONE, deliberately.
+        // Unlike n_batch, a 0 here is not "off" -- it is "use the default" -- and
+        // forcing 0 would be a hang. The asymmetry is stated at every layer
+        // because it is the kind of thing that reads as a bug when it is not.
+        if (config->n_threads_batch >= 0) {
+            cp.n_threads_batch = config->n_threads_batch;
+        }
+
+        // FLASH ATTENTION. The field is `flash_attn_type` and its type is
+        // `enum llama_flash_attn_type`, NOT a bool -- verified against the pinned
+        // llama.h at 3018a11e79e489b657dbb77c95694889ccff92df:
+        //
+        //     enum llama_flash_attn_type {
+        //         LLAMA_FLASH_ATTN_TYPE_AUTO     = -1,
+        //         LLAMA_FLASH_ATTN_TYPE_DISABLED =  0,
+        //         LLAMA_FLASH_ATTN_TYPE_ENABLED  =  1,
+        //     };
+        //     ...
+        //     enum llama_flash_attn_type   flash_attn_type;   // when to enable
+        //
+        // The first attempt at this wrote `cp.flash_attn = ... != 0` and did not
+        // compile: "no member named 'flash_attn' in 'llama_context_params'"
+        // (android-native run 36955318134, all four ABIs). Upstream llama.cpp had
+        // a bool `flash_attn` at some point; this pin does not, and the enum has
+        // three states where a bool had two -- AUTO is not reachable by a bool at
+        // all, so a bool would have silently lost the library's own default.
+        //
+        // AUTO (-1) is the DEFAULT and is what the code used before, by never
+        // assigning the field. 0 is explicitly disabled, 1 explicitly enabled.
+        // A negative config value keeps AUTO, so the default path is unchanged.
+        switch (config->flash_attn) {
+            case 0:  cp.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_DISABLED; break;
+            case 1:  cp.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_ENABLED;  break;
+            default: cp.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_AUTO;     break;
+        }
         // KV cache element type. F16 is the default; a caller can trade fidelity
         // for footprint by asking for 4-bit. ggml validates the pairing.
         cp.type_k = (ggml_type)(config->cache_type_k ? config->cache_type_k : GGML_TYPE_F16);

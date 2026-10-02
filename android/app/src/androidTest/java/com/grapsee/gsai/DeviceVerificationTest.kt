@@ -1802,7 +1802,11 @@ class DeviceVerificationTest {
                     // varying batch or flash attention as well or its own table
                     // stops being about what it says it is about.
                     GsNativeLoader.isLibraryLoaded() && GsNative.initTuned(
-                        m.absolutePath, nCtx, nThreads, 0, 0, 0,
+                        // -1 for n_threads_batch and flash_attn, NOT 0. Both are
+                        // enums-or-negative-sentinel, and this sweep is about
+                        // n_threads, so the other two must be left on the library
+                        // defaults -- which is what a 0 would not do.
+                        m.absolutePath, nCtx, nThreads, -1, 0, 0, -1,
                     )
                 } catch (t: Throwable) {
                     println("LEVERS $label FAILED TO INITIALISE: ${t.message}")
@@ -2019,7 +2023,7 @@ class DeviceVerificationTest {
             GsNative.shutdown()
             val ok = try {
                 GsNativeLoader.isLibraryLoaded() && GsNative.initTuned(
-                    m.absolutePath, nCtx, nThreads, nBatch, 0, 0,
+                    m.absolutePath, nCtx, nThreads, -1, nBatch, 0, -1,
                 )
             } catch (t: Throwable) {
                 println("LEVERS3 $label FAILED TO INITIALISE: ${t.message}")
@@ -2132,7 +2136,7 @@ class DeviceVerificationTest {
             GsNative.shutdown()
             val loaded = try {
                 GsNativeLoader.isLibraryLoaded() && GsNative.initTuned(
-                    m.absolutePath, nCtx, nThreads, 0, 0, if (flash) 1 else 0,
+                    m.absolutePath, nCtx, nThreads, -1, 0, 0, if (flash) 1 else 0,
                 )
             } catch (t: Throwable) {
                 println("LEVERS5 flash_attn=$flash FAILED TO INITIALISE: ${t.message}")
@@ -2216,6 +2220,203 @@ class DeviceVerificationTest {
                 "same reason then the failure is the context, not flash attention.",
             off.loaded || on.loaded || off.why != on.why,
         )
+    }
+
+
+    // ========================================================================
+    // LEVER 7 -- n_threads_batch, WHICH IS NOT n_threads.
+    //
+    // Found by reading the pinned llama.h rather than by guessing at what the
+    // knobs were. `struct llama_context_params` at
+    // 3018a11e79e489b657dbb77c95694889ccff92df has TWO thread fields:
+    //
+    //     int32_t  n_threads;        // number of threads to use for GENERATION
+    //     int32_t  n_threads_batch;  // number of threads to use for BATCH PROCESSING
+    //
+    // This wrapper set n_threads and never touched n_threads_batch, so prompt
+    // processing ran on llama_context_default_params()'s value for the whole time.
+    //
+    // WHY THIS MATTERS FOR THE NUMBER THE APP IS JUDGED ON. The earlier table
+    // found "4 threads optimal, 8 threads 70x worse" and recorded it as a result
+    // about threads. It is a real result and it stands -- but it is a result about
+    // GENERATION threads, because prompt processing was never given the number.
+    // And time-to-first-token is prompt processing. So the one field that could
+    // have moved TTFT by moving prompt processing across cores was never swept.
+    //
+    // THE LONG PROMPT IS ESSENTIAL AGAIN. n_threads_batch only has work to
+    // parallelise during prompt processing, so a short prompt measures the
+    // generation path and reports the lever as inert.
+    //
+    // 1 IS IN THE SWEEP DELIBERATELY. It is the row that proves the field is
+    // real: if setting n_threads_batch to 1 changes nothing at all, then either
+    // the field is not reaching llama.cpp or the emulator parallelises prompt
+    // processing no matter what. Either way that is worth knowing, and a sweep
+    // without a deliberately-bad row cannot tell "no effect" from "no effect
+    // because the value never arrived".
+    //
+    // 0 IS NOT SWEPT. It is the sentinel for "leave the library default" and
+    // passing it as a thread count would ask for zero batch threads. Whether that
+    // returns an error or hangs is exactly the kind of thing that would turn a
+    // 53-minute device run into a 6-hour timeout, so it is documented here rather
+    // than tried.
+    // ========================================================================
+
+    @Test
+    fun perf_lever7_prompt_processing_threads_are_a_separate_lever_from_generation_threads() {
+        val model = findModel()
+        assertNotNull(
+            "no model on the device, so there is nothing to sweep. This is a " +
+                "FAILURE, not a skip.",
+            model,
+        )
+        val m = model!!
+
+        val longPrompt = buildString {
+            append("Summarise the following engineering notes.\n\n")
+            var i = 1
+            while (length < 2200) {
+                append(
+                    "Note $i: the retrieval layer caches embeddings for thirty " +
+                        "minutes, and a cache miss recomputes the query vector " +
+                        "before the first token is produced.\n"
+                )
+                i++
+            }
+        }
+        assertTrue(
+            "the long prompt is only ${longPrompt.length} chars, which cannot " +
+                "exercise prompt processing",
+            longPrompt.length > 2000,
+        )
+        println("LEVERS7 long prompt: ${longPrompt.length} chars")
+
+        data class TbRow(
+            val genThreads: Int,
+            val batchThreads: Int,
+            val loaded: Boolean,
+            val ttft: Long,
+            val t49: Long,
+            val reply: String,
+            val why: String,
+        )
+
+        // n_threads is HELD AT 4 for every row: 4 was measured as the generation
+        // optimum, so holding it fixed is what isolates n_threads_batch. The one
+        // extra row varies n_threads as well, purely to show the two fields are
+        // not the same field.
+        val nCtx = 2048
+        val genThreadCounts = listOf(4, 4, 4, 4, 2)
+        val batchThreadCounts = listOf(1, 2, 4, 8, 8)
+
+        val rows = mutableListOf<TbRow>()
+        for (i in genThreadCounts.indices) {
+            val gen = genThreadCounts[i]
+            val batch = batchThreadCounts[i]
+            val label = "n_threads=$gen n_threads_batch=$batch"
+            GsNative.shutdown()
+            val loaded = try {
+                GsNativeLoader.isLibraryLoaded() && GsNative.initTuned(
+                    m.absolutePath, nCtx, gen, batch, 0, 0, -1,
+                )
+            } catch (t: Throwable) {
+                println("LEVERS7 $label FAILED TO INITIALISE: ${t.message}")
+                false
+            }
+            if (!loaded) {
+                rows += TbRow(gen, batch, false, -1, -1, "", "initTuned failed")
+                continue
+            }
+            var reply = ""
+            val ttft = try {
+                GsNative.chatWithBudget(longPrompt, 8)   // warm-up, discarded
+                val t0 = System.nanoTime() / 1_000_000
+                reply = GsNative.chatWithBudget(longPrompt, 1)
+                System.nanoTime() / 1_000_000 - t0
+            } catch (t: Throwable) {
+                println("LEVERS7 $label THREW: ${t.message}")
+                -1L
+            }
+            var t49 = -1L
+            if (ttft > 0) {
+                t49 = try {
+                    val t0 = System.nanoTime() / 1_000_000
+                    GsNative.chatWithBudget(longPrompt, 49)
+                    System.nanoTime() / 1_000_000 - t0
+                } catch (t: Throwable) {
+                    println("LEVERS7 $label 49-token run threw: ${t.message}")
+                    -1L
+                }
+            }
+            val ok = ttft > 0 && t49 > ttft
+            println(
+                "LEVERS7 $label ttft=${ttft}ms t49=${t49}ms " +
+                    "reply=${reply.take(50).replace("\n", " ")}",
+            )
+            rows += TbRow(gen, batch, true, ttft, t49, reply, if (ok) "" else "no usable timing"))
+        }
+        GsNative.shutdown()
+        GsNativeLoader.initWith(m.absolutePath)
+
+        println("=== ITEM 1 LEVER 7: prompt-processing threads (long prompt, 0.5B) ===")
+        println(
+            String.format(
+                "  %-10s %-14s %10s %10s %9s",
+                "n_threads", "n_threads_batch", "TTFT ms", "tok/s", "chars",
+            ),
+        )
+        for (r in rows) {
+            if (!r.loaded || r.ttft <= 0) {
+                println(String.format("  %-10d %-14d %10s", r.genThreads, r.batchThreads, "-"))
+                continue
+            }
+            val perToken = (r.t49 - r.ttft).toDouble() / 48.0
+            val tps = if (perToken > 0) 1000.0 / perToken else 0.0
+            println(
+                String.format(
+                    "  %-10d %-14d %10d %10.2f %9d",
+                    r.genThreads, r.batchThreads, r.ttft, tps, r.reply.length,
+                ),
+            )
+        }
+
+        val usable = rows.filter { it.loaded && it.ttft > 0 && it.t49 > it.ttft }
+        assertTrue(
+            "no n_threads_batch value produced a usable timing: " +
+                rows.joinToString("; ") { "${it.batchThreads}: ${it.why}" },
+            usable.isNotEmpty(),
+        )
+
+        // THE ROW THAT PROVES THE FIELD ARRIVED.
+        //
+        // Constrained to gen=4 so it compares like with like, and it asserts the
+        // DIRECTION rather than merely that the numbers differ: a single batch
+        // thread must be slower at prompt processing than several. A bare
+        // "the numbers are not all equal" would pass on a 1% scheduling wobble,
+        // which is noise, and a field that never reached llama.cpp would produce
+        // exactly that.
+        val gen4 = usable.filter { it.genThreads == 4 }
+        if (gen4.size >= 2) {
+            val best = gen4.minByOrNull { it.ttft }!!
+            val oneThread = gen4.filter { it.batchThreads == 1 }.minByOrNull { it.ttft }
+            if (oneThread != null) {
+                println(
+                    "LEVERS7 n_threads_batch=1 TTFT ${oneThread.ttft}ms vs the best " +
+                        "(${best.batchThreads} threads) ${best.ttft}ms",
+                )
+                assertTrue(
+                    "n_threads_batch=1 (${oneThread.ttft}ms) is FASTER than " +
+                        "${best.batchThreads} batch threads (${best.ttft}ms). On a " +
+                        "multi-core runner one prompt-processing thread should not " +
+                        "beat several, so either the field did not reach llama.cpp " +
+                        "or something else is being measured. Both are worth a red run.",
+                    oneThread.ttft >= best.ttft,
+                )
+            } else {
+                println("LEVERS7 n_threads_batch=1 produced no usable row; not comparable")
+            }
+        } else {
+            println("LEVERS7 only ${gen4.size} usable row(s) at n_threads=4; not comparable")
+        }
     }
 
 }

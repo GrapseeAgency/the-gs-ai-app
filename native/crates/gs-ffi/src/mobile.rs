@@ -136,6 +136,7 @@ extern "C" {
         model_path: *const c_char,
         n_ctx: c_int,
         n_threads: c_int,
+        n_threads_batch: c_int,
         n_batch: c_int,
         n_ubatch: c_int,
         flash_attn: c_int,
@@ -235,7 +236,12 @@ impl MobileCtx {
     pub fn create(model_path: &str, n_ctx: i32, n_threads: i32) -> Result<Self, MobileError> {
         // DELEGATES. The defaults are written down in create_tuned's doc and in
         // llama_config_t, not here a second time.
-        Self::create_tuned(model_path, n_ctx, n_threads, 0, 0, 0)
+        // 0, -1, 0, 0, -1 -- NOT five zeros. flash_attn is an enum in which -1 is
+        // AUTO (what the library defaulted to before the field was ever
+        // assigned) and n_threads_batch takes a negative to mean "leave the
+        // library's value alone". Zeroing both would pin the kernel DISABLED and
+        // the batch to zero threads for every caller who asked for nothing.
+        Self::create_tuned(model_path, n_ctx, n_threads, -1, 0, 0, -1)
     }
     /// `create` with the three performance levers: prompt-processing batch,
     /// micro-batch, and flash attention.
@@ -251,6 +257,7 @@ impl MobileCtx {
         model_path: &str,
         n_ctx: i32,
         n_threads: i32,
+        n_threads_batch: i32,
         n_batch: i32,
         n_ubatch: i32,
         flash_attn: i32,
@@ -262,6 +269,7 @@ impl MobileCtx {
                 p.as_ptr(),
                 n_ctx,
                 n_threads,
+                n_threads_batch,
                 n_batch,
                 n_ubatch,
                 flash_attn,
@@ -502,12 +510,21 @@ pub extern "C" fn gs_ffi_mobile_create_tuned(
     model_path: *const c_char,
     n_ctx: c_int,
     n_threads: c_int,
+    n_threads_batch: c_int,
     n_batch: c_int,
     n_ubatch: c_int,
     flash_attn: c_int,
 ) -> *mut GS_MobileCtx {
     unsafe {
-        gs_mobile_create_tuned(model_path, n_ctx, n_threads, n_batch, n_ubatch, flash_attn)
+        gs_mobile_create_tuned(
+            model_path,
+            n_ctx,
+            n_threads,
+            n_threads_batch,
+            n_batch,
+            n_ubatch,
+            flash_attn,
+        )
     }
 }
 

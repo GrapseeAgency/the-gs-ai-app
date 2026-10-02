@@ -197,6 +197,7 @@ pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_initTuned(
     model_path: JString,
     n_ctx: jint,
     n_threads: jint,
+    n_threads_batch: jint,
     n_batch: jint,
     n_ubatch: jint,
     flash_attn: jint,
@@ -209,7 +210,9 @@ pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_initTuned(
                 return JNI_FALSE;
             }
         };
-        match MobileCtx::create_tuned(&path, n_ctx, n_threads, n_batch, n_ubatch, flash_attn) {
+        match MobileCtx::create_tuned(
+            &path, n_ctx, n_threads, n_threads_batch, n_batch, n_ubatch, flash_attn,
+        ) {
             Ok(c) => {
                 set_global(Some(c));
                 JNI_TRUE
