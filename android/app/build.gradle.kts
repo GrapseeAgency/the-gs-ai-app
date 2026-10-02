@@ -317,6 +317,13 @@ dependencies {
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test:rules:1.6.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
+    // Blocker 4: ChatUiReplyTest drives the composer with Compose UI test.
+    // The source set carried Espresso + JUnit but NOT the Compose test rule,
+    // so a real UI assertion could not compile. One BOM platform line + the
+    // junit4 rule, plus the debug manifest for createAndroidComposeRule.
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
     androidTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     testImplementation("io.ktor:ktor-client-mock:2.3.12")
 }

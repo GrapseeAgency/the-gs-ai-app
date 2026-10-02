@@ -3468,3 +3468,69 @@ here. None is available. **The arm64 `.so` compiles and passes ELF verification
 no further attempt is worth dispatching.** A future change that needs it should
 provision a dedicated arm64 runner/self-hosted host first, not dispatch into a
 queue that does not assign.
+
+---
+
+## BLOCKER 4: a real UI send-and-reply test on BOTH platforms — AUTHORED, not executed
+
+What was added, where, and what it still needs before it can RUN.
+
+### Android — `ChatUiReplyTest`
+
+* File: `android/app/src/androidTest/java/com/grapsee/gsai/ChatUiReplyTest.kt`
+* Test: `sendHello_rendersARealAssistantReply`
+* Flow: tap the composer (`onAllNodes(hasSetTextAction()).onFirst()` →
+  `performTextInput("hello")`), tap the send affordance
+  (`onNodeWithContentDescription("Send")`), then poll the semantics tree until
+  a non-blank text node other than the composer placeholder shows, bounded at
+  180 s.
+* Assertions: a reply bubble rendered at all; its text does not start with the
+  canned `localReply` greeting prefix (`"Hey — good to see you."`), i.e. best
+  effort it came from the engine; it is not the sent `"hello"` echoed.
+* Skip rule: `assumeTrue` on the same GGUF discovery rules as
+  `GsNativeTest.deviceModel` — with no 0.5B model on the device the test
+  SKIPS, never fabricates.
+* **Wiring needed (one line + one debug line), DONE in this commit**: the
+  androidTest source set carried JUnit/Espresso/rules but no Compose UI
+  test rule, so `createAndroidComposeRule` could not compile.
+  `android/app/build.gradle.kts` now has
+  `androidTestImplementation(platform(libs.androidx.compose.bom))`,
+  `androidTestImplementation("androidx.compose.ui:ui-test-junit4")`, and
+  `debugImplementation("androidx.compose.ui:ui-test-manifest")`.
+* Compile check: NOT verifiable in this sandbox — no Android SDK is
+  installed (`SDK location not found`; no `$ANDROID_HOME`, no
+  `android.jar` anywhere under `/home/arafat` or `/opt`). The file is
+  authored against the Compose UI test API as used in current BOM 2024.09.03,
+  and is **device-run-blocked**: it must be compile-checked and executed on
+  a device/emulator by the androidTest job.
+* Logcat side-channel: the "came from the local model" check is TEXT-based;
+  the native engine also frames its answer through `GsNative.chat`, but this
+  test deliberately does not parse logcat in-process.
+
+### iOS — `GsChatUiTests`
+
+* File: `ios/App/Tests/GsChatUiTests.swift`
+* Test: `testSendHelloRendersARealAssistantReply`
+* Flow: `XCUIApplication().launch()` → find the field by placeholder text
+  `"Ask anything…"` → `typeText("hello")` → tap the button with
+  accessibilityLabel `"Send"` → poll `app.staticTexts` until a non-blank,
+  non-chrome, non-canned-prefix label appears, bounded at 180 s.
+* Skip rules: (a) `GS_UI_TEST_MODE=1` env var, (b) a 0.5B GGUF via
+  `$GS_TEST_MODEL` or Application Support, like `GsNativeTests.deviceModel`.
+* **Wiring needed (a NEW target), NOT done**: `ios/project.yml` has only
+  `AppTests` (`bundle.unit-test`). `XCUIApplication` inside that hosted unit
+  bundle cannot launch the app; this test compiles there (the class
+  references `XCUIApplication`, which resolves through the XCTest module)
+  but will XCTSkip unless every guard passes — including a *real*
+  UI-testing run. To execute it for real: add a
+  `UITests: { type: bundle.ui-testing, ... }` target in `ios/project.yml`,
+  add it to the scheme's test targets, and run with `GS_UI_TEST_MODE=1`.
+* Compile check: NOT verifiable — this sandbox is Linux, no Xcode/xcodebuild.
+
+### Status
+
+**AUTHORED, compile-unverified, device-run-blocked.** Both tests skip
+cleanly when their precondition (provisioned model / test mode) is absent,
+so wiring them in today changes no existing result. The first real run must
+come from a machine with an Android SDK and/or Xcode, and its result — pass,
+skip, or a real red — goes in the run record for Blocker 4.
