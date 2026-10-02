@@ -2839,3 +2839,99 @@ diffusion backend is the one this project already models correctly —
 That is a real piece of work — a CMake shared target, its own artifacts, symbol
 visibility, and a loader — and it is **Item 2's real remaining scope**, not
 something a link flag settles.
+
+---
+
+## FIFTEEN TESTS, ONE ROOT CAUSE: THE FUNCTION THAT RECOVERS A CONTEXT COULD NOT
+
+`android-device` **36981908316**, head `9b60f2c`. **29 tests, 12 passed, 17
+failed, 0 skipped.** Fifteen of the seventeen carried the identical message:
+
+    GsNativeException: GsNative.backendAvailable: no native context;
+    call init(modelPath) first
+
+Fifteen identical failures is one cause wearing fifteen costumes, and the count is
+the least interesting number in the run. The cause was in
+`GsNativeLoader.initWith`:
+
+```kotlin
+fun initWith(modelPath: String): Boolean {
+    if (!ensureLoaded()) return false
+    synchronized(this) {
+        if (pendingModelPath == modelPath && GsNative.backendAvailable()) return true
+        return try {                       // <-- the catch starts HERE
+            val ok = GsNative.init(modelPath)
+            ...
+        } catch (t: Throwable) { ... false }
+    }
+}
+```
+
+**`backendAvailable()` is evaluated on the line above the `try`.** It raises
+`GsNativeException` rather than returning false, so if that branch is reached the
+exception leaves `initWith` entirely.
+
+The branch is reached whenever `pendingModelPath` matches the requested path while
+the context is dead. And it *did* match, because:
+
+- `pendingModelPath` is cleared by `GsNativeLoader.release()`
+- it is **not** cleared by a direct `GsNative.shutdown()`
+- and four of the five new lever tests called `GsNative.shutdown()` directly, 9
+  times, to reset the context between configurations
+
+So the sequence was: a lever test tears the context down without updating the
+bookkeeping, then calls `initWith` to put it back, `initWith` believes the context
+is already live, asks, the question throws, the exception escapes into the lever
+test, **the lever test fails on its last line**, and the restore never happens.
+Every later test needing the engine then finds no context.
+
+### Two defects, and the second is the one that would have bitten a user
+
+1. **Mine.** The lever tests bypassed `GsNativeLoader`'s bookkeeping. They now
+   call `GsNativeLoader.release()`, which does the shutdown *and* clears
+   `pendingModelPath`. Nine call sites.
+
+2. **Pre-existing, and this is the finding.** `initWith` is the function whose job
+   is to *recover* a context, its contract is *"@return true when a context exists
+   afterwards"*, and it **throws** in precisely the state recovery exists for. No
+   test suite is needed to see that: if the context dies for any reason while the
+   recorded path is stale, the user gets an exception from the recovery function.
+   The whole body is now inside the `try`, and `pendingModelPath` is cleared on
+   failure — without that second half, a *failed* init leaves a stale path that
+   makes the *next* call take the branch that throws.
+
+**`isAvailable()` had the same shape** and is the more quotable of the two:
+
+```kotlin
+fun isAvailable(): Boolean = ensureLoaded() && GsNative.backendAvailable()
+```
+
+A predicate whose answer is "no" **throws** instead of answering. Now `runCatching`
+around it. It also does not consult `pendingModelPath`, deliberately: `initWith`'s
+fast path is the proof that a stale recorded value is worse than none.
+
+### THE THIRD LINE OF DEFENCE, AND WHY IT PRINTS
+
+`@After restoreTheProcessWideContextAfterEveryTest` repairs the context after
+every test and **prints when it had to**. The two source fixes cannot cover a test
+nobody anticipated; a shared process-wide resource makes that a matter of when,
+not if. The repair is silent in the normal case, and loud in the abnormal one —
+because a repair that printed nothing would be the same false-pass this suite
+exists to avoid, one level up: a green suite in which a test quietly failed to
+clean up after itself.
+
+### What this cost, and what it bought
+
+The run was red and 17 tests' worth of signal was lost to one defect — including
+the four lever tests that had **already printed their measurements** before
+failing on the restore. That is worth stating plainly: the numbers in
+`RESULTS-mobile-concurrency.md` came from tests that this run reports as FAILED,
+and they are reported as what they are — measurements printed by a failing test,
+with the failure cause identified and fixed separately.
+
+It also means the run's own ordering is evidence. Execution order, from the
+per-test logcat timestamps, is: the three pre-existing sweeps passed, then `sd0`
+failed, then `perf_lever5` measured two settings successfully and failed, and
+**everything after it that needed the engine failed.** `perf_lever5`'s logcat
+contains both `loaded=true` rows and then a stack frame with no assertion message
+— a test that worked and then failed on its way out.

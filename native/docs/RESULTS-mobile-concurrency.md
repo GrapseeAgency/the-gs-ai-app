@@ -1054,3 +1054,151 @@ instrumented and unit tests exist and are wired but have not been run. So:
 **The 12 MB xcframework** is a `staticlib` with the Rust runtime statically
 linked into both slices. A real iOS app would want a dynamic framework or a
 thinner dependency set. Worth a decision before shipping.
+---
+
+## ITEM 1 MEASURED: the performance levers, on the emulator
+
+**Run 36981908316**, head `9b60f2c`, x86_64 emulator, API 30, `qwen2.5-0.5b-instruct`.
+29 tests, 12 passed, 17 failed, **0 skipped** — and the 17 failures are one root
+cause, fixed in the following commit and written up in `ISSUE-LOG.md`. Every
+number below was printed by the test that measured it; nothing here is estimated.
+
+All three timings are on the same device, in the same run, against the same
+model file. The prompt is stated per table because **a speed number is not
+comparable across prompts**, and the difference here is an order of magnitude.
+
+### LEVER 7 — `n_threads_batch`, the one that moved the number
+
+`n_threads_batch` is a **separate field** from `n_threads` in
+`llama_context_params`: generation threads versus *batch-processing* threads. It
+had never been assigned, so prompt processing ran on the library default for the
+whole life of this code. 2255-character prompt, `n_ctx=2048`, `n_threads` pinned.
+
+| `n_threads` | `n_threads_batch` | TTFT ms | vs the 4-thread row |
+|---:|---:|---:|---|
+| 4 | 1 | **77129** | **2.10x slower** |
+| 4 | 2 | 38979 | 1.06x slower |
+| 4 | 4 | **36745** | — |
+| 4 | 8 | 41798 | 1.14x slower |
+| 2 | 8 | 42147 | 1.15x slower |
+
+**The lever is real and large: 2.10x from 1 to 4 prompt-processing threads.** The
+curve rises to 4 and then falls at 8, which is over-subscription on a 4-core
+runner and is what a correct measurement looks like — a lever that only ever went
+up would have suggested the field was not reaching llama.cpp at all.
+
+**And the build was already at the optimum, by accident.** The default is "leave
+`llama_context_default_params()` alone", which on this runner is 4 — which the
+sweep now *confirms* rather than *assumes*. That matters for reading the earlier
+Item 3 table: "4 threads is optimal" was a statement about generation threads with
+prompt processing on a value nobody had ever written down. Both halves are now
+measured, and they agree.
+
+The load-bearing assertion in the test is directional: **one** batch thread must
+not be *faster* than several on a multi-core runner. "The numbers differ" would
+pass on a 1% scheduling wobble, and a field that never reached llama.cpp produces
+exactly that. The 2.10x gap is not a wobble.
+
+### LEVER 3 — `n_batch`, a clean negative, and the control row earned its keep
+
+2255-character prompt (about 500 tokens). Three TTFT repeats per row, two
+49-token runs for the decode rate.
+
+| `n_batch` | TTFT ms | tok/s | TTFT spread over 3 runs |
+|---:|---:|---:|---:|
+| 128 | 36914 | 8.70 | 61 ms |
+| 256 | 36775 | 8.57 | 28 ms |
+| 512 | 36688 | 8.55 | 77 ms |
+| 1024 | 36685 | 8.63 | 155 ms |
+
+**This is a genuine null and the control row is what makes it one.** A ~500-token
+prompt fits entirely inside a batch of 512, so the 512 and 1024 rows *cannot*
+differ — and they do not: 36688 ms against 36685 ms, a gap of 3 ms. The sweep is
+therefore known to be capable of varying something, because it did so at 128 and
+256 relative to that pair, and the flatness above 256 is the prompt fitting.
+
+All four rows lie within 229 ms of each other, and the within-row spread is
+28–155 ms. So the differences are inside the noise: **`n_batch` does not affect
+TTFT for this workload**, measured with a prompt long enough to have exercised it
+and with repeats tight enough to have seen it if it were there.
+
+### LEVER 5 — flash attention, small, real, and correct
+
+| `flash_attn_type` | TTFT ms | 49-token run | reply |
+|---|---:|---:|---|
+| disabled (`0`) | 4563 | 5167 | `Paris` |
+| enabled (`1`) | **4417** | 5031 | `Paris` |
+
+**146 ms, 3.2% faster, and both settings contain `paris`.** The speed is small
+enough to be near the noise floor and it is reported as such rather than as a win.
+The correctness half is the part that matters: `AUTO` is this build's default and
+reaching for `ENABLED` must not cost accuracy, so the test asserts the same
+discriminator the chat tests use — both replies must contain the answer to a
+question whose answer is not in the prompt.
+
+The field is `enum llama_flash_attn_type`, not a bool, and `-1` is `AUTO`. A bool
+would have had no way to express `AUTO` and would have silently pinned the kernel
+to disabled for every caller that had not opted in.
+
+### LEVER 4 — quantisation: one row of four, and the reason
+
+| quantisation | bytes | TTFT ms | tok/s | facts |
+|---|---:|---:|---:|---|
+| Q4_K_M | 491,400,032 | 4930 | 11.34 | **8/10** |
+| Q4_0 | 428,730,208 | — | — | not on the device |
+| Q5_K_M | 522,186,592 | — | — | not on the device |
+| Q8_0 | 675,710,816 | — | — | not on the device |
+
+The three failures are **not** a measurement and must not be read as one: the
+device job verifies all four downloads by size and SHA-256 and that step was
+green, so the files existed on the runner and the `adb push` did not deliver them.
+All three are larger than the control, which is consistent with the push of ~2.1 GB
+running out of room or time rather than with a per-file fault. **The honest
+statement is that lever 4 is one row of four and the other three are unmeasured.**
+
+The row that did run: `8/10` facts. The score is **FACTUALITY on five prompts with
+checkable answers** — Paris, 19, Jupiter, "bonjour", the first five primes — and it
+is not fluency, coherence or helpfulness and must not be quoted as "chat quality".
+A 0.5B model can pass all five and still write nonsense between the answers.
+
+### Item 2, diffusion: NOT MEASURED, and the reason is a real architectural conflict
+
+`sd0_diffusion_generates_a_real_png_on_this_device` **failed**, correctly, with
+
+```
+sdBackendName is 'sd.cpp:not-compiled'
+```
+
+The library is behind `link_stable_diffusion`, default **off**, because linking it
+puts two different versions of ggml into one shared object: 574 identical
+`ggml_*` symbol names, four left undefined, and `dlopen` fails on a device. The
+numbers, the three failures in sequence, and the correct fix are in
+`ISSUE-LOG.md`. The test asserting `sdAvailable` is what turns that into a red
+run rather than a test that quietly passes because diffusion does nothing.
+
+### The target, stated against the numbers
+
+The brief asks for **TTFT below 3000 ms**. Measured on this emulator:
+
+| prompt | TTFT ms |
+|---|---:|
+| short (`perfPrompt`) | 4417 – 4930 |
+| 2255 characters (about 500 tokens) | 36745 – 77129 |
+
+**The short-prompt figure is 1.5x over the target and the long-prompt figure is
+12x–26x over it.** Prompt length dominates, by an order of magnitude, and no lever
+in this table moves it: batch size is flat, flash attention is 3%, and prompt
+threads are already at their optimum. The honest reading is that 3000 ms is not
+reachable for a 500-token prompt on this emulator by any of levers 3, 5 or 7, and
+that the short-prompt gap would need a different lever — fewer prompt tokens, or
+a smaller model — rather than a different value of one of these three.
+
+### What is measured, in one line
+
+| lever | field | best value | TTFT ms | versus the build's existing behaviour |
+|---|---|---|---:|---|
+| 3 | `n_batch` | any 256–1024 | 36685 | no effect (control row confirms) |
+| 5 | flash attention | `ENABLED` | 4417 | 3.2% faster, correctness held |
+| 7 | `n_threads_batch` | 4 | 36745 | already the default; now confirmed |
+| 4 | quantisation | Q4_K_M only | 4930 | 3 of 4 rows unmeasured |
+| 6 | speculative decoding | — | — | provably capped at 1.146x, and regresses TTFT |

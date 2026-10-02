@@ -49,7 +49,24 @@ object GsNativeLoader {
      * and a loaded library with no context cannot answer.
      */
     @JvmStatic
-    fun isAvailable(): Boolean = ensureLoaded() && GsNative.backendAvailable()
+    // A PREDICATE THAT THROWS IS A BUG, and this one did.
+    //
+    // `ensureLoaded() && GsNative.backendAvailable()` -- and backendAvailable()
+    // raises GsNativeException("no native context; call init(modelPath) first")
+    // rather than returning false. So the one function whose entire job is to
+    // answer "is there a context?" threw instead of answering, in precisely the
+    // situation where the answer is "no".
+    //
+    // android-device 36981908316 is a demonstration: every test that asked this
+    // question after the context was torn down received an exception, and 15
+    // tests failed with that exception as their reported reason rather than with
+    // anything about the product.
+    //
+    // runCatching here, and pendingModelPath is NOT consulted: it can be stale,
+    // and initWith's own fast path proved that a stale value is worse than none.
+    fun isAvailable(): Boolean =
+        runCatching { ensureLoaded() && GsNative.backendAvailable() }
+            .getOrDefault(false)
 
     /** True when the .so is loaded, whether or not a generation backend exists. */
     @JvmStatic
@@ -69,14 +86,46 @@ object GsNativeLoader {
     fun initWith(modelPath: String): Boolean {
         if (!ensureLoaded()) return false
         synchronized(this) {
-            if (pendingModelPath == modelPath && GsNative.backendAvailable()) return true
+            // THE WHOLE BODY IS INSIDE THE TRY. It was not, and this function --
+            // whose job is to RECOVER a context -- threw an exception in exactly
+            // the state recovery is for.
+            //
+            // android-device 36981908316, 29 tests, 17 failures:
+            //
+            //   if (pendingModelPath == modelPath && GsNative.backendAvailable())
+            //       return true
+            //   return try { GsNative.init(modelPath) ... } catch (t) { false }
+            //
+            // `pendingModelPath` is cleared by release() but NOT by a direct
+            // GsNative.shutdown(). So after one of those, pendingModelPath still
+            // matches, the short-circuit does NOT save it, and backendAvailable()
+            // is evaluated -- and it throws
+            //     GsNativeException: GsNative.backendAvailable: no native context
+            // at a point that is OUTSIDE the catch. The exception escaped
+            // initWith, into whichever test called it, which failed there, and
+            // the context was never restored. Every later test needing the engine
+            // then failed the same way: 15 tests, one root cause, reported as 15.
+            //
+            // The consequence in the product is the same and needs no test suite:
+            // if the context dies for any reason and the recorded path is stale,
+            // the user gets an exception from the function whose contract is
+            // "@return true when a context exists afterwards".
+            //
+            // Clearing pendingModelPath on failure is the other half: without it
+            // a FAILED init leaves a stale path that makes the NEXT call take the
+            // branch that throws.
             return try {
-                val ok = GsNative.init(modelPath)
-                if (ok) pendingModelPath = modelPath
-                ok
+                if (pendingModelPath == modelPath && GsNative.backendAvailable()) {
+                    true
+                } else {
+                    val ok = GsNative.init(modelPath)
+                    pendingModelPath = if (ok) modelPath else null
+                    ok
+                }
             } catch (t: Throwable) {
                 // A GsNativeException here is information, not a crash: it
                 // carries the reason the engine declined the model.
+                pendingModelPath = null
                 Log.w(TAG, "native init declined $modelPath", t)
                 false
             }

@@ -5,6 +5,7 @@ import android.graphics.BitmapFactory
 import android.os.Build
 import android.os.Environment
 import androidx.room.Room
+import org.junit.After
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.grapsee.gsai.data.SettingsStore
@@ -63,6 +64,64 @@ class DeviceVerificationTest {
      * /sdcard because adb cannot write into /data/data without root, and the
      * app's own external dir because it can.
      */
+    /**
+     * The engine context is PROCESS-WIDE, so a test that leaves it down breaks
+     * every test that runs after it. That happened, and it cost fifteen tests.
+     *
+     * android-device **36981908316**, 29 tests, 17 failures. Fifteen of them
+     * carried the identical message
+     *
+     *     GsNativeException: GsNative.backendAvailable: no native context;
+     *     call init(modelPath) first
+     *
+     * and one root cause produced all fifteen: a lever test called
+     * `GsNative.shutdown()` **directly**, which tears down the context but does
+     * NOT clear `GsNativeLoader.pendingModelPath`. The restore then called
+     * `initWith`, whose first line is
+     *
+     *     if (pendingModelPath == modelPath && GsNative.backendAvailable())
+     *
+     * — the paths still matched, so `backendAvailable()` was evaluated, and it
+     * throws. That call was outside `initWith`'s own try/catch, so the exception
+     * escaped into the lever test, which failed on its last line, and the context
+     * was never restored.
+     *
+     * Both halves are fixed at the source (`GsNativeLoader.release()` here, the
+     * try/catch there). This `@After` is the third line of defence, and it is
+     * here because the first two cannot cover a test nobody anticipated:
+     *
+     *  - it REPAIRS, so one test cannot cascade into fifteen
+     *  - it PRINTS when it had to, so the damage is still visible rather than
+     *    silently papered over
+     *
+     * A repair that is silent would be the same false-pass this suite exists to
+     * avoid, one level up: the suite would go green while a test quietly did not
+     * clean up after itself.
+     */
+    @After
+    fun restoreTheProcessWideContextAfterEveryTest() {
+        if (!GsNativeLoader.isLibraryLoaded()) return
+        if (GsNativeLoader.isAvailable()) return
+        val model = findModel()
+        if (model == null) {
+            println(
+                "AFTER: no native context and no model on the device, so nothing was " +
+                    "restored. Any test that needs the engine will now fail with " +
+                    "'no native context' -- that is the test doing the reporting, " +
+                    "not this one.",
+            )
+            return
+        }
+        val restored = runCatching { GsNativeLoader.initWith(model.absolutePath) }
+            .getOrDefault(false)
+        println(
+            "AFTER: REPAIRED the process-wide context for the tests that run next. " +
+                "Something before this point left it down; restored from " +
+                "${model.name}, now available = $restored. If $restored is false the " +
+                "next engine test will fail, and that is correct.",
+        )
+    }
+
     private fun findModel(): File? {
         val arg = InstrumentationRegistry.getArguments().getString("gs_test_model")
         if (!arg.isNullOrBlank()) {
@@ -1822,7 +1881,7 @@ class DeviceVerificationTest {
         for (nCtx in ctxSizes) {
             for (nThreads in threadCounts) {
                 val label = "n_ctx=$nCtx n_threads=$nThreads"
-                GsNative.shutdown()
+                GsNativeLoader.release()
                 val ok = try {
                     // 0, 0, 0 for the three levers: this test is the ONE that
                     // measured threads and context, and it must not silently start
@@ -2047,7 +2106,7 @@ class DeviceVerificationTest {
 
         for (nBatch in batchSizes) {
             val label = "n_batch=$nBatch"
-            GsNative.shutdown()
+            GsNativeLoader.release()
             val ok = try {
                 GsNativeLoader.isLibraryLoaded() && GsNative.initTuned(
                     m.absolutePath, nCtx, nThreads, -1, nBatch, 0, -1,
@@ -2097,7 +2156,7 @@ class DeviceVerificationTest {
             )
             rows += BRow(nBatch, ttft, t49.min(), chars, why.isEmpty(), why)
         }
-        GsNative.shutdown()
+        GsNativeLoader.release()
         GsNativeLoader.initWith(m.absolutePath)
 
         println("=== ITEM 1 LEVER 3: batch size, 500-token prompt, 0.5B ===")
@@ -2158,7 +2217,7 @@ class DeviceVerificationTest {
         )
 
         val rows = (listOf(false, true)).map { flash ->
-            GsNative.shutdown()
+            GsNativeLoader.release()
             val loaded = try {
                 GsNativeLoader.isLibraryLoaded() && GsNative.initTuned(
                     m.absolutePath, nCtx, nThreads, -1, 0, 0, if (flash) 1 else 0,
@@ -2198,7 +2257,7 @@ class DeviceVerificationTest {
             )
             FaRow(flash, loaded, ttft, t49, reply, if (ok) "" else "no usable timing")
         }
-        GsNative.shutdown()
+        GsNativeLoader.release()
         GsNativeLoader.initWith(m.absolutePath)
 
         println("=== ITEM 1 LEVER 5: flash attention ===")
@@ -2338,7 +2397,7 @@ class DeviceVerificationTest {
             val gen = genThreadCounts[i]
             val batch = batchThreadCounts[i]
             val label = "n_threads=$gen n_threads_batch=$batch"
-            GsNative.shutdown()
+            GsNativeLoader.release()
             val loaded = try {
                 GsNativeLoader.isLibraryLoaded() && GsNative.initTuned(
                     m.absolutePath, nCtx, gen, batch, 0, 0, -1,
@@ -2379,7 +2438,7 @@ class DeviceVerificationTest {
             )
             rows += TbRow(gen, batch, true, ttft, t49, reply, if (ok) "" else "no usable timing")
         }
-        GsNative.shutdown()
+        GsNativeLoader.release()
         GsNativeLoader.initWith(m.absolutePath)
 
         println("=== ITEM 1 LEVER 7: prompt-processing threads (long prompt, 0.5B) ===")
@@ -2888,7 +2947,7 @@ class DeviceVerificationTest {
                 f.length(),
             )
 
-            GsNative.shutdown()
+            GsNativeLoader.release()
             val loaded = try {
                 GsNativeLoader.isLibraryLoaded() &&
                     GsNative.initTuned(f.absolutePath, nCtx, nThreads, -1, 0, 0, -1)
@@ -2936,7 +2995,7 @@ class DeviceVerificationTest {
             )
             rows += QRow(m.id, f, true, ttft, t49.min(), hit, total, notes, "")
         }
-        GsNative.shutdown()
+        GsNativeLoader.release()
         // Restore the default context, and only if there IS a model to restore.
         // The fallback here used to be `it.url`, which is a string that is not a
         // path: passing "https://..." to initWith hands llama_model_load_from_file
