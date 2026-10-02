@@ -2281,13 +2281,55 @@ jobs:
           # actually runs the tests asserts the prediction against what the test
           # PROCESS reports about itself. The answer is printed there, after the
           # evidence exists.
-          if printf '%s' "$SIM_ARCHS" | grep -q 'arm64' && \
-             ! printf '%s' "$SIM_ARCHS" | grep -q 'x86_64'; then
+          # THIS MUST NOT GUESS WHEN BOTH ARCHES ARE LISTED.
+          #
+          # It used to. The first version was
+          #
+          #     if   arm64 && !x86_64 -> arm64
+          #     elif x86_64           -> x86_64
+          #     else                  -> "see the three lines above"
+          #
+          # and on ios-native 37023563596, where SIMULATOR_ARCHS is `arm64 x86_64`,
+          # the second branch fired and the log printed
+          #
+          #     iOS TESTS EXECUTE ON: x86_64 (arm64 host; arm64 would be emulated)
+          #
+          # **arm64 tests were running the whole time.** The process reported
+          # `iOS-EXEC-ARCH: arm64`, between its own `started` and `passed` lines:
+          #
+          #     Test Case '-[AppTests.GsNativeTests test_the_process_reports_which_
+          #     slice_is_executing]' started.
+          #     iOS-EXEC-ARCH: arm64
+          #     Test Case '...' passed (0.002 seconds).
+          #
+          # So that answer was recorded in RESULTS-mobile-concurrency.md and in
+          # ISSUE-LOG.md as a MEASUREMENT, and it was a guess about a two-element
+          # list, printed in the same voice as a fact. The value of the prediction
+          # was never its answer; its only job is to be FALSIFIABLE, and "x86_64"
+          # chosen out of two possibilities by an `elif` is not falsifiable -- it
+          # would have been re-printed on every future run and looked like a
+          # repeated confirmation.
+          #
+          # So: both listed is AMBIGUOUS, and the measurement below decides.
+          HAS_ARM64=no
+          HAS_X86=no
+          printf '%s' "$SIM_ARCHS" | grep -qw arm64 && HAS_ARM64=yes
+          printf '%s' "$SIM_ARCHS" | grep -qw x86_64 && HAS_X86=yes
+          if [ "$HAS_ARM64" = yes ] && [ "$HAS_X86" = yes ]; then
+            PREDICT="<ambiguous>"
+          elif [ "$HAS_ARM64" = yes ]; then
             PREDICT="arm64"
-          elif printf '%s' "$SIM_ARCHS" | grep -q 'x86_64'; then
+          elif [ "$HAS_X86" = yes ]; then
             PREDICT="x86_64"
           else
             PREDICT="<unknown>"
+          fi
+          if [ "$PREDICT" = "<ambiguous>" ]; then
+            echo "::warning::SIMULATOR_ARCHS lists BOTH arm64 and x86_64, so what the"
+            echo "::warning::destination resolves to cannot be inferred from it. The old"
+            echo "::warning::code picked x86_64 out of the two by an \`elif\` and recorded"
+            echo "::warning::that as the answer; it was wrong. The arch below is measured"
+            echo "::warning::by the test process and is the only claim made."
           fi
           echo "predicted arch, to be CONFIRMED by the test process: $PREDICT"
           printf 'GS_IOS_PREDICTED_ARCH=%s\n' "$PREDICT" >> "$GITHUB_ENV"
@@ -2406,7 +2448,16 @@ jobs:
           # The prediction is ASSERTED, not trusted. Agreeing by luck on one runner
           # is not evidence that the inference works; disagreeing is a real defect
           # in the destination, so it is a failure.
-          if [ "$PREDICTED" != "<unknown>" ] && [ "$RAN" != "$PREDICTED" ]; then
+          # `<unknown>` and `<ambiguous>` are both "nothing falsifiable was
+          # predicted", so neither is asserted. `<ambiguous>` is the case this
+          # runner is in, and asserting against it would fail the run for
+          # declining to guess -- the opposite of what the check is for.
+          case "$PREDICTED" in
+            "<unknown>"|"<ambiguous>") PREDICTED_ASSERTABLE=no ;;
+            *)                         PREDICTED_ASSERTABLE=yes ;;
+          esac
+          echo "  prediction is falsifiable            : $PREDICTED_ASSERTABLE"
+          if [ "$PREDICTED_ASSERTABLE" = yes ] && [ "$RAN" != "$PREDICTED" ]; then
             echo "::error::the destination was predicted to execute $PREDICTED and the test"
             echo "::error::process was compiled as $RAN, with SIMULATOR_ARCHS '$SIM_ARCHS'."
             echo "::error::Inference and reality disagree, so this run says nothing about"

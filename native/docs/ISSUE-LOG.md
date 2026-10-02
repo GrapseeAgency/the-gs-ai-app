@@ -3285,3 +3285,80 @@ point in this repository's CI**.
 slice links; that is a property of the archive, checked by `lipo -info` and by
 `archive_arch.py`'s `e_machine` read. **A slice that links is not a slice that has
 run**, and this repository has now produced that same gap on both platforms.
+
+
+---
+
+## CORRECTION: ITEM 4's ANSWER WAS WRONG. THE iOS TESTS EXECUTE ON **arm64**
+
+**This corrects the two entries above it that state `x86_64`.** The XCTests have
+been executing **arm64**, natively, on an arm64 host, on every run.
+
+`android-device`/`ios-native` **37030554138**, head `8e44dc4`, verbatim:
+
+    Test Case '-[AppTests.GsNativeTests test_the_process_reports_which_slice_is_executing]' started.
+    iOS-EXEC-ARCH: arm64
+    Test Case '-[AppTests.GsNativeTests test_the_process_reports_which_slice_is_executing]' passed (0.002 seconds).
+
+Printed between that test case's own `started` and `passed` lines, so it is the
+executing process reporting on itself.
+
+### THE MECHANISM, WHICH IS THE REUSABLE PART
+
+The wrong answer came from a rule applied to `SIMULATOR_ARCHS`:
+
+    if   arm64 && !x86_64 -> "arm64 (native)"
+    elif x86_64           -> "x86_64 (arm64 host; arm64 would be emulated)"
+
+`SIMULATOR_ARCHS` on this runner is **`arm64 x86_64`**, so the second branch fired.
+**Both branches were possible and the rule picked one**, then printed it beside
+the two lines that were evidence:
+
+    executable (lipo -info)   : … are: x86_64 arm64
+    simulator SIMULATOR_ARCHS : arm64 x86_64
+    iOS TESTS EXECUTE ON      : x86_64 (arm64 host; arm64 would be emulated)
+
+Three lines: two evidence, one coin toss, all in the same voice. The trailing
+`arm64 would be emulated` was the most expensive clause -- a confident technical
+claim, and false.
+
+**The value of a prediction is not its answer, it is that it can be falsified.**
+That rule was not falsifiable: with `SIMULATOR_ARCHS = arm64 x86_64` it would
+print `x86_64` again on every future run, and a reader comparing two runs would
+see the same value twice and read it as re-confirmation. **It would have become
+more convincing the longer it went uncontradicted.** That is the twelfth instance
+of this log's standing shape -- a tool or rule answering a different question than
+the one asked -- and the first where the wrong answer was *recorded as a
+measurement* and repeated in two documents.
+
+It is also a false pass in the exact sense this log keeps re-finding: the step
+that printed it could not have failed on this input.
+
+Fixed by returning `<ambiguous>` whenever both arches are listed, and asserting the
+prediction only when it was falsifiable:
+
+    SIMULATOR_ARCHS      predicted      process ran   verdict
+    arm64 x86_64         <ambiguous>    arm64         PASS  <- the measured reality
+    arm64 x86_64         <ambiguous>    x86_64        PASS  <- rule can no longer be wrong
+    arm64                arm64          arm64         PASS, falsifiable
+    x86_64               x86_64         x86_64        PASS, falsifiable
+    (unreadable)         <unknown>      arm64         PASS  <- nothing predicted
+
+### THE CONSEQUENCE FOR THE arm64 STORY, WHICH IS NOW DIFFERENT PER PLATFORM
+
+**iOS: arm64 execution has always been happening.** Not linked-and-idle --
+running natively, on every run. The gap was never "arm64 does not run on iOS"; it
+was that nobody had measured which arch ran and the inference guessed.
+
+**Android: arm64 still has never executed.** Closed permanently at `arm64-probe`
+36992975588, 121.3 min queued, `runner_name: null`. Unchanged by this, and not
+substituted for by it -- a simulator is not a device.
+
+| platform | arm64 linked | arm64 executed |
+|---|---|---|
+| iOS | yes | **yes, natively, since the first CI run** |
+| Android | yes | **never** |
+
+Two statements repeated earlier in this log are therefore wrong and are corrected
+here: that the iOS arm64 slice is "built, linked, and never executed", and that the
+executing arch was `x86_64`. **Both were about iOS. Neither applied to Android.**

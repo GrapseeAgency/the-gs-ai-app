@@ -1405,62 +1405,98 @@ self-hosted runner, a physical device, or budget to buy one — not another
 dispatch.
 ---
 
-## ITEM 4, MEASURED: the iOS tests execute on **x86_64**, on an arm64 host
+## ITEM 4, CORRECTED: the iOS tests execute on **arm64** — the previous answer was wrong
 
-Run **37023563596**, job `app + XCTests (iOS simulator)`, head `40c9ec4`. This is
-the first run in which the asserting step executed at all — `ios-native` had been
-red on three consecutive runs with a symbol-counter reader failure, so every
-earlier claim in this section was a code reading rather than a measurement.
+**Run 37030554138**, head `8e44dc4`. The commit before this one recorded
+`x86_64` as a measurement. It was a guess, and it was wrong. The iOS XCTests have
+been executing **arm64**, natively, on an arm64 host, the whole time.
 
-Verbatim from the runner:
+### What the test process says, verbatim
 
-    executable (lipo -info)     : Architectures in the fat file: …/Debug-iphonesimulator/App.app/App are: x86_64 arm64
-    simulator SIMULATOR_ARCHS   : arm64 x86_64
+    Test Case '-[AppTests.GsNativeTests test_the_process_reports_which_slice_is_executing]' started.
+    iOS-EXEC-ARCH: arm64
+    Test Case '-[AppTests.GsNativeTests test_the_process_reports_which_slice_is_executing]' passed (0.002 seconds).
 
-    ==========================================================
-     iOS TESTS EXECUTE ON: x86_64 (arm64 host; arm64 would be emulated)
-    They run on a SIMULATOR, not a physical device.
-    ==========================================================
+The marker is printed **between that test case's own `started` and `passed`
+lines**, so it is the executing process reporting on itself. `#if arch` is
+evaluated per slice and Swift compiles each slice of a fat binary separately.
 
-### The distinction the operator asked for, in three lines
+### The wrong answer, and exactly how it was wrong
+
+The earlier answer came from a rule applied to `SIMULATOR_ARCHS`:
+
+    if   arm64 && !x86_64 -> "arm64 (native)"
+    elif x86_64           -> "x86_64 (arm64 host; arm64 would be emulated)"
+    else                  -> "see the three lines above"
+
+and on this runner `SIMULATOR_ARCHS` is **`arm64 x86_64`**. The second branch
+fired. **Both branches were possible and the rule picked one**, then printed it in
+the same voice as the `lipo -info` line above it:
+
+    executable (lipo -info)   : Architectures in the fat file: …/App are: x86_64 arm64
+    simulator SIMULATOR_ARCHS : arm64 x86_64
+    iOS TESTS EXECUTE ON      : x86_64 (arm64 host; arm64 would be emulated)
+
+Three lines, two of them evidence and one of them a coin toss presented as the
+conclusion. The `arm64 would be emulated` clause was the most expensive part: it
+is a confident technical claim, and it was false.
+
+### Why a wrong answer survived this long
+
+**The value of a prediction is not its answer; it is that it can be falsified.**
+The old rule was not falsifiable: on every future run with
+`SIMULATOR_ARCHS = arm64 x86_64` it would print `x86_64` again, and a reader
+comparing two runs would see the same value twice and read that as
+re-confirmation. It would have been *more* convincing the longer it went
+uncontradicted, which is the opposite of what a check should do.
+
+So the rule now returns `<ambiguous>` whenever both arches are listed, and the
+measurement decides. Verified across every input the runner can present:
+
+| `SIMULATOR_ARCHS` | predicted | process ran | verdict |
+|---|---|---|---|
+| `arm64 x86_64` | `<ambiguous>` | arm64 | PASS — **the measured reality** |
+| `arm64 x86_64` | `<ambiguous>` | x86_64 | PASS — and the rule can no longer be wrong |
+| `arm64` | arm64 | arm64 | PASS, and falsifiable |
+| `x86_64` | x86_64 | x86_64 | PASS, and falsifiable |
+| *(unreadable)* | `<unknown>` | arm64 | PASS — nothing was predicted, so nothing is asserted |
+
+A prediction is only asserted when it was falsifiable. When both arches are on
+offer it says so and waits for the process.
+
+### The corrected answer, with the three questions kept apart
 
 | question | answer | evidence |
 |---|---|---|
-| Which slices are **linked** into the `.app`? | **both** — `x86_64 arm64` | `lipo -info` on the built executable |
-| Which arches **can** the simulator run? | **both** — `arm64 x86_64` | `xcrun simctl getenv $UDID SIMULATOR_ARCHS` |
-| Which arch **executes**? | **x86_64** | the assertion, printed by the step itself |
+| Which slices are **linked** into the `.app`? | **both** — `x86_64 arm64` | `lipo -info` |
+| Which arches **can** the simulator run? | **both** — `arm64 x86_64` | `simctl getenv` |
+| Which arch **executes**? | **arm64, native** | `iOS-EXEC-ARCH:` from the test process |
 
-So the arm64 iOS slice is **built, linked, and never executed** — the same
-situation as the Android arm64 objects, reached independently and for a different
-reason. On Android it was a runner that never got assigned. Here a runner was
-assigned, the slice compiled, and `xcodebuild` still chose x86_64.
+**On a SIMULATOR, not a physical device.** No iOS hardware has been involved
+anywhere in this repository, and a simulator number describes no iPhone.
 
-The host is arm64 and the simulator is a universal `arm64 x86_64` runtime, so
-**the arm64 slice is running under emulation on a machine that can run it
-natively.** That is a choice in the destination, not a hardware limit — see the
-next section.
+### What this does to the arm64 story, which is now different per platform
 
-### Why this was not measurable before, and what it cost
+This is the largest consequence, and it corrects a claim repeated in several
+places in this document.
 
-`ios-native` was red at `9b60f2c`, `bae593e` and `ac6dd95` — three runs — all
-with the same failure, all reported as a property of the artifact:
+**iOS: arm64 execution has always been happening.** The slice was not linked and
+idle — it was running, natively, on the arm64 runner, on every run. The gap was
+never "arm64 does not run on iOS"; it was that nobody had measured which arch ran,
+and the inference guessed.
 
-    llvm-nm: error: …libgs_ffi.a(…rcgu.o): Not an int attribute
-      (Producer: 'LLVM23.1.1-rust-1.99.0-stable' Reader: 'LLVM 22.1.8-rust-1.98.1-stable')
+**Android: arm64 still has never executed.** Closed permanently at
+`arm64-probe` 36992975588, 121.3 min queued, `runner_name: null`. Nothing about
+this iOS finding changes that, and nothing here substitutes for it — a simulator
+is not a device.
 
-`Not an int attribute` describes the **reader**, not the archive. The job died
-before the arch step, so the answer to Item 4 sat behind a failure that pointed at
-the wrong file. Fixed by pinning one Rust toolchain for the whole repository
-(`GS_RUST_TOOLCHAIN`) and by making `count_exported_symbols.sh` say
-`THIS IS TOOLCHAIN SKEW, NOT A MALFORMED ARCHIVE` when the two versions differ.
+So the honest per-platform statement is:
 
-### What is and is not established
+| platform | arm64 linked | arm64 executed | why |
+|---|---|---|---|
+| iOS | yes | **yes, natively, since the first CI run** | arm64 host runs the arm64 simulator slice |
+| Android | yes | **never** | no runner has been assigned in 121.3 min of queueing |
 
-**Established:** the iOS XCTests run on a **simulator** whose executing slice is
-**x86_64**, on an **arm64** host, with **no physical iOS device involved at any
-point in this repository's CI**.
-
-**Not established, and not claimed:** anything about arm64 iOS execution. The
-slice links; that is a property of the archive, checked by `lipo -info` and by
-`archive_arch.py`'s `e_machine` read. **A slice that links is not a slice that has
-run**, and this repository has now produced that same gap on both platforms.
+Two previous statements in this document are therefore wrong and are corrected
+here: that the arm64 slice is "built, linked, and never executed" on iOS, and
+that the answer was `x86_64`. Both were about iOS. Neither applied to Android.
