@@ -3429,3 +3429,42 @@ Recorded rather than guessed: the version numbers are from the two
 `ggml/CMakeLists.txt` files, and the symbol count from a read-only diff. Defining
 as a plan of record, this session does **not** claim a working one-`.so` build --
 it claims the requirement and the blocker, with the path (Option B) named.
+
+
+---
+
+## BLOCKER 2, FINAL: arm64 Android closed with three raw failures
+
+**1. Hosted arm64 runner.** `arm64-probe` **36992975588**, `host:
+ubuntu-24.04-arm64`, created `2026-10-02T09:59:54Z`, sitting `queued` with
+`started_at` set at creation time and `runner_name: null` at cancellation
+**121.3 min = 2.02 h** later. Cancelled at HTTP 202. Software in the Fleet
+never assigned. Any future attempt should note that the per-run
+`queue=0 min` style API numbers under-report by showing assignment time, not
+wait time (see `ISSUE-LOG` Item 3).
+
+**2. macOS HVF.** `arm64-probe` **37051537763**, `host: macos-15`. Raw:
+
+    sysctl kern.hv_support = unreadable
+    ##[error]sysctl kern.hv_support returned [unreadable].
+    HVF error: HV_UNSUPPORTED
+    qemu-system-aarch64-headless: failed to initialize HVF: Invalid argument
+
+On the macos-15 runner the key is absent and qemu independently reports
+`HV_UNSUPPORTED`. So no HVF, and an arm64 guest cannot be accelerated there.
+Verified, not assumed: the probe reads the sysctl, falls back to an explicit
+diagnostic, and qemu's own error confirms the same negative.
+
+**3. Self-hosted.** Not present. No `self-hosted` label, no AWS/Graviton/Oracle
+credentials in the repository's workflow or workflow scripts; the only secrets
+referenced are `GS_ENDPOINT`, `GS_API_KEY`, `GS_BENCH_API_KEY`,
+`OPENROUTER_API_KEY` (benchmark scoring, `benchmark.yml:151-154`). Not a future
+blockade item -- it is absent today and nothing in the repo enables it.
+
+**Conclusion.** arm64 Android execution requires either a GitHub arm64 runner
+with HVF, or physical hardware, or a self-hosted arm runner that does not exist
+here. None is available. **The arm64 `.so` compiles and passes ELF verification
+(`archive_arch.py`, `elf_machine.py`); its runtime on Android is UNVERIFIED, and
+no further attempt is worth dispatching.** A future change that needs it should
+provision a dedicated arm64 runner/self-hosted host first, not dispatch into a
+queue that does not assign.
