@@ -494,6 +494,33 @@ jobs:
           EXPECT_SZ="882587118"
           CHECKPOINT_NAME="sdxs-512-dreamshaper.safetensors"
 
+          # BOTH ARE INITIALISED HERE, AND THAT IS THE WHOLE FIX.
+          #
+          # `set -euo pipefail` is on, and on the SUCCESS path neither variable
+          # was ever assigned -- GS_SD_VERIFIED is set inside the `if`, and
+          # GS_SD_ABSENT is only set in the two failure branches. So the closing
+          #
+          #     echo "GS_SD_ABSENT=$GS_SD_ABSENT" >> "$GITHUB_ENV"
+          #
+          # read an UNBOUND variable and the step exited 1 -- after the 882 MB had
+          # been downloaded and its SHA-256 had been verified. Run 36971517977:
+          #
+          #     env:
+          #       GS_MODEL_VERIFIED: true
+          #       GS_SD_VERIFIED: true
+          #                                    <- and no GS_SD_ABSENT line at all
+          #     ##[error]Process completed with exit code 1.
+          #
+          # The job reported "Fetch the SDXS-512 checkpoint" as the failed step
+          # and the log showed the checksum MATCHING, which is a contradiction
+          # that points at the step rather than at the network or the file.
+          #
+          # The general form: a variable that is only assigned on some paths and
+          # read on all of them is unset on the rest, and under `set -u` that is
+          # a crash rather than an empty string. Defaults belong at the top.
+          GS_SD_VERIFIED=false
+          GS_SD_ABSENT=false
+
           echo "fetching 882 MB of diffusion weights from HuggingFace"
           if ! curl -fL --retry 3 --retry-delay 5 -o "$CHECKPOINT_NAME" "$URL"; then
             echo "::warning::could not fetch $URL; the diffusion test will SKIP"
