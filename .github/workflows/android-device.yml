@@ -81,7 +81,35 @@ jobs:
     # boots is a property of the runner, not of this file.
     name: instrumented tests (emulator, ${{ inputs.abi || 'x86_64' }}, API 30)
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # 60 MINUTES WAS EXACTLY THE BUDGET AND EXACTLY WHAT IT KILLED.
+    #
+    # Run 36958995854, head 96d3c29: cancelled at 04:10:48, started 03:10:37.
+    # Sixty minutes and eleven seconds, with `timeout-minutes: 60` set on this
+    # job. Nothing hung and nothing failed: the suite outgrew its own budget
+    # because Item 1 added three lever sweeps to 23 existing tests, and lever 7
+    # alone is five full model loads with multi-second generations each.
+    #
+    # The arithmetic for what this job now has to do, so the next increase is
+    # not a guess:
+    #
+    #   existing suite, 23 tests, measured          ~40 min
+    #   + lever 3   4 batch sizes x 6 generations   ~ 4 min
+    #   + lever 5   2 settings x 4 generations      ~ 2 min
+    #   + lever 7   5 thread counts x 6             ~ 6 min
+    #   + lever 4   4 model loads + 20 generations ~ 6 min
+    #   + sd0       one 882 MB load plus a CPU
+    #               diffusion generation           ~ 8 min
+    #   ------------------------------------------------------
+    #   test time, roughly                            ~66 min
+    #   + emulator boot, SDK, 2.6 GB of downloads,
+    #     artifact upload                            ~15 min
+    #   ------------------------------------------------------
+    #   total, roughly                                ~81 min
+    #
+    # 150 leaves headroom for a slow runner without turning the timeout into a
+    # no-op: a genuine hang still dies, and a 2.5x overrun means something is
+    # wrong rather than merely slow.
+    timeout-minutes: 150
     # ABI AT JOB LEVEL, NOT PER STEP.
     #
     # Each `run:` block is a fresh shell, so a variable set in one step does not
