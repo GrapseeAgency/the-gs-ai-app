@@ -108,8 +108,22 @@ gs_llama_ctx* gs_llama_create(const llama_config_t* config) {
         cp.n_seq_max = config->n_seq_max > 0 ? (uint32_t)config->n_seq_max : 1u;
         cp.n_threads = config->n_threads > 0 ? config->n_threads
                                              : (int)std::thread::hardware_concurrency();
-        cp.n_batch   = 512;
-        cp.n_ubatch  = 512;
+        // THE THREE LEVERS. The 512s are the literals that were here before, kept
+        // as the value a 0 selects, so the default path is unchanged.
+        //
+        // n_ubatch is clamped to n_batch because llama.cpp requires
+        // n_ubatch <= n_batch and ggml's assertion on that is a hard abort rather
+        // than an error return -- so a caller that asks for a micro-batch larger
+        // than the batch would take the process down instead of getting an
+        // error. Clamping here, where the numbers are still just numbers.
+        cp.n_batch   = config->n_batch   > 0 ? config->n_batch   : 512;
+        cp.n_ubatch  = config->n_ubatch  > 0 ? config->n_ubatch  : 512;
+        if (cp.n_ubatch > cp.n_batch) cp.n_ubatch = cp.n_batch;
+        // Flash attention. UNSET before, so it inherited whatever
+        // llama_context_default_params() happened to carry. Now explicit, because
+        // "unset" is not a measurement: it means the default changed underneath a
+        // number nobody wrote down.
+        cp.flash_attn = config->flash_attn != 0;
         // KV cache element type. F16 is the default; a caller can trade fidelity
         // for footprint by asking for 4-bit. ggml validates the pairing.
         cp.type_k = (ggml_type)(config->cache_type_k ? config->cache_type_k : GGML_TYPE_F16);

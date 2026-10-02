@@ -132,6 +132,15 @@ extern "C" {
     // Image generation, IN-PROCESS. Nothing here spawns a process; see
     // sd_bridge.rs, whose no_subprocess_remains_in_this_file test reads its own
     // source to keep it that way.
+    fn gs_mobile_create_tuned(
+        model_path: *const c_char,
+        n_ctx: c_int,
+        n_threads: c_int,
+        n_batch: c_int,
+        n_ubatch: c_int,
+        flash_attn: c_int,
+    ) -> *mut GS_MobileCtx;
+
     fn gs_mobile_sd_create(model_path: *const c_char) -> *mut GS_MobileImg;
     fn gs_mobile_sd_set_options(img: *mut GS_MobileImg, threads: c_int, cfg_scale: f32) -> c_int;
     fn gs_mobile_sd_available(img: *mut GS_MobileImg) -> c_int;
@@ -224,9 +233,41 @@ impl MobileCtx {
     /// Create a context. `model_path` may be empty, which is the normal
     /// "app launched, model not downloaded yet" state.
     pub fn create(model_path: &str, n_ctx: i32, n_threads: i32) -> Result<Self, MobileError> {
-        let p = CString::new(model_path).map_err(|_| MobileError::InvalidArg("path contains NUL".into()))?;
-        let raw = std::panic::catch_unwind(|| unsafe { gs_mobile_create(p.as_ptr(), n_ctx, n_threads) })
-            .map_err(|_| MobileError::Internal("panic in gs_mobile_create".into()))?;
+        // DELEGATES. The defaults are written down in create_tuned's doc and in
+        // llama_config_t, not here a second time.
+        Self::create_tuned(model_path, n_ctx, n_threads, 0, 0, 0)
+    }
+    /// `create` with the three performance levers: prompt-processing batch,
+    /// micro-batch, and flash attention.
+    ///
+    /// Each takes 0 for "the value this build already used", which is NOT zero --
+    /// see `llama_config_t`. `create` is this call with 0, 0, 0 and delegates, so
+    /// the defaults are written down once.
+    ///
+    /// The panic guard is `catch_unwind` for the same reason `create` has one:
+    /// a ggml assertion on a bad n_batch/n_ubatch pairing aborts rather than
+    /// returns, and the C++ side clamps before it gets there.
+    pub fn create_tuned(
+        model_path: &str,
+        n_ctx: i32,
+        n_threads: i32,
+        n_batch: i32,
+        n_ubatch: i32,
+        flash_attn: i32,
+    ) -> Result<Self, MobileError> {
+        let p =
+            CString::new(model_path).map_err(|_| MobileError::InvalidArg("path contains NUL"))?;
+        let raw = std::panic::catch_unwind(|| unsafe {
+            gs_mobile_create_tuned(
+                p.as_ptr(),
+                n_ctx,
+                n_threads,
+                n_batch,
+                n_ubatch,
+                flash_attn,
+            )
+        })
+        .map_err(|_| MobileError::Internal("panic in gs_mobile_create_tuned".into()))?;
         if raw.is_null() {
             return Err(MobileError::Unavailable(last_error()));
         }
@@ -442,6 +483,32 @@ pub extern "C" fn gs_ffi_mobile_render_svg(
     output_path: *const c_char,
 ) -> c_int {
     unsafe { gs_mobile_render_svg(spec_json, output_path) }
+}
+
+// -----------------------------------------------------------------------
+/// `init` with the three performance levers, which were hardcoded and
+/// therefore unmeasurable until now.
+///
+/// Six arguments is a lot for an ABI entry point, and it is six because each one
+/// is a MEASUREMENT VARIABLE rather than a preference: n_batch is the
+/// prompt-processing throughput knob and therefore the TTFT knob for a long
+/// prompt, n_ubatch bounds a single graph, and flash_attn changes the attention
+/// kernel. Bundling them into one call keeps them in one context -- a context
+/// built with n_batch 1024 and n_ubatch 256 is a different measurement from one
+/// built with 256 and 1024, and two calls would let a caller ask for a
+/// combination that never existed.
+#[no_mangle]
+pub extern "C" fn gs_ffi_mobile_create_tuned(
+    model_path: *const c_char,
+    n_ctx: c_int,
+    n_threads: c_int,
+    n_batch: c_int,
+    n_ubatch: c_int,
+    flash_attn: c_int,
+) -> *mut GS_MobileCtx {
+    unsafe {
+        gs_mobile_create_tuned(model_path, n_ctx, n_threads, n_batch, n_ubatch, flash_attn)
+    }
 }
 
 #[cfg(test)]

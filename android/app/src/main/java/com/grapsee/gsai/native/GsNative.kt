@@ -45,7 +45,27 @@ object GsNative {
      * A separate name at all so the production entry point's ABI is untouched.
      * The app calls [init]; benchmarks call this.
      */
-    external fun initTuned(modelPath: String, nCtx: Int, nThreads: Int): Boolean
+    /**
+     * [init] with the context size, thread count, and the three PERFORMANCE LEVERS
+     * that were previously hardcoded in the wrapper and therefore unmeasurable:
+     * the prompt-processing batch, the micro-batch, and flash attention.
+     *
+     * Each of the last three takes 0 for "the value this build already used",
+     * which is NOT zero -- a batch of 0 would mean "process nothing". [init] is
+     * this call with 0, 0, 0.
+     *
+     * [nBatch] is the TTFT knob for a long prompt: it is how many prompt tokens go
+     * to `llama_decode` at once. [nUbatch] bounds a single graph and must not
+     * exceed [nBatch] (the C++ side clamps rather than letting ggml abort).
+     */
+    external fun initTuned(
+        modelPath: String,
+        nCtx: Int,
+        nThreads: Int,
+        nBatch: Int,
+        nUbatch: Int,
+        flashAttn: Int,
+    ): Boolean
 
     /** 1 when a generation backend is compiled into this build. */
     external fun backendAvailable(): Boolean

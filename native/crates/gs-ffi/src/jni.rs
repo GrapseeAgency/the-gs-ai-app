@@ -197,6 +197,9 @@ pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_initTuned(
     model_path: JString,
     n_ctx: jint,
     n_threads: jint,
+    n_batch: jint,
+    n_ubatch: jint,
+    flash_attn: jint,
 ) -> jboolean {
     guard!(env, "initTuned", JNI_FALSE, {
         let path: String = match env.get_string(&model_path) {
@@ -206,7 +209,7 @@ pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_initTuned(
                 return JNI_FALSE;
             }
         };
-        match MobileCtx::create(&path, n_ctx, n_threads) {
+        match MobileCtx::create_tuned(&path, n_ctx, n_threads, n_batch, n_ubatch, flash_attn) {
             Ok(c) => {
                 set_global(Some(c));
                 JNI_TRUE

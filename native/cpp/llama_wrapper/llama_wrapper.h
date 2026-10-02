@@ -59,6 +59,31 @@ typedef struct {
     int32_t     cache_type_k; /* gs_kv_type_t. F16 unless asked otherwise. */
     int32_t     cache_type_v; /* gs_kv_type_t. F16 unless asked otherwise. */
     int32_t     n_seq_max;    /* concurrent sequences. 0 or 1 = no batching. */
+
+    /* THE MEASURED LEVERS. All three were HARDCODED or UNSET before, which is why
+     * they could not be measured: cp.n_batch and cp.n_ubatch were the literals
+     * 512 and 512, and cp.flash_attn was never assigned at all.
+     *
+     * 0 OR NEGATIVE MEANS "the value this build already used", not "zero":
+     *
+     *   n_batch    0 -> 512, the literal that was there
+     *   n_ubatch   0 -> 512, the literal that was there
+     *   flash_attn 0 -> off, which is what llama_context_default_params() gives
+     *
+     * so a caller that passes none of them gets byte-identical behaviour to a
+     * caller that does not exist. That matters more than it sounds: a config
+     * default of 0 for n_batch would mean "process nothing", which is a different
+     * bug rather than a different default.
+     *
+     * n_batch and n_ubatch are SEPARATE on purpose. n_batch is how many tokens
+     * are handed to llama_decode at once, which is the prompt-processing
+     * throughput knob and therefore the TTFT knob for a long prompt. n_ubatch is
+     * the micro-batch, which bounds the peak compute of a single graph. llama.cpp
+     * requires n_ubatch <= n_batch.
+     */
+    int32_t     n_batch;
+    int32_t     n_ubatch;
+    int32_t     flash_attn;  /* nonzero -> enable flash attention. */
 } llama_config_t;
 
 } /* extern "C" -- reopened below */

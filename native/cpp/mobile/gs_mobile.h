@@ -43,6 +43,19 @@ typedef struct gs_mobile_ctx gs_mobile_ctx_t;
  */
 gs_mobile_ctx_t* gs_mobile_create(const char* model_path, int32_t n_ctx, int32_t n_threads);
 
+/* The same, with the three PERFORMANCE LEVERS that were previously unreachable
+ * because they were hardcoded in llama_wrapper.cpp: the prompt-processing batch,
+ * the micro-batch, and flash attention.
+ *
+ * Every one of them takes 0 for "the value this build already used", which is NOT
+ * the same as zero -- n_batch 0 would mean "process nothing". gs_mobile_create
+ * above is exactly this call with 0, 0, 0, and it delegates rather than repeating
+ * the defaults, so there is one place they are written down. */
+gs_mobile_ctx_t* gs_mobile_create_tuned(const char* model_path,
+                                        int32_t n_ctx, int32_t n_threads,
+                                        int32_t n_batch, int32_t n_ubatch,
+                                        int32_t flash_attn);
+
 /* Destroy a context. NULL-safe. */
 void gs_mobile_free(gs_mobile_ctx_t* ctx);
 

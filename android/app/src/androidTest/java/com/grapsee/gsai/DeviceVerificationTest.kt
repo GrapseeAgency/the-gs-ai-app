@@ -1797,8 +1797,12 @@ class DeviceVerificationTest {
                 val label = "n_ctx=$nCtx n_threads=$nThreads"
                 GsNative.shutdown()
                 val ok = try {
+                    // 0, 0, 0 for the three levers: this test is the ONE that
+                    // measured threads and context, and it must not silently start
+                    // varying batch or flash attention as well or its own table
+                    // stops being about what it says it is about.
                     GsNativeLoader.isLibraryLoaded() && GsNative.initTuned(
-                        m.absolutePath, nCtx, nThreads,
+                        m.absolutePath, nCtx, nThreads, 0, 0, 0,
                     )
                 } catch (t: Throwable) {
                     println("LEVERS $label FAILED TO INITIALISE: ${t.message}")
@@ -1935,6 +1939,283 @@ class DeviceVerificationTest {
                     )}% faster on TTFT",
             )
         }
+    }
+
+
+    // ========================================================================
+    // ITEM 1, LEVERS 3-5: batch size, and flash attention.
+    //
+    // Levers 1 and 2 (threads, n_ctx) are measured above and are dead ends: n_ctx
+    // does not move TTFT at all and 4 threads is already the throughput optimum.
+    //
+    // LEVER 3 -- BATCH -- IS MEASURED WITH A LONG PROMPT, WHICH IS THE WHOLE
+    // POINT OF IT. n_batch is how many prompt tokens reach llama_decode at once,
+    // so it can only matter when there are prompt tokens to batch. Measuring it
+    // with "hello" measures nothing, and the previous table used a short prompt,
+    // which is why it could not have found an effect if one existed.
+    //
+    // 500 tokens is the number the brief asks for, and it is also the only length
+    // at which the four batch sizes differ: at 512 tokens the whole prompt fits
+    // in one batch of 512 and every value behaves identically, so 512 is included
+    // deliberately as the CONTROL -- if the four rows come out the same, that is a
+    // real result about batching rather than a table that failed to vary anything.
+    // ========================================================================
+
+    @Test
+    fun perf_lever3_batch_size_is_measured_with_a_500_token_prompt() {
+        val model = findModel()
+        assertNotNull(
+            "no model on the device, so there is nothing to sweep. This is a " +
+                "FAILURE, not a skip.",
+            model,
+        )
+        val m = model!!
+
+        // A ~500-token prompt, built from real words so the tokenizer produces a
+        // realistic number of tokens rather than a few hundred of one repeated
+        // subword. Repeated filler tokenizes to far fewer tokens than its
+        // character count suggests, which would quietly make this a short-prompt
+        // measurement wearing a long-prompt's label.
+        val longPrompt = buildString {
+            append("Summarise the following engineering notes.\n\n")
+            var i = 1
+            while (length < 2200) {
+                append(
+                    "Note $i: the retrieval layer caches embeddings for thirty " +
+                        "minutes, and a cache miss recomputes the query vector " +
+                        "before the first token is produced.\n"
+                )
+                i++
+            }
+        }
+        println("LEVERS3 long prompt: ${longPrompt.length} chars")
+        assertTrue(
+            "the long prompt is only ${longPrompt.length} chars, which is not long " +
+                "enough to make batching observable",
+            longPrompt.length > 2000,
+        )
+
+        data class BRow(
+            val nBatch: Int,
+            val ttftMs: Long,
+            val t49: Long,
+            val chars: Int,
+            val ok: Boolean,
+            val why: String,
+        )
+
+        val batchSizes = listOf(128, 256, 512, 1024)
+        val rows = mutableListOf<BRow>()
+
+        // n_ctx must be large enough to hold the prompt, or the context itself
+        // truncates it and every row measures the same truncation. 2048 was the
+        // default and it is kept, because the previous table showed n_ctx does not
+        // affect TTFT -- so holding it fixed isolates the batch variable.
+        val nCtx = 2048
+        val nThreads = 4   // measured above as the throughput optimum
+
+        for (nBatch in batchSizes) {
+            val label = "n_batch=$nBatch"
+            GsNative.shutdown()
+            val ok = try {
+                GsNativeLoader.isLibraryLoaded() && GsNative.initTuned(
+                    m.absolutePath, nCtx, nThreads, nBatch, 0, 0,
+                )
+            } catch (t: Throwable) {
+                println("LEVERS3 $label FAILED TO INITIALISE: ${t.message}")
+                false
+            }
+            if (!ok) {
+                rows += BRow(nBatch, -1, -1, 0, false, "initTuned failed")
+                continue
+            }
+            try {
+                GsNative.chatWithBudget(longPrompt, 8)   // warm-up, discarded
+            } catch (t: Throwable) {
+                rows += BRow(nBatch, -1, -1, 0, false, "warm-up threw: ${t.message}")
+                continue
+            }
+            // One token, three repeats: TTFT is the thing being measured and a
+            // single sample of it is a sample of scheduler noise.
+            val ttfts = (0 until 3).map {
+                val t0 = System.nanoTime() / 1_000_000
+                val text = GsNative.chatWithBudget(longPrompt, 1)
+                val ms = System.nanoTime() / 1_000_000 - t0
+                println("LEVERS3 $label budget=1 -> ${ms}ms, ${text.length} chars")
+                ms
+            }
+            val t49 = (0 until 2).map {
+                val t0 = System.nanoTime() / 1_000_000
+                val text = GsNative.chatWithBudget(longPrompt, 49)
+                val ms = System.nanoTime() / 1_000_000 - t0
+                println("LEVERS3 $label budget=49 -> ${ms}ms, ${text.length} chars")
+                ms to text.length
+            }
+            val ttft = ttfts.min()
+            val spread = ttfts.max() - ttfts.min()
+            val perToken = (t49.min() - ttft).toDouble() / 48.0
+            val tps = if (perToken > 0) 1000.0 / perToken else 0.0
+            val chars = t49.first().second
+
+            // REPEATS MUST AGREE, or the fastest row is the luckiest row.
+            val why = when {
+                ttft <= 0 -> "non-positive TTFT ($ttft ms)"
+                spread * 2 > (t49.min() - ttft) ->
+                    "noisy: ${spread}ms spread across 3 TTFT samples"
+                chars == 0 -> "no output at a 49-token budget"
+                else -> ""
+            }
+            println(
+                "LEVERS3 n_batch=$nBatch ttft=${ttft}ms ttfts=$ttfts " +
+                    "tps=${"%.2f".format(tps)} chars=$chars spread=${spread}ms" +
+                    (if (why.isEmpty()) "" else "  REJECTED: $why"),
+            )
+            rows += BRow(nBatch, ttft, t49.min(), chars, why.isEmpty(), why)
+        }
+        GsNative.shutdown()
+        GsNativeLoader.initWith(m.absolutePath)
+
+        println("=== ITEM 1 LEVER 3: batch size, 500-token prompt, 0.5B ===")
+        println(String.format("  %-9s %10s %10s %10s", "n_batch", "TTFT ms", "tok/s", "spread"))
+        for (r in rows) {
+            if (!r.ok) {
+                println(String.format("  %-9d %10s %10s   %s", r.nBatch, "-", "-", r.why))
+                continue
+            }
+            val perToken = (r.t49 - r.ttft).toDouble() / 48.0
+            val tps = if (perToken > 0) 1000.0 / perToken else 0.0
+            println(String.format("  %-9d %10d %10.2f %10d", r.nBatch, r.ttft, tps, r.t49 - r.ttft))
+        }
+        assertTrue(
+            "all four batch sizes failed: " + rows.joinToString("; ") { "${it.nBatch}: ${it.why}" },
+            rows.any { it.ok },
+        )
+    }
+
+    // ========================================================================
+    // LEVER 5 -- FLASH ATTENTION. Reported either way.
+    //
+    // It is a KERNEL choice, not a tuning parameter, so the honest question is not
+    // "is it faster" but "does it change anything measurable here, and does it still
+    // produce the same answer". Both are measured here: TTFT and tok/s, AND the
+    // reply text, so a kernel that is faster and wrong is caught.
+    //
+    // llama.cpp may refuse it on CPU (flash attention has historically been
+    // GPU-only), and a refusal is a RESULT, not a failure: the honest states are
+    // "faster", "slower", "identical", and "refused to load", and this test is
+    // written so that all four can pass.
+    // ========================================================================
+
+    @Test
+    fun perf_lever5_flash_attention_is_measured_and_its_answer_is_compared() {
+        val model = findModel()
+        assertNotNull(
+            "no model on the device, so there is nothing to measure. This is a " +
+                "FAILURE, not a skip.",
+            model,
+        )
+        val m = model!!
+        val nCtx = 2048
+        val nThreads = 4
+        val prompt = "What is the capital of France? Answer with one word."
+
+        data class FaRow(
+            val flash: Boolean,
+            val loaded: Boolean,
+            val ttft: Long,
+            val t49: Long,
+            val reply: String,
+            val why: String,
+        )
+
+        val rows = (listOf(false, true)).map { flash ->
+            GsNative.shutdown()
+            val loaded = try {
+                GsNativeLoader.isLibraryLoaded() && GsNative.initTuned(
+                    m.absolutePath, nCtx, nThreads, 0, 0, if (flash) 1 else 0,
+                )
+            } catch (t: Throwable) {
+                println("LEVERS5 flash_attn=$flash FAILED TO INITIALISE: ${t.message}")
+                false
+            }
+            if (!loaded) {
+                return@map FaRow(flash, false, -1, -1, "", "initTuned failed or refused")
+            }
+            var reply = ""
+            val ttft = try {
+                GsNative.chatWithBudget(prompt, 8)   // warm-up
+                val t0 = System.nanoTime() / 1_000_000
+                reply = GsNative.chatWithBudget(prompt, 1)
+                System.nanoTime() / 1_000_000 - t0
+            } catch (t: Throwable) {
+                println("LEVERS5 flash_attn=$flash THREW: ${t.message}")
+                -1L
+            }
+            var t49 = -1L
+            if (ttft > 0) {
+                t49 = try {
+                    val t0 = System.nanoTime() / 1_000_000
+                    GsNative.chatWithBudget(prompt, 49)
+                    System.nanoTime() / 1_000_000 - t0
+                } catch (t: Throwable) {
+                    println("LEVERS5 flash_attn=$flash 49-token run threw: ${t.message}")
+                    -1L
+                }
+            }
+            val ok = ttft > 0 && t49 > ttft
+            println(
+                "LEVERS5 flash_attn=$flash loaded=true ttft=${ttft}ms t49=${t49}ms " +
+                    "reply=${reply.take(60).replace("\n", " ")}",
+            )
+            FaRow(flash, loaded, ttft, t49, reply, if (ok) "" else "no usable timing")
+        }
+        GsNative.shutdown()
+        GsNativeLoader.initWith(m.absolutePath)
+
+        println("=== ITEM 1 LEVER 5: flash attention ===")
+        for (r in rows) {
+            if (!r.loaded) {
+                println("  flash_attn=${r.flash}  DID NOT LOAD: ${r.why}")
+                continue
+            }
+            val perToken = (r.t49 - r.ttft).toDouble() / 48.0
+            val tps = if (perToken > 0) 1000.0 / perToken else 0.0
+            println(
+                "  flash_attn=${r.flash}  TTFT ${r.ttft}ms  ${"%.2f".format(tps)} tok/s  " +
+                    "answer=${r.reply.take(40).replace("\n", " ")}",
+            )
+        }
+
+        val off = rows.first { it.flash == false }
+        val on = rows.first { it.flash == true }
+
+        // THE ANSWER MUST BE THE SAME ANSWER. A kernel that produces different text
+        // is not "faster", it is different, and a speedup that costs correctness is
+        // the one outcome worth refusing.
+        //
+        // Both must contain "paris", which is the discriminator the chat tests
+        // already use, rather than merely being non-empty -- a kernel that emitted
+        // a paragraph of plausible English and no answer would pass "non-empty".
+        if (off.loaded && on.loaded && off.ttft > 0 && on.ttft > 0) {
+            for (r in listOf(off, on)) {
+                assertTrue(
+                    "flash_attn=${r.flash} answered a capital-of-France question " +
+                        "without saying Paris: ${r.reply.take(120)}",
+                    r.reply.lowercase().contains("paris"),
+                )
+            }
+        }
+
+        // A refusal to load is a legitimate result on CPU. It is REPORTED, and the
+        // test passes -- because the alternative is a test that goes red forever on
+        // a platform where the feature is not available, and a red test forever gets
+        // commented out.
+        assertTrue(
+            "neither flash-attention setting loaded, so nothing was measured. The " +
+                "reasons were: off=${off.why} on=${on.why}. If BOTH fail for the " +
+                "same reason then the failure is the context, not flash attention.",
+            off.loaded || on.loaded || off.why != on.why,
+        )
     }
 
 }
