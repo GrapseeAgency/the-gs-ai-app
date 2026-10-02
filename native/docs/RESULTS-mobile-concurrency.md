@@ -1202,3 +1202,89 @@ a smaller model — rather than a different value of one of these three.
 | 7 | `n_threads_batch` | 4 | 36745 | already the default; now confirmed |
 | 4 | quantisation | Q4_K_M only | 4930 | 3 of 4 rows unmeasured |
 | 6 | speculative decoding | — | — | provably capped at 1.146x, and regresses TTFT |
+---
+
+## ITEM 3 CLOSED, PERMANENTLY: 2.02 hours in the queue and no runner
+
+Run `arm64-probe` **36992975588**, `host: ubuntu-24.04-arm64`, the correct runner
+label, dispatched deliberately as the operator's one final attempt.
+
+| field | value |
+|---|---|
+| `created_at` | `2026-10-02T09:59:54Z` |
+| status at cancel | **`queued`** |
+| `runner_name` | **`(none)`** |
+| time in the queue before cancel | **121.3 min = 2.02 h** |
+
+The operator's criterion was "if it queues >2h, cancel and close permanently with
+the exact queue-time evidence". It queued for 2.02 h. Cancelled at HTTP 202.
+
+### The one field that must not be used as evidence
+
+```json
+{ "job": "can ubuntu-24.04-arm64 host an arm64 emulator?",
+  "status": "queued",
+  "started_at": "2026-10-02T09:59:55Z",     <- ONE SECOND after created_at
+  "runner_name": null }
+```
+
+**`started_at` says `09:59:55Z` and the run was created at `09:59:54Z`.** It is
+set when the job is *created*, not when a machine picks it up, so a job that never
+ran for two hours still carries a `started_at`. Reading it as "it started" is the
+single easiest way to report this as a working arm64 run.
+
+The fields that do not lie are `status`, which stayed `queued`, and
+`runner_name`, which stayed `null`. Every arm64 claim in this repository is
+therefore stated as *never dispatched to a runner*, never as *failed* — the run
+did not fail, it never began, and those are different facts.
+
+### What this closes, and what it does not
+
+**Closed:** arm64 **device** execution and arm64 **real-device TTFT**. There is
+no remaining avenue. The alternatives were both measured:
+
+- `ubuntu-24.04-arm64` — the correct label — queued 2.02 h and was cancelled.
+  Six earlier attempts on this workflow, and every previous arm64 dispatch,
+  behaved the same way: `queue=0 min` in the API is the *assignment* timestamp,
+  not the wait, which is why the six rows in `arm64-probe`'s own run history all
+  read "queue=0 min" and under-report the problem.
+- `macos-15` — assigns instantly and has **no `kern.hv_support`**, so it cannot
+  run an arm64 emulator either. Fast and useless is the worst combination: it
+  produces a red run quickly instead of a queued one slowly, and the two look
+  identical in a run list.
+
+**Not closed, because it was never asked:** the code is still built and linked
+for `arm64-v8a`. `archive_arch.py` reads the `e_machine` of every member of every
+`.a` and refuses (exit 3) rather than skipping an arch it cannot read, so the
+claim "the archive contains an arm64 object" is a checked property of the
+artifact and not an intention. **What has never happened is that arm64 code
+executing.** A binary that links is not a binary that has run.
+
+### The number that makes the emulator the only measurement available
+
+The arm64 block is not a preference; it is arithmetic, from the same run's
+measurements:
+
+| prompt | TTFT on x86_64 emulator |
+|---|---:|
+| short | 3067 – 4930 ms |
+| 2255 characters (~500 tokens) | 36685 – 77129 ms |
+
+A 500-token prefill takes **36.7 s** on the x86_64 emulator, and the only
+accelerator number this repository has ever produced is lever 5's **146 ms**, on a
+short prompt, from a kernel change. **There is no measurement in this repository
+of what arm64 hardware would do**, and the honest reason is not a missing run: it
+is that no runner has ever been assigned to execute arm64 code here.
+
+So the gap cannot be closed by arithmetic. Any ratio between emulator and arm64
+would be a number invented in this document rather than measured on a device, and
+an invented ratio in a results file is indistinguishable from a measured one once
+the commit is pushed. **What can be said is bounded by what is known:** the target
+is missed on every configuration measured, by 1.5x on a short prompt and by 12x
+to 26x on a 500-token prompt, and the two levers that could plausibly move
+prefill — prompt-processing threads and flash attention — are already at their
+optimum and worth 3.2% respectively.
+
+Nothing further will be attempted. Any future arm64 measurement needs a
+self-hosted runner, a physical device, or budget to buy one — not another
+dispatch.

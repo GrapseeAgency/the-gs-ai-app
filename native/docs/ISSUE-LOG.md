@@ -2935,3 +2935,34 @@ failed, then `perf_lever5` measured two settings successfully and failed, and
 **everything after it that needed the engine failed.** `perf_lever5`'s logcat
 contains both `loaded=true` rows and then a stack frame with no assertion message
 — a test that worked and then failed on its way out.
+
+---
+
+## ITEM 3, FINAL ATTEMPT, AND THE CLOSE
+
+`arm64-probe` **36992975588**, `host: ubuntu-24.04-arm64`. Dispatched
+deliberately as the operator's one last try, with the correct runner label, and
+cancelled at **121.3 min = 2.02 h** still `queued` with `runner_name: null`.
+
+The six earlier attempts on this workflow all report `queue=0 min` in the API,
+and that number is the **assignment** timestamp rather than the wait — so the run
+history under-reports this problem by showing every attempt as instant. Measuring
+`created_at` against wall-clock is the only way to see it, and the answer is that
+the last six arm64 dispatches have collectively waited hours to never begin.
+
+**`started_at` is not evidence of anything.** It read `09:59:55Z` for a run
+created at `09:59:54Z` that then sat queued for two hours. Any arm64 claim built
+on that field would report a run that never started as one that did.
+
+This is the ninth time a tool reported its own failure as a property of the
+artifact, and the first time the failure mode was *time* rather than a
+mis-parsed column: the six `queue=0 min` rows are the run list asserting that six
+arm64 attempts were dispatched instantly when none of them ran at all. A number
+that is correct about a different question is worse than no number, because it is
+checkable and wrong.
+
+Closed: arm64 device execution and arm64 real-device TTFT. Not closed, because it
+was never claimed: the arm64 objects build and link, and `archive_arch.py` reads
+`e_machine` from every member of every `.a` and exits 3 rather than skipping an
+arch it cannot read. **Linking is not running, and no arm64 instruction has been
+executed in this repository.**
