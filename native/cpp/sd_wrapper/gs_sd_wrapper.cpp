@@ -311,8 +311,25 @@ int32_t gs_sd_generate(gs_sd_ctx_t* ctx,
     int n_images = 0;
     const bool ok = generate_image(ctx->inner, &gp, &images, &n_images);
     if (!ok || !images || n_images < 1) {
+        // GS_ERR_RUNTIME DOES NOT EXIST. The ABI's codes are:
+        //   GS_ERR_INVALID_ARG -1, GS_ERR_NO_MEMORY -2, GS_ERR_IO -3,
+        //   GS_ERR_UNAVAILABLE -4, GS_ERR_GENERATION -5, GS_ERR_TIMEOUT -6,
+        //   GS_ERR_INTERNAL -7, GS_ERR_UNSUPPORTED -8, GS_ERR_NOT_FOUND -9
+        // and `generate_image` returning no image is the definition of
+        // GS_ERR_GENERATION: "decode failed or produced nothing".
+        //
+        // It said GS_ERR_RUNTIME because this line has never been compiled. The
+        // whole `#if defined(GS_SD_HAVE_SDCPP)` block only exists once
+        // GS_SD_PREBUILT is set, and nothing set it until this session --
+        // android-native run 36969762884 is the first build that reached it:
+        //     linking stable-diffusion.cpp in-process from .../sd-android-x86_64
+        //     ../../cpp/sd_wrapper/gs_sd_wrapper.cpp:315:16: error: use of
+        //     undeclared identifier 'GS_ERR_RUNTIME'
+        //
+        // So the in-process diffusion path is code that survived review, and CI,
+        // and the 18-symbol ABI gate, without ever being handed to a compiler.
         set_err("gs_sd_generate: generate_image returned no image");
-        return GS_ERR_RUNTIME;
+        return GS_ERR_GENERATION;
     }
     const sd_image_t& img = images[0];
     const int rc = write_png(img.data, img.width, img.height, img.channel, output_path);
