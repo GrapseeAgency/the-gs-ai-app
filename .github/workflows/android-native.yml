@@ -451,8 +451,32 @@ jobs:
           # stable-diffusion -> ggml -> ggml-cpu -> ggml-base. A missing base
           # archive produces a wall of undefined ggml symbols that names neither
           # the cause nor the file, so it is checked here where the cause is known.
+          # THE STEMS ARE `stable-diffusion`, NOT `libstable-diffusion`.
+          #
+          # This loop read `test -f "$SD_ROOT/lib/lib$A.a"` with A already starting
+          # with `lib`, so it looked for liblibggml-base.a and reported all four
+          # archives missing while listing them, present and correctly named, four
+          # lines above:
+          #
+          #     native/prebuilts/sd-android-x86_64/lib/libggml-base.a
+          #     ::error::lib is missing: libstable-diffusion.a libggml.a ...
+          #
+          # THIRD instance of the `lib` prefix being double-counted. build.rs says
+          # so in its own words, about itself:
+          #
+          #     The same mistake is already recorded twice in this file -- the `lib`
+          #     prefix on archive stems, and llama's own ordering
+          #
+          # and build.rs is the authority for both the stems and the order:
+          #
+          #     const SD_DEP_ORDER: &[&str] =
+          #         &["stable-diffusion", "ggml", "ggml-cpu", "ggml-base"];
+          #     let p = libs.join(format!("lib{name}.a"));
+          #
+          # So the stems are read from one place rather than retyped, and `lib` is
+          # added exactly once.
           MISSING=""
-          for A in libstable-diffusion libggml libggml-cpu libggml-base; do
+          for A in stable-diffusion ggml ggml-cpu ggml-base; do
             test -f "$SD_ROOT/lib/lib$A.a" || MISSING="$MISSING $A.a"
           done
           if [ -n "$MISSING" ]; then
