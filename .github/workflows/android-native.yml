@@ -29,6 +29,18 @@ on:
         required: false
         default: ""
         type: string
+      link_stable_diffusion:
+        description: >-
+          Link stable-diffusion.cpp INTO libgs_ffi.so. OFF BY DEFAULT, and the
+          default is the finding rather than a preference: the two projects ship
+          two different versions of ggml, 574 of whose symbol names are identical,
+          and putting both in one .so leaves four of them undefined. dlopen then
+          fails on a device with "cannot locate symbol". Fixing that needs
+          stable-diffusion.cpp as its OWN shared object, which is not done. Set
+          this to true to reproduce the failure, or once that refactor lands.
+        required: false
+        default: "false"
+        type: boolean
   push:
     branches: [native-runtime]
     paths:
@@ -317,6 +329,7 @@ jobs:
       # above pulls `llamacpp-<abi>` and only that.
       # =========================================================================
       - name: Fetch the cross-compiled stable-diffusion.cpp for this ABI
+        if: ${{ inputs.link_stable_diffusion == true }}
         env:
           GH_TOKEN: ${{ github.token }}
           DEPS_RUN_ID: ${{ github.event.inputs.deps_run_id || github.event.workflow_run.id }}
@@ -846,6 +859,12 @@ jobs:
           #                             ggml_mul_mat_i8_tensorwise
           #   armeabi-v7a  (no SD)      exit 0, 0 denied
           # Sizes, for the record: 3,520,408 bytes without SD, 42,356,592 with.
+          # With link_stable_diffusion on, this is EXPECTED to fail and says why.
+          # It is left fatal rather than downgraded to a warning, because a
+          # check that can be silenced by a flag is a check that will be silenced
+          # by accident. The default is off, so the default build is green and the
+          # conflict is opt-in and reproducible.
+          echo "  link_stable_diffusion = ${{ inputs.link_stable_diffusion }}"
           python3 "$GITHUB_WORKSPACE/.github/scripts/undefined_syms.py" "$SO" || {
             echo "::error::the .so imports symbols in a denied namespace that it does"
             echo "::error::not define. dlopen will fail on a device and nothing in this"
