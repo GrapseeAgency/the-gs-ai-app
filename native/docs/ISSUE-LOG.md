@@ -1602,3 +1602,213 @@ From the built bytes, and the log says which of these is which:
 And what is **not** claimed, printed in the step's own output: a signed `.ipa`
 (needs an identity and a provisioning profile this repository does not have), and
 **execution** — nothing here runs the device binary.
+---
+
+## THE THREE PERFORMANCE LEVERS WERE NOT PARAMETERS, THEY WERE LITERALS
+
+Item 1 of the new brief asks for levers 3-5: batch size, quantisation, flash
+attention. Two of them had never been *measured*, and the reason turned out to be
+that they could not be. In `native/cpp/llama_wrapper/llama_wrapper.cpp`:
+
+```cpp
+cp.n_batch   = 512;
+cp.n_ubatch  = 512;
+```
+
+Two literals. Not parameters, not defaults read from a config, not fields of any
+struct — two numbers typed into an assignment. And `cp.flash_attn` was **never
+assigned at all**, so it inherited whatever `llama_context_default_params()`
+happened to carry, which is not a number anyone wrote down and therefore not a
+number anyone can compare a change against.
+
+This is worth recording as a category rather than an incident. "We never measured
+this lever" and "this lever does not exist" look identical from outside, and the
+second one is a stronger claim than anyone can support without reading the
+assignment. Reading the assignment took four minutes and changed the task from
+*sweep three values* to *add three parameters, then sweep*.
+
+### 0 MEANS "AS THIS BUILD ALREADY WAS", AND THAT IS NOT ZERO
+
+The new fields default to today's behaviour, which for two of them is a literal:
+
+| field | sentinel | why not just 0 |
+|---|---|---|
+| `n_batch` | `0 -> 512` | `n_batch = 0` means "process no tokens" |
+| `n_ubatch` | `0 -> 512` | same |
+| `flash_attn` | `< 0 -> AUTO` | it is an enum; 0 is `DISABLED` |
+| `n_threads_batch` | `< 0 -> library default` | 0 means zero batch threads |
+
+A config default of `0` for a *size* is a plausible-looking way to ship a build
+that answers nothing, so 0 cannot be the sentinel for a size. A config default of
+`0` for a *thread count* is a value somebody types by accident, so 0 cannot be
+the sentinel there either. Two different sentinels for two different classes of
+field is the correct answer, and `gs_mobile_create` now delegates with
+`-1, 0, 0, -1` rather than five zeros.
+
+### n_ubatch is CLAMPED, because ggml asserts rather than returns
+
+`n_ubatch <= n_batch` is a `GGML_ASSERT` in llama.cpp, and an assert is a process
+abort, not an error return. A caller asking for a micro-batch larger than the
+batch would take the app down instead of being told. The clamp is in C++, where
+the numbers are still just numbers.
+
+## THE FIELD WAS AN ENUM, AND A BOOL WOULD HAVE BEEN A SECOND DEFECT
+
+The first attempt at lever 5 was `cp.flash_attn = config->flash_attn != 0;`. It
+did not compile — run **36955318134**, all four ABIs:
+
+```
+../../cpp/llama_wrapper/llama_wrapper.cpp:126:12: error: no member named
+'flash_attn' in 'llama_context_params'
+    cp.flash_attn = config->flash_attn != 0;
+    ~~ ^
+```
+
+Read from the pinned header, `3018a11e79e489b657dbb77c95694889ccff92df`:
+
+```c
+enum llama_flash_attn_type {
+    LLAMA_FLASH_ATTN_TYPE_AUTO     = -1,
+    LLAMA_FLASH_ATTN_TYPE_DISABLED =  0,
+    LLAMA_FLASH_ATTN_TYPE_ENABLED  =  1,
+};
+...
+enum llama_flash_attn_type   flash_attn_type;   // when to enable Flash Attention
+```
+
+The bool would have been a defect even if it had compiled. `AUTO` is the library
+default and **is not reachable by a bool at all**, so `!= 0` would have pinned
+the kernel to `DISABLED` for every caller that had not opted in — turning "unset,
+therefore the default" into "explicitly off" and making the benchmark measure
+something this build had never done. Three enum states where I planned for two,
+and the state I would have dropped is the one the code was actually in.
+
+## AND THERE WAS A SECOND THREAD FIELD THAT NOBODY WAS SETTING
+
+The same struct has two thread fields, and the wrapper set one of them:
+
+```c
+int32_t  n_threads;        // number of threads to use for GENERATION
+int32_t  n_threads_batch;  // number of threads to use for BATCH PROCESSING
+```
+
+`n_threads_batch` was never assigned. Prompt processing ran on
+`llama_context_default_params()`'s value for the entire life of this code.
+
+**This corrects how an existing number was read.** The Item 3 table reported "4
+threads is optimal, 8 threads is 70x worse" and recorded it as a result about
+threads. That result is real and it stands — but it is a result about
+*generation* threads. Time-to-first-token is prompt processing, and prompt
+processing was never given the number. The one field that could have moved TTFT
+by moving prompt processing across cores was never swept, and the table's own
+wording was broader than its evidence.
+
+The new test sweeps `n_threads_batch` over 1, 2, 4, 8 on a 2000+ character
+prompt, and its load-bearing assertion is **directional**: one batch thread must
+not be *faster* than several on a multi-core runner. "The numbers differ" would
+pass on a 1% scheduling wobble, which is noise, and a field that never reached
+llama.cpp produces exactly that.
+
+`0` is deliberately not swept. It is the leave-the-default sentinel, and passing
+it as a thread count is the one value that could turn a 53-minute device run into
+a timeout.
+
+## A FLOOR THAT COULD NOT NOTICE ITS OWN SET GROWING
+
+Adding the eighteenth `gs_ffi_mobile_*` symbol exposed a gate that had stopped
+describing its subject. Three copies of the ABI existed in three formats:
+
+1. the inline `EXPECTED_ABI` list in `android-native.yml` — 17 names
+2. the floor check 20 lines above it — the literal `-ge 17`
+3. an eleven-symbol subset inline in `ios-native.yml` — a shell `for` loop
+
+The floor's comment claimed it "matches the ABI". It did not, and it could not:
+
+```sh
+[ "$N" -ge 17 ] || { echo "FAIL: the ABI has 17 gs_ffi_mobile_* entry points"; exit 1; }
+```
+
+With 18 symbols exported, `18 -ge 17` **passes**. A floor cannot notice a set
+growing. The comment two lines above it already conceded the deeper problem —
+*"a floor count can pass with the WRONG symbols"* — and the per-symbol comparison
+below it is what actually establishes the ABI.
+
+My first fix was to add a nineteenth hardcoded number. Both Android checks now
+read `.github/scripts/gs_mobile_abi.txt` and the floor is `wc -l` of it, so there
+is no number left to bump.
+
+**The check that proves it matters is the rename.** Replacing
+`gs_ffi_mobile_ocr` with `gs_ffi_mobile_ocr2` keeps the count at 18, so the floor
+passes and only the set comparison catches it. Simulated before writing the
+commit, not after.
+
+### A LINT, AND AN EXTRACTOR THAT WAS WRONG BEFORE THE FILE WAS
+
+The iOS list is a *deliberate* subset — the iOS device slice is not required to
+carry the six `sd_*` diffusion entry points or `render_svg`, and pointing its
+check at the full list would fail it for a reason unrelated to iOS. Nothing
+enforced that the two lists agreed.
+
+`.github/scripts/check_abi_lists_agree.py` now does, with four properties that can
+each fail alone. Property 1 is NON-EMPTINESS, and it exists because the first
+version of the extractor sliced `ios-native.yml` from `MISSING=""` to the next
+`do` — and the file contains **two of each**, so it read the wrong block,
+extracted zero symbols, and reported a confident `subset: True`.
+
+That is a vacuous pass, and it would have shipped as a green lint. The same shape
+as the SVG row parser, the `nativeLibraryDir` shape, and `Elf64.kt`: a check that
+reports a clean result because it was reading the wrong thing. The extractor is
+now anchored on the `for S in ... do` loop itself.
+
+Each property was then made to fail against a mutated copy, in isolation:
+
+| mutation | rejected as |
+|---|---|
+| iOS list emptied | `FAIL 1/4` |
+| iOS pins `gs_ffi_mobile_teleport` | `FAIL 3/4` |
+| iOS subset inflated to all 18 | `FAIL 4/4` |
+| full name instead of a suffix in the `.txt` | `FAIL 1/4` |
+
+## A BRACE LINT THAT COULD NOT SEE AN EXTRA PAREN
+
+`check_kt_braces.py` counts `{` and `}`. It passed a file containing:
+
+```kotlin
+rows += TbRow(gen, batch, true, ttft, t49, reply, if (ok) "" else "no usable timing"))
+//                                                                                  ^ extra
+```
+
+Two opens, three closes. Balanced braces, one paren too many. Run **36956138901**:
+
+```
+e: ...DeviceVerificationTest.kt:2355:98 Unexpected token
+```
+
+The real gap is that the lint's job is "will this file parse", and a brace counter
+is not that. **I wrote a bracket checker to close the gap, and it produced 197
+false positives on a file that has compiled for months** — one raw JSON string
+(`"layer1":"orchestration","layer2":"inference"}"""`, line 1367) breaks the
+literal stripper, and every later report cascades from that one miscount. Deleted
+rather than iterated, and recorded here because the failure is the interesting
+part: this repository has now had a hand-rolled bracket scanner be wrong *five*
+times, and the existing brace lint is still the only one of the five that is
+right. `kotlinc` is the authority and it names the line in five minutes.
+
+The one thing worth keeping from the attempt: the arity of every `initTuned` call
+is now checked by a script that strips comments first and does not count the
+trailing comma. My first version of *that* check reported 11 arguments for a
+7-argument call, because it counted commas inside a `//` comment and the comma
+before `)`. Both versions were wrong before the file was.
+
+## STATUS
+
+| item | state |
+|---|---|
+| lever 3 — `n_batch` | reachable and swept on a 500-token prompt |
+| lever 5 — flash attention | reachable; the field is an enum, and it is `AUTO` by default |
+| lever 7 — `n_threads_batch` | **found while reading the pinned header**; the field existed and was never set |
+| lever 4 — quantisation | not started; needs three more 500 MB downloads in the device job |
+| lever 6 — speculative decoding | not started |
+| ABI floor | was a stale literal that could not notice growth; now derived |
+| ABI lists | two copies, one unchecked; now linted, with a non-vacuity property |
+| last CI | `android-native` **success** (36956136615, all four ABIs, 18-symbol gate derived and green); `android-app` **failure** on the extra paren, now fixed and not yet re-run |

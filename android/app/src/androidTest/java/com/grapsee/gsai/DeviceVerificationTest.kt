@@ -2352,7 +2352,7 @@ class DeviceVerificationTest {
                 "LEVERS7 $label ttft=${ttft}ms t49=${t49}ms " +
                     "reply=${reply.take(50).replace("\n", " ")}",
             )
-            rows += TbRow(gen, batch, true, ttft, t49, reply, if (ok) "" else "no usable timing"))
+            rows += TbRow(gen, batch, true, ttft, t49, reply, if (ok) "" else "no usable timing")
         }
         GsNative.shutdown()
         GsNativeLoader.initWith(m.absolutePath)
