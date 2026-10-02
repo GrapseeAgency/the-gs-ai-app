@@ -208,8 +208,28 @@ internal class Elf64(private val bytes: ByteArray) {
             val off = (dynsym.offset + i * entsize).toInt()
             if (off + 24 > bytes.size) break
             buf.position(off)
-            val stName = buf.int
-            val stShndx = buf.short.toInt() and 0xFFFF
+            // Elf64_Sym, 24 bytes, and st_shndx is NOT the second field:
+            //
+            //   +0  st_name u32    +4 st_info u8    +5 st_other u8
+            //   +6  st_shndx u16   +8 st_value u64  +16 st_size u64
+            //
+            // The previous version read st_name then a short and called it st_shndx,
+            // which is st_info and st_other. For an undefined symbol both of those
+            // are 0, so a large part of the import table was classified as DEFINED
+            // and the test said, on run 36943592549:
+            //
+            //     the .dynsym table yielded no IMPORTS, which cannot be true of a
+            //     library that calls into libc. A parser that returns nothing is a
+            //     parser that passes everything.
+            //
+            // SAME SHAPE AS THE SECTION-HEADER BUG, one function below in the file
+            // and one commit earlier: a struct with a field SKIPPED between the ones
+            // read, where every read is in bounds and every type is right.
+            val stName = buf.int // st_name
+            buf.short // st_info + st_other, two adjacent bytes read as one
+            val stShndx = buf.short.toInt() and 0xFFFF // st_shndx
+            buf.long // st_value
+            buf.long // st_size
             val name = cString(dynstr.offset, stName)
             if (name.isNotEmpty()) out.add(name to (stShndx == 0))
         }
