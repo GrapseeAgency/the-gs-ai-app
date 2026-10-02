@@ -2924,8 +2924,8 @@ class DeviceVerificationTest {
             // file, and NOT on the 500-token prompt lever 3 uses. Mixing the two
             // would make the quantisation table incomparable with the batch one.
             val short = "Count from 1 to 40 in decimal, one number per line, and nothing else."
-            val (t1, _) = timeBudget(1, 2, short) { println("LEVERS4 ${m.id} $it") }, short)
-            val (t49, _) = timeBudget(49, 2, short) { println("LEVERS4 ${m.id} $it") }, short)
+            val (t1, _) = timeBudget(1, 2, short) { println("LEVERS4 ${m.id} $it") }
+            val (t49, _) = timeBudget(49, 2, short) { println("LEVERS4 ${m.id} $it") }
             val ttft = t1.min()
             val perToken = (t49.min() - ttft).toDouble() / 48.0
             val tps = if (perToken > 0) 1000.0 / perToken else 0.0
