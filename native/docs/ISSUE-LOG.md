@@ -2335,3 +2335,71 @@ deleted**, and the reason is written down: the honest result is *"a same-size pa
 cannot exceed 1.146x on throughput and regresses TTFT"*, which is derivable from
 two measured file sizes and one inequality. Restoring the feature would need a
 **smaller** same-tokenizer draft, and no such model is published for this family.
+
+## SIX HAND-ROLLED KOTLIN SCANNERS, SIX FAILURES, AND THE ONE THAT IS STILL RIGHT
+
+This is a meta-finding and it is the most useful thing in this entry, because it
+says where the time actually went and what not to do next.
+
+| # | scanner | how it failed | what it cost |
+|---|---|---|---|
+| 1 | the SVG row parser | a one-position shift: rows labelled with the previous value, one field dropped | a real product bug, found only by lifting the function into a harness |
+| 2 | the `nativeLibraryDir` shape check | asserted a *shape* that was not there, and reported it as a hard failure | indistinguishable from the thing it was not |
+| 3 | the brace scanner (v1) | wrong about the file it was written for | run 1 |
+| 4 | the brace scanner (v2) | wrong about its own fixture | run 2 |
+| 5 | the Byte/Int scanner | wrong again | run 3 |
+| 6 | **the bracket scanner (this session)** | **197 false positives on a file that has compiled for months** | one red run, then a red lint |
+| 7 | **the object-member scanner (this session)** | **18 false positives, across four distinct classes, and a verdict that disagreed with its own output** | two rounds |
+
+### What they have in common
+
+Every one of them was written to avoid a five-minute compile. Every one of them
+had to be debugged, and the debugging cost more than the compiles it saved. **The
+compile is not slow; it is the only authority, and it names the line.**
+
+### The seventh scanner, in detail, because the failures are instructive
+
+It was written for a real class of bug — I hit *two* in an hour, and both were
+worth a check:
+
+1. a `typealias` inside an `object`, which is illegal Kotlin and whose parse
+   failure cascaded into two more errors 39 lines away
+2. `K.wifiOnly`, used twice and declared never, which the compiler reported as
+   `Unresolved reference 'wifiOnly'` — naming a member that **is** declared, so
+   the error sends you to a correct declaration and you find nothing wrong
+
+The scanner reported 18 undeclared members on 102 files that compile. In classes:
+
+- **`X.entries` and `X.valueOf`** — compiler-synthesised enum members. 6 of them.
+- **`DiffusionCatalog.fitsDevice` and friends** — my brace-walk stopped early, so
+  it collected the *nested* `Checkpoint` data class's members and missed the
+  object's own `fun`s. The declared list it printed is the evidence: it contains
+  `SDXS_512, bytes, cfgScale, ...` and not one `fun`.
+- **`Block.withShiftedSource`, `GsColors.toMaterialScheme`** — extension
+  properties and top-level extension functions, which are not members of the
+  object at all.
+
+And the worst part: run over the whole tree it printed **18 undeclared** and
+exited **0**. `python3 ... | tail -22; echo $?` reports `tail`'s status, not
+Python's. **A check whose verdict is read through a pipe is not a check.** I have
+now made that mistake twice in this session — an arity checker that printed the
+right answer and returned the wrong one, and this.
+
+### The general rule, and it is about the checks, not the code
+
+> A hand-rolled scanner for a language with a compiler is a liability after the
+> first false positive, and the cost is not linear — a scanner that cries wolf
+> gets deleted, and the bug it was written for comes back.
+
+**What survives in the tree is two lints, and both are simple enough to be right:**
+
+- `check_kt_braces.py` — counts `{` and `}`. Took four attempts and is currently
+  correct. It cannot see a missing paren, and that limitation is now written
+  down rather than papered over.
+- `check_row_fields.py` — reads `data class` field lists and checks row-member
+  reads. Added this session, verified by **reintroducing the exact bug it exists
+  to catch** on a copy and confirming it rejects it, and with a non-vacuity guard
+  so a batch that examines nothing is a failure.
+
+Both are *narrow on purpose*. A narrow check that is right is worth more than a
+general one that is nearly right, and the general one has now failed six times.
