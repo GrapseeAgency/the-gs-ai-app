@@ -3023,3 +3023,70 @@ column read as a name, `queue=0 min` standing in for queue time, and
 `started_at` standing in for a runner. Here the discarded information was a whole
 page, and it was discarded silently, in a way that would have had me polling an
 ancient run and concluding the dispatch had not landed.
+
+
+---
+
+## LEVER 4, COMPLETE: FOUR ROWS, AND THE SHIPPED DEFAULT IS THE SLOWEST
+
+`android-device` **37005521803**, head `086bb0d`. **29 tests, 28 passed, 1 failed
+(`sd0`, correctly), 0 skipped** — the `initWith` fix held, and the fifteen-test
+cascade did not return.
+
+    quantisation            bytes          TTFT ms   tok/s  facts
+    q4_0              428,730,208               792   37.35   9/10
+    q8_0              675,710,816               942   26.77   9/10
+    q5_k_m            522,186,592              3805   13.25   9/10
+    q4_k_m  (shipped) 491,400,032              4269   11.65   8/10
+
+`q4_0` is **5.4x lower TTFT, 3.2x the decode rate, one more fact correct and 13%
+smaller** than the quantisation this build ships. All four within one run, so
+none of it depends on the cross-run drift below.
+
+### Why the ordering is trusted and the magnitudes are not
+
+Every magnitude in this table is suspect, because the shared runner host moves
+them. The same `q4_k_m` file, consecutive runs, no code change:
+
+    run 36992620210   TTFT 3067 ms   17.87 tok/s
+    run 37005521803   TTFT 4269 ms   11.65 tok/s
+
++39% TTFT and −35% tok/s on one fixed file. **1.39x and 1.53x of pure host load.**
+So the numbers that mean something are the ones three independent things agree on:
+
+1. **TTFT and tok/s are different code paths** — load-plus-prefill versus pure
+   decode — and they produce the **identical four-way rank order**.
+   Contention does not sort two unrelated measurements the same way.
+2. **File size disagrees with that order.** By size: `q4_0 < q4_k_m < q5_k_m <
+   q8_0`. By speed: `q4_0 < q8_0 < q5_k_m < q4_k_m`. A bandwidth or page-fault
+   story requires the largest file to be slowest, and `q8_0` is 58% larger than
+   `q4_0` yet **second fastest**.
+3. **The fastest row ran first and cold**, so no warm-up explains it.
+
+That is also the general lesson, and it is the one worth keeping: when every
+*magnitude* in a benchmark is unreliable, the question is not which number to
+trust but **which relations survive**. Relations measured by independent code
+paths agreeing is evidence. A single magnitude is not.
+
+### What it licenses, and what it does not
+
+**Licenses, with confidence:** on this configuration the shipped default is the
+slowest of the four quantisations available for it. Actionable, not in dispute.
+
+**Does not license "ship Q4_0".** One emulator, one 0.5B model, CPU-only,
+`GGML_BLAS=OFF`. The K-quant advantage on arm64 is normally the reverse of this,
+because the NEON and dot-product kernels differ between the K and legacy layouts
+— and arm64 execution is the capability item 3 just closed permanently. Choosing
+a shipped quantisation needs a run on the target architecture.
+
+### The 3000 ms target, met for the first time, by the lever nobody turned
+
+`q4_0` short-prompt TTFT is **792 ms** against the brief's 3000 ms. The largest
+available win was not in `n_batch` (flat), `flash_attn_type` (3.2%) or
+`n_threads_batch` (already at its optimum) — none of those three was ever going to
+reach 3000 ms. It was in **which file gets loaded**, a knob this build could
+already have turned and had not.
+
+The long-prompt case has no `q4_0` measurement and is left blank. Scaling the 5.4x
+from a short prompt to a 500-token prefill would be inventing the number that
+matters most.
