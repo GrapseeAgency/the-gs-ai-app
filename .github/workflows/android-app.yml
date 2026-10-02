@@ -127,6 +127,38 @@ jobs:
       # ABI was 18, because a floor cannot notice a set growing. The floor and the
       # per-symbol comparison now both read the .txt, and this lint checks that
       # the iOS subset is a real, non-empty subset of it.
+      # CAN A GREEN IN THIS SUITE MEAN ANYTHING?
+      #
+      # Two narrow checks, each verified by PLANTING the defect it exists for and
+      # watching it get caught. A @Test with no assertion that can fail is a test
+      # that cannot fail; an assertion whose condition cannot be false is not an
+      # assertion. Both were worth writing because both had already been true in
+      # this repository's history in a different form -- two tests skipped
+      # precisely because the library was broken (run 36971941114), which made
+      # "the library does not load" a green.
+      #
+      # The step asserts a non-zero @Test count FIRST, because a scan handed the
+      # wrong paths examines nothing and exits 0. That is the shape of failure
+      # this repository pays for most often.
+      - name: Every test can fail, and every assertion is load-bearing
+        run: |
+          set -euo pipefail
+          mapfile -t KTT < <(find android/app/src/androidTest -name '*.kt' 2>/dev/null | sort)
+          echo "checking ${#KTT[@]} instrumented-test source(s)"
+          test "${#KTT[@]}" -gt 0 || {
+            echo "FAIL: found no androidTest sources; the find pattern is wrong and"
+            echo "FAIL: this step would pass by checking nothing."
+            exit 1
+          }
+          NTESTS=$(grep -h -o '@Test' "${KTT[@]}" | wc -l | tr -d ' ')
+          echo "  $NTESTS @Test annotation(s) across ${#KTT[@]} file(s)"
+          test "$NTESTS" -gt 0 || {
+            echo "FAIL: no @Test found. Either the suite is empty or the extractor"
+            echo "FAIL: stopped matching, and both must be a red run."
+            exit 1
+          }
+          python3 .github/scripts/check_tests_can_fail.py "${KTT[@]}"
+
       - name: The two ABI lists agree
         run: |
           set -euo pipefail
