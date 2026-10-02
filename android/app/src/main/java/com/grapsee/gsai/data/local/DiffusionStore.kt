@@ -56,6 +56,23 @@ object DiffusionStore {
         const val PROMPT_SHOWN = "diffusion_prompt_shown"
         const val INSTALLED_PATH = "diffusion_installed_path"
         const val INSTALLED_ID = "diffusion_installed_id"
+
+        // WAS MISSING, and the compiler said `Unresolved reference 'wifiOnly'`
+        // rather than `Unresolved reference 'K.wifiOnly'` -- at the two USE
+        // sites, 40 lines from this declaration:
+        //
+        //   e: DiffusionStore.kt:91:55  Unresolved reference 'wifiOnly'
+        //   e: DiffusionStore.kt:134:37 Unresolved reference 'wifiOnly'
+        //
+        // It named the wrong symbol because the right one does not exist and
+        // `wifiOnly` is a real member of this object one line away. Reading
+        // "unresolved wifiOnly" as "the property wifiOnly is missing" sends you
+        // to look at a declaration that is present and correct.
+        //
+        // The key is namespaced with `diffusion.` because this store has its own
+        // preferences file, and a shared key with ModelStore would let one
+        // store's write answer the other's read.
+        const val wifiOnly = "diffusion.wifiOnly"
     }
 
     sealed class Result {
