@@ -172,6 +172,47 @@ fi
 
 echo
 echo
+echo
+echo "=== 2e. the lever-4 quantisations ==="
+# FOUR files, ~2.1 GB, onto an emulator. The loop is here so the four push the
+# same way: the same run-as route, the same size verification, and a name that
+# the device test can compute rather than guess.
+#
+# EACH IS SIZE-CHECKED ON THE DEVICE. A truncated adb push reports success, and
+# llama_model_load_from_file on a truncated GGUF reports a corrupt model -- so
+# without this the failure appears as a MODEL fault when it is a TRANSFER fault.
+# The expected size is the one in ModelCatalog.kt, not a number typed here.
+push_gguf() {
+  local FILE="$1" WANT="$2"
+  if [ ! -f "$GITHUB_WORKSPACE/$FILE" ]; then
+    echo "  SKIP    $FILE (not on the runner)"
+    return 0
+  fi
+  adb push "$GITHUB_WORKSPACE/$FILE" /data/local/tmp/$FILE >/dev/null
+  adb shell chmod 644 /data/local/tmp/$FILE || true
+  adb shell run-as com.grapsee.gsai cp /data/local/tmp/$FILE "files/$FILE" 2>&1 | head -1
+  local DSZ
+  DSZ=$(adb shell run-as com.grapsee.gsai stat -c%s "files/$FILE" 2>/dev/null | tr -d '\r' || echo 0)
+  if [ "${DSZ:-0}" = "$WANT" ]; then
+    echo "  OK      $FILE  $DSZ bytes"
+  else
+    # Deleted rather than left, so the test SKIPS it instead of loading a
+    # partial file and reporting a corrupt model.
+    echo "  WRONG   $FILE on-device ${DSZ:-0} != $WANT; removing so it is not measured"
+    adb shell run-as com.grapsee.gsai rm -f "files/$FILE" || true
+  fi
+  adb shell rm -f /data/local/tmp/$FILE || true
+}
+
+# q4_k_m is FIRST so the control exists even if a later push fails.
+push_gguf qwen2.5-0.5b-instruct-q4_k_m.gguf 491400032
+push_gguf qwen2.5-0.5b-instruct-q4_0.gguf   428730208
+push_gguf qwen2.5-0.5b-instruct-q5_k_m.gguf 522186592
+push_gguf qwen2.5-0.5b-instruct-q8_0.gguf   675710816
+
+echo "in-app gguf listing:"
+adb shell run-as com.grapsee.gsai ls -la files/ 2>&1 | grep -E 'gguf|safetensors' | sed 's/^/    /' || true
+
 echo "=== 2d. the SDXS-512 diffusion checkpoint ==="
 # 882 MB, and the filename must be EXACTLY DiffusionCatalog.destination()'s
 # basename, because the device test looks it up by that name in the app's private

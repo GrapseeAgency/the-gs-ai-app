@@ -2151,3 +2151,79 @@ is not.** The UDID is now re-discovered with the *same* script the test step use
 which is also what makes this step inspect the simulator the tests will actually
 use rather than whichever one sorts first. Two different simulators would make the
 answer a different number from the question.
+
+## ITEM 1, LEVER 4: THE FOUR QUANTISATIONS, AND WHAT "QUALITY" MAY AND MAY NOT MEAN
+
+The brief asks for TTFT, tok/s, and a good/acceptable/bad judgement of chat
+quality on 5 fixed prompts. Sizes and digests are read from the Hugging Face API
+for the specific files, because an empty `sha256` in this codebase means the
+download is **refused** and a wrong one means a download that cannot complete.
+
+| quantisation | bytes | sha256 (first 24) |
+|---|---:|---|
+| Q4_0 | 428,730,208 | `7671c0c304e6ce5a7fc577bc` |
+| Q4_K_M | 491,400,032 | `74a4da8c9fdbcd15bd1f6d01` *(the default, the CONTROL)* |
+| Q5_K_M | 522,186,592 | `041474553fcabfc2a2d67903` |
+| Q8_0 | 675,710,816 | `ca59ca7f13d0e15a8cfa77b` |
+
+That is **2.12 GB of extra download in a job that already fetches 491 MB**, and
+it is stated in the workflow rather than discovered when a run times out.
+
+**Q4_K_M is a row in the table, not a special case.** It is the current default,
+which makes it the control: without it, "Q4_0 is 30% faster" has no baseline, and
+"Q4_0 is faster" could equally mean the device got faster. It is **linked** from
+the already-verified `model.gguf` rather than downloaded a second time — 491 MB
+and four minutes saved, and the bytes are the bytes.
+
+**A quantisation that fails its size or digest is deleted, not measured.** The
+number would be real and wrong, which is worse than no number. The sweep then
+measures however many arrived and names the ones that did not. The same rule
+applies on the device: a truncated `adb push` reports success, and
+`llama_model_load_from_file` on a truncated GGUF reports a **corrupt model** — so
+without the on-device size check the failure appears as a model fault when it is a
+transfer fault.
+
+### The quality score is FACTUALITY, and the test says so in its own name
+
+Each of the five prompts has a fact that is checkable without reading English
+well: the capital of France is Paris, 12 + 7 is 19, the largest planet is
+Jupiter, "good morning" in French contains "bonjour", and the sequence prompt
+asks for five specific primes. `required` is a list where **any** member
+satisfies the fact, deliberately — the model has several correct ways to say
+"Paris", and requiring one spelling would measure formatting rather than
+quantisation.
+
+**This is not fluency, coherence or helpfulness, and it is not a proxy for one.**
+A model can score `good` on all five and still write nonsense between the answers,
+and nothing here would notice. A 0.5B model almost certainly does. So the column
+is `facts`, the verdict is labelled **FACTUALITY**, and the log prints:
+
+```
+  'verdict' is FACTUALITY on 5 prompts with checkable answers.
+  It is NOT fluency, coherence or helpfulness, and must not be quoted
+  as 'chat quality'. A 0.5B model can pass all five and write nonsense.
+```
+
+Asking a model to judge it was rejected for a reason worth recording: a 0.5B
+model grading prose is a worse judge of prose than the thing being graded, and
+its verdict would be a number with no more connection to quality than the prompt
+length.
+
+**Three bands, not two.** "All five correct" versus "at least one wrong" would
+put Q4_0 and Q8_0 in the same band whenever the small model misses a fact at
+*every* quantisation — which is likely, and would make the measurement
+uninformative. So there is partial credit, and the per-prompt fact counts are
+printed so the bands can be second-guessed from the log.
+
+**A zero is not a quality result.** The test asserts that every loaded
+quantisation produced *some* text, because a factuality score of `0/8` from a
+model that emitted nothing is a **load failure being scored as a quality
+regression**.
+
+### The speed number is on the SHORT prompt, deliberately
+
+A speed number is not comparable across prompts. Lever 3 measures a 500-token
+prompt because `n_batch` is a prompt-processing knob; this table measures the
+short `perfPrompt` because the quantisation question is about the default chat
+path. Mixing the two would make the quantisation table incomparable with the
+batch table and with every other table in the file.

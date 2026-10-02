@@ -118,6 +118,75 @@ object ModelCatalog {
         minRamBytes = 2L * 1024 * 1024 * 1024,
     )
 
+    /**
+     * The same 0.5B model at four quantisations, for Item 1's LEVER 4.
+     *
+     * Every size and digest below was read from the Hugging Face API's blob
+     * metadata for that specific file, which is the same standard [MODEL_0_5B]
+     * holds itself to. An empty `sha256` is treated as "cannot verify" and the
+     * download is REFUSED, so a wrong digest here is a download that cannot
+     * complete rather than a silently wrong model.
+     *
+     *     qwen2.5-0.5b-instruct-q4_0.gguf     428,730,208 bytes
+     *     qwen2.5-0.5b-instruct-q4_k_m.gguf   491,400,032 bytes  (the default)
+     *     qwen2.5-0.5b-instruct-q5_k_m.gguf   522,186,592 bytes
+     *     qwen2.5-0.5b-instruct-q8_0.gguf     675,710,816 bytes
+     *
+     * Q4_K_M is listed rather than special-cased so the sweep compares four rows
+     * of the same shape. It is the current default, which makes it the CONTROL:
+     * a table whose control is missing cannot tell "the new quantisation is
+     * faster" from "this device got faster".
+     *
+     * These are NOT tier candidates. `modelFor(tier)` must keep returning
+     * [MODEL_0_5B] and [MODEL_1_5B] only -- a quantisation is a measurement, not
+     * a device class, and letting one into `modelFor` would mean the tier system
+     * could start choosing a quantisation with no way to record that it did.
+     */
+    val QUANT_4_0 = Model(
+        id = "qwen2.5-0.5b-instruct-q4_0",
+        displayName = "Qwen2.5 0.5B Instruct (Q4_0)",
+        url = "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_0.gguf",
+        sha256 = "7671c0c304e6ce5a7fc577bcb12aba01e2c155cc2efd29b2213c95b18edaf6ed",
+        bytes = 428_730_208L,
+        minRamBytes = 2L * 1024 * 1024 * 1024,
+    )
+
+    val QUANT_4_K_M = Model(
+        id = "qwen2.5-0.5b-instruct-q4_k_m",
+        displayName = "Qwen2.5 0.5B Instruct (Q4_K_M)",
+        url = "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf",
+        sha256 = "74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db",
+        bytes = 491_400_032L,
+        minRamBytes = 2L * 1024 * 1024 * 1024,
+    )
+
+    val QUANT_5_K_M = Model(
+        id = "qwen2.5-0.5b-instruct-q5_k_m",
+        displayName = "Qwen2.5 0.5B Instruct (Q5_K_M)",
+        url = "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q5_k_m.gguf",
+        sha256 = "041474553fcabfc2a2d67903f9d2c2e50bd92528e670da4f33b5d0ce6e59fd55",
+        bytes = 522_186_592L,
+        minRamBytes = 2L * 1024 * 1024 * 1024,
+    )
+
+    val QUANT_8_0 = Model(
+        id = "qwen2.5-0.5b-instruct-q8_0",
+        displayName = "Qwen2.5 0.5B Instruct (Q8_0)",
+        url = "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q8_0.gguf",
+        sha256 = "ca59ca7f13d0e15a8cfa77bd17e65d24f6844b554a7b6c12e07a5f89ff76844e",
+        bytes = 675_710_816L,
+        minRamBytes = 2L * 1024 * 1024 * 1024,
+    )
+
+    /**
+     * The lever-4 sweep, cheapest first so a partial run still measures a range.
+     *
+     * [QUANT_4_K_M] is the same bytes as [MODEL_0_5B] under a different `id`, and
+     * the device job pushes it under its own filename so the test can find both
+     * without one shadowing the other.
+     */
+    val QUANT_SWEEP: List<Model> = listOf(QUANT_4_0, QUANT_4_K_M, QUANT_5_K_M, QUANT_8_0)
+
     fun modelFor(tier: Tier): Model? = when (tier) {
         Tier.HIGH -> MODEL_1_5B
         Tier.MID -> MODEL_0_5B

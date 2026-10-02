@@ -2761,4 +2761,262 @@ class DeviceVerificationTest {
         return null
     }
 
+
+    // ========================================================================
+    // ITEM 1, LEVER 4: QUANTISATION, WITH A QUALITY SCORE THAT MEANS SOMETHING.
+    //
+    // The brief asks for TTFT, tok/s, and a good/acceptable/bad judgement of chat
+    // quality on 5 fixed prompts. The first two are measurements. The third is
+    // the one that needs care, so here is exactly what this test does and does
+    // not claim.
+    //
+    // === WHAT "QUALITY" MEANS HERE, PRECISELY ===
+    //
+    // Each of the five prompts has a FACT that is checkable without reading
+    // English well: the capital of France is Paris, 12 + 7 is 19, the largest
+    // planet is Jupiter, "good morning" in French contains "bonjour", and the
+    // fifth prime is 11. A quantisation that has lost the ability to produce
+    // those strings has lost the ability to do the job, and that is measurable.
+    //
+    // === WHAT IT DOES NOT CLAIM ===
+    //
+    // This is NOT a fluency, coherence or helpfulness judgement, and it is not a
+    // proxy for one. A model can score "good" on all five and still write
+    // nonsense prose between the answers, and nothing here would notice. A
+    // 0.5B model almost certainly does. So the verdict is labelled
+    // FACTUALITY, the table column is "facts", and no number in this test should
+    // be quoted as "chat quality".
+    //
+    // WHY NOT JUST ASK A MODEL TO JUDGE IT: because a 0.5B model grading prose is
+    // a worse judge of prose than the thing being graded, and its verdict would
+    // be a number with no more connection to quality than the prompt length.
+    //
+    // === WHY THE SCORE HAS THREE BANDS AND NOT TWO ===
+    //
+    // "All five correct" and "at least one wrong" would put Q4_0 and Q8_0 in the
+    // same band whenever the small model misses a fact at every quantisation --
+    // which is likely, and would make the whole measurement uninformative. So
+    // there is a middle band for PARTIAL credit, and the count of facts is
+    // printed per quantisation so the bands can be second-guessed from the log.
+    //
+    // === THE CONTROL IS IN THE TABLE ===
+    //
+    // Q4_K_M is the current default and is measured in the same run on the same
+    // device. Without it, "Q4_0 is 30% faster" has no baseline and "Q4_0 is
+    // faster" could equally mean the device got faster.
+    // ========================================================================
+
+    @Test
+    fun perf_lever4_quantisation_is_measured_with_a_factuality_score() {
+        val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+        val sweep = ModelCatalog.QUANT_SWEEP
+
+        // THE FIVE PROMPTS, WITH THEIR CHECKABLE FACTS.
+        //
+        // `required` is a list of substrings, ANY of which satisfies that fact --
+        // deliberately, because the small model has several correct ways to say
+        // "Paris" ("paris", "Paris.", "The capital is Paris") and requiring one
+        // spelling would measure formatting rather than quantisation.
+        data class Probe(
+            val label: String,
+            val prompt: String,
+            val facts: List<String>,
+        )
+
+        val probes = listOf(
+            Probe(
+                "capital of France",
+                "What is the capital of France? Answer with one word.",
+                listOf("paris"),
+            ),
+            Probe(
+                "arithmetic",
+                "What is 12 + 7? Answer with the number only.",
+                listOf("19"),
+            ),
+            Probe(
+                "largest planet",
+                "Name the largest planet in the solar system. One word.",
+                listOf("jupiter"),
+            ),
+            Probe(
+                "translation",
+                "Translate 'good morning' into French. Reply with the French only.",
+                listOf("bonjour", "matin"),
+            ),
+            Probe(
+                "sequence",
+                "List the first five prime numbers, comma separated, nothing else.",
+                // Three facts, because a model that emits "2, 3, 5" has produced
+                // most of the answer and scoring that as a total miss would make
+                // the measure too blunt to separate 4-bit from 8-bit.
+                listOf("2", "3", "5", "7", "11"),
+            ),
+        )
+
+        val nCtx = 2048
+        val nThreads = 4   // measured as the generation optimum
+        val budget = 40    // long enough to state an answer, short enough to repeat
+
+        data class QRow(
+            val model: String,
+            val file: File,
+            val loaded: Boolean,
+            val ttft: Long,
+            val t49: Long,
+            val factsHit: Int,
+            val factsTotal: Int,
+            val perProbe: List<String>,
+            val why: String,
+        )
+
+        val rows = mutableListOf<QRow>()
+
+        for (m in sweep) {
+            val f = findQuant(ctx, m.id)
+            if (f == null) {
+                println("LEVERS4 ${m.id} is not on the device; skipping that row")
+                rows += QRow(m.id, File("/nonexistent"), false, -1, -1, 0, 0, emptyList(),
+                    "not on the device (the push size-checks and removes a bad one)")
+                continue
+            }
+            assertEquals(
+                "${m.displayName} is ${f.length()} bytes on the device, not ${m.bytes}. " +
+                    "A truncated push would surface as a corrupt model rather than as a transfer.",
+                m.bytes,
+                f.length(),
+            )
+
+            GsNative.shutdown()
+            val loaded = try {
+                GsNativeLoader.isLibraryLoaded() &&
+                    GsNative.initTuned(f.absolutePath, nCtx, nThreads, -1, 0, 0, -1)
+            } catch (t: Throwable) {
+                println("LEVERS4 ${m.id} FAILED TO INITIALISE: ${t.message}")
+                false
+            }
+            if (!loaded) {
+                rows += QRow(m.id, f, false, -1, -1, 0, 0, emptyList(), "initTuned failed")
+                continue
+            }
+
+            // ---- the five probes ----
+            val notes = mutableListOf<String>()
+            var hit = 0
+            var total = 0
+            for (p in probes) {
+                val reply = try {
+                    GsNative.chatWithBudget(p.prompt, budget)
+                } catch (t: Throwable) {
+                    notes += "${p.label}: THREW ${t.message}"
+                    ""
+                }
+                val low = reply.lowercase()
+                val got = p.facts.count { low.contains(it) }
+                hit += got
+                total += p.facts.size
+                notes += "${p.label}: $got/${p.facts.size} ${reply.take(48).replace("\n", " ")}"
+            }
+
+            // ---- speed, on the SHORT prompt the other levers used ----
+            // A speed number is not comparable across prompts, so this is measured
+            // on the same prompt as every other row in every other table in this
+            // file, and NOT on the 500-token prompt lever 3 uses. Mixing the two
+            // would make the quantisation table incomparable with the batch one.
+            val short = "Count from 1 to 40 in decimal, one number per line, and nothing else."
+            val (t1, _) = timeBudget(1, 2, { println("LEVERS4 ${m.id} $it") }, short)
+            val (t49, _) = timeBudget(49, 2, { println("LEVERS4 ${m.id} $it") }, short)
+            val ttft = t1.min()
+            val perToken = (t49.min() - ttft).toDouble() / 48.0
+            val tps = if (perToken > 0) 1000.0 / perToken else 0.0
+            println(
+                "LEVERS4 ${m.id} ttft=${ttft}ms tok/s=${"%.2f".format(tps)} " +
+                    "facts=$hit/$total  ${notes.joinToString(" | ")}",
+            )
+            rows += QRow(m.id, f, true, ttft, t49.min(), hit, total, notes, "")
+        }
+        GsNative.shutdown()
+        // Restore the default context, and only if there IS a model to restore.
+        // The fallback here used to be `it.url`, which is a string that is not a
+        // path: passing "https://..." to initWith hands llama_model_load_from_file
+        // a URL and the failure says CORRUPT MODEL rather than bad path.
+        findModel()?.let { GsNativeLoader.initWith(it.absolutePath) }
+
+        // ---- the table ----
+        println("=== ITEM 1 LEVER 4: quantisation (0.5B, x86_64 emulator) ===")
+        println(String.format(
+            "  %-14s %10s %10s %8s  %-12s %s",
+            "quantisation", "TTFT ms", "tok/s", "facts", "verdict", "note",
+        ))
+        for (r in rows) {
+            if (!r.loaded) {
+                println(String.format(
+                    "  %-14s %10s %10s %8s  %-12s %s",
+                    r.model, "-", "-", "-", "not measured", r.why,
+                ))
+                continue
+            }
+            val perToken = (r.t49 - r.ttft).toDouble() / 48.0
+            val tps = if (perToken > 0) 1000.0 / perToken else 0.0
+            // THE THREE BANDS, on FACTS and not on prose.
+            val frac = if (r.factsTotal > 0) r.factsHit.toDouble() / r.factsTotal else 0.0
+            val verdict = when {
+                frac >= 0.999 -> "good"
+                frac >= 0.60 -> "acceptable"
+                else -> "bad"
+            }
+            println(String.format(
+                "  %-14s %10d %10.2f %8s  %-12s",
+                r.model, r.ttft, tps, "${r.factsHit}/${r.factsTotal}", verdict,
+            ))
+            r.perProbe.forEach { println("        $it") }
+        }
+        println()
+        println("  'verdict' is FACTUALITY on 5 prompts with checkable answers.")
+        println("  It is NOT fluency, coherence or helpfulness, and must not be quoted")
+        println("  as 'chat quality'. A 0.5B model can pass all five and write nonsense.")
+
+        // ---- what is asserted ----
+        val loaded = rows.filter { it.loaded }
+        assertTrue(
+            "no quantisation produced a usable measurement: " +
+                rows.joinToString("; ") { "${it.model}: ${it.why}" },
+            loaded.isNotEmpty(),
+        )
+        // EVERY loaded quantisation must have produced SOME text, or a factuality
+        // score of 0/8 is indistinguishable from a model that returned nothing.
+        for (r in loaded) {
+            assertTrue(
+                "${r.model} scored ${r.factsHit}/${r.factsTotal} facts. The per-probe " +
+                    "lines above show whether it answered at all; a quantisation that " +
+                    "emits nothing must not be reported as a factuality LOSS, because " +
+                    "that would be scoring a load failure as a quality regression.",
+                r.factsTotal > 0,
+            )
+        }
+    }
+
+    /**
+     * A quantisation, found by the exact filename its catalogue `id` implies.
+     *
+     * The threshold is a third of the expected size rather than 1 MB, because the
+     * smallest quantisation here is 428 MB and a 1 MB floor would happily accept
+     * an HTML error page saved under the right name.
+     */
+    private fun findQuant(ctx: android.content.Context, id: String): File? {
+        val name = "$id.gguf"
+        for (dir in listOf(
+            ctx.filesDir,
+            ctx.getExternalFilesDir(null),
+            ctx.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
+            File("/sdcard"),
+            File("/storage/emulated/0"),
+        )) {
+            if (dir == null) continue
+            val f = File(dir, name)
+            if (f.isFile && f.length() > 100_000_000L) return f
+        }
+        return null
+    }
+
 }

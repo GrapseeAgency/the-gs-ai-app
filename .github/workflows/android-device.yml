@@ -501,6 +501,94 @@ jobs:
           echo "GS_SD_ABSENT=$GS_SD_ABSENT" >> "$GITHUB_ENV"
           ls -la "$CHECKPOINT_NAME" 2>/dev/null || echo "(removed: unverifiable)"
 
+      # =========================================================================
+      # ITEM 1, LEVER 4: THE OTHER THREE QUANTISATIONS.
+      #
+      # 2.12 GB of extra download in a job that already fetches 491 MB. That is
+      # the cost of the measurement the brief asks for, and it is stated here
+      # rather than discovered when a run times out.
+      #
+      # A LOOP, not three near-identical steps, because the three differ only in
+      # url/size/digest and three copies of a verification block is three places
+      # for a digest to be wrong in one of them. The pairs are read from a single
+      # table below, so the values and the checks cannot drift apart.
+      #
+      # EACH IS VERIFIED OR DROPPED. A quantisation that fails its size or digest
+      # is DELETED and reported, and the sweep then measures however many arrived
+      # and names the ones that did not. Carrying an unverified weight file to a
+      # device and measuring it would be worse than not measuring it: the number
+      # would be real and wrong.
+      # =========================================================================
+      - name: Fetch the other three quantisations for the lever-4 sweep
+        run: |
+          set -euo pipefail
+          BASE="https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main"
+          # name                      url-path                          bytes         sha256
+          while read -r NAME FILE BYTES SHA; do
+            [ -n "$NAME" ] || continue
+            case "$NAME" in \#*) continue ;; esac
+            echo
+            echo "=== $NAME: $FILE ($BYTES bytes) ==="
+            if ! curl -fL --retry 3 --retry-delay 5 -o "$FILE" "$BASE/$FILE"; then
+              echo "::warning::could not fetch $FILE; the sweep will run without it"
+              GS_QUANT_MISSING="${GS_QUANT_MISSING:-} $NAME"
+              continue
+            fi
+            SZ=$(stat -c%s "$FILE")
+            if [ "$SZ" != "$BYTES" ]; then
+              echo "::error::$FILE is $SZ bytes, expected $BYTES. ModelCatalog.kt is wrong"
+              echo "::error::or upstream changed. Deleting rather than measuring it."
+              rm -f "$FILE"
+              GS_QUANT_MISSING="${GS_QUANT_MISSING:-} $NAME"
+              continue
+            fi
+            GOT=$(sha256sum "$FILE" | cut -d' ' -f1)
+            if [ "$GOT" != "$SHA" ]; then
+              echo "::error::$FILE sha256 is $GOT, expected $SHA. Deleting rather than"
+              echo "::error::measuring a weight file nothing has vouched for."
+              rm -f "$FILE"
+              GS_QUANT_MISSING="${GS_QUANT_MISSING:-} $NAME"
+              continue
+            fi
+            echo "VERIFIED $FILE  $SZ bytes  $GOT"
+          done <<'TABLE'
+          qwen2.5-0.5b-instruct-q4_0.gguf   428730208  7671c0c304e6ce5a7fc577bcb12aba01e2c155cc2efd29b2213c95b18edaf6ed
+          qwen2.5-0.5b-instruct-q5_k_m.gguf 522186592  041474553fcabfc2a2d67903f9d2c2e50bd92528e670da4f33b5d0ce6e59fd55
+          qwen2.5-0.5b-instruct-q8_0.gguf   675710816  ca59ca7f13d0e15a8cfa77bd17e65d24f6844b554a7b6c12e07a5f89ff76844e
+          TABLE
+
+          # Q4_K_M is the CONTROL and is already in the workspace as model.gguf
+          # under a different name. It is linked rather than downloaded a second
+          # time: 491 MB and four minutes saved, and the bytes are the bytes.
+          if [ -f "$GITHUB_WORKSPACE/model.gguf" ]; then
+            ln -f "$GITHUB_WORKSPACE/model.gguf" qwen2.5-0.5b-instruct-q4_k_m.gguf
+            echo
+            echo "q4_k_m (CONTROL) linked from the already-verified model.gguf"
+            SZ=$(stat -c%s qwen2.5-0.5b-instruct-q4_k_m.gguf)
+            echo "  $SZ bytes (expected 491400032)"
+            [ "$SZ" = "491400032" ] || { echo "::error::the control is the wrong size"; exit 1; }
+          else
+            echo "::error::model.gguf is absent, so even the CONTROL is missing."
+            echo "::error::The previous step verifies it and fails if it cannot; if this"
+            echo "::error::fires, the sweep would have no baseline to compare against."
+            exit 1
+          fi
+
+          echo "GS_QUANT_MISSING=${GS_QUANT_MISSING:-}" >> "$GITHUB_ENV"
+          echo
+          echo "=== quantisations present for the sweep ==="
+          for F in qwen2.5-0.5b-instruct-q4_0.gguf \
+                   qwen2.5-0.5b-instruct-q4_k_m.gguf \
+                   qwen2.5-0.5b-instruct-q5_k_m.gguf \
+                   qwen2.5-0.5b-instruct-q8_0.gguf; do
+            if [ -f "$F" ]; then
+              echo "  present  $F  $(stat -c%s "$F") bytes"
+            else
+              echo "  MISSING  $F"
+            fi
+          done
+          echo "missing: ${GS_QUANT_MISSING:-none}"
+
       - name: Start the emulator and run the instrumented tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
