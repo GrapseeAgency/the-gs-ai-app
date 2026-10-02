@@ -3362,3 +3362,31 @@ substituted for by it -- a simulator is not a device.
 Two statements repeated earlier in this log are therefore wrong and are corrected
 here: that the iOS arm64 slice is "built, linked, and never executed", and that the
 executing arch was `x86_64`. **Both were about iOS. Neither applied to Android.**
+
+
+### Confirmed green: `ios-native` 37035062981, head `5b6533a`
+
+The correction above rests on a run that **failed**, which is the right way for the
+assertion to behave but the wrong thing to cite as the settled state. The
+confirming run, verbatim:
+
+    iOS-EXEC-ARCH: arm64
+    passed=49 failed=0 skipped=0
+      arch the test PROCESS reported  : arm64
+      arch inferred before the run    : <ambiguous>
+      prediction is falsifiable       : no
+     iOS TESTS EXECUTED ON: arm64   (measured, not inferred)
+    VERIFIED: 49 passed, 0 skipped on the iOS simulator, arch=arm64 reported by the test process
+
+**49 iOS test executions, 0 failures, 0 skips, every one of them arm64 code
+running natively on an arm64 host.**
+
+The prediction line is the part to read twice. `SIMULATOR_ARCHS` lists
+`arm64 x86_64`, the rule returns `<ambiguous>`, `falsifiable: no` records that
+nothing was asserted because nothing could be, and the answer comes from the
+process. The old rule would have printed `x86_64` here, agreed with itself on
+every future run, and looked increasingly confirmed while being wrong.
+
+**On a simulator.** No iOS hardware has been involved at any point, and none of
+these 49 executions describes an iPhone's performance. What it establishes is which
+architecture the test binary runs as, which is what item 4 asked.
