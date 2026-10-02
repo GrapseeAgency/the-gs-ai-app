@@ -13,13 +13,28 @@ name: android-native
 
 on:
   workflow_dispatch:
+    inputs:
+      deps_run_id:
+        description: >-
+          android-deps run to take the prebuilt packages from. BLANK means "the
+          most recent successful one", which is what a push does.
+        required: false
+        default: ""
+        type: string
+      native_run_id:
+        description: >-
+          Reserved, for symmetry with android-device.yml, which takes a
+          android-native run id. This workflow cannot consume its own run id, so
+          the input exists to be explicit about that rather than to be used.
+        required: false
+        default: ""
+        type: string
   push:
     branches: [native-runtime]
     paths:
       - 'native/**'
       - '.github/workflows/android-native.yml'
       - '.cargo/config.toml'
-
 concurrency:
   group: android-native-${{ github.ref }}
   cancel-in-progress: true
