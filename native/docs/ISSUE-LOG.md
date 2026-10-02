@@ -2573,3 +2573,121 @@ branch and `gs_sd_generate` answers `GS_ERR_UNAVAILABLE` with a reason, which is
 the honest state. `x86_64` and `arm64-v8a` **fail closed**, because a device test
 must not run against a library that cannot generate. Two green, two red, and the
 split is the one that was specified rather than the one that was convenient.
+
+## ITEM 2, THE CHAIN, COMPLETE: THE LIBRARY IS LINKED IN-PROCESS
+
+`android-native` run **36970739680** at head `893fe58`. **All four ABIs green,
+14/14 steps each.** The lines that matter, from the x86_64 job:
+
+```
+GS_SD_PREBUILT: /home/runner/work/.../native/prebuilts/sd-android-x86_64
+diffusion is IN-PROCESS for x86_64: no subprocess, no sd-cli
+warning: gs-ffi@0.1.0: linking stable-diffusion.cpp in-process from
+    /home/runner/work/.../native/prebuilts/sd-android-x86_64 (4 archives)
+gs_ffi_mobile_* exported: 18, ABI declares: 18
+all 18 expected gs_ffi_mobile_* symbols present
+process-creating imports: execlp fork waitpid
+```
+
+That is Item 2's bar minus the pixels: **an on-device PNG from a text prompt, no
+subprocess**, and the only process-creating imports are the three
+`ggml_print_backtrace` symbols that have been there all along.
+
+### The precondition was four separate faults, and each one hid the next
+
+| # | fault | found by |
+|---|---|---|
+| 1 | `GS_SD_PREBUILT` set in **no workflow** | reading one build line twice |
+| 2 | the fetch step never downloaded the SD artifact | reading the step's own name |
+| 3 | the SD package was **arm64-only** and the device job is **x86_64** | the matrix comparison |
+| 4 | the package was **half** in the documented shape | a listing four lines above an error |
+
+Fault 3 is the one that would have survived the other three. Fixing 1 and 2
+produces a working arm64 `.so` and leaves the **x86_64** `.so — the one the
+emulator loads — still portable-only, with the build green.
+
+### What each fault looked like from the outside
+
+**Fault 1**, run 36956136615, `success`, all four ABIs:
+
+```
+(no) cargo:warning=linking stable-diffusion.cpp in-process from ...
+(no) cargo:warning=GS_SD_PREBUILT=... has no include/stable-diffusion.h
+YES cargo:warning=portable sd_wrapper: procedural path only.
+```
+
+The **absent** line is the diagnosis. build.rs prints the second line only when
+the variable is present and its contents are wrong; neither branch printing means
+it was never set at all.
+
+**Fault 3**, and the package that would have shipped:
+
+```
+stablediffusion-arm64      <- the literal name, every run, every ABI
+```
+
+against `android-device.yml`'s default `abi: x86_64`.
+
+**Fault 4**, run 36965589398 — the archives were in the error's own listing:
+
+```
+::error::native/prebuilts/sd-android-x86_64/lib is missing: libstable-diffusion.a ...
+native/prebuilts/sd-android-x86_64/libggml-base.a     <- present, four lines up
+```
+
+and then a *second* `lib` fault in my own check, which looked for
+`liblibggml-base.a` because the stems already started with `lib`. **Third
+instance of that one**, and `build.rs` says so about itself:
+
+> The same mistake is already recorded twice in this file — the `lib` prefix on
+> archive stems, and llama's own ordering
+
+### Four checks, each of which could have passed on a defect
+
+| check | what it stops | how it was verified |
+|---|---|---|
+| the SD archive **presence** check | a package one directory away from the right shape | ran on the complete tree AND on a tree with one archive deleted |
+| `archive_arch.py` | an arm64 archive linked into an x86_64 `.so`, which the emulator refuses to load, turning every test into a **SKIP** rather than a failure | 5 fixtures: correct, mislabelled, relabelled, non-archive, unknown ABI |
+| `archive_arch.py` **exit 3** | a `.a` with no readable ELF objects passing as correct | the non-archive fixture exits 3, not 0 |
+| the ABI floor, derived | a stale literal that cannot notice a set growing | a RENAME keeps the count at 18; only the set comparison catches it |
+
+`assert_arch_member.sh`'s header supplied the last two, verbatim:
+
+> `file -b` on the .a itself is NOT a valid architecture check either: an ar
+> archive reports only "current ar archive".
+
+which I had already written **wrong** in a new step, and which failed all four
+correct archives with `WRONG libggml.a: current ar archive` (run 36968639571)
+before I read it.
+
+### AND THEN THE NEVER-COMPILED CODE
+
+With the library finally linked, the first error in that code appeared
+immediately:
+
+```
+../../cpp/sd_wrapper/gs_sd_wrapper.cpp:315:16: error: use of undeclared
+identifier 'GS_ERR_RUNTIME'
+```
+
+The whole `#if defined(GS_SD_HAVE_SDCPP)` block — the actual in-process
+diffusion implementation — has passed review, the 18-symbol ABI gate and every
+device run **without ever being handed to a compiler**. `GS_ERR_RUNTIME` is not a
+code; the nearest true one is `GS_ERR_GENERATION` ("decode failed or produced
+nothing"), which is exactly the case.
+
+**The general lesson, and it is not about C++: a code path gated behind a build
+flag is not covered by a test that asserts the flag is off.** The device tests
+asserted `GS_ERR_UNAVAILABLE` with its reason, which is the *correct* behaviour
+for a build without the library — and a correct assertion is precisely what a
+never-compiled path looks like from the outside.
+
+The rest of that block was then checked against the pinned header rather than
+hoped about: every `GS_ERR_*`, every upstream entry point including the three that
+do **not** start with `sd_` (`new_sd_ctx`, `free_sd_ctx`, `generate_image`), every
+field set on `sd_img_gen_params_t`, and `sample_params.guidance.txt_cfg`. My
+first two attempts at that check reported `prompt` and `negative_prompt` as
+undeclared, which was **my extraction** grabbing the first `typedef struct {` in
+the file rather than the one ending `} sd_img_gen_params_t;`. Locating a struct by
+its terminator rather than by the keyword that introduces one is the difference
+between a check and a guess.
