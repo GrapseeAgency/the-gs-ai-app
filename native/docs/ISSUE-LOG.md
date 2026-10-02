@@ -2691,3 +2691,49 @@ undeclared, which was **my extraction** grabbing the first `typedef struct {` in
 the file rather than the one ending `} sd_img_gen_params_t;`. Locating a struct by
 its terminator rather than by the keyword that introduces one is the difference
 between a check and a guess.
+
+## "A PUSH CANCELS IN-FLIGHT RUNS" IS TRUE FOR SOME WORKFLOWS AND NOT OTHERS
+
+I have been operating on a single global rule — *a push to `native-runtime`
+cancels in-flight runs* — and holding documentation commits back because of it.
+It is a property of each workflow's triggers, and for the one that matters most
+here it is **false**.
+
+| workflow | triggers | can a push cancel it? |
+|---|---|---|
+| `android-app` | dispatch, **push**, PR | **yes** (`cancel-in-progress: true`) |
+| `android-deps` | dispatch, **push** | **yes** |
+| `android-native` | dispatch, **push** | **yes** |
+| `ios-native` | dispatch, **push** | **yes** |
+| `ios` | dispatch, **push** | **yes** |
+| **`android-device`** | dispatch, **`workflow_run`** | **NO — it has no `push` trigger at all** |
+| `benchmark` | dispatch | no |
+| `eval-gate` | PR, schedule, dispatch | no |
+| `android-release` | push, dispatch | push, but no `cancel-in-progress` |
+| `arm64-probe` | dispatch, push | push, but no `cancel-in-progress` |
+
+A push can only cancel a run whose workflow **enters its concurrency group on
+`push`**. `android-device.yml` has `workflow_dispatch` and `workflow_run` and
+nothing else, so a commit cannot join
+`android-device-${{ github.ref }}` and therefore cannot cancel anything in it.
+
+### The cancellation I attributed to a push was the job timeout
+
+Run **36958995854** came back `cancelled`, and I had it filed as "a push
+cancels it". The timestamps say otherwise:
+
+```
+started    03:10:37
+cancelled  04:10:48
+= 60 minutes 11 seconds, with timeout-minutes: 60 on the job
+```
+
+Sixty minutes and eleven seconds is not a push; it is the job's own budget, spent.
+`timeout-minutes` is now 150, with the arithmetic for what the job now has to do
+written next to it.
+
+**Both beliefs were wrong in the same way**: each was a single rule generalised
+past what it was measured on, and each would have changed what I did next. The
+first made me delay a docs commit for no reason; had I generalised the other way —
+"pushes never cancel" — I would have pushed during an `android-native` run and
+lost it, because for that workflow it is exactly true that they do.
