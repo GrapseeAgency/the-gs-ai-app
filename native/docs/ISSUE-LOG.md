@@ -2966,3 +2966,60 @@ was never claimed: the arm64 objects build and link, and `archive_arch.py` reads
 `e_machine` from every member of every `.a` and exits 3 rather than skipping an
 arch it cannot read. **Linking is not running, and no arm64 instruction has been
 executed in this repository.**
+docs: the `read` mis-binding is unique, and `per_page` is applied before any sort I write
+
+Two checks, both run rather than eyeballed, because the lever-4 fix was a
+`while read` with one name too many and that class deserves a sweep rather than
+a patch.
+
+## EVERY `while read` IN THE WORKFLOWS, BOUND AGAINST ITS REAL INPUT
+
+| file:line | names | input | verdict |
+|---|---|---|---|
+| `ios-native.yml:870` | `_ADDR _TYPE NAME` | `nm -gU` output | 3 fields -> 3 names, and `case "$NAME"` is field-exact so `gs_llama_create` cannot be satisfied by `gs_llama_create_result` |
+| `ios-native.yml:2569` | `TRIPLE ARCH SYSROOT` | here-doc `TARGETS`, 3 columns | correct, verified by running it |
+| `ios-native.yml:2676` | `A` | `find -name '*.a'` | one path per line -> one name, and `N < 4` fails the step |
+| `android-device.yml:584` | `NAME FILE BYTES SHA` | here-doc `TABLE`, 3 columns | **THE BUG.** Fixed in the previous commit |
+| `android-device.yml:608` | `FILE BYTES SHA` | the same table | correct, and short rows now `exit 1` |
+
+So the mis-binding was **unique**: one loop of four here-doc-fed readers, and the
+other three were already right — including one that does the harder thing and
+matches a symbol name *field-exactly* with a comment naming the exact failure it
+prevents.
+
+Two of the three that are right carry a non-vacuity guard, which is why they are
+right rather than lucky:
+
+    ios-native.yml:870   MISSING accumulates and the step fails
+    ios-native.yml:2676   N < 4 -> ::error:: and exit 1
+
+The broken loop had neither. It was three names too generous and no guard, which
+is exactly the combination that produces a green run measuring one row of four.
+
+## `per_page` IS APPLIED BEFORE ANY SORT I WRITE, SO A SMALL PAGE IS ARBITRARY
+
+Chasing the dispatched device run, this query:
+
+    /actions/workflows/android-device.yml/runs?branch=native-runtime&per_page=2
+
+sorted by `created_at` and put **run 36781918633 at head `48028f3`** at the top —
+a run several hundred commits old — while the run I had just dispatched at head
+`086bb0d` was absent from the list entirely. The same endpoint without the branch
+filter, `per_page=10`, sorted the same way, returned it correctly as the newest:
+
+    37005521803  in_progress  2026-10-02T12:14:36Z  head=086bb0d
+
+The API paginates before the response reaches me, so `per_page=2` is a page
+chosen by *the server's* ordering, and my sort only orders whatever survived it.
+**Sorting a truncated page tells you about the truncation, not about the
+workflow.** Every run lookup in this repository now uses the unfiltered endpoint
+with a page large enough to hold the history, and checks the `head_sha` of what
+came back rather than trusting position.
+
+This is the tenth instance of the same shape — a tool answering a *different*
+question than the one asked, reported as if it were the answer. The others were
+`nm` unreadable, an awk scalar fatal, `file -b` on an archive, a `readelf` `Ndx`
+column read as a name, `queue=0 min` standing in for queue time, and
+`started_at` standing in for a runner. Here the discarded information was a whole
+page, and it was discarded silently, in a way that would have had me polling an
+ancient run and concluding the dispatch had not landed.
