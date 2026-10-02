@@ -1812,3 +1812,70 @@ before `)`. Both versions were wrong before the file was.
 | ABI floor | was a stale literal that could not notice growth; now derived |
 | ABI lists | two copies, one unchecked; now linted, with a non-vacuity property |
 | last CI | `android-native` **success** (36956136615, all four ABIs, 18-symbol gate derived and green); `android-app` **failure** on the extra paren, now fixed and not yet re-run |
+
+## A DEFAULTED PARAMETER IN THE WRONG POSITION BROKE FOUR CALL SITES AT ONCE
+
+`android-app` **36957611401** failed on four lines, none of them in new code:
+
+    e: DeviceVerificationTest.kt:1272:44 No value passed for parameter 'out'
+    e: DeviceVerificationTest.kt:1272:53 Argument type mismatch
+    e: DeviceVerificationTest.kt:1839:49 No value passed for parameter 'out'
+
+The cause was one line in the previous commit. `timeBudget` was
+
+```kotlin
+private fun timeBudget(budget: Int, repeats: Int, out: (String) -> Unit, prompt: String = perfPrompt)
+```
+
+and every call site in the file is a **trailing lambda**:
+
+```kotlin
+timeBudget(1, repeats) { println("PERF $it") }
+```
+
+Kotlin binds a trailing lambda to the **last** parameter. `prompt` had been
+appended after `out`, so the lambda stopped being the trailing argument and
+became an attempt to supply `prompt: String` -- a type error on four unrelated
+lines at once, in a file that had compiled the day before.
+
+Appending a parameter to the end of a Kotlin function reads as strictly additive.
+It is the one edit that is not: if the last parameter is a function type, it
+silently rewrites the call syntax of every existing caller. A default value does
+not soften this. `prompt: String = perfPrompt` in that position is not a safe
+default, it is a different overload's worth of breakage wearing one.
+
+Now `prompt` comes **before** `out`, and it has **no default** -- a benchmark
+number with an implicit prompt is not a measurement, and a default is exactly what
+let the too-short shared prompt survive into the batch sweep unnoticed. All six
+call sites now name their prompt, which is also the only way to read a row of the
+table and know which prompt produced it.
+
+## A TEST THAT MEASURES WITH A PROMPT TOO SHORT TO MEASURE WITH
+
+Worth stating on its own because it is the second time in this file.
+
+The threads/context sweep measures with `perfPrompt` -- *"Count from 1 to 60 in
+decimal, one number per line"* -- which is short and generates for a long time.
+That is the right shape for measuring **decode rate**.
+
+It is the wrong shape for `n_batch` or `n_threads_batch`, because both are
+**prompt-processing** knobs. On a prompt this short there are a handful of prompt
+tokens to batch, so the sweep would have found no effect and the finding would
+have been *"batching does not matter"* -- a conclusion produced entirely by the
+choice of prompt, reported as a property of the engine.
+
+Both new levers therefore build a 2000+ character prompt from real words (repeated
+filler tokenises to far fewer tokens than its character count suggests, which would
+have made a 2200-character prompt a 200-token one wearing a long prompt's label)
+and assert the length before using it.
+
+## STATUS
+
+| item | state |
+|---|---|
+| lever 3 -- `n_batch` | reachable, swept on a 500-token prompt |
+| lever 5 -- flash attention | reachable; the field is an enum, and it defaults to `AUTO` |
+| lever 7 -- `n_threads_batch` | **found while reading the pinned header**; the field existed and was never set |
+| lever 4 -- quantisation | not started; needs three more 500 MB downloads in the device job |
+| lever 6 -- speculative decoding | not started |
+| last CI | `android-native` **success** (36956136615); `android-app` failing on a Kotlin signature, fixed, not yet re-run |

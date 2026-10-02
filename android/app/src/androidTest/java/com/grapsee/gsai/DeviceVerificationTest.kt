@@ -1193,9 +1193,20 @@ class DeviceVerificationTest {
      * printed so the noise is visible rather than hidden.
      */
     /**
-     * [prompt] exists so the batch and prompt-processing-thread levers can be
-     * measured on a LONG prompt. It defaults to [perfPrompt] so the existing
-     * two-argument calls are unchanged.
+     * [prompt] is EXPLICIT at every call site and comes BEFORE [out], and both
+     * of those are deliberate.
+     *
+     * It has no default because a benchmark number without its prompt is not a
+     * measurement -- the whole reason the batch and prompt-processing-thread
+     * levers needed a longer prompt is that the old shared one was too short to
+     * exercise them, and a default would let that mistake recur silently.
+     *
+     * It comes before [out] because Kotlin binds a trailing lambda to the LAST
+     * parameter. Appending `prompt` after `out` looked harmless and broke every
+     * existing `timeBudget(1, 2) { ... }` call at once -- android-app 36957611401
+     * reported "No value passed for parameter 'out'" and "Argument type mismatch"
+     * on all four. A defaulted parameter in that position is not a safe default
+     * at all; it is a different overload's worth of breakage wearing one.
      *
      * This was added after a second, hand-rolled timing loop drifted into a
      * `List<Pair<Long, Int>>` and then called `.min()` on it, which does not
@@ -1206,8 +1217,8 @@ class DeviceVerificationTest {
     private fun timeBudget(
         budget: Int,
         repeats: Int,
+        prompt: String,
         out: (String) -> Unit,
-        prompt: String = perfPrompt,
     ): Pair<List<Long>, String> {
         val times = ArrayList<Long>(repeats)
         var last = ""
@@ -1269,8 +1280,8 @@ class DeviceVerificationTest {
         // Two budgets, far apart so the slope is well conditioned: 49 tokens
         // against 1 gives 48 token-intervals instead of 30.
         val repeats = 3
-        val (low, lowText) = timeBudget(1, repeats) { println("PERF $it") }
-        val (high, highText) = timeBudget(49, repeats) { println("PERF $it") }
+        val (low, lowText) = timeBudget(1, repeats, perfPrompt) { println("PERF $it") }
+        val (high, highText) = timeBudget(49, repeats, perfPrompt) { println("PERF $it") }
 
         // THE BUDGET MUST BE HONOURED, OR THE SLOPE IS AN ARTEFACT.
         //
@@ -1836,8 +1847,8 @@ class DeviceVerificationTest {
                     rows += Row(nCtx, nThreads, -1, -1, emptyList(), 0, 0, false, "warm-up threw: ${t.message}")
                     continue
                 }
-                val (t1, text1) = timeBudget(1, 2) { println("LEVERS $it") }
-                val (t49, text49) = timeBudget(49, 2) { println("LEVERS $it") }
+                val (t1, text1) = timeBudget(1, 2, perfPrompt) { println("LEVERS $it") }
+                val (t49, text49) = timeBudget(49, 2, perfPrompt) { println("LEVERS $it") }
 
                 val ttft = t1.min()
                 val total = t49.min()
@@ -2057,8 +2068,8 @@ class DeviceVerificationTest {
             // `chars` comes off the TEXT -- the previous version of this block
             // returned Pair<Long,Int> per repeat and then called .min() on that
             // list, which does not compile.
-            val (ttfts, text1) = timeBudget(1, 3, { println("LEVERS3 $label $it") }, longPrompt)
-            val (t49, text49) = timeBudget(49, 2, { println("LEVERS3 $label $it") }, longPrompt)
+            val (ttfts, text1) = timeBudget(1, 3, longPrompt) { println("LEVERS3 $label $it") }
+            val (t49, text49) = timeBudget(49, 2, longPrompt) { println("LEVERS3 $label $it") }
 
             val ttft = ttfts.min()
             val spread = ttfts.max() - ttfts.min()
