@@ -323,4 +323,57 @@ final class GsNativeTests: XCTestCase {
             "send() did not append a user row at all: \(text)")
     }
 
+    /// WHICH SLICE IS EXECUTING, reported by the process that is executing it.
+    ///
+    /// Everything else this repository knows about the executing architecture is a
+    /// capability or a prediction, and all three have been measured disagreeing
+    /// with the answer on the very run that produced them:
+    ///
+    ///   - `SIMULATOR_ARCHS` says what the simulator CAN run. It reported
+    ///     `arm64 x86_64` on a runner that executed x86_64.
+    ///   - `lipo -info` says what is LINKED. It reported `x86_64 arm64` for that
+    ///     same run.
+    ///   - `xcodebuild -showBuildSettings`'s `ARCHS` says what will be BUILT.
+    ///
+    /// None of those is what ran. This is. `#if arch` is evaluated per slice at
+    /// compile time and Swift compiles each slice of a fat binary separately, so
+    /// the branch taken here is the branch the executing slice was compiled
+    /// with.
+    ///
+    /// It deliberately does NOT use `uname()`, which inside a simulator returns
+    /// the HOST's architecture: it would have cheerfully reported `arm64` for a
+    /// process running emulated x86_64 code. A wrong answer stated confidently is
+    /// worse than no answer, and this test exists to remove exactly that.
+    ///
+    /// Measured on ios-native 37023563596: the tests executed **x86_64** on an
+    /// arm64 host, so before this test nothing in the build said so.
+    func test_the_process_reports_which_slice_is_executing() {
+        #if arch(arm64)
+        let arch = "arm64"
+        #elseif arch(x86_64)
+        let arch = "x86_64"
+        #elseif arch(arm)
+        let arch = "arm"
+        #else
+        let arch = "unknown"
+        #endif
+
+        // Field-exact and distinctly prefixed, so the workflow's log parse cannot
+        // be satisfied by a build setting echoed into the same log.
+        print("iOS-EXEC-ARCH: \(arch)")
+
+        // Inert unless the workflow asks for a specific arch, so this test cannot
+        // make a normal run fail. It is the cross-check for `sim_arch`, not a
+        // permanent constraint on whatever the default destination resolves to.
+        if let expected = ProcessInfo.processInfo.environment["GS_EXPECT_ARCH"],
+           !expected.isEmpty {
+            XCTAssertEqual(
+                arch, expected,
+                "the destination asked for arch=\(expected) and this process was "
+                + "compiled as \(arch). xcodebuild built for a slice other than the "
+                + "one that ran, so a green run on \(expected) proved nothing about "
+                + "that architecture.")
+        }
+    }
+
 }

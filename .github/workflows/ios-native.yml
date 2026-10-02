@@ -2268,22 +2268,39 @@ jobs:
             echo "::warning::arch and the executable arch above are what is known."
           fi
 
-          # The one-line ANSWER, so the log states the number the brief asked for
-          # rather than making a reader infer it from three lines of context.
+          # A PREDICTION, NOT THE ANSWER.
+          #
+          # This block runs BEFORE any test, so nothing here can know what
+          # executed. It infers the arch from SIMULATOR_ARCHS, which is a
+          # CAPABILITY: on ios-native 37023563596 it read `arm64 x86_64` and the
+          # tests went on to execute x86_64, which happened to agree -- by luck,
+          # not by measurement, and on a different runner it could read `arm64
+          # x86_64` and the tests could run x86_64 for a different reason.
+          #
+          # So it is written to $GITHUB_ENV as a prediction, and the step that
+          # actually runs the tests asserts the prediction against what the test
+          # PROCESS reports about itself. The answer is printed there, after the
+          # evidence exists.
           if printf '%s' "$SIM_ARCHS" | grep -q 'arm64' && \
              ! printf '%s' "$SIM_ARCHS" | grep -q 'x86_64'; then
-            ANSWER="arm64 (native)"
+            PREDICT="arm64"
           elif printf '%s' "$SIM_ARCHS" | grep -q 'x86_64'; then
-            ANSWER="x86_64 (${HOST_ARCH} host; arm64 would be emulated)"
+            PREDICT="x86_64"
           else
-            ANSWER="see the three lines above"
+            PREDICT="<unknown>"
           fi
+          echo "predicted arch, to be CONFIRMED by the test process: $PREDICT"
+          printf 'GS_IOS_PREDICTED_ARCH=%s\n' "$PREDICT" >> "$GITHUB_ENV"
+
           echo
           echo "=========================================================="
-          echo " iOS TESTS EXECUTE ON: $ANSWER"
+          echo " iOS TESTS WILL EXECUTE ON (predicted): $PREDICT"
           echo " They run on a SIMULATOR, not a physical device."
+          echo " This is inferred from SIMULATOR_ARCHS and is NOT the answer."
+          echo " The measured answer is printed by the XCTest step below,"
+          echo " from the arch the test process itself reports."
           echo "=========================================================="
-          printf 'iOS test arch: %s\n' "$ANSWER" >> "$GITHUB_STEP_SUMMARY"
+          printf 'iOS test arch (PREDICTED, unconfirmed): %s\n' "$PREDICT" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run the XCTests on a booted simulator
         run: |
@@ -2332,20 +2349,81 @@ jobs:
           # the count is printed. If every test skipped, that is a SKIP not a
           # PASS and it must not be reported as one.
           echo "=== per-test results ==="
-          grep -E "Test Case .* (passed|failed|skipped)" test-simulator.log || true
-          PASSED=$(grep -c "Test Case .* passed" test-simulator.log || true)
-          FAILED=$(grep -c "Test Case .* failed" test-simulator.log || true)
-          SKIPPED=$(grep -c "Test Case .* skipped" test-simulator.log || true)
+          grep -aE "Test Case .* (passed|failed|skipped)" test-simulator.log || true
+          PASSED=$(grep -ac "Test Case .* passed" test-simulator.log || true)
+          FAILED=$(grep -ac "Test Case .* failed" test-simulator.log || true)
+          SKIPPED=$(grep -ac "Test Case .* skipped" test-simulator.log || true)
           echo "passed=$PASSED failed=$FAILED skipped=$SKIPPED"
           if [ "$FAILED" -ne 0 ]; then
             echo "::error::$FAILED test(s) failed"
             exit 1
           fi
           if [ "$PASSED" -eq 0 ]; then
-            echo "::error::0 tests passed. The model-backed tests skip without a GGUF and the rest need the framework; a green run that executed nothing is not a pass."
+            echo "::error::0 tests passed. The model-backed tests skip without a GGUF and"
+            echo "::error::the rest need the framework, so a green xcodebuild here means"
+            echo "::error::nothing executed -- a SKIP, not a PASS."
             exit 1
           fi
-          echo "VERIFIED: $PASSED passed, $SKIPPED skipped on the iOS simulator"
+
+          # ---- WHAT ACTUALLY EXECUTED, which is not what the earlier step inferred ----
+          #
+          # `SIMULATOR_ARCHS` is a CAPABILITY. `lipo -info` is what is LINKED.
+          # Neither is what ran, and on ios-native 37023563596 both listed arm64
+          # while the tests executed x86_64.
+          #
+          # The only evidence of what ran is the test process's own architecture,
+          # printed by test_the_process_reports_which_slice_is_executing from the
+          # `#if arch` branch its own slice was compiled with. An earlier version of
+          # this step tried to read the arch out of xcodebuild's banner and DID NOT
+          # WORK -- this xcodebuild prints
+          #
+          #     Test Suite 'All tests' started at 2026-10-02 15:13:44.639.
+          #
+          # "started at", with no arch in it, so the parser matched nothing and the
+          # check would have failed on the runner it was written for. The arch had
+          # to come from the process.
+          #
+          # It is deliberately not `uname()`: inside a simulator that returns the
+          # HOST's architecture and would report arm64 for a process running
+          # emulated x86_64 code -- a confident wrong answer, which is worse than
+          # no answer and is the thing this step exists to rule out.
+          RAN=$(sed -n 's/^iOS-EXEC-ARCH: \([a-z0-9_]*\).*/\1/p' test-simulator.log | sort -u | sed -n '1p')
+          PREDICTED="${GS_IOS_PREDICTED_ARCH:-<none>}"
+          echo
+          echo "  arch the test PROCESS reported  : ${RAN:-<none>}"
+          echo "  arch inferred before the run    : $PREDICTED"
+
+          if [ -z "$RAN" ]; then
+            echo "::error::no test process reported its architecture, so there is no"
+            echo "::error::evidence that any test ran on any particular slice. A green"
+            echo "::error::step with no arch evidence is the vacuous pass this repository"
+            echo "::error::keeps re-finding. The iOS-EXEC-ARCH marker is absent; the log"
+            echo "::error::says this instead:"
+            grep -aE 'Test Suite|Testing failed|error:' test-simulator.log | sed -n '1,10p' | sed 's/^/    /'
+            exit 1
+          fi
+
+          # The prediction is ASSERTED, not trusted. Agreeing by luck on one runner
+          # is not evidence that the inference works; disagreeing is a real defect
+          # in the destination, so it is a failure.
+          if [ "$PREDICTED" != "<unknown>" ] && [ "$RAN" != "$PREDICTED" ]; then
+            echo "::error::the destination was predicted to execute $PREDICTED and the test"
+            echo "::error::process was compiled as $RAN, with SIMULATOR_ARCHS '$SIM_ARCHS'."
+            echo "::error::Inference and reality disagree, so this run says nothing about"
+            echo "::error::$PREDICTED and must not be reported as though it did."
+            exit 1
+          fi
+
+          echo
+          echo "=========================================================="
+          echo " iOS TESTS EXECUTED ON: $RAN   (measured, not inferred)"
+          echo " Reported by the test process itself."
+          echo " They run on a SIMULATOR, not a physical device. A simulator is"
+          echo " not hardware and no number from one describes an iPhone."
+          echo " $PASSED test executions, all on $RAN."
+          echo "=========================================================="
+          printf 'iOS test arch (MEASURED by the test process): %s\n' "$RAN" >> "$GITHUB_STEP_SUMMARY"
+          echo "VERIFIED: $PASSED passed, $SKIPPED skipped on the iOS simulator, arch=$RAN reported by the test process"
 
       - name: Upload the logs and the xcframework test evidence
         if: always()
