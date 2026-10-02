@@ -2737,3 +2737,105 @@ past what it was measured on, and each would have changed what I did next. The
 first made me delay a docs commit for no reason; had I generalised the other way —
 "pushes never cancel" — I would have pushed during an `android-native` run and
 lost it, because for that workflow it is exactly true that they do.
+
+docs: two versions of ggml in one .so, and the check that finds it in CI instead of on a device
+
+Run **36975792039**. `android-native` green on all four ABIs, the 18-symbol ABI
+gate green, the DT_NEEDED completeness check green, APK built, installed,
+launched. Then **24 of 29 device tests failed**:
+
+    java.lang.UnsatisfiedLinkError: dlopen failed: cannot locate symbol
+    "ggml_sage_attn" referenced by "/data/app/.../libgs_ffi.so"
+
+## THE CAUSE, MEASURED FROM BOTH ARTIFACTS
+
+`android-native` links **two different versions of ggml** into one shared object:
+llama.cpp's, from `llamacpp-<abi>`, and stable-diffusion.cpp's, from
+`stablediffusion-<abi>`. From `libggml-base.a` in each, android-deps 36966641772:
+
+| | llama.cpp | sd.cpp |
+|---|---:|---:|
+| `ggml_*` symbols defined | 574 | 591 |
+| `ggml_sage_attn` | no | **yes** |
+| defined by **both**, two implementations | | **574** |
+| only in sd.cpp | | **17** |
+| only in llama.cpp | **0** | |
+
+**sd.cpp's ggml is a strict superset.** So the linker's job is trivial and
+catastrophic at once: llama.cpp's copy is linked first and satisfies all 574
+shared names, so sd.cpp's `libggml-base.a` is never extracted for them, and the
+members holding the 17 newer symbols are never pulled in. Four of those are
+referenced by `libstable-diffusion.a` and therefore end up undefined:
+
+    ggml_sage_attn   ggml_prec_set_acc
+    ggml_quantize_i8_convrot   ggml_mul_mat_i8_tensorwise
+
+All four verified present in **sd.cpp's** `libggml-base.a` and absent from
+llama.cpp's, and all four `UND` in the shipped `.so`. The device reported
+`ggml_sage_attn` because it is the first one the loader reaches.
+
+For scale: **3,520,408 bytes** without stable-diffusion linked, **42,356,592**
+with. Item 2's cost is 38.8 MB and a library that does not load.
+
+### And this is the SECOND error, behind the first
+
+The previous run, 36971941114, failed with `library "libc++_shared.so" not found`.
+Shipping the companion fixed that and revealed this one. `c3` — added in between —
+**passed**, and proved the companion *was* in the APK, which is what ruled out the
+other two explanations. Three failures, each revealing the next.
+
+## THE CHECK, AND THE TWO BUGS IT HAD FIRST
+
+`.github/scripts/undefined_syms.py`, wired into android-native's verify step.
+Every existing check asks what the `.so` needs **from the system**; none asks what
+it fails to supply **for itself**. `ggml_`/`llama_`/`sd_`/`gguf_` are **denied, not
+allowed**, so a future ggml that adds a symbol goes red in CI naming it.
+
+**Bug 1, and it is the whole point of this entry.** The first `defined()` matched
+the `Ndx` column with a bare `\S+`, which consumed `UND`. So **every undefined
+symbol counted as defined**, and on the very `.so` that could not load:
+
+    250 imported, 0 unresolved
+
+**A checker that reports clean on the exact artefact it was written for is worse
+than no checker.** The only reason this one is trustworthy is that it was run
+against that artefact and disagreed with me.
+
+**Bug 2.** Filtering "defined" on the *value* column found 2 symbols where there
+are thousands: in a relocatable archive the value is 0 and says nothing.
+`Ndx` is the column that decides.
+
+**Bug 3.** `readelf -W` prints version suffixes — `strlen@LIBC (2)` — and the
+regex assumed the name was the last field, silently dropping **150 of 400**
+undefined symbols.
+
+### Non-vacuity, on both real artefacts of the same run
+
+| artefact | result |
+|---|---|
+| `x86_64`, SD linked | **exit 1** — 4 denied, each named |
+| `armeabi-v7a`, no SD | **exit 0** — 0 denied |
+
+163 further imported-but-undefined symbols (`memcpy`, `pthread_mutex_lock`,
+`_Znwm`) are *expected*: they resolve at load time from `DT_NEEDED`. They are
+counted and sampled, not listed, because 163 lines of noise bury the 4 that
+matter.
+
+## WHAT FIXES IT, AND IT IS NOT A LINK-ORDER CHANGE
+
+Putting sd.cpp's archives first would resolve the four names, and then
+**`libllama.a`'s calls into ggml would reach sd.cpp's implementation** — a
+different version of the same library, with its own struct layouts. That converts
+a `dlopen` failure into memory corruption, which is strictly worse and much
+harder to attribute.
+
+The correct shape is what llama.cpp itself ships: stable-diffusion.cpp as its
+**own shared object**, `libstable_diffusion.so`, carrying **its own** ggml,
+loaded with `dlopen`/`dlsym` on first use. Each `.so` then has its own symbol
+namespace, the two ggml copies coexist, and the failure mode of a missing
+diffusion backend is the one this project already models correctly —
+`GS_ERR_UNAVAILABLE` with `sd.cpp:not-compiled` as the reason.
+
+That is a real piece of work — a CMake shared target, its own artifacts, symbol
+visibility, and a loader — and it is **Item 2's real remaining scope**, not
+something a link flag settles.

@@ -817,6 +817,43 @@ jobs:
           fi
           echo "all $(printf '%s\n' "$WANT" | wc -l | tr -d ' ') expected gs_ffi_mobile_* symbols present"
 
+          # THE LIBRARY MUST DEFINE EVERYTHING IT IMPORTS, AND UNTIL NOW
+          # NOTHING CHECKED THAT.
+          #
+          # Run 36975792039: this job was green on all four ABIs, the 18-symbol
+          # gate was green, the DT_NEEDED completeness check was green, the APK
+          # built, installed and launched -- and then 24 of 29 device tests failed
+          # with
+          #
+          #     dlopen failed: cannot locate symbol "ggml_sage_attn" referenced by
+          #     "/data/app/.../libgs_ffi.so"
+          #
+          # Every existing check asks what the .so needs FROM THE SYSTEM. None
+          # asks what it fails to supply FOR ITSELF. This is the same shape as the
+          # bug this file already records:
+          #
+          #     A library that will not dlopen without a second .so is not
+          #     self-contained, and the missing companion is invisible until
+          #     System.loadLibrary on a device
+          #
+          # ggml_, llama_, sd_ and gguf_ are DENIED rather than allowed, so a
+          # future ggml that adds a symbol goes red HERE, naming it, instead of
+          # going red on a device 40 minutes in.
+          #
+          # Verified non-vacuous on both real artefacts of this run's deps:
+          #   x86_64       (SD linked)  exit 1, 4 denied: ggml_sage_attn,
+          #                             ggml_prec_set_acc, ggml_quantize_i8_convrot,
+          #                             ggml_mul_mat_i8_tensorwise
+          #   armeabi-v7a  (no SD)      exit 0, 0 denied
+          # Sizes, for the record: 3,520,408 bytes without SD, 42,356,592 with.
+          python3 "$GITHUB_WORKSPACE/.github/scripts/undefined_syms.py" "$SO" || {
+            echo "::error::the .so imports symbols in a denied namespace that it does"
+            echo "::error::not define. dlopen will fail on a device and nothing in this"
+            echo "::error::workflow can see that. The cause is two versions of ggml"
+            echo "::error::linked into one object; see native/docs/ISSUE-LOG.md."
+            exit 1
+          }
+
           # THE LIBRARY MUST NOT BE ABLE TO RUN A SHELL.
           #
           # The image path is in-process now -- the old one spawned `sd-cli` from a
