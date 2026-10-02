@@ -3038,10 +3038,42 @@ class DeviceVerificationTest {
 
         // ---- what is asserted ----
         val loaded = rows.filter { it.loaded }
-        assertTrue(
-            "no quantisation produced a usable measurement: " +
-                rows.joinToString("; ") { "${it.model}: ${it.why}" },
-            loaded.isNotEmpty(),
+
+        // EVERY quantisation in the sweep, or the test FAILS.
+        //
+        // This was `loaded.isNotEmpty()`, and it is the second half of the same
+        // defect the `while read` mis-binding caused. Runs 36981908316 and
+        // 36992620210 each downloaded ONE quantisation of four, and this
+        // assertion passed on one row both times:
+        //
+        //     LEVERS4 qwen2.5-0.5b-instruct-q4_0 is not on the device; skipping
+        //     LEVERS4 qwen2.5-0.5b-instruct-q4_k_m ttft=4930ms tok/s=11.34
+        //     LEVERS4 qwen2.5-0.5b-instruct-q5_k_m is not on the device; skipping
+        //     LEVERS4 qwen2.5-0.5b-instruct-q8_0   is not on the device; skipping
+        //
+        // Three rows printed "skipping", one row produced a number, and the run
+        // reported the lever as MEASURED. A sweep over four configurations that
+        // reports one of them is not a sweep, and the three missing rows are
+        // exactly where the answer was hiding: the shipped Q4_K_M is the SLOWEST
+        // of the four, which is only visible with all four present.
+        //
+        // An absent file is a transfer failure, not a finding. The load refusal
+        // is a legitimate RESULT when the subject under test is whether the
+        // engine accepts a model -- that is what `a8_...failure_arm` and the
+        // sd0 backend assertion are for. Here the subject is WHICH QUANTISATION
+        // TO SHIP, and that question has no answer from a subset.
+        val missing = rows.filter { !it.loaded }
+        println("LEVERS4 measured ${loaded.size} of ${sweep.size} quantisations")
+        assertEquals(
+            "the lever-4 sweep is defined over ${sweep.size} quantisations and " +
+                "measured ${loaded.size}. A missing file is a transfer failure, not a " +
+                "finding: the job that pushed these verifies every one by size and " +
+                "sha256 before the test starts, so a row is absent because the push " +
+                "or the copy into the app's private dir did not deliver it. " +
+                "Unmeasured: " +
+                missing.joinToString("; ") { "${it.model}: ${it.why}" },
+            sweep.size,
+            loaded.size,
         )
         // EVERY loaded quantisation must have produced SOME text, or a factuality
         // score of 0/8 is indistinguishable from a model that returned nothing.

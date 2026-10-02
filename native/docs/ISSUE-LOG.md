@@ -3090,3 +3090,56 @@ already have turned and had not.
 The long-prompt case has no `q4_0` measurement and is left blank. Scaling the 5.4x
 from a short prompt to a 500-token prefill would be inventing the number that
 matters most.
+
+
+---
+
+## THREE GATES, EACH REASONABLE, COLLECTIVELY A FALSE PASS
+
+The lever-4 sweep reported one quantisation of four and the run was green, twice.
+Taking the broken run's own output and pushing it through the check found three
+separate defects, each hiding the next.
+
+**1. I renamed a variable and left three references to the old one.** Fixing
+`while read -r NAME FILE BYTES SHA` to `FILE BYTES SHA`, I left `$NAME` in three
+`GS_QUANT_MISSING=` assignments (lines 622, 630, 638). Under `set -euo pipefail`
+that is an abort on an unbound variable: **the first error path of the loop I had
+just fixed would have died with `NAME: unbound variable`, naming neither the file
+nor the reason.** All three are on the fetch-failure, size-mismatch and
+digest-mismatch arms -- every path where something goes wrong and none where it
+succeeds, which is why the next run passed and this went unnoticed.
+
+I verified the loop's binding and its short-row guard and never executed its error
+paths. `bash -n` on the step passed; `bash -n` cannot see an unbound variable.
+
+**2. The fetch step warned and continued.** `::warning::` plus `continue` is how
+two device runs downloaded one of four files and reported the lever as measured.
+It also failed open in the worst direction: a transient Hugging Face outage
+removes exactly the row that shows the shipped default is the slowest of the four.
+All three arms now `exit 1`, verified by executing the workflow's own loop five
+ways with only `curl`, `stat` and `sha256sum` stubbed:
+
+    variant    exit  VERIFIED  ::error::  ::warning::
+    allgood      0         3          0           0
+    fetch        1         0          5           0
+    size         1         0          2           0
+    digest       1         0          2           0
+    shortrow     1         0          2           0
+
+**3. The assertion itself accepted one row.** `assertTrue(loaded.isNotEmpty())`
+over a four-file sweep. It is now `assertEquals(sweep.size, loaded.size)` with a
+message that separates "the transfer failed" from "the engine refused the model".
+
+    run 37005521803 (4 rows)  ->  assertEquals(4, 4) -> PASS
+    run 36992620210 (1 row)   ->  assertEquals(4, 1) -> FAIL, naming all three
+
+**A load refusal is a legitimate result when the subject is whether the engine
+accepts a model** -- `a8_each_backend_behaviour_maps_to_its_own_failure_arm` and
+the `sd0` backend assertion both rely on it. **It is not a legitimate result when
+the subject is which quantisation to ship**, because that question has no answer
+from a subset.
+
+The green run was not wrong about anything it reported. It reported one correct
+number and called it four, and the three rows it dropped included the only one
+that would have answered the question. That is the hard version of a false pass:
+every gate individually reasonable, collectively misleading.
