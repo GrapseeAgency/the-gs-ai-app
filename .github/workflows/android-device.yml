@@ -579,11 +579,44 @@ jobs:
           set -euo pipefail
           BASE="https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main"
           # name                      url-path                          bytes         sha256
-          while read -r NAME FILE BYTES SHA; do
-            [ -n "$NAME" ] || continue
-            case "$NAME" in \#*) continue ;; esac
+          # THREE names for THREE columns. It had FOUR:
+          #
+          #     while read -r NAME FILE BYTES SHA
+          #
+          # against rows of `filename  bytes  sha256`. Bash binds them in order and
+          # does not complain about a leftover, so:
+          #
+          #     NAME  = qwen2.5-0.5b-instruct-q4_0.gguf
+          #     FILE  = 428730208          <- THE BYTE COUNT
+          #     BYTES = 7671c0c3...        <- THE DIGEST
+          #     SHA   = (empty)
+          #
+          # and `curl -fL -o "$FILE" "$BASE/$FILE"` asked Hugging Face for a file
+          # named `428730208`, which 404s. Three of four quantisations were never
+          # downloaded, on two consecutive device runs, and the sweep reported one
+          # row of four.
+          #
+          # The failure message is what gave it away, and it is worth keeping in
+          # this form because a byte count where a filename belongs is not a
+          # thing a reader can mistake for anything else:
+          #
+          #     ::warning::could not fetch 428730208; the sweep will run without it
+          #
+          # `$FILE` is also what the size and digest checks use, so a
+          # mis-bound FILE would have made those checks meaningless too rather
+          # than merely failing.
+          while read -r FILE BYTES SHA; do
+            [ -n "$FILE" ] || continue
+            case "$FILE" in \#*) continue ;; esac
+            # A row that is not three fields is not a row this loop understands,
+            # and saying so is better than binding them one field along.
+            if [ -z "$BYTES" ] || [ -z "$SHA" ]; then
+              echo "::error::the quantisation table row '$FILE' has fewer than three"
+              echo "::error::fields. Expected: filename  bytes  sha256."
+              exit 1
+            fi
             echo
-            echo "=== $NAME: $FILE ($BYTES bytes) ==="
+            echo "=== $FILE: $BYTES bytes ==="
             if ! curl -fL --retry 3 --retry-delay 5 -o "$FILE" "$BASE/$FILE"; then
               echo "::warning::could not fetch $FILE; the sweep will run without it"
               GS_QUANT_MISSING="${GS_QUANT_MISSING:-} $NAME"
