@@ -786,6 +786,67 @@ What does NOT change: **no arm64 instruction has been executed by this
 repository**, and the arm64 `.so` remains statically verified only. The section
 above — what is proven, what is not, and what would close it — stands.
 
+## ITEM 3 MEASURED: the threads and context levers do NOT move TTFT
+
+Run `36948588228`, `perf_the_threads_and_context_levers_are_swept_in_one_run`,
+PASS. All twelve combinations measured in ONE device run against ONE model
+(qwen2.5-0.5b-instruct-q4_k_m.gguf, 491,400,032 bytes, SHA-256 verified), each
+after a discarded warm-up, two repeats per token budget, with the budget honoured
+in every row (1 char at budget 1, 49 chars at budget 49).
+
+| n_ctx | n_threads | TTFT ms | tok/s | per-token ms | spread ms |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 512 | 1 | 5432 | 5.87 | 170.5 | 17 |
+| 512 | 2 | 5352 | 11.29 | 88.6 | 20 |
+| **512** | **4** | **5353** | **12.09** | **82.7** | 41 |
+| 512 | 8 | 11004 | **0.17** | 5759.6 | 8988 |
+| 1024 | 1 | 5424 | 5.88 | 170.1 | 147 |
+| 1024 | 2 | 5355 | 11.29 | 88.6 | 2 |
+| **1024** | **4** | **5343** | **12.02** | **83.2** | 6 |
+| 1024 | 8 | 10875 | **0.18** | 5641.2 | 2288 |
+| 2048 | 1 | 5422 | 5.92 | 169.0 | 12 |
+| 2048 | 2 | 5341 | 11.20 | 89.3 | 48 |
+| **2048** | **4** | **5336** | **12.08** | **82.8** | 51 |
+| 2048 | 8 | 10831 | **0.18** | 5616.2 | 2332 |
+
+```
+default 2048/4  ttft=5336ms   best 2048/4  ttft=5336ms   best is 0.0% faster
+```
+
+### WHAT THE TABLE SAYS, WHICH IS NOT WHAT WAS EXPECTED
+
+**n_ctx does not affect TTFT.** 512, 1024 and 2048 give 5336-5432 ms, a spread of
+96 ms against a measurement whose own repeat-noise is up to 51 ms. The expectation
+was that a smaller KV cache would be touched less before the first token. On this
+model and this build it is not: at 49 tokens the working set fits comfortably
+whatever the context is declared to be, so the allocation is not on the critical
+path.
+
+**The shipping default is already the throughput optimum.** 4 threads gives
+12.02-12.09 tok/s, and it is the best or tied-best cell in every n_ctx row. There is
+nothing to win here, and saying so is more useful than a change.
+
+**8 threads is 70x WORSE, and this is the finding worth carrying to a phone.**
+0.17-0.18 tok/s, per-token 5.6-5.8 s, and TTFT roughly doubles to ~11 s. The
+emulator is given `cores: 2`, so eight threads oversubscribe by 4x and every
+token pays for it. On a phone the core count is small and the ratio is worse, not
+better -- an app that sized threads to the device's marketing number rather than
+its core count would land in this row.
+
+### WHAT IT DOES NOT ESTABLISH
+
+It is an x86_64 emulator, 2 cores, CPU-only llama.cpp, no NPU, and the ranking of
+1/2/4 threads is a ranking of oversubscription. A phone's core count differs, so
+the absolute numbers here are a floor and the shape of the 8-thread collapse is the
+part that transfers.
+
+Levers 3, 4 and 5 of the brief -- batch size, quantisation, flash attention -- are
+NOT measured. n_batch/n_ubatch are not reachable through
+`gs_mobile_create(model_path, n_ctx, n_threads)`, flash attention needs a
+`llama_context_params` field this wrapper does not expose, and the alternative
+quantisations are 500 MB downloads that would have to be added to the device job.
+Recorded as not done rather than estimated.
+
 ## What is NOT done
 
 Stated plainly rather than dressed up.
