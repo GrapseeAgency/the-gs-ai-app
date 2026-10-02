@@ -36,8 +36,20 @@ object DiffusionStore {
     /** Its own file, so clearing the LLM's preferences cannot clear this. */
     private const val PREFS = "gsai_diffusion"
 
-    /** Reuses [ModelStore.Consent] rather than declaring a second identical enum. */
-    typealias Consent = ModelStore.Consent
+    // There is deliberately no `typealias Consent = ModelStore.Consent` here.
+    // A type alias must be TOP LEVEL, and this was written inside the object
+    // because it saves typing. The compiler says so precisely:
+    //
+    //     e: DiffusionStore.kt:40:5 Nested and local type alias
+    //
+    // and then reported `Unresolved reference 'wifiOnly'` at lines 79 and 122 --
+    // 39 lines away, in code that is correct. One unparseable declaration made
+    // the parser lose its place and the two errors below it are the same error.
+    //
+    // Naming it in full costs eight extra characters per use and is clearer: a
+    // reader who sees `ModelStore.Consent` knows the type is SHARED with the
+    // chat store rather than a lookalike of it, which is the fact that matters
+    // here -- the two stores must agree on what UNDECIDED means.
 
     private object K {
         const val CONSENT = "diffusion_consent"
@@ -51,7 +63,7 @@ object DiffusionStore {
         data class Refused(val reason: String) : Result()
     }
 
-    var consent by mutableStateOf(Consent.UNDECIDED)
+    var consent by mutableStateOf(ModelStore.Consent.UNDECIDED)
         private set
     var installedPath by mutableStateOf<String?>(null)
         private set
@@ -74,8 +86,8 @@ object DiffusionStore {
         }.getOrNull()?.let { name ->
             // An unknown stored name is UNDECIDED rather than a crash. A schema
             // change must not make the app unlaunchable over a consent flag.
-            Consent.entries.firstOrNull { it.name == name }
-        } ?: Consent.UNDECIDED
+            ModelStore.Consent.entries.firstOrNull { it.name == name }
+        } ?: ModelStore.Consent.UNDECIDED
         wifiOnly = runCatching { prefs!!.getBoolean(K.wifiOnly, true) }.getOrDefault(true)
         refreshInstalled()
     }
@@ -96,7 +108,7 @@ object DiffusionStore {
                     "weights, or is not 64-bit",
             )
         }
-        if (consent != Consent.GRANTED) {
+        if (consent != ModelStore.Consent.GRANTED) {
             return Result.Refused("on-device image generation has not been enabled")
         }
         if (wifiOnly && isCellular()) {
@@ -110,7 +122,7 @@ object DiffusionStore {
         return Result.Ok
     }
 
-    fun updateConsent(value: Consent) {
+    fun updateConsent(value: ModelStore.Consent) {
         consent = value
         prefs?.edit()?.putString(K.CONSENT, value.name)?.apply()
         prefs?.edit()?.putBoolean(K.PROMPT_SHOWN, true)?.apply()
@@ -131,7 +143,7 @@ object DiffusionStore {
      * later gets a bigger one would never be asked again.
      */
     fun shouldPrompt(): Boolean {
-        if (consent != Consent.UNDECIDED) return false
+        if (consent != ModelStore.Consent.UNDECIDED) return false
         if (promptHasBeenShown()) return false
         return app?.let { DiffusionCatalog.fitsDevice(it) } ?: false
     }
