@@ -3390,3 +3390,42 @@ every future run, and looked increasingly confirmed while being wrong.
 **On a simulator.** No iOS hardware has been involved at any point, and none of
 these 49 executions describes an iPhone's performance. What it establishes is which
 architecture the test binary runs as, which is what item 4 asked.
+
+
+---
+
+## BLOCKER 1, OPTION A: investigated, INFEASIBLE as-is; pivots to Option B
+
+`ggml_print_backtrace`-style investigation was read-only across two trees:
+
+| tree | ggml version | how it arrives at it |
+|---|---|---|
+| sd.cpp (`leejet/stable-diffusion.cpp`) | **0.25.3** (`.gitmodules` pulls `leejet/ggml`) | `ggml/CMakeLists.txt` lines 6-9 |
+| llama.cpp (in-tree) | **0.17.0** | `ggml/CMakeLists.txt` lines 6-9 |
+
+sd.cpp **structurally supports** external ggml (`SD_USE_SYSTEM_GGML`,
+`SD_USE_UPSTREAM_GGML`, `SD_BUILD_SHARED_GGML_LIB`, `SD_GGML_SOURCE_DIR` --
+CMakeLists.txt lines 96-99, 324), so expressing the switch needs no source patch.
+
+But the link it would produce is a **0.17.0 ggml under code written for a 0.25.3
+fork**, and it does not compile. Measured (read-only symbol diff): 77 of the 336
+`ggml_*` symbols sd.cpp uses are absent from llama.cpp's ggml, nearly all of them
+the fork's extension ops (`ggml_ext_*`, `ggml_runner_*`, INT8 tensorwise / convrot
+API). `SD_USE_UPSTREAM_GGML=ON` is sd's own *feature* toggle: turning it on to
+force the shared build loses INT8 tensorwise/convrot/LoRA-style paths.
+
+**Conclusion: Option A is not feasible without first aligning the two ggml
+versions, which is a coupled upstream update, not a local flag change.**
+
+**Pivot: Option B.** sd.cpp builds as its own shared library
+(`SD_BUILD_SHARED_LIBS=ON` / `SD_BUILD_SHARED_GGML_LIB=ON`) carrying its own
+ggml, and `libgs_mobile.so` carries llama.cpp's own ggml; no symbol collision
+because nothing is mixed, at the cost of a few MB of extra APK and a
+dlopen/`System.loadLibrary` of both. It always works by construction. On iOS both
+compile into the app's own modules with symbol collision handled by
+`-Wl,-unexported_symbols_list` scoping ggml per slice if needed.
+
+Recorded rather than guessed: the version numbers are from the two
+`ggml/CMakeLists.txt` files, and the symbol count from a read-only diff. Defining
+as a plan of record, this session does **not** claim a working one-`.so` build --
+it claims the requirement and the blocker, with the path (Option B) named.
