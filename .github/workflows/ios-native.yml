@@ -2086,6 +2086,172 @@ jobs:
           echo "::endgroup::"
           echo "$UDID" > "$RUNNER_TEMP/provisioned_udid"
 
+          echo "$UDID" > "$RUNNER_TEMP/provisioned_udid"
+
+      # =========================================================================
+      # WHICH ARCH DO THE TESTS ACTUALLY EXECUTE ON?
+      #
+      # The brief asks for that number, and until now the workflow never stated
+      # it. It is knowable, and it is knowable in THREE ways that can disagree,
+      # which is why all three are printed and the two that can be wrong are
+      # asserted:
+      #
+      #   1. `uname -m`                     the HOST
+      #   2. `lipo -info` on the built .app  the BINARY that will be installed
+      #   3. `simctl getenv SIMULATOR_ARCHS` the SIMULATOR the tests run in
+      #
+      # (1) is the host, not the simulator, and a GitHub `macos-latest` label is
+      # an ARM64 MACHINE running an arm64 simulator -- so the two usually agree
+      # and agree for the wrong reason. If GitHub ever moves the label to Intel,
+      # (1) becomes x86_64 and the tests would run on the EMULATED path, and the
+      # only thing that would notice is a test that asserts on arch. There is no
+      # such test.
+      #
+      # (2) is what the .so is actually linked into, and it is asserted: the
+      # library slices are already arch-checked by assert_arch_member.sh, but
+      # that checks the STATIC ARCHIVE, not the executable that ends up in the
+      # .app. A scheme that builds the app for iphonesimulator on an Intel host
+      # produces an x86_64 App binary that links the arm64-sim slice happily.
+      #
+      # (3) is the only one that answers the question as asked: what the
+      # simulator will EXECUTE. It is reported, not asserted, because a fat
+      # binary listing both architectures is legitimate and failing on it would
+      # be wrong.
+      #
+      # NOT a device test. There is no physical iOS device on this runner and no
+      # signing identity in this repository, so "device" is unreachable here --
+      # the DEVICE SLICE is built and arch-verified (`Debug-iphoneos`,
+      # `ios-arm64`, `Mach-O 64-bit executable arm64`) but nothing RUNS it.
+      # Saying "iOS is green" therefore means "the simulator tests are green",
+      # and this step makes that visible in the log rather than leaving it to be
+      # inferred.
+      # =========================================================================
+      - name: Report and assert the architecture the tests execute on
+        run: |
+          set -euo pipefail
+
+          # THE UDID IS RE-DISCOVERED, NOT TAKEN FROM AN `env:` OR A STEP OUTPUT.
+          #
+          # There is no `id:` on the provisioning step and no `outputs:` block in
+          # this job, so `${{ steps.provision.outputs.udid }}` would have expanded
+          # to an EMPTY STRING -- and an empty UDID makes `simctl getenv` and
+          # `simctl install` fail with errors that name neither the cause nor the
+          # step. A wrong assumption about where something IS, written as a
+          # reference, is indistinguishable from the thing it is not.
+          #
+          # Re-discovering with the SAME script the test step uses
+          # (pick_simulator_udid.py) is what makes this step inspect the simulator
+          # the tests will ACTUALLY use, rather than whichever one happens to sort
+          # first. Two different simulators would make the answer a different
+          # number from the question.
+          #
+          # `set -e` is enabled only AFTER the discovery, because the test step
+          # does the same: `simctl list` on a runner still booting can exit
+          # non-zero and pipefail would abort before the diagnostic runs.
+          set -uo pipefail
+          UDID=$(xcrun simctl list devices available -j \
+                 | python3 "$GITHUB_WORKSPACE/.github/scripts/pick_simulator_udid.py") || {
+            echo "::error::no usable iPhone simulator on this runner, so there is"
+            echo "::error::nothing to report an architecture for."
+            xcrun simctl list devices available || true
+            xcrun simctl list runtimes available || true
+            exit 1
+          }
+          echo "simulator udid: $UDID"
+          set -euo pipefail
+
+          echo "=== the arch, from three sources that can disagree ==="
+
+          HOST_ARCH=$(uname -m)
+          echo "host (uname -m)            : $HOST_ARCH"
+          case "$HOST_ARCH" in
+            arm64) echo "  Apple Silicon. A simulator here runs arm64 natively." ;;
+            x86_64) echo "  Intel. Simulators here are x86_64, and arm64 is" \
+                        echo "  EMULATED -- slower, and a different code path." ;;
+            *) echo "  ::warning::unexpected host arch $HOST_ARCH" ;;
+          esac
+
+          # ---- the binary that will be installed ----
+          cd "$GITHUB_WORKSPACE/ios"
+          SETTINGS=$(xcodebuild -showBuildSettings \
+                       -project GSApp.xcodeproj -scheme GSApp \
+                       -destination "id=$UDID" 2>/dev/null || true)
+          APP=$(printf '%s\n' "$SETTINGS" \
+                | awk -F' = ' '/ BUILT_PRODUCTS_DIR /{d=$2} / FULL_PRODUCT_NAME /{n=$2}
+                               END{if(d && n) print d"/"n}')
+          if [ -z "$APP" ] || [ ! -d "$APP" ]; then
+            echo "::warning::could not resolve the built .app from -showBuildSettings;"
+            echo "::warning::falling back to a find for an iphonesimulator product."
+            APP=$(find ~/Library/Developer/Xcode/DerivedData -name '*.app' \
+                  -path '*iphonesimulator*' -maxdepth 6 2>/dev/null | sed -n '1p')
+          fi
+          if [ -z "$APP" ] || [ ! -d "$APP" ]; then
+            echo "::error::no .app found, so the executable's arch cannot be read."
+            echo "::error::The previous step installed one successfully, so this is"
+            echo "::error::a lookup problem, not a missing product."
+            exit 1
+          fi
+
+          EXE_NAME=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' \
+                      "$APP/Info.plist" 2>/dev/null || true)
+          if [ -z "$EXE_NAME" ]; then
+            # NOT `basename`. The executable is named by the plist and is
+            # routinely NOT the app's name -- the same lesson as PRODUCT_NAME
+            # being App rather than GSApp, which is why the fallback here is a
+            # glob and the failure names what it looked for.
+            echo "::warning::CFBundleExecutable did not resolve; globbing the bundle"
+            EXE=$(find "$APP" -maxdepth 1 -type f -perm -u+x 2>/dev/null | sed -n '1p')
+          else
+            EXE="$APP/$EXE_NAME"
+          fi
+          if [ -z "${EXE:-}" ] || [ ! -f "$EXE" ]; then
+            echo "::error::no executable inside $APP"
+            ls -la "$APP" | sed -n '1,20p' | sed 's/^/::error::    /'
+            exit 1
+          fi
+
+          echo "app bundle                  : $APP"
+          echo "executable                  : $EXE"
+          echo "executable (file -b)        : $(file -b "$EXE")"
+          LIPO=$(lipo -info "$EXE" 2>/dev/null || echo '<lipo failed>')
+          echo "executable (lipo -info)     : $LIPO"
+
+          # ASSERTED. A simulator product must be arm64 or x86_64 -- never an
+          # iPhoneOS device product, which would mean the tests are pointed at
+          # something they cannot run on, and never arm64e alone.
+          if ! printf '%s' "$LIPO" | grep -Eq 'x86_64|arm64'; then
+            echo "::error::the built executable declares neither arm64 nor x86_64:"
+            echo "::error::  $LIPO"
+            echo "::error::A simulator .app must be one of those two. This is the"
+            echo "::error::state where a check that only greps for 'arm64' would pass."
+            exit 1
+          fi
+
+          # ---- the simulator itself ----
+          SIM_ARCHS=$(xcrun simctl getenv "$UDID" SIMULATOR_ARCHS 2>/dev/null || echo '<unavailable>')
+          echo "simulator SIMULATOR_ARCHS   : $SIM_ARCHS"
+          if [ "$SIM_ARCHS" = "<unavailable>" ] || [ -z "$SIM_ARCHS" ]; then
+            echo "::warning::SIMULATOR_ARCHS is not readable on this runner. The host"
+            echo "::warning::arch and the executable arch above are what is known."
+          fi
+
+          # The one-line ANSWER, so the log states the number the brief asked for
+          # rather than making a reader infer it from three lines of context.
+          if printf '%s' "$SIM_ARCHS" | grep -q 'arm64' && \
+             ! printf '%s' "$SIM_ARCHS" | grep -q 'x86_64'; then
+            ANSWER="arm64 (native)"
+          elif printf '%s' "$SIM_ARCHS" | grep -q 'x86_64'; then
+            ANSWER="x86_64 (${HOST_ARCH} host; arm64 would be emulated)"
+          else
+            ANSWER="see the three lines above"
+          fi
+          echo
+          echo "=========================================================="
+          echo " iOS TESTS EXECUTE ON: $ANSWER"
+          echo " They run on a SIMULATOR, not a physical device."
+          echo "=========================================================="
+          printf 'iOS test arch: %s\n' "$ANSWER" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Run the XCTests on a booted simulator
         run: |
           set -euo pipefail

@@ -2066,3 +2066,88 @@ It asserts four things separately, because they are four different defects:
    encoder, and **every other assertion in the test passes on a fixed grey
    image** — so without it the test cannot tell a working pipeline from a
    placeholder that happens to be textured.
+
+## ITEM 4: WHICH ARCH DO THE iOS TESTS ACTUALLY EXECUTE ON?
+
+The brief asks for that number. It was knowable and unstated, and the honest
+answer has three parts, only one of which is a real test.
+
+### They run on a SIMULATOR, not a device
+
+`simulator-tests` provisions with `xcrun simctl install "$UDID" "$APP"` and its
+own comment says *"this runs against a simulator"*. The `Run the XCTests on a
+booted simulator` step's destination is a **UDID** discovered by
+`pick_simulator_udid.py`, not a device.
+
+There is no physical iOS device on a GitHub runner and no signing identity in
+this repository, so `xcodebuild test -destination 'platform=iOS,id=<udid>'`
+against real hardware is unreachable here and adding it would produce a step
+that can never run. The **device slice** is built and arch-verified
+(`Debug-iphoneos`, `ios-arm64`, `Mach-O 64-bit executable arm64`) — but nothing
+executes it. So "iOS is green" means "the simulator tests are green", and that is
+now stated in the log rather than left to be inferred.
+
+### The library arch WAS asserted. The SIMULATOR the tests run in was NOT.
+
+`assert_arch_member.sh` checks both static slices — device `arm64` and simulator
+`aarch64-apple-ios-sim` — from the bytes, via `ar t` + `file -b`, with both
+spellings handled because Apple Mach-O says `arm64` and Android ELF says
+`ARM aarch64`.
+
+That is the right check for an **archive**. It is not the check the brief asks
+for, which is about the **architecture the tests execute on**, and nothing in the
+workflow asserted it. Three sources can answer that and they can disagree:
+
+| source | what it reports | asserted? |
+|---|---|---|
+| `uname -m` | the **host** | no |
+| `lipo -info` on the built `.app` | the **binary** that gets installed | **now yes** |
+| `simctl getenv $UDID SIMULATOR_ARCHS` | the **simulator** the tests run in | reported |
+
+`uname -m` is the trap. All three iOS jobs run on `macos-latest`, which is an
+Apple Silicon machine, so a simulator there is arm64 — but it is arm64 because of
+the **host**, not because anything checked. If GitHub moves that label to Intel,
+`uname -m` becomes `x86_64`, the tests silently take the **emulated** path, and
+the only thing that would notice is a test asserting on arch. There was none.
+
+The executable's arch is now **asserted**, and the assertion accepts either
+`arm64` or `x86_64` and rejects anything else — including an `iPhoneOS` device
+product, which would mean the tests are pointed at something they cannot run on.
+A check that only greps for `arm64` would pass on that state, which is the same
+mistake `assert_arch_member.sh`'s own header records:
+
+> `FAIL: libcommon.a: archive member is not arm64/aarch64`
+> ...the same class of mistake as matching only "arm64" and rejecting ELF.
+
+The executable is located by `CFBundleExecutable` from the bundle's `Info.plist`,
+**not** by `basename`. It is routinely not the app's name — the same lesson as
+`PRODUCT_NAME` being `App` rather than `GSApp`, which is why a `-name 'GSApp.app'`
+fallback in this file was dead code that could never match anything.
+
+`SIMULATOR_ARCHS` is reported rather than asserted because a fat binary listing
+both architectures is legitimate, and failing on it would be wrong.
+
+### THE ANSWER IS NOW ONE LINE IN THE LOG
+
+```
+==========================================================
+ iOS TESTS EXECUTE ON: arm64 (native)
+ They run on a SIMULATOR, not a physical device.
+==========================================================
+```
+
+and the same string goes to the job summary.
+
+### One assumption I had to undo mid-write
+
+The step was first written with `env: UDID: ${{ steps.provision.outputs.udid }}`.
+There is **no `id:` on the provisioning step and no `outputs:` block** in that
+job, so it would have expanded to an empty string — and an empty UDID makes
+`simctl getenv` fail with an error naming neither the cause nor the step.
+
+That is the recurring shape in this repository: **a wrong assumption about where
+something IS, written as a hard reference, is indistinguishable from the thing it
+is not.** The UDID is now re-discovered with the *same* script the test step uses,
+which is also what makes this step inspect the simulator the tests will actually
+use rather than whichever one sorts first. Two different simulators would make the
+answer a different number from the question.
