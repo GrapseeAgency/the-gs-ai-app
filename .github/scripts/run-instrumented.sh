@@ -210,6 +210,63 @@ push_gguf qwen2.5-0.5b-instruct-q4_0.gguf   428730208
 push_gguf qwen2.5-0.5b-instruct-q5_k_m.gguf 522186592
 push_gguf qwen2.5-0.5b-instruct-q8_0.gguf   675710816
 
+# WHAT THE APK ACTUALLY CONTAINS, BEFORE ANYTHING IS INSTALLED.
+#
+# Run 36971941114 failed every native test with
+#     dlopen failed: library "libc++_shared.so" not found
+# while the log showed the companion being COPIED into jniLibs:
+#     -rw-r--r-- 1 runner runner  6447640 Oct  2 06:07 libc++_shared.so
+#     -rw-r--r-- 1 runner runner 42356592 Oct  2 06:07 libgs_ffi.so
+# and Gradle reporting it as packaged. So the file was written, merged, and
+# still not found, and "not found" from a linker is ambiguous between
+#   * the APK does not contain it
+#   * the APK contains it and the linker could not use it (compressed, wrong ABI)
+#   * the library that needs it is not the one being inspected
+#
+# `unzip -l` settles the first two in one line and costs nothing. The APK's own
+# listing is the only primary evidence that exists for this question.
+echo
+echo "=== the APK's native entries, and what libgs_ffi.so needs ==="
+APK=$(find "$GITHUB_WORKSPACE/android/app/build/outputs/apk" -name '*.apk' 2>/dev/null | head -1 || true)
+SO_JNI="$GITHUB_WORKSPACE/android/app/src/main/jniLibs/$ABI/libgs_ffi.so"
+if [ -z "$APK" ]; then
+  echo "  no APK found under build/outputs/apk -- the build did not produce one"
+  find "$GITHUB_WORKSPACE/android/app/build/outputs" -maxdepth 3 2>/dev/null | sed -n '1,12p' | sed 's/^/    /'
+elif [ ! -f "$SO_JNI" ]; then
+  echo "  no jniLibs .so to read DT_NEEDED from: $SO_JNI"
+else
+  echo "  apk: $APK"
+  echo "  every lib/<abi>/ entry it contains:"
+  unzip -l "$APK" 2>/dev/null | grep -E 'lib/[^/]+/.*\.so$' | awk '{printf "    %10s  %s
+", $1, $4}' | sort -k2
+  NEEDED=$(readelf -d "$SO_JNI" 2>/dev/null | sed -n 's/.*(NEEDED).*\[\(.*\)\]/\1/p')
+  echo "  libgs_ffi.so DT_NEEDED: $NEEDED"
+  for N in $NEEDED; do
+    case "$N" in
+      libc.so|libm.so|libdl.so|liblog.so|libandroid.so|libz.so|libjnigraphics.so|libEGL.so|libGLESv2.so|libGLESv3.so|libOpenSLES.so|libaaudio.so)
+        continue ;;
+    esac
+    if unzip -l "$APK" 2>/dev/null | grep -q "lib/$ABI/$N$"; then
+      echo "    OK       $N is in the APK at lib/$ABI/"
+    else
+      echo "    ABSENT   $N is NOT in the APK at lib/$ABI/ -- THIS IS WHY dlopen failed"
+    fi
+  done
+  echo "  is the APK's copy of each .so STORED (uncompressed)? A DEFLATED .so"
+  echo "  cannot be loaded straight out of the APK when extractNativeLibs is"
+  echo "  false, and the linker says only 'not found':"
+  # `unzip -Z`, NOT `unzip -lv`. The -v listing is
+  #     Length  Date  Time  Name
+  # i.e. FOUR fields, so an awk that compared $1 to $7 compared a length to
+  # nothing and printed DEFLATED for a file created with ZIP_STORED. The
+  # difference is invisible unless you read a file you know the answer for,
+  # which is why both a stored and a deflated fixture are built here.
+  # `unzip -Z` is perm ver os size flags METHOD date time name, so the method
+  # is $6 and the name is $NF.
+  unzip -Z "$APK" 2>/dev/null | grep -E 'lib/[^/]+/(libgs_ffi|libc\+\+_shared)\.so$' \
+    | awk '{ printf "    %-48s %s\n", $NF, ($6=="stor" ? "STORED" : "DEFLATED (" $6 ")") }'
+fi
+
 echo "in-app gguf listing:"
 adb shell run-as com.grapsee.gsai ls -la files/ 2>&1 | grep -E 'gguf|safetensors' | sed 's/^/    /' || true
 

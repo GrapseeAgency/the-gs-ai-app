@@ -2,6 +2,7 @@ package com.grapsee.gsai
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.os.Build
 import android.os.Environment
 import androidx.room.Room
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -3017,6 +3018,107 @@ class DeviceVerificationTest {
             if (f.isFile && f.length() > 100_000_000L) return f
         }
         return null
+    }
+
+
+    // ========================================================================
+    // c3: THE APK MUST CARRY EVERY LIBRARY libgs_ffi.so NEEDS.
+    //
+    // Added because of run 36971941114, where 22 tests failed with one cause:
+    //
+    //     java.lang.UnsatisfiedLinkError: dlopen failed: library
+    //     "libc++_shared.so" not found
+    //
+    // while the same log showed the companion being written and reported as
+    // packaged:
+    //
+    //     -rw-r--r-- 1 runner runner  6447640 Oct  2 06:07 libc++_shared.so
+    //     -rw-r--r-- 1 runner runner 42356592 Oct  2 06:07 libgs_ffi.so
+    //     Unable to strip the following libraries, packaging them as they are:
+    //       libandroidx.graphics.path.so, libc++_shared.so, libgs_ffi.so
+    //
+    // Twenty-two identical-looking failures, and not one of them says which
+    // library was missing or where it was expected. This test answers that
+    // question once, in one place, with the APK as the evidence.
+    //
+    // WHY IT NAMES libc++_shared.so SPECIFICALLY, WHICH LOOKS LIKE A HARDCODE
+    // AND IS NOT.
+    //
+    // It was READ from the shipped library's DT_NEEDED, out of the artifact of
+    // the android-native run that built it. `$ readelf -d` on
+    // `libgs_ffi-x86_64` artifact 11211288088, run 36970739680:
+    //
+    //     Dynamic section at offset 0x26373d8 contains 28 entries:
+    //       Tag  Type  Name/Value
+    //       0x1 (NEEDED)  Shared library: [libc++_shared.so]
+    //       0x1 (NEEDED)  Shared library: [libdl.so]
+    //       0x1 (NEEDED)  Shared library: [libm.so]
+    //       0x1 (NEEDED)  Shared library: [libc.so]
+    //
+    // So this is a measurement, and the test is written to be UPDATED when the
+    // measurement changes -- not to discover a new dependency by watching 22
+    // tests go red. Enabling stable-diffusion.cpp is what added it: the sd.cpp
+    // archives are built with CMAKE_ANDROID_STL_TYPE=c++_shared, and linking them
+    // put a `libc++_shared` DT_NEEDED into a library whose other 41 MB does not
+    // have one.
+    //
+    // The `printA` of every entry is deliberate even when the assertion passes:
+    // the next time this fails, the answer is in the log above the failure.
+    // ========================================================================
+
+    @Test
+    fun c3_the_apk_carries_every_library_the_shipped_so_needs() {
+        val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+        val abi = Build.SUPPORTED_ABIS.firstOrNull()
+        assertNotNull("no ABI reported by the platform", abi)
+
+        val apk = File(ctx.applicationInfo.sourceDir)
+        assertTrue(
+            "the installed APK is not where packageManager said it would be: $apk",
+            apk.isFile,
+        )
+
+        val libEntries = mutableListOf<String>()
+        ZipFile(apk).use { zf ->
+            zf.entries().asSequence()
+                .filter { it.name.startsWith("lib/") && it.name.endsWith(".so") }
+                .forEach { libEntries += it.name }
+        }
+        libEntries.sort()
+        println("c3 APK: $apk (${apk.length()} bytes)")
+        println("c3 native entries (${libEntries.size}):")
+        libEntries.forEach { println("    $it") }
+
+        // THE SHIPPED LIBRARY IS THERE, which is the other half of the claim and
+        // is asserted rather than assumed: everything below is about the
+        // libraries it points at.
+        assertTrue(
+            "the APK has no lib/$abi/libgs_ffi.so. It has ${libEntries.size} " +
+                "native entries: ${libEntries.joinToString()}",
+            libEntries.any { it == "lib/$abi/libgs_ffi.so" },
+        )
+
+        // AND EVERY LIBRARY IT NAMES. `libc++_shared.so` is not special-cased as
+        // a constant beyond the DT_NEEDED evidence above; if a future build
+        // needs another one, the list below grows and this still means something.
+        val nonSystem = listOf("libc++_shared.so")
+        for (need in nonSystem) {
+            val entry = "lib/$abi/$need"
+            assertTrue(
+                "libgs_ffi.so has `$need` in its DT_NEEDED (read from the " +
+                    "android-native artifact with `readelf -d`) but the APK has " +
+                    "no `$entry`, so dlopen on this device will fail with " +
+                    "\"library \\\"$need\\\" not found\" for EVERY test that " +
+                    "touches the engine.\n" +
+                    "  the APK has ${libEntries.size} native entries:\n" +
+                    libEntries.joinToString("\n") { "    $it" } +
+                    "\n  android-native copies the companion into " +
+                    "jniLibs/$abi/ and reports it as packaged, so if this fails " +
+                    "the file is reaching the workspace and not the APK.",
+                libEntries.any { it == entry },
+            )
+            println("c3 OK: $entry is present, and libgs_ffi.so needs it")
+        }
     }
 
 }

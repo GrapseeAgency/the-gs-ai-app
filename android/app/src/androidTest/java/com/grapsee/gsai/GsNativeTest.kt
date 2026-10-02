@@ -149,7 +149,35 @@ class GsNativeTest {
      */
     @Test
     fun failureIsAnExceptionNotAnEmptyString() {
-        assumeTrue(GsNativeLoader.isLibraryLoaded())
+        // NOT `assumeTrue(GsNativeLoader.isLibraryLoaded())`, WHICH IS WHAT WAS
+        // HERE, AND WHICH IS A FALSE PASS OF EXACTLY THE KIND THIS SUITE EXISTS
+        // TO AVOID.
+        //
+        // Run 36971941114: the .so failed to dlopen --
+        //
+        //     java.lang.UnsatisfiedLinkError: dlopen failed: library
+        //     "libc++_shared.so" not found
+        //
+        // and these two tests were reported as IGNORED, not failed. 28 tests, 22
+        // failures, **2 skipped**. The two tests whose entire subject is the
+        // native library quietly stepped aside at the moment the native library
+        // was broken.
+        //
+        // `assumeTrue(isLibraryLoaded())` says: if the thing I am testing is
+        // absent, do not test it. For a test about the LIBRARY that is the
+        // assumption, not a precondition -- the failure of the library IS the
+        // finding, and it must be red. The 21 failures in DeviceVerificationTest
+        // are the only reason this run was noticed as red at all.
+        //
+        // A skip is a green that tested nothing, and a skip whose TRIGGER is the
+        // failure being tested for is worse than no test: it looks like coverage.
+        assertTrue(
+            "libgs_ffi.so did not load, so this test has nothing to say. The reason " +
+                "is in the logcat and the run's own summary. Reporting it as a " +
+                "SKIP would be the one outcome this test must never produce: it is " +
+                "a test about the native library, and the library is what broke.",
+            GsNativeLoader.isLibraryLoaded(),
+        )
         requireModel()
 
         // A SUCCESS returns text.
@@ -253,7 +281,35 @@ class GsNativeTest {
      */
     @Test
     fun shutdownIsIdempotent() {
-        assumeTrue(GsNativeLoader.isLibraryLoaded())
+        // NOT `assumeTrue(GsNativeLoader.isLibraryLoaded())`, WHICH IS WHAT WAS
+        // HERE, AND WHICH IS A FALSE PASS OF EXACTLY THE KIND THIS SUITE EXISTS
+        // TO AVOID.
+        //
+        // Run 36971941114: the .so failed to dlopen --
+        //
+        //     java.lang.UnsatisfiedLinkError: dlopen failed: library
+        //     "libc++_shared.so" not found
+        //
+        // and these two tests were reported as IGNORED, not failed. 28 tests, 22
+        // failures, **2 skipped**. The two tests whose entire subject is the
+        // native library quietly stepped aside at the moment the native library
+        // was broken.
+        //
+        // `assumeTrue(isLibraryLoaded())` says: if the thing I am testing is
+        // absent, do not test it. For a test about the LIBRARY that is the
+        // assumption, not a precondition -- the failure of the library IS the
+        // finding, and it must be red. The 21 failures in DeviceVerificationTest
+        // are the only reason this run was noticed as red at all.
+        //
+        // A skip is a green that tested nothing, and a skip whose TRIGGER is the
+        // failure being tested for is worse than no test: it looks like coverage.
+        assertTrue(
+            "libgs_ffi.so did not load, so this test has nothing to say. The reason " +
+                "is in the logcat and the run's own summary. Reporting it as a " +
+                "SKIP would be the one outcome this test must never produce: it is " +
+                "a test about the native library, and the library is what broke.",
+            GsNativeLoader.isLibraryLoaded(),
+        )
         GsNativeLoader.release()
         GsNativeLoader.release()   // must not throw when nothing was loaded
         val state = GsNativeLoader.state()
