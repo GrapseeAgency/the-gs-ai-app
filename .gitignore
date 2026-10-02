@@ -128,3 +128,30 @@ native/prebuilts/
 # and it appeared because the lints import each other while being run locally.
 __pycache__/
 *.pyc
+
+# ------------------------------------------------------------------ binaries
+# The project rule is: no .so, no .a, no .gguf, no traineddata, no __pycache__,
+# no PNG fixtures. The first four were already guarded above -- native/**/*.so,
+# native/**/*.a, **/*.gguf and __pycache__/ -- and the two below were not. Both
+# gaps were found by PROBING, not by reading:
+#
+#     $ git check-ignore -q native/x.traineddata ; echo $?
+#     1
+#
+# A tesseract traineddata file is 15-40 MB and there are several, so this is the
+# most expensive of the unguarded types. The OCR fixture the device tests use is
+# DRAWN AT RUN TIME by .github/scripts/make_invoice_png.py precisely so that no
+# image needs committing -- which is the right pattern, and a missing ignore rule
+# is what undoes it.
+**/*.traineddata
+*.traineddata
+
+# QA screenshot dumps. download/ and upload/ hold operator- and agent-captured
+# PNGs; there are about 25 of them on main and none is read by a test.
+#
+# NOT `*.png`. The app icon is a PNG that MUST be committed:
+#     ios/App/Assets.xcassets/AppIcon.appiconset/AppIcon.png
+# and a global rule would silently drop it from the next clone, which fails at
+# build time with a missing-asset error naming neither the rule nor the icon.
+download/*.png
+upload/*.png
