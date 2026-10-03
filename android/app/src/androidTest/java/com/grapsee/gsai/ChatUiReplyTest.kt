@@ -4,13 +4,11 @@ import android.os.Environment
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
-import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -116,32 +114,11 @@ class ChatUiReplyTest {
         // user takes when they type and hit the keyboard's Send key -- the composer
         // wires ImeAction.Send to the same submit (GsComponents.kt:374). No pixel is
         // involved, so nothing can be occluded or off-screen.
-        // isDisplayed(), because onAllNodes(...).onFirst() was matching a node that
-        // is in the composition tree but NOT on screen.
-        //
-        // Three attempts, all with raw evidence, all at the same interaction:
-        //   37099938349  onAllNodes(hasSetTextAction()).onFirst().performClick()
-        //                -> AssertionError: Failed to inject touch input.
-        //   37105786497  ... with performScrollTo() first
-        //                -> AssertionError: Action performScrollTo() failed.
-        //   37110553713  ... after removing the Send tap and using performImeAction()
-        //                -> AssertionError: Failed to inject touch input.
-        //
-        // Attempt 6 is the decisive one: with the Send button no longer tapped, the
-        // SAME error appeared on the INPUT's own click. So the Send button was never
-        // the problem, scrolling was never the problem, and the IME was never the
-        // problem. The node the test picked cannot receive a tap at all, which is
-        // what Compose reports when the matched node is not displayed.
-        //
-        // The app has more than one focusable text field in its composition, and
-        // `onFirst()` takes whichever comes first in the semantics tree rather than
-        // whichever the user can see.
-        val input = composeTestRule
-            .onAllNodes(hasSetTextAction() and isDisplayed())
-            .onFirst()
-        input.assertIsDisplayed()
+        val input = composeTestRule.onAllNodes(hasSetTextAction()).onFirst()
         input.performClick()
         input.performTextInput("hello")
+        composeTestRule.waitForIdle()
+        input.performImeAction()
         composeTestRule.waitForIdle()
 
         // 4. a real reply bubble with non-blank assistant text within N s.

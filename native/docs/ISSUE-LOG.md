@@ -3604,3 +3604,76 @@ with the prebuilt llama.cpp would differ in size but not in architecture.
    looks like nothing whatsoever to do with a comment.** The longest surviving
    block is `Assemble the xcframework` at 21007, which has always parsed, so the
    real ceiling is above that and I have not measured where it is.
+
+
+---
+
+## BLOCKER 4 (Android): BLOCKED with seven raw attempts
+
+**Blocked on tooling, not on the product.** The test compiles, is discovered, and
+executes. It cannot complete its interaction, and I cannot determine which node it
+is selecting without an Android SDK, which this host does not have.
+
+| run | what was tried | raw failure |
+|---|---|---|
+| 37059713834 | `onAllNodes(hasSetTextAction()).onFirst()` with `onAllNodes`/`fetchSemanticsNodes` imported as top-level | `Unresolved reference 'fetchSemanticsNodes'` / `'onAllNodes'` |
+| 37065414953 | the two above removed as "members of the provider" | `Unresolved reference 'onFirst'` |
+| 37099938349 | `onFirst` re-imported | compiles; `AssertionError: Failed to inject touch input.` at line 100 (the **Send** tap) |
+| 37104629452 | `performScrollTo()` added before both taps | `Unresolved reference 'performScrollTo'` |
+| 37105786497 | import added | compiles; `AssertionError: Action performScrollTo() failed.` |
+| 37110553713 | Send tap dropped, `performImeAction()` used instead | compiles; `AssertionError: Failed to inject touch input.` -- now on the **input's own click** |
+| 37114863265 | `hasSetTextAction() and isDisplayed()` to match only visible fields | `Unresolved reference. None of the following candidates` + `Argument type mismatch: actual type is 'kotlin.Boolean'` -- `isDisplayed` is not a `SemanticsMatcher` |
+
+### What the evidence actually established
+
+Attempt 6 is the one that narrowed it. With the Send button no longer being
+tapped, the **same** error appeared on the input's own click. In one move that
+eliminates the Send button, scrolling, and the IME as causes. What remains is that
+the selected node cannot receive a tap at all, which is what Compose reports when
+the matched node is not displayed -- `onAllNodes(...).onFirst()` takes whichever
+focusable text field comes first in the **semantics tree**, not whichever one a
+user can see, and this app has more than one in composition.
+
+Attempt 7 then showed my own next fix was wrong: `isDisplayed()` is an assertion
+on `SemanticsNodeInteraction`, not a `SemanticsMatcher` you can `and` into a
+matcher.
+
+### Why this stops here
+
+**Four of the seven attempts were compile failures caused by me guessing whether a
+Compose symbol is a member or an extension, and I was wrong each time with
+opposite answers.** This host has no Android SDK, so the only way to learn a
+declaration form is a ~70 minute CI run, and each run settles exactly one symbol.
+Attempt 1 alone cost two symbols; attempt 7 re-asked a question attempt 2 had
+already answered.
+
+What would actually converge, neither of which I can do here:
+
+1. **Enumerate the semantics tree** from the run that already executes -- print
+   every node's `contentDescription`, `text`, and bounds at the moment of failure,
+   and pick the composer by what it really is instead of by ordinal.
+2. **Read the ui-test AAR** (`javap` the class, or grep the jar) for the real
+   declaration forms, once, instead of one symbol per CI run.
+
+Option 1 is a better test as well: it names the node it picked, so the next
+failure is specific rather than "failed to inject touch input".
+
+### What IS established, and it is not nothing
+
+- The test **compiles** (`compileDebugAndroidTestKotlin` clean as of 37105786497
+  and 37110553713).
+- The suite **discovers** it and it **runs**:
+  `started: sendHello_rendersARealAssistantReply(com.grapsee.gsai.ChatUiReplyTest)`.
+- It fails at a genuine interaction, not a build or discovery problem.
+
+So the file is worth keeping: it is the only UI-level send-and-reply test in the
+repository, it runs, and its remaining failure is one node-selection question.
+It is reverted to the attempt-6 state because that is the last version that
+**compiles**; leaving attempt 7 in place would trade a behavioural failure for a
+build failure, which is strictly worse.
+
+**iOS half of Blocker 4 is DONE as far as it can go**: run 37059718048 compiled
+`GsChatUiTests.swift` (`SwiftCompile normal arm64 ... GsChatUiTests.swift`),
+discovered it (`Test Suite 'GsChatUiTests' started`), and it **skipped** (0.037s)
+on its `GS_UI_TEST_MODE` guard rather than faking a pass -- `passed=49 failed=0
+skipped=1`. Executing it needs an XCUITest target and a provisioned model.
