@@ -91,30 +91,50 @@ object ModelCatalog {
         minRamBytes = 4L * 1024 * 1024 * 1024,
     )
 
+    /**
+     * THE SHIPPED DEFAULT, and it changed because of a measurement, not a
+     * preference.
+     *
+     * android-device **37118362666**, `QuantQuality50Test`, 50 hardcoded prompts
+     * through both quantisations on the same emulator, one deterministic
+     * rule-based judge:
+     *
+     *     q4_0   mean 4.2200  ci95 +/- 0.2117   dist {5=18, 4=28, 3=1, 2=3}
+     *     q4_k_m mean 4.1600  ci95 +/- 0.2195   dist {5=17, 4=27, 3=3, 2=3}
+     *     delta (q4_0 - q4_k_m) = +0.0600        |delta| <= 0.3  ->  TRUE
+     *
+     * Against the throughput measured on runs 37005521803 and 37022078103:
+     *
+     *     q4_0   788-792 ms TTFT
+     *     q4_k_m 3830-4269 ms TTFT          4.9x - 5.4x
+     *
+     * **Q4_0 is not worse on the rubric** -- it is 0.06 points HIGHER, and the two
+     * intervals overlap almost entirely, so the honest statement is that the two
+     * are indistinguishable on this rubric while differing 5x on speed. The
+     * decision rule (within 0.3 points) is met with a margin of 0.24.
+     *
+     * The rubric's limits, so this is not over-read: it rewards written-down
+     * answers and reply form. It cannot see fluency, tone, or helpfulness. It is
+     * a proxy, and a 5 means "the expected answer is present in a non-degenerate
+     * reply" and nothing more.
+     *
+     * One thing this does NOT license: it was measured on an x86_64 emulator,
+     * CPU-only. The K-quant advantage on real arm64 hardware is normally the
+     * reverse of what was measured here, because the NEON and dot-product kernels
+     * differ between the K and legacy layouts. **Re-measure on the target
+     * architecture before this default reaches a phone.**
+     */
     val MODEL_0_5B = Model(
-        id = "qwen2.5-0.5b-instruct-q4_k_m",
-        displayName = "Qwen2.5 0.5B Instruct (Q4_K_M)",
-        url = "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf",
-        // MEASURED, not asserted. android-device downloads this exact URL on
-        // every run and hashes it, and the byte count is checked against this
-        // field's `bytes` before the hash is compared:
-        //     sha256: 74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db
-        //     expect: 74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db
-        //     CHECKSUM MATCHES ModelCatalog.kt -- the hardcoded hash is correct
-        //     [ "$SZ" = "491400032" ]
-        // (runs 36405645557, 36409455281, 36414439107 -- identical each time.)
-        //
-        // It was EMPTY until now, which is why the download tests refused:
-        //     Refused(reason=Qwen2.5 0.5B Instruct (Q4_K_M) has no verified
-        //     checksum yet)
-        // An empty sha256 is treated as "cannot verify" and refused rather than
-        // accepted unchecked. That refusal is CORRECT behaviour working on a
-        // catalogue entry that had never been filled in -- the defect was the
-        // empty string, not the check.
-        //
-        // MODEL_1_5B below is still empty and still refuses, on purpose.
-        sha256 = "74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db",
-        bytes = 491_400_032L,
+        id = "qwen2.5-0.5b-instruct-q4_0",
+        displayName = "Qwen2.5 0.5B Instruct (Q4_0)",
+        url = "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_0.gguf",
+        // MEASURED, not asserted. android-device downloads this exact URL on every
+        // run, hashes it, checks the byte count against `bytes`, and then compares
+        // the hash. Runs 36405645557, 36409455281, 36414439107 for the previous
+        // Q4_K_M default, and the Q4_0 file is verified by the same step in
+        // android-device 37005521803 and 37022078121.
+        sha256 = "7671c0c304e6ce5a7fc577bcb12aba01e2c155cc2efd29b2213c95b18edaf6ed",
+        bytes = 428_730_208L,
         minRamBytes = 2L * 1024 * 1024 * 1024,
     )
 
@@ -127,15 +147,16 @@ object ModelCatalog {
      * download is REFUSED, so a wrong digest here is a download that cannot
      * complete rather than a silently wrong model.
      *
-     *     qwen2.5-0.5b-instruct-q4_0.gguf     428,730,208 bytes
-     *     qwen2.5-0.5b-instruct-q4_k_m.gguf   491,400,032 bytes  (the default)
+     *     qwen2.5-0.5b-instruct-q4_0.gguf     428,730,208 bytes  (the default)
+     *     qwen2.5-0.5b-instruct-q4_k_m.gguf   491,400,032 bytes
      *     qwen2.5-0.5b-instruct-q5_k_m.gguf   522,186,592 bytes
      *     qwen2.5-0.5b-instruct-q8_0.gguf     675,710,816 bytes
      *
-     * Q4_K_M is listed rather than special-cased so the sweep compares four rows
-     * of the same shape. It is the current default, which makes it the CONTROL:
-     * a table whose control is missing cannot tell "the new quantisation is
-     * faster" from "this device got faster".
+     * Q4_0 is listed rather than special-cased so the sweep compares four rows
+     * of the same shape, and it is the CONTROL because it is the default: a table
+     * whose control is missing cannot tell "the new quantisation is faster" from
+     * "this device got faster". The control followed the default on the evidence
+     * in MODEL_0_5B, so Q4_K_M is now an ordinary downloaded row.
      *
      * These are NOT tier candidates. `modelFor(tier)` must keep returning
      * [MODEL_0_5B] and [MODEL_1_5B] only -- a quantisation is a measurement, not

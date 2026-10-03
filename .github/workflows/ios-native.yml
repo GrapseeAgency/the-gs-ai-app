@@ -1970,10 +1970,10 @@ jobs:
 
           WORK="$RUNNER_TEMP/provision"
           mkdir -p "$WORK"
-          GGUF="$WORK/qwen2.5-0.5b-instruct-q4_k_m.gguf"
-          URL="https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf"
-          WANT_SHA="74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db"
-          WANT_BYTES="491400032"
+          GGUF="$WORK/qwen2.5-0.5b-instruct-q4_0.gguf"
+          URL="https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_0.gguf"
+          WANT_SHA="7671c0c304e6ce5a7fc577bcb12aba01e2c155cc2efd29b2213c95b18edaf6ed"
+          WANT_BYTES="428730208"
 
           # CACHED BETWEEN RUNS, and the cache key includes the hash being asked
           # for, so a changed model can never be served from a stale entry.
@@ -2113,14 +2113,14 @@ jobs:
           # matter what was copied in. So it is created here, explicitly.
           SUPPORT="$CONTAINER/Library/Application Support"
           mkdir -p "$SUPPORT"
-          cp "$GGUF" "$SUPPORT/qwen2.5-0.5b-instruct-q4_k_m.gguf"
+          cp "$GGUF" "$SUPPORT/qwen2.5-0.5b-instruct-q4_0.gguf"
           cp "$WORK/invoice.png" "$SUPPORT/invoice.png"
           echo "container: $CONTAINER"
           echo "Application Support now holds:"
           ls -l "$SUPPORT" | sed 's/^/  /'
           # Read the copied file's hash back from ITS final location, not from the
           # staging copy: the thing that must be right is the file the test opens.
-          FINAL_SHA=$(shasum -a 256 "$SUPPORT/qwen2.5-0.5b-instruct-q4_k_m.gguf" | awk '{print $1}')
+          FINAL_SHA=$(shasum -a 256 "$SUPPORT/qwen2.5-0.5b-instruct-q4_0.gguf" | awk '{print $1}')
           echo "model in the container: $FINAL_SHA"
           if [ "$FINAL_SHA" != "$WANT_SHA" ]; then
             echo "::error::the copy in the container does not match the verified download"

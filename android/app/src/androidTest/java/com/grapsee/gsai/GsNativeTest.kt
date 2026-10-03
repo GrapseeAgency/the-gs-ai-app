@@ -1,5 +1,6 @@
 package com.grapsee.gsai
 
+import com.grapsee.gsai.data.local.ModelCatalog
 import android.os.Environment
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -73,7 +74,13 @@ class GsNativeTest {
                 ctx.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
             )) {
                 if (dir == null) continue
-                val f = java.io.File(dir, "qwen2.5-0.5b-instruct-q4_k_m.gguf")
+                // The filename comes from ModelCatalog.MODEL_0_5B.id, NOT a literal.
+        // It was a hardcoded 'qwen2.5-0.5b-instruct-q4_k_m.gguf' in all
+        // three test files, which meant the default quantisation could be
+        // changed in the catalogue and NOBODY WOULD NOTICE: the tests would
+        // keep loading the old file and the switch would be cosmetic. The
+        // default is now Q4_0 and these three all read it from one place.
+                val f = File(dir, "${ModelCatalog.MODEL_0_5B.id}.gguf")
                 if (f.isFile && f.length() > 0) {
                     println("GsNativeTest: found model at ${f.absolutePath} (${f.length()} bytes)")
                     return f.absolutePath

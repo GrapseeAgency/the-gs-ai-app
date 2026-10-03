@@ -3677,3 +3677,66 @@ build failure, which is strictly worse.
 discovered it (`Test Suite 'GsChatUiTests' started`), and it **skipped** (0.037s)
 on its `GS_UI_TEST_MODE` guard rather than faking a pass -- `passed=49 failed=0
 skipped=1`. Executing it needs an XCUITest target and a provisioned model.
+
+
+---
+
+## BLOCKER 3 DECIDED: the shipped default is now Q4_0
+
+`android-device` **37118362666**, `QuantQuality50Test`, **PASSED**. Verbatim from
+the run's logcat:
+
+    === QUANT50 DECISION ===
+      prompts              : 50
+      q4_0   mean +/- ci95 : 4.2200 +/- 0.2117
+      q4_k_m mean +/- ci95 : 4.1600 +/- 0.2195
+      delta (q4_0 - q4_k_m): 0.0600
+      |delta| <= 0.3       : true
+      VERDICT: Q4_0 is within 0.3 points of the shipped Q4_K_M, so the throughput
+      argument may be taken as decisive and the default may switch to Q4_0.
+
+    QUANT50 qwen2.5-0.5b-instruct-q4_0   n=50 mean=4.2200 ci95=+/-0.2117 dist={5=18, 4=28, 3=1, 2=3}
+    QUANT50 qwen2.5-0.5b-instruct-q4_k_m n=50 mean=4.1600 ci95=+/-0.2195 dist={5=17, 4=27, 3=3, 2=3}
+
+Real replies, not a stub: `[0] score=5 [paris] reply=Paris.`,
+`[1] score=5 [19] reply=19|im_end|`, `[2] score=5 [jupiter] reply=Jupiter. |im_end|`.
+
+**Q4_0 is not worse on the rubric -- it is 0.06 points HIGHER**, and the two
+intervals overlap almost completely. The honest statement is that the two are
+**indistinguishable on this rubric while differing 4.9x-5.4x on TTFT** (runs
+37005521803, 37022078103). The 0.3-point decision rule is met with 0.24 to spare.
+
+What the rubric does NOT cover, so this is not over-read: it rewards written-down
+answers and reply form. It cannot see fluency, tone, or helpfulness, and 5 means
+"the expected answer is present in a non-degenerate reply" and nothing more. **And
+it was measured on an x86_64 emulator, CPU-only, where the K-quant advantage on
+real arm64 is normally the reverse.** Re-measure on the target architecture before
+this default reaches a phone.
+
+### THE SWITCH WAS NOT ONE LINE, AND THE SECOND HALF WAS THE IMPORTANT HALF
+
+`ModelCatalog.MODEL_0_5B` became Q4_0, and that alone would have changed
+**nothing measurable**. All three test files resolved the model by a hardcoded
+literal:
+
+    val f = File(dir, "qwen2.5-0.5b-instruct-q4_k_m.gguf")
+
+in `DeviceVerificationTest.findModel()`, `GsNativeTest` and `ChatUiReplyTest`. So
+changing the catalogue would have left every test still loading Q4_K_M, and the
+switch would have been **cosmetic and invisible**: no test would fail, and the
+next person to read "the default is Q4_0" would be reading a lie that the suite
+actively agreed with. All three now read `ModelCatalog.MODEL_0_5B.id`.
+
+**A default that is written in one place and read from another is not a default;
+it is a suggestion.** The same class as the lever-4 sweep passing on 1 of 4 rows:
+a green run agreeing with a change that never happened.
+
+The device job followed: the control fetch is now Q4_0 (URL, sha256
+`7671c0c3...`, 428,730,208 bytes) and Q4_K_M moved into the fetch TABLE as an
+ordinary downloaded row, so the four-row sweep is still whole -- three downloaded,
+one linked from the verified `model.gguf`. **The control followed the default on
+purpose: a control that is not the shipped default measures the wrong thing.**
+
+`ios-native` follows too, URL, sha256, byte count and the copy into Application
+Support. **Both platforms ship the same model**, which they did not before this
+change was finished.
