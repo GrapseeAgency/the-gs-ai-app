@@ -4360,3 +4360,73 @@ ordering surfaces in about three, without an emulator at all. The fix is to buil
 the APK and the androidTest APK before booting. It is a real improvement and it is
 not the blocker, so it is recorded rather than bundled into a run that is already
 dispatched against the green `android-native` 37134268637.
+
+
+---
+
+## Run 37135423868: the design failed exactly the way it predicted
+
+**Status: `sdBackendName is 'sd.cpp:unloadable'`. Root cause found, fixed,
+re-dispatch pending.**
+
+31 tests ran. 29 passed. Two failed:
+
+    sd0_diffusion_generates_a_real_png_on_this_device  FAILED
+      java.lang.AssertionError: sdBackendName is 'sd.cpp:unloadable'.
+    ChatUiReplyTest > sendHello_rendersARealAssistantReply  FAILED
+      java.lang.AssertionError: Failed to inject touch input.
+
+The second is Blocker 4 Android, already BLOCKED after seven attempts and not
+touched here. The first is this item.
+
+### The failure, and it is the one this design has a single way to produce
+
+`android-native` was green on both ABIs with 5 of 5 entry points exported, the
+arch gate passing and 0 denied. `android-device` verified the checkpoint
+(`GS_SD_VERIFIED: true`, `GS_SD_ABSENT: false`), staged the model, built the APK
+and booted the emulator. And then diffusion was unavailable with a specific,
+correct diagnostic:
+
+    sdBackendName is 'sd.cpp:unloadable'
+
+Root cause, one line of `android-device.yml`:
+
+    SO=$(find /tmp/so-artifact/x -name 'libgs_ffi.so' -type f | head -1 || true)
+    cp "$SO" android/app/src/main/jniLibs/$ABI/libgs_ffi.so
+
+It found one library **by name** and copied one file. Option B's entire premise is
+that there are now two, and the second one has to sit in the same
+`jniLibs/<abi>/` directory or neither the soname nor the `dladdr` fallback can
+find it. So `libgs_sd.so` never entered the APK.
+
+This is the failure mode written down in advance, in the comment I added to
+`android-native.yml` when the sibling copy went in: *"A separate shared library
+that is not a SIBLING is the one way this design fails silently: the build is
+green, the wrapper compiles, and every generation returns `sd.cpp:unloadable` at
+runtime on a device only."* Every gate I added was green. The gate that was
+missing was in the file that assembles the APK.
+
+### What is fixed
+
+1. `android-device.yml` stages `libgs_sd.so` and **exits 1 if it is absent**, with
+   the list of `.so` files that WERE in the artifact. A missing second library is
+   now a build failure with a diagnosis, not a device-only runtime string.
+2. The ELF arch gate now loops over **both** libraries. One was checked before,
+   and a wrong-arch `libgs_sd.so` beside a right-arch `libgs_ffi.so` surfaces as
+   exactly the same `unloadable` string as a missing one -- so a single-library
+   arch check leaves a real ambiguity in place for the second library. That is an
+   ambiguity Option B introduces and a one-library design does not have.
+3. `sd0` now **prints** `GsNative.lastError()` rather than pointing at it. The
+   assertion message ended with "GetLastError() carries the dlerror() text", and
+   on this run that sent the reader to a string nobody had printed -- the
+   backend name said "dlopen failed" and not why, and the why was a missing
+   file in a directory three workflow files away. A diagnostic that names where
+   the answer is instead of carrying it costs a CI round trip; this is the third
+   time in this file that has happened.
+
+### The host verification did not catch it, and why that is not a defect
+
+Case 2 of the four loader cases proved the `dladdr` sibling fallback works *given a
+sibling*. It cannot prove a sibling exists -- that is the packaging step's job,
+and no amount of testing the loader substitutes for testing the package. The gap
+was not in the code under test, it was in the step that feeds it.

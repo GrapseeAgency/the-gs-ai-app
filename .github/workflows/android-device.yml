@@ -372,6 +372,36 @@ jobs:
             exit 1
           fi
           cp "$SO" android/app/src/main/jniLibs/$ABI/libgs_ffi.so
+
+          # libgs_sd.so, AND IT MUST BE HERE OR sd0 IS DEAD ON THE DEVICE.
+          #
+          # This step found libgs_ffi.so with a `find -name` and copied that one file.
+          # Option B put sd.cpp in a SECOND shared library that has to sit in the
+          # SAME jniLibs/<abi>/ directory, and nothing here copied it, so it never
+          # entered the APK. Everything upstream stayed green -- android-native
+          # exported 5 of 5 entry points, the arch gate passed, 0 denied -- and the
+          # only place it could show up was on the device:
+          #
+          #   sdBackendName is 'sd.cpp:unloadable'   (run 37135423868, sd0 FAILED)
+          #
+          # which is the failure this design has exactly one way to produce, and the
+          # reason the wrapper tries the soname and then dladdr's its own path: a
+          # library that is not a SIBLING cannot be found by either.
+          #
+          # So this is not optional. A missing libgs_sd.so is NOT a skip and NOT a
+          # degraded mode; it makes gs_sd_generate return GS_ERR_UNAVAILABLE for
+          # every call and every diffusion number becomes fabricated. The test fails
+          # closed on it, which is correct, but the fix belongs here.
+          SD_SO=$(find /tmp/so-artifact/x -name 'libgs_sd.so' -type f | head -1 || true)
+          if [ -z "$SD_SO" ]; then
+            echo "::error::libgs_sd.so not inside the artifact zip. android-native"
+            echo "::error::uploads dist/android/$ABI/ which must contain BOTH libraries."
+            echo "::error::Present in the artifact:"
+            find /tmp/so-artifact/x -type f -name '*.so' | sed -n '1,20p' | sed 's/^/::error::  /'
+            exit 1
+          fi
+          cp "$SD_SO" android/app/src/main/jniLibs/$ABI/libgs_sd.so
+          echo "  libgs_sd.so staged: $(stat -c%s android/app/src/main/jniLibs/$ABI/libgs_sd.so) bytes"
           # SAFETY NET, not the fix. android-native now links libc++ statically and
           # FAILS ITS OWN BUILD if a libc++_shared DT_NEEDED survives, so this
           # should find nothing. If it does, the companion is placed anyway so the
@@ -410,6 +440,25 @@ jobs:
           python3 "$GITHUB_WORKSPACE/.github/scripts/elf_machine.py" \
             "android/app/src/main/jniLibs/$ABI/libgs_ffi.so" "$ABI" \
             || { echo "::error::the linker would reject this .so on a $ABI emulator"; exit 1; }
+
+          # BOTH, NOT ONE. An arm64 libgs_sd.so beside an x86_64 libgs_ffi.so is
+          # accepted by the build, loads, and dies on the first call -- which from
+          # the test's side is indistinguishable from "not packaged", because both
+          # surface as the same gs_sd_backend_name. Checking only the first library
+          # would have left that ambiguity in place for the second one, which is
+          # precisely the failure mode Option B introduces that a single-library
+          # design does not have.
+          for SOFILE in libgs_ffi.so libgs_sd.so; do
+            SMACH=$(python3 "$GITHUB_WORKSPACE/.github/scripts/elf_machine.py" \
+              "android/app/src/main/jniLibs/$ABI/$SOFILE")
+            echo "  $SOFILE: ELF machine $SMACH (ABI $ABI)"
+            python3 "$GITHUB_WORKSPACE/.github/scripts/elf_machine.py" \
+              "android/app/src/main/jniLibs/$ABI/$SOFILE" "$ABI" \
+              || { echo "::error::$SOFILE is not $ABI. The linker would reject it on"
+                   echo "::error::this emulator, and the failure surfaces as a missing"
+                   echo "::error::library rather than as a wrong one."
+                   exit 1; }
+          done
 
           # THE KOTLIN CAN BE NEWER THAN THE LIBRARY, AND IT LOOKED LIKE SIXTEEN
           # BUGS.

@@ -2581,6 +2581,19 @@ class DeviceVerificationTest {
         )
         val backend = GsNative.sdBackendName(handle)
         println("SD0 backend: $backend")
+        // PRINT THE dlerror, NOT JUST A POINTER TO IT.
+        //
+        // The assertion message ends with "GetLastError() carries the dlerror()
+        // text" -- which on run 37135423868 sent the reader to a string nobody had
+        // printed. The backend name said "dlopen failed" and not why, which is the
+        // half of the diagnosis that matters: the actual answer was that
+        // android-device.yml copied libgs_ffi.so into jniLibs and never copied
+        // libgs_sd.so, so the APK did not contain the library at all.
+        //
+        // A diagnostic that names where the answer is, instead of printing it,
+        // costs a whole CI round trip. This is the third time in this file that a
+        // message pointed at information instead of carrying it.
+        println("SD0 lastError: ${GsNative.lastError()}")
         assertTrue(
             "sdBackendName is '$backend'. libgs_sd.so did not load, so " +
                 "gs_sd_generate cannot run and every number below would be " +
