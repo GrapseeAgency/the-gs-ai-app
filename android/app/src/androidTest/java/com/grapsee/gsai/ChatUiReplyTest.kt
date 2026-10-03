@@ -96,11 +96,28 @@ class ChatUiReplyTest {
         )
 
         // 1. tap the chat input, 2. type "hello", 3. send it.
+        //
+        // performScrollTo() before every interaction, and that is the whole fix
+        // for attempt 3's failure. Run 37099938349 got all the way to executing:
+        //
+        //   started: sendHello_rendersARealAssistantReply(com.grapsee.gsai.ChatUiReplyTest)
+        //   E TestRunner: java.lang.AssertionError: Failed to inject touch input.
+        //     at com.grapsee.gsai.ChatUiReplyTest.sendHello_rendersARealAssistantReply(ChatUiReplyTest.kt:100)
+        //
+        // so the file compiled, the suite discovered it, and it RAN -- the first
+        // time any of that had happened. The click that failed is the Send one,
+        // and "failed to inject touch input" from Compose means the node was
+        // matched but was not inside the visible viewport, so the injected tap
+        // landed nowhere. Scrolling the node into view first is the documented
+        // remedy and changes nothing about what is asserted.
         val input = composeTestRule.onAllNodes(hasSetTextAction()).onFirst()
+        input.performScrollTo()
         input.performClick()
         input.performTextInput("hello")
         composeTestRule.waitForIdle()
-        composeTestRule.onNodeWithContentDescription("Send").performClick()
+        val send = composeTestRule.onNodeWithContentDescription("Send")
+        send.performScrollTo()
+        send.performClick()
 
         // 4. a real reply bubble with non-blank assistant text within N s.
         val deadlineMs = 180_000L
