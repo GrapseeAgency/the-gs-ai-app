@@ -28,7 +28,11 @@
 // <string.h> — all of which the NDK already provides, so nothing else has to
 // travel in the package.
 #if defined(GS_SD_HAVE_SDCPP)
+// TYPES come from the header at compile time; the five FUNCTIONS are resolved
+// with dlopen/dlsym at runtime, because sd.cpp's ggml (0.25.3 fork) cannot be
+// linked into the same .so as llama.cpp's (0.17.0). See gs_sd_dyn.h.
 #include "stable-diffusion.h"
+#include "gs_sd_dyn.h"
 #endif
 
 namespace {
@@ -216,20 +220,31 @@ gs_sd_ctx_t* gs_sd_create(const char* model_path) {
     c->model_path = model_path;
 
 #if defined(GS_SD_HAVE_SDCPP)
+    const auto& api = gs_sd_dyn::get();
+    if (!api.loaded) {
+        c->available    = false;
+        c->backend_name = "sd.cpp:unloadable";
+        set_err(std::string("gs_sd_create: ") + api.error);
+        return c;
+    }
+
     sd_ctx_params_t params;
-    sd_ctx_params_init(&params);
+    api.ctx_params_init(&params);
     params.model_path   = model_path;
     params.n_threads    = 0;              // 0 = sd_get_num_physical_cores()
     params.enable_mmap  = true;           // a 2.3 GB checkpoint must not be read twice
     params.backend      = nullptr;        // CPU. Vulkan is a separate build.
-    c->inner = new_sd_ctx(&params);
+    c->inner = api.new_ctx(&params);
     if (!c->inner) {
         set_err(std::string("gs_sd_create: new_sd_ctx returned null for ") + model_path);
         delete c;
         return nullptr;
     }
     c->available    = true;
-    c->backend_name = "sd.cpp";
+    // NAMES THE ROUTE, so a log says whether the soname or the sibling path
+    // worked. "sd.cpp" alone cannot tell a reader which mechanism is load-bearing
+    // on this device, and the two differ on Android linkers.
+    c->backend_name = "sd.cpp:dlopen";
 #else
     // HONEST, AND THE POINT OF IT. Without the library linked there is no
     // generation, and saying so is the whole value of this branch. The previous
@@ -291,8 +306,13 @@ int32_t gs_sd_generate(gs_sd_ctx_t* ctx,
     }
 
 #if defined(GS_SD_HAVE_SDCPP)
+    const auto& api = gs_sd_dyn::get();
+    if (!api.loaded) {
+        set_err(std::string("gs_sd_generate: ") + api.error);
+        return GS_ERR_UNAVAILABLE;
+    }
     sd_img_gen_params_t gp;
-    sd_img_gen_params_init(&gp);
+    api.img_params_init(&gp);
     gp.prompt         = prompt;
     gp.negative_prompt = negative_prompt ? negative_prompt : "";
     gp.width          = width;
@@ -309,7 +329,7 @@ int32_t gs_sd_generate(gs_sd_ctx_t* ctx,
 
     sd_image_t* images = nullptr;
     int n_images = 0;
-    const bool ok = generate_image(ctx->inner, &gp, &images, &n_images);
+    const bool ok = api.generate_image(ctx->inner, &gp, &images, &n_images);
     if (!ok || !images || n_images < 1) {
         // GS_ERR_RUNTIME DOES NOT EXIST. The ABI's codes are:
         //   GS_ERR_INVALID_ARG -1, GS_ERR_NO_MEMORY -2, GS_ERR_IO -3,
@@ -354,7 +374,10 @@ int32_t gs_sd_generate(gs_sd_ctx_t* ctx,
 void gs_sd_free(gs_sd_ctx_t* ctx) {
     if (!ctx) return;
 #if defined(GS_SD_HAVE_SDCPP)
-    if (ctx->inner) free_sd_ctx(ctx->inner);
+    if (ctx->inner) {
+        const auto& api = gs_sd_dyn::get();
+        if (api.loaded) api.free_ctx(ctx->inner);
+    }
 #endif
     delete ctx;
 }

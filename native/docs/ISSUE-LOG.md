@@ -3782,3 +3782,133 @@ Q4_0 rather than of this emulator is the exact error this item exists to prevent
 
 **Until this item is closed, the shipped default is a bet on emulator evidence,
 and the cost of it being wrong is a 5x regression on the phones that matter.**
+
+
+---
+
+## ITEM 2 / OPTION B: sd.cpp and llama.cpp in TWO shared libraries, dlopen'd
+
+**Status: implemented, four loader paths verified on host, CI dispatched.**
+Commit: see the `feat(blocker 1)` commit on this branch.
+
+### The collision, measured rather than asserted
+
+sd.cpp at the pinned SHA `3f8527a46c54ecf4cb4ed6003da8e8982283c73c` carries
+ggml `0.25.3` (leejet fork). llama.cpp carries ggml `0.17.0` (upstream). Symbol
+arithmetic over both static archives:
+
+    574 names present in BOTH  ->  ggml_* overwhelmingly
+      0 names only in llama.cpp
+      4 names only in sd.cpp
+      4 left UNDEFINED after linking everything in one .so
+
+Zero names unique to llama.cpp is the whole finding. A link that lists sd.cpp's
+archives last lets llama.cpp's copies satisfy every shared name first, so sd.cpp's
+archives are never extracted and the four leftovers stay undefined. That is not a
+link ORDER problem, so reordering converts a clean failure at build time into
+wrong-ABI calls at runtime on a device. Option A is therefore not merely
+inconvenient; the failure mode it produces is silent.
+
+### What changed
+
+| File | Change |
+|---|---|
+| `native/cpp/sd_wrapper/gs_sd_dyn.h` | NEW. dlopen/dlsym of five entry points. |
+| `native/cpp/sd_wrapper/gs_sd_wrapper.cpp` | All five call sites route through `gs_sd_dyn::get()`. |
+| `native/cpp/CMakeLists.txt` | `gs_sd` links `${CMAKE_DL_LIBS}`. |
+| `native/crates/gs-ffi/build.rs` | Requires `libgs_sd.so`, links NOTHING static. |
+| `.github/workflows/android-deps.yml` | `-DSD_BUILD_SHARED_LIBS=ON`, ships `libgs_sd.so`. |
+| `.github/workflows/android-native.yml` | Arch + export gate, copies it BESIDE `libgs_ffi.so`. |
+| `.../DeviceVerificationTest.kt` | sd0 asserts the backend is `sd.cpp:dlopen`. |
+
+The key move is that sd.cpp's TYPES (`sd_ctx_params_t`, `sd_img_gen_params_t`,
+`sd_image_t`, `sd_ctx_t`) come from `stable-diffusion.h` at COMPILE time and cost
+nothing at link time. A header declares; it does not link. Only the five FUNCTIONS
+are resolved at runtime, so this is not a rewrite of the wrapper -- every call site
+changes from `foo(a)` to `api().foo(a)` and nothing else moves.
+
+`RTLD_LOCAL` is deliberate. sd.cpp's `ggml_*` must not be able to satisfy a
+llama.cpp reference by accident; global scope would reintroduce the exact collision
+this removes.
+
+### HOST VERIFICATION, raw output
+
+The wrapper compiles against the real header and real ggml includes:
+
+    g++ -fsyntax-only -std=c++17 -DGS_SD_HAVE_SDCPP \
+      -Inative/cpp/include -Inative/cpp/sd_wrapper \
+      -I<real sd.cpp>/include -I<real sd.cpp>/ggml/include -I<real sd.cpp>/ggml/src \
+      native/cpp/sd_wrapper/gs_sd_wrapper.cpp
+    g++ exit=0    stderr lines: 0
+
+All five `dlsym` names are real defined globals in upstream's archive, checked with
+`nm -g --defined-only` against the host's own `libstable-diffusion.a`
+(52023804 bytes):
+
+    sd_ctx_params_init       sd_ctx_params_init
+    new_sd_ctx               new_sd_ctx
+    sd_img_gen_params_init   sd_img_gen_params_init
+    generate_image           generate_image
+    free_sd_ctx              free_sd_ctx
+    missing: 0 of 5
+
+Then the loader was driven end to end against a stub `.so` exporting those five
+signatures, through the real `gs_sd_wrapper.cpp` and the real header's types:
+
+**Case 1 - soname route available**
+
+    after gs_sd_create           backend=sd.cpp:dlopen          available=1
+    last error:                  ""
+
+**Case 2 - soname route UNAVAILABLE, the `.so` reachable only as a SIBLING.**
+This is the load-bearing one: it is the case Android's linker namespace forces.
+
+    after gs_sd_create           backend=sd.cpp:dlopen          available=1
+    last error:                  ""
+
+**Case 3 - no `libgs_sd.so` at all.** Refuses, names both routes, writes nothing.
+
+    after gs_sd_create           backend=sd.cpp:unloadable      available=0
+    last error:  "gs_sd_create: libgs_sd.so could not be loaded by soname or by
+                  sibling path. It must be packaged in the SAME jniLibs/<abi>/
+                  directory as libgs_ffi.so. Last dlerror:
+                  ./libgs_sd.so: cannot open shared object file: No such file"
+    gs_sd_generate:              rc=-4  wrote_file=0
+    generate last error:         "gs_sd_generate: no diffusion backend: sd.cpp:unloadable"
+
+**Case 4 - a `.so` that opens but is not sd.cpp.** Names the missing symbols, so a
+reader is not sent to look at the wrong file.
+
+    backend=sd.cpp:unloadable      available=0
+    last error:  "gs_sd_create: libgs_sd.so opened
+                  (dlopen(<dir of libgs_ffi.so>/libgs_sd.so)) but is missing:
+                  sd_ctx_params_init, new_sd_ctx, sd_img_gen_params_init,
+                  generate_image, free_sd_ctx"
+
+`wrote_file=0` on every refusal path: a failed generation writes nothing, so a
+green run cannot hide one behind a leftover file from a previous attempt.
+
+### What the host check does NOT prove
+
+The stub has the right signatures; it does not generate. Host-linking upstream's
+own archive into a `.so` was refused -- `relocation R_X86_64_PC32 cannot be used
+against symbol 'std::ctype<char>::id'; recompile with -fPIC` -- because that
+archive was built static. **That is a host artifact, not an Android problem:** the
+NDK compiles every target `-fPIC` because position-independent code is mandatory on
+Android. So the real generation, on real arm64, is still owed and is exactly what
+sd0 asserts.
+
+### The two gates that make the failure loud instead of green
+
+1. `android-native.yml` refuses to package a `libgs_sd.so` that is the wrong
+   architecture, or that exports fewer than all five entry points. It has no other
+   exit: a build that cannot generate is visibly unable rather than quietly
+   portable.
+2. sd0 asserts `backend.contains("dlopen")`, not merely `sdAvailable`. Available
+   says a context exists; that string says the context came from the separate
+   library. If the two `.so` files are ever collapsed back into one, the ggml
+   collision returns and this assertion is what notices.
+
+Verified locally before committing: `elf_machine.py /usr/lib/libc.so.6 x86_64`
+exits 0 and the same file against `arm64-v8a` exits 1 naming the mismatch, so the
+gate refuses rather than silently passing.

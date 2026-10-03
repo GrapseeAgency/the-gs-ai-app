@@ -802,7 +802,16 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DSD_VULKAN=OFF -DSD_METAL=OFF -DSD_CUDA=OFF \
             -DGGML_OPENMP=OFF \
-            -DSD_BUILD_SHARED_LIBS=OFF \
+            # OPTION B: SHARED, so sd.cpp and its ggml 0.25.3 leave as ONE
+            # self-contained .so that libgs_ffi.so never links against. It was OFF,
+            # which produced static .a archives that build.rs then linked into
+            # libgs_ffi.so alongside llama.cpp's ggml 0.17.0 -- 574 identical
+            # ggml_* names in one symbol table. See sd_wrapper/gs_sd_dyn.h.
+            #
+            # SD_BUILD_SHARED_GGML_LIB stays OFF on purpose: ggml is then built
+            # STATIC and absorbed INTO libgs_sd.so, so the shipped pair is one
+            # object with one copy of ggml rather than two that must not collide.
+            -DSD_BUILD_SHARED_LIBS=ON \
             -DSD_WEBP=OFF -DSD_WEBM=OFF \
             -G Ninja
           cmake --build build -j"$(nproc)" 2>&1 | tee build.log
@@ -850,6 +859,36 @@ jobs:
             exit 1
           fi
           echo "archives found: $FOUND"
+
+          # THE DELIVERABLE OF OPTION B: one shared library, renamed so the runtime
+          # name is ours rather than an upstream naming choice we would then be
+          # coupled to.
+          SD_SO="$(find build -name 'libstable-diffusion.so' -o -name 'libstable-diffusion.dylib' 2>/dev/null | sed -n '1p')"
+          if [ -z "$SD_SO" ]; then
+            echo "::error::SD_BUILD_SHARED_LIBS=ON produced no shared library."
+            echo "::error::found under build/:"
+            find build -maxdepth 3 -name '*.so' -o -maxdepth 3 -name '*.a' | sed -n '1,20p' | sed 's/^/  /'
+            exit 1
+          fi
+          cp "$SD_SO" dist/lib/libgs_sd.so
+          echo "  $SD_SO -> dist/lib/libgs_sd.so ($(stat -c%s dist/lib/libgs_sd.so) bytes)"
+          echo "  must be packaged BESIDE libgs_ffi.so in jniLibs/<abi>/: the"
+          echo "  wrapper tries the soname first and then dladdr's its own path, so"
+          echo "  a sibling location is what makes it load on a device."
+
+          # The .so must carry the ggml INSIDE it, or Option B has not happened and
+          # the .so will fail to load with undefined ggml symbols. This is the
+          # assertion that would catch a silent return to a ggml-less build.
+          if command -v readelf >/dev/null 2>&1; then
+            UNDEF=$(readelf -d dist/lib/libgs_sd.so 2>/dev/null | grep -c 'NEEDED.*sd\|NEEDED.*ggml' || true)
+            echo "  sd.cpp/ggml NEEDED entries: $UNDEF (0 is expected: both are inside)"
+            if [ "$UNDEF" -ne 0 ]; then
+              echo "::error::libgs_sd.so still depends on external sd/ggml libraries:"
+              readelf -d dist/lib/libgs_sd.so | grep NEEDED | sed 's/^/  /'
+              echo "::error::That reintroduces the ggml collision Option B removes."
+              exit 1
+            fi
+          fi
 
           # THE HEADERS. The package was ARCHIVES ONLY, so there was no way to
           # compile anything against it -- which is why gs_wrapper.cpp could not

@@ -2517,12 +2517,17 @@ class DeviceVerificationTest {
     // subprocess, no workspace dependencies. Each clause is asserted rather than
     // assumed:
     //
-    //   no subprocess      the library is linked IN-PROCESS, which
-    //                      sdAvailable() is what proves. A library that is absent
-    //                      makes sdAvailable false and sdCreate's handle report
-    //                      "sd.cpp:not-compiled" -- a .so can export all eighteen
-    //                      mobile symbols and still be unable to generate, which
-    //                      is exactly what android-native run 36956136615 shipped.
+    //   no subprocess      the library is in the PROCESS, which sdAvailable() is
+    //                      what proves. It is NOT linked: sd.cpp bundles its own
+    //                      ggml 0.25.3 and llama.cpp bundles 0.17.0, with 574
+    //                      identical ggml_* names, so libgs_sd.so is dlopen'd as a
+    //                      SIBLING of libgs_ffi.so with RTLD_LOCAL. In-process is
+    //                      the claim; two .so files is how it is achieved.
+    //                      A library that cannot load makes sdAvailable false and
+    //                      the handle report "sd.cpp:unloadable" -- a .so can export
+    //                      all eighteen mobile symbols and still be unable to
+    //                      generate, which is exactly what android-native run
+    //                      36956136615 shipped.
     //   from a text prompt the prompt is asserted to have changed the output
     //                      relative to a second, different prompt. One image
     //                      proves the encoder works; two images with different
@@ -2577,13 +2582,28 @@ class DeviceVerificationTest {
         val backend = GsNative.sdBackendName(handle)
         println("SD0 backend: $backend")
         assertTrue(
-            "sdBackendName is '$backend'. The library is NOT linked into this .so, " +
-                "so gs_sd_generate cannot run and every number below would be " +
-                "fabricated. The cause is upstream of this test: check that " +
-                "android-native exported GS_SD_PREBUILT and that the .so logs " +
-                "'linking stable-diffusion.cpp in-process' rather than " +
-                "'portable sd_wrapper: procedural path only'.",
+            "sdBackendName is '$backend'. libgs_sd.so did not load, so " +
+                "gs_sd_generate cannot run and every number below would be " +
+                "fabricated. The cause is upstream of this test and is one of " +
+                "exactly two things, and the backend string distinguishes them: " +
+                "\"sd.cpp:not-compiled\" means android-native did not export " +
+                "GS_SD_PREBUILT so the wrapper compiled the procedural-only path; " +
+                "\"sd.cpp:unloadable\" means the header was there and dlopen failed, " +
+                "which in practice means libgs_sd.so is not in the SAME " +
+                "jniLibs/<abi>/ directory as libgs_ffi.so. GetLastError() carries " +
+                "the dlerror() text.",
             GsNative.sdAvailable(handle),
+        )
+        // THE OPTION-B ASSERTION. Available is necessary but not sufficient: it
+        // says a context exists. This says the CONTEXT CAME FROM dlopen of the
+        // sibling library, which is the whole design -- sd.cpp and llama.cpp cannot
+        // share a symbol table, so if this string is anything else the two .so
+        // files were collapsed back into one and the ggml collision is back.
+        assertTrue(
+            "backend is '$backend', so diffusion is in process but NOT via " +
+                "dlopen of libgs_sd.so. The two ggml versions would then be in one " +
+                "symbol table, which is the state Option B was written to remove.",
+            backend.contains("dlopen"),
         )
 
         val out = DiffusionCatalog.imageDestination(ctx, "sd0-a")

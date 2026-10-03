@@ -404,11 +404,26 @@ fn main() {
         let hdr = root.join("include").join("stable-diffusion.h");
         let libs = root.join("lib");
         if hdr.exists() && libs.is_dir() {
-            let sd_lib = libs.join("libstable-diffusion.a");
-            if !sd_lib.exists() {
+            // OPTION B: sd.cpp is a SEPARATE SHARED LIBRARY, loaded with dlopen.
+            //
+            // It was libstable-diffusion.a and it was statically linked below.
+            // That cannot work: sd.cpp bundles ggml 0.25.3 (leejet fork) and
+            // llama.cpp bundles 0.17.0, with 574 identical ggml_* names. Linking
+            // both into libgs_ffi.so means llama.cpp's copies satisfy every
+            // shared name first, sd.cpp's archives are never extracted, and four
+            // symbols are left undefined -- and on a device that is a dlopen
+            // failure at best and silent wrong-ABI calls at worst.
+            //
+            // So the header is still needed (sd_ctx_params_t and friends are
+            // compile-time types) but NOTHING is linked. Only libgs_sd.so, which
+            // android-deps.yml builds with -DSD_BUILD_SHARED_LIBS=ON and renames.
+            let sd_so = libs.join("libgs_sd.so");
+            if !sd_so.exists() {
                 panic!(
-                    "GS_SD_PREBUILT={} has the header but no libstable-diffusion.a, so \
-                     it is not the package android-deps.yml produces. contents of {}: {:?}",
+                    "GS_SD_PREBUILT={} has the header but no libgs_sd.so, so it is not \
+                     the package android-deps.yml produces. Option B requires \
+                     sd.cpp built SHARED (SD_BUILD_SHARED_LIBS=ON) and installed \
+                     as libgs_sd.so. contents of {}: {:?}",
                     root.display(), libs.display(),
                     std::fs::read_dir(&libs).map(|rd| rd.filter_map(|e| e.ok())
                         .map(|e| e.file_name()).collect::<Vec<_>>()).unwrap_or_default()
@@ -425,29 +440,24 @@ fn main() {
             // exactly backwards. The same mistake is already recorded twice in
             // this file -- the `lib` prefix on archive stems, and llama's own
             // ordering -- so it is enumerated rather than sorted.
-            const SD_DEP_ORDER: &[&str] =
-                &["stable-diffusion", "ggml", "ggml-cpu", "ggml-base"];
+            // DELIBERATELY NO cargo:rustc-link-lib HERE.
+            //
+            // The search path is still emitted so the link line can find
+            // libgs_sd.so if anything ever wants to link against it directly, but
+            // no archive is linked: sd.cpp is reached through dlopen/dlsym in
+            // sd_wrapper/gs_sd_dyn.h, with RTLD_LOCAL so its ggml symbols cannot
+            // be mistaken for llama.cpp's. Linking anything here reintroduces the
+            // exact collision Option B exists to remove, and it would fail as an
+            // undefined symbol in a different crate rather than naming this.
             println!("cargo:rustc-link-search=native={}", libs.display());
-            let mut linked = 0usize;
-            for name in SD_DEP_ORDER {
-                let p = libs.join(format!("lib{name}.a"));
-                if !p.exists() {
-                    panic!(
-                        "GS_SD_PREBUILT={} is missing lib{name}.a. The package must \
-                         contain stable-diffusion, ggml, ggml-cpu and ggml-base. \
-                         found: {:?}",
-                        root.display(),
-                        std::fs::read_dir(&libs).map(|rd| rd.filter_map(|e| e.ok())
-                            .map(|e| e.file_name()).collect::<Vec<_>>()).unwrap_or_default()
-                    );
-                }
-                println!("cargo:rustc-link-lib=static={name}");
-                linked += 1;
-            }
+            let sd_bytes = std::fs::metadata(&sd_so).map(|m| m.len()).unwrap_or(0);
             println!(
-                "cargo:warning=linking stable-diffusion.cpp in-process from {} \
-                 ({linked} archives, dependency order). No subprocess is involved.",
-                root.display()
+                "cargo:warning=stable-diffusion.cpp is a SEPARATE shared library \
+                 ({} bytes at {}), loaded with dlopen. Nothing is statically \
+                 linked, so sd.cpp's ggml 0.25.3 and llama.cpp's ggml 0.17.0 \
+                 never share a symbol table. No subprocess is involved.",
+                sd_bytes,
+                sd_so.display()
             );
             have_sd = true;
         } else {
@@ -476,7 +486,7 @@ fn main() {
             .include(sd_prebuilt.as_ref().unwrap().join("include"));
         println!("cargo:rustc-cfg=gs_sd_sdcpp");
         println!("cargo:rustc-check-cfg=cfg(gs_sd_sdcpp)");
-        println!("cargo:warning=sd.cpp IS linked: gs_sd_generate will do real diffusion");
+        println!("cargo:warning=sd.cpp header present and libgs_sd.so found: gs_sd_generate will do real diffusion IF the .so is packaged beside libgs_ffi.so");
     } else {
         println!(
             "cargo:warning=portable sd_wrapper: procedural path only. \

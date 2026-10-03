@@ -800,6 +800,50 @@ jobs:
             echo "copied to $DEST/libgs_ffi.so"
           fi
           file "$DEST/libgs_ffi.so"
+
+          # OPTION B: libgs_sd.so ships BESIDE libgs_ffi.so, in the same directory.
+          #
+          # A separate shared library that is not a SIBLING is the one way this
+          # design fails silently: the build is green, the wrapper compiles, and
+          # every generation returns "sd.cpp:unloadable" at runtime on a device
+          # only. The wrapper tries the soname first (needs the app's lib dir in
+          # the linker namespace) and then dladdr's its own path (unconditional),
+          # so a sibling is what makes it work on both.
+          SD_SO_SRC=""
+          for CANDIDATE in "$SD_ROOT/lib/libgs_sd.so" "$SD_ROOT/libgs_sd.so"; do
+            if [ -f "$CANDIDATE" ]; then SD_SO_SRC="$CANDIDATE"; break; fi
+          done
+          if [ -n "$SD_SO_SRC" ]; then
+            cp "$SD_SO_SRC" "$DEST/libgs_sd.so"
+            echo "  libgs_sd.so: $SD_SO_SRC -> $DEST/libgs_sd.so ($(stat -c%s "$DEST/libgs_sd.so") bytes)"
+            # The arch of the .so matters exactly as much as the arch of the .a
+            # did: an arm64 libgs_sd.so beside an x86_64 libgs_ffi.so loads and
+            # then dies on the first call, and every diffusion test SKIPs.
+            if ! python3 "$GITHUB_WORKSPACE/.github/scripts/elf_machine.py" \
+                 "$DEST/libgs_sd.so" "${{ matrix.abi }}" >/dev/null 2>&1; then
+              echo "::error::libgs_sd.so is not ${{ matrix.abi }}:"
+              python3 "$GITHUB_WORKSPACE/.github/scripts/elf_machine.py" "$DEST/libgs_sd.so" || true
+              exit 1
+            fi
+            echo "  libgs_sd.so arch: ${{ matrix.abi }} confirmed"
+            # And it must EXPORT the five entry points the wrapper dlsyms, or the
+            # loader fails with "opened but is missing: ..." naming them.
+            NSD=$(nm -D --defined-only "$DEST/libgs_sd.so" 2>/dev/null \
+                  | grep -cE ' (sd_ctx_params_init|new_sd_ctx|sd_img_gen_params_init|generate_image|free_sd_ctx)$' || true)
+            echo "  sd entry points exported: $NSD (5 required)"
+            if [ "$NSD" -lt 5 ]; then
+              echo "::error::libgs_sd.so exports $NSD of the 5 entry points gs_sd_dyn.h"
+              echo "::error::resolves. It will open and then fail on the first call."
+              nm -D --defined-only "$DEST/libgs_sd.so" 2>/dev/null | grep -E 'sd_ctx_params_init|new_sd_ctx|sd_img_gen_params_init|generate_image|free_sd_ctx' || true
+              exit 1
+            fi
+          else
+            echo "::warning::no libgs_sd.so found under $SD_ROOT, so diffusion stays"
+            echo "::warning::unavailable on this ABI. gs_sd_backend_name will report"
+            echo "::warning::sd.cpp:not-compiled and sd0 will fail -- which is correct,"
+            echo "::warning::not a skip."
+          fi
+
           # A cdylib that exists but exports nothing loads and fails at the
           # first call, so the ABI is asserted, not assumed.
           N=$(nm -D --defined-only "$DEST/libgs_ffi.so" | grep -c 'gs_ffi_mobile_' || true)

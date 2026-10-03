@@ -43,7 +43,10 @@ endif()
 
 # ---- sd + ocr wrappers ---------------------------------------------------
 add_library(gs_sd STATIC sd_wrapper/gs_sd_wrapper.cpp)
-target_link_libraries(gs_sd PUBLIC gs_abi)
+# ${CMAKE_DL_LIBS} is dlopen/dlsym/dladdr. It is REQUIRED and not optional: without
+# it the wrapper's symbols resolve against nothing and the link fails with an
+# undefined dlopen rather than anything naming the missing -ldl.
+target_link_libraries(gs_sd PUBLIC gs_abi ${CMAKE_DL_LIBS})
 target_include_directories(gs_sd PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/sd_wrapper)
