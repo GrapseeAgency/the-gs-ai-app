@@ -1270,12 +1270,30 @@ prime. A 0.5B model can pass all five and write nonsense between the answers.
 sdBackendName is 'sd.cpp:not-compiled'
 ```
 
-The library is behind `link_stable_diffusion`, default **off**, because linking it
-puts two different versions of ggml into one shared object: 574 identical
-`ggml_*` symbol names, four left undefined, and `dlopen` fails on a device. The
-numbers, the three failures in sequence, and the correct fix are in
-`ISSUE-LOG.md`. The test asserting `sdAvailable` is what turns that into a red
-run rather than a test that quietly passes because diffusion does nothing.
+**This diagnosis was right and the response to it was wrong.** sd.cpp was behind a
+`link_stable_diffusion` flag defaulted to **off**, so nothing ever fetched the sd
+package: `GS_SD_PREBUILT` went unset, `GS_SD_HAVE_SDCPP` stayed undefined, and
+the wrapper compiled its procedural-only branch. The reported `not-compiled` was
+therefore a self-fulfilling default rather than a discovery about sd.cpp.
+
+Turning the flag on did not help, because the flag meant "link sd.cpp INTO
+libgs_ffi.so" and linking is exactly what cannot work: two ggml versions, 574
+identical `ggml_*` names, none of them unique to llama.cpp, four left undefined,
+and `dlopen` failing on a device. The flag's own description said so and said what
+the fix was -- sd.cpp as its OWN shared object -- which is now done.
+
+**Option B**: `libgs_sd.so` carries sd.cpp and its ggml 0.25.3, shipped as a
+sibling of `libgs_ffi.so` and reached by `dlopen` with `RTLD_LOCAL`.
+`libgs_ffi.so` keeps llama.cpp and its ggml 0.17.0, statically linked as before.
+The flag is renamed `enable_sd_diffusion` and defaults to **on**, because a flag
+whose default is off does not measure the shipped design. Four loader paths were
+verified on host, raw output in `ISSUE-LOG.md`; the real 512x512 generation on
+arm64 is still owed and is what `sd0` asserts.
+
+The test asserting `sdAvailable` is what turns all of this into a red run rather
+than a test that quietly passes because diffusion does nothing. `sd0` now also
+asserts `backend.contains("dlopen")` rather than mere availability: available says
+a context exists, that string says the context came from the separate library.
 
 ### The target, stated against the numbers
 

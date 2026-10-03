@@ -29,17 +29,18 @@ on:
         required: false
         default: ""
         type: string
-      link_stable_diffusion:
+      enable_sd_diffusion:
         description: >-
-          Link stable-diffusion.cpp INTO libgs_ffi.so. OFF BY DEFAULT, and the
-          default is the finding rather than a preference: the two projects ship
-          two different versions of ggml, 574 of whose symbol names are identical,
-          and putting both in one .so leaves four of them undefined. dlopen then
-          fails on a device with "cannot locate symbol". Fixing that needs
-          stable-diffusion.cpp as its OWN shared object, which is not done. Set
-          this to true to reproduce the failure, or once that refactor lands.
+          Build and ship the diffusion path. ON BY DEFAULT, and the default is the
+          design rather than a preference: sd.cpp is packaged as its OWN shared
+          object, libgs_sd.so, shipped as a SIBLING of libgs_ffi.so and reached by
+          dlopen. It is not linked in, and it cannot be -- the two projects ship two
+          different versions of ggml, 574 of whose symbol names are identical and
+          none of them unique to llama.cpp, so link order alone decides which copies
+          win. Set this to false only to build a libgs_ffi.so with no diffusion at
+          all, which makes sd0 on a device fail closed rather than skip.
         required: false
-        default: "false"
+        default: "true"
         type: boolean
   push:
     branches: [native-runtime]
@@ -372,7 +373,14 @@ jobs:
       # above pulls `llamacpp-<abi>` and only that.
       # =========================================================================
       - name: Fetch the cross-compiled stable-diffusion.cpp for this ABI
-        if: ${{ inputs.link_stable_diffusion == true }}
+        # ON BY DEFAULT. This step used to sit behind a `link_stable_diffusion`
+        # flag defaulted to FALSE, which meant that on every push to this branch
+        # nothing fetched the sd package at all: GS_SD_PREBUILT went unset,
+        # GS_SD_HAVE_SDCPP stayed undefined, the wrapper compiled its
+        # procedural-only branch, and sd0 on a device could only ever report
+        # "sd.cpp:not-compiled". A flag that is off by default does not measure
+        # the shipped design; it measures an alternative nobody ships.
+        if: ${{ inputs.enable_sd_diffusion != false }}
         env:
           GH_TOKEN: ${{ github.token }}
           DEPS_RUN_ID: ${{ github.event.inputs.deps_run_id || github.event.workflow_run.id }}
@@ -958,12 +966,19 @@ jobs:
           #                             ggml_mul_mat_i8_tensorwise
           #   armeabi-v7a  (no SD)      exit 0, 0 denied
           # Sizes, for the record: 3,520,408 bytes without SD, 42,356,592 with.
-          # With link_stable_diffusion on, this is EXPECTED to fail and says why.
-          # It is left fatal rather than downgraded to a warning, because a
-          # check that can be silenced by a flag is a check that will be silenced
-          # by accident. The default is off, so the default build is green and the
-          # conflict is opt-in and reproducible.
-          echo "  link_stable_diffusion = ${{ inputs.link_stable_diffusion }}"
+          # THAT RESULT WAS THE POINT OF OPTION B, AND THIS IS NOW A REGRESSION GATE.
+          #
+          # When sd.cpp was LINKED into libgs_ffi.so the four denials above were the
+          # expected outcome and the step could not be made green without lying about
+          # it. Now libgs_ffi.so contains llama.cpp and its ggml 0.17.0 and nothing
+          # else, so it cannot possibly import an sd or ggml symbol it does not
+          # define: this check passes by construction, and if it ever reports a
+          # denial again then the two .so files have been collapsed back into one
+          # and the collision Option B exists to remove is back.
+          #
+          # It stays fatal. A check that can be silenced by a flag is a check that
+          # will be silenced by accident.
+          echo "  enable_sd_diffusion = ${{ inputs.enable_sd_diffusion }}"
           python3 "$GITHUB_WORKSPACE/.github/scripts/undefined_syms.py" "$SO" || {
             echo "::error::the .so imports symbols in a denied namespace that it does"
             echo "::error::not define. dlopen will fail on a device and nothing in this"
