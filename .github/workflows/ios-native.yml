@@ -1598,25 +1598,13 @@ jobs:
                exit 1 ;;
           esac
 
-          # EXPORT THE DEVICE PRODUCT, because later steps need the path and this
-          # step used to keep it to itself.
-          #
-          # ios-native 37099751974, job 111137574474: the App.app inventory step
-          # I added reported
-          #
-          #     ##[error]IOS_APP_PATH is unset or does not name a directory: ''
-          #
-          # because NOTHING EVER WROTE IOS_APP_PATH. The device build had run and
-          # printed `device product: YES` and `arch: arm64` in the very same job,
-          # so the bundle existed; only the handoff of its location was missing, and
-          # the upload step's `path: ${{ env.IOS_APP_PATH }}` was empty for the
-          # same reason. A step that verifies a build and does not publish where
-          # the build is makes every later step re-derive it, and re-derivation is
-          # how a verified artifact silently stops being reachable.
-          #
-          # Exported only AFTER the directory-name and architecture assertions, so
-          # the path is published only once it is known to be a real arm64 device
-          # product and not a simulator build wearing the same slice.
+          # Export the device product so later steps need not re-derive it.
+          # Run 37099751974: the App.app inventory found IOS_APP_PATH empty in a
+          # job that had already printed `device product: YES` and `arch: arm64`.
+          # Exported after the assertions, so only a real device slice is published.
+          # Kept short: a longer version of this comment pushed this run block
+          # past GitHub's 21000-char limit and the whole workflow stopped parsing
+          # (run 37101866762, "Exceeded max expression length 21000").
           echo "IOS_APP_PATH=$APP" >> "$GITHUB_ENV"
           echo "  exported IOS_APP_PATH=$APP"
 
