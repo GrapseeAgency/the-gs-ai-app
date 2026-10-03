@@ -3740,3 +3740,45 @@ purpose: a control that is not the shipped default measures the wrong thing.**
 `ios-native` follows too, URL, sha256, byte count and the copy into Application
 Support. **Both platforms ship the same model**, which they did not before this
 change was finished.
+
+
+---
+
+## OPEN ITEM, TRACKED: the Q4_0 default switch is PROVISIONAL on emulator evidence
+
+**This is an open action, not a footnote.** It is listed here so it cannot be
+lost when the decision that produced it is read months from now.
+
+> **Q4_0 default switch is provisional on emulator evidence. K-quant advantage
+> on real arm64 typically reverses. Re-verify on real arm64 hardware before this
+> default ships. If real hardware shows Q4_K_M wins on TTFT or quality, revert.**
+
+### Why it is provisional, in one paragraph
+
+The 50-prompt comparison (run 37118362666) put Q4_0 at 4.2200 +/- 0.2117 against
+Q4_K_M's 4.1600 +/- 0.2195 -- indistinguishable on that rubric -- while Q4_0 is
+4.9x-5.4x faster on TTFT on the same emulator. **Both halves of that were
+measured on an x86_64 emulator, CPU-only, with no BLAS.** The ordering it found is
+consistent with the known behaviour of the scalar unpacking path: `dequantize_row_q4_K`
+expands 6-bit sub-blocks with per-32-element scale/min pairs, while
+`dequantize_row_q4` is a flat int4-to-fp16 expansion and `dequantize_row_q8` is a
+scale and a copy. On a CPU with no vectorised kernel selected for the legacy
+layouts, that is exactly the advantage measured. On arm64 the NEON and
+dot-product kernels differ between the K and legacy layouts, and **the expected
+ordering there is the reverse of what was measured.**
+
+So the measurement is sound and the conclusion drawn from it is still
+configuration-specific. A decision that reads "Q4_0 is 5x faster" as a property of
+Q4_0 rather than of this emulator is the exact error this item exists to prevent.
+
+### What closing it requires
+
+- A real arm64 device, or an arm64 runner, executing the TTFT measurement for both
+  quantisations. **Blocked by item 3's permanent close: arm64-probe 36992975588,
+  121.3 min queued, `runner_name: null`; macos-15 `HV_UNSUPPORTED`.**
+- Until then the cheapest real-silicon proxy available to the operator is
+  `./scripts/bench-device.sh` (commit b3c77ad): attach a phone, one command, and it
+  writes `native/docs/DEVICE-BENCH-<serial>.md`.
+
+**Until this item is closed, the shipped default is a bet on emulator evidence,
+and the cost of it being wrong is a 5x regression on the phones that matter.**
