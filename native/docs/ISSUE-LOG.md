@@ -4283,3 +4283,80 @@ luminance statistics. `sd0` asserts `backend.contains("dlopen")` rather than mer
 context came from the separate library -- which is the entire design under test.
 It also fails closed on a missing checkpoint, so a skipped diffusion test cannot
 be mistaken for a passing one.
+
+
+---
+
+## Run 37134742711: checkpoint verified, then MY OWN latent compile error
+
+**Status: the whole pipeline worked right up to the Kotlin compiler. The break is
+mine, from `af5621e`, and no device run had happened since.**
+
+### Everything upstream of the test was correct
+
+    GS_SD_VERIFIED: true
+    GS_SD_ABSENT: false
+    GS_QUANT_MISSING:
+    all five fetch steps: ok
+
+The 882 MB SDXS-512 checkpoint downloaded and its checksum verified, the Q4_0
+control model was present, and the emulator booted (`sys.boot_completed`,
+`input keyevent 82`, animation scales zeroed). Then:
+
+    > Task :app:compileDebugAndroidTestKotlin FAILED
+    e: file:///.../androidTest/java/com/grapsee/gsai/GsNativeTest.kt:83:25
+         Unresolved reference 'File'.
+    * What went wrong:
+    Execution failed for task ':app:compileDebugAndroidTestKotlin'
+    64 actionable tasks: 61 executed, 3 from cache
+
+Zero tests ran. The uploaded-artifact step then reported the honest consequence:
+
+    ##[warning]No files were found with the provided path:
+    android/app/build/outputs/androidTest-results/ ... No artifacts will be uploaded.
+
+### Whose bug: mine, and from my own Q4_0 commit
+
+`af5621e` switched the shipped default to Q4_0 and, in the same pass, replaced a
+hardcoded filename in `GsNativeTest.kt`:
+
+    val f = File(dir, "${ModelCatalog.MODEL_0_5B.id}.gguf")
+
+That was the right change -- it is why three test files now read the catalogue
+instead of retyping the default. But it introduced a `File` use and
+`import java.io.File` was never added. It stayed latent only because no device run
+happened between `af5621e` and now.
+
+    GsNativeTest.kt            0 imports of java.io.File   <- was
+    DeviceVerificationTest.kt  1
+    QuantQuality50Test.kt      1
+
+So the change whose entire purpose was "a default written in one place and read
+from another is a suggestion" was itself committed without compiling. Fixed in
+`54abfd4`.
+
+### Checked, and stated with its limits
+
+All six `androidTest` files were checked for the same class of error across the
+types most often reached for without an import -- `File`, `IOException`,
+`ArrayList`, `HashMap`, `Base64`: **0 missing** now.
+
+That is a spot check over five names, and it is not a substitute for the
+compiler. The compiler is what found this one, twice now it has been the thing
+that caught my edits: first the sd.cpp linkage, now this. A five-name grep that
+passes is evidence of nothing beyond those five names, and it is recorded as such
+rather than presented as a gate.
+
+### One inefficiency noted, deliberately not changed
+
+Timeline from the log:
+
+    15:54:36  emulator begins booting (sys.boot_completed polling)
+    15:59:14  Gradle starts
+    15:59:25  compileDebugAndroidTestKotlin FAILED
+
+Roughly five minutes of emulator ran before a Kotlin error that a build-first
+ordering surfaces in about three, without an emulator at all. The fix is to build
+the APK and the androidTest APK before booting. It is a real improvement and it is
+not the blocker, so it is recorded rather than bundled into a run that is already
+dispatched against the green `android-native` 37134268637.
