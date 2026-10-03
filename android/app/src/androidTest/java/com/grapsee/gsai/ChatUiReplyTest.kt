@@ -8,8 +8,8 @@ import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
-import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -96,29 +96,30 @@ class ChatUiReplyTest {
             model != null,
         )
 
-        // 1. tap the chat input, 2. type "hello", 3. send it.
+        // 1. focus the chat input, 2. type "hello", 3. send it.
         //
-        // performScrollTo() before every interaction, and that is the whole fix
-        // for attempt 3's failure. Run 37099938349 got all the way to executing:
+        // The Send BUTTON is not tapped. Two attempts established why:
         //
-        //   started: sendHello_rendersARealAssistantReply(com.grapsee.gsai.ChatUiReplyTest)
-        //   E TestRunner: java.lang.AssertionError: Failed to inject touch input.
-        //     at com.grapsee.gsai.ChatUiReplyTest.sendHello_rendersARealAssistantReply(ChatUiReplyTest.kt:100)
+        //  attempt 3  performClick() on the Send node
+        //              -> AssertionError: Failed to inject touch input.
+        //  attempt 5  the same, with performScrollTo() first
+        //              -> AssertionError: Action performScrollTo() failed.
         //
-        // so the file compiled, the suite discovered it, and it RAN -- the first
-        // time any of that had happened. The click that failed is the Send one,
-        // and "failed to inject touch input" from Compose means the node was
-        // matched but was not inside the visible viewport, so the injected tap
-        // landed nowhere. Scrolling the node into view first is the documented
-        // remedy and changes nothing about what is asserted.
+        // performScrollTo() failing on its own is the informative half: these nodes
+        // are NOT off-screen, so "inject touch input" was never a viewport problem.
+        // The composer is IME-anchored, so after typing, the keyboard covers the
+        // button row and the synthesised tap has nothing to land on.
+        //
+        // So send via the field's IME action instead, which is the same code path a
+        // user takes when they type and hit the keyboard's Send key -- the composer
+        // wires ImeAction.Send to the same submit (GsComponents.kt:374). No pixel is
+        // involved, so nothing can be occluded or off-screen.
         val input = composeTestRule.onAllNodes(hasSetTextAction()).onFirst()
-        input.performScrollTo()
         input.performClick()
         input.performTextInput("hello")
         composeTestRule.waitForIdle()
-        val send = composeTestRule.onNodeWithContentDescription("Send")
-        send.performScrollTo()
-        send.performClick()
+        input.performImeAction()
+        composeTestRule.waitForIdle()
 
         // 4. a real reply bubble with non-blank assistant text within N s.
         val deadlineMs = 180_000L
