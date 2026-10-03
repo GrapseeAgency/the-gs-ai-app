@@ -4220,3 +4220,66 @@ No `libgs_sd.so` has reached a device yet, and no 512x512 PNG has been produced 
 real diffusion. This run got the two libraries to link side by side, which is the
 last thing that could be settled without hardware. The next run is the first that
 can say whether generation works, and sd0 fails closed on all of it.
+
+
+---
+
+## Run 37134268637: BOTH `.so` files green, arch-checked, 5/5 exports, 0 denied
+
+**Status: Option B is built, packaged and symbol-verified for arm64-v8a and
+x86_64. Device generation dispatched as 37134742711 and still owed.**
+
+`android-native` 37134268637, dispatched against the green deps run 37133353879.
+Every step green on both ABIs, including `Verify the artifact`, which is where the
+Option B gates live. Verbatim from the x86_64 job:
+
+    copied to .../dist/android/x86_64/libgs_ffi.so
+    .../dist/android/x86_64/libgs_ffi.so: ELF 64-bit LSB shared object, x86-64
+    libgs_sd.so: .../native/prebuilts/sd-android-x86_64/lib/libgs_sd.so
+                 -> .../dist/android/x86_64/libgs_sd.so
+    libgs_sd.so arch: x86_64 confirmed
+    sd entry points exported: 5 (5 required)
+    gs_ffi_mobile_* exported: 18, ABI declares: 18
+    309 imported, 36 defined, 137 unresolved (0 denied, 137 other), 0 line(s) unparsed
+    path: dist/android/x86_64/
+
+### Each line is a different claim
+
+| line | what it rules out |
+|---|---|
+| `sd entry points exported: 5 (5 required)` | A `libgs_sd.so` that opens and then fails on first call. This is the gate that would catch sd.cpp being rebuilt without `-DSD_BUILD_SHARED_LIB` visibility. |
+| `libgs_sd.so arch: x86_64 confirmed` | An arm64 `libgs_sd.so` beside an x86_64 `libgs_ffi.so`, which loads and then dies on the first call and turns every diffusion test into a skip. |
+| `0 denied` | **The regression.** That check could not pass while sd.cpp was linked in; its own comment recorded `x86_64 (SD linked) exit 1, 4 denied: ggml_sage_attn, ggml_prec_set_acc, ggml_quantize_i8_convrot, ggml_mul_mat_i8_tensorwise`. It passes now because `libgs_ffi.so` holds llama.cpp and its ggml 0.17.0 and nothing else, so it cannot import an sd or ggml symbol it does not define. A denial here would mean the two libraries had been collapsed back into one. |
+| `18, ABI declares: 18` | The mobile ABI is unchanged by all of the above -- the fix did not quietly cost a symbol. |
+| `path: dist/android/x86_64/` | **The silent one.** A separate `.so` that is not a SIBLING is the single way this design fails while every other check stays green: the build is fine, the exports are right, and generation returns `sd.cpp:unloadable` on a device only. One upload path, one directory, both files. |
+
+That last row is why the upload path is `dist/android/<abi>/` and not two separate
+artifacts. Splitting them would make the sibling relationship a convention rather
+than a property of the layout.
+
+### Symbol-level proof the two ggml versions never meet
+
+From the link line the step captures on failure (`build-logs-x86_64.zip`), which
+is how the previous run's swallowed cargo error was finally read:
+
+    -lgs_llama -lllama -lggml -lggml-cpu -lggml-base
+    -lgs_abi -lgs_sd -lgs_mobile -lgs_batch
+    -lc++_shared -ldl
+
+llama.cpp and its ggml on one line; `gs_sd` (the wrapper) present with `-ldl` and
+**no sd.cpp archive anywhere**. `dlopen`/`dlsym`/`dladdr` resolve inside
+`libgs_ffi.so`; sd.cpp's own copy of ggml lives in a different file and is reached
+only by name at runtime, with `RTLD_LOCAL` so it cannot satisfy a llama reference.
+
+### Still owed, and it is the only part left
+
+Nothing has run this on a device. `android-device` 37134742711 was dispatched
+with `native_run_id=37134268637`, `deps_run_id=37133353879`, `abi=x86_64`.
+
+What it must show for this item to close: `SD0 backend: sd.cpp:dlopen` (not
+`not-compiled`, not `unloadable`), a 512x512 PNG that decodes, and non-blank
+luminance statistics. `sd0` asserts `backend.contains("dlopen")` rather than mere
+`sdAvailable`, because available says a context exists and the string says the
+context came from the separate library -- which is the entire design under test.
+It also fails closed on a missing checkpoint, so a skipped diffusion test cannot
+be mistaken for a passing one.
