@@ -484,11 +484,23 @@ jobs:
           }
           echo "header: $(wc -c < "$SD_ROOT/include/stable-diffusion.h") bytes"
 
-          # ALL FOUR ARCHIVES, because build.rs links them in a fixed order:
-          # stable-diffusion -> ggml -> ggml-cpu -> ggml-base. A missing base
-          # archive produces a wall of undefined ggml symbols that names neither
-          # the cause nor the file, so it is checked here where the cause is known.
-          # THE STEMS ARE `stable-diffusion`, NOT `libstable-diffusion`.
+          # THE GGML ARCHIVES ONLY, and `stable-diffusion` is NOT among them any
+          # more. It WAS the first of four, because build.rs linked them in a fixed
+          # order: stable-diffusion -> ggml -> ggml-cpu -> ggml-base. build.rs
+          # now links NOTHING (Option B: sd.cpp is dlopen'd, because its ggml
+          # 0.25.3 and llama.cpp's 0.17.0 have 574 names in common and zero that
+          # are unique to llama.cpp, so link order alone decides the winner).
+          #
+          # The three ggml archives are still built STATIC and still travel, because
+          # sd.cpp's shared branch forces BUILD_SHARED_LIBS OFF for ggml and so
+          # absorbs them INTO libgs_sd.so. They are checked because they are the
+          # payload of that .so: a missing member surfaces as undefined ggml symbols
+          # at dlopen on a device, naming neither the cause nor the file. The .so
+          # itself is checked separately, further down, for arch and for its five
+          # entry points.
+          #
+          # A fifth historical note, kept because it is the reason this list is
+          # written the way it is: the stems are `ggml`, NOT `libggml`.
           #
           # This loop read `test -f "$SD_ROOT/lib/lib$A.a"` with A already starting
           # with `lib`, so it looked for liblibggml-base.a and reported all four
@@ -513,14 +525,14 @@ jobs:
           # So the stems are read from one place rather than retyped, and `lib` is
           # added exactly once.
           MISSING=""
-          for A in stable-diffusion ggml ggml-cpu ggml-base; do
+          for A in ggml ggml-cpu ggml-base; do
             test -f "$SD_ROOT/lib/lib$A.a" || MISSING="$MISSING $A.a"
           done
           if [ -n "$MISSING" ]; then
             echo "::error::$SD_ROOT/lib is missing:$MISSING"
-            echo "::error::The link order is stable-diffusion, ggml, ggml-cpu, ggml-base; a"
-            echo "::error::missing member of that chain surfaces as undefined ggml symbols"
-            echo "::error::in the .so with nothing to name the cause."
+            echo "::error::These three are built STATIC and absorbed into libgs_sd.so, so"
+            echo "::error::a missing one surfaces as undefined ggml symbols at dlopen on"
+            echo "::error::the device, with nothing to name the cause."
             # GUARDED, AND IT COST THE DIAGNOSTIC ITSELF. `ls -1 "$SD_ROOT/lib"` on
             # a directory that does not exist exits 2, `set -e` killed the step
             # there, and the run ended:
