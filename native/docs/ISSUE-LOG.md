@@ -3912,3 +3912,122 @@ sd0 asserts.
 Verified locally before committing: `elf_machine.py /usr/lib/libc.so.6 x86_64`
 exits 0 and the same file against `arm64-v8a` exits 1 naming the mismatch, so the
 gate refuses rather than silently passing.
+
+
+---
+
+## BLOCKER 1, BLOCKING SUB-ITEM: android-deps could never build sd.cpp (attempt six)
+
+**Status: cause found and reproduced on host, fix implemented and verified on
+host, pushed. Real arm64 generation still owed.**
+
+### What CI actually said, raw
+
+`android-deps` run **37131858719**, the SHA that first built sd.cpp SHARED, failed
+in 3m10s. Both `stable-diffusion.cpp` jobs red; the other six jobs green
+(`tesseract`, `onnxruntime`, four `llama.cpp`). The failing log, verbatim:
+
+    CMake Error at thirdparty/libwebp/CMakeLists.txt:204 (add_library):
+      Cannot find source file:
+        /sources/android/cpufeatures/cpu-features.c
+    CMake Error at thirdparty/libwebp/CMakeLists.txt:204 (add_library):
+      No SOURCES given to target: cpufeatures-webp
+    CMake Generate step failed.  Build files cannot be regenerated correctly.
+    ##[error]Process completed with exit code 1.
+
+Note what this is NOT. Not `-DSD_BUILD_SHARED_LIBS=ON` -- configure got as far as
+the GENERATE step, so every flag was accepted. Not a missing submodule -- attempt 2
+of five was that, and `src-sd/ggml/CMakeLists.txt` was asserted present before this
+step. Not an SDK or toolchain limitation. It is one upstream out-of-tree configure
+defect in a vendored library.
+
+This is attempt three's defect unchanged. The job comment already recorded five
+attempts and named the sixth: *"patch thirdparty/libwebp/CMakeLists.txt so the
+cpufeatures-webp target points at a real source, rather than deleting the
+reference."* This took that branch rather than repeating the five.
+
+### Reproduced on host first, which is what made the fix cheap
+
+A minimal harness -- `ANDROID ON`, `ANDROID_NDK` pointing at an empty directory,
+`add_subdirectory` of the vendored libwebp -- reproduces CI's failure exactly:
+
+    CMake Error at .../thirdparty/libwebp/CMakeLists.txt:204 (add_library):
+      /tmp/opencode/wp/empty/sources/android/cpufeatures/cpu-features.c
+    CMake Error at .../thirdparty/libwebp/CMakeLists.txt:204 (add_library):
+      No SOURCES given to target: cpufeatures-webp
+
+Same file, same line 204, same two errors, without a 70-minute CI round trip.
+
+### The fix: one added condition, no deletion
+
+    - if(ANDROID)
+    + if(ANDROID AND EXISTS "${ANDROID_NDK}/sources/android/cpufeatures/cpu-features.c")
+          include_directories(${ANDROID_NDK}/sources/android/cpufeatures)
+
+Deletion is what attempt five tried, and it broke sd.cpp's top-level CMakeLists
+instead -- `CMake Error at CMakeLists.txt:60 (endif)`. So nothing is removed.
+
+The added condition routes to the `else` branch two lines below, which already
+sets `HAVE_CPU_FEATURES_H 0`: libwebp then compiles the portable
+feature-detection path it compiles on every non-Android host. On an NDK old
+enough to still ship that directory, behaviour is bit-for-bit unchanged. The
+condition cannot pass vacuously, because it names the exact file whose absence is
+the failure -- which is the property a comment-based patch would not have.
+
+### Verified on host, including the half that matters
+
+    reproduce    configure with ANDROID=ON, ANDROID_NDK=<empty>
+                 -> the two CMake Errors above
+    patched      same command, same empty dir
+                 -> "-- Build files have been written to: ..."
+    built        cmake --build -> 227/227, exit 0
+
+And that it is BEHAVIOUR-NEUTRAL rather than merely quieter -- configure and build
+passing is only half the claim:
+
+    generated webp/config.h:              /* #undef HAVE_CPU_FEATURES_H */
+    cpu.c.o undefined Android* refs:      0
+    libwebp.a undefined cpu-features refs: 0
+
+`cpu.c` is the file that would have referenced them:
+`thirdparty/libwebp/src/dsp/cpu.c:22 #include <cpu-features.h>` and `:173
+const AndroidCpuFamily cpu_family`. With the flag off both compile out, so the
+`cpufeatures-webp` target was providing nothing that the build actually needed.
+
+### The patch script refuses to no-op
+
+`.github/scripts/patch_sd_libwebp.py`, four paths tested against real trees:
+
+| case | result | exit |
+|---|---|---|
+| unpatched tree | patches, prints the new guard | 0 |
+| same tree again | "already patched", no double-patch | 0 |
+| file missing | names candidate CMakeLists.txt files | 1 |
+| guard renamed by upstream | lists every ANDROID/cpufeatures line it found | 1 |
+
+The last two leave the tree **byte-identical**, verified with `cmp`. A silent
+no-op here would print a green step directly above the identical CMake error,
+which is worse than having no patch step at all -- so refusal is the behaviour
+that matters, more than the patching.
+
+### One thing checked because it has bitten me before
+
+The step ends with `grep ... | sed -n '1,20p' | sed 's/^/    /'` under
+`set -euo pipefail`. `head` in that position is a 141 SIGPIPE that kills the step;
+`sed -n '1,20p'` is not. Measured, not assumed:
+
+    cat 2,000,000-line file | head -20      -> producer SIGPIPE, subshell dies
+    cat 2,000,000-line file | sed -n '1,20p' -> exit 0
+
+`sed` reads to EOF unless given an explicit `q`. The lint reports no finding on
+this step, which agrees.
+
+### Still owed
+
+The host tree is x86-64 Linux. The patched sd.cpp has not been configured with the
+Android toolchain file, because there is no NDK on this host. So what attempt six
+proves is that the upstream configure defect is gone; what it does not prove is
+that sd.cpp compiles for arm64 with `SD_BUILD_SHARED_LIBS=ON`, that
+`libgs_sd.so` is produced, or that it exports the five entry points. Those are
+the next CI run, and `android-native.yml` will refuse to package a `libgs_sd.so`
+that is the wrong architecture or is missing any of the five.

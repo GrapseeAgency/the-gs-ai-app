@@ -776,6 +776,51 @@ jobs:
             ls -la src-sd/ggml | sed -n '1,10p'
             exit 1
           }
+
+      # ATTEMPT SIX. It starts from the untried idea that attempt five's own
+      # comment recorded, rather than repeating the five before it.
+      #
+      # The cause is unchanged since attempt three and is not ours: the vendored
+      # libwebp builds a `cpufeatures-webp` target out of
+      #   ${ANDROID_NDK}/sources/android/cpufeatures/cpu-features.c
+      # and Google removed that directory from the NDK years ago, so the path
+      # resolves to nothing and CMake's GENERATE step dies with
+      #
+      #   CMake Error at thirdparty/libwebp/CMakeLists.txt:204 (add_library):
+      #     Cannot find source file: .../sources/android/cpufeatures/cpu-features.c
+      #   CMake Error at thirdparty/libwebp/CMakeLists.txt:204 (add_library):
+      #     No SOURCES given to target: cpufeatures-webp
+      #
+      # That pair of errors is run 37131858719's verbatim, on the same file and
+      # the same line 204, so this is the same defect and not a new one.
+      #
+      # The fix is ONE added condition and no deletion, because attempt five
+      # deleted the vendored directory and commented the reference out and that
+      # broke sd.cpp's top-level CMakeLists instead: `CMake Error at
+      # CMakeLists.txt:60 (endif)`. Guarding the block with
+      #
+      #   AND EXISTS "<the file it references>"
+      #
+      # does what the else branch two lines below already does: with the file
+      # absent, HAVE_CPU_FEATURES_H falls to the 0 the non-Android path has
+      # always set and libwebp compiles its portable detection branch. On an
+      # ancient NDK that still ships the directory, behaviour is unchanged. The
+      # condition cannot pass vacuously -- it names the exact file whose absence
+      # is the failure.
+      #
+      # The patch script carries its own rationale, the full before/after, and
+      # its own host verification. It refuses to no-op: if the file is missing or
+      # upstream moved the block it exits 1 with the tree untouched and lists the
+      # ANDROID/cpufeatures lines it did find. A silent no-op here would print a
+      # green step directly above the identical CMake error, which is worse than
+      # no patch step at all.
+      - name: Patch vendored libwebp for NDKs without sources/android/cpufeatures
+        run: |
+          set -euo pipefail
+          python3 "$GITHUB_WORKSPACE/.github/scripts/patch_sd_libwebp.py" src-sd
+          echo "--- the patched area, verbatim, so the log carries the evidence ---"
+          grep -n 'ANDROID\|cpufeatures' src-sd/thirdparty/libwebp/CMakeLists.txt \
+            | sed -n '1,20p' | sed 's/^/    /'
       - name: Build for arm64, CPU only
         run: |
           set -euo pipefail
