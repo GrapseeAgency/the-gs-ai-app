@@ -2,6 +2,7 @@ package com.grapsee.gsai
 
 import android.content.Context
 import android.os.Environment
+import com.grapsee.gsai.data.local.ModelCatalog
 import com.grapsee.gsai.native.GsNative
 import com.grapsee.gsai.native.GsNativeLoader
 import androidx.test.ext.junit.runners.AndroidJUnit4
