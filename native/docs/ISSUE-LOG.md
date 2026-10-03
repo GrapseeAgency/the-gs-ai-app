@@ -3534,3 +3534,73 @@ cleanly when their precondition (provisioned model / test mode) is absent,
 so wiring them in today changes no existing result. The first real run must
 come from a machine with an Android SDK and/or Xcode, and its result — pass,
 skip, or a real red — goes in the run record for Blocker 4.
+
+
+---
+
+## BLOCKER 5: DONE, with the unsigned device App.app inventoried
+
+`ios-native` **37101990669**, head `2010643`, **green**. Verbatim from the job log:
+
+    === size ===
+    23M     .../Build/Products/Debug-iphoneos
+    23.13 MiB
+
+    === bundle layout (top level) ===
+    __preview.dylib       16456
+    App                   72688
+    App.debug.dylib   23876304
+    AppIcon60x60@2x.png     8057
+    AppIcon76x76@2x~ipad.png 10924
+    Assets.car           247512
+    Info.plist             1957
+    PkgInfo                   8
+
+    === embedded frameworks ===
+    (no Frameworks directory)
+
+    === EVERY Mach-O binary inside the bundle, and its architecture ===
+    __preview.dylib   Mach-O 64-bit dynamically linked shared library arm64  -> arm64 OK
+    App               Mach-O 64-bit executable arm64                          -> arm64 OK
+    App.debug.dylib   Mach-O 64-bit dynamically linked shared library arm64  -> arm64 OK
+    Mach-O binaries inspected: 3
+
+    === codesign --verify --deep, expected to FAIL on signing only ===
+    codesign exit: 1
+    VERIFIED: the only problem is the missing signature, ...
+    === device .app inventory COMPLETE ===
+
+Artifact `ios-device-app-unsigned` is published. **This is the bar the operator
+set: a `.app` bundle that would ship if it had a signing identity.** It is not a
+signed `.ipa`, and that needs the Apple Developer account.
+
+**`(no Frameworks directory)` is a real property, not a gap.** `gs_ffi` is
+statically linked, so the engine lives inside `App.debug.dylib` -- which is
+23.9 MB of the 23.13 MiB total. Anyone asking "is the engine in the app" must
+look there, not in `Frameworks/`. This is a Debug configuration; a Release build
+with the prebuilt llama.cpp would differ in size but not in architecture.
+
+### THREE FAILURES TO GET HERE, all mine, all with raw evidence
+
+1. **`ios-native 37065002554`** -- failed by this repository's OWN lint, on my OWN
+   new step: `FAIL ios-native.yml step='Inventory the unsigned device App.app'
+   line 64`, `printf ... | sed ... | head -20`, `sed: stdout: Broken pipe`. A bare
+   pipeline ending in an early-exiting consumer: `head` closes the pipe, the
+   producer takes SIGPIPE and exits 141, and under `bash -e` the step dies naming
+   neither the line nor the cause. Fixed by bounding the INPUT with `sed -n`.
+   **The check that exists to catch this caught me writing it.**
+2. **`ios-native 37099751974`** -- `##[error]::IOS_APP_PATH is unset or does not
+   name a directory: ''`, in a job that had already printed `device product: YES`
+   and `arch: arm64`. **Nothing ever wrote `IOS_APP_PATH`.** The step that resolved
+   the bundle verified it and kept its location to itself, so my inventory step
+   read an empty string and the upload step's `path:` was empty too. A step that
+   verifies a build and does not publish WHERE the build is makes every later
+   step re-derive it.
+3. **`ios-native 37101866762`** -- the whole workflow stopped PARSING:
+   `Invalid Argument - failed to parse workflow: (Line: 1444, Col: 14): Exceeded
+   max expression length 21000`. My 1.1 KB comment had grown the `Assert the device
+   app...` run block to **21207** characters. Trimmed to 20888. **The failure mode
+   of an over-long comment is that the entire workflow stops dispatching, which
+   looks like nothing whatsoever to do with a comment.** The longest surviving
+   block is `Assemble the xcframework` at 21007, which has always parsed, so the
+   real ceiling is above that and I have not measured where it is.
