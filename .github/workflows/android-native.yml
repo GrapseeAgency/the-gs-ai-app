@@ -829,9 +829,24 @@ jobs:
           # only. The wrapper tries the soname first (needs the app's lib dir in
           # the linker namespace) and then dladdr's its own path (unconditional),
           # so a sibling is what makes it work on both.
+          # GS_SD_PREBUILT, NOT SD_ROOT. SD_ROOT is a shell variable local to the
+          # Fetch step; GS_SD_PREBUILT is what that step writes to $GITHUB_ENV, so
+          # it is the only one of the two that exists in a later step. This is what
+          # run 37133800731 died on, under `set -u`:
+          #     line 197: SD_ROOT: unbound variable
+          #     ##[error]Process completed with exit code 1.
+          #
+          # The `:-` default is not defensive noise: with enable_sd_diffusion off the
+          # Fetch step never runs, GS_SD_PREBUILT is never written, and a bare
+          # $GS_SD_PREBUILT would turn "diffusion is disabled" into an unbound-variable
+          # crash naming neither the flag nor the intent. The `:+` on the candidates
+          # is for the same reason: an unset SD_ROOT must expand to no argument at
+          # all rather than to the empty string, which -f would accept and then try
+          # to read as a file called "/libgs_sd.so".
+          SD_ROOT="${GS_SD_PREBUILT:-}"
           SD_SO_SRC=""
-          for CANDIDATE in "$SD_ROOT/lib/libgs_sd.so" "$SD_ROOT/libgs_sd.so"; do
-            if [ -f "$CANDIDATE" ]; then SD_SO_SRC="$CANDIDATE"; break; fi
+          for CANDIDATE in "${SD_ROOT:+$SD_ROOT/lib/libgs_sd.so}" "${SD_ROOT:+$SD_ROOT/libgs_sd.so}"; do
+            if [ -n "$CANDIDATE" ] && [ -f "$CANDIDATE" ]; then SD_SO_SRC="$CANDIDATE"; break; fi
           done
           if [ -n "$SD_SO_SRC" ]; then
             cp "$SD_SO_SRC" "$DEST/libgs_sd.so"
@@ -858,7 +873,7 @@ jobs:
               exit 1
             fi
           else
-            echo "::warning::no libgs_sd.so found under $SD_ROOT, so diffusion stays"
+            echo "::warning::no libgs_sd.so found under ${SD_ROOT:-<GS_SD_PREBUILT unset>}, so diffusion stays"
             echo "::warning::unavailable on this ABI. gs_sd_backend_name will report"
             echo "::warning::sd.cpp:not-compiled and sd0 will fail -- which is correct,"
             echo "::warning::not a skip."

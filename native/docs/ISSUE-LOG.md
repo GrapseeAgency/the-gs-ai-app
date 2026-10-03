@@ -4126,3 +4126,97 @@ nothing has confirmed it exports the five entry points on a real toolchain. The
 next run settles all three, and `android-native.yml` will refuse to package a
 `libgs_sd.so` that is the wrong architecture or missing any of the five -- so a
 failure there is a gate working, not a gate untested.
+
+
+---
+
+## Run 37133800731: the two `.so` BOTH BUILT; the step then died on an unbound variable
+
+**Status: `android-deps` green and `libgs_sd.so` real; `libgs_ffi.so` links
+against it. One variable-scope bug left, now fixed and tested.**
+
+### android-deps 37133353879 -- GREEN, first time in six attempts
+
+    -- Configuring done (5.3s)
+    -- Generating done (0.1s)
+    -- Build files have been written to: .../build
+    [113/120] Linking CXX shared library bin/libstable-diffusion.so
+    archives found: 3
+      build/ggml/src/libggml-cpu.a -> dist/lib/libggml-cpu.a (1705350 bytes)
+    build/bin/libstable-diffusion.so -> dist/lib/libgs_sd.so (41937944 bytes)
+    sd.cpp/ggml NEEDED entries: 0 (0 is expected: both are inside)
+    packaged header: 20473 bytes
+      header declares new_sd_ctx / free_sd_ctx / sd_ctx_params_init /
+                     sd_img_gen_params_init / generate_image
+    44M  dist
+    Artifact stablediffusion-x86_64 successfully uploaded! ID 11277613657
+
+Three things in there are the design working, not just a green tick:
+
+- **`archives found: 3`** -- exactly the three stems the rewritten gate requires.
+  `libstable-diffusion.a` is gone because it is now the `.so`.
+- **`sd.cpp/ggml NEEDED entries: 0`** -- `libgs_sd.so` carries its own ggml
+  0.25.3 inside itself. A non-zero count here would mean Option B had quietly
+  become Option A again with an external dependency.
+- **Both ABIs, both SHARED.** `x86_64` is what the emulator can actually load, so
+  this is the one that matters for proving generation.
+
+### android-native 37133800731 -- it COMPILED
+
+All four ABIs failed, identically, at `Build libgs_ffi.so`. The real error was not
+in the job log -- cc-rs and cargo swallow it, which this file already documents --
+so it came out of the `build-logs-x86_64.zip` artifact, where the step deliberately
+captures the linker's own output. Before the failure:
+
+    Finished `release` profile [optimized] target(s) in 8.30s
+    dist/android/x86_64/libgs_ffi.so: ELF 64-bit LSB shared object, x86-64
+    === DT_NEEDED completeness check ===
+      every dlopen dependency is accounted for
+      build log confirms a llama.cpp backend is compiled in
+
+And from the captured link line, the thing Option B exists to produce:
+
+    -lgs_llama -lllama -lggml -lggml-cpu -lggml-base     <- llama.cpp + its ggml
+    -lgs_abi -lgs_sd -lgs_mobile -lgs_batch
+    -lc++_shared -ldl
+
+**No sd.cpp archive anywhere on that line, and `-ldl` present** -- `gs_sd` links
+`${CMAKE_DL_LIBS}` now, so `dlopen`/`dlsym`/`dladdr` resolve inside
+`libgs_ffi.so` while sd.cpp itself stays outside it. That is the two-library
+design, in one line of linker invocation.
+
+The artifact fetch also worked, from the log:
+
+    native/prebuilts/sd-android-x86_64/lib/libgs_sd.so
+
+### The failure, raw
+
+    line 197: SD_ROOT: unbound variable
+    ##[error]Process completed with exit code 1.
+
+My bug, and the same class as the continuation-comment one: **scope**. I put the
+`libgs_sd.so` copy in the `Build libgs_ffi.so` step, but `SD_ROOT` is a shell
+variable local to the `Fetch stable-diffusion.cpp` step. What that step publishes
+to later steps is `GS_SD_PREBUILT`, via `$GITHUB_ENV`.
+
+Fixed, and the fix is tested in all three states rather than reasoned about:
+
+    GS_SD_PREBUILT set, .so present   -> FOUND: /tmp/pkg/lib/libgs_sd.so   exit 0
+    GS_SD_PREBUILT set, .so absent    -> not found (SD_ROOT='/tmp/nowhere') exit 0
+    GS_SD_PREBUILT UNSET             -> not found (SD_ROOT='<unset>')       exit 0
+    the OLD form, same three cases   -> line 3: SD_ROOT: unbound variable  (all three)
+
+The `:-` on the right-hand side is load-bearing for the third case: with
+`enable_sd_diffusion` off, the Fetch step never runs, `GS_SD_PREBUILT` is never
+written, and a bare `$GS_SD_PREBUILT` would convert "diffusion is disabled" into
+an unbound-variable crash that names neither the flag nor the intent. The `:+` on
+the candidates matters for the same reason -- an unset `SD_ROOT` has to expand to
+no argument at all, not to an empty string that `-f` accepts and then tries to
+open as `/libgs_sd.so`.
+
+### What is still owed
+
+No `libgs_sd.so` has reached a device yet, and no 512x512 PNG has been produced by
+real diffusion. This run got the two libraries to link side by side, which is the
+last thing that could be settled without hardware. The next run is the first that
+can say whether generation works, and sd0 fails closed on all of it.
