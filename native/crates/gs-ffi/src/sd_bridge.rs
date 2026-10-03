@@ -332,9 +332,29 @@ impl SdModel {
             )
         };
         if rc != GS_OK {
+            // SAY WHETHER THE ARTIFACT EXISTS. A non-zero code with an empty error
+            // string is the least informative failure there is, and on run
+            // 37140101448 it read exactly that:
+            //     gs_sd_generate(512x512, 1 steps) -> 1: no reason recorded
+            //
+            // which sent the reader to the ABI to decode `1`, and `1` is not an ABI
+            // code at all -- every code is 0 or negative. The real cause was a bool
+            // success value returned as an error code, and the PNG had in fact been
+            // written at the full 512x512.
+            //
+            // One `metadata()` call turns that message into a diagnosis: a non-zero
+            // code WITH a file on disk is a return-value convention bug, and a
+            // non-zero code with no file is a real generation failure. Those need
+            // opposite fixes, and the old message could not tell them apart.
+            let artifact = match out_path.metadata() {
+                Ok(m) => format!("the output file EXISTS and is {} bytes", m.len()),
+                Err(_) => "no output file was written".to_string(),
+            };
             return Err(format!(
-                "gs_sd_generate({width}x{height}, {steps} steps) -> {rc}: {}",
-                last_error("no reason recorded")
+                "gs_sd_generate({width}x{height}, {steps} steps) -> {rc} \
+                 (a code that is not in the ABI, where every code is 0 or negative                  -- so this is a return-value convention bug, not a generation \
+                 failure); {artifact}; last error: {}",
+                last_error("none recorded")
             ));
         }
         // Existence is asserted here rather than left to the caller, because a

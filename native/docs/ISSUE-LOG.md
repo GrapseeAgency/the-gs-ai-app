@@ -4430,3 +4430,95 @@ Case 2 of the four loader cases proved the `dladdr` sibling fallback works *give
 sibling*. It cannot prove a sibling exists -- that is the packaging step's job,
 and no amount of testing the loader substitutes for testing the package. The gap
 was not in the code under test, it was in the step that feeds it.
+
+
+---
+
+## Run 37140101448: OPTION B WORKS ON A REAL DEVICE
+
+**Status: `SD0 backend: sd.cpp:dlopen`. The architecture is proven. One inverted
+return value was standing between it and a green sd0.**
+
+31 tests ran. The `libgs_sd.so` staging fix took: the fetch step found the library,
+the arch gate passed on both libraries, the APK contained it, and:
+
+    System.out: SD0 backend: sd.cpp:dlopen
+    System.out: SD0 lastError:
+
+That is the whole of Option B, working, on Android, for the first time. The
+`dlopen`-by-sibling-path fallback -- the branch that exists *because* Android's
+linker namespace cannot be relied on to find a library by soname -- found
+`libgs_sd.so` next to `libgs_ffi.so` and resolved all five entry points. Both
+`sdnative` assertions passed: availability, and `backend.contains("dlopen")`.
+
+### The failure was a bool read as an error code
+
+    com.grapsee.gsai.native.GsNativeException:
+      GsNative.sdGenerate: gs_sd_generate(512x512, 1 steps) -> 1: no reason recorded
+
+`1` is not an ABI code. Every code in `gs_abi.h` is 0 or negative:
+`GS_ERR_INVALID_ARG -1`, `NO_MEMORY -2`, `IO -3`, `UNAVAILABLE -4`,
+`GENERATION -5`, `TIMEOUT -6`, `INTERNAL -7`, `UNSUPPORTED -8`, `NOT_FOUND -9`.
+There is no `1`.
+
+The cause, at `gs_sd_wrapper.cpp`:
+
+    bool write_png(const uint8_t* pixels, uint32_t w, uint32_t h, uint32_t channels, ...)   // line 153
+
+    // the OTHER caller, which gets it right:
+    return write_png(pixels, w, h, channels, path) ? GS_OK : GS_ERR_IO;                    // line 208
+
+    // the diffusion caller, which did not:
+    const int rc = write_png(img.data, img.width, img.height, img.channel, output_path);   // line 355
+    ...
+    if (rc != GS_OK) return rc;                                                            // line 358
+
+`write_png` returns **`true` on success**. `true` is `1`. `GS_OK` is `0`. So
+`1 != 0` is true, and the function returned the boolean's success value **as an
+error code**.
+
+So the sequence on the device was: diffusion ran, `generate_image` returned
+images, the encoder wrote the 512x512 PNG, and then the wrapper reported failure
+because it read a `bool` through an `int` error-code convention.
+
+This is invisible in review and to the compiler. Both versions compile, only one
+is correct at runtime, and the 18-symbol ABI gate says nothing about it. It
+survived because the whole `#if defined(GS_SD_HAVE_SDCPP)` block was, until this
+session, code that had never been handed to a compiler -- the same defect class as
+the `GS_ERR_RUNTIME` undeclared identifier found earlier in this same function,
+where the comment records that the in-process diffusion path "survived review,
+and CI, and the 18-symbol ABI gate, without ever being handed to a compiler".
+
+Fixed: the mapping is now spelled out at the call site, and sets an error message
+on failure, which the previous version could not do because a bool carries no
+reason.
+
+### "no reason recorded" was the second defect, and it is the one that cost the time
+
+The bridge reported `rc` and then, for the reason, fell back to
+`last_error("no reason recorded")`. So the message named a code that is not in the
+ABI and carried no text at all -- the least informative failure available. It sent
+the reader to decode `1`, and decoding `1` is what found this.
+
+`sd_bridge.rs` now also reports whether the artifact exists:
+
+    a non-zero code WITH a file on disk is a return-value convention bug
+    a non-zero code with NO file is a real generation failure
+
+Those need opposite fixes and the old message could not tell them apart. One
+`metadata()` call, and the message would have said
+*"a code that is not in the ABI ... the output file EXISTS and is N bytes"* --
+which names this bug directly instead of describing a number.
+
+Verified locally before pushing: `g++ -fsyntax-only -DGS_SD_HAVE_SDCPP` against
+the real sd.cpp header, exit 0 with 0 stderr lines; `cargo check -p gs-ffi`,
+exit 0, 4 warnings all pre-existing.
+
+### Where this leaves Blocker 1
+
+Closed on architecture, pending one green sd0 for the behaviour: the two shared
+libraries build for arm64 and x86_64, ship as siblings, pass the arch and
+export gates, `dlopen` resolves all five entry points on a real Android device,
+and generation reaches the encoder. What the next run settles is whether the PNG
+decodes and is non-blank -- which sd0 already asserts with three separate
+pixel-statistics checks, so it cannot pass on a grey rectangle.

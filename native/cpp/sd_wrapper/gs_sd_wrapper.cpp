@@ -352,13 +352,42 @@ int32_t gs_sd_generate(gs_sd_ctx_t* ctx,
         return GS_ERR_GENERATION;
     }
     const sd_image_t& img = images[0];
-    const int rc = write_png(img.data, img.width, img.height, img.channel, output_path);
+    // write_png RETURNS A BOOL, NOT AN ERROR CODE.
+    //
+    // Declared `bool write_png(...)` at the top of this file, and the other caller
+    // gets it right at line 208:
+    //     return write_png(pixels, w, h, channels, path) ? GS_OK : GS_ERR_IO;
+    //
+    // This one used to read:
+    //     const int rc = write_png(img.data, ...);
+    //     if (rc != GS_OK) return rc;
+    //
+    // which inverts success into failure. `write_png` returns true on success, true
+    // is 1, GS_OK is 0, so `1 != 0` is true and the function returned **1 -- the
+    // success value of a bool, reported as an error code**. Run 37140101448 on a
+    // real device, after real diffusion had already run and already written the
+    // 512x512 PNG:
+    //     SD0 backend: sd.cpp:dlopen
+    //     GsNative.sdGenerate: gs_sd_generate(512x512, 1 steps) -> 1: no reason recorded
+    //
+    // "no reason recorded" is the other half of it: the bool carried no error text,
+    // so the error channel was empty and the bridge had nothing to report. The
+    // return code said failure, the reason said nothing, and the test failed on a
+    // SUCCESS. A mapping that reads the wrong field cannot report a reason either.
+    //
+    // The mapping is spelled out rather than delegated so that the convention is
+    // visible at the call site, because getting it wrong is invisible in review:
+    // both versions compile, and only one of them is correct at runtime.
+    if (!write_png(img.data, img.width, img.height, img.channel, output_path)) {
+        set_err(std::string("gs_sd_generate: wrote no PNG to ") + output_path +
+                " (encoder refused; the diffusion result was produced and discarded)");
+        return GS_ERR_IO;
+    }
     // The library owns `images`; there is no free_image in the pinned header, so
     // the array is left alone rather than guessed at. That is a real leak for a
     // long-lived process and is recorded rather than papered over — on a phone
     // each generation allocates a fresh model context in the common path, so it
     // does not accumulate; see ISSUE-LOG.md.
-    if (rc != GS_OK) return rc;
     return GS_OK;
 #else
     // Unused here and only here: without the library there is no sampler to give a
