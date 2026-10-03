@@ -2541,7 +2541,14 @@ jobs:
           echo "=== codesign --verify --deep, expected to FAIL on signing only ==="
           CSOUT=$(codesign --verify --deep --verbose=4 "$APP" 2>&1) && CSRC=0 || CSRC=$?
           echo "  codesign exit: $CSRC"
-          printf '%s\n' "$CSOUT" | sed 's/^/    /' | head -20
+          # BOUND THE INPUT, NOT THE OUTPUT. `... | sed ... | head -20` closes the
+          # pipe early; under `bash -e` the producer takes SIGPIPE, exits 141, and
+          # the step dies with `sed: stdout: Broken pipe` naming neither the line
+          # nor the cause. `sed -n '1,20p'` reads the whole capture and prints
+          # twenty lines, so nothing is cut off. This is the repository's own
+          # check_pipefail_traps lint, and it caught this exact mistake in this
+          # exact step on its first run.
+          printf '%s\n' "$CSOUT" | sed -n '1,20p' | sed 's/^/    /'
           if [ "$CSRC" -eq 0 ]; then
             echo "  (it passed; unusual for an unsigned bundle, and is reported as such)"
           elif printf '%s' "$CSOUT" | grep -qiE 'not signed|no signature|unsigned'; then
