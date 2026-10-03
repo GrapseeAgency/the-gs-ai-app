@@ -828,8 +828,13 @@ jobs:
           # CPU-only number to be measured, and Vulkan on Android needs
           # libvulkan + a loader that is not in the NDK sysroot. Enabling it
           # without measuring would be the other kind of guess.
-          # Webp is off, and the reason is a real upstream defect rather than a
-          # preference. Raw, run 36384581930:
+          # Webp is off. The ORIGINAL reason was a real upstream defect rather
+          # than a preference, raw from run 36384581930, and that defect is now
+          # PATCHED two steps above by patch_sd_libwebp.py rather than routed
+          # around -- so this flag is belt and braces, not the fix. It stays
+          # because webp is an image INPUT format for this project and is not
+          # needed to measure CPU decode, which is the number the brief asks
+          # for. The historical error, for reference:
           #     CMake Error at thirdparty/libwebp/CMakeLists.txt:204 (add_library):
           #       Cannot find source file:
           #         /sources/android/cpufeatures/cpu-features.c
@@ -842,20 +847,31 @@ jobs:
           # not needed to measure CPU decode, which is the number the brief asks
           # for. Unknown -D names are a cmake warning, not an error, so all
           # three spellings are passed and the one that bites is the one used.
+          # OPTION B: SHARED, so sd.cpp and its ggml 0.25.3 leave as ONE
+          # self-contained .so that libgs_ffi.so never links against. It was OFF,
+          # which produced static .a archives that build.rs then linked into
+          # libgs_ffi.so alongside llama.cpp's ggml 0.17.0 -- 574 identical
+          # ggml_* names in one symbol table, and none of them unique to
+          # llama.cpp. See native/cpp/sd_wrapper/gs_sd_dyn.h.
+          #
+          # SD_BUILD_SHARED_GGML_LIB stays OFF on purpose: ggml is then built
+          # STATIC and absorbed INTO libgs_sd.so, so the shipped pair is one
+          # object with one copy of ggml rather than two that must not collide.
+          #
+          # NOT INSIDE THE COMMAND. This block sat between two backslash-continued
+          # lines once and bash read the next flag as a command:
+          #     line 35: -DSD_BUILD_SHARED_LIBS=ON: command not found
+          #     Process completed with exit code 127.
+          # The `\` joins the next PHYSICAL line into the command, and a `#` at the
+          # start of that continued line comments out the rest of it -- so every
+          # comment line after the continuation silently ate the flag beneath it,
+          # and the flag became the command. A comment between two continued
+          # lines does not fail loudly; it deletes the code under it.
           cmake -S src-sd -B build \
             -DCMAKE_TOOLCHAIN_FILE="$PWD/android.toolchain.cmake" \
             -DCMAKE_BUILD_TYPE=Release \
             -DSD_VULKAN=OFF -DSD_METAL=OFF -DSD_CUDA=OFF \
             -DGGML_OPENMP=OFF \
-            # OPTION B: SHARED, so sd.cpp and its ggml 0.25.3 leave as ONE
-            # self-contained .so that libgs_ffi.so never links against. It was OFF,
-            # which produced static .a archives that build.rs then linked into
-            # libgs_ffi.so alongside llama.cpp's ggml 0.17.0 -- 574 identical
-            # ggml_* names in one symbol table. See sd_wrapper/gs_sd_dyn.h.
-            #
-            # SD_BUILD_SHARED_GGML_LIB stays OFF on purpose: ggml is then built
-            # STATIC and absorbed INTO libgs_sd.so, so the shipped pair is one
-            # object with one copy of ggml rather than two that must not collide.
             -DSD_BUILD_SHARED_LIBS=ON \
             -DSD_WEBP=OFF -DSD_WEBM=OFF \
             -G Ninja

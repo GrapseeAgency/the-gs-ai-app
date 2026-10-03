@@ -4031,3 +4031,98 @@ that sd.cpp compiles for arm64 with `SD_BUILD_SHARED_LIBS=ON`, that
 `libgs_sd.so` is produced, or that it exports the five entry points. Those are
 the next CI run, and `android-native.yml` will refuse to package a `libgs_sd.so`
 that is the wrong architecture or is missing any of the five.
+
+
+---
+
+## ATTEMPT SIX, run 37132949637: the libwebp blocker is DEAD; I broke the next line
+
+**Status: the six-attempt blocker is resolved and proved in real CI. The build
+step then failed on my own bug, which is now fixed and linted.**
+
+### The good news, raw, from the failing log
+
+The patch step passed and configure got all the way through:
+
+      -- Configuring done (5.3s)
+      -- Generating done (0.1s)
+      -- Build files have been written to:
+         /home/runner/work/the-gs-ai-app/the-gs-ai-app/build
+
+That is the line the last SIX attempts never reached. Attempts one through five
+all died in CMake's GENERATE step at `libwebp/CMakeLists.txt:204`. This run wrote
+build files, which means `patch_sd_libwebp.py` did its job on a real NDK on a
+real runner, not just in my host reproduction.
+
+### The bad news, also raw, and it was mine
+
+    line 35: -DSD_BUILD_SHARED_LIBS=ON: command not found
+    ##[error]Process completed with exit code 127.
+
+I put the explanatory comment for `SD_BUILD_SHARED_LIBS` **inside** the
+backslash-continued cmake command:
+
+      cmake -S src-sd -B build \
+        -DCMAKE_TOOLCHAIN_FILE="$PWD/android.toolchain.cmake" \
+        ...
+        -DGGML_OPENMP=OFF \
+        # OPTION B: SHARED, so sd.cpp and its ggml 0.25.3 leave as ONE
+        # self-contained .so that libgs_ffi.so never links against.
+        -DSD_BUILD_SHARED_LIBS=ON \
+        -DSD_WEBP=OFF -DSD_WEBM=OFF
+
+A trailing `\` joins the next PHYSICAL line into the command. That line starts
+with `#`, so it is a comment, and the comment runs to the end of that line --
+which means the continuation STOPS there and the flag line beneath it becomes its
+own command. Hence `command not found`.
+
+**The worse half is the part that did not error.** The four flags after that
+comment block were not merely misplaced; they were dropped from the cmake call
+entirely, and nothing said so. A comment in the wrong place does not fail loudly,
+it DELETES the code under it. Had the flag line not happened to be the first
+thing after the comment, this would have been a configure with silently different
+options and a green-looking step.
+
+`bash -n` does not catch it: every line is individually a valid comment or a
+valid command.
+
+### Hence a lint, because this is the second time this class has cost a run
+
+`.github/scripts/check_shell_continuations.py` reports any line whose predecessor
+ends in `\` and which itself starts with `#`, and additionally parses every `run:`
+block with `bash -n`.
+
+Verified non-vacuous, which is the only property worth anything in a lint:
+
+    clean tree, all 4 workflows      -> ok: no continuation-comment traps
+    the BROKEN android-deps.yml      -> ::error:: ... step=Build for arm64, CPU
+                                        only  line 24
+                                        -DGGML_OPENMP=OFF \
+                                        # OPTION B: SHARED, ...
+                                        FAIL: 1 problem(s)
+
+It names the exact line that broke run 37132949637, taken from the previous
+commit's own file.
+
+### Also corrected while in there
+
+The comment above the cmake call still claimed webp was disabled *because the
+upstream defect was unfixable around*:
+
+    # Webp is off, and the reason is a real upstream defect rather than a
+    # preference.
+
+That stopped being true in the same commit. It now says the defect is PATCHED by
+`patch_sd_libwebp.py` two steps above and the flag is belt and braces, with the
+historical error retained for reference. A comment that has become false is worse
+than no comment, because it is the thing a reader trusts when deciding what to
+change next.
+
+### What is still owed, stated plainly
+
+Configure and generate passing is not a build. Nothing has yet compiled sd.cpp for
+arm64 with `SD_BUILD_SHARED_LIBS=ON`, no `libgs_sd.so` has been produced, and
+nothing has confirmed it exports the five entry points on a real toolchain. The
+next run settles all three, and `android-native.yml` will refuse to package a
+`libgs_sd.so` that is the wrong architecture or missing any of the five -- so a
+failure there is a gate working, not a gate untested.
