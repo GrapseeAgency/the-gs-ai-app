@@ -5740,3 +5740,104 @@ The two that failed on first contact (`check_kt_format_specs` with five false
 positives, `check_kt_imports` with four classes of them) were fixed and
 re-verified in both directions before this run; the other four passed on first
 contact, which is a weaker property and is recorded as such.
+
+
+---
+
+## Run 37180922647: 36 tests, 0 skipped, 34 passed. The 2 failures are one mistake of mine.
+
+    Tests 35/36 completed. (0 skipped) (2 failed)
+    Finished 36 tests on emulator-5554 - 11
+
+**36 declared, 36 ran, 0 skipped.** Both new `ChatUiReplyTest` cases compiled and
+ran without a single injected tap, which is the thing seven attempts could not do.
+
+### Both failures, verbatim, and they are ONE mistake
+
+    java.lang.UnsatisfiedLinkError: No implementation found for
+      java.lang.String com.grapsee.gsai.native.GsNative.lastError()
+      (tried Java_com_grapsee_gsai_native_GsNative_lastError and
+       Java_com_grapsee_gsai_native_GsNative_lastError__)
+      at ChatUiReplyTest.assistantReply_isRenderedInTheRealComposeTree(ChatUiReplyTest.kt:150)
+      at ChatUiReplyTest.cancellingAStreamKeepsThePartialReplyAndReportsCancelled(ChatUiReplyTest.kt:296)
+
+I wrote:
+
+    assertTrue(
+        "GsNativeLoader.initWith(...) returned false: ${GsNative.lastError()}",
+        GsNativeLoader.initWith(m.absolutePath),
+    )
+
+**Kotlin evaluates arguments left to right, so the MESSAGE is constructed before the
+CONDITION runs.** The message calls a native method, and the library is loaded by
+the very call whose result the assertion is about to check. The string threw before
+`initWith` was ever called.
+
+Ruled out first, because "no implementation found" reads like a missing symbol:
+
+    $ nm -D --defined-only libgs_ffi-x86_64.so | grep GsNative_lastError
+    1 match
+
+and all seventeen JNI entry points are exported -- `backendAvailable`, `buildInfo`,
+`chat`, `chatWithBudget`, `embedImage`, `embedText`, `init`, `initTuned`,
+`lastError`, `renderSvg`, `runOcr`, `sdAvailable`, `sdBackendName`, `sdCreate`,
+`sdFree`, `sdGenerate`, `selfCheck`, `shutdown` -- alongside
+`gs_ffi_mobile_* exported: 18`. The symbol was there; it simply had not been loaded
+at the moment the string was built. Verified against the artifact of the exact
+`android-native` run the device consumed, not a local build.
+
+Fixed by capturing the result first:
+
+    val inited = GsNativeLoader.initWith(m.absolutePath)
+    assertTrue("... returned false. No native diagnostic is printed here on purpose: ...",
+               inited)
+
+The `GsNative.selfCheck()` in the NEXT assertion is safe, because that line is only
+reached once `initWith` has returned true.
+
+### The four new GsNativeTest cases all PASSED on the device
+
+| test | result | evidence |
+|---|---|---|
+| `aCorruptGgufIsRefusedAndTheEngineRecoversAfterwards` | PASSED | 8196-byte file starting with the real `GGUF` magic refused, then the real model loaded and answered |
+| `aNonEnglishPromptIsAnsweredWithoutFallingBack` | PASSED | three scripts answered |
+| `anOverlongPromptIsHandledRatherThanHangingOrEmptying` | PASSED | 20007 characters |
+| `ocrOnSomethingThatIsNotAnImageRaisesRatherThanReturningEmpty` | PASSED | both wrong inputs raised `IOException` |
+
+The Japanese answer is worth quoting verbatim, because the test is not a
+translation-quality test and this is exactly the case it was written for:
+
+    GsNativeTest: Japanese (23 chars) -> 北京です。|im_end|
+
+**Wrong.** "What is the capital of Japan?" answered with Beijing. That is a 0.5B
+model being a 0.5B model, and the test says so. What it asserts is that the answer
+is non-blank and came from the engine rather than `localReply()`, and both hold --
+which a test that only checked `isNotBlank()` could not have told apart from a
+canned fallback.
+
+OCR, both wrong inputs, and the behaviour is the one asserted:
+
+    ocr(text with a .png extension) raised IOException: The image Uri could not be resolved.
+    ocr(text with a .png extension) -> raised=true returned=''
+    ocr(random bytes)               raised IOException: The image Uri could not be resolved.
+
+Returning `''` would have been read as "the image had no text in it", which is a
+different bug with a different fix.
+
+### The shipped default is confirmed on the device
+
+    found model at /data/user/0/com.grapsee.gsai/files/qwen2.5-0.5b-instruct-q4_0.gguf
+    (428730208 bytes)
+
+**Q4_0**, the switch from Blocker 3, read from `ModelCatalog` by the tests rather
+than typed into them -- which is the property that switch was supposed to have.
+
+### What this run does and does not settle
+
+Settles: `ChatUiReplyTest` no longer injects a touch, and both of its tests execute.
+Settles: four new coverage gaps are real tests that pass on hardware.
+
+Does not settle: **Blocker 4 Android is still open.** Both `ChatUiReplyTest` cases
+failed, on my bug rather than the tap -- but until they pass, the claim "the reply
+renders in the real Compose tree" rests on a run where both tests threw in their
+first assertion. Fixed and re-dispatched; it needs a green run before it counts.

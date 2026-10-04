@@ -145,10 +145,30 @@ class ChatUiReplyTest {
         )
         val m = File(model!!)
 
+        // NO NATIVE CALL IN AN ASSERTION MESSAGE. Kotlin evaluates arguments left to
+        // right, so the MESSAGE is built before the CONDITION runs -- and this
+        // message calls GsNative.lastError(), which needs the native library that
+        // initWith has not loaded yet. Both of these tests failed on a device with
+        //
+        //   java.lang.UnsatisfiedLinkError: No implementation found for
+        //     com.grapsee.gsai.native.GsNative.lastError()
+        //     (tried Java_com_grapsee_gsai_native_GsNative_lastError and
+        //     ..._lastError__)
+        //
+        // which is a confusing way to learn that the message, not the assertion, is
+        // what threw. `lastError` IS exported from the shipped .so -- verified with
+        // nm -D against android-native 37161154981's artifact -- so the symbol is
+        // there and simply had not been loaded at the moment the string was built.
+        //
+        // The result is captured FIRST so the message can only ever describe
+        // something that already happened.
+        val inited = GsNativeLoader.initWith(m.absolutePath)
         assertTrue(
-            "GsNativeLoader.initWith(${m.absolutePath}) returned false: " +
-                "${GsNative.lastError()}",
-            GsNativeLoader.initWith(m.absolutePath),
+            "GsNativeLoader.initWith(${m.absolutePath}) returned false. No native " +
+                "diagnostic is printed here on purpose: lastError() needs the " +
+                "library this call has not loaded yet, and an assertion message " +
+                "that throws masks the assertion it was written to explain.",
+            inited,
         )
         assertTrue(
             "isAvailable() is false, so ServiceLocator.chatStream's local branch " +
@@ -292,9 +312,11 @@ class ChatUiReplyTest {
                 "This is a FAILURE, not a skip.",
             model,
         )
+        // Same reason as above: capture the result, then describe it.
+        val inited = GsNativeLoader.initWith(File(model!!).absolutePath)
         assertTrue(
-            "GsNativeLoader.initWith failed: ${GsNative.lastError()}",
-            GsNativeLoader.initWith(File(model!!).absolutePath),
+            "GsNativeLoader.initWith(${model!!}) returned false",
+            inited,
         )
         SettingsStore.init(ctx)
         ModelStore.init(ctx)
