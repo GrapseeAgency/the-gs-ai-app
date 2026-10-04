@@ -5653,3 +5653,90 @@ now runs them and will report what it finds.
 
 The one that failed did so within minutes of being wired in, which is the whole
 argument for wiring it in rather than continuing to run it by hand.
+
+
+---
+
+## CONFIRMATION: the release gate with the typo has never executed in any release
+
+The earlier claim was "the current `Gates` step body has never run". That is now
+checked against the tags rather than inferred from a date.
+
+    ef6058a  2026-09-30  fix(91): seven pipelines could kill their own step; one is
+                         a gate that fires on a successful match
+    -- the commit that rewrote the Gates step into its current body
+
+    tags, newest first:
+      v0.70.0  2026-09-24  BUG3: full-path latency instrumentation
+      v0.69.0  2026-09-24
+      v0.68.2  2026-09-23
+      v0.68.1  2026-09-23
+      v0.68.0  2026-09-21
+
+    is ef6058a an ancestor of the newest tags?
+      v0.70.0: does not contain ef6058a
+      v0.69.0: does not contain ef6058a
+      v0.68.2: does not contain ef6058a
+
+`android-release.yml` triggers only on `tags: ['v*']`. The newest tag is six days
+**older** than the commit that introduced the body, and that commit is in none of
+them. So:
+
+- the body has never executed;
+- the `SDK_BUILTOOLS` one-letter typo sat in a release gate for six days;
+- the next `v*` push would have run `"/apksigner"`, swallowed the failure with
+  `|| true`, and failed the gate with
+  `::error::signing certificate is not b1ffd75d...` -- a SIGNING diagnosis for a
+  PATH typo, six days before anyone would have shipped.
+
+Also checked while here, because "a gate that has never run" is worth ruling out
+everywhere rather than only where a bug was already suspected. All ten workflows
+have executed:
+
+    android-app        132 runs
+    android-native     198
+    android-device      83
+    android-deps        92
+    ios-native         207
+    iOS (macOS)          39   last 2026-09-24  success
+    Android release      9   last 2026-09-24  success
+    arm64-runner-probe  23   last 2026-10-02  failure
+    Benchmark           17   last 2026-09-25  failure
+    Eval gate           10   last 2026-10-03  failure
+
+No dead workflow. But two of them have not run since the branches changed under
+them: `iOS (macOS)` and `Android release` last executed on **2026-09-24**, and both
+live on `main` while this work is on `native-runtime`. So the honest statement is
+not "these gates are unverified" but "**everything verified in this session was
+verified against `native-runtime`, and the release path that ships to users is
+still on `main` and was last exercised eight days before any of it.**"
+
+That is worth saying plainly. Every finding in this log -- the Option B work, the
+six defects, the four gates, the six lints -- applies to a branch nobody ships
+from. The work is real and the evidence is real, and none of it has reached the
+release path. Whether to merge `native-runtime` into `main` is the operator's call
+and not one to make from here.
+
+## Six lints, green in CI for the first time
+
+`android-app` 37182655646 -- **success**, with the lint step's own output:
+
+    104 Kotlin, 10 workflow, 18 C++ file(s)
+    --- format specifiers match argument counts
+    ok: 37 format call(s), specifier counts match argument counts
+    --- imports resolve, none unused, no unimported framework type
+    ok: 427 local import(s) resolve; no unimported framework types,
+       46 unused import(s) reported as warnings
+    --- bool results are not consumed as ABI error codes
+    ok: 3 file(s) with bool-returning functions, no ABI-convention misuse
+    --- every run: block's variables are in scope
+    ok: every run block's variables are assigned in it, in env:, or guarded
+    --- every workflow that runs a script is triggered by changes to it
+    ok: every workflow that runs a .github/scripts/ script is triggered by it
+       (9 filtered workflow(s) checked)
+
+That is the first run in which any of the six has executed against the whole tree.
+The two that failed on first contact (`check_kt_format_specs` with five false
+positives, `check_kt_imports` with four classes of them) were fixed and
+re-verified in both directions before this run; the other four passed on first
+contact, which is a weaker property and is recorded as such.
