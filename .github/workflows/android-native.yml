@@ -31,16 +31,33 @@ on:
         type: string
       enable_sd_diffusion:
         description: >-
-          Build and ship the diffusion path. ON BY DEFAULT, and the default is the
-          design rather than a preference: sd.cpp is packaged as its OWN shared
-          object, libgs_sd.so, shipped as a SIBLING of libgs_ffi.so and reached by
-          dlopen. It is not linked in, and it cannot be -- the two projects ship two
-          different versions of ggml, 574 of whose symbol names are identical and
-          none of them unique to llama.cpp, so link order alone decides which copies
-          win. Set this to false only to build a libgs_ffi.so with no diffusion at
-          all, which makes sd0 on a device fail closed rather than skip.
+          Build and ship the diffusion path. OFF BY DEFAULT NOW, and that is a
+          shipping decision rather than a preference.
+
+          sd.cpp works: run 37164998711 produced two 512x512 images on an x86_64
+          emulator, 187.5s and 186.9s. It is still not shipping to mobile, for
+          reasons that are about the product and not about the code:
+
+            * libgs_sd.so is 41.9 MB of native code in every APK.
+            * The SD checkpoint is 882 MB and is downloaded separately, so an APK
+              WITHOUT it ships a diffusion button that always fails -- a visible
+              broken feature rather than an absent one.
+            * 187s per 512x512 image is a floor measured on the slowest plausible
+              substrate (x86_64 emulator, CPU only, steps=1). The phone number is
+              unknown in both directions. No arm64 device has ever run it.
+
+          So the mobile build ships no diffusion at all: no libgs_sd.so, no
+          checkpoint download, and GsNative.sdCreate fails closed with an
+          unavailable reason rather than skipping. The code and the desktop path
+          are untouched -- this flag is the gate.
+
+          The mechanism is unchanged and still deliberate: sd.cpp is packaged as
+          its OWN shared object, libgs_sd.so, reached by dlopen and never linked,
+          because the two projects ship two different versions of ggml, 574 of
+          whose symbol names are identical and none unique to llama.cpp, so link
+          order alone decides which copies win.
         required: false
-        default: "true"
+        default: "false"
         type: boolean
   push:
     branches: [native-runtime]

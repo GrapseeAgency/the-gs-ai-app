@@ -10,6 +10,16 @@ on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    # WHICH android-native RUN SUPPLIES THE NATIVE LIBRARY. See
+    # .github/scripts/stage_release_so.sh for why this is needed at all: this
+    # workflow previously shipped APKs with no native library in them whatsoever.
+    # 37161154981 is a run in which all four ABIs built green.
+    inputs:
+      so_run_id:
+        description: 'android-native run id to take libgs_ffi-<abi> from'
+        required: false
+        default: '37161154981'
+        type: string
 
 permissions:
   contents: write
@@ -28,6 +38,16 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
+
+      # THE APK HAD NO NATIVE LIBRARY. This is the step that puts one in it.
+      # libgs_sd.so is deliberately NOT staged -- diffusion is off on mobile, and
+      # shipping it would add 41.9 MB plus a path whose 882 MB checkpoint is not in
+      # the APK. Tesseract is absent by construction: it is in the :ocr-fallback
+      # module, which :app does not depend on, and ML Kit is a direct dependency.
+      - name: Stage libgs_ffi.so into jniLibs for every ABI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/stage_release_so.sh "${{ inputs.so_run_id }}"
 
       - name: Unit tests + assemble
         working-directory: android
