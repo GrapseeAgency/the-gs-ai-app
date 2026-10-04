@@ -55,7 +55,21 @@ jobs:
 
       - name: Unit tests + assemble
         working-directory: android
-        run: gradle --no-build-cache --max-workers=2 testDebugUnitTest assembleDebug
+        # :app EXPLICITLY, not bare `assembleDebug`.
+        #
+        # Run 37207805346 staged all four ABIs correctly and then failed at:
+        #     > Task :ocr-fallback:processDebugMainManifest FAILED
+        #
+        # A bare `assembleDebug` builds EVERY module in the tree, and `:ocr-fallback`
+        # -- the Tesseract module -- has been broken for four attempts, documented in
+        # android/app/build.gradle.kts. It is not part of this release: `:app` does
+        # not depend on it, Tesseract is deliberately absent from the base APK, and
+        # OCR ships as ML Kit. So the release must build the module it SHIPS rather
+        # than every module that happens to exist.
+        #
+        # This is the same shape as the bug this release already fixed twice: naming
+        # the thing you want instead of "everything, and find out".
+        run: gradle --no-build-cache --max-workers=2 :app:testDebugUnitTest :app:assembleDebug
 
       - name: Gates (badging, cert, BASE_URL)
         working-directory: android
