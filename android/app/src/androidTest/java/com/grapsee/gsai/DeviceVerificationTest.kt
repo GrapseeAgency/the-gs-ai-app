@@ -22,24 +22,17 @@ import com.grapsee.gsai.native.GsNativeLoader
 import com.grapsee.gsai.ocr.MlKitOcr
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
-import io.ktor.client.request.post
-import io.ktor.client.request.setBody
-import io.ktor.http.ContentType
-import io.ktor.http.contentType
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
-import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.util.zip.ZipFile
-import java.net.InetAddress
-import java.net.ServerSocket
 import java.util.UUID
 import java.security.MessageDigest
 

@@ -4988,3 +4988,76 @@ recorded here as the next lint-shaped gap rather than presented as solved.
 The generalisable form: **any place where two files must agree, and the agreement
 is maintained by typing both names in two files, will eventually be one name in
 two files.** `libgs_ffi-x86_64` and `stablediffusion-x86_64` are the pair today.
+
+
+---
+
+## ChatUiReplyTest: a guessed package cost a run, and the lint that now prevents it
+
+`android-device` 37179305182 failed in 8 minutes -- fast, because it never reached
+the emulator:
+
+    e: .../ChatUiReplyTest.kt:10:36 Unresolved reference 'SettingsStore'.
+    e: .../ChatUiReplyTest.kt:158:9 Unresolved reference 'SettingsStore'.
+    e: .../ChatUiReplyTest.kt:161:9 Unresolved reference 'SettingsStore'.
+    e: .../ChatUiReplyTest.kt:162:49 Unresolved reference 'SettingsStore'.
+    * What went wrong:
+    Execution failed for task ':app:compileDebugAndroidTestKotlin'
+
+I wrote `import com.grapsee.gsai.data.local.SettingsStore`. The class is in
+`com.grapsee.gsai.data`. Every other import in the file was correct, so nothing
+about the file signalled that one line was a guess rather than a reading -- and
+`SettingsStore` sits next to `ModelStore`, which IS in `data.local`, which is
+exactly what makes the wrong package plausible.
+
+### `.github/scripts/check_kt_imports.py`, three checks
+
+1. **a local import that does not resolve** -- the wrong-package mistake. Resolved
+   against real declarations in the module's own sources, and the message says
+   where the symbol actually lives:
+   `::error:: 'SettingsStore' is declared in: com.grapsee.gsai.data`
+2. **an import that is never referenced** -- dead code.
+3. **a well-known framework type used bare with no import** -- the `af5621e`
+   defect, `File(dir, ...)` with `import java.io.File` missing.
+
+Check 3 is a curated list and says so. It covers the types most often reached for
+in test code, not the SDK.
+
+### Verified non-vacuous, and twice wrong on the way
+
+    wrong package re-injected        -> CAUGHT
+    af5621e re-injected              -> CAUGHT
+
+Three false-positive sources had to be removed first, and each was a real mistake
+in the lint rather than in the code:
+
+| false positive | cause | fix |
+|---|---|---|
+| `ArrayList`, `HashMap`, `LinkedHashMap`, `TreeMap`, `LinkedList`, `ArrayDeque`, `Random` | **Kotlin stdlib typealiases needing no import** -- unlike Java's | removed from the list; the list is short and specific for this reason |
+| `GsNative`, `ModelCatalog` "unused" | used inside `"${...}"` template expressions, which are code, not string text | `mask_noncode` copies balanced `${...}` through verbatim |
+| `setBody`, `Before` | appear only inside comments | comments masked before the usage scan |
+
+The first one produced four false positives on its very first run against the real
+tree. A lint validated only against the bug it was written for would have shipped
+with them.
+
+### Seven unused imports, removed
+
+Check 2 found seven in `DeviceVerificationTest.kt`, all genuine:
+
+    io.ktor.client.request.post        io.ktor.http.ContentType
+    io.ktor.client.request.setBody     io.ktor.http.contentType
+    org.junit.Before                   java.net.InetAddress
+    java.net.ServerSocket
+
+Two are instructive. `setBody` appears once in the file -- inside a comment
+describing what the ktor client *would* do. `Before` looks used six times and is
+used zero times: every hit is a substring of `onBefore`, `preferBefore` or
+`preferLocalBefore`. A substring is not a reference, which is why the check
+requires a non-word character before the name.
+
+`java.net.ServerSocket` and `java.net.InetAddress` are imported and unused because
+the code calls them **fully qualified** (`java.net.ServerSocket(0, 1, ...)`). Also
+genuine, and also harmless -- which is the point: this class of finding is never
+urgent, so a lint that reports it must not report it loudly enough to train people
+to ignore the lint.

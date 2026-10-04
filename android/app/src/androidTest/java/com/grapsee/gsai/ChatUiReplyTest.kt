@@ -7,7 +7,7 @@ import com.grapsee.gsai.MainActivity
 import com.grapsee.gsai.data.chat.ChatStreamController
 import com.grapsee.gsai.data.local.ModelCatalog
 import com.grapsee.gsai.data.local.ModelStore
-import com.grapsee.gsai.data.local.SettingsStore
+import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.di.ServiceLocator
 import com.grapsee.gsai.native.GsNative
 import com.grapsee.gsai.native.GsNativeLoader
