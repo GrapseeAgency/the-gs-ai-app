@@ -25,6 +25,11 @@ on:
       # accident, and only as often as someone remembers to dispatch it.
       - 'ios/**'
       - '.github/workflows/ios-native.yml'
+      # The workflow RUNS scripts under .github/scripts/, so a change to one of
+      # them has to reach this workflow or the script is unmaintainable in
+      # practice: edit it, nothing reruns, and the edit is silently inert.
+      # Found by .github/scripts/check_workflow_trigger_covers_scripts.py.
+      - '.github/scripts/**'
       - '.cargo/config.toml'
 
 concurrency:

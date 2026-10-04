@@ -30,10 +30,30 @@ on:
     branches: [native-runtime]
     paths:
       - 'android/**'
+      # THE LINT JOB IN HERE INSPECTS THESE PATHS, SO THESE PATHS MUST TRIGGER IT.
+      #
+      # The filter was `android/**` alone, which meant the five lints added to this
+      # workflow -- two of which read .github/workflows/*.yml and all of which read
+      # .github/scripts/ -- could only ever run in response to a commit that had
+      # ALREADY broken something they inspect. Wiring a lint into a workflow whose
+      # trigger excludes the lint's own inputs is the same defect as not writing the
+      # lint: a check that cannot run cannot fail.
+      #
+      # Found by reading the trigger AFTER wiring the lints, which is the order that
+      # made it visible. Writing them and assuming they were now enforced is exactly
+      # the assumption this repository keeps having to unpick.
+      - '.github/workflows/**'
+      - '.github/scripts/**'
+      - 'native/cpp/**'
+      - 'native/crates/**'
   pull_request:
     branches: [native-runtime]
     paths:
       - 'android/**'
+      - '.github/workflows/**'
+      - '.github/scripts/**'
+      - 'native/cpp/**'
+      - 'native/crates/**'
 
 concurrency:
   group: android-app-${{ github.ref }}
@@ -102,6 +122,66 @@ jobs:
       # in five minutes; this catches it without a round trip, and was itself
       # verified by reintroducing the exact bug on a copy and confirming the
       # script rejects it.
+      # FIVE LINTS THAT WERE FILES AND NOTHING ELSE.
+      #
+      # Each of these was written during this session to stop a defect class from
+      # recurring, and each was run BY HAND from a shell. None of them was invoked
+      # by any workflow. A lint nothing executes is a comment with a shebang: it
+      # cannot fail a build, cannot stop a commit, and cannot tell anyone it exists
+      # except the person who wrote it.
+      #
+      # That is the same defect as the three CI gates found in the audit -- a check
+      # that cannot fail -- arrived at from the other direction. It was also caught
+      # by a NAIVE CHECK, which is worth recording: the first audit of this asked
+      # `grep -l <lint> .github/workflows/*.yml | wc -l` and reported
+      # check_workflow_var_scope as wired, because the string appears in a COMMENT
+      # in android-release.yml. Five were unwired, not four, and the extra one was
+      # found by a substring match standing in for an invocation.
+      #
+      # All five run here, in the job that already lints, so there is one place to
+      # look. Each was verified non-vacuous by re-injecting the defect it was
+      # written for.
+      - name: Lints that only existed as files until now
+        run: |
+          set -euo pipefail
+          mapfile -t KTL < <(find android/app/src -name '*.kt' 2>/dev/null | sort)
+          test "${#KTL[@]}" -gt 0 || {
+            echo "FAIL: no Kotlin sources found; the find pattern is wrong and these"
+            echo "FAIL:lints would pass by checking nothing."
+            exit 1
+          }
+          mapfile -t WFL < <(ls .github/workflows/*.yml)
+          test "${#WFL[@]}" -gt 0 || {
+            echo "FAIL: no workflow files found."
+            exit 1
+          }
+          mapfile -t CPPS < <(find native/cpp -name '*.cpp' -o -name '*.h' 2>/dev/null | sort)
+          test "${#CPPS[@]}" -gt 0 || {
+            echo "FAIL: no C++ sources found; check_error_code_conventions would pass"
+            echo "FAIL:by checking nothing."
+            exit 1
+          }
+          echo "  ${#KTL[@]} Kotlin, ${#WFL[@]} workflow, ${#CPPS[@]} C++ file(s)"
+
+          echo "--- format specifiers match argument counts"
+          python3 .github/scripts/check_kt_format_specs.py "${KTL[@]}"
+
+          echo "--- imports resolve, none unused, no unimported framework type"
+          python3 .github/scripts/check_kt_imports.py "${KTL[@]}" \
+            --src android/app/src/main/java/com/grapsee/gsai
+
+          echo "--- bool results are not consumed as ABI error codes"
+          python3 .github/scripts/check_error_code_conventions.py "${CPPS[@]}"
+
+          echo "--- every run: block's variables are in scope"
+          python3 .github/scripts/check_workflow_var_scope.py "${WFL[@]}"
+
+          echo "--- no comment between backslash-continued lines"
+          python3 .github/scripts/check_shell_continuations.py "${WFL[@]}"
+
+          echo "--- every workflow that runs a script is triggered by changes to it"
+          python3 .github/scripts/check_workflow_trigger_covers_scripts.py "${WFL[@]}"
+
       - name: Row field reads name fields the row declares
         run: |
           set -euo pipefail

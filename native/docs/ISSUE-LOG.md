@@ -5440,3 +5440,120 @@ All three shared a property: each returned success while being unable to detect
 the failure it was written for. None of them would have been found by running the
 suite -- all three need the input to be *wrong*, which is the one thing a passing
 build never supplies.
+
+
+---
+
+## FOURTH GATE THAT COULD NOT FAIL: five lints that no workflow ever ran
+
+The most important finding of the audit, and it is not a CI gate at all. It is the
+mechanism by which the other gates were going to keep failing.
+
+Five lints were written during this session to stop a defect class from recurring.
+Every one was run **by hand** from a shell. Not one was invoked by any workflow.
+
+    check_shell_continuations        wired into 0 workflows
+    check_kt_format_specs            wired into 0 workflows
+    check_error_code_conventions     wired into 0 workflows
+    check_kt_imports                 wired into 0 workflows
+    check_workflow_var_scope         wired into 0 workflows
+
+A lint nothing executes is a comment with a shebang. It cannot fail a build, cannot
+stop a commit, and cannot tell anyone it exists except the person who wrote it. The
+exact defect I had spent the audit closing, arrived at from the other direction.
+
+### The audit of the wiring was itself wrong, in the same way
+
+The first check was:
+
+    grep -l <lint> .github/workflows/*.yml | wc -l
+
+which reported `check_workflow_var_scope` as **wired into 1**, because the string
+appears in a *comment* in `android-release.yml`. Five were unwired, not four, and
+the extra one was found by a substring match standing in for an invocation.
+
+That is worth recording on its own: the check for "is this gate real" was a
+substring match, which is the same technique that produced a phantom `$I` in the
+var-scope lint and a phantom `ARCH` in ios-native. Substring matching is how this
+work repeatedly manufactures findings that are not there and misses ones that are.
+
+### Wiring them in was necessary and NOT sufficient
+
+All five now run in `android-app.yml`'s compile job. And then:
+
+    on:
+      push:
+        paths:
+          - 'android/**'
+
+The lint job reads `.github/workflows/*.yml`, `.github/scripts/*` and
+`native/cpp/**`. **A change to any of those did not trigger the workflow that
+lints them.** So the lints could only ever run in response to a commit that had
+already broken something they inspect. Wiring a lint into a workflow whose trigger
+excludes the lint's own inputs enforces nothing at all.
+
+Found by reading the trigger *after* wiring the lints, which is the order that made
+it visible. Writing them and assuming they were now enforced is precisely the
+assumption this repository keeps having to unpick.
+
+Trigger filter widened to the paths the job actually reads:
+
+    android/**  .github/workflows/**  .github/scripts/**  native/cpp/**  native/crates/**
+
+### And the same defect existed in two more workflows
+
+Running the check across all ten workflows found eight further instances:
+
+    android-native.yml   2 steps run .github/scripts/ scripts; push paths did not
+                         include .github/scripts/**
+    ios-native.yml       6 steps, same cause -- and one of them runs
+                         check_pipefail_traps.py, the lint that has caught real
+                         defects in this repository more than once
+
+So the one lint with a proven track record could not be triggered by a change to
+itself. `android-deps` already covered it; `android-device` is unfiltered and needs
+nothing.
+
+### `.github/scripts/check_workflow_trigger_covers_scripts.py`
+
+Flags a workflow whose `run:` block invokes a script under `.github/scripts/` while
+its own `push`/`pull_request` `paths:` filter omits that directory. Deliberately
+narrow:
+
+- **precise** -- the workflow is asserted to RUN that script, so a change to it
+  must reach the workflow;
+- **not about correctness** -- it has no opinion on what the script checks;
+- **`workflow_dispatch` is not a trigger** -- a manual run is not a gate;
+- **unfiltered workflows are skipped** -- they run on every push, so every script
+  they invoke is already reachable.
+
+Non-vacuous against the real pre-fix file:
+
+    $ check_workflow_trigger_covers_scripts.py <android-app.yml at 17ff8df>
+    ::error:: job=compile  step=Braces balance in every Kotlin source
+    ::error::  runs .github/scripts/check_kt_braces.py, but this workflow's
+    ::error::  push/pull_request `paths:` is android/**
+    ::error::  include .github/scripts. A change to that script does not run this
+    ::error::  step, so the step cannot fail on a change to the script it exists
+    ::error::  to run.
+    FAIL: 1 unreachable script invocation(s) in 1 filtered workflow(s)
+
+    $ ... on the current tree
+    ok: every workflow that runs a .github/scripts/ script is triggered by it
+        (9 filtered workflow(s) checked)
+
+### Final state of the six lints
+
+    check_pipefail_traps              wired (ios-native)
+    check_kt_braces                   wired (android-app)
+    check_tests_can_fail              wired (android-app)
+    check_kt_imports                  wired (android-app)
+    check_kt_format_specs             wired (android-app)
+    check_error_code_conventions      wired (android-app)
+    check_workflow_var_scope          wired (android-app)
+    check_shell_continuations         wired (android-app)
+    check_workflow_trigger_covers...  wired (android-app)
+
+All six newly-wired lints run in the one job that already lints, so there is a
+single place to look, and all six were verified non-vacuous by re-injecting the
+defect each was written for.
