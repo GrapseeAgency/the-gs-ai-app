@@ -28,7 +28,27 @@
 # Usage: stage_release_so.sh <android-native-run-id> [repo]
 set -euo pipefail
 
-SO_RUN="${1:?usage: stage_release_so.sh <android-native-run-id> [repo]}"
+# THE DEFAULT IS HERE, NOT ONLY IN THE WORKFLOW.
+#
+# Run 37207411446 failed in 8 seconds with:
+#     Run bash .github/scripts/stage_release_so.sh ""
+#     stage_release_so.sh: line 31: usage: stage_release_so.sh <android-native-run-id>
+#
+# because `inputs.so_run_id` is EMPTY on a tag push. GitHub only populates
+# `workflow_dispatch` inputs for a manual dispatch -- on `push: tags: ['v*']` the
+# `inputs` context is empty and the input's `default:` is never applied. So the
+# declared default existed only for the dispatch path, and the release path, which is
+# the one that matters, got an empty string.
+#
+# Same shape as the `enable_sd_diffusion` trap in this repository, where `== true`
+# against an empty input on push is false and silently disabled the flag. Both are
+# the same mistake: a default written in one place and relied on from another.
+DEFAULT_SO_RUN=37161154981
+SO_RUN="${1:-$DEFAULT_SO_RUN}"
+if [ -z "$SO_RUN" ]; then
+  echo "::error::no android-native run id given and the built-in default is empty" >&2
+  exit 1
+fi
 REPO="${2:-${GITHUB_REPOSITORY:?GITHUB_REPOSITORY must be set or passed as arg 2}}"
 API="${GITHUB_API_URL:-https://api.github.com}"
 GH_TOKEN="${GH_TOKEN:?GH_TOKEN must be set}"
