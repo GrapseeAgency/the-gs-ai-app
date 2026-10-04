@@ -67,20 +67,34 @@ fi
 
 abs="$(cd "$(dirname "$rel")" && pwd)/$(basename "$rel")"
 
-member="$(ar t "$abs" | grep -v '^__' | sed -n '1p')"
-if [ -z "$member" ]; then
+# EVERY MEMBER, NOT THE FIRST ONE.
+#
+# This read `member="$(ar t "$abs" | grep -v '^__' | sed -n '1p')"` and then checked
+# only that object, so an archive whose FIRST member was correct and whose remaining
+# members were the wrong architecture passed. A mixed archive is exactly what a
+# stale object in a reused build tree produces, and a gate that cannot see one
+# cannot catch one.
+#
+# .github/scripts/archive_arch.py already checks every object and android-native.yml
+# already uses it -- and its own docstring records the bug this one still has:
+#     "i386" != "i686", so EVERY object in a correct x86 build counted as wrong
+# Two arch checkers with different strength is the defect; this is now the strong
+# one, so a mixed archive fails at the point where it is built rather than three
+# jobs later.
+#
+# `sed -n '1p'`, never `head -1`, still: under `set -o pipefail` a `head -1` closes
+# the pipe and SIGPIPEs `ar`, which is a 141 that kills the step.
+mapfile -t MEMBERS < <(ar t "$abs" | grep -v '^__')
+if [ "${#MEMBERS[@]}" -eq 0 ]; then
   echo "FAIL: $label: archive has no object members" >&2
   ar t "$abs" >&2
   exit 1
 fi
 
-echo "$label first object member: $member"
+echo "$label: ${#MEMBERS[@]} object member(s) to check"
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
-( cd "$work" && ar x "$abs" "$member" && file -b "$member" ) > "$work/out.txt"
-cat "$work/out.txt"
-
 # `file` spells the same ISA differently per format and per vendor:
 #   Apple Mach-O : arm64        Android/Linux ELF : aarch64
 #   x86_64 ELF   : x86-64      x86_64 Mach-O      : x86_64
@@ -99,8 +113,34 @@ case "$EXPECT" in
   armeabi-v7a) PAT='ARM|arm|eabi' ;;
   *)       PAT="$EXPECT" ;;
 esac
-if ! grep -qE "$PAT" "$work/out.txt"; then
-  echo "FAIL: $label: archive member is not $EXPECT" >&2
-  echo "  file said: $(cat "$work/out.txt")" >&2
+
+CHECKED=0
+BAD=0
+BADLIST=""
+for member in "${MEMBERS[@]}"; do
+  # `file -b` on a path that does not exist exits non-zero and prints nothing, so a
+  # missing extraction would otherwise read as "no match" for the wrong reason.
+  if ! ( cd "$work" && ar x "$abs" "$member" ) 2>/dev/null; then
+    echo "FAIL: $label: could not extract $member" >&2
+    exit 1
+  fi
+  if [ ! -f "$work/$member" ]; then
+    echo "FAIL: $label: extracted $member but it is not a file" >&2
+    exit 1
+  fi
+  out="$(file -b "$work/$member")"
+  CHECKED=$((CHECKED + 1))
+  if ! grep -qE "$PAT" <<<"$out"; then
+    BAD=$((BAD + 1))
+    [ -n "$BADLIST" ] && BADLIST="$BADLIST $member"
+    BADLIST="${BADLIST:+$BADLIST }$member"
+    echo "  wrong-architecture member: $member -> $out"
+  fi
+done
+echo "$label: $CHECKED checked, $BAD wrong-architecture (want $EXPECT)"
+
+if [ "$BAD" -ne 0 ]; then
+  echo "FAIL: $label: $BAD of $CHECKED object member(s) are not $EXPECT" >&2
+  echo "  wrong members:$BADLIST" >&2
   exit 1
 fi

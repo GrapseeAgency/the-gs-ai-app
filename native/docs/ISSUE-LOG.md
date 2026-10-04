@@ -5345,3 +5345,98 @@ script; if the parser had stopped understanding its input, that line would still
 have printed `0 denied` and the conclusion would have been unchanged. A gate whose
 failure mode is indistinguishable from success is the worst kind, because it
 converts a broken measurement into a confident number.
+
+
+---
+
+## THIRD GATE THAT COULD PASS ON A DEFECT: the arch gate read ONE member
+
+`.github/scripts/assert_arch_member.sh`, used by `android-deps.yml` to gate every
+archive it packages:
+
+    member="$(ar t "$abs" | grep -v '^__' | sed -n '1p')"
+    ...
+    ( cd "$work" && ar x "$abs" "$member" && file -b "$member" ) > "$work/out.txt"
+    if ! grep -qE "$PAT" "$work/out.txt"; then ... exit 1; fi
+
+It extracted **one** member and checked **one** member. An archive whose first
+object was correct and whose remaining objects were the wrong architecture
+**passed**.
+
+That is the exact shape of mistake the gate exists to catch. A mixed archive is
+what a stale object in a reused build tree produces -- and a first-member check is
+blind to precisely that, because the stale object is rarely first.
+
+### It was already known, in the other script
+
+`.github/scripts/archive_arch.py` checks **every** object, `android-native.yml`
+already uses it, and its own docstring records a bug this one still has:
+
+> "i386" != "i686", so EVERY object in a correct x86 build counted as wrong:
+>     libggml-base.a: 9 objects, 9 wrong-architecture
+
+So the repository had two architecture gates of different strength, and the weak
+one was in the workflow that **builds** the artifacts. A mixed archive would have
+been packaged by `android-deps` and only caught two jobs later. Two gates with
+different strength is itself the defect; this one is now the strong one.
+
+### Demonstrated, not argued
+
+Homogeneous, real, from the sd.cpp tree on this host:
+
+    $ assert_arch_member.sh libggml-base.a libggml-base.a x86_64
+    libggml-base.a: 9 object member(s) to check
+    libggml-base.a: 9 checked, 0 wrong-architecture (want x86_64)
+    exit 0
+
+Mixed -- a correct archive with one non-object member appended:
+
+    $ assert_arch_member.sh good.a mixed.a x86_64
+    mixed.a: 10 object member(s) to check
+      wrong-architecture member: junk.o -> ASCII text
+    mixed.a: 10 checked, 1 wrong-architecture (want x86_64)
+    FAIL: mixed.a: 1 of 10 object member(s) are not x86_64
+      wrong members:junk.o
+    exit 1
+
+**The old logic, run verbatim on that same mixed archive:**
+
+    OLD logic checked only: ggml.c.o
+      file said: ELF 64-bit LSB relocatable, x86-64, version 1 (SYSV), not stripped
+    OLD VERDICT: PASS   <- 1 of 10 members is wrong and the gate is GREEN
+
+That is the non-vacuity proof: the previous code passed the archive the new code
+rejects, on the same input, with the wrong member named.
+
+### One structural bug introduced and caught before pushing
+
+Moving the check into a loop meant `$PAT` was used ~12 lines before the `case`
+statement that defines it, and under `set -u` that is an immediate death -- not a
+silent pass, which is why it was worth fixing properly rather than shimming.
+The pattern block now sits above the loop, and the dead first-member check at the
+end was replaced by an aggregate:
+
+    FAIL: $label: $BAD of $CHECKED object member(s) are not $EXPECT
+      wrong members:$BADLIST
+
+`$BADLIST` accumulates names, so the failure says **which** objects are wrong
+rather than just how many. A count without names sends the reader to `ar t` and
+back to the start.
+
+`sed -n '1p'` is retained over `head -1` deliberately, and the reason is in the
+file: under `set -o pipefail` a `head -1` closes the pipe and SIGPIPEs `ar`, which
+is a 141 that kills the step. Third time this repository has had that specific
+trap.
+
+### The tally so far
+
+| gate | was | now |
+|---|---|---|
+| test count in `run-instrumented.sh` | `RAN > 0` floor | exact, derived from `@Test` annotations |
+| `undefined_syms.py` unparsed rows | `::warning::`, and under-counted | fatal, and counted broadly |
+| `assert_arch_member.sh` | first member only | every member, offending names listed |
+
+All three shared a property: each returned success while being unable to detect
+the failure it was written for. None of them would have been found by running the
+suite -- all three need the input to be *wrong*, which is the one thing a passing
+build never supplies.
