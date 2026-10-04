@@ -5178,3 +5178,84 @@ written `recognize(path)`. After 37179305182 cost a run on exactly this class of
 mistake -- `com.grapsee.gsai.data.local.SettingsStore` -- every symbol the new
 tests touch was checked against the declaration before pushing. Caught on the
 first read.
+
+
+---
+
+## A CI GATE THAT COULD PASS ON A DEFECT: `RAN > 0`
+
+Found while auditing the device suite's own gates. In `.github/scripts/run-instrumented.sh`:
+
+    RAN=$(grep -oE 'Starting [0-9]+ tests?' connected.log | grep -oE '[0-9]+' | tail -1)
+    RAN=${RAN:-0}
+    if [ "$RAN" = "0" ]; then
+      echo "FAIL: the runner started ZERO tests..."
+      TEST_RC=1
+    fi
+
+That is a **floor**, and a floor is the weakest gate there is. It cannot tell
+"every test ran" from "one test ran". So if discovery found only one class, or a
+runner argument narrowed the run, or the installed androidTest APK carried a stale
+test DEX, this check passed and the run was green with most of the suite never
+executed.
+
+A green run that tested one thing is worse than a red one, and this is the second
+time that specific shape has cost time here -- the 18-symbol ABI gate is a floor
+too, and its own comment records the reasoning ("a floor cannot notice a set
+growing").
+
+### The expected count is counted from the sources
+
+    DECLARED=$(grep -rhcE '^[[:space:]]*@Test\b' android/app/src/androidTest/... | awk '{s+=$1} END {print s+0}')
+    IGNORED=$(grep -rhcE '^[[:space:]]*@Ignore\b' android/app/src/androidTest/... | awk '{s+=$1} END {print s+0}')
+    EXPECTED=$((DECLARED - IGNORED))
+
+Derived, never written down beside itself, for the same reason the ABI floor is
+derived from the declared ABI: **a hardcoded count goes stale silently, and a
+stale count is the defect.** Adding a test and not seeing this fail is precisely
+the signal that the new test does not run.
+
+`^[[:space:]]*@Test`, not a bare `@Test`: a docstring that says "@Test" must not
+count as a test, or adding a sentence to a comment breaks the build. Both counts
+happen to be 36 today, which is exactly why the naive form would have looked
+correct until the day it did not.
+
+### Under-run FAILS, over-run WARNS -- deliberately different
+
+    RAN  new gate                      old gate (RAN > 0)
+    36   pass                          pass
+    35   FAIL (under-run)              pass
+    1    FAIL (under-run)              pass   <- the defect
+    0    FAIL (under-run)              FAIL
+    37   NOTE (over-run)               pass
+
+Over-running is not a defect. One `@Test` method that drives 50 prompts internally
+already does it, and a future `@ParameterizedTest` would too. A gate that fails on
+that direction trains people to disable it, so the two directions are not treated
+the same.
+
+### Validated against history, which is the part that matters
+
+A new gate that would have failed a previously-green run is worse than no gate.
+
+    @Test methods at afbf43c (the commit run 37164998711 executed):
+      ChatUiReplyTest.kt           1
+      DeviceVerificationTest.kt   25
+      GsNativeTest.kt              4
+      QuantQuality50Test.kt        1
+      TOTAL                       31
+    run 37164998711 reported:       31 tests
+
+Exact agreement, so the gate passes on the last known-good run. It is 36 now
+because of the five tests added alongside it, and the in-flight run will exercise
+both changes at once.
+
+### The diagnostic names what did not run, and does not lie about it
+
+On under-run it lists the absent tests by name, extracted with `awk` matching the
+`fun` that **follows an `@Test` annotation**. A bare `grep 'fun '` also catches
+helpers named `chunk`, `describe`, `frame`, `handle`, `quote`, `run`, `score`,
+`start`, `stop` and `turn` -- eleven names that exist in this suite -- and listing
+those as "did not run" would be a lie in the one diagnostic whose entire job is to
+be true. Verified: the extractor returns exactly 36 names with **0** helpers
+leaked.

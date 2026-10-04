@@ -412,12 +412,81 @@ fi
 # exit 0. Only `testInstrumentationRunner` was missing.
 RAN=$(grep -oE 'Starting [0-9]+ tests?' connected.log | grep -oE '[0-9]+' | tail -1 || true)
 RAN=${RAN:-0}
+
+# THE EXPECTED COUNT IS COUNTED FROM THE SOURCES, NEVER WRITTEN DOWN.
+#
+# This used to be `if [ "$RAN" = "0" ]` -- a floor, and a floor is the weakest
+# possible gate. It cannot tell "every test ran" from "one test ran", so if
+# discovery silently found only one class, or a runner argument narrowed the run,
+# or an APK shipped with a stale test DEX, the check passed and the run was green
+# with 35 of 36 tests never executed.
+#
+# A green run that tested one thing is worse than a red one, so the number is
+# DERIVED the same way the 18-symbol ABI floor is derived from the declared ABI
+# rather than written down beside it. Adding a test and not seeing this fail would
+# mean the new test never runs -- which is precisely the defect this detects, and
+# precisely what happens if the expected count is a literal.
+#
+# `^\s*@Test`, not a bare `@Test`: a docstring that says "@Test" must not be
+# counted as a test, or adding a sentence to a comment would break the build. Both
+# counts happen to be 36 today, which is exactly why the naive form would have
+# looked fine.
+DECLARED=$(grep -rhcE '^[[:space:]]*@Test\b' android/app/src/androidTest/java/com/grapsee/gsai/*.kt \
+  2>/dev/null | awk '{s+=$1} END {print s+0}')
+IGNORED=$(grep -rhcE '^[[:space:]]*@Ignore\b' android/app/src/androidTest/java/com/grapsee/gsai/*.kt \
+  2>/dev/null | awk '{s+=$1} END {print s+0}')
+EXPECTED=$((DECLARED - IGNORED))
 echo "tests the runner actually started: $RAN"
-if [ "$RAN" = "0" ]; then
-  echo "FAIL: the runner started ZERO tests. This is not a pass; it is an empty run."
-  echo "      Check testInstrumentationRunner in :app defaultConfig -- without it"
-  echo "      the androidTest APK has no runner and discovery returns nothing."
+echo "tests declared in the sources    : $DECLARED (@Ignore: $IGNORED) -> expected $EXPECTED"
+# UNDER-RUN FAILS, OVER-RUN WARNS. The defect this exists to catch is tests
+# SILENTLY NOT RUNNING, which is the under-run direction. Over-running is not a
+# defect: one @Test method that drives 50 prompts internally, or a future
+# @ParameterizedTest, legitimately produces more executions than annotations, and a
+# gate that fails on that trains people to disable it. So the two directions are
+# deliberately not treated the same.
+if [ "$RAN" -lt "$EXPECTED" ] 2>/dev/null; then
+  echo "FAIL: the runner started $RAN test(s) but $EXPECTED are declared in"
+  echo "      android/app/src/androidTest. A partial run is not a pass."
+    echo "      $((EXPECTED - RAN)) test(s) did NOT run. Usual causes:"
+    echo "        - a test class failed to compile into the androidTest DEX"
+    echo "        - a runner argument narrowed the run (package=/class=)"
+    echo "        - the installed androidTest APK is stale"
+    echo "      Which declared tests are absent from the results, by name:"
+    # The method that FOLLOWS an @Test annotation -- not every `fun` in the file.
+    # A bare `fun` grep also catches helpers named chunk/describe/frame/handle/
+    # quote/run/score/start/stop/turn, and listing those as "did not run" would be
+    # a lie in a diagnostic whose whole job is to be true.
+    awk '
+      /^[[:space:]]*@Test[[:space:]]*$/ { want = 1; next }
+      want && /^[[:space:]]*fun[[:space:]]+[A-Za-z0-9_]+/ {
+        line = $0
+        sub(/^[[:space:]]*fun[[:space:]]+/, "", line)
+        sub(/[( ].*$/, "", line)
+        print line
+        want = 0
+      }
+    ' android/app/src/androidTest/java/com/grapsee/gsai/*.kt | sort -u > /tmp/gs-declared-tests.txt
+    : > /tmp/gs-ran-tests.txt
+    for f in app/build/outputs/androidTest-results/connected/*.xml; do
+      [ -e "$f" ] || continue
+      python3 - "$f" 2>/dev/null >> /tmp/gs-ran-tests.txt <<'PYEOF' || true
+import sys, xml.etree.ElementTree as ET
+try:
+    root = ET.parse(sys.argv[1]).getroot()
+except Exception:
+    sys.exit(0)
+for tc in root.iter("testcase"):
+    print(tc.get("name", ""))
+PYEOF
+    done
+    comm -23 /tmp/gs-declared-tests.txt <(sort -u /tmp/gs-ran-tests.txt) \
+      | sed 's/^/        DID NOT RUN: /' | sed -n '1,40p'
   TEST_RC=1
+elif [ "$RAN" -gt "$EXPECTED" ] 2>/dev/null; then
+  echo "NOTE: the runner started $RAN test(s) for $EXPECTED @Test methods."
+  echo "      Expected when a test method expands into several executions"
+  echo "      (the 50-prompt comparison does exactly this). Not a failure, but"
+  echo "      if a new test is missing, this is where it would show up."
 fi
 
 echo
