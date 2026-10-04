@@ -60,6 +60,23 @@ jobs:
           # Both tools' full output is captured first, so there is no live process
           # for grep to signal -- and the captures are printed, so a failure says
           # WHAT the APK actually was rather than only that a gate tripped.
+          # THE TOOLS MUST EXIST BEFORE THEY ARE USED, AND SAY SO IF THEY DO NOT.
+          # Both captures below are `|| true` so a TOOL FAILURE cannot be mistaken
+          # for a CONTENT FAILURE -- and that is exactly why the tool's existence has
+          # to be its own check. With `|| true` alone, a missing or misspelled
+          # tool produces a confusing CONTENT error several lines later.
+          for TOOL in "$SDK_BUILDTOOLS/aapt2" "$SDK_BUILDTOOLS/apksigner"; do
+            test -x "$TOOL" || {
+              echo "::error::$TOOL is missing or not executable."
+              echo "::error::SDK_BUILDTOOLS=$SDK_BUILDTOOLS"
+              echo "::error::Every content gate below would report a CONTENT failure"
+              echo "::error::caused by a MISSING TOOL, so this is checked first and"
+              echo "::error::named here."
+              ls -1 "$ANDROID_HOME/build-tools" 2>/dev/null \
+                | sed 's/^/::error::  build-tools present: /' || true
+              exit 1
+            }
+          done
           BADGING=$("$SDK_BUILDTOOLS/aapt2" dump badging "$APK" 2>&1 || true)
           printf '%s\n' "$BADGING" | sed -n '1,6p' | sed 's/^/  badging: /'
           if ! printf '%s\n' "$BADGING" | grep -q "package: name='com.grapsee.gsai'"; then
@@ -67,7 +84,27 @@ jobs:
             printf '%s\n' "$BADGING" | sed -n '1,20p' | sed 's/^/  /'
             exit 1
           fi
-          CERTS=$("$SDK_BUILTOOLS/apksigner" verify --print-certs "$APK" 2>&1 || true)
+          # SDK_BUILDTOOLS. The next line read `$SDK_BUILTOOLS` -- one letter short
+          # -- and that is the entire bug. Nothing defines SDK_BUILTOOLS, no env
+          # sets it, and this step has no `set -u`, so it expanded to empty:
+          #
+          #     CERTS=$("/apksigner" verify --print-certs "$APK" 2>&1 || true)
+          #
+          # `|| true` swallowed "not found", CERTS became the error text, and the
+          # fingerprint check then failed and reported
+          #
+          #     ::error::signing certificate is not b1ffd75d...
+          #
+          # which names a SIGNING PROBLEM when the cause is a misspelled PATH. The
+          # step has never run since: the last tag run was 2026-09-24 (v0.70.0) and
+          # the commit that introduced this body was 2026-09-30, so the next tag
+          # push would have blocked a release on a one-letter typo and pointed at
+          # the wrong subsystem entirely.
+          #
+          # Found by .github/scripts/check_workflow_var_scope.py, which reports a
+          # variable a step reads but never assigns. It cannot see a typo on its
+          # own -- it sees that this name has no assignment, and there is none.
+          CERTS=$("$SDK_BUILDTOOLS/apksigner" verify --print-certs "$APK" 2>&1 || true)
           printf '%s\n' "$CERTS" | sed -n '1,6p' | sed 's/^/  certs: /'
           if ! printf '%s\n' "$CERTS" | grep -qi "b1ffd75dd410c84bd9467e418c419cd377d57569ae7ac5e26b778e6418b1a483"; then
             echo "::error::signing certificate is not b1ffd75dd410c84bd9467e418c419cd377d57569ae7ac5e26b778e6418b1a483. apksigner said:"

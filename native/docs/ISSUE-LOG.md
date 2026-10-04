@@ -4858,3 +4858,133 @@ reason -- not slowness, but that the K-quant advantage reverses on real arm64. T
 open items, two different re-verification requirements: this one needs a *latency*
 measurement, that one needs a *quality* re-measurement. Both are blocked on the
 same missing hardware and are closed by the same phone.
+
+
+---
+
+## AUDIT: which of the six defects had a lint, and what class is still unlinted
+
+Six defects cost the Blocker 1 work. Two now have lints that catch them, and the
+audit below is the honest accounting of the other four -- because the useful
+question is not "did I fix six bugs" but "what class of defect is still invisible".
+
+| # | defect | invisible to | lint |
+|---|---|---|---|
+| 1 | `#` comment between backslash-continued lines dropped a flag **and four more** | compiler, review, YAML | `check_shell_continuations.py` |
+| 2 | vendored libwebp unbuildable | -- | `patch_sd_libwebp.py` (refuses to no-op) |
+| 3 | `SD_ROOT` local to another step | review | **`check_workflow_var_scope.py`** (new) |
+| 4 | `android-device.yml` copied one `.so` by name | every gate, the 18-symbol ABI check | **still unlinted** (see below) |
+| 5 | `bool` success returned as an error code | compiler, review, ABI gate | `check_error_code_conventions.py` |
+| 6 | `MissingFormatArgumentException` in a `println` | compiler, review | `check_kt_format_specs.py` |
+
+### The two new lints, and both are verified non-vacuous
+
+A lint that has never fired is indistinguishable from a lint that cannot fire, so
+each was checked by re-injecting the defect it was written for.
+
+**`check_error_code_conventions.py`** -- bool-returning functions consumed as ABI
+error codes. Three rules: assigned to an int-typed variable, compared against an
+ABI code, returned unmapped.
+
+    current native tree   ok: 3 file(s) with bool-returning functions
+    pre-fix wrapper      ::error:: prefix.cpp:355  write_png() ... assigned to an
+                                           int-typed variable
+
+The third rule initially also flagged line 208 --
+
+    return write_png(pixels, w, h, channels, path) ? GS_OK : GS_ERR_IO;
+
+-- which is the **correct** usage and sits twelve lines from the bug. A lint that
+reports the right thing and the fix is a lint that gets switched off, so rule 3
+requires the return to be unmapped.
+
+**`check_workflow_var_scope.py`** -- a `run:` block is its own shell, so a variable
+assigned in one step does not exist in the next.
+
+    all 10 workflows, current   ok
+    pre-fix android-native      ::error:: job=build step=Build libgs_ffi.so
+                                read but never assigned here: SD_ROOT
+    android-release, typo
+    re-injected                 ::error:: job=build step=Gates (badging, cert,
+                                BASE_URL)  ... SDK_BUILTOOLS
+
+Getting it to zero false positives took five fixes, and every one of them was a
+false positive I had to go and disprove rather than assume:
+
+| false positive | real cause | fix |
+|---|---|---|
+| `ARCH`, `SYSROOT` in ios-native | `while read -r TRIPLE ARCH SYSROOT` assigns **every** name; the regex captured only the first | capture all names after `read` |
+| `KT`, `KTT` in android-app | `mapfile -t KT` assigns an array with no `KT=` anywhere | recognise `mapfile`/`readarray` |
+| `PIPESTATUS` | a bash builtin array, always present | added to the builtin set |
+| `IOS_DESTINATION` | published by an earlier step via `$GITHUB_ENV` | `$GITHUB_ENV` writes scope to later steps in the job |
+| `I` | `${ImageOS:-}` -- the bare-`$` regex captured one character of a camelCase name | read `${...}` and `$NAME` as separate alternatives, and treat `${V:-}` as guarded |
+
+The last two matter beyond this lint: **`$GITHUB_ENV` is the supported way to
+publish a value across steps**, and treating those reads as findings would have
+flagged the correct pattern twice (`GS_SD_PREBUILT` and `IOS_DESTINATION`). A lint
+that punishes the recommended idiom gets disabled.
+
+## A LIVE RELEASE-GATE BUG this found, which no run would have caught
+
+The var-scope lint flagged `SDK_BUILTOOLS` in `android-release.yml`. It is a
+**one-letter typo** -- `BUILTOOLS` for `BUILDTOOLS` -- on the certificate gate:
+
+    CERTS=$("$SDK_BUILTOOLS/apksigner" verify --print-certs "$APK" 2>&1 || true)
+
+Nothing defines `SDK_BUILTOOLS`. The step has no `set -u`, so it expanded to
+empty, giving `"/apksigner"`, and `|| true` swallowed "not found". `CERTS` became
+the error text, the fingerprint check failed, and the gate reported:
+
+    ::error::signing certificate is not b1ffd75dd410c84bd9467e418c419cd377d57569ae7ac5e26b778e6418b1a483
+
+**A SIGNING PROBLEM message, caused by a misspelled PATH.** The operator would
+have been sent to the keystore when the cause was a typo.
+
+And the reason no run caught it: `android-release.yml` triggers only on `v*` tags.
+The last tag run was **2026-09-24** (v0.70.0). The commit that introduced this step
+body, `ef6058a` ("fix(91): seven pipelines could kill their own step"), is dated
+**2026-09-30**. So the current body **has never executed** -- verified by
+diffing against the tag:
+
+    WAS (v0.70.0, ran green):
+      SDK_BUILDTOOLS="$ANDROID_HOME/build-tools/35.0.0"
+      "$SDK_BUILDTOOLS/apksigner" verify --print-certs "$APK" | grep -qi "<sha>" || exit 1
+    NOW (2026-09-30, never run):
+      39:  SDK_BUILDTOOLS="$ANDROID_HOME/build-tools/35.0.0"
+      63:  BADGING=$("$SDK_BUILDTOOLS/aapt2" ...)        <- correct spelling
+      70:  CERTS=$(  "$SDK_BUILTOOLS/apksigner" ...)     <- typo
+
+Fixed, and the fix does not rely on the typo not recurring: both tools are now
+checked for existence **before** any content gate runs, and a missing tool exits
+with its own path and the build-tools listing. With `|| true` on both captures, a
+tool failure and a content failure are otherwise indistinguishable, and that is
+what turned a typo into a misleading diagnosis.
+
+Also fixed in the same pass: `SIM_ARCHS` in the iOS XCTests step was read with no
+assignment, inside a `::error::` echo. Under `set -u` that error path would have
+aborted with `SIM_ARCHS: unbound variable` instead of printing the diagnostic it
+exists to print. Now `${SIM_ARCHS:-<not reported by the architecture step>}` --
+the guarded form, which is what the lint teaches.
+
+## The class that is STILL unlinted
+
+**Defect 4: a set that must be complete, enumerated by hand.** `android-device.yml`
+found one library by name and copied one file:
+
+    SO=$(find /tmp/so-artifact/x -name 'libgs_ffi.so' -type f | head -1)
+    cp "$SO" android/app/src/main/jniLibs/$ABI/libgs_ffi.so
+
+Option B made the set size two. Nothing in the build, the ABI gate, the arch gate
+or the packaging gate knew that, so the build was green in five places and
+diffusion was `sd.cpp:unloadable` on a device only.
+
+This is now guarded -- the step fails if `libgs_sd.so` is absent, listing the
+`.so` files that WERE present -- but it is guarded by **two hand-maintained lines**,
+which is exactly the shape that failed. A real fix wants the list to come from one
+place: the artifact's own directory listing, with the required set derived from
+what `android-native` uploaded rather than retyped. That is not written, and it is
+recorded here as the next lint-shaped gap rather than presented as solved.
+
+The generalisable form: **any place where two files must agree, and the agreement
+is maintained by typing both names in two files, will eventually be one name in
+two files.** `libgs_ffi-x86_64` and `stablediffusion-x86_64` are the pair today.

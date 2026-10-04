@@ -2469,7 +2469,8 @@ jobs:
           echo "  prediction is falsifiable            : $PREDICTED_ASSERTABLE"
           if [ "$PREDICTED_ASSERTABLE" = yes ] && [ "$RAN" != "$PREDICTED" ]; then
             echo "::error::the destination was predicted to execute $PREDICTED and the test"
-            echo "::error::process was compiled as $RAN, with SIMULATOR_ARCHS '$SIM_ARCHS'."
+            echo "::error::process was compiled as $RAN, with SIMULATOR_ARCHS '${SIM_ARCHS:-<not reported by the
+                 architecture step>}'."
             echo "::error::Inference and reality disagree, so this run says nothing about"
             echo "::error::$PREDICTED and must not be reported as though it did."
             exit 1
