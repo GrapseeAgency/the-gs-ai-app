@@ -50,8 +50,7 @@ jobs:
         # `inputs` is EMPTY on a tag push -- workflow_dispatch defaults do not
         # apply there -- so the fallback is repeated here as well as inside the
         # script. Run 37207411446 failed on exactly this: stage_release_so.sh ""
-        run: bash .github/scripts/stage_release_so.sh "
-          ${{ inputs.so_run_id || '37161154981' }}"
+        run: bash .github/scripts/stage_release_so.sh "${{ inputs.so_run_id || '37161154981' }}"
 
 
       - name: Unit tests + assemble

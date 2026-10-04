@@ -44,7 +44,13 @@ set -euo pipefail
 # against an empty input on push is false and silently disabled the flag. Both are
 # the same mistake: a default written in one place and relied on from another.
 DEFAULT_SO_RUN=37161154981
-SO_RUN="${1:-$DEFAULT_SO_RUN}"
+# TRIMMED, because a YAML-folded argument arrives with a leading space.
+# Run 37207647049 got the right run id and still failed:
+#     staging libgs_ffi.so from android-native run  37161154981
+#     curl: (3) URL rejected: Malformed input to a URL function
+# A space inside a URL is enough, and the log line above is the only place it was
+# visible -- so this is trimmed rather than trusted.
+SO_RUN="$(printf '%s' "${1:-$DEFAULT_SO_RUN}" | tr -d '[:space:]')"
 if [ -z "$SO_RUN" ]; then
   echo "::error::no android-native run id given and the built-in default is empty" >&2
   exit 1
