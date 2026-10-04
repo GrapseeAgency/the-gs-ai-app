@@ -5557,3 +5557,99 @@ Non-vacuous against the real pre-fix file:
 All six newly-wired lints run in the one job that already lints, so there is a
 single place to look, and all six were verified non-vacuous by re-injecting the
 defect each was written for.
+
+
+---
+
+## The lint I wired in immediately turned a build RED -- on its own false positives
+
+`android-app` 37181907762, run **37181907762 -> conclusion: failure**, on a commit
+that was correct.
+
+    FAIL: 5 mismatch(es) in 37 format call(s)
+
+All five were false positives, from three distinct bugs in the lint, and one
+structural mistake of mine: **I had only ever run it against
+`android/app/src/*/java/com/grapsee/gsai/*.kt` -- 26 calls -- and CI passes the
+whole tree, 104 sources and 37 calls.** The extra scope contained code the lint
+had never seen, and the lint was wrong about it immediately.
+
+This is the strongest possible argument for the previous commit. A lint run only
+from a shell, over a scope I chose, on the files I had been editing, is a comment
+with a shebang -- and the moment it met code I had not looked at, it failed.
+
+### Bug 1: the literal was paired with the wrong `.format(`
+
+    "((?:[^"\\]|\\.)*)"\s*\.format\(([^)]*)\)      with re.S
+
+Two ways to be wrong at once:
+
+- `[^)]*` for the arguments stops at the first `)`, and these calls put their
+  arguments on the **following lines**, so a 6-argument call counted as 0 or 1;
+- `re.S` let the literal body span lines, so a literal from one call paired with
+  the `.format(` of another.
+
+It reported `"%-58s %10d %10s %10s %10s %10s"` (line 389) **at line 362**, which is
+a different call with `%10s` where this one has `%10d`.
+
+Fixed by requiring the gap between the closing quote and `.format(` to be
+**whitespace only** -- that is what makes the pairing unambiguous -- and by
+extracting arguments with **paren counting** instead of stopping at the first one.
+
+### Bug 2: `%% of frozen blocks` was scanned as a format specifier
+
+    '  pre-fix regression : %5.1f%% of frozen blocks kept their instances'
+
+reported **2** specifiers: `%5.1f` and `% o`.
+
+**Space is a legitimate flag character** in a conversion specifier. The scan
+started at the second `%` of `%%`, matched the space as a flag, and took `o` from
+the English word "of". A specifier invented out of prose.
+
+Fixed with alternation so the scan consumes `%%` as a unit before it can start a
+specifier at the second percent:
+
+    SPEC = re.compile(r"%(?:%|[-+ #0-9.]*[a-zA-Z])")
+
+    '%.1f%% of frozen blocks'  ->  ['%.1f']
+    '%5.1f%% of frozen'        ->  ['%5.1f']
+    '100%% done, %d items'     ->  ['%d']
+
+### Bug 3: two definitions of `SPEC`, the second shadowing the first
+
+Fixing bug 2 edited the **first** `SPEC = re.compile(...)`. A `SPEC` redefinition
+added during the earlier rewrite sat at line 65 and **overrode it at import time**,
+so the fix appeared to do nothing. Found by grepping for the definition and
+finding two.
+
+That is the same failure as the `link_stable_diffusion` flag: **a default written
+in one place and read from another.** Two copies of a constant, one of them dead
+at runtime because Python binds the name once.
+
+### Verified after the fix
+
+    full android/app/src   ok: 37 format call(s), specifier counts match
+    androidTest subset     ok: 26 format call(s)
+    the afbf43c bug, re-injected   CAUGHT (exit nonzero)
+    %% handling, all four shapes   correct
+    multi-line 6-arg calls         6 spec, 6 arg, OK
+
+Both directions matter and both are checked: a lint that no longer fires is as
+useless as one that always fires, so the injected defect is re-run after every
+change to the matcher.
+
+### What this says about the other lints
+
+Four lints had never seen a file outside the subset I chose. They are now wired
+into CI over the full tree, which is the first time most of them have met
+`android/app/src/main/**` and `android/app/src/test/**` at all.
+
+They passed on first contact -- `check_kt_imports` and
+`check_error_code_conventions` and `check_workflow_var_scope` are clean across
+104 sources, 10 workflows and 18 C++ files. But "passed on first contact" is a
+weaker claim than "verified non-vacuous", and the difference between those two
+phrases is what this entry is about. The honest statement is that `android-app`
+now runs them and will report what it finds.
+
+The one that failed did so within minutes of being wired in, which is the whole
+argument for wiring it in rather than continuing to run it by hand.

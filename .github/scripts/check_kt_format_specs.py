@@ -30,8 +30,79 @@ import os
 import re
 import sys
 
-SPEC = re.compile(r"%[-+ #0-9.]*[a-zA-Z]")
-CALL = re.compile(r'"((?:[^"\\]|\\.)*)"\s*\.format\(([^)]*)\)', re.S)
+# A conversion specifier: flags, width, precision, then a conversion character.
+#
+# `%%` IS MATCHED AS A UNIT, because space is a legitimate flag character and
+# without this the literal "%% of frozen blocks kept their instances" is scanned as
+#
+#     %5.1f      a real specifier
+#     % o        ...the SECOND percent, then the space as a flag, then "o"
+#
+# `-- a specifier invented out of the English words "percent of". It reported two
+# false positives in ParserStreamingBenchmark.kt, both of which were correct code.
+# Alternation means the scan consumes `%%` before it can start a specifier at the
+# second percent, and `%%` entries are then discarded.
+SPEC = re.compile(r"%(?:%|[-+ #0-9.]*[a-zA-Z])")
+
+# PAIR THE LITERAL WITH ITS OWN .format().
+#
+# The first version used
+#     "((?:[^"\\]|\\.)*)"\s*\.format\(([^)]*)\)   with re.S
+# and reported FIVE false positives in ParserStreamingBenchmark.kt, turning
+# android-app.yml red on a commit that was correct. Two reasons, both structural:
+#
+#   1. `[^)]*` for the arguments stops at the first ')', and these calls put their
+#      arguments on the FOLLOWING lines, so a 6-argument call counted as 0 or 1.
+#   2. `re.S` let the literal body span lines, so a literal from one call paired
+#      with the `.format(` of another. It reported "%-58s %10d %10s ..." (line 389)
+#      at line 362, and paired "%5.1f%% of frozen blocks" with a "% o" from a
+#      different line -- inventing a specifier out of the words "% of".
+#
+# So: the gap between the closing quote and `.format(` must be WHITESPACE ONLY,
+# which is what makes the pairing unambiguous, and the arguments are extracted by
+# counting parens rather than by stopping at the first one.
+LITERAL = re.compile(r'"((?:[^"\\]|\\.)*)"[ \t\r\n]*\.format\(')
+
+
+def split_args(text, start):
+    """Return (args_text, end_index) for the argument list beginning at `start`.
+
+    Counts parentheses so a nested call, or arguments on following lines, are
+    handled. A string literal inside the arguments may contain parens, so quotes
+    are tracked too.
+    """
+    depth = 0
+    i = start
+    quote = None
+    while i < len(text):
+        ch = text[i]
+        if quote:
+            if ch == "\\":
+                i += 2
+                continue
+            if ch == quote:
+                quote = None
+            i += 1
+            continue
+        if ch in "\"'":
+            quote = ch
+        elif ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            if depth == 0:
+                return text[start:i], i
+            depth -= 1
+        i += 1
+    return text[start:], len(text)
+
+
+def find_calls(src):
+    """(lineno, literal, args_text) for every `"...".format(...)` call."""
+    out = []
+    for m in LITERAL.finditer(src):
+        args, _end = split_args(src, m.end())
+        out.append((src[: m.start()].count("\n") + 1, m.group(1), args))
+    return out
 
 
 def strip_comments(src):
@@ -65,6 +136,34 @@ def strip_comments(src):
     return "\n".join(out)
 
 
+def split_top_level(args):
+    """Split on commas that are not inside (), [], {} or a string."""
+    parts, buf, depth, quote = [], [], 0, None
+    for ch in args:
+        if quote:
+            buf.append(ch)
+            if ch == "\\":
+                continue
+            if ch == quote:
+                quote = None
+            continue
+        if ch in "\"'":
+            quote = ch
+            buf.append(ch)
+            continue
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        if ch == "," and depth == 0:
+            parts.append("".join(buf))
+            buf = []
+            continue
+        buf.append(ch)
+    parts.append("".join(buf))
+    return parts
+
+
 def main(argv):
     if len(argv) < 2:
         sys.exit(__doc__)
@@ -72,16 +171,15 @@ def main(argv):
     checked = 0
     for path in argv[1:]:
         src = strip_comments(open(path).read())
-        for match in CALL.finditer(src):
-            literal, args = match.group(1), match.group(2).strip()
+        for line, literal, raw_args in find_calls(src):
+            args = raw_args.strip()
             specs = [s for s in SPEC.findall(literal) if s != "%%"]
             if not specs:
                 continue
             checked += 1
-            nargs = 0 if args == "" else len([a for a in args.split(",") if a.strip()])
+            nargs = 0 if args == "" else len([a for a in split_top_level(args) if a.strip()])
             if len(specs) != nargs:
                 problems += 1
-                line = src[: match.start()].count("\n") + 1
                 print("::error::%s:%d  %d specifier(s) %s vs %d argument(s)"
                       % (os.path.basename(path), line, len(specs), specs, nargs))
                 print("::error::  throws MissingFormatArgumentException at RUNTIME, "
