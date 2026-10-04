@@ -5898,3 +5898,113 @@ were checking was fine.
 Two of the eight were found only because a lint was wired in and immediately
 failed. That is the argument for wiring lints in rather than running them by hand,
 stated as an outcome rather than as a principle.
+
+
+---
+
+## Run 37184562759: three failures, and one of them is a regression I caused in someone else's test
+
+    Tests 35/36 completed. (0 skipped) (3 failed)
+    Finished 36 tests on emulator-5554 - 11
+
+    ChatUiReplyTest.assistantReply_isRenderedInTheRealComposeTree
+      java.lang.AssertionError: the engine answered with "Paris" but no node in
+      the real Compose tree renders it.
+    ChatUiReplyTest.cancellingAStreamKeepsThePartialReplyAndReportsCancelled
+      java.lang.AssertionError: a cancelled stream must publish Phase.Cancelled,
+      not Done.
+    DeviceVerificationTest.a5_prefer_local_is_off_by_default
+      java.lang.AssertionError: preferLocal must be OFF by default -- that is the
+      whole safety property of commit 1(b)
+
+All three are mine. The first two are the test being wrong about the app. The third
+is the test suite catching a real thing I broke.
+
+### 3. a5: my tests leaked a persisted preference into an existing safety test
+
+`a5` reads the raw SharedPreferences key `settings.preferLocal` and asserts it is
+**false**, which is the entire safety property of the local-first routing switch.
+My two new tests call `SettingsStore.updatePreferLocal(true)` and never put it back,
+so whichever of them ran first left the switch on for `a5`.
+
+The part worth recording is that **`a5`'s own failure message predicted this before
+it happened**:
+
+    "If this fails, either a test above turned it on and did not restore it, or the
+     default in SettingsStore.kt:43 changed."
+
+It was the first. The suite documented this failure mode and I walked into it
+anyway. Fixed by saving and restoring `preferLocal` around both tests
+(`withRestoredPreferLocal`).
+
+`ModelStore.installedPath` is deliberately **not** restored: `ModelStore` exposes no
+clear or uninstall, the only writer is `recordInstalled(file, modelId)`, and calling
+it with an invented empty `modelId` to undo a record would be guessing at state
+rather than restoring it. No test asserts a default `installedPath`, so leaving it
+is the smaller risk -- and saying so beats a plausible-looking guess.
+
+### 1. The engine worked and the test was asserting on the wrong screen
+
+    ChatUiReplyTest: phase=Done
+    ChatUiReplyTest: streamText -> Paris.
+    ChatUiReplyTest: RENDERED -> GS AI | Your intelligent command centre |
+                             One AI for everything | Chat, write, research and
+                             build in one place | Your data ...
+
+The controller answered `"Paris."` and reached `Done`. The rendered tree was the
+**AUTH gate's marketing copy**, not a chat screen. `GsNavHost` computes
+
+    val start = if (SessionStore.isSessionActive(context)) GsRoutes.CHAT
+                 else GsRoutes.AUTH
+
+With no session the app opens on AUTH, and `SessionStore.activateSession(context)`
+**exists and no test had ever called it.** The reply never rendered because there
+was no chat screen to render it into -- the engine was correct throughout.
+
+This is the distinction the test was written to make, and it made it: "the engine
+answered" and "the UI shows the answer" are separate facts, and here the first was
+true while the second was untested because the app was somewhere else entirely.
+
+Fixed with `enterChatWithLocalModel()`: activate the session, mark onboarded, then
+`activityRule.scenario.recreate()`. The recreate is required, not decorative -- the
+rule launches `MainActivity` before any test body runs and the start destination is
+computed during composition, so activating the session afterwards only takes effect
+once the graph is rebuilt.
+
+### 2. The cancel arrived after the stream had already finished
+
+    ChatUiReplyTest: before cancel -> phase=Done chars=1259
+
+The test waited for partial text before cancelling, and a 0.5B model answering "a
+500-word essay about bridges" produced 1259 characters inside that window. So
+`phase` was already `Done`, the cancel had nothing to cancel, and the test asserted
+on a `Done` it had caused itself.
+
+Fixed on both sides, because either alone is a race:
+
+- the prompt is now ~3000 words rather than 500;
+- the cancel fires on the **first observation of `Streaming`** instead of after
+  waiting for content. Polling for the phase and cancelling on sight of it is a
+  deterministic ordering; polling for content races the model.
+
+And the preservation assertion is no longer allowed to pass vacuously:
+
+    sawPartial && (after?.streamText?.length ?: -1) >= (beforeCancel?.streamText?.length ?: 0)
+
+Without the `sawPartial` guard that comparison is `0 >= 0` when nothing had been
+streamed -- true, and proving nothing. When the guard is not satisfied the test says
+so in the log rather than passing quietly.
+
+### The class of defect, named
+
+Two of the three are **a test that asserted a property of the app without
+establishing the app's preconditions.** The engine was fine; the session was never
+created and the cancel was sequenced wrong. Neither was visible without running on
+a device against the real `MainActivity`.
+
+The pre-existing tests in this repository avoid it by never launching an Activity --
+`a6` drives `ChatRepository` directly and reads the text in the test. That design
+choice is precisely why those tests are stable, and it is also why none of them ever
+noticed that `activateSession` was unused. Asserting against a real Activity buys
+real coverage and charges a precondition tax; the tax is only payable if you know
+the preconditions exist, and I did not.

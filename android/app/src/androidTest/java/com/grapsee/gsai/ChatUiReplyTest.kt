@@ -5,6 +5,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.grapsee.gsai.MainActivity
 import com.grapsee.gsai.data.chat.ChatStreamController
+import com.grapsee.gsai.data.SessionStore
 import com.grapsee.gsai.data.local.ModelCatalog
 import com.grapsee.gsai.data.local.ModelStore
 import com.grapsee.gsai.data.SettingsStore
@@ -106,6 +107,73 @@ class ChatUiReplyTest {
         return null
     }
 
+    /**
+     * Put the app in the state these tests need, and put it BACK afterwards.
+     *
+     * TWO PRECONDITIONS, both found by this test failing rather than by reading the
+     * source first.
+     *
+     * 1. A SESSION. `GsNavHost` computes
+     *        val start = if (SessionStore.isSessionActive(context)) GsRoutes.CHAT
+     *                     else GsRoutes.AUTH
+     * so with no session the app opens on the AUTH gate, and the semantics tree is
+     * full of marketing copy -- run 37184562759 rendered
+     *        GS AI | Your intelligent command centre | One AI for everything | ...
+     * while the engine had already answered "Paris." and reached phase Done. The
+     * controller worked perfectly; the test was asserting on the wrong screen.
+     *     `SessionStore.activateSession` exists and NO test had ever called it.
+     *
+     * 2. RESTORING `preferLocal`. These tests set it true. `a5_prefer_local_is_off
+     *    _by_default` asserts it is OFF, which is the whole safety property of the
+     *    routing switch, and it started failing in the same run because a test
+     *    before it left the preference flipped in the app's persisted store. That
+     *    is a test-ordering dependency, and the fix is to restore rather than to
+     *    hope about ordering.
+     *
+     * Recreating the activity is required rather than optional: the rule launches
+     * MainActivity before any test body runs, and the start destination is computed
+     * during composition, so activating the session afterwards has to be followed by
+     * a recreate for the nav graph to be rebuilt.
+     */
+    private fun enterChatWithLocalModel(): String? {
+        val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+        SessionStore.activateSession(ctx)
+        SessionStore.setOnboarded(ctx, true)
+        composeTestRule.activityRule.scenario.recreate()
+        composeTestRule.waitForIdle()
+        return provisionedModel()
+    }
+
+    /**
+     * Restores EXACTLY ONE preference, and that is the whole point.
+     *
+     * `a5_prefer_local_is_off_by_default` reads the raw key
+     * `settings.preferLocal` out of SharedPreferences and asserts it is false. Its own
+     * failure message already named this failure mode before it happened:
+     *
+     *     "If this fails, either a test above turned it on and did not restore it,
+     *      or the default in SettingsStore.kt:43 changed."
+     *
+     * It was the first. So `preferLocal` is saved and put back.
+     *
+     * `ModelStore.installedPath` is deliberately NOT restored. `ModelStore` exposes
+     * no clear or uninstall, so the only writer is
+     * `recordInstalled(file, modelId)`, and calling it with an invented empty modelId
+     * to "undo" a record would be guessing at state rather than restoring it. No
+     * test asserts a default installedPath, so leaving it is the smaller risk --
+     * and saying so beats a plausible-looking guess.
+     */
+    private fun withRestoredPreferLocal(body: () -> Unit) {
+        val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+        SettingsStore.init(ctx)
+        val before = SettingsStore.preferLocal
+        try {
+            body()
+        } finally {
+            SettingsStore.updatePreferLocal(before)
+        }
+    }
+
     /** Every semantics node carrying a non-blank Text entry. */
     private val hasAnyText = SemanticsMatcher("has non-blank text") { node ->
         node.config.getOrElse(SemanticsProperties.Text) { emptyList() }
@@ -129,47 +197,45 @@ class ChatUiReplyTest {
     )
 
     @Test
-    fun assistantReply_isRenderedInTheRealComposeTree() {
+    fun assistantReply_isRenderedInTheRealComposeTree() = withRestoredPreferLocal {
         val ctx = InstrumentationRegistry.getInstrumentation().targetContext
 
-        // ---- the engine has to be live, or this asserts nothing ----------
-        // FAILS rather than skips, like a6. A skip here is a green run that
-        // proved nothing, and the suite's standing is 0 skipped.
-        val model = provisionedModel()
+        // ---- a SESSION, so the app is on CHAT and not on the AUTH gate ------
+        val model = enterChatWithLocalModel()
         assertNotNull(
             "no 0.5B GGUF provisioned, so the local path cannot run and this " +
-                "test would silently prove nothing. This is a FAILURE, not a " +
-                "skip. If android-device.yml reported GS_QUANT_MISSING the " +
-                "download failed and that run's log says which file.",
+                "test would silently prove nothing. This is a FAILURE, not a skip.",
             model,
         )
         val m = File(model!!)
+        assertTrue(
+            "GsNativeLoader.initWith(${m.absolutePath}) returned false",
+            GsNativeLoader.initWith(m.absolutePath),
+        )
+        assertTrue(
+            "isAvailable() is false, so the local branch is inert and any reply " +
+                "could only be the canned fallback. selfCheck: ${GsNative.selfCheck()}",
+            GsNativeLoader.isAvailable(),
+        )
+        ModelStore.recordInstalled(m, ModelCatalog.MODEL_0_5B.id)
+        SettingsStore.updatePreferLocal(true)
+        println("ChatUiReplyTest: preferLocal=${SettingsStore.preferLocal} " +
+            "installedPath=${ModelStore.installedPath} " +
+            "available=${GsNativeLoader.isAvailable()}")
 
         // NO NATIVE CALL IN AN ASSERTION MESSAGE. Kotlin evaluates arguments left to
-        // right, so the MESSAGE is built before the CONDITION runs -- and this
-        // message calls GsNative.lastError(), which needs the native library that
-        // initWith has not loaded yet. Both of these tests failed on a device with
+        // right, so the MESSAGE is built before the CONDITION runs -- and an earlier
+        // version of this test called GsNative.lastError() in the message of the very
+        // assertion whose condition loads the library. Both of these tests died on a
+        // device with
         //
         //   java.lang.UnsatisfiedLinkError: No implementation found for
         //     com.grapsee.gsai.native.GsNative.lastError()
-        //     (tried Java_com_grapsee_gsai_native_GsNative_lastError and
-        //     ..._lastError__)
         //
-        // which is a confusing way to learn that the message, not the assertion, is
-        // what threw. `lastError` IS exported from the shipped .so -- verified with
-        // nm -D against android-native 37161154981's artifact -- so the symbol is
-        // there and simply had not been loaded at the moment the string was built.
-        //
-        // The result is captured FIRST so the message can only ever describe
-        // something that already happened.
-        val inited = GsNativeLoader.initWith(m.absolutePath)
-        assertTrue(
-            "GsNativeLoader.initWith(${m.absolutePath}) returned false. No native " +
-                "diagnostic is printed here on purpose: lastError() needs the " +
-                "library this call has not loaded yet, and an assertion message " +
-                "that throws masks the assertion it was written to explain.",
-            inited,
-        )
+        // `lastError` IS exported from the shipped .so -- verified with nm -D against
+        // android-native 37161154981's artifact -- so the symbol was there and simply
+        // had not been loaded when the string was built. The result is captured FIRST
+        // above, so the message can only describe something that already happened.
         assertTrue(
             "isAvailable() is false, so ServiceLocator.chatStream's local branch " +
                 "is inert and a reply could only be the canned fallback. " +
@@ -304,9 +370,9 @@ class ChatUiReplyTest {
      * waiting for completion would make this test pass for the wrong reason.
      */
     @Test
-    fun cancellingAStreamKeepsThePartialReplyAndReportsCancelled() {
+    fun cancellingAStreamKeepsThePartialReplyAndReportsCancelled() = withRestoredPreferLocal {
         val ctx = InstrumentationRegistry.getInstrumentation().targetContext
-        val model = provisionedModel()
+        val model = enterChatWithLocalModel()
         assertNotNull(
             "no 0.5B GGUF provisioned, so there is no stream to cancel. " +
                 "This is a FAILURE, not a skip.",
@@ -323,9 +389,17 @@ class ChatUiReplyTest {
         ModelStore.recordInstalled(File(model), ModelCatalog.MODEL_0_5B.id)
         SettingsStore.updatePreferLocal(true)
 
-        // Long enough that it cannot finish before the cancel lands, and worded so
-        // the model has plenty to stream rather than emitting a token and stopping.
-        val prompt = "Write a detailed 500 word essay about the history of bridges."
+        // Long enough that there is a real chance it is still streaming when the
+        // cancel lands. The previous prompt -- a 500-word essay -- was NOT long
+        // enough: run 37184562759 printed
+        //     before cancel -> phase=Done chars=1259
+        // so the stream had already finished and there was nothing to cancel, and the
+        // test asserted on a Done it had caused itself. The cancel below now also
+        // fires on the FIRST observation of Streaming rather than after waiting for
+        // text, so the wait is for the phase and not for the model.
+        val prompt =
+            "Write a detailed 3000 word essay about the history of bridges, " +
+                "covering every century in turn."
         ServiceLocator.chatStream.start(
             conversationId = null,
             prompt = prompt,
@@ -337,10 +411,24 @@ class ChatUiReplyTest {
             ServiceLocator.chatStream.state.value?.phase,
         )
 
-        // Give it long enough to have produced SOME text, so property 2 is a real
-        // assertion about preserved output rather than a vacuous one about an
-        // empty buffer.
-        val sawPartial = waitUntil(60_000L) {
+        // Wait for STREAMING, not for text. Waiting for text is what let the stream
+        // reach Done before the cancel in the previous run. Polling for the phase and
+        // cancelling on the first sight of it is the deterministic ordering; polling
+        // for content is a race with the model.
+        val sawStreaming = waitUntil(30_000L) {
+            ServiceLocator.chatStream.state.value?.phase ==
+                ChatStreamController.Phase.Streaming
+        }
+        assertTrue(
+            "the stream never reported Streaming within 30s of start(), so there " +
+                "was nothing to cancel. phase=" +
+                "${ServiceLocator.chatStream.state.value?.phase}",
+            sawStreaming,
+        )
+        // A short grace period for SOME text, so the second property is about
+        // preserved output rather than about an empty buffer. Bounded and short: if
+        // it is not satisfied the test says so instead of passing vacuously.
+        val sawPartial = waitUntil(5_000L) {
             (ServiceLocator.chatStream.state.value?.streamText?.length ?: 0) > 0
         }
         val beforeCancel = ServiceLocator.chatStream.state.value
@@ -380,14 +468,29 @@ class ChatUiReplyTest {
         // point: if `sawPartial` is false there was nothing to preserve, so that case
         // is reported rather than counted as a pass -- and the prompt needs to be
         // slower for the assertion to mean anything.
+        // `>=` and not `==`: tokens can arrive between reading `before` and the
+        // cancel landing, so the buffer may legitimately grow. SHRINKING means the
+        // republish lost text.
+        //
+        // The `sawPartial` guard is what keeps this from being vacuous. Without it
+        // the comparison is `0 >= 0` when nothing had been streamed, which is true
+        // and proves nothing. Requiring that partial text was actually seen turns a
+        // silent pass into a failure naming the reason.
         assertTrue(
             "the cancel DESTROYED partial output: streamText went from " +
                 "${beforeCancel?.streamText?.length} characters to " +
                 "${after?.streamText?.length}. ChatScreen promises partial output " +
                 "stays on screen, and that promise lives entirely in the " +
                 "catch (CancellationException) republish of the buffer.",
-            after?.streamText?.length ?: -1 >= beforeCancel?.streamText?.length ?: 0,
+            sawPartial &&
+                (after?.streamText?.length ?: -1) >= (beforeCancel?.streamText?.length ?: 0),
         )
+        if (!sawPartial) {
+            println("ChatUiReplyTest: NOTE no partial text was seen before the " +
+                "cancel, so the preservation check above is satisfied by the guard " +
+                "rather than by a comparison of real buffers. The prompt may need " +
+                "to be slower for that half of this test to mean anything.")
+        }
         assertNull(
             "a cancelled stream reported an error: ${after?.error}. Cancel is a " +
                 "user action, not a failure, and an error string here would surface " +
