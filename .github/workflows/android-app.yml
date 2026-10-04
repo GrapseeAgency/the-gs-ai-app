@@ -167,8 +167,14 @@ jobs:
           python3 .github/scripts/check_kt_format_specs.py "${KTL[@]}"
 
           echo "--- imports resolve, none unused, no unimported framework type"
+          # ALL THREE SOURCE SETS, not just main. Test files import test-local
+          # helpers (WireServer, Elf64) and the benchmark suite lives under
+          # src/test; resolving against main alone reported 23 unresolvable imports
+          # that were all resolvable in their own source set.
           python3 .github/scripts/check_kt_imports.py "${KTL[@]}" \
-            --src android/app/src/main/java/com/grapsee/gsai
+            --src android/app/src/main/java/com/grapsee/gsai \
+            --src android/app/src/androidTest/java/com/grapsee/gsai \
+            --src android/app/src/test/java/com/grapsee/gsai
 
           echo "--- bool results are not consumed as ABI error codes"
           python3 .github/scripts/check_error_code_conventions.py "${CPPS[@]}"
