@@ -5841,3 +5841,60 @@ Does not settle: **Blocker 4 Android is still open.** Both `ChatUiReplyTest` cas
 failed, on my bug rather than the tap -- but until they pass, the claim "the reply
 renders in the real Compose tree" rests on a run where both tests threw in their
 first assertion. Fixed and re-dispatched; it needs a green run before it counts.
+
+
+---
+
+## Gate audit, completed: what was broken, and what was sound
+
+Every workflow's gates were audited. Recording the sound ones matters as much as
+the broken ones -- an audit that only lists findings reads as a fishing expedition
+rather than a search.
+
+### Broken, and now fixed
+
+| # | gate | the defect | commit |
+|---|---|---|---|
+| 1 | device test count | `RAN > 0` floor: could not tell 36 tests from 1 | `17ff8df` |
+| 2 | `undefined_syms.py` | `unparsed` was a warning, and under-counted, so "0 denied" could be an artefact | `92e2c61` |
+| 3 | `assert_arch_member.sh` | checked ONE archive member; a mixed archive passed | `88779a0` |
+| 4 | six lints | existed as files; no workflow ran them | `6e17e53` |
+| 5 | `android-app.yml` trigger | `paths: android/**` excluded everything its own lint job reads | `6e17e53` |
+| 6 | `android-native.yml`, `ios-native.yml` triggers | same, 8 steps; `ios-native` runs `check_pipefail_traps` and could not be triggered by a change to it | `d808089` |
+| 7 | `android-release.yml` Gates | one-letter typo `SDK_BUILTOOLS`; would have blocked the next release with a SIGNING diagnosis for a PATH typo | `e891f3c` |
+| 8 | `android-device.yml` staging | copied one `.so` by name; `libgs_sd.so` never entered the APK | `429a9e3` |
+
+### Sound, checked and left alone
+
+- **`ios.yml` (39 runs).** The XCTest step has `set -o pipefail` and GitHub runs
+  `bash -e`, and `tee` reads to EOF rather than exiting early, so there is no
+  SIGPIPE masking and a failing test turns the step red. Both static gates,
+  `scripts/ios_static_gates.py` and `scripts/swift_structure_gate.py`, end in
+  `sys.exit(0 if ok else 1)`. "Summarise results" asserts nothing, but it is a
+  summary: it writes `$GITHUB_STEP_SUMMARY` and the enforcing happens upstream.
+
+- **`eval-gate.yml`.** Its Welch gate exits 0 when `tests/judged-baseline.jsonl`
+  or `judged-run.jsonl` is absent, which looks like "pass on absence" and is not:
+  the rule is documented in the file, it is deliberate, and the reasoning is
+  sound -- *"Runs with fewer than 2 trials per judged case are NEUTRAL -- a single
+  run never fakes significance."* The case that genuinely worries, a run whose
+  turns cannot be exported, is covered by a separate step named **"Silent-failure
+  gate -- block on ANY violation"** running `scripts/silent-failure-ci.ts`. So
+  the neutrality is safe by design rather than by luck, and changing it would
+  remove a deliberate decision rather than fix a defect.
+
+### The shape the eight broken ones share
+
+Not one of them was found by running the suite. Each needed its **input** to be
+wrong -- a mixed archive, an unparseable symbol row, a partial test run, a missing
+file, a stale trigger -- and a passing build never supplies any of those.
+
+That is the single most useful thing this audit produced, and it is worth stating
+plainly for whoever works on this next: **a green CI run is evidence about the
+cases CI happened to exercise.** The defects above were all in the checks
+themselves, and every one of them was invisible precisely because the thing they
+were checking was fine.
+
+Two of the eight were found only because a lint was wired in and immediately
+failed. That is the argument for wiring lints in rather than running them by hand,
+stated as an outcome rather than as a principle.
