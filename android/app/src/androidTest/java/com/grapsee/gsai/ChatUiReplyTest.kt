@@ -12,9 +12,11 @@ import com.grapsee.gsai.di.ServiceLocator
 import com.grapsee.gsai.native.GsNative
 import com.grapsee.gsai.native.GsNativeLoader
 import android.os.Environment
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -256,5 +258,130 @@ class ChatUiReplyTest {
             prompt,
             reply.trim(),
         )
+    }
+
+    /**
+     * Cancelling a stream must reach Phase.Cancelled AND KEEP THE PARTIAL TEXT.
+     *
+     * This is a promise written into the product, not a behaviour I inferred.
+     * `ChatScreen`'s own docstring says: *"Stop-generation cancels through the
+     * controller; partial output stays on screen and disk."* Five call sites in
+     * the app invoke `cancelAndFinalize()` -- the Stop button, navigation away,
+     * a new chat, stream eviction, and process teardown -- and **nothing tested
+     * any of them.**
+     *
+     * Two properties, and the second is the one a naive test would miss:
+     *
+     *   1. the phase becomes Cancelled, so the UI stops showing "Streaming" and
+     *      the Stop button becomes Send again;
+     *   2. `streamText` still holds what had arrived. `cancelAndFinalize()` is
+     *      two lines -- `job?.cancel(); job = null` -- so the text survives ONLY
+     *      because the controller's `catch (CancellationException)` republishes
+     *      the buffer. Delete that republish and this still reaches phase 1 while
+     *      silently destroying the user's half-written answer.
+     *
+     * Cancelled EARLY and on purpose: the model is fast enough on a 0.5B that
+     * waiting for completion would make this test pass for the wrong reason.
+     */
+    @Test
+    fun cancellingAStreamKeepsThePartialReplyAndReportsCancelled() {
+        val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+        val model = provisionedModel()
+        assertNotNull(
+            "no 0.5B GGUF provisioned, so there is no stream to cancel. " +
+                "This is a FAILURE, not a skip.",
+            model,
+        )
+        assertTrue(
+            "GsNativeLoader.initWith failed: ${GsNative.lastError()}",
+            GsNativeLoader.initWith(File(model!!).absolutePath),
+        )
+        SettingsStore.init(ctx)
+        ModelStore.init(ctx)
+        ModelStore.recordInstalled(File(model), ModelCatalog.MODEL_0_5B.id)
+        SettingsStore.updatePreferLocal(true)
+
+        // Long enough that it cannot finish before the cancel lands, and worded so
+        // the model has plenty to stream rather than emitting a token and stopping.
+        val prompt = "Write a detailed 500 word essay about the history of bridges."
+        ServiceLocator.chatStream.start(
+            conversationId = null,
+            prompt = prompt,
+            assistantMessageId = "gs-test-cancel-1",
+        )
+        assertEquals(
+            "start() must publish Streaming before anything is cancelled",
+            ChatStreamController.Phase.Streaming,
+            ServiceLocator.chatStream.state.value?.phase,
+        )
+
+        // Give it long enough to have produced SOME text, so property 2 is a real
+        // assertion about preserved output rather than a vacuous one about an
+        // empty buffer.
+        val sawPartial = waitUntil(60_000L) {
+            (ServiceLocator.chatStream.state.value?.streamText?.length ?: 0) > 0
+        }
+        val beforeCancel = ServiceLocator.chatStream.state.value
+        println("ChatUiReplyTest: before cancel -> phase=${beforeCancel?.phase} " +
+            "chars=${beforeCancel?.streamText?.length}")
+
+        ServiceLocator.chatStream.cancelAndFinalize()
+
+        val reachedTerminal = waitUntil(30_000L) {
+            ServiceLocator.chatStream.state.value?.phase != ChatStreamController.Phase.Streaming
+        }
+        val after = ServiceLocator.chatStream.state.value
+        println("ChatUiReplyTest: after cancel  -> phase=${after?.phase} " +
+            "chars=${after?.streamText?.length} error=${after?.error}")
+
+        assertTrue(
+            "30s after cancelAndFinalize() the phase is still " +
+                "${after?.phase}. cancelAndFinalize is `job?.cancel(); job = null` " +
+                "and nothing else, so the terminal state depends entirely on the " +
+                "job's catch block running. A UI stuck in Streaming shows a spinner " +
+                "forever and the Stop button never comes back.",
+            reachedTerminal,
+        )
+        assertEquals(
+            "a cancelled stream must publish Phase.Cancelled, not Done. Done means " +
+                "the turn finished and was persisted; a cancel that reports Done " +
+                "makes a partial answer indistinguishable from a complete one.",
+            ChatStreamController.Phase.Cancelled,
+            after?.phase,
+        )
+        // `>=` and not `==`: tokens can arrive between reading `before` and the
+        // cancel landing, so the buffer may legitimately grow. Shrinking means the
+        // republish lost text.
+        //
+        // The first draft of this line was `(after?.streamText?.length ?: 0) >= 0`,
+        // which is TRUE OF EVERY INTEGER and therefore asserted nothing. A weaker
+        // point: if `sawPartial` is false there was nothing to preserve, so that case
+        // is reported rather than counted as a pass -- and the prompt needs to be
+        // slower for the assertion to mean anything.
+        assertTrue(
+            "the cancel DESTROYED partial output: streamText went from " +
+                "${beforeCancel?.streamText?.length} characters to " +
+                "${after?.streamText?.length}. ChatScreen promises partial output " +
+                "stays on screen, and that promise lives entirely in the " +
+                "catch (CancellationException) republish of the buffer.",
+            after?.streamText?.length ?: -1 >= beforeCancel?.streamText?.length ?: 0,
+        )
+        assertNull(
+            "a cancelled stream reported an error: ${after?.error}. Cancel is a " +
+                "user action, not a failure, and an error string here would surface " +
+                "as an error banner the user cannot dismiss or explain.",
+            after?.error,
+        )
+    }
+
+    /** Polls [condition] until it holds or [timeoutMs] elapses. Returns whether it held. */
+    private fun waitUntil(timeoutMs: Long, condition: () -> Boolean): Boolean {
+        val start = System.currentTimeMillis()
+        while (System.currentTimeMillis() - start < timeoutMs) {
+            if (condition()) return true
+            composeTestRule.waitForIdle()
+            Thread.sleep(250)
+        }
+        return condition()
     }
 }

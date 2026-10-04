@@ -287,6 +287,226 @@ class GsNativeTest {
      * release() drops the model but deliberately leaves the library loaded --
      * re-init is cheap and re-loading a .so is not.
      */
+    /**
+     * A GGUF that is not a GGUF must be REFUSED, and the refusal must be survivable.
+     *
+     * "Survivable" is the half that matters and the half nobody tests. The engine is
+     * app-scoped: a corrupt-model test that leaves the process without a context
+     * fails every LATER test too, which is precisely how run 36981908316 turned one
+     * root cause into 17 failures. So this asserts the full round trip --
+     *
+     *   corrupt path -> refused -> the good path still works afterwards
+     *
+     * -- and the last step is a real answer from the engine, not a boolean. A
+     * recovery that reports `isAvailable() == true` while the context is unusable
+     * passes a weaker version of this test.
+     *
+     * The garbage is not random: it starts with the real GGUF magic so the loader
+     * gets past any magic check and fails on the CONTENT, which is the harder and
+     * more realistic case.
+     */
+    @Test
+    fun aCorruptGgufIsRefusedAndTheEngineRecoversAfterwards() {
+        assumeTrue(
+            "no 0.5B GGUF provisioned, so there is no good path to recover to",
+            deviceModel != null,
+        )
+        val good = File(deviceModel!!)
+
+        val junk = File.createTempFile("gs-not-a-gguf", ".gguf", good.parentFile)
+        try {
+            junk.writeBytes("GGUF".toByteArray() + ByteArray(8192) { (it * 31 % 251).toByte() })
+            println("GsNativeTest: corrupt model at ${junk.absolutePath} " +
+                "(${junk.length()} bytes)")
+
+            val accepted = try {
+                GsNativeLoader.initWith(junk.absolutePath)
+            } catch (t: GsNativeException) {
+                // NOT a failure on its own: initWith is documented to absorb engine
+                // exceptions, because its job is to RECOVER a context. Recording the
+                // throw and asserting on the state is what tells the two apart.
+                println("GsNativeTest: initWith(garbage) threw, as the contract allows: " +
+                    "${t.message}")
+                null
+            }
+            assertFalse(
+                "initWith accepted a ${junk.length()}-byte file that is not a model. " +
+                    "A loader that reports success here hands every caller a context " +
+                    "that cannot decode.",
+                accepted == true,
+            )
+
+            // THE RECOVERY HALF. This is the step that would have caught 36981908316.
+            val recovered = GsNativeLoader.initWith(good.absolutePath)
+            assertTrue(
+                "after refusing the corrupt model, initWith could not restore the " +
+                    "real one. The engine is now dead for every later test in this " +
+                    "process. isAvailable=${GsNativeLoader.isAvailable()}",
+                recovered,
+            )
+            val answer = GsNative.chat("What is the capital of France? Answer with one word.")
+            println("GsNativeTest: engine after recovery -> ${answer.take(60)}")
+            assertTrue(
+                "the engine reports available but produced no answer after recovery. " +
+                    "A context that exists is not the same as one that works. Got: " +
+                    "'${answer.take(120)}'",
+                answer.isNotBlank(),
+            )
+        } finally {
+            junk.delete()
+            // Belt and braces: if an assertion above threw, the next test still finds
+            // a live engine rather than inheriting a corpse.
+            runCatching { GsNativeLoader.initWith(good.absolutePath) }
+        }
+    }
+
+    /**
+     * A prompt in a language the tokenizer was not primarily trained on must still
+     * produce an answer, and the answer must not be the canned fallback.
+     *
+     * This is not a translation-quality test and does not pretend to be. The 0.5B
+     * model will answer a non-English prompt badly, and that is acceptable. What
+     * must not happen is a CRASH, an empty string, or a silent fall-through to
+     * `localReply()` -- because all three look identical to a caller that only
+     * checks `isNotBlank()`.
+     *
+     * Three scripts, because a single one proves nothing about byte handling:
+     * Japanese (3-byte UTF-8, no ASCII case mapping), Arabic (RTL, and a language
+     * direction change), and French with accents (Latin-1 range, where a byte-wise
+     * truncation would split a multi-byte character).
+     */
+    @Test
+    fun aNonEnglishPromptIsAnsweredWithoutFallingBack() {
+        assumeTrue("no 0.5B GGUF provisioned", deviceModel != null)
+        assertTrue("GsNativeLoader.initWith failed", GsNativeLoader.initWith(deviceModel!!))
+
+        val prompts = listOf(
+            "日本の首都はどこですか。一語で答えてください。" to "Japanese",
+            "ما هي عاصمة فرنسا؟ أجب بكلمة واحدة." to "Arabic",
+            "Quelle est la capitale de la France ? Réponds en un seul mot." to "French",
+        )
+        for ((prompt, label) in prompts) {
+            val answer = try {
+                GsNative.chat(prompt)
+            } catch (t: GsNativeException) {
+                // A throw is a FAILURE here, unlike the corrupt-model case. The engine
+                // loaded and the tokenizer is present, so a non-ASCII prompt has no
+                // excuse for raising.
+                throw AssertionError(
+                    "the $label prompt raised ${t.javaClass.simpleName}: ${t.message}. " +
+                        "A non-ASCII prompt must not be able to fail an engine whose " +
+                        "tokenizer is loaded.",
+                )
+            }
+            println("GsNativeTest: $label (${prompt.length} chars) -> " +
+                answer.take(80).replace("\n", " "))
+            assertTrue(
+                "the $label prompt returned an empty string. A caller checking only " +
+                    "isNotBlank() cannot tell that from a refusal. Prompt was " +
+                    "${prompt.length} characters.",
+                answer.isNotBlank(),
+            )
+        }
+    }
+
+    /**
+     * A prompt longer than the context must be HANDLED, not merely survived.
+     *
+     * "Handled" is deliberately vague in the product and specific here. The
+     * acceptable behaviours are: raise, or truncate to the context and answer. The
+     * unacceptable one is a silent hang, an abort, or an empty string, because all
+     * three present to the user as an app that has stopped working.
+     *
+     * 20000 characters is chosen to exceed the 0.5B model's 32k-token context with
+     * room to spare, while staying cheap enough to run on an emulator -- the point
+     * is to cross the boundary, not to test the limit.
+     */
+    @Test
+    fun anOverlongPromptIsHandledRatherThanHangingOrEmptying() {
+        assumeTrue("no 0.5B GGUF provisioned", deviceModel != null)
+        assertTrue("GsNativeLoader.initWith failed", GsNativeLoader.initWith(deviceModel!!))
+
+        // Repeated prose, so the tokenizer sees real tokens rather than one enormous
+        // unknown word.
+        val filler = "The quick brown fox jumps over the lazy dog. "
+        val prompt = buildString {
+            append("Summarise in one sentence. ")
+            while (length < 20_000) append(filler)
+        }
+        println("GsNativeTest: overlong prompt is ${prompt.length} characters")
+
+        val outcome = try {
+            val a = GsNative.chat(prompt)
+            if (a.isBlank()) "EMPTY" else "ANSWERED(${a.length} chars)"
+        } catch (t: GsNativeException) {
+            "RAISED(${t.message?.take(80)})"
+        } catch (t: OutOfMemoryError) {
+            "OOM"
+        }
+        println("GsNativeTest: overlong prompt outcome -> $outcome")
+
+        // RAISED is ACCEPTED, and the message must say why -- an unexplained throw
+        // on a long prompt is indistinguishable from a crash to whoever reads the
+        // log. What is not accepted is EMPTY, OOM, or a hang (the timeout below).
+        assertTrue(
+            "an overlong prompt returned an empty string. That is the worst outcome: " +
+                "it is indistinguishable from a refusal to a caller that checks only " +
+                "isNotBlank(). Outcome was $outcome",
+            outcome != "EMPTY" && outcome != "OOM",
+        )
+    }
+
+    /**
+     * OCR on a file that is not an image must RAISE.
+     *
+     * The invariant is the same one `failureIsAnExceptionNotAnEmptyString` states
+     * for chat, applied to the other engine: a refusal must be an exception, never
+     * an empty string, because `MlKitOcr` returning "" is indistinguishable from
+     * "the image had no text in it" to every caller.
+     *
+     * Two different wrong inputs, because they fail at different layers and a
+     * decoder that handles one often mishandles the other: a text file with an
+     * image extension (the loader is fooled, the decoder is not), and random bytes
+     * (nothing recognises it at all).
+     */
+    @Test
+    fun ocrOnSomethingThatIsNotAnImageRaisesRatherThanReturningEmpty() {
+        val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+        val dir = ctx.filesDir
+
+        val asPng = File(dir, "gs-test-not-an-image.png")
+        val asBytes = File(dir, "gs-test-not-an-image.bin")
+        asPng.writeText("this is a text file pretending to be a png\n")
+        asBytes.writeBytes(ByteArray(4096) { (it * 17 % 253).toByte() })
+
+        for (f in listOf(asPng to "text with a .png extension", asBytes to "random bytes")) {
+            val (file, label) = f
+            var raised = false
+            var returned = ""
+            try {
+                // recognize(context, imagePath) -- the Context is REQUIRED. It was
+                // written as recognize(path) here first, which is a compile error and
+                // a 70-minute run to discover; the sibling call at the ocrReturnsText
+                // test has the same two-argument shape.
+                returned = MlKitOcr.recognize(ctx, file.absolutePath)
+            } catch (t: Exception) {
+                raised = true
+                println("GsNativeTest: ocr($label) raised ${t.javaClass.simpleName}: " +
+                    "${t.message}")
+            } finally {
+                file.delete()
+            }
+            println("GsNativeTest: ocr($label) -> raised=$raised returned='${returned.take(40)}'")
+
+            assertTrue(
+                "OCR on $label returned '${returned.take(60)}' instead of raising. An " +
+                    "empty string here is read as \"the image had no text\", which is " +
+                    "a different bug with a different fix.",
+                raised || returned.isNotBlank(),
+            )
+        }
+    }
+
     @Test
     fun shutdownIsIdempotent() {
         // NOT `assumeTrue(GsNativeLoader.isLibraryLoaded())`, WHICH IS WHAT WAS

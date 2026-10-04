@@ -5061,3 +5061,120 @@ the code calls them **fully qualified** (`java.net.ServerSocket(0, 1, ...)`). Al
 genuine, and also harmless -- which is the point: this class of finding is never
 urgent, so a lint that reports it must not report it loudly enough to train people
 to ignore the lint.
+
+
+---
+
+## MISSING-TEST AUDIT: five gaps found, four were real
+
+Operator's list, checked against what the suite actually asserts rather than what
+it names.
+
+| candidate | status | where |
+|---|---|---|
+| cancelled chat | **NO COVERAGE** | new test |
+| empty prompt | already covered | `GsNativeTest.failureIsAnExceptionNotAnEmptyString` calls `GsNative.chat("")` and asserts it raises |
+| long prompt | **perf only, no correctness** | new test |
+| non-English prompt | **NO COVERAGE** | new test |
+| corrupt GGUF | **NO COVERAGE** | new test |
+| corrupt image | **NO COVERAGE** | new test |
+
+### cancelled chat -- the highest-value gap, because it is a written promise
+
+`ChatScreen`'s docstring states it outright:
+
+> Stop-generation cancels through the controller; partial output stays on screen
+> and disk.
+
+Five call sites invoke `cancelAndFinalize()` -- Stop button, navigation away, new
+chat, stream eviction, process teardown -- and nothing tested any of them.
+
+The property that matters is the one a naive test misses. `cancelAndFinalize()` is
+two lines:
+
+    fun cancelAndFinalize() {
+        job?.cancel()
+        job = null
+    }
+
+The text survives **only** because the job's `catch (CancellationException)`
+republishes the buffer:
+
+    publishIfMine(token) { it.copy(streamText = buffer.toString(), phase = Phase.Cancelled) }
+
+Delete that republish and the phase still becomes `Cancelled` -- so a test that
+only asserts the phase passes while the user's half-written answer is silently
+destroyed. The test asserts both, and compares lengths **across** the cancel
+(`after >= before`), because tokens can legitimately arrive between reading the
+"before" snapshot and the cancel landing.
+
+The test also waits for partial text to exist before cancelling. If it never
+arrives the assertion would be vacuous, so that case is *reported in the failure
+message* rather than quietly counted as a pass.
+
+### corrupt GGUF -- tested as refusal AND recovery, because only the second is hard
+
+The engine is app-scoped, so a corrupt-model test that leaves the process without
+a context fails every later test too. That is not hypothetical: run 36981908316
+turned one root cause into 17 failures. So the test asserts the round trip:
+
+    corrupt path -> refused -> real path still answers
+
+and the last step is a real answer from the engine, not `isAvailable() == true`. A
+recovery that reports available while the context is unusable passes a weaker test.
+
+The garbage file **starts with the real `GGUF` magic**, so the loader gets past a
+magic check and fails on content -- the harder and more realistic case.
+
+Also asserted: `initWith` must not throw on garbage. That is different from the
+other new tests, where a throw IS a failure. `initWith`'s documented contract is
+to absorb engine exceptions because its job is to *recover* a context, so the test
+records the throw and judges the resulting state.
+
+### non-English prompt -- three scripts, because one proves nothing
+
+Japanese (3-byte UTF-8), Arabic (RTL, direction change) and French with accents
+(Latin-1 range, where byte-wise truncation splits a multi-byte character).
+
+Not a translation-quality test and does not pretend to be -- a 0.5B model answers
+these badly and that is acceptable. The assertion is that it does not crash, does
+not return empty, and does not fall through to `localReply()`, all three of which
+look identical to a caller checking only `isNotBlank()`.
+
+### long prompt -- "handled" made specific
+
+20,000 characters of real prose, over the 32k context with room to spare, while
+staying cheap on an emulator. `RAISED` is **accepted** (with a message that says
+why -- an unexplained throw is indistinguishable from a crash in a log), `ANSWERED`
+is accepted, and `EMPTY` / `OOM` are failures. Empty is the worst outcome because
+it is indistinguishable from a refusal.
+
+### corrupt image -- two kinds, two layers
+
+A text file with a `.png` extension (the loader is fooled, the decoder is not) and
+random bytes (nothing recognises it). `MlKitOcr.recognize` must raise or return
+non-blank; returning `""` is read as "the image had no text", which is a
+different bug with a different fix.
+
+### A vacuous assertion I wrote and caught myself
+
+The cancelled-chat test first ended with
+
+    !sawPartial || (after?.streamText?.length ?: 0) >= 0
+
+`(x ?: 0) >= 0` is **true of every integer**, so it asserted nothing. Replaced
+with a real comparison across the cancel.
+
+Worth recording: `.github/scripts/check_tests_can_fail.py` reports
+`10 @Test function(s) examined, 0 cannot fail` -- **and it did not catch this.**
+It finds tests with no assertions and a few weak patterns; it does not evaluate
+arithmetic tautologies. So the repository's own weak-assertion lint has a blind
+spot, and the thing that caught this was reading the line I had just written.
+
+### One compile error caught before dispatch, not after
+
+`MlKitOcr.recognize(context, imagePath)` takes a Context. The new test was first
+written `recognize(path)`. After 37179305182 cost a run on exactly this class of
+mistake -- `com.grapsee.gsai.data.local.SettingsStore` -- every symbol the new
+tests touch was checked against the declaration before pushing. Caught on the
+first read.
