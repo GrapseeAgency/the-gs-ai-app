@@ -4778,3 +4778,83 @@ would be the exact error this file was rewritten to stop making.
 Assertion 6 has its own failure message naming `ChatScreen.kt:633-642` and the
 terminal phase, because "the engine answered but nothing rendered" and "the engine
 never answered" need opposite fixes and the old message could not tell them apart.
+
+
+---
+
+## OPEN ITEM, TRACKED: SD generation time on emulator is 187s. Target silicon measurement required before this feature ships
+
+> **SD generation time on emulator is 187s. Target silicon measurement required
+> before this feature ships. If a real device cannot generate in <30s, the feature
+> may need to be disabled on mobile or moved server-side.**
+
+### The number, and exactly what it is
+
+From `android-device` 37164998711, on an x86_64 emulator, API 30, CPU only:
+
+    SD0 generated a photograph of a red barn in a green field, daylight
+      -> 787072 bytes in 187511ms
+    SD0 second prompt -> 787072 bytes in 186858ms
+
+Two independent generations, 187.5 s and 186.9 s -- consistent, so the figure is
+reproducible rather than a one-off.
+
+### What that number is NOT
+
+**It is not a phone number and must never be quoted as one.** Specifically:
+
+- **x86_64, not arm64.** The only ABI `android-device.yml` can run is x86_64,
+  because it executes natively on a linux runner; arm64 there needs KVM for a
+  foreign guest. That is the nested-virtualisation wall that already closed item 3
+  permanently (arm64-probe 36992975588, 121.3 min queued, `runner_name: null`;
+  macos-15 `HV_UNSUPPORTED`).
+- **No hardware at all.** An x86_64 emulator's CPU paths, cache hierarchy, memory
+  bandwidth and thread scheduler are not an arm64 phone's, and the gap between
+  them is not a constant factor that can be assumed in either direction.
+- **CPU only.** The build is `-DSD_VULKAN=OFF`. sd.cpp on Android needs libvulkan
+  and a loader that is not in the NDK sysroot, so Vulkan was never enabled and no
+  GPU number exists for this pipeline at any point.
+- **`steps=1` and `cfg=1.0`,** which are documented mandatory constraints of the
+  SDXS-512 checkpoint rather than tuning. A higher step count would be slower and
+  is not what shipped, so the 187 s is the floor for this checkpoint on this
+  silicon class, not a mid-range figure.
+- **A 512x512 image.** Small by diffusion standards.
+
+So: 187 s is a floor measured on the slowest plausible substrate, and the honest
+reading is that **the phone number is unknown and could be better or much worse.**
+
+### Why it is tracked rather than noted
+
+Three reasons, and the third is the one that matters:
+
+1. **It is the number most likely to be quoted out of context.** It is the only
+   diffusion timing in the repository, it looks like a benchmark result, and
+   "the app generates images in 3 minutes" is exactly the sentence a reader would
+   write after a single glance.
+2. **The feature is currently reachable in the shipping path.** Nothing in the
+   app measures or gates on generation time. A user on a mid-range phone can reach
+   a three-minute-plus operation with no warning, because the only timing evidence
+   anyone has is from hardware that does not exist in the product.
+3. **A 3-minute synchronous operation is a product decision, not an engineering
+   one.** Whether that ships at all depends on who is willing to wait, whether it
+   shows a progress indicator, and whether it drains a battery. None of that is
+   answerable from CI.
+
+### What closing it requires
+
+- A real arm64 device. The operator-facing proxy already exists:
+  `./scripts/bench-device.sh` (commit `b3c77ad`), guarded, writes
+  `native/docs/DEVICE-BENCH-<serial>.md`. One command with a phone attached.
+- The decision rule is written down in advance so it is not negotiated later:
+  **if a real device cannot generate a 512x512 image in under 30 s, the feature
+  needs disabling on mobile or moving server-side.** Writing the threshold now,
+  before the number exists, is the point -- a threshold chosen after seeing the
+  number is not a threshold.
+
+### The adjacent open item, deliberately kept separate
+
+The Q4_0 default switch is provisional on emulator evidence for a *different*
+reason -- not slowness, but that the K-quant advantage reverses on real arm64. Two
+open items, two different re-verification requirements: this one needs a *latency*
+measurement, that one needs a *quality* re-measurement. Both are blocked on the
+same missing hardware and are closed by the same phone.
