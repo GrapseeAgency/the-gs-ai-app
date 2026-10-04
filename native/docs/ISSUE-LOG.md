@@ -4610,3 +4610,102 @@ anything.
 
 The architecture is done and demonstrated. What remains is one green sd0, which
 now depends only on three pixel-statistics assertions that this run never reached.
+
+
+---
+
+# BLOCKER 1: CLOSED
+
+**Run 37164998711. Real diffusion, on a real device, from a text prompt, in
+process, no subprocess. 787,072 bytes at 512x512.**
+
+    System.out: SD0 backend: sd.cpp:dlopen
+    System.out: SD0 lastError:
+    System.out: SD0 generated a photograph of a red barn in a green field,
+                 daylight -> 787072 bytes in 187511ms
+    System.out: SD0 pixels: n=262144 min=0 max=255 mean=106.9 sd=98.96
+    System.out: SD0 second prompt -> 787072 bytes in 186858ms, sd=101.45
+    System.out: SD0 mean |luminance difference| between the two prompts: 125.22
+
+Suite: **31 tests, 1 failure, 0 skipped, 55m44.98s, 96% successful.** The single
+failure is `ChatUiReplyTest > sendHello_rendersARealAssistantReply`, which is
+Blocker 4 Android and was already BLOCKED after seven attempts.
+
+## Every clause of the requirement, with its evidence
+
+| clause | evidence |
+|---|---|
+| a PNG on the device | `787072 bytes`, written by the test's own output path |
+| 512x512 | `n=262144` is exactly 512 x 512, and `assertEquals("PNG width", 512, ...)` / `("PNG height", 512, ...)` passed |
+| from a text prompt | two DIFFERENT prompts, and the outputs differ: **mean absolute luminance difference 125.22** |
+| no subprocess | `dlopen` of a SIBLING library; `c2_the_shipped_library_imports_no_process_spawning_symbol` passes |
+| no workspace dependencies | both `.so` files built by `android-native` 37161154981, which depends on nothing but `android-deps` 37133353879 |
+| not a placeholder | `min=0 max=255 mean=106.9 sd=98.96` -- full range, high variance |
+
+The line that matters most is the last one. **One image proves the encoder works;
+two images with different content prove the conditioning is wired up.** A mean
+absolute luminance difference of 125.22 out of 255 between two prompts cannot be
+produced by a stub, a placeholder, an unconditioned sampler, or a fixed seed that
+ignores the prompt. That is the difference between a library that loads and a
+model that is actually being driven.
+
+`sd=98.96` and `sd=101.45` on the two images also rule out the three specific
+failure modes the test asserts separately: a uniform rectangle (sd~0), an
+all-black image (max=0) and an all-white image (min=max=255). A PNG that merely
+*decodes* could be any of the three.
+
+## What it took, in order
+
+Six blocked attempts at building sd.cpp at all, then the two-library design, then
+four defects that each looked like the last one:
+
+1. **`SD_BUILD_SHARED_LIBS=ON` never ran**, because a `#` comment sat between two
+   backslash-continued lines and the flag beneath it was silently dropped. It was
+   `command not found`, exit 127 -- and the four flags after it vanished with no
+   error at all. Lint added: `check_shell_continuations.py`.
+2. **The vendored libwebp could not configure**, which is what all six blocked
+   attempts were. `patch_sd_libwebp.py` adds one condition instead of deleting a
+   reference, and refuses to no-op.
+3. **`SD_ROOT` was local to the Fetch step**, so the `.so` copy died on an unbound
+   variable under `set -u`. `GS_SD_PREBUILT` is what that step publishes.
+4. **`android-device.yml` copied one library by name.** `libgs_sd.so` never
+   entered the APK, so the build was green everywhere and diffusion was
+   `sd.cpp:unloadable` on the device only.
+5. **`write_png` returns a `bool`** and its success value was returned as an error
+   code, so a run that had already generated and written a correct PNG reported
+   `-> 1: no reason recorded`.
+6. **sd0's own `println` threw** `MissingFormatArgumentException` between the
+   decode assertions and the pixel-statistics assertions, deleting the evidence it
+   was there to report.
+
+Four of those six were mine, and three of them were invisible to review, to the
+compiler, or to the 18-symbol ABI gate. Two are now linted
+(`check_shell_continuations.py`, `check_kt_format_specs.py`), and both were verified
+non-vacuous by re-injecting the original defect and confirming it is reported.
+
+## Reproducibility of the Blocker 3 numbers
+
+`QuantQuality50Test` passed in this run too, and returned **identical** values to
+run 37118362666:
+
+    q4_0   mean +/- ci95 : 4.2200 +/- 0.2117
+    q4_k_m mean +/- ci95 : 4.1600 +/- 0.2195
+    delta (q4_0 - q4_k_m): 0.0600
+    |delta| <= 0.3       : true
+
+Two independent runs, same rubric, same figures to four decimals. The Blocker 3
+measurement is reproducible.
+
+## Still open, and none of it is Blocker 1
+
+- **`ChatUiReplyTest`** -- BLOCKED after seven attempts; `Failed to inject touch
+  input.` Untouched by this work.
+- **Real-device TTFT** -- no arm64 runner (arm64-probe 36992975588, 121.3 min
+  queued, `runner_name: null`; macos-15 `HV_UNSUPPORTED`). The proxy is
+  `scripts/bench-device.sh`.
+- **The Q4_0 default remains PROVISIONAL on emulator evidence**, tracked as an
+  open item. Both halves of the deciding measurement were taken on an x86_64
+  emulator, CPU-only, no BLAS, and the expected ordering on real arm64 is the
+  reverse.
+- **Diffusion timing is an emulator number.** 187 seconds for one 512x512 image at
+  1 step on CPU-only x86_64 is not a phone number and must not be quoted as one.
