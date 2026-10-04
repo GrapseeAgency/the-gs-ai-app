@@ -6435,3 +6435,84 @@ architectural gap and is documented in the test's own docstring: `App/project.ym
 has `AppTests (bundle.unit-test)` only, and `XCUIApplication().launch()` from a unit
 test host is why the test is guarded. Making it run needs a `bundle.ui-testing` target
 plus scheme wiring. That is unchanged and is not something a filename fix reaches.
+
+---
+
+## 2026-10-05 — arm64 phone, 2nd report: a failed turn was stored as the assistant's reply
+
+Reported from a real phone running v0.71.1: a message ("hi") produced nothing for
+~20s, and the assistant bubble rendered
+
+    — The connection dropped mid-turn while GS was working. Reopen this chat in a
+      moment to load the finished reply. —
+
+### The server, not the phone
+
+Probed `preview-chat-c945696f-6447-4dfa-b510-971d8b9eb5bf.space-z.ai` directly:
+
+    POST /api/v1/conversations                 201   1.0s
+    GET  /api/v1/conversations                 200   0.4s
+    GET  /api/health                           200   1.2s   {"status":"ok"}
+    POST /api/v1/conversations/{id}/messages   502   1.4s   x6/6 attempts
+        {"code":"upstream_error","message":"GS AI is temporarily unavailable."}
+
+Reads and creates work; the send path is down because its upstream provider is
+unavailable. **No APK can fix this.**
+
+Note the monitoring gap this exposed: `GET /api/health` returns `200 {"status":"ok"}`
+while the only endpoint a user cares about is returning 502. The health probe does
+not touch the upstream. Unchanged by this commit, and worth fixing — a liveness
+check that cannot observe the thing being load-bearing is decoration.
+
+### The app defect, which is real and was ours
+
+The user-visible failure had three independent lies in one sentence, each provable
+from the code at the branch that produced it (`ChatRepository.send`,
+`SendFailure.MidStreamCut`):
+
+1. **"while GS was working"** — this arm requires `accumulated.isEmpty()`. Not one
+   token arrived. There was no work to report on.
+2. **"Reopen this chat in a moment to load the finished reply"** — this arm is only
+   reachable *after* `recoverLatestAssistant()` returned null. Recovery had already
+   proven no completed answer was saved. The sentence pointed at something guaranteed
+   not to exist, and asked the user to wait for it.
+3. **It is stored as the assistant's message.** The text is appended to `accumulated`
+   and then `persistAssistant(...)`d, so the conversation permanently contains an
+   answer the model never gave. This is the part that reads, to the user, as "GS
+   replied with this".
+
+The **partial-text** branch had the same defect 2 — it also ended in "reopen to load
+the finished reply" despite recovery having found nothing.
+
+### Why no test caught it
+
+The strings were inline literals inside a ~700-line `send()` with no JVM-testable
+seam. `DeviceVerificationTest` asserts `"connection dropped mid-turn"` to
+discriminate `MidStreamCut` from `BackendError(0)`, but only for the partial case —
+`WireServer.MODE_CUT_MID_STREAM` sends `delta("HALF A SE")` before closing, so
+`accumulated` is never empty there. **The branch a phone actually hit had no
+coverage at all**, and `src/test` contained nothing that referenced `ChatRepository`.
+
+### Fix
+
+Extracted both notices into `SendFailureNotice` — a pure `internal object` with no
+dependency on Room, Ktor or the native layer, so `testDebugUnitTest` can reach it
+with no device and no network. Added `SendFailureNoticeTest` with five cases,
+asserted as NEGATIVE constraints ("must not promise X") rather than exact wording,
+because the wording drifts and the promises are load-bearing.
+
+Each assertion was checked non-vacuously: the text that shipped in v0.71.0/0.71.1 is
+rejected by three of them.
+
+`midStreamNothingArrived()` deliberately does **not** contain `"connection dropped
+mid-turn"`. That phrase is the classification signal the on-device test reads, and it
+is true only when text arrived; reusing it for a zero-token turn would present a
+request that produced nothing as a half-finished answer — precisely the misreading
+in the screenshot.
+
+### Still unfixed
+
+The notice is now honest, but it is still an assistant bubble and it is still
+persisted. `MessageEntity` has no error flag, so an error and a reply are
+indistinguishable by construction; fixing that needs a Room migration and distinct
+UI rendering. Recorded as a known limitation of v0.71.2 rather than quietly shipped.

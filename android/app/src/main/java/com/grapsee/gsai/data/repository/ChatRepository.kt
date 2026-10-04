@@ -518,12 +518,19 @@ class ChatRepository(
                         onDone(recovered)
                         return activeId
                     }
+                    // Both branches are reached only AFTER
+                    // recoverLatestAssistant() returned null -- so NEITHER may
+                    // promise the user a finished reply to reopen and collect.
+                    // The old literals did, in both branches, and nothing could
+                    // assert it: they were inline in this function with no
+                    // JVM-testable seam. That is why they are now pure,
+                    // tested functions in SendFailureNotice.
                     if (accumulated.isNotEmpty()) {
-                        val tail = "\n\n— The connection dropped mid-turn. Reopen this chat in a moment to load the finished reply."
+                        val tail = "\n\n" + SendFailureNotice.midStreamPartial()
                         accumulated.append(tail)
                         onDelta(tail)
                     } else {
-                        val notice = "— The connection dropped mid-turn while GS was working. Reopen this chat in a moment to load the finished reply. —"
+                        val notice = SendFailureNotice.midStreamNothingArrived()
                         accumulated.append(notice)
                         onDelta(notice)
                     }
