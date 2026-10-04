@@ -2680,9 +2680,26 @@ class DeviceVerificationTest {
         //   all black       -> a zeroed latent that never decoded
         //   all white       -> a saturated latent
         val stats = luminanceStats(bmp)
+        // ONE format call, AND NO SPLIT FORMAT STRINGS.
+        //
+        // This used to read:
+        //     "SD0 pixels: min=${...} max=${...} mean=" +
+        //         "%.1f sd=%.1f".format(stats.mean) + " sd=%.2f".format(stats.sd)
+        //
+        // where "%.1f sd=%.1f" carries TWO specifiers and is given ONE argument, so
+        // it threw java.util.MissingFormatArgumentException: Format specifier
+        // '%.1f' -- which is how run 37161479688 failed, having already generated
+        // a real 787072-byte 512x512 PNG that decoded cleanly.
+        //
+        // WHERE IT SAT IS THE PART THAT MATTERS. It is between the decode
+        // assertions and the three non-blank assertions that follow. A diagnostic
+        // that can throw, placed immediately above the checks it precedes, does
+        // two things at once: it turns a passing run red, and it removes the pixel
+        // statistics from the log -- so the evidence needed to judge the image is
+        // destroyed by the line that was meant to report it.
         println(
-            "SD0 pixels: min=${stats.min} max=${stats.max} mean=" +
-                "%.1f sd=%.1f".format(stats.mean) + " sd=%.2f".format(stats.sd),
+            "SD0 pixels: n=${stats.n} min=${stats.min} max=${stats.max} " +
+                "mean=%.1f sd=%.2f".format(stats.mean, stats.sd),
         )
         assertTrue(
             "every one of ${stats.n} pixels is the same value (${stats.min}). A " +

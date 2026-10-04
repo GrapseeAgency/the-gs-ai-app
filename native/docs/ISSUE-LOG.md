@@ -4522,3 +4522,91 @@ export gates, `dlopen` resolves all five entry points on a real Android device,
 and generation reaches the encoder. What the next run settles is whether the PNG
 decodes and is non-blank -- which sd0 already asserts with three separate
 pixel-statistics checks, so it cannot pass on a grey rectangle.
+
+
+---
+
+## Run 37161479688: real diffusion on a real device, and a test that broke while reporting it
+
+**Status: generation WORKS. 787,072-byte PNG, 512x512, decoded. The only failure
+is a broken `println` in the test itself.**
+
+From the sd0 logcat artifact:
+
+    10-04 00:03:07.147 System.out: SD0 backend: sd.cpp:dlopen
+    10-04 00:03:07.148 System.out: SD0 lastError:
+    10-04 00:06:14.135 System.out: SD0 generated a photograph of a red barn in a
+                              green field, daylight -> 787072 bytes in 186932ms
+
+That is the whole chain, end to end, on an x86_64 emulator: `dlopen` resolved
+`libgs_sd.so` as a sibling of `libgs_ffi.so`, all five entry points bound,
+`generate_image` ran, and the encoder wrote 787072 bytes in 187 seconds. For scale,
+512 x 512 x 3 = 786432, so this is a real full-size image rather than a
+placeholder.
+
+The `bool write_png` fix is what got here. The previous run returned the
+boolean's success value as an error code and reported failure on a success; this
+one returned `GS_OK`, the file existed, `BitmapFactory` decoded it, and the
+`assertEquals("PNG width", 512, ...)` and `assertEquals("PNG height", 512, ...)`
+both passed.
+
+### What failed, verbatim
+
+    java.util.MissingFormatArgumentException: Format specifier '%.1f'
+        at java.util.Formatter.format(Formatter.java:2523)
+
+From this line, in the test:
+
+    println(
+        "SD0 pixels: min=${stats.min} max=${stats.max} mean=" +
+            "%.1f sd=%.1f".format(stats.mean) + " sd=%.2f".format(stats.sd),
+    )
+
+`"%.1f sd=%.1f"` carries **two** specifiers and is given **one** argument. It
+compiles, reviews cleanly, and throws at runtime.
+
+### Where it sat is the part worth recording
+
+The line sits between the decode assertions and the three non-blank assertions:
+
+    assertNotNull(bmp)              // decoded
+    assertEquals("PNG width",  512) // passed
+    assertEquals("PNG height", 512) // passed
+    println("SD0 pixels: ...")      // <-- THREW HERE
+    assertTrue(stats.max - stats.min >= 16)   // never ran
+    assertTrue(...)                            // never ran
+    assertTrue(...)                            // never ran
+
+So a diagnostic that can throw, placed immediately above the checks it precedes,
+does two things at once: it turns a passing run red, and it deletes the pixel
+statistics from the log. The evidence needed to judge whether the image is blank
+was destroyed by the line that existed to report it. That is worse than a missing
+diagnostic, because a missing one costs nothing.
+
+This is the same shape as the "GetLastError() carries the dlerror() text" message
+from the previous run: a reporting line that carries no usable information. One
+points the reader at a string nobody printed; the other throws before printing
+anything.
+
+Fixed with a single `.format()` over the whole message, and the pixel count added
+because `stats.n` was being computed and never reported.
+
+### A lint, because this is the second time
+
+`.github/scripts/check_kt_format_specs.py` counts `%`-specifiers against
+arguments for every `"...".format(...)` call, **after stripping comments** -- a
+lint that matches its own documentation is a lint that cries wolf on the fix.
+
+    clean tree, 6 test files + main sources -> ok: 26 format call(s)
+    the same bug re-injected into a copy  -> ::error:: ...:2529  2 specifier(s)
+                                            ['%.1f', '%.1f'] vs 1 argument(s)
+                                            FAIL: 1 mismatch(es)
+
+Verified non-vacuous by re-injecting the real defect into a scratch copy and
+confirming it is reported, rather than trusting that a passing check means
+anything.
+
+### Blocker 1
+
+The architecture is done and demonstrated. What remains is one green sd0, which
+now depends only on three pixel-statistics assertions that this run never reached.
