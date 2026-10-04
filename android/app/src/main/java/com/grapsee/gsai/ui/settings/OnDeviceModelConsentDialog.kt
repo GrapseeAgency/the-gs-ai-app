@@ -57,7 +57,9 @@ fun OnDeviceModelConsentDialog(
     onDismiss: () -> Unit = {},
 ) {
     val model = ModelStore.target()
-    var phase by remember { mutableStateOf(Phase.ASK) }
+    // HIDDEN, not ASK. See the enum comment: starting at ASK is why
+    // "Not now" did nothing at all on a real device.
+    var phase by remember { mutableStateOf(Phase.HIDDEN) }
     var bytes by remember { mutableStateOf(0L) }
     var total by remember { mutableStateOf(0L) }
     var job by remember { mutableStateOf<Job?>(null) }
@@ -68,8 +70,12 @@ fun OnDeviceModelConsentDialog(
 
     // Fires once per install. A user who declined is not asked again, because
     // setConsent moves the state off UNDECIDED permanently.
+    //
+    // This is the ONLY thing that opens the dialog, and the only thing that decides
+    // HIDDEN -- so a DECLINED install stays quiet. It previously only ever SET ASK,
+    // which is why "Not now" could not close it.
     LaunchedEffect(Unit) {
-        if (ModelStore.shouldPrompt()) phase = Phase.ASK
+        phase = if (ModelStore.shouldPrompt()) Phase.ASK else Phase.HIDDEN
     }
 
     if (model == null) return
@@ -82,6 +88,10 @@ fun OnDeviceModelConsentDialog(
                 // nag the "once per install" promise forbids. A dismissal is a
                 // refusal.
                 ModelStore.updateConsent(Consent.DECLINED)
+                // HIDE OURSELVES: onDismiss() is a NO-OP when the
+                // caller passed nothing, which is how MainActivity calls
+                // this -- relying on it left the dialog stuck on screen.
+                phase = Phase.HIDDEN
                 onDismiss()
             },
             title = { Text("Enable on-device AI?") },
@@ -157,6 +167,10 @@ fun OnDeviceModelConsentDialog(
                 TextButton(
                     onClick = {
                         ModelStore.updateConsent(Consent.DECLINED)
+                        // HIDE OURSELVES: onDismiss() is a NO-OP when the
+                        // caller passed nothing, which is how MainActivity calls
+                        // this -- relying on it left the dialog stuck on screen.
+                        phase = Phase.HIDDEN
                         onDismiss()
                     },
                     modifier = Modifier.testTag("gs_consent_decline"),

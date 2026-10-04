@@ -82,12 +82,32 @@ object ModelCatalog {
         // empty value is treated as "cannot verify" and REFUSED, so a HIGH-tier
         // device falls back instead.
         //
-        // To fill this in, download the file and hash it, the same way the
-        // android-device job does for the 0.5B:
-        //     curl -L -o qwen2.5-1.5b-instruct-q4_k_m.gguf <url>
-        //     sha256sum qwen2.5-1.5b-instruct-q4_k_m.gguf
-        sha256 = "",
-        bytes = 1_122_816_512L,
+        // FILLED IN, FROM HUGGINGFACE'S OWN PUBLISHED DIGEST -- reported on a real
+        // phone as "Could not start the download -- Qwen2.5 1.5B Instruct (Q4_K_M)
+        // has no verified checksum yet", on a HIGH-class device, which is exactly
+        // the tier this entry targets.
+        //
+        // PROVENANCE, precisely, because the empty value was correct when it was
+        // empty and must not be replaced with a guess:
+        //
+        //     curl -sIL <url> | grep -i '^x-linked-\(size\|etag\)'
+        //       x-linked-size: 1117320736
+        //       x-linked-etag: "6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e"
+        //
+        // `x-linked-etag` is the SHA-256 of the git-LFS object, which is what
+        // HuggingFace serves the bytes for and what its own integrity check uses.
+        // I did NOT download 1.1 GB and hash it locally; this is the publisher's
+        // digest, not a local measurement, and it is recorded as such.
+        //
+        // The 0.5B entries were checked the same way and every one of them matches
+        // HF exactly -- sizes 428,730,208 / 491,400,032 and their digests -- so the
+        // drift was confined to this entry.
+        //
+        // `bytes` WAS ALSO WRONG, and separately: it declared 1,122,816,512 against
+        // a real 1,117,320,736, a 5,495,776-byte error that would have made the
+        // progress bar and the size gate disagree with the file actually arriving.
+        sha256 = "6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e",
+        bytes = 1_117_320_736L,
         minRamBytes = 4L * 1024 * 1024 * 1024,
     )
 
