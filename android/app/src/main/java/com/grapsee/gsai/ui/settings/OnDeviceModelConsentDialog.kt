@@ -260,7 +260,26 @@ fun OnDeviceModelConsentDialog(
     }
 }
 
-private enum class Phase { ASK, DOWNLOADING, DONE, FAILED }
+/**
+ * HIDDEN EXISTS BECAUSE "Not now" DID NOTHING, and it was reported from a real
+ * phone: the dialog reappeared on every launch with no way past it.
+ *
+ * The cause was that `phase` was INITIALISED to ASK unconditionally:
+ *
+ *     var phase by remember { mutableStateOf(Phase.ASK) }
+ *     LaunchedEffect(Unit) { if (ModelStore.shouldPrompt()) phase = Phase.ASK }
+ *
+ * That effect can only ever SET ASK. There was no state meaning "not showing", so
+ * writing `Consent.DECLINED` changed nothing on screen -- and `MainActivity` renders
+ * this dialog with NO `onDismiss` argument, so the default no-op ran and the dialog
+ * simply stayed. The comment near the decline path talks about a "once per install"
+ * promise that this state machine could not honour.
+ *
+ * So: start HIDDEN, and let `shouldPrompt()` be the only thing that opens OR closes
+ * it. A gate that starts open and is merely told to close cannot be trusted to stay
+ * closed.
+ */
+private enum class Phase { HIDDEN, ASK, DOWNLOADING, DONE, FAILED }
 
 /** A Row that keeps this file's imports short without pulling in more. */
 @Composable
