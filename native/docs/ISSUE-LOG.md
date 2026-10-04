@@ -5259,3 +5259,89 @@ helpers named `chunk`, `describe`, `frame`, `handle`, `quote`, `run`, `score`,
 those as "did not run" would be a lie in the one diagnostic whose entire job is to
 be true. Verified: the extractor returns exactly 36 names with **0** helpers
 leaked.
+
+
+---
+
+## SECOND GATE THAT COULD PASS ON A DEFECT: `unparsed` was a warning
+
+Found in `.github/scripts/undefined_syms.py` -- the check that is supposed to prove
+the shipped `.so` imports no symbol from the namespace it must not share with
+sd.cpp. It is the gate Blocker 1's whole symbol-level claim rests on.
+
+Two defects, and the first one hid the second.
+
+### 1. The counter could not count what it was for
+
+The parser skipped any line `SYM` did not match, and counted only those matching
+`UND\s*\S`:
+
+    if not m:
+        if re.match(r"^\s*\d+:", line) and re.search(r"UND\s*\S", line):
+            unparsed += 1
+        continue
+
+A symbol row in any format the regex rejects therefore vanished from **both**
+`defined` and `imported` without incrementing anything. A denied `ggml_*` on such a
+line could never appear in `denied`.
+
+The guard was also wrong in the way that concealed this. It meant to exclude the
+nameless row
+
+    0: 0000000000000000     0 NOTYPE  LOCAL  DEFAULT UND
+
+by matching `UND` followed by a non-space character -- but that row **ENDS** at
+`UND`, so `UND\s*\S` does not match it. It fell through to the bare `continue` and
+was skipped by accident rather than by the documented exclusion. The count came out
+right and the mechanism was not, which is the worst combination: it looks correct.
+
+Now: every row matching `^\s*\d+:` that `SYM` rejects is counted, except one whose
+**last token** is `UND` -- which is the actual reason that row is not a symbol.
+
+### 2. Even a counted row was only a warning
+
+    if unparsed:
+        print("::warning::%d symbol line(s) did not match the parser. A check that silently"
+        print("::warning::skips lines is a check that silently skips symbols.")
+
+and then `return 0`.
+
+The script states the principle and then declines to apply it. An unreadable line
+means "0 denied" is an artefact of the parser rather than a fact about the binary,
+and a gate that cannot read its input cannot certify it. **Fatal now**, with a
+message that says the fix is to teach `SYM` the row format rather than to lower
+the bar.
+
+### Measured before changing a green gate
+
+A stricter gate that would fail a previously-green build is worse than no gate, so
+the corrected counter was run against real binaries first:
+
+    libc.so.6    genuinely unparsed: 0
+    libm.so.6    genuinely unparsed: 0
+
+    shipped parser on a healthy binary:
+      21 imported, 2919 defined, 21 unresolved (0 denied, 21 other), 0 unparsed
+      exit 0
+
+### Non-vacuous
+
+Each row class fed through the SHIPPED `SYM` and the shipped counter:
+
+    healthy defined row      matched   counted-as-unparsed=0
+    healthy undefined row    matched   counted-as-unparsed=0
+    nameless UND row         no-match  counted-as-unparsed=0   <- correctly excluded
+    versioned name (@@LIB_1) matched   counted-as-unparsed=0
+    unparseable row          no-match  counted-as-unparsed=1   <- now FATAL
+
+The `@@VERSION` row matters: symbol versioning is exactly the kind of format change
+that would have silently emptied the analysis, and `SYM` handles it.
+
+### Why this one mattered more than the first
+
+The `RAN > 0` floor would let a partial **test** run pass. This one would let a
+symbol-level **claim** pass. Blocker 1's closing evidence is "0 denied" from this
+script; if the parser had stopped understanding its input, that line would still
+have printed `0 denied` and the conclusion would have been unchanged. A gate whose
+failure mode is indistinguishable from success is the worst kind, because it
+converts a broken measurement into a confident number.

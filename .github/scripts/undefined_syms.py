@@ -78,6 +78,11 @@ ALLOWED_PREFIXES = (
 )
 DENIED_PREFIXES = ("ggml_", "llama_", "sd_", "gguf_")
 
+# A readelf row whose LAST token is UND has no name and is not a symbol:
+#     0: 0000000000000000     0 NOTYPE  LOCAL  DEFAULT UND
+# Excluded explicitly so it is never counted as unparseable.
+NAMELESS_UND = re.compile(r"UND\s*$")
+
 # Num: Value Size Type Bind Vis Ndx Name[ @Version] [ (N)]
 #
 # Ndx is the ONLY thing that says defined vs undefined. The Value column is 0 for
@@ -105,12 +110,32 @@ def read(path):
             continue
         m = SYM.match(line)
         if not m:
-            # A row with no name is not a symbol. readelf emits
-            #     0: 0000000000000000  0 NOTYPE LOCAL DEFAULT UND
-            # with nothing after UND, and counting that as "unparsed" would be a
-            # permanent, meaningless warning.
-            if re.match(r"^\s*\d+:", line) and re.search(r"UND\s*\S", line):
-                unparsed += 1
+            # COUNT EVERY SYMBOL ROW THE PARSER COULD NOT READ.
+            #
+            # It used to count only rows matching `UND\s*\S` and silently `continue`
+            # past everything else, which meant the counter could not detect the case
+            # it exists to detect: a symbol line in a format this regex rejects just
+            # vanished from BOTH `defined` and `imported`. A denied `ggml_*` on such a
+            # line would never appear in `denied`, and the gate would return 0.
+            #
+            # The guard was also wrong in a way that hid this. It excluded the
+            # nameless row by matching `UND\s*\S`, i.e. a NON-SPACE character after
+            # UND -- but that row is
+            #
+            #     0: 0000000000000000     0 NOTYPE  LOCAL  DEFAULT UND
+            #
+            # which ENDS at UND. `UND\s*\S` does not match it, so it fell through to
+            # the bare `continue` and was skipped by accident rather than by the
+            # documented exclusion. The net count happened to be right and the
+            # mechanism was not.
+            #
+            # The exclusion is now stated as what it is: a row whose LAST token is UND
+            # carries no name and is not a symbol.
+            if not re.match(r"^\s*\d+:", line):
+                continue
+            if NAMELESS_UND.search(line):
+                continue
+            unparsed += 1
             continue
         name = m.group("name")
         if not name:
@@ -175,10 +200,26 @@ def main(argv):
     print("  %s" % path)
     print("  %d imported, %d defined, %d unresolved (%d denied, %d other), %d line(s) unparsed"
           % (len(imported), len(have), len(unresolved), len(denied), len(other), unparsed))
+    # UNPARSED IS FATAL, and it was a warning.
+    #
+    # The script's own warning text said "a check that silently skips lines is a
+    # check that silently skips symbols" -- and then returned 0. An unreadable line
+    # means that symbol is in NEITHER `defined` nor `imported`, so a denied symbol on
+    # it cannot be reported, and "0 denied" becomes an artefact of the parser rather
+    # than a fact about the binary.
+    #
+    # A gate that cannot read its input cannot certify anything, and the safe
+    # direction to be wrong in is the loud one. This cannot false-alarm on a healthy
+    # ELF: measured against real binaries with the corrected exclusion,
+    # libc.so.6 and libm.so.6 both report 0 genuinely unparsed rows.
     if unparsed:
-        print("::warning::%d symbol line(s) did not match the parser. A check that silently"
-              % unparsed)
-        print("::warning::skips lines is a check that silently skips symbols.")
+        print("FAIL: %d symbol line(s) did not match the parser. Those symbols are in" % unparsed)
+        print("      neither the defined nor the imported set, so a denied symbol on")
+        print("      one of them is INVISIBLE to this check and \"0 denied\" would be an")
+        print("      artefact of the parser rather than a fact about the binary.")
+        print("      A check that cannot read its input cannot certify it. The fix is")
+        print("      to teach SYM the row format, not to lower the bar.")
+        return 1
     if denied:
         print("FAIL: %d symbol(s) in a denied namespace are undefined." % len(denied))
         return 1
