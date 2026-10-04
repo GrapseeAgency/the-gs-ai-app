@@ -802,7 +802,7 @@ jobs:
             [ -e "$f" ] || continue
             echo "--- $(basename "$f") ---"
             grep -oE 'tests="[0-9]+" *[a-z]+="[0-9]+" *(failures|skipped)="[0-9]+"' "$f" || true
-            grep -oE '<testsuite[^>]*name="[^"]*"' "$f" | sed 's/^/    /' | sed -n '1,40p'
+            grep -oE '<testsuite[^>]*name="[^"]*"' "$f" | sed 's/^/    /' | sed -n '1,40p' || true
           done
           {
             echo "### android-device"

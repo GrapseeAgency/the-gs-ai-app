@@ -940,7 +940,7 @@ jobs:
               # None of these is guessed at; the numbers decide.
               echo "  --- why, and the evidence ---"
               echo "  any llama symbol, any type, first few:"
-              printf '%s\n' "$ALLSYM" | grep -i llama | sed -n '1,5p' | sed 's/^/    /'
+              printf '%s\n' "$ALLSYM" | grep -i llama | sed -n '1,5p' | sed 's/^/    /' || true
               echo "  members whose name mentions llama:"
               ar -t "$OUT" 2>/dev/null | grep -i llama | sed -n '1,5p' | sed 's/^/    /' || echo "    (none)"
               echo "  sizes of what went in, and what came out:"
@@ -948,7 +948,7 @@ jobs:
                 echo "    $(stat -f%z "$F" 2>/dev/null || stat -c%s "$F" 2>/dev/null)  $F"
               done
               echo "  first symbols present:"
-              nm -gU "$OUT" 2>/dev/null | grep -E ' T ' | sed -n '1,5p' | sed 's/^/    /'
+              nm -gU "$OUT" 2>/dev/null | grep -E ' T ' | sed -n '1,5p' | sed 's/^/    /' || true
               exit 1
             fi
             echo "  symbols present: llama_backend_init, llama_model_load, llama_free"
@@ -1143,7 +1143,7 @@ jobs:
           test -n "$LLVM_NM" || { echo "FAIL: llvm-nm not found"; exit 1; }
           "$LLVM_NM" --defined-only --extern-only \
             "$GITHUB_WORKSPACE/dist/ios/device/libgs_ffi.a" \
-            | grep -oE 'gs_[a-z_0-9]+' | sort -u | sed -n '1,20p'
+            | grep -oE 'gs_[a-z_0-9]+' | sort -u | sed -n '1,20p' || true
 
           echo "=== dSYM ==="
           # Rust ships a .a with debug info; a dSYM is produced when dSYM is
@@ -2463,7 +2463,7 @@ jobs:
             echo "::error::step with no arch evidence is the vacuous pass this repository"
             echo "::error::keeps re-finding. The iOS-EXEC-ARCH marker is absent; the log"
             echo "::error::says this instead:"
-            grep -aE 'Test Suite|Testing failed|error:' test-simulator.log | sed -n '1,10p' | sed 's/^/    /'
+            grep -aE 'Test Suite|Testing failed|error:' test-simulator.log | sed -n '1,10p' | sed 's/^/    /' || true
             exit 1
           fi
 

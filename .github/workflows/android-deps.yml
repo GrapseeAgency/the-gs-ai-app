@@ -820,7 +820,7 @@ jobs:
           python3 "$GITHUB_WORKSPACE/.github/scripts/patch_sd_libwebp.py" src-sd
           echo "--- the patched area, verbatim, so the log carries the evidence ---"
           grep -n 'ANDROID\|cpufeatures' src-sd/thirdparty/libwebp/CMakeLists.txt \
-            | sed -n '1,20p' | sed 's/^/    /'
+            | sed -n '1,20p' | sed 's/^/    /' || true
       - name: Build for arm64, CPU only
         run: |
           set -euo pipefail
@@ -945,7 +945,7 @@ jobs:
             echo "  sd.cpp/ggml NEEDED entries: $UNDEF (0 is expected: both are inside)"
             if [ "$UNDEF" -ne 0 ]; then
               echo "::error::libgs_sd.so still depends on external sd/ggml libraries:"
-              readelf -d dist/lib/libgs_sd.so | grep NEEDED | sed 's/^/  /'
+              readelf -d dist/lib/libgs_sd.so | grep NEEDED | sed 's/^/  /' || true
               echo "::error::That reintroduces the ggml collision Option B removes."
               exit 1
             fi

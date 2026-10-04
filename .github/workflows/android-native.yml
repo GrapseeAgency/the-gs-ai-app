@@ -919,7 +919,7 @@ jobs:
           # A .so with no exported symbols loads and fails at the first call, so
           # the ABI is asserted, not assumed.
           echo "=== exported ABI ==="
-          nm -D --defined-only "$SO" | grep -oE 'gs_[A-Za-z_0-9]+' | sort -u
+          nm -D --defined-only "$SO" | grep -oE 'gs_[A-Za-z_0-9]+' | sort -u || true
           # ELEVEN PER-SYMBOL CHECKS, AND A FLOOR THAT WAS GOING QUIETLY LOOSE.
           #
           # This was `[ "$N" -ge 8 ]` against an ABI of TEN symbols, so the floor

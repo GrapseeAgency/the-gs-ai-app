@@ -6275,3 +6275,68 @@ that is broken. Added `pollFastUntil`, which reads the `StateFlow` directly at 5
 granularity and never touches the Compose clock. Three prompts were tried and both
 wrong ones are recorded in the file -- 500 words (finished first) and 3000 words
 (first token never arrived).
+
+---
+
+## The same class, eight more times: a reporting pipeline that died on an empty report
+
+The grep-trap lint's NOTE class turned out to be over-cautious. I had assumed some of
+those bare pipelines were assertions and refused to silence them. Checking each one:
+
+    android-deps.yml   "--- the patched area, verbatim, so the log carries the evidence ---"
+                       grep -n 'ANDROID|cpufeatures' .../CMakeLists.txt | sed -n '1,20p'
+
+That runs **after** `patch_sd_libwebp.py` has already succeeded. Its only job is to
+print evidence. An empty result is not a failure of anything.
+
+    android-native.yml  echo "=== exported ABI ==="
+                        nm -D --defined-only "$SO" | grep -oE 'gs_[A-Za-z_0-9]+' | sort -u
+
+Also pure reporting -- the asserting comparison is further down, and it is already
+guarded.
+
+So all eight were extraction, and all eight are now `|| true`. The eight:
+
+| file | line | what it prints |
+|---|---|---|
+| `android-deps.yml` | 823 | the patched libwebp area, as log evidence |
+| `android-deps.yml` | 948 | `readelf -d` NEEDED entries |
+| `android-device.yml` | 805 | per-suite test names from the results XML |
+| `android-native.yml` | 922 | the exported ABI symbol list |
+| `ios-native.yml` | 943 | llama symbols from the combined archive |
+| `ios-native.yml` | 951 | text symbols from `nm -gU` |
+| `ios-native.yml` | 1146 | exported `gs_*` symbols |
+| `ios-native.yml` | 2466 | XCTest suite results from the simulator log |
+
+**Not one of them could report anything, because each died before printing.** A step
+whose purpose is to produce evidence, killed by the absence of evidence.
+
+The lint now reports **0 findings** across 113 scripts and workflow run blocks, and
+the NOTE class exists but is empty. It stays in the lint because the distinction is
+real: a pipeline ending in `grep -q` **is** an assertion, and silencing that class
+would disable checks. The rule that produced this pass only touched statements whose
+last element is a formatter (`sed`, `sort`, `head`, `wc`, `tr`), never one ending in
+`grep`.
+
+### Two mistakes of my own while applying it, and what caught them
+
+Both were caught before pushing, both were the same mistake -- **trusting line
+numbers from one coordinate system in another**:
+
+1. The lint reports line numbers relative to a `run:` block body; I indexed the
+   **file** with them. That appended `|| true` to the wrong lines and broke two
+   workflows:
+       yaml.scanner.ScannerError: while scanning a block scalar
+         in ".github/workflows/ios-native.yml", line 367, column 2
+2. Reverted and redone by **text search**, which found nothing -- because the
+   yaml-parsed body is dedented and the file's lines are not. All eight were skipped
+   silently, and a silent skip in a fixer is worse than a loud failure.
+
+Third attempt matched on stripped text and applied the edit to the file's own line,
+so indentation is preserved by construction. Verified: the diff is **8 lines, each
+only `|| true` appended**, and all four workflows parse.
+
+That is three attempts on a mechanical edit, all from not verifying the coordinate
+system before mutating. The checks that caught it -- `yaml.safe_load` after every
+change, and reading the diff -- are the only reason this is a footnote rather than
+another broken workflow.
