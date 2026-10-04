@@ -111,6 +111,30 @@ jobs:
           }
           python3 .github/scripts/check_kt_braces.py "${KT[@]}"
 
+      # The one escape with no legitimate use in Kotlin. Narrow on purpose: a
+      # general "unsupported escape" scan reports 64 false positives across this
+      # tree, because backslashes are literal inside raw strings and inside
+      # comments, and this tree is full of regexes written both ways.
+      #
+      # Added after android-release 37229157857 failed on
+      #   SendFailureNoticeTest.kt:67:14 Unsupported escape sequence
+      # from a "\\`accumulated\\`" written into a string literal. Verified by
+      # reintroducing that exact token and confirming this reports it at 67:14
+      # and 67:27 -- the same position the Kotlin compiler gave.
+      - name: No escaped backticks in Kotlin string literals
+        run: |
+          set -euo pipefail
+          mapfile -t KTB < <(
+            find android/app/src -name '*.kt' 2>/dev/null | sort
+          )
+          echo "checking ${#KTB[@]} Kotlin source(s)"
+          test "${#KTB[@]}" -gt 0 || {
+            echo "FAIL: found no Kotlin sources; the find pattern is wrong and"
+            echo "FAIL: this step would pass by checking nothing."
+            exit 1
+          }
+          python3 .github/scripts/check_kt_escaped_backtick.py "${KTB[@]}"
+
       # A brace counter cannot see a missing field name, and a file-wide
       # "is this field declared anywhere?" cannot either -- `ttft` IS declared,
       # by two other row classes in the same file. The read has to be bound to

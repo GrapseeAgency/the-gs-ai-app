@@ -64,7 +64,7 @@ class SendFailureNoticeTest {
     fun `the nothing-arrived notice does not claim GS was working`() {
         val text = SendFailureNotice.midStreamNothingArrived()
         assertFalse(
-            "\`accumulated\` is empty in this branch, so no token ever arrived and " +
+            "accumulated is empty in this branch, so no token ever arrived and " +
                 "there was no work in progress to report on. Got: $text",
             text.contains("while GS was working"),
         )
