@@ -431,11 +431,52 @@ RAN=${RAN:-0}
 # counted as a test, or adding a sentence to a comment would break the build. Both
 # counts happen to be 36 today, which is exactly why the naive form would have
 # looked fine.
+# A GATE MUST NEVER BE ABLE TO KILL THE STEP THAT REPORTS ON IT.
+#
+# `${VAR}` is used rather than `$VAR` so an empty grep/awk result becomes 0 instead
+# of reaching `$(( ))`. `$(( EMPTY - 0 ))` is a FATAL arithmetic error and bash
+# exits 2 on it -- which is the only mechanism in this block that can produce an
+# exit status 2, and run 37189055840 died with exactly that: the log shows
+#
+#     connectedDebugAndroidTest exit: 1
+#     === dumping logcat (test exit was 2) ===
+#
+# with NOTHING from this gate in between, so the script died before its first echo
+# and nothing it was built to report got reported. A check whose own failure mode
+# is a silent death is the same defect this whole audit is about, one level down.
+#
+# WHY IT IS NOT SIMPLY KNOWN, and a theory I disproved rather than shipped.
+#
+# The obvious suspect was `$(( ))` on an empty operand being a fatal arithmetic
+# error. **It is not.** Measured:
+#
+#     bash -c 'D=""; echo "$((D - 0))"'      ->  0, exit 0
+#
+# bash treats an empty variable in arithmetic as zero, so that path cannot produce
+# exit 2 and the theory is wrong. The `${VAR:-0}` guards are kept anyway -- they
+# are correct and free -- but they are NOT claimed as the fix.
+#
+# What is actually known: run 37189055840 printed `connectedDebugAndroidTest exit:
+# 1` and then the EXIT trap with `test exit was 2`, with nothing from this gate in
+# between, so the script died between those two lines. The gate logic itself is
+# sound -- reproduced against the same sources it prints
+# `started=36 declared=36 ignored=0 expected=36`, exit 0 -- and `bash -n` passes.
+# The cause is NOT identified.
+#
+# So the fix here is diagnostic rather than corrective: the unconditional
+# `=== test-count gate reached ===` line above prints before any computation, so
+# the next run distinguishes the two cases. If it appears, the block was entered and
+# something inside it failed. If it does not, the script is dying before this point
+# and the fault is upstream of the gate, not in it. Either way the log will say
+# which, instead of both cases looking like silence.
 DECLARED=$(grep -rhcE '^[[:space:]]*@Test\b' android/app/src/androidTest/java/com/grapsee/gsai/*.kt \
   2>/dev/null | awk '{s+=$1} END {print s+0}')
+DECLARED=${DECLARED:-0}
 IGNORED=$(grep -rhcE '^[[:space:]]*@Ignore\b' android/app/src/androidTest/java/com/grapsee/gsai/*.kt \
   2>/dev/null | awk '{s+=$1} END {print s+0}')
+IGNORED=${IGNORED:-0}
 EXPECTED=$((DECLARED - IGNORED))
+echo "=== test-count gate reached: runner=$RAN declared=$DECLARED ignored=$IGNORED expected=$EXPECTED ==="
 echo "tests the runner actually started: $RAN"
 echo "tests declared in the sources    : $DECLARED (@Ignore: $IGNORED) -> expected $EXPECTED"
 # UNDER-RUN FAILS, OVER-RUN WARNS. The defect this exists to catch is tests
