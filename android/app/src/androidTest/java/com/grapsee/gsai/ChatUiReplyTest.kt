@@ -457,7 +457,7 @@ class ChatUiReplyTest {
         // reach Done before the cancel in the previous run. Polling for the phase and
         // cancelling on the first sight of it is the deterministic ordering; polling
         // for content is a race with the model.
-        val sawStreaming = waitUntil(30_000L) {
+        val sawStreaming = pollFastUntil(30_000L) {
             ServiceLocator.chatStream.state.value?.phase ==
                 ChatStreamController.Phase.Streaming
         }
@@ -471,7 +471,7 @@ class ChatUiReplyTest {
         // for a phase and polling for content are different races: the phase is
         // observable immediately, the content is not, and waiting for content is
         // what let the stream finish first in the previous run.
-        val sawPartial = waitUntil(90_000L) {
+        val sawPartial = pollFastUntil(90_000L) {
             (ServiceLocator.chatStream.state.value?.streamText?.length ?: 0) > 0
         }
         if (!sawPartial) {
@@ -486,7 +486,7 @@ class ChatUiReplyTest {
 
         ServiceLocator.chatStream.cancelAndFinalize()
 
-        val reachedTerminal = waitUntil(30_000L) {
+        val reachedTerminal = pollFastUntil(30_000L) {
             ServiceLocator.chatStream.state.value?.phase != ChatStreamController.Phase.Streaming
         }
         val after = ServiceLocator.chatStream.state.value
@@ -554,13 +554,42 @@ class ChatUiReplyTest {
         )
     }
 
-    /** Polls [condition] until it holds or [timeoutMs] elapses. Returns whether it held. */
+    /** Polls [condition] until it holds or [timeoutMs] elapses. Returns whether it held.
+     *
+     *  THIS IS THE WRONG HELPER FOR THE CANCEL TEST, and using it there is why that
+     *  test failed twice for the same apparent reason.
+     *
+     *  It calls `composeTestRule.waitForIdle()` between polls, which BLOCKS until the
+     *  Compose tree goes idle. While a stream is running, tokens arrive at ~30 Hz, so
+     *  "idle" may not happen for seconds -- long enough for the model to finish. The
+     *  cancel then lands on a `Done` stream and there is nothing to cancel:
+     *
+     *      before cancel -> phase=Done chars=1151
+     *
+     *  Which is the worst way for a test to fail: it looks like the feature is broken
+     *  and it is the test's own polling that broke it. */
     private fun waitUntil(timeoutMs: Long, condition: () -> Boolean): Boolean {
         val start = System.currentTimeMillis()
         while (System.currentTimeMillis() - start < timeoutMs) {
             if (condition()) return true
             composeTestRule.waitForIdle()
             Thread.sleep(250)
+        }
+        return condition()
+    }
+
+    /**
+     * Polls WITHOUT touching the Compose clock, for anything that races a running
+     * stream. `ChatStreamController.state` is a StateFlow, so its value can be read
+     * from the test thread; the UI does not need to be idle for it to advance.
+     *
+     * 50 ms granularity so the cancel lands within one poll of the first token.
+     */
+    private fun pollFastUntil(timeoutMs: Long, condition: () -> Boolean): Boolean {
+        val start = System.currentTimeMillis()
+        while (System.currentTimeMillis() - start < timeoutMs) {
+            if (condition()) return true
+            Thread.sleep(50)
         }
         return condition()
     }

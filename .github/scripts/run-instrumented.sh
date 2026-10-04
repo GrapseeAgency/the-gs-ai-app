@@ -431,53 +431,54 @@ RAN=${RAN:-0}
 # counted as a test, or adding a sentence to a comment would break the build. Both
 # counts happen to be 36 today, which is exactly why the naive form would have
 # looked fine.
-# A GATE MUST NEVER BE ABLE TO KILL THE STEP THAT REPORTS ON IT.
+# ROOT CAUSE, MEASURED. This gate never executed once across three device runs, and
+# the reason is not subtle once it is stated:
 #
-# `${VAR}` is used rather than `$VAR` so an empty grep/awk result becomes 0 instead
-# of reaching `$(( ))`. `$(( EMPTY - 0 ))` is a FATAL arithmetic error and bash
-# exits 2 on it -- which is the only mechanism in this block that can produce an
-# exit status 2, and run 37189055840 died with exactly that: the log shows
+#     set -e                       <-- line 393, PRE-EXISTING
+#     ...
+#     IGNORED=$(grep -rhcE '^[[:space:]]*@Ignore\b' .../*.kt | awk '{s+=$1} ...')
+#
+# This repository has ZERO @Ignore annotations. `grep -c` exits 1 when it matches
+# nothing -- correctly, that is what grep does -- and `set -o pipefail` promotes
+# that 1 to the pipeline's status, and `set -e` then treats the ASSIGNMENT as fatal.
+# So the script died on the line before its first echo and reported nothing:
 #
 #     connectedDebugAndroidTest exit: 1
 #     === dumping logcat (test exit was 2) ===
 #
-# with NOTHING from this gate in between, so the script died before its first echo
-# and nothing it was built to report got reported. A check whose own failure mode
-# is a silent death is the same defect this whole audit is about, one level down.
+# Reproduced with the script's own options, no runner involved:
 #
-# WHY IT IS NOT SIMPLY KNOWN, and a theory I disproved rather than shipped.
+#     bash -c 'set -euo pipefail; IGNORED=$(grep -rhcE "^[[:space:]]*@Ignore\b" ... | awk ...); echo AFTER'
+#     before
+#     exit=1            <- "AFTER" never printed
 #
-# The obvious suspect was `$(( ))` on an empty operand being a fatal arithmetic
-# error. **It is not.** Measured:
+# This is the SAME shape as the `grep -q` SIGPIPE landmine this file already
+# documents three times, inverted: there a grep that SUCCEEDED killed the step, here
+# a grep that correctly found NOTHING kills it. "No matches" is a result, not an
+# error, and under `set -e` a result is indistinguishable from a failure.
 #
-#     bash -c 'D=""; echo "$((D - 0))"'      ->  0, exit 0
+# The fix is `{ grep ... || true; } | awk ...`, NOT `grep ... | awk ... || echo 0`.
+# The second form is wrong in a way `bash -n` cannot see and only running it catches:
+# `|| echo 0` APPENDS to the substitution's stdout, so awk's "0" is followed by
+# echo's "0", the variable becomes "0\n0", and the arithmetic dies with
+#     bash: line 1: 0
+#     0: arithmetic syntax error in expression (error token is "0")
+# Wrapping the grep in a brace group neutralises its exit code while contributing
+# nothing to stdout, so awk's value arrives exactly once. `bash -n` passed on the
+# broken form; executing it did not. The marker below is FIRST, before any
+# computation, so the next run says whether the block was entered at all rather than
+# both "entered and failed" and "never entered" presenting as silence.
 #
-# bash treats an empty variable in arithmetic as zero, so that path cannot produce
-# exit 2 and the theory is wrong. The `${VAR:-0}` guards are kept anyway -- they
-# are correct and free -- but they are NOT claimed as the fix.
-#
-# What is actually known: run 37189055840 printed `connectedDebugAndroidTest exit:
-# 1` and then the EXIT trap with `test exit was 2`, with nothing from this gate in
-# between, so the script died between those two lines. The gate logic itself is
-# sound -- reproduced against the same sources it prints
-# `started=36 declared=36 ignored=0 expected=36`, exit 0 -- and `bash -n` passes.
-# The cause is NOT identified.
-#
-# So the fix here is diagnostic rather than corrective: the unconditional
-# `=== test-count gate reached ===` line above prints before any computation, so
-# the next run distinguishes the two cases. If it appears, the block was entered and
-# something inside it failed. If it does not, the script is dying before this point
-# and the fault is upstream of the gate, not in it. Either way the log will say
-# which, instead of both cases looking like silence.
-DECLARED=$(grep -rhcE '^[[:space:]]*@Test\b' android/app/src/androidTest/java/com/grapsee/gsai/*.kt \
-  2>/dev/null | awk '{s+=$1} END {print s+0}')
+# Note this bug was NOT in my new logic's arithmetic -- a theory I tested and
+# disproved, and recorded as disproven rather than shipped. `$(( ))` on an empty
+# operand is fine in bash: `D=""; echo $((D - 0))` prints 0 and exits 0. The fault is
+# `set -e` meeting a zero-match grep, one line earlier.
+echo "=== test-count gate reached: runner started $RAN ==="
+DECLARED=$( { grep -rhcE '^[[:space:]]*@Test\b' android/app/src/androidTest/java/com/grapsee/gsai/*.kt || true; } 2>/dev/null | awk '{s+=$1} END {print s+0}' )
 DECLARED=${DECLARED:-0}
-IGNORED=$(grep -rhcE '^[[:space:]]*@Ignore\b' android/app/src/androidTest/java/com/grapsee/gsai/*.kt \
-  2>/dev/null | awk '{s+=$1} END {print s+0}')
+IGNORED=$( { grep -rhcE '^[[:space:]]*@Ignore\b' android/app/src/androidTest/java/com/grapsee/gsai/*.kt || true; } 2>/dev/null | awk '{s+=$1} END {print s+0}' )
 IGNORED=${IGNORED:-0}
 EXPECTED=$((DECLARED - IGNORED))
-echo "=== test-count gate reached: runner=$RAN declared=$DECLARED ignored=$IGNORED expected=$EXPECTED ==="
-echo "tests the runner actually started: $RAN"
 echo "tests declared in the sources    : $DECLARED (@Ignore: $IGNORED) -> expected $EXPECTED"
 # UNDER-RUN FAILS, OVER-RUN WARNS. The defect this exists to catch is tests
 # SILENTLY NOT RUNNING, which is the under-run direction. Over-running is not a
@@ -537,7 +538,18 @@ echo "=== 5. what ran, what skipped, what failed ==="
 for f in app/build/outputs/androidTest-results/connected/*.xml; do
   [ -e "$f" ] || continue
   echo "--- $(basename "$f") ---"
-  python3 - "$f" <<'PY' 2>/dev/null || grep -oE '<testsuite[^>]*' "$f" | head -5
+  # The `||` here binds to python3, NOT to grep -- so grep's exit status was the
+  # statement's status, and `grep -oE` finding no `<testsuite` (exit 1) killed the
+  # script under the `set -e` from line 393. Found by check_set_e_grep_traps.py.
+  #
+  # It never fired only because this loop had not run: the XML directory is absent
+  # when the tests do not produce results, and then the loop body is skipped. A gate
+  # that only works because its input has been missing is not a gate.
+  #
+  # `sed -n '1,5p'` rather than `head -5`: head closes the pipe early, SIGPIPEs the
+  # producer, and under pipefail that is a 141 -- the trap this file documents three
+  # times already.
+  python3 - "$f" <<'PY' 2>/dev/null || { grep -oE '<testsuite[^>]*' "$f" || true; } | sed -n '1,5p'
 import sys, xml.etree.ElementTree as ET
 try:
     t = ET.parse(sys.argv[1])

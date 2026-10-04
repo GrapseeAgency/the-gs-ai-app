@@ -188,6 +188,58 @@ jobs:
           echo "--- every workflow that runs a script is triggered by changes to it"
           python3 .github/scripts/check_workflow_trigger_covers_scripts.py "${WFL[@]}"
 
+      # `grep` EXITS 1 WHEN IT MATCHES NOTHING. That is an answer, not an error, and
+      # under `set -e` an unguarded grep that correctly finds nothing kills the script.
+      #
+      # This is not theoretical. The device suite's test-count gate never executed
+      # across three ~70-minute runs:
+      #
+      #     set -e                                                    # line 393
+      #     IGNORED=$(grep -rhcE '^[[:space:]]*@Ignore\b' .../*.kt | awk '{s+=$1} ...')
+      #
+      # This repository has ZERO @Ignore annotations, so grep correctly exited 1,
+      # pipefail promoted it, set -e killed the script on the assignment -- one line
+      # before the gate's first echo -- and every run reported only:
+      #
+      #     connectedDebugAndroidTest exit: 1
+      #     === dumping logcat (test exit was 2) ===
+      #
+      # Reproduced without a runner, and it is the SAME SHAPE as the `grep -q` SIGPIPE
+      # trap this repository has hit three times, inverted: there a grep that
+      # SUCCEEDED killed the step, here a grep that correctly found NOTHING does.
+      #
+      # Swept over every .sh under .github/scripts and every workflow run block, so
+      # the blast radius is measured rather than assumed: 9 sites, of which one was
+      # `GOT=$(nm -D ... | grep -oE 'gs_ffi_mobile_...')` -- a .so exporting none of
+      # those symbols is the defect the step exists to catch, and it died silently on
+      # the assignment instead of reaching the comparison that names the shortfall.
+      #
+      # NOTE (deliberately not silenced): the lint reports bare pipelines ending in
+      # grep as ::warning::, not ::error::. In those the grep may BE the assertion, and
+      # wrapping it in `|| true` would disable a real check. They are surfaced so the
+      # missing diagnostic is visible, not so they can be suppressed.
+      - name: No unguarded `grep` after `set -e`
+        run: |
+          set -euo pipefail
+          mapfile -t SHL < <(ls .github/scripts/*.sh)
+          test "${#SHL[@]}" -gt 0 || {
+            echo "FAIL: no .github/scripts/*.sh found, so half this check would pass"
+            echo "FAIL:by inspecting nothing."
+            exit 1
+          }
+          # WFL IS BUILT HERE, NOT INHERITED. The first version of this step read
+          # ${WFL[@]} from the other lint step, and check_workflow_var_scope.py -- my
+          # own lint -- flagged it: each `run:` block is its own shell. Caught before
+          # dispatch by the lint that exists for exactly this, which is the first time
+          # in this session one of these lints has caught the step that added it.
+          mapfile -t WFL < <(ls .github/workflows/*.yml)
+          test "${#WFL[@]}" -gt 0 || {
+            echo "FAIL: no workflow files found, so the other half of this check"
+            echo "FAIL:would pass by inspecting nothing."
+            exit 1
+          }
+          python3 .github/scripts/check_set_e_grep_traps.py "${SHL[@]}" "${WFL[@]}"
+
       - name: Row field reads name fields the row declares
         run: |
           set -euo pipefail
@@ -236,7 +288,12 @@ jobs:
             echo "FAIL: this step would pass by checking nothing."
             exit 1
           }
-          NTESTS=$(grep -h -o '@Test' "${KTT[@]}" | wc -l | tr -d ' ')
+          # `{ ... || true; }` so a file with no @Test cannot kill the step: this COUNTS
+          # annotations to decide whether the lint below has anything to check, and a
+          # count of zero is a legitimate answer, not a failure. Found by
+          # check_set_e_grep_traps.py. Note this is the same shape as the bug that
+          # stopped run-instrumented.sh's test-count gate from ever executing.
+          NTESTS=$( { grep -h -o '@Test' "${KTT[@]}" || true; } | wc -l | tr -d ' ')
           echo "  $NTESTS @Test annotation(s) across ${#KTT[@]} file(s)"
           test "$NTESTS" -gt 0 || {
             echo "FAIL: no @Test found. Either the suite is empty or the extractor"

@@ -6129,3 +6129,149 @@ recorded is the observation, the ruled-out theory, and the next discriminator. T
 is the same standard applied to every other unresolved item in this log -- and it
 is worth naming the pattern: a gate that has never run is indistinguishable from a
 gate that cannot run, and I have now shipped one of each and found it by looking.
+
+
+---
+
+## ROOT CAUSE of the gate that never ran: `grep` exiting 1 for "no matches", under `set -e`
+
+Three device runs (37184562759, 37189055840, 37194012137) showed the same two lines
+and nothing between them:
+
+    connectedDebugAndroidTest exit: 1
+    === dumping logcat (test exit was 2) ===
+
+`run-instrumented.sh` sets **`set -e` at line 393** -- pre-existing, and correct for
+a step that is meant to abort. Eighty lines later my new gate counts annotations:
+
+    set -e                       # line 393
+    ...
+    IGNORED=$(grep -rhcE '^[[:space:]]*@Ignore\b' android/app/src/androidTest/.../*.kt \
+      2>/dev/null | awk '{s+=$1} END {print s+0}')
+
+**This repository has zero `@Ignore` annotations.** `grep -c` exits 1 when it matches
+nothing -- correctly, that is what grep does -- `set -o pipefail` promotes that 1 to
+the pipeline's status, and `set -e` then treats the ASSIGNMENT as fatal. The script
+died on the line before its first `echo`, so it reported nothing at all.
+
+Reproduced with no runner involved:
+
+    bash -c 'set -euo pipefail; IGNORED=$(grep -rhcE "^[[:space:]]*@Ignore\b" ... | awk ...); echo AFTER'
+    before
+    exit=1                        # "AFTER" never printed
+
+**This is the same trap this repository has already hit three times, inverted.** The
+documented one is `grep -q` closing the pipe early, SIGPIPE-ing the producer, and
+`pipefail` firing on a *successful* match. Here a grep that correctly found
+*nothing* is fatal. Both reduce to one mistake: under `set -e`, a command's exit
+status decides whether the script lives, and grep's exit status encodes "did I find
+anything", not "did I work".
+
+### The fix, and a second bug in the fix
+
+    DECLARED=$( { grep -rhcE '...' .../*.kt || true; } 2>/dev/null | awk '{s+=$1} END {print s+0}' )
+
+The brace group forces exit 0 and contributes **nothing** to stdout.
+
+The first attempt was `... | awk ... || echo 0`, which is wrong in a way `bash -n`
+cannot see and only executing it catches: `|| echo 0` **appends** to the
+substitution, so awk's `0` is followed by echo's `0`, the variable becomes `"0\n0"`,
+and the arithmetic dies with
+
+    bash: line 1: 0
+    0: arithmetic syntax error in expression (error token is "0")
+
+An earlier theory of mine -- that `$(( ))` on an empty operand was the cause -- was
+**tested and disproven** (`D=""; echo $((D - 0))` prints `0`, exit 0) and is recorded
+as disproven rather than shipped as an explanation.
+
+Verified end-to-end under the script's own options:
+
+    === test-count gate reached: runner started 36 ===
+    tests declared in the sources    : 36 (@Ignore: 0) -> expected 36
+    REACHED END
+    exit=0
+
+## Nine more sites of the same class, found by writing the lint for it
+
+`.github/scripts/check_set_e_grep_traps.py`, wired into `android-app.yml`.
+
+Swept over every `.sh` under `.github/scripts` and every workflow `run:` block --
+**113 scripts** -- and found 9 more. One is the important one:
+
+    GOT=$(nm -D --defined-only "$SO" | grep -oE 'gs_ffi_mobile_[A-Za-z_0-9]+' | sort -u)
+
+A `.so` exporting **none** of those symbols is exactly the defect the step exists to
+catch, and `grep -oE` exits 1 in that case -- so under `set -e` the step **died on the
+assignment, silently, instead of reaching the comparison that names the shortfall**.
+A gate that cannot report the failure it exists for, found by the same shape of bug
+that stopped the test-count gate running, in the workflow that gates every shipped
+`.so`.
+
+The other eight are the same shape: a count or an extraction whose legitimate answer
+is "none". Two are worth naming individually:
+
+- `A=$(echo "$MAP" | grep -E "/lib$NAME\.a$" | sed -n '1p')` -- a library **missing**
+  from the map made the step die with no message instead of naming which one.
+- `READER_DIAG=$(printf '%s\n' "$NAMES" | grep -vE '...' | sed -n '1,5p')` -- a
+  best-effort **diagnostic** block, where an empty result is the correct answer. A
+  diagnostic that fails while diagnosing is its own defect class.
+
+All nine are now `{ ... || true; } | ...`, which changes no semantics whatsoever.
+
+### Two severities, because silencing the other half would disable real checks
+
+The lint distinguishes:
+
+- **ERROR** -- an **assignment** fed by a grep. Benign to guard; this is the shape
+  that killed the gate.
+- **NOTE** -- a bare pipeline ending in grep, where the grep may **be** the
+  assertion. 8 of these. Wrapping them in `|| true` would disable a real check, so
+  they are surfaced as `::warning::` with the note that a match-less run correctly
+  fails the step **but with no diagnostic naming what was expected** -- a real gap,
+  recorded rather than papered over.
+
+### The lint was wrong three times before it was right, each time on real code
+
+| false positive | cause | fix |
+|---|---|---|
+| `mapfile -t M < <(ar t ... \| grep -v '^__')` | process substitution **discards** the exit status; my exemption looked for `>` when `<(` closes with `)` | check for `)` after the grep |
+| `if ! find ... \| grep -q .; then` | my condition test could not cross a pipe, so `if ... \| grep` looked unguarded | test **positionally**: is a keyword before the grep? |
+| `GOT=$(grep ... \\` + `\| sort -u \|\| true)` | analysed PHYSICAL lines, so the `\|\| true` one line down was invisible | join backslash continuations into one logical statement first |
+
+The third is the dangerous kind: the false positives were of the shape the lint
+exists to catch. A lint that cries wolf on the correct form gets switched off, and a
+switched-off lint protects nothing.
+
+## A regression I introduced while fixing the above, caught before dispatch
+
+Re-indenting two `ios-native.yml` edits with hand-written indentation **broke the
+YAML**:
+
+    yaml.scanner.ScannerError: while scanning a simple key
+      in ".github/workflows/ios-native.yml", line 1095, column 3
+
+My replacement lines lost the block-scalar indentation, so `run: |` ended early and
+YAML tried to parse shell comments as keys. Caught by `yaml.safe_load` in the same
+command that made the edit -- the verification is only useful if it runs.
+
+And `check_workflow_var_scope.py` -- my own lint -- flagged the CI step I had just
+added for reading `${WFL[@]}` from a **different** step, because each `run:` block is
+its own shell. That is the first time one of these lints has caught the step that
+added it.
+
+## Cancel test: the polling helper was the bug, twice
+
+    before cancel -> phase=Done chars=1151
+
+The cancel "did not work" twice. It did -- the test's own polling broke it.
+`waitUntil` calls `composeTestRule.waitForIdle()` between polls, which **blocks until
+the Compose tree is idle**. Tokens arrive at ~30 Hz, so idle may not happen for
+seconds: long enough for the model to finish. The cancel then landed on a `Done`
+stream.
+
+Worst way for a test to fail, because it reads as a broken feature: it is the test
+that is broken. Added `pollFastUntil`, which reads the `StateFlow` directly at 50 ms
+granularity and never touches the Compose clock. Three prompts were tried and both
+wrong ones are recorded in the file -- 500 words (finished first) and 3000 words
+(first token never arrived).

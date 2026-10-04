@@ -1090,7 +1090,9 @@ jobs:
             test -n "$MEMBERS" || { echo "FAIL: $LIB is not a readable ar archive"; exit 1; }
             echo "    members: $(printf '%s' "$MEMBERS" | wc -l | tr -d ' ')"
             # The Mach-O inside the archive must be the requested arch.
-            INNER=$(ar t "$THIN" | grep -v '^__' | sed -n '1p')
+            # Discharged: an archive whose members are all `__` pseudo-members makes
+            # `grep -v` exit 1 and would kill the step under `set -e`.
+            INNER=$( { ar t "$THIN" | grep -v '^__' || true; } | sed -n '1p')
             echo "    member: $INNER"
             lipo -info "$A" || { echo "FAIL: lipo could not read $A"; exit 1; }
             # The thin slice has to be a real, readable archive, or every `ar`
@@ -1769,9 +1771,14 @@ jobs:
             echo "::error::    $LLVM_NM --defined-only --extern-only $DEVICE_LIB"
             exit 1
           fi
-          READER_DIAG=$(printf '%s\n' "$NAMES" \
+          # Discharged. This builds BEST-EFFORT diagnostics -- "the first 5 non-symbol
+          # lines" -- so an empty result is the correct answer, not a failure. But if
+          # every line matches the filter, `grep -v` exits 1 and `set -e` killed the
+          # step inside a diagnostic block, losing the very output being assembled.
+          # A diagnostic that fails while diagnosing is its own defect class.
+          READER_DIAG=$( { printf '%s\n' "$NAMES" \
             | grep -vE '^[[:space:]]*[0-9a-fA-F]+[[:space:]]+[A-Za-z][[:space:]]_' \
-            | sed -n '1,5p')
+            || true; } | sed -n '1,5p')
           if [ -n "$READER_DIAG" ]; then
             echo "  --- reader diagnostics (first 5 non-symbol lines) ---"
             printf '%s\n' "$READER_DIAG" | sed 's/^/    /'
@@ -2901,7 +2908,11 @@ jobs:
             echo "$MAP" | sed 's/^/    /'
             N=$(echo "$MAP" | wc -l | tr -d ' ')
             for NAME in llama ggml ggml-cpu ggml-base; do
-              A=$(echo "$MAP" | grep -E "/lib$NAME\.a$" | sed -n '1p')
+              # Discharged, and this one had a real failure mode: a library MISSING from
+              # the map makes `grep -E` exit 1, so the step died with no message
+              # instead of saying which library was absent. The `test -z` guard below
+              # now reports it.
+              A=$( { echo "$MAP" | grep -E "/lib$NAME\.a$" || true; } | sed -n '1p')
               if [ -z "$A" ]; then
                 echo "::error::$DIR has no lib$NAME.a. $MAP"
                 exit 1

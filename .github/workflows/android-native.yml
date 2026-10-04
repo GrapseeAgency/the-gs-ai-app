@@ -888,7 +888,10 @@ jobs:
           # first call, so the ABI is asserted, not assumed.
           N=$(nm -D --defined-only "$DEST/libgs_ffi.so" | grep -c 'gs_ffi_mobile_' || true)
           ABI="$GITHUB_WORKSPACE/.github/scripts/gs_mobile_abi.txt"
-          WANT_N=$(grep -cve '^[[:space:]]*#' -e '^[[:space:]]*$' "$ABI")
+          # Discharged: if the ABI file were entirely comments, `grep -c` would exit 1 and
+          # `set -e` would kill the step before the comparison below could report
+          # anything useful. Found by check_set_e_grep_traps.py.
+          WANT_N=$( { grep -cve '^[[:space:]]*#' -e '^[[:space:]]*$' "$ABI" || true; } )
           echo "gs_ffi_mobile_* exported: $N, ABI declares: $WANT_N"
           # The floor is DERIVED from the declared ABI, not written down beside
           # it. It used to be a literal 17 with a comment saying it "matches the
@@ -937,8 +940,14 @@ jobs:
           # two of them.
           ABI="$GITHUB_WORKSPACE/.github/scripts/gs_mobile_abi.txt"
           [ -r "$ABI" ] || { echo "::error::the ABI list $ABI is missing or unreadable"; exit 1; }
-          WANT=$(grep -ve '^[[:space:]]*#' -e '^[[:space:]]*$' "$ABI" | sed 's/^/gs_ffi_mobile_/' | sort -u)
-          GOT=$(nm -D --defined-only "$SO" | grep -oE 'gs_ffi_mobile_[A-Za-z_0-9]+' | sort -u)
+          # Discharged for the same reason as WANT_N above.
+          WANT=$( { grep -ve '^[[:space:]]*#' -e '^[[:space:]]*$' "$ABI" || true; } | sed 's/^/gs_ffi_mobile_/' | sort -u)
+          # THIS ONE MATTERED MOST. A `.so` exporting NO gs_ffi_mobile_* symbol is exactly
+          # the defect this step exists to catch, and `grep -oE` exits 1 in that case
+          # -- so under `set -e` the step died on the assignment, silently, INSTEAD OF
+          # reaching the comparison that names the shortfall. A gate that cannot report
+          # the failure it exists for. Found by check_set_e_grep_traps.py.
+          GOT=$( { nm -D --defined-only "$SO" | grep -oE 'gs_ffi_mobile_[A-Za-z_0-9]+' || true; } | sort -u)
           echo "expected $(printf '%s\n' "$WANT" | wc -l | tr -d ' ') symbols, found $(printf '%s\n' "$GOT" | wc -l | tr -d ' ')"
           MISSING=$(comm -23 <(printf '%s\n' "$WANT") <(printf '%s\n' "$GOT"))
           UNEXPECTED=$(comm -13 <(printf '%s\n' "$WANT") <(printf '%s\n' "$GOT"))
