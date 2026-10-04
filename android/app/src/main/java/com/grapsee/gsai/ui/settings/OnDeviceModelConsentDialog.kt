@@ -81,6 +81,14 @@ fun OnDeviceModelConsentDialog(
     if (model == null) return
 
     when (phase) {
+        // HIDDEN renders NOTHING. Not a no-op branch for the compiler's benefit --
+        // this is the state that makes "Not now" work, and it is the default on
+        // every launch where consent was already given or declined.
+        //
+        // Release 37211777086 caught the exhaustiveness half:
+        //   'when' expression must be exhaustive. Add the 'HIDDEN' branch
+        Phase.HIDDEN -> Unit
+
         Phase.ASK -> AlertDialog(
             onDismissRequest = {
                 // A swipe-away is not consent and not refusal. Leaving it
@@ -223,18 +231,25 @@ fun OnDeviceModelConsentDialog(
         )
 
         Phase.DONE -> AlertDialog(
-            onDismissRequest = onDismiss,
+            // Every exit sets HIDDEN itself. `onDismiss` alone is a NO-OP when the
+            // caller supplied none, which is how MainActivity calls this dialog --
+            // so DONE and FAILED were stuck on screen for exactly the same reason ASK
+            // was, and neither has an automated test.
+            onDismissRequest = { phase = Phase.HIDDEN; onDismiss() },
             title = { Text("Ready") },
             text = { Text("On-device AI is installed and works offline. You can delete it any time in Settings.") },
             confirmButton = {
-                TextButton(onClick = onDismiss, modifier = Modifier.testTag("gs_consent_done")) {
+                TextButton(
+                    onClick = { phase = Phase.HIDDEN; onDismiss() },
+                    modifier = Modifier.testTag("gs_consent_done"),
+                ) {
                     Text("Done")
                 }
             },
         )
 
         Phase.FAILED -> AlertDialog(
-            onDismissRequest = onDismiss,
+            onDismissRequest = { phase = Phase.HIDDEN; onDismiss() },
             title = { Text("Could not start the download") },
             text = {
                 Column {
@@ -252,7 +267,10 @@ fun OnDeviceModelConsentDialog(
                 }
             },
             confirmButton = {
-                TextButton(onClick = onDismiss, modifier = Modifier.testTag("gs_consent_dismiss_error")) {
+                TextButton(
+                    onClick = { phase = Phase.HIDDEN; onDismiss() },
+                    modifier = Modifier.testTag("gs_consent_dismiss_error"),
+                ) {
                     Text("Close")
                 }
             },
