@@ -474,12 +474,48 @@ RAN=${RAN:-0}
 # operand is fine in bash: `D=""; echo $((D - 0))` prints 0 and exits 0. The fault is
 # `set -e` meeting a zero-match grep, one line earlier.
 echo "=== test-count gate reached: runner started $RAN ==="
-DECLARED=$( { grep -rhcE '^[[:space:]]*@Test\b' android/app/src/androidTest/java/com/grapsee/gsai/*.kt || true; } 2>/dev/null | awk '{s+=$1} END {print s+0}' )
+
+# THE PATH IS ANCHORED TO $GITHUB_WORKSPACE, and that is the second bug in this gate.
+#
+# Run 37200141082 executed the gate for the first time and reported:
+#
+#     === test-count gate reached: runner started 36 ===
+#     tests declared in the sources    : 0 (@Ignore: 0) -> expected 0
+#     NOTE: the runner started 36 test(s) for 0 @Test methods.
+#
+# DECLARED was 0 because the glob matched NOTHING. This script does `cd android` at
+# line 110 and never comes back, so by line ~470 the working directory is
+# $GITHUB_WORKSPACE/android and the workspace-relative path
+# `android/app/src/androidTest/...` does not exist from there.
+#
+# That is the same mistake three times over in this session: a path written in one
+# coordinate system and used in another -- the ios-native block-scalar indentation,
+# the lint reporting body-relative line numbers for file-relative edits, and now this.
+# The pattern is worth naming because it is the single most productive way to break
+# something that works on a laptop.
+#
+# And it failed SILENTLY in the worst direction: 36 > 0 took the over-run NOTE branch,
+# so a gate that had counted NOTHING printed a reassuring note. Hence the DECLARED==0
+# check below -- a gate that cannot count must not pass.
+GTEST="$GITHUB_WORKSPACE/android/app/src/androidTest/java/com/grapsee/gsai"
+DECLARED=$( { grep -rhcE '^[[:space:]]*@Test\b' "$GTEST"/*.kt || true; } 2>/dev/null | awk '{s+=$1} END {print s+0}' )
 DECLARED=${DECLARED:-0}
-IGNORED=$( { grep -rhcE '^[[:space:]]*@Ignore\b' android/app/src/androidTest/java/com/grapsee/gsai/*.kt || true; } 2>/dev/null | awk '{s+=$1} END {print s+0}' )
+IGNORED=$( { grep -rhcE '^[[:space:]]*@Ignore\b' "$GTEST"/*.kt || true; } 2>/dev/null | awk '{s+=$1} END {print s+0}' )
 IGNORED=${IGNORED:-0}
 EXPECTED=$((DECLARED - IGNORED))
 echo "tests declared in the sources    : $DECLARED (@Ignore: $IGNORED) -> expected $EXPECTED"
+echo "  counted in: $GTEST"
+if [ "$DECLARED" -eq 0 ]; then
+  echo "FAIL: 0 @Test methods were counted in $GTEST"
+  echo "      The count could NOT be computed, so this gate can make no judgement --"
+  echo "      and run 37200141082 showed what happens when it proceeds anyway: 36 > 0"
+  echo "      took the over-run branch and it printed a reassuring NOTE having counted"
+  echo "      nothing. A check that cannot count must not pass."
+  ls -1d "$GITHUB_WORKSPACE"/android/app/src/*/java/com/grapsee/gsai 2>/dev/null \
+    | sed 's/^/      source sets present: /' || echo "      (none found)"
+  echo "      cwd was: $PWD"
+  TEST_RC=1
+fi
 # UNDER-RUN FAILS, OVER-RUN WARNS. The defect this exists to catch is tests
 # SILENTLY NOT RUNNING, which is the under-run direction. Over-running is not a
 # defect: one @Test method that drives 50 prompts internally, or a future
@@ -524,7 +560,7 @@ PYEOF
     comm -23 /tmp/gs-declared-tests.txt <(sort -u /tmp/gs-ran-tests.txt) \
       | sed 's/^/        DID NOT RUN: /' | sed -n '1,40p'
   TEST_RC=1
-elif [ "$RAN" -gt "$EXPECTED" ] 2>/dev/null; then
+elif [ "$EXPECTED" -gt 0 ] && [ "$RAN" -gt "$EXPECTED" ] 2>/dev/null; then
   echo "NOTE: the runner started $RAN test(s) for $EXPECTED @Test methods."
   echo "      Expected when a test method expands into several executions"
   echo "      (the 50-prompt comparison does exactly this). Not a failure, but"

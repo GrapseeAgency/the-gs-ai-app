@@ -6340,3 +6340,98 @@ That is three attempts on a mechanical edit, all from not verifying the coordina
 system before mutating. The checks that caught it -- `yaml.safe_load` after every
 change, and reading the diff -- are the only reason this is a footnote rather than
 another broken workflow.
+
+---
+
+## The gate RAN — and silently passed on a count of zero
+
+Run 37200141082, fourth attempt, and the first time the gate executed at all:
+
+    === test-count gate reached: runner started 36 ===
+    tests declared in the sources    : 0 (@Ignore: 0) -> expected 0
+    NOTE: the runner started 36 test(s) for 0 @Test methods.
+
+`DECLARED` was **0** because the glob matched nothing. `run-instrumented.sh` does
+`cd android` at line 110 and never comes back, so by the time the gate runs the
+working directory is `$GITHUB_WORKSPACE/android`, where the workspace-relative path
+`android/app/src/androidTest/java/com/grapsee/gsai/*.kt` does not exist.
+
+**That is the third time in this session I broke something by writing a path in one
+coordinate system and using it in another.** The first two: re-indenting two
+`ios-native.yml` block scalars by hand, and indexing file lines with line numbers the
+grep-trap lint reports relative to a `run:` body. All three passed review, all three
+were invisible to the tool that made the change, and all three were caught only by
+running the thing afterwards. It is the single most productive way to break something
+that works on a laptop, and it is now a named pattern rather than three anecdotes.
+
+### And it failed in the worst direction
+
+`36 > 0` took the **over-run NOTE** branch, so a gate that had counted *nothing*
+printed a reassuring note. The fix has two parts:
+
+1. **The path is anchored to `$GITHUB_WORKSPACE`**, so it is correct from any cwd.
+2. **`DECLARED == 0` is now FATAL.** A gate that cannot count must not pass, and the
+   failure names the directory it tried, lists the source sets it can see, and prints
+   its own cwd — because "I counted nothing" is only actionable if it says where it
+   looked. The over-run NOTE is additionally suppressed when `EXPECTED == 0`, so a
+   broken count cannot be laundered into a pass by any branch.
+
+Verified by executing it from `android/`, which is the real cwd at that point:
+
+    === test-count gate reached: runner started 36 ===
+    tests declared in the sources    : 36 (@Ignore: 0) -> expected 36
+      counted in: /tmp/opencode/gsai/android/app/src/androidTest/java/com/grapsee/gsai
+    match -> pass
+
+## iOS: the same stale-filename defect, still live, and it was HIDING BEHIND A SKIP
+
+Independent of the device run, so it got done. Both Swift tests hardcoded a quantised
+filename in real code:
+
+    ios/App/Tests/GsNativeTests.swift     dir.appendingPathComponent("qwen2.5-0.5b-instruct-q4_k_m.gguf")
+    ios/App/Tests/GsChatUiTests.swift     dir.appendingPathComponent("qwen2.5-0.5b-instruct-q4_k_m.gguf")
+
+while `ios-native.yml` provisions, into that same Application Support directory:
+
+    GGUF="$WORK/qwen2.5-0.5b-instruct-q4_0.gguf"
+    cp "$GGUF" "$SUPPORT/qwen2.5-0.5b-instruct-q4_0.gguf"
+
+So the model **was** provisioned, `deviceModel()` returned `nil`, and the 3 tests in
+`GsNativeTests` plus the 1 in `GsChatUiTests` skipped while reporting **"no model
+provisioned"** — a phrase that reads as a precondition which was not met and is
+indistinguishable from one.
+
+**A skip is the one result a reader cannot tell from success.** A wrong assertion
+contradicts the evidence; a stale literal removes it. That asymmetry is why this got
+a lint and not just a fix.
+
+Verified alongside it: **Android's `q4_k_m` occurrences are now all comments** —
+`GsNativeTest.kt` 2/2 in comment, `ChatUiReplyTest.kt` 1/1, `DeviceVerificationTest.kt`
+3/3, zero in code, and all three build the filename from `ModelCatalog.MODEL_0_5B.id`.
+That fix is complete. iOS had no equivalent, so the tests now glob the family
+(`qwen2.5-0.5b-instruct-`) and take what was provisioned, **sorted** so that
+provisioning two quants cannot make it flaky. The quantisation is a provisioning
+decision and the pipeline makes it in one place; a test has no business restating it.
+
+### `.github/scripts/check_model_filename_literals.py`
+
+Flags a quantised `.gguf` filename in **code**; a family prefix is the fixed form and
+is allowed. Comments are exempt on purpose — the fix documents the old literal, and a
+lint that matches its own documentation cries wolf on the fix.
+
+    pre-fix GsNativeTests.swift   ::error:: qwen2.5-0.5b-instruct-q4_k_m.gguf
+    pre-fix GsChatUiTests.swift   ::error:: qwen2.5-0.5b-instruct-q4_k_m.gguf
+    both fixed files              ok: no quantised GGUF filename written as a literal
+    whole ios/ tree              ok: 76 file(s)
+
+Wired into `ios-native.yml`, which is the workflow that covers `ios/**` and already
+runs the shell-continuation lint. Verified: YAML parses, the step body passes
+`bash -n`, and the trigger already includes `.github/scripts/**`.
+
+### What this does NOT fix about Blocker 4 iOS
+
+`GsChatUiTests` still cannot execute, for precondition 3, which is a real
+architectural gap and is documented in the test's own docstring: `App/project.yml`
+has `AppTests (bundle.unit-test)` only, and `XCUIApplication().launch()` from a unit
+test host is why the test is guarded. Making it run needs a `bundle.ui-testing` target
+plus scheme wiring. That is unchanged and is not something a filename fix reaches.

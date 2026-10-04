@@ -18,6 +18,32 @@ final class GsNativeTests: XCTestCase {
 
     /// The model path, if one has been provisioned. `nil` means the model-backed
     /// tests skip.
+    ///
+    /// THE FILENAME IS NOT HARDCODED. It used to be:
+    ///
+    ///     dir.appendingPathComponent("qwen2.5-0.5b-instruct-q4_k_m.gguf")
+    ///
+    /// while `.github/workflows/ios-native.yml` provisions, into this very
+    /// directory:
+    ///
+    ///     GGUF="$WORK/qwen2.5-0.5b-instruct-q4_0.gguf"
+    ///     cp "$GGUF" "$SUPPORT/qwen2.5-0.5b-instruct-q4_0.gguf"
+    ///
+    /// So the model WAS provisioned and `deviceModel()` still returned `nil`, and
+    /// every test gated on it skipped while reporting the cause as **"no model
+    /// provisioned"** -- a statement that reads as a precondition which was not
+    /// met, and is indistinguishable from one.
+    ///
+    /// A skip is the one result a reader cannot tell from success, so a stale
+    /// literal here is worse than a wrong assertion: it removes the evidence rather
+    /// than contradicting it.
+    ///
+    /// Same defect already fixed in three Android test files, where the filename
+    /// comes from `ModelCatalog.MODEL_0_5B.id`. iOS has no catalogue, so the
+    /// equivalent is to ask for the FAMILY and take what was provisioned --
+    /// deterministically, sorted, so provisioning two quants cannot make it flaky.
+    /// The quantisation is a provisioning decision and the pipeline makes it in
+    /// one place; a test has no business restating it.
     private func deviceModel() -> String? {
         if let env = ProcessInfo.processInfo.environment["GS_TEST_MODEL"],
            FileManager.default.fileExists(atPath: env) {
@@ -27,8 +53,13 @@ final class GsNativeTests: XCTestCase {
             for: .applicationSupportDirectory, in: .userDomainMask,
             appropriateFor: nil, create: false)
         guard let dir = support else { return nil }
-        let candidate = dir.appendingPathComponent("qwen2.5-0.5b-instruct-q4_k_m.gguf")
-        return FileManager.default.fileExists(atPath: candidate.path) ? candidate.path : nil
+        let family = "qwen2.5-0.5b-instruct-"
+        let present = (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []
+        let matches = present
+            .filter { $0.hasPrefix(family) && $0.hasSuffix(".gguf") }
+            .sorted()
+        guard let name = matches.first else { return nil }
+        return dir.appendingPathComponent(name).path
     }
 
     // MARK: - Always asserted

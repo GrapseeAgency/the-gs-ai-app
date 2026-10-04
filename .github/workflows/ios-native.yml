@@ -119,6 +119,45 @@ jobs:
       - name: No comment inside a backslash continuation
         run: python3 .github/scripts/check_continuation_comments.py
 
+      # A QUANTISED MODEL FILENAME WRITTEN AS A LITERAL IN A TEST.
+      #
+      # Found in this file's own subject matter, not in a workflow:
+      #
+      #   ios/App/Tests/GsNativeTests.swift
+      #   ios/App/Tests/GsChatUiTests.swift
+      #       dir.appendingPathComponent("qwen2.5-0.5b-instruct-q4_k_m.gguf")
+      #
+      #   this workflow, "Provision the model and the OCR fixture"
+      #       GGUF="$WORK/qwen2.5-0.5b-instruct-q4_0.gguf"
+      #       cp "$GGUF" "$SUPPORT/qwen2.5-0.5b-instruct-q4_0.gguf"
+      #
+      # The provisioning step above downloads q4_0. The tests looked for q4_k_m. So
+      # the model WAS provisioned into Application Support and `deviceModel()`
+      # returned nil, and every test gated on it SKIPPED while reporting the cause
+      # as "no model provisioned" -- a phrase that reads as a precondition which was
+      # not met and is indistinguishable from one.
+      #
+      # Why that is worth a lint rather than a review note: a skip is the one result
+      # a reader cannot tell from success. A wrong assertion contradicts the
+      # evidence; a stale literal here removes it.
+      #
+      # The quantisation is a PROVISIONING decision and this workflow makes it in one
+      # place. iOS has no ModelCatalog, so the tests now glob the family
+      # (`qwen2.5-0.5b-instruct-`) and take what was provisioned, sorted for
+      # determinism. Comments are exempt, so the docstring recording the old literal
+      # does not trip it.
+      - name: No hardcoded quantised model filename in a test
+        run: |
+          set -euo pipefail
+          mapfile -t SWFT < <(find ios -name '*.swift' 2>/dev/null | sort)
+          test "${#SWFT[@]}" -gt 0 || {
+            echo "FAIL: no Swift sources found, so this check would pass by"
+            echo "FAIL:inspecting nothing."
+            exit 1
+          }
+          echo "  ${#SWFT[@]} Swift source(s)"
+          python3 .github/scripts/check_model_filename_literals.py "${SWFT[@]}"
+
       # THE OTHER `bash -e` LANDMINE, AND IT HAS COST FOUR RUNS.
       #
       # GitHub runs a `run:` block as `bash -e {0}`. A pipeline whose consumer
