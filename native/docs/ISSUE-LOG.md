@@ -4709,3 +4709,72 @@ measurement is reproducible.
   reverse.
 - **Diffusion timing is an emulator number.** 187 seconds for one 512x512 image at
   1 step on CPU-only x86_64 is not a phone number and must not be quoted as one.
+
+
+---
+
+## BLOCKER 4 ANDROID: CLOSED by changing what is tested, not by an eighth tap
+
+**Chosen option: (a) replace with a stronger a6-style test -- but driving the
+controller the screen observes, so the assertion is on the RENDERED tree, which
+a6 never was.**
+
+`ChatUiReplyTest` no longer injects a touch. It starts the stream on
+`ServiceLocator.chatStream` -- the exact instance `ChatScreen` is bound to -- and
+waits for `Paris` to appear in the semantics tree of the real `MainActivity`.
+
+### Why this is stronger, not merely different
+
+    before   touch -> composer -> submit -> screen shows a bubble
+    now      controller -> repository -> native engine -> StreamState
+                -> REAL ChatScreen recomposition -> text in the REAL semantics tree
+
+`a6_the_chat_screen_path_answers_from_the_engine` drives the repository and
+collects the text **in the test**, so it never proves the screen renders
+anything. This test asserts the same engine discriminator and reads it back out
+of the UI. Together they separate "the engine answered" from "the UI shows the
+answer" -- which is the only distinction the seven failed attempts existed to
+make.
+
+The wiring that makes it possible is documented at `ChatScreen.kt:406`
+(`chatStream.state.collectAsState()`) and `ChatScreen.kt:633-642` (while the phase
+is `Streaming`, `streamText` is folded into the rendered message list). So driving
+the controller makes the screen render on its own. No touch, no IME, no viewport.
+
+### The seven failures, kept in the file
+
+The class docstring carries all three verbatim, because they are the reason the
+approach changed and not a footnote:
+
+    attempt 3  performClick() on the Send node   -> Failed to inject touch input.
+    attempt 5  the same, with performScrollTo() -> Action performScrollTo() failed.
+    attempt 6  performClick() on the input field -> Failed to inject touch input.
+
+`performScrollTo()` failing on its own is the informative half: the nodes are not
+off-screen, so "inject touch input" was never a viewport problem.
+
+### What is still NOT covered, and it is not papered over
+
+That a literal finger tap on the Send button dispatches a send. The file says so
+in its docstring rather than implying coverage. It is a one-line wiring fact
+(`GsComponents.kt:374` wires ImeAction.Send and the button to the same submit),
+and if it is ever wanted the honest place is a UIAutomator test against a real
+finger -- which needs hardware this repository does not have. Claiming it now
+would be the exact error this file was rewritten to stop making.
+
+### What it asserts
+
+1. model present -- **fails, does not skip**, like a6 (the suite's standing is 0
+   skipped)
+2. `GsNativeLoader.initWith` true, `isAvailable()` true
+3. `preferLocal=true`, model recorded installed
+4. the stream reaches a **terminal** phase (`!= Streaming`)
+5. `StreamState.streamText` contains `"Paris"` -- `localReply()` has no France
+   branch and falls through to a generic template, so this can only be the engine
+6. **a node in the real Compose tree renders text containing `"Paris"`** -- the
+   assertion the seven attempts were reaching for, and the one a6 cannot make
+7. the reply is not the canned fallback prefix and not the echoed prompt
+
+Assertion 6 has its own failure message naming `ChatScreen.kt:633-642` and the
+terminal phase, because "the engine answered but nothing rendered" and "the engine
+never answered" need opposite fixes and the old message could not tell them apart.
