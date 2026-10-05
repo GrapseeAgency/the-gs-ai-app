@@ -530,27 +530,29 @@ class ChatRepository(
                         onDelta(tail)
                     } else {
                         // NOTHING ACCUMULATED IS NOT THE SAME AS "NEVER
-                        // REACHED". A GsStreamCutException thrown after a 2xx
-                        // carries that status: the backend accepted the turn
-                        // and began answering, and CIO merely discarded the
-                        // partial chunked body before any delta reached this
-                        // buffer (raw: runs 37285336823 and 37293692221, both
-                        // printing "No reply came back ... before any part of
-                        // the answer arrived" for a cut the WireServer had
-                        // ANSWERED -- the server's own request counter proves
-                        // it). The honest label for that case is the same one
-                        // the partial branch uses. Only a status-less cut --
-                        // the request itself never got a response -- may say
-                        // "before any part arrived".
-                        val cutStatus = (e as? GsStreamCutException)?.status
-                        val notice = if (cutStatus != null) {
-                            "\u2014 The connection dropped mid-turn. Nothing " +
-                                "arrived before it went down, and nothing was " +
-                                "saved. Tap regenerate, or try again in a " +
-                                "moment. \u2014"
-                        } else {
-                            SendFailureNotice.midStreamNothingArrived()
-                        }
+                        // REACHED". Two raw runs printed "No reply came back
+                        // ... before any part of the answer arrived" for a cut
+                        // the WireServer ANSWERED (37285336823, 37293692221 --
+                        // the server's own request counter >= 1 both times).
+                        // The earlier attempt keyed the notice on
+                        // GsStreamCutException.status and never fired, because
+                        // CIO notices this cut INSIDE post(), before the
+                        // HttpResponse object exists -- status is null by
+                        // construction (ApiClient's own comment records that
+                        // the headers and first chunk arrive in one segment
+                        // and a mid-body death surfaces there).
+                        //
+                        // The classification itself already proves what is
+                        // honest here: classifySendFailure rethrows the three
+                        // reachability shapes unchanged and routes everything
+                        // else to MidStreamCut, so reaching this branch means
+                        // a connection existed and the cut happened at or
+                        // after the request. "Before any part arrived" is
+                        // therefore not a claim this arm may make.
+                        val notice = "\u2014 The connection dropped mid-turn. " +
+                            "Nothing arrived before it went down, and nothing " +
+                            "was saved. Tap regenerate, or try again in a " +
+                            "moment. \u2014"
                         accumulated.append(notice)
                         onDelta(notice)
                     }
