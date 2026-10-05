@@ -108,9 +108,23 @@ fi
 echo
 echo "=== 1. build the APK and the instrumented-test APK ==="
 cd android
-if gradle --no-daemon --console=plain :app:assembleDebug :app:assembleDebugAndroidTest; then
-  echo "build OK"
-else
+# PIN THE GRADLE, DO NOT BORROW THE RUNNER'S. The runner image ships Gradle
+# 9.8.0, and every AGP 8.x dies on it at plugin apply --
+#     Plugin 'com.android.internal.application' relies on
+#     'org.gradle.api.problems.internal.InternalProblems', a Gradle internal
+#     API that was removed in Gradle 9.6.0.
+# Raw, android-app run 37282692340 and android-device run 37282851304
+# ("Welcome to Gradle 9.8.0!" straight into that failure). The repo carries no
+# gradle-wrapper.jar BY DESIGN (no committed binaries), so the wrapper is
+# GENERATED here from the runner's own Gradle and every invocation below goes
+# through ./gradlew, which downloads the distribution the properties file pins
+# (gradle-8.13-bin.zip). The generated jar lives only on the runner.
+if ! ./gradlew --version >/dev/null 2>&1; then
+  gradle wrapper --gradle-version 8.13 --distribution-type bin --no-daemon \
+    || { echo "FAIL: could not generate the Gradle 8.13 wrapper"; exit 1; }
+fi
+./gradlew --version | sed -n '1,9p'
+if ! ./gradlew --no-daemon --console=plain :app:assembleDebug :app:assembleDebugAndroidTest; then
   echo "BUILD FAILED -- the tests cannot run, and that is reported as a failure"
   exit 1
 fi
@@ -388,7 +402,7 @@ set +e
 #     .github/scripts/run-instrumented.sh: line 149: :app:connectedDebugAndroidTest: command not found
 #     connectedDebugAndroidTest exit: 127
 # Raw, run 36414439107. It cost a booted emulator and a 5-minute APK build.
-gradle --no-daemon --console=plain :app:connectedDebugAndroidTest 2>&1 | tee connected.log
+./gradlew --no-daemon --console=plain :app:connectedDebugAndroidTest 2>&1 | tee connected.log
 TEST_RC=${PIPESTATUS[0]}
 set -e
 echo "connectedDebugAndroidTest exit: $TEST_RC"
