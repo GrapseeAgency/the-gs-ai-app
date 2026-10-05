@@ -387,9 +387,25 @@ jobs:
         working-directory: android
         run: |
           set -euo pipefail
+          # PIN THE GRADLE, DO NOT BORROW THE RUNNER'S. The runner image ships a
+          # Gradle far newer than any AGP 8.x tolerates -- raw, run 37282692340:
+          #     Plugin 'com.android.internal.application' relies on
+          #     'org.gradle.api.problems.internal.InternalProblems', a Gradle
+          #     internal API that was removed in Gradle 9.6.0.
+          # ...with the runner on Gradle 9.8.0. The repo carries no
+          # gradle-wrapper.jar BY DESIGN (no committed binaries), so the
+          # wrapper is GENERATED here from the runner's own Gradle and then
+          # every invocation goes through ./gradlew, which downloads the
+          # distribution the properties file pins (gradle-8.13-bin.zip).
+          # The generated jar lives only on the runner; nothing binary lands
+          # in the repository.
+          gradle wrapper --gradle-version 8.13 --distribution-type bin --no-daemon \
+            || { echo "::error::could not generate the Gradle 8.13 wrapper"; exit 1; }
+          ./gradlew --version | sed -n '1,9p'
+          grep -q "Gradle 8.13" <(./gradlew --version 2>/dev/null) \
+            || { echo "::error::the wrapper did not resolve Gradle 8.13"; exit 1; }
           # --no-daemon because a runner has one process and gradle's daemon
           # survives the step and eats the next one.
-          gradle --version
           # --info, because at the default level Gradle reports only
           #   Compilation error. See log for more details
           # and the actual `e: file://...` lines never reach the job log.
@@ -405,7 +421,7 @@ jobs:
           # A source set that is never compiled is a source set nobody is
           # checking, and the instrumented tests are the whole point of the
           # device run.
-          gradle --no-daemon --console=plain --info --stacktrace \
+          ./gradlew --no-daemon --console=plain --info --stacktrace \
             :app:compileDebugKotlin :app:compileDebugAndroidTestKotlin 2>&1 | tee compile.log
           # Echo the diagnostics on their own, so a failure is legible without
           # scrolling a 4000-line --info log.
