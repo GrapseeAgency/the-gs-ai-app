@@ -100,7 +100,16 @@ class WireServer private constructor(
          * discarded before the client read it and the failure was classified as if
          * the provider had never spoken.
          */
-        const val MID_STREAM_PAUSE_MS = 750L
+        // 750ms was measured enough on a quiet emulator (run 36777497765's own
+        // follow-up) and NOT enough under the full 36-test suite, where the
+        // emulator has just model-loaded and is still busy: run 37285336823's
+        // a8 lost the same race the comment below describes -- the client never
+        // consumed the partial chunk before the close discarded it, so the turn
+        // classified as BackendError(0) instead of MidStreamCut. The window is
+        // wall-clock on the client side, so widen it: 2.5s is still far less
+        // than a real provider's gap between the first token and dying, and the
+        // assertion below is unchanged.
+        const val MID_STREAM_PAUSE_MS = 2_500L
 
         private const val CONV_ID = "srv-conv-1"
 

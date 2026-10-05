@@ -427,11 +427,39 @@ class DeviceVerificationTest {
             after is ModelStore.Result.Allowed,
         )
 
-        // --- an unverifiable model must be refused outright ---------------
-        val unverifiable = ModelCatalog.MODEL_1_5B
+        // --- the 1.5B entry is verifiable again, and must stay that way ----
+        // This block used to assert `ModelCatalog.MODEL_1_5B.sha256.isBlank()`
+        // and read the blank as the product's refusal decision for an
+        // unverifiable file. Then 6eac53a filled the digest from HuggingFace's
+        // own published x-linked-etag (provenance recorded in the catalog
+        // comment), because the blank value made the model undownloadable on
+        // exactly the HIGH tier it targets -- reported on a real phone as
+        // "has no verified checksum yet". The old assertion now fails on a
+        // CORRECT catalog, which makes it a stale test, not a caught defect.
+        //
+        // The refusal rule itself is unchanged and stays keyed on a BLANK
+        // checksum (ModelStore.mayDownload: "has no verified checksum yet").
+        // Exercising it needs a mayDownload(model) seam, which production does
+        // not have; what a test CAN pin without one is the catalog state the
+        // rule now acts on: the publisher digest and the true byte size.
         assertTrue(
-            "the 1.5B model has no verified checksum and must be refused",
-            unverifiable.sha256.isBlank(),
+            "the 1.5B model carries a publisher digest (HF x-linked-etag); " +
+                "blank would make it undownloadable on HIGH tiers -- the " +
+                "defect 6eac53a fixed",
+            ModelCatalog.MODEL_1_5B.sha256.isNotBlank(),
+        )
+        assertEquals(
+            "the 1.5B digest must stay the HF-published LFS etag, not a " +
+                "value copied from another model's bytes",
+            "6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e",
+            ModelCatalog.MODEL_1_5B.sha256,
+        )
+        assertEquals(
+            "the 1.5B byte count must match the HF-published size, or the " +
+                "progress bar and the size gate disagree with the file " +
+                "actually arriving",
+            1_117_320_736L,
+            ModelCatalog.MODEL_1_5B.bytes,
         )
     }
 
