@@ -107,12 +107,18 @@ final class GsChatUiTests: XCTestCase {
         // 4. a real reply bubble with non-blank assistant text within N s.
         //    The canned fallback's "hello" greeting is known; the real local
         //    model's is free-form, so we discriminate on the rendered text.
+        //    NO `label.length`: XCUITest rejects that key path outright --
+        //    raw, run 37284554031:
+        //        Invalid key path label.length specified in predicate format
+        //        string (XCTElementQueryInvalidPredicate)
+        //    -- at this exact line, after the composer and Send both worked.
+        //    `label != ''` says the same thing in valid syntax.
         let cannedPrefix = "Hey — good to see you."
         let deadline = Date().addingTimeInterval(180)
         var bubbleText: String?
         repeat {
             let matches = app.staticTexts
-                .matching(NSPredicate(format: "label.length > 0 AND label != %@ AND label != %@ AND NOT (label BEGINSWITH %@)",
+                .matching(NSPredicate(format: "label != '' AND label != %@ AND label != %@ AND NOT (label BEGINSWITH %@)",
                                       "Ask anything…", "hello", "Search"))
                 .allElementsBoundByIndex
                 .map(\.label)
