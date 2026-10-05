@@ -470,7 +470,20 @@ jobs:
           # would have left that ambiguity in place for the second one, which is
           # precisely the failure mode Option B introduces that a single-library
           # design does not have.
+          #
+          # ...WHEN IT IS SHIPPED AT ALL. On a gated build (ITEM 7) there IS no
+          # libgs_sd.so to check: raw, run 37281317138 --
+          #     cannot read android/app/src/main/jniLibs/x86_64/libgs_sd.so:
+          #     [Errno 2] No such file or directory
+          # -- the fetch step correctly staged one library and this loop then
+          # died on the absence the gate produces. A file that does not exist
+          # has no ELF machine to be wrong about; the gate's own correctness is
+          # asserted on the device by sd0's nativeLibraryDir probe.
           for SOFILE in libgs_ffi.so libgs_sd.so; do
+            if [ "$SOFILE" = "libgs_sd.so" ] && [ ! -f "android/app/src/main/jniLibs/$ABI/$SOFILE" ]; then
+              echo "  $SOFILE: absent (diffusion gated off) -- nothing to verify"
+              continue
+            fi
             SMACH=$(python3 "$GITHUB_WORKSPACE/.github/scripts/elf_machine.py" \
               "android/app/src/main/jniLibs/$ABI/$SOFILE")
             echo "  $SOFILE: ELF machine $SMACH (ABI $ABI)"
