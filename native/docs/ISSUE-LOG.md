@@ -6647,3 +6647,36 @@ The revert is one real change, not a suggestion: all three device test files
 read `ModelCatalog.MODEL_0_5B.id`, and the android-device control fetch follows
 the default on purpose, so flipping the catalogue flips the tests and the
 control with it.
+
+## ITEM 8 OF THE NEW BRIEF -- CLOSED PERMANENTLY, MEASURED ON AGP 8.13.2
+
+The last untried variable was the producer: the six-release reading proved the
+CONSUMER (`.single()` on the BASE_MODULE_METADATA collection) byte-identical
+across 8.5.2 through 8.13.2, but whether a later AGP registers the base's
+metadata PRODUCER differently was, until now, "not claimed either way". It is
+now claimed from a run, not a changelog:
+
+* Gradle pinned at 8.13 (CI-generated wrapper; the runner image's Gradle 9.8.0
+  breaks every AGP 8.x at plugin apply, raw: runs 37282692340 / 37283167572 /
+  37284603107 -- three separate lessons recorded in the workflow comments).
+* `dynamicFeatures += setOf(":ocr-fallback")` enabled, AGP 8.13.2, live build:
+  android-app run `37285014335` died in the split's own task graph with
+
+      Execution failed for task ':ocr-fallback:extractDeepLinksDebug'.
+      > Error while evaluating property 'applicationId' ...
+         > Collection is empty.
+      Caused by: java.util.NoSuchElementException: Collection is empty.
+        at com.android.build.api.variant.impl.DynamicFeatureVariantImpl
+             $instantiateBaseModuleMetadata$1.transform(DynamicFeatureVariantImpl.kt:274)
+
+  Same function, same empty collection, moved from line 244 (8.5.2) to line 274
+  (8.13.2). The base STILL emits no BASE_MODULE_METADATA artifact for the
+  feature to consume. `:ocr-fallback` reverted OFF; the app build is otherwise
+  clean on the pinned Gradle.
+
+FINAL STATE: the consumer is identical across six releases read from sources
+jars, and the producer registration is identical across the live span
+8.5.2 -> 8.13.2, measured. The operator's wording stands verbatim: OCR fallback
+on de-Googled devices requires a manual build with the module enabled until AGP
+changes the metadata producer. ML Kit remains the primary path, which ~99% of
+devices use. Tesseract stays cross-compiled and verified, out of the .so.
