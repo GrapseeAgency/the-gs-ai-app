@@ -6680,3 +6680,13 @@ jars, and the producer registration is identical across the live span
 on de-Googled devices requires a manual build with the module enabled until AGP
 changes the metadata producer. ML Kit remains the primary path, which ~99% of
 devices use. Tesseract stays cross-compiled and verified, out of the .so.
+
+## ITEM 3 OF THE NEW BRIEF -- CLOSED ON QUEUE-TIME EVIDENCE
+
+Run `37280191290`, host input `ubuntu-24.04-arm64`, dispatched 2026-10-05T07:52:29Z.
+Still `queued` at 09:52:29Z -- two hours, zero runner seconds. Cancelled by the
+operator's rule ("if GitHub queues it over two hours without running, close it
+with the raw queue-time as evidence and move on"). The label has now been
+probed twice and produced zero executions across both attempts: the arm64
+emulator question remains unanswerable on this repository's runners, and the
+revert criterion for the Q4_0 default stays blocked on a real arm64 device.
