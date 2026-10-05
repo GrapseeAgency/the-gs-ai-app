@@ -149,7 +149,15 @@ jobs:
       - name: No hardcoded quantised model filename in a test
         run: |
           set -euo pipefail
-          mapfile -t SWFT < <(find ios -name '*.swift' 2>/dev/null | sort)
+          # NO MAPFILE. macOS runner images ship /bin/bash 3.2, and mapfile is a
+          # bash 4 builtin -- raw, runs 37208719199 AND 37282307069 (the runner
+          # image changed around 2026-10-04, so every ios-native job dies at
+          # this lint step with exit 127 before any real work):
+          #     /Users/runner/work/_temp/*.sh: line 2: mapfile: command not found
+          # A find piped into a while-read builds the same array in any bash,
+          # and the null-delimited variant is safe against spaces in paths.
+          SWFT=()
+          while IFS= read -r -d '' f; do SWFT+=("$f"); done < <(find ios -name '*.swift' -print0 2>/dev/null | sort -z)
           test "${#SWFT[@]}" -gt 0 || {
             echo "FAIL: no Swift sources found, so this check would pass by"
             echo "FAIL:inspecting nothing."
