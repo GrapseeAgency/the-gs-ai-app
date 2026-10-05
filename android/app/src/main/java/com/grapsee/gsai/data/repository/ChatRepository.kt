@@ -27,7 +27,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -727,10 +726,29 @@ class ChatRepository(
         } else {
             localReply(prompt)
         }
-        reply.split(" ").forEachIndexed { index, word ->
-            onDelta(if (index == 0) word else " $word")
-            delay(26)
-        }
+    // ONCE, NOT A FAKE TYPEWRITER.
+    //
+    // This used to replay the finished answer one word at a time:
+    //
+    //     reply.split(" ").forEachIndexed { index, word ->
+    //         onDelta(if (index == 0) word else " $word")
+    //         delay(26)
+    //     }
+    //
+    // The engine does not stream. GsNative.chat returns the whole completion as
+    // one String (Rust chat_impl -> gs_mobile_chat -> gs_llama_chat, which runs
+    // to completion), so by this point the answer already exists in full. The
+    // loop added no information and cost ~4.9s of dead air per 256-token reply
+    // -- ~190 words at 26ms each -- purely to imitate the network path's shape.
+    //
+    // It also lied about progress: during nativeReply() no delta has been
+    // emitted and the bubble is empty, then text starts arriving. A typewriter
+    // over completed work reads as "still thinking", which is the opposite of
+    // the truth.
+    //
+    // One emit. The screen's Generating phase already carries the waiting
+    // state, so nothing is lost by being honest about the shape.
+    onDelta(reply)
     }
 
     /**

@@ -6516,3 +6516,110 @@ The notice is now honest, but it is still an assistant bubble and it is still
 persisted. `MessageEntity` has no error flag, so an error and a reply are
 indistinguishable by construction; fixing that needs a Room migration and distinct
 UI rendering. Recorded as a known limitation of v0.71.2 rather than quietly shipped.
+
+---
+
+## 2026-10-05 — "the native path is lagging and incredibly slow"
+
+Operator report after v0.71.2. Traced to three separate causes, in descending order
+of size.
+
+### 1. A fake typewriter over an already-finished answer (~4.9s per reply)
+
+`ChatRepository.streamLocalReply` ended with:
+
+    reply.split(" ").forEachIndexed { index, word ->
+        onDelta(if (index == 0) word else " $word")
+        delay(26)
+    }
+
+THE ENGINE DOES NOT STREAM. The whole chain is synchronous and returns once:
+
+    GsNative.chat            -> Java String
+    Rust chat_impl           -> call(|c| c.chat(&p, max_tokens, 0.2))
+    mobile.rs chat           -> gs_mobile_chat(...)
+    gs_mobile.cpp            -> gs_llama_chat(...)   // runs to completion
+    llama_wrapper.cpp        -> gs_llama_generate_opts(...)
+
+So `reply` was already the finished answer when the loop started. The loop replayed
+it one word at a time with a 26ms pause, purely to imitate the network path's
+shape. At the 256-token default budget (~190 words) that is **~4.9 seconds of dead
+air between having the answer and being able to read it**, on every reply.
+
+It also misrepresented progress. `nativeReply()` emits nothing until generation
+finishes, so the bubble is empty for the whole generation; then text begins
+arriving. A typewriter over completed work reads as "the model is still thinking",
+which is the opposite of the truth, and is a plausible contributor to the earlier
+"nothing for twenty seconds" report.
+
+Fixed: emit once (`onDelta(reply)`). The screen's Generating phase already carries
+the waiting state, so nothing is lost by being honest about the shape.
+
+Guarded by `.github/scripts/check_no_fake_streaming_delay.py`, wired into
+`android-app.yml`. Scoped to ChatRepository.kt on purpose: that file has no real
+stream to pace, and legitimate retry backoff lives in ApiClient. Verified
+non-vacuously -- restoring the typewriter makes it exit 1 -- and verified that it
+does NOT trip on the fix's own comment, which quotes `delay(26)` to document what
+was removed.
+
+### 2. Four threads, hardcoded, on a phone with eight
+
+`GsNative.init` resolves to `gs_mobile_create(path, 2048, 4)` ->
+`gs_mobile_create_tuned(path, 2048, 4, -1, 0, 0, -1)`. Four threads is a sensible
+desktop default and a poor phone one: an 8-core device idles half its CPU for the
+entire generation, and generation is the only thing the user is waiting on.
+
+Fixed to call `initTuned` with `availableProcessors()` for BOTH `n_threads` and
+`n_threads_batch`. They are not the same knob -- `n_threads` is decode,
+`n_threads_batch` is prompt processing, and prompt processing is what
+time-to-first-token is made of.
+
+**No native rebuild required.** `initTuned` was already in the shipped ABI,
+verified by reading the dynamic symbol table of the arm64 `libgs_ffi.so` inside the
+v0.71.2 APK, which exports `Java_com_grapsee_gsai_native_GsNative_initTuned`.
+
+The four untouched sentinels, each meaning "exactly as this build already was":
+n_ctx 2048, n_batch 0, n_ubatch 0, flash_attn -1. The -1 is load-bearing and not a
+typo: flash_attn is an ENUM (-1 AUTO / 0 DISABLED / 1 ENABLED) passed through by the
+C side, so sending 0 would pin every non-opted-in caller to DISABLED.
+
+NOT MEASURED ON ARM64. No arm64 benchmark has run; TTFT on a device was still
+pending at v0.71.2. This is the standard mobile configuration applied without a
+device number behind it, and it is labelled that way rather than presented as a
+measured speedup.
+
+### 3. Real token streaming does not exist
+
+Causes 1 and 2 are everything fixable without touching C++. The third cause is
+that during `nativeReply()` the UI shows NOTHING at all -- no delta is emitted
+until the entire generation completes. For a 256-token generation that is many
+seconds of an empty bubble.
+
+Genuine streaming needs a token callback through
+`gs_llama_generate_opts` -> `gs_llama_chat` -> `gs_mobile_chat` -> Rust
+`MobileCtx::chat` -> a new JNI method taking a callback, plus a Kotlin `Flow`.
+NOT DONE. It needs a new `.so`, which needs the android-native workflow, and then
+`stage_release_so.sh` re-pointed at the new run id -- two coupled CI stages.
+
+### Knobs found but deliberately not pulled
+
+Recorded here because they are the next things to try, not because they were done:
+
+- `cache_type_k`/`cache_type_v` are hardcoded to F16 (1) in `gs_mobile_create_tuned`.
+  Q8_0 KV cache would roughly halve KV memory and often speeds decode on mobile.
+  Native change.
+- `n_gpu_layers` is hardcoded to 0 with the comment "mobile: no GPU offload path
+  here". `buildInfo` already reports `llama.cpp+vulkan`, so a Vulkan build exists.
+  Potential large win, high risk on device battery/thermal. Native change.
+- `llama_sampler_chain_params.no_perf = true` and `sp.no_perf = true` are set, so
+  per-token timings are unavailable in a release build.
+
+### The lesson, which is not new
+
+The single largest cost here was 26ms of `delay()` per word -- code whose only
+purpose was to look like the network path. It was faster to delete 6 lines than to
+optimise anything, and it was invisible because "it streams" and "it is slow" look
+identical from the outside until you check whether anything is actually arriving
+incrementally. Nothing tested it, for the same reason nothing tested the consent
+dialog's state machine earlier in this session: the behaviour was inline in a
+function with no seam.

@@ -118,7 +118,45 @@ object GsNativeLoader {
                 if (pendingModelPath == modelPath && GsNative.backendAvailable()) {
                     true
                 } else {
-                    val ok = GsNative.init(modelPath)
+                    // Device thread counts instead of the 4 that init() hardcodes.
+                //
+                // `init` resolves to gs_mobile_create(path, 2048, 4) ->
+                // gs_mobile_create_tuned(path, 2048, 4, -1, 0, 0, -1). Four
+                // threads is a reasonable desktop default and a poor phone one:
+                // an 8-core device idles half its CPU for the whole generation,
+                // and generation is the only thing the user is waiting on.
+                //
+                // n_threads_batch is set from the same count, and it is NOT the
+                // same knob. n_threads is decode; n_threads_batch is prompt
+                // processing, and prompt processing is what time-to-first-token
+                // is made of. It was the library default (-1) before.
+                //
+                // The other four sentinels are UNCHANGED and each means "exactly
+                // as this build already was":
+                //
+                //   n_ctx        2048  same as init's hardcoded value
+                //   n_batch      0     0 is the sentinel for unchanged
+                //   n_ubatch     0     0 is the sentinel for unchanged
+                //   flash_attn  -1     AUTO, the enum value AUTO
+                //
+                // -1 for flash attention is load-bearing and NOT a typo for 0:
+                // flash_attn is an ENUM (-1 AUTO, 0 DISABLED, 1 ENABLED) and the
+                // C side passes it through. Sending 0 would pin the kernel to
+                // DISABLED for every caller that never opted in.
+                //
+                // initTuned was already in the shipped ABI -- verified by
+                // reading the dynamic symbol table of the arm64 libgs_ffi.so in
+                // the v0.71.2 APK, which exports Java_..._GsNative_initTuned -- so
+                // this needs no native rebuild.
+                val ok = GsNative.initTuned(
+                    modelPath,
+                    DEVICE_N_CTX,
+                    DEVICE_THREADS,
+                    DEVICE_THREADS,
+                    UNCHANGED_BATCH,
+                    UNCHANGED_UBATCH,
+                    FLASH_ATTN_AUTO,
+                )
                     pendingModelPath = if (ok) modelPath else null
                     ok
                 }
@@ -138,6 +176,36 @@ object GsNativeLoader {
      */
     @JvmStatic
     fun loadedModelPath(): String? = pendingModelPath
+
+    /**
+     * Generation and prompt-processing threads, from the device rather than a
+     * constant.
+     *
+     * `Runtime.availableProcessors()` is the honest number, and llama.cpp is
+     * built to scale across it. `coerceAtLeast(2)` guards the pathological
+     * single-core report, where decode would otherwise be serialised; it is a
+     * floor, not a ceiling -- there is deliberately NO cap, because clamping
+     * an 8-core phone to some smaller number would trade real throughput for
+     * nothing.
+     *
+     * NOT YET MEASURED ON ARM64. Every arm64 device execution so far has been
+     * the user's phone reporting a bug, and a TTFT measurement was still
+     * pending at v0.71.2. This is the standard mobile configuration applied
+     * without a device benchmark behind it, and it is labelled as such rather
+     * than presented as a measured speedup.
+     */
+    private val DEVICE_THREADS: Int =
+        Runtime.getRuntime().availableProcessors().coerceAtLeast(2)
+
+    /** Context size, unchanged from what `init` hardcoded. */
+    private const val DEVICE_N_CTX: Int = 2048
+
+    /** Sentinel meaning "exactly as this build already was". Not "zero". */
+    private const val UNCHANGED_BATCH: Int = 0
+    private const val UNCHANGED_UBATCH: Int = 0
+
+    /** flash_attn is an enum: -1 AUTO, 0 DISABLED, 1 ENABLED. */
+    private const val FLASH_ATTN_AUTO: Int = -1
 
     /** Release the context. The library stays loaded; re-init is cheap. */
     @JvmStatic

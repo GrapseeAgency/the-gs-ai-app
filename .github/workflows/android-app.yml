@@ -135,6 +135,25 @@ jobs:
           }
           python3 .github/scripts/check_kt_escaped_backtick.py "${KTB[@]}"
 
+      # Guards the v0.71.2 perf fix: the local path replayed a FINISHED answer
+      # with delay(26) per word, ~4.9s of dead air per reply. The engine returns
+      # a completed String, so any delay in ChatRepository is simulated
+      # streaming. Scoped to that one file on purpose -- real retry backoff is
+      # legitimate and lives in ApiClient.
+      #
+      # Verified non-vacuously: restoring the typewriter makes this exit 1, and
+      # it stays 0 on the fix's own comment, which quotes `delay(26)` to explain
+      # what was removed. Comments are exempt for that reason.
+      - name: No artificial per-chunk delay in the chat send path
+        run: |
+          set -euo pipefail
+          CR=android/app/src/main/java/com/grapsee/gsai/data/repository/ChatRepository.kt
+          test -f "$CR" || {
+            echo "FAIL: $CR is gone; this step would pass by checking nothing."
+            exit 1
+          }
+          python3 .github/scripts/check_no_fake_streaming_delay.py "$CR"
+
       # A brace counter cannot see a missing field name, and a file-wide
       # "is this field declared anywhere?" cannot either -- `ttft` IS declared,
       # by two other row classes in the same file. The read has to be bound to
