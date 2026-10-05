@@ -4226,3 +4226,24 @@ Work Log:
 
 Stage Summary:
 - Benchmark pipeline is UNBLOCKED end-to-end: dispatch-only workflow valid again, subset filtering honest and observable, baseline-subset run in flight. Next (cron-driven): await run 36155160244 → fetch artifacts → assemble-baseline.py → update tests/baseline-scaffold-v1.json → dispatch scaffold=aci → delta+CI → keep/revert → verification → context → router.
+
+---
+Task ID: HANDOFF-EXEC (GLM takes over, items 1-8)
+Agent: main (Z.ai Code)
+Task: Execute the operator handoff: fix the send path + health endpoint, then items 3-8.
+
+Work Log:
+- Pulled: local was ahead 1 / behind 399; rebased cleanly. All work below pushed to main.
+- ITEM 1: send path verified LIVE in the rebuilt sandbox: POST messages HTTP 200 in 1.19s non-stream ("ALIVE") and 200 in 0.66s stream (deltas, done event, persisted). Found + fixed on the way: stale readonly SQLite handle after the platform rebuild (Prisma "attempt to write a readonly database", dev server restart fixed it). Pre-restart dev.log holds the outage evidence: KEYPOOL layer=none count=0 + TURN-ERROR 401 "missing X-Token header". KEYPOOL REFILL BLOCKED: the 12 OpenRouter keys were NOT in the handoff message (only the GitHub token). Provisioning ready: bun scripts/provision-keys.ts "<keys>".
+- ITEM 2 DONE (commit f5767d4): health now probes the real send path. Live curls: wiped pool -> 200 with keypool size 0 + primary ok 451ms; invalid key provisioned -> real OpenRouter 401 "User not found." 273ms, fall-through to primary; 503 fires when every serving path is dead.
+- ITEM 6 DONE (d942eaf): Q4_0 vs Q4_K_M re-measurement tracked in native/docs/ISSUE-LOG.md with a decided revert criterion.
+- ITEM 7 DONE: gate confirmed (enable_sd_diffusion default false, android-native.yml) + v0.71.3 release notes patched with the desktop-only diffusion statement (GitHub API PATCH, release 403443937).
+- ITEM 4 (one attempt, commit e0b99f1): the device suite was dead BEFORE any test (run 37208912694: "libgs_sd.so not inside the artifact zip" -- ITEM 7's gate vs the fetch step's unconditional demand). Fetch step now tolerates the gated artifact (GS_SD_LIB_ABSENT), checkpoint download skipped, sd0 SKIPs via a nativeLibraryDir probe. First re-run found the SECOND unconditional consumer (ELF check "cannot read libgs_sd.so", run 37281317138) -- fixed 7d8ec23, re-dispatched. The cancel test itself already carries its fix (immediate cancel after first Streaming observation); the green run is its verification.
+- ITEM 5 (798ad7e): GsChatUITests bundle.ui-testing target added (ios/project.yml), test moved to App/Tests/UITests/, @testable import dropped, GSApp launch-argument hooks (-gs_test_session_active, -gs_test_local_model) initialize the engine (production never calls GsNativeLoader.initialize -- the offline path was canned-only), ios-native stages the verified GGUF at /tmp/gs-ui-model.gguf for the scheme env.
+- ITEM 8 (0b341db + 3078d22): the last untried variable -- dynamicFeatures enabled on AGP 8.13.2. First run failed on the RUNNER's Gradle 9.8.0 (internal API removed in 9.6 breaks all AGP 8.x): fixed by generating a Gradle 8.13 wrapper in CI (no jar committed), re-dispatched.
+- Runner-image breakage fixed on the way (50f5646): macOS bash 3.2 has no mapfile -- every ios-native job died at the lint step since ~Oct 4 (runs 37208719199, 37282307069).
+- NOTED, not yet fixed: ios.yml push-CI red on every push since ~Oct 4 (missing GsFfi.xcframework on the lightweight runner) -- pre-existing, queued for ITEM 9.
+
+Stage Summary:
+- In flight: android-device (ITEM 4 verify), ios-native (ITEM 5 verify), android-app (ITEM 8 verdict), arm64 probe 37280191290 queued 07:52:29Z (deadline 09:52:29Z per the two-hour rule).
+- BLOCKED: keypool refill needs the 12 OpenRouter keys; iOS signed .ipa needs the operator's Apple account.
