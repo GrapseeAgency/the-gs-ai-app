@@ -122,7 +122,13 @@ cd android
 # GENERATED IN AN EMPTY DIRECTORY, NOT IN THIS ONE (raw: android-app run
 # 37283167572 -- `gradle wrapper` inside the project configures the build,
 # applies AGP, and dies on the runner's Gradle 9.8 before generating anything).
-mkdir -p /tmp/gs-wrapper-gen && cd /tmp/gs-wrapper-gen
+# An EMPTY settings.gradle: Gradle 9 refuses the wrapper task in a
+# directory with no build (raw: run 37284603107, "does not contain a
+# Gradle build"), and an empty one has no plugins to apply, so the
+# runner's Gradle 9.8 cannot trip over AGP here.
+mkdir -p /tmp/gs-wrapper-gen
+touch /tmp/gs-wrapper-gen/settings.gradle
+cd /tmp/gs-wrapper-gen
 if ! gradle wrapper --gradle-version 8.13 --distribution-type bin --no-daemon; then
   echo "FAIL: could not generate the Gradle 8.13 wrapper"; exit 1
 fi
