@@ -6623,3 +6623,27 @@ identical from the outside until you check whether anything is actually arriving
 incrementally. Nothing tested it, for the same reason nothing tested the consent
 dialog's state machine earlier in this session: the behaviour was inline in a
 function with no seam.
+
+## OPEN ITEM: re-measure Q4_0 vs Q4_K_M on real arm64 before the default reaches a phone
+
+Status: **OPEN**, blocked on the same hardware wall as the arm64 device run
+(nested virtualisation on every reachable runner). This is a tracked item, not a
+footnote: the Q4_0 default was decided on run `37118362666` (QuantQuality50Test,
+n=50 per arm, delta +0.06, verdict text verbatim in the BLOCKER 3 section above)
+and on a 4.9x-5.4x TTFT advantage from runs `37005521803` and `37022078103` --
+**all of it on an x86_64 emulator, CPU-only**. Neither the instruction set nor
+the memory subsystem of that host resembles a phone, and K-quant's advantage on
+real arm64 is normally the reverse of the emulator's.
+
+**Revert criterion (decided now, so the measurement cannot be argued with
+later):** run both quants through the same QuantQuality50 rubric plus the same
+TTFT probes on a real arm64 device. If Q4_K_M's TTFT advantage reappears there
+and the rubric delta stays inside the +/-0.3 equivalence band, revert
+`ModelCatalog.MODEL_0_5B` to Q4_K_M. If the rubric delta exceeds the band
+against Q4_K_M, keep Q4_0 and record why. Either way the measurement, the raw
+logcat and the decision land in this log as a new dated section.
+
+The revert is one real change, not a suggestion: all three device test files
+read `ModelCatalog.MODEL_0_5B.id`, and the android-device control fetch follows
+the default on purpose, so flipping the catalogue flips the tests and the
+control with it.
