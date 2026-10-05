@@ -154,10 +154,12 @@ jobs:
           # image changed around 2026-10-04, so every ios-native job dies at
           # this lint step with exit 127 before any real work):
           #     /Users/runner/work/_temp/*.sh: line 2: mapfile: command not found
-          # A find piped into a while-read builds the same array in any bash,
-          # and the null-delimited variant is safe against spaces in paths.
+          # A find piped into a while-read builds the same array in any bash.
+          # Newline-delimited: Swift source paths contain no newlines, and the
+          # `-d ''` form trips check_workflow_var_scope.py's read-assignment
+          # regex (run 37283363457), which then flags `f` as read-unassigned.
           SWFT=()
-          while IFS= read -r -d '' f; do SWFT+=("$f"); done < <(find ios -name '*.swift' -print0 2>/dev/null | sort -z)
+          while IFS= read -r f; do SWFT+=("$f"); done < <(find ios -name '*.swift' 2>/dev/null | sort)
           test "${#SWFT[@]}" -gt 0 || {
             echo "FAIL: no Swift sources found, so this check would pass by"
             echo "FAIL:inspecting nothing."

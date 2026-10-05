@@ -84,7 +84,14 @@ abs="$(cd "$(dirname "$rel")" && pwd)/$(basename "$rel")"
 #
 # `sed -n '1p'`, never `head -1`, still: under `set -o pipefail` a `head -1` closes
 # the pipe and SIGPIPEs `ar`, which is a 141 that kills the step.
-mapfile -t MEMBERS < <(ar t "$abs" | grep -v '^__')
+#
+# NO MAPFILE. The macOS runner image changed around 2026-10-04 and the default
+# /bin/bash is 3.2, where mapfile/readarray do not exist -- raw, ios-native run
+# 37283363457 died here with exit 127 ("mapfile: command not found") after a
+# fully successful 18s Rust build. A while-read loop builds the same array in
+# any bash; the archive listing is small enough that streaming it twice is free.
+MEMBERS=()
+while IFS= read -r m; do MEMBERS+=("$m"); done < <(ar t "$abs" | grep -v '^__')
 if [ "${#MEMBERS[@]}" -eq 0 ]; then
   echo "FAIL: $label: archive has no object members" >&2
   ar t "$abs" >&2
