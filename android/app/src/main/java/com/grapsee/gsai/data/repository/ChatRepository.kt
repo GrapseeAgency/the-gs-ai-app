@@ -529,7 +529,28 @@ class ChatRepository(
                         accumulated.append(tail)
                         onDelta(tail)
                     } else {
-                        val notice = SendFailureNotice.midStreamNothingArrived()
+                        // NOTHING ACCUMULATED IS NOT THE SAME AS "NEVER
+                        // REACHED". A GsStreamCutException thrown after a 2xx
+                        // carries that status: the backend accepted the turn
+                        // and began answering, and CIO merely discarded the
+                        // partial chunked body before any delta reached this
+                        // buffer (raw: runs 37285336823 and 37293692221, both
+                        // printing "No reply came back ... before any part of
+                        // the answer arrived" for a cut the WireServer had
+                        // ANSWERED -- the server's own request counter proves
+                        // it). The honest label for that case is the same one
+                        // the partial branch uses. Only a status-less cut --
+                        // the request itself never got a response -- may say
+                        // "before any part arrived".
+                        val cutStatus = (e as? GsStreamCutException)?.status
+                        val notice = if (cutStatus != null) {
+                            "\u2014 The connection dropped mid-turn. Nothing " +
+                                "arrived before it went down, and nothing was " +
+                                "saved. Tap regenerate, or try again in a " +
+                                "moment. \u2014"
+                        } else {
+                            SendFailureNotice.midStreamNothingArrived()
+                        }
                         accumulated.append(notice)
                         onDelta(notice)
                     }
