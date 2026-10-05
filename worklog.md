@@ -4277,3 +4277,16 @@ Work Log:
 Stage Summary:
 - In flight: ios-native 37292983744 (ITEM 5 verdict), android-device 37293692221 (a3/a8 fixes + cancel test re-verify).
 - BLOCKED: keypool refill (12 keys not provided), iOS signed .ipa (needs operator account).
+
+---
+Task ID: HANDOFF-EXEC (item 5 verified)
+Agent: main (Z.ai Code)
+Task: ITEM 5 verification verdict.
+
+Work Log:
+- ios-native run 37292983744 (head 8e9edc9): SUCCESS. GsChatUiTests.testSendHelloRendersARealAssistantReply PASSED in 55.9s with a real reply bubble ("Today", not the canned prefix). passed=50 failed=0 skipped=0 -- the first ios-native run where the UI test EXECUTED instead of skipping, and zero skips across the whole iOS suite.
+- The run also confirms: macOS mapfile fixes hold, the scheme env (GS_UI_TEST_MODE + GS_TEST_MODEL=/tmp/gs-ui-model.gguf) reached the runner, the launch-argument hooks (-gs_test_session_active, -gs_test_local_model) armed the engine, and the xcframework + llama.cpp jobs stayed green.
+- android-device run 1747c96 in flight: verifies the a3 stale-assertion fix, the a8 WireServer pause, and the ChatRepository post-2xx-cut notice.
+
+Stage Summary:
+- ITEM 5 DONE. Remaining: android-device verdict for the a8/a3 fixes; ITEM 1 keypool refill blocked on the 12 keys.
