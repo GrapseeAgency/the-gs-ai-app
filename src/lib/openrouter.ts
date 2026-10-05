@@ -29,6 +29,7 @@
 
 import { consumeSseStream, type ChatMessageInput } from '@/lib/ai'
 import { loadKeyPool } from '@/lib/keypool'
+import { OPENROUTER_MODELS } from '@/lib/models'
 
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1'
 
@@ -303,4 +304,80 @@ export async function orStreamChat(
 export async function orPoolStatus(): Promise<{ size: number; fingerprints: string[] }> {
   const keys = (await loadKeyPool()).keys
   return { size: keys.length, fingerprints: keys.map(maskKey) }
+}
+
+// ---------------------------------------------------------------------------
+// HEALTH PROBE (outage 2026-10-05, ITEM 2) — one cheap upstream call that
+// proves the OpenRouter send path is alive with the CURRENT pool. Any HTTP
+// 200 with a parseable completion body counts as healthy: health measures
+// the PIPE (auth + network + model serving), not output quality. max_tokens=1
+// bounds cost; up to 3 distinct keys are tried so one cooled/dead key cannot
+// produce a false negative for a pool that otherwise works. Key material is
+// never logged or returned (last-4 fingerprints only, via loadKeyPool's own
+// masking).
+// ---------------------------------------------------------------------------
+
+export type OrProbeResult = {
+  /** false when the pool is empty — nothing was probed (layer offline). */
+  probed: boolean
+  ok: boolean
+  /** Last HTTP status observed (null when the request never got a response). */
+  status: number | null
+  error: string | null
+  latencyMs: number
+}
+
+const HEALTH_PROBE_TIMEOUT_MS = 10_000
+const HEALTH_PROBE_MAX_KEYS = 3
+
+export async function orHealthProbe(): Promise<OrProbeResult> {
+  const t0 = Date.now()
+  const keys = (await loadKeyPool()).keys
+  if (keys.length === 0) {
+    return { probed: false, ok: false, status: null, error: 'keypool empty', latencyMs: 0 }
+  }
+  const model = OPENROUTER_MODELS['gs-free'][0]
+  let lastError = 'OpenRouter unavailable'
+  let lastStatus: number | null = null
+  for (let i = 0; i < Math.min(HEALTH_PROBE_MAX_KEYS, keys.length); i++) {
+    const key = keys[(keyCursor + i) % keys.length]
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), HEALTH_PROBE_TIMEOUT_MS)
+    try {
+      const response = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          Authorization: `Bearer ${key}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://grapsee.agency',
+          'X-Title': 'GS AI',
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: 1,
+          messages: [{ role: 'user', content: 'ping' }],
+        }),
+      })
+      lastStatus = response.status
+      if (response.ok) {
+        return { probed: true, ok: true, status: 200, error: null, latencyMs: Date.now() - t0 }
+      }
+      lastError = await extractError(response)
+      // 400/404 are permanent for this request shape — rotating keys cannot
+      // fix them; report the failure as the layer's real state.
+      if (!shouldRotate(response.status)) break
+    } catch (e) {
+      lastError = e instanceof Error ? e.message : String(e)
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+  return {
+    probed: true,
+    ok: false,
+    status: lastStatus,
+    error: lastError.slice(0, 200),
+    latencyMs: Date.now() - t0,
+  }
 }
