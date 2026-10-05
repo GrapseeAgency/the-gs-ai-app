@@ -135,9 +135,17 @@ jobs:
           # LibraryIdentifier names are the truth, and a simulator-only or
           # device-only framework fails later with a dyld error that reads
           # like a broken build instead of a missing slice.
-          PLIST="$XF/Info.plist"
-          grep -q "ios-arm64-simulator" "$PLIST" || { echo "::error::no ios-arm64-simulator slice in the fetched framework"; exit 1; }
-          grep -q '"ios-arm64"' "$PLIST" || { echo "::error::no ios-arm64 device slice in the fetched framework"; exit 1; }
+          # plutil -p, NOT raw grep: the Info.plist inside the artifact is a
+          # BINARY plist, and grep over its bytes matched nothing (raw: run
+          # 37308093580, "no ios-arm64-simulator slice" immediately after a
+          # successful download and extract).
+          plutil -p "$XF/Info.plist" > /tmp/xff-plist.txt || {
+            echo "::error::could not read the fetched Info.plist"
+            exit 1
+          }
+          cat /tmp/xff-plist.txt
+          grep -q "ios-arm64-simulator" /tmp/xff-plist.txt || { echo "::error::no ios-arm64-simulator slice in the fetched framework"; exit 1; }
+          grep -q '"ios-arm64"' /tmp/xff-plist.txt || { echo "::error::no ios-arm64 device slice in the fetched framework"; exit 1; }
           echo "staged: $(du -sh "$XF" | cut -f1)"
 
       - name: Resolve available iPhone simulator destination
