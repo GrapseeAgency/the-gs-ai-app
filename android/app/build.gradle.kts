@@ -159,7 +159,7 @@ android {
     // module's variant not seeing `dynamicFeatures` at all, and the evidence for
     // that is the ABSENCE of the producer task in the graph -- not another error
     // message, which is what four of the five attempts chased.
-    // dynamicFeatures += setOf(":ocr-fallback")
+    dynamicFeatures += setOf(":ocr-fallback")
 
     defaultConfig {
         applicationId = "com.grapsee.gsai"

@@ -1,6 +1,6 @@
 # Pinned, known-good combo for the-gs-ai-app (do not bump casually).
 [versions]
-agp = "8.5.2"
+agp = "8.13.2"
 kotlin = "2.0.20"
 playCore = "2.1.0"
 playServices = "18.5.0"
