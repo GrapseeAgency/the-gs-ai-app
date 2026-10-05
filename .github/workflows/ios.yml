@@ -144,7 +144,13 @@ jobs:
             exit 1
           }
           cat /tmp/xff-plist.txt
-          grep -q "ios-arm64-simulator" /tmp/xff-plist.txt || { echo "::error::no ios-arm64-simulator slice in the fetched framework"; exit 1; }
+          # THE SLICE NAMES INCLUDE EVERY ARCHITECTURE: the simulator slice is
+          # a fat arm64+x86_64 build whose LibraryIdentifier is
+          # "ios-arm64_x86_64-simulator" (raw: run 37308423838 -- the literal
+          # "ios-arm64-simulator" matched nothing because of the _x86_64). So
+          # match on what the identifiers are actually made of: a slice whose
+          # name ends in -simulator, and the bare device identifier ios-arm64.
+          grep -q -- '-simulator"' /tmp/xff-plist.txt || { echo "::error::no simulator slice in the fetched framework"; exit 1; }
           grep -q '"ios-arm64"' /tmp/xff-plist.txt || { echo "::error::no ios-arm64 device slice in the fetched framework"; exit 1; }
           echo "staged: $(du -sh "$XF" | cut -f1)"
 
