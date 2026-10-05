@@ -4290,3 +4290,17 @@ Work Log:
 
 Stage Summary:
 - ITEM 5 DONE. Remaining: android-device verdict for the a8/a3 fixes; ITEM 1 keypool refill blocked on the 12 keys.
+
+---
+Task ID: HANDOFF-EXEC (item 9: ios.yml push gate fixed)
+Agent: main (Z.ai Code)
+Task: Fix the ios.yml push-CI (red since ~Oct 4).
+
+Work Log:
+- Root cause: the App target hard-links Frameworks/GsFfi.xcframework (project.yml), and the pull gate's bare checkout has no framework. Raw: run 37292984587, "There is no XCFramework found at .../GsFfi.xcframework. (in target 'App')".
+- Fix (7875f7e): fetch the GsFfi.xcframework artifact from the latest successful ios-native run (the same producer/consumer pattern android-device uses for libgs_ffi.so), extract into ios/Frameworks/GsFfi.xcframework, assert both slices.
+- Two iterations with raw evidence: (1) the artifact Info.plist is a BINARY plist -- raw grep matched nothing, fixed with plutil -p (run 37308093580); (2) the simulator slice identifier is the fat "ios-arm64_x86_64-simulator", so the literal "ios-arm64-simulator" matched nothing (run 37308423838) -- the check now matches -simulator" + the exact "ios-arm64" device identifier.
+- RESULT: run 37308807074 (head ffa1499) SUCCESS -- the push gate is green for the first time since ~Oct 4. The UI test in this gate skips honestly (no model staged there; the deep verification stays in ios-native).
+
+Stage Summary:
+- ios.yml green. Remaining: android-device 37307523562 (503c393) verifying a3/a8 + the ChatRepository post-2xx-cut notice.
