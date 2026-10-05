@@ -1,6 +1,16 @@
 {
-  "versionCode": 73,
-  "versionName": "0.68.2",
+  "versionCode": 77,
+  "versionName": "0.71.3",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "notes": "v0.68.2 — evaluation-closure release (no UI changes): register-class routing (jokes, banter, sarcasm, emotional and tease turns are served by the model class proven to hold register), GS Free chain measured against the full 60-case eval suite (deterministic contract 48/48 on the free tier), backend now stamps every turn with a real revision and exposes GET /api/v1/diagnostics for device acceptance. Still from 0.68.1: honest send-failure labels, GS Free live behind the self-healing key vault, one assistant with zero model pickers."
+  "sha256": "07ecf81df4fdd351b8686cbc82a9196d63d4aab1c9cce7d9e488cab6eed279ac",
+  "size": 84104873,
+  "notes": "v0.71.3 — performance release. The on-device chat path was slow for three separate reasons, all now addressed or recorded. (1) The app replayed an ALREADY-FINISHED answer one word at a time with a 26ms delay, because GsNative.chat returns one completed String rather than streaming; that was ~4.9s of dead air on every reply and it deleted in six lines. (2) The engine was hardcoded to 4 threads on an 8-core phone, idling half the CPU for the whole generation; it now uses availableProcessors() for both decode and prompt processing, via initTuned which was already in the shipped ABI. (3) An empty streaming bubble rendered nothing at all — the caret rides a paragraph that did not exist — so the local path showed a blank bubble for the entire generation; it now shows the caret alone. From v0.71.2: a failed send was shown and persisted as the assistant's reply, telling the user to reopen the chat for a finished reply that recovery had already proven did not exist; both messages are now honest and covered by a JVM test. KNOWN OUTAGE: the backend returns 502 upstream_error for every message send, across all model names, while create and read still work and /api/health still reports ok because it never touches the upstream. No APK can fix that. Still unverified: real-device arm64 TTFT is estimated, not measured.",
+  "knownLimitations": [
+    "arm64 device execution: partially verified. A real phone found the v0.71.0 and v0.71.1 defects, but no arm64 performance benchmark has run, so the thread change carries no device measurement.",
+    "backend send path is down: 502 upstream_error on every message, verified across all model names. Server-side, not fixable from the app.",
+    "GET /api/health returns 200 ok while the send path is 502, because the probe never touches the upstream.",
+    "real-device time-to-first-token is estimated, not measured.",
+    "stable-diffusion is disabled on mobile; libgs_sd.so is not shipped.",
+    "Tesseract OCR is not in the APK; ML Kit is used instead."
+  ]
 }
