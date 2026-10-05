@@ -4262,3 +4262,18 @@ Work Log:
 Stage Summary:
 - BLOCKED unchanged: keypool refill (12 OpenRouter keys not yet provided), iOS signed .ipa (needs operator account).
 - Noted for ITEM 9: ios.yml push-CI red since ~Oct 4 (lightweight runner has no GsFfi.xcframework; App target now hard-links it).
+
+---
+Task ID: HANDOFF-EXEC (item 3 closed, item 4 verified, item 9 findings)
+Agent: main (Z.ai Code)
+Task: Probe deadline handling, device-suite verdicts, a3/a8 fixes.
+
+Work Log:
+- ITEM 3 CLOSED (997db98): ubuntu-24.04-arm64 probe run 37280191290 queued 07:52:29Z, still queued at 09:52:29Z (2h01m, zero runner seconds), cancelled per the operator's rule. ISSUE-LOG records it.
+- ITEM 4 VERIFIED (run 37285336823): 36/36 tests ran; cancellingAStreamKeepsThePartialReplyAndReportsCancelled PASSED (the fix held); sd0 SKIPPED via the nativeLibraryDir gate probe as designed. Two failures, both harness pieces, both fixed in b0a5d2e and re-verified next run: a3 asserted MODEL_1_5B.sha256.isBlank(), stale since 6eac53a filled the HF publisher digest (now pins digest 6a1a2eb6... and true bytes 1,117,320,736); a8's WireServer MID_STREAM_PAUSE_MS 750 -> 2500 (the mid-stream-cut race is real under a loaded emulator).
+- ITEM 9 findings recorded: (a) Eval gate live suite failed -- its 60-case burst tripped [ZAI-BREAKER] 429 and the OpenRouter fallback is EMPTY (keypool wiped), so FAILURE_HONESTY cases got generic unavailability; the keypool refill is the fix (reinforces ITEM 1's blocker). Also: silent-failure gate BLOCKed on citation_mismatch (cited=2 sourcesRead=4) -- a synthesis-path behavior to investigate, pre-existing. (b) ios.yml push-CI red since ~Oct 4: the lightweight runner lacks GsFfi.xcframework which the App target now hard-links. (c) TODO comment at ios/App/Sources/Features/Create/CodeWorkspaceView.swift:72.
+- ITEM 5 verification: first run reached the UI test -- composer found, tap, type, Send all worked; the test then died on an INVALID NSPREDICATE ('label.length' key path rejected by XCUITest, XCTElementQueryInvalidPredicate, GsChatUiTests.swift:115). Fixed to 'label != ''' (8e9edc9), re-dispatched run 37292983744.
+
+Stage Summary:
+- In flight: ios-native 37292983744 (ITEM 5 verdict), android-device 37293692221 (a3/a8 fixes + cancel test re-verify).
+- BLOCKED: keypool refill (12 keys not provided), iOS signed .ipa (needs operator account).
