@@ -4247,3 +4247,18 @@ Work Log:
 Stage Summary:
 - In flight: android-device (ITEM 4 verify), ios-native (ITEM 5 verify), android-app (ITEM 8 verdict), arm64 probe 37280191290 queued 07:52:29Z (deadline 09:52:29Z per the two-hour rule).
 - BLOCKED: keypool refill needs the 12 OpenRouter keys; iOS signed .ipa needs the operator's Apple account.
+
+---
+Task ID: HANDOFF-EXEC (items 4/5/8 verification round)
+Agent: main (Z.ai Code)
+Task: Verify ITEM 4 (cancel test) + ITEM 5 (iOS UI target) + close ITEM 8.
+
+Work Log:
+- Gradle 9.8 runner collision (three raw lessons, three commits): bare `gradle` on the new ubuntu image breaks every AGP 8.x (InternalProblems removed in Gradle 9.6). Fix: generate a Gradle 8.13 wrapper in CI. Lesson 1: in-project `gradle wrapper` configures the build and dies first (run 37283167572). Lesson 2: Gradle 9 refuses the wrapper task in a dir with no settings file (run 37284603107). Final form: empty temp dir + empty settings.gradle -> copy gradlew + jar (jar never committed), invoke ./gradlew. android-app GREEN on 6dc5176.
+- ITEM 8 CLOSED PERMANENTLY (6dc5176): dynamicFeatures on AGP 8.13.2 + Gradle 8.13 -> run 37285014335 died in :ocr-fallback:extractDeepLinksDebug with "Collection is empty" at DynamicFeatureVariantImpl.kt:274 (was 244 on 8.5.2). Consumer identical across six releases (sources jars), producer measured identical live across 8.5.2 -> 8.13.2. dynamicFeatures reverted OFF; ISSUE-LOG records the closure with the raw error. Operator's wording stands: OCR fallback needs a manual gated build until AGP changes.
+- ios-native blocked since ~Oct 4 by the macOS runner image change (bash 3.2, no mapfile): fixed ios-native.yml lint step + assert_arch_member.sh (runs 37208719199, 37282307069, 37283363457); also satisfied check_workflow_var_scope.py's read-assignment regex (the `-d ''` read form is untrackable for it).
+- In flight at last write: android-device 37285336823 (6dc5176) = ITEM 4 verification (23 tests incl. the cancel test + sd0 skip probe); ios-native 37284554031 (20080dc) = ITEM 5 verification (GsChatUITests executes on the simulator); arm64-runner-probe 37280191290 queued since 07:52:29Z, two-hour deadline 09:52:29Z.
+
+Stage Summary:
+- BLOCKED unchanged: keypool refill (12 OpenRouter keys not yet provided), iOS signed .ipa (needs operator account).
+- Noted for ITEM 9: ios.yml push-CI red since ~Oct 4 (lightweight runner has no GsFfi.xcframework; App target now hard-links it).
