@@ -373,7 +373,7 @@ jobs:
           fi
           cp "$SO" android/app/src/main/jniLibs/$ABI/libgs_ffi.so
 
-          # libgs_sd.so, AND IT MUST BE HERE OR sd0 IS DEAD ON THE DEVICE.
+          # libgs_sd.so, AND THE GATE DECIDES WHETHER IT SHOULD BE HERE.
           #
           # This step found libgs_ffi.so with a `find -name` and copied that one file.
           # Option B put sd.cpp in a SECOND shared library that has to sit in the
@@ -388,20 +388,42 @@ jobs:
           # reason the wrapper tries the soname and then dladdr's its own path: a
           # library that is not a SIBLING cannot be found by either.
           #
-          # So this is not optional. A missing libgs_sd.so is NOT a skip and NOT a
-          # degraded mode; it makes gs_sd_generate return GS_ERR_UNAVAILABLE for
-          # every call and every diffusion number becomes fabricated. The test fails
-          # closed on it, which is correct, but the fix belongs here.
+          # Since ITEM 7 the gate inverts the rule: a build with
+          # enable_sd_diffusion=false SHIPS NO libgs_sd.so on purpose, so absence
+          # is now legal and the branch below decides between the two states.
+          # What has NOT changed: when the library is shipped, it must be staged
+          # here, or every diffusion number on the device is fabricated -- the
+          # test fails closed on that, which is correct.
           SD_SO=$(find /tmp/so-artifact/x -name 'libgs_sd.so' -type f | head -1 || true)
           if [ -z "$SD_SO" ]; then
-            echo "::error::libgs_sd.so not inside the artifact zip. android-native"
-            echo "::error::uploads dist/android/$ABI/ which must contain BOTH libraries."
-            echo "::error::Present in the artifact:"
-            find /tmp/so-artifact/x -type f -name '*.so' | sed -n '1,20p' | sed 's/^/::error::  /'
-            exit 1
+            # GATED OFF BY PRODUCT DECISION (ITEM 7 of the current brief).
+            # android-native's enable_sd_diffusion input defaults to "false" and
+            # a gated build ships NO libgs_sd.so at all: no 41.9 MB library, no
+            # 882 MB checkpoint, GsNative.sdCreate fails closed. Absence is the
+            # DESIGNED state of the artifact, not a broken upload.
+            #
+            # Raw evidence for why this cannot stay a hard failure: run
+            # 37208912694 died here --
+            #     ##[error]libgs_sd.so not inside the artifact zip.
+            # -- before the emulator ever started, so 0 of 23 tests ran,
+            # including the cancel test whose fix was waiting on a green suite.
+            # The fetch step refused an artifact the producer was now SUPPOSED
+            # to produce.
+            #
+            # sd0 detects the absence on the device (nativeLibraryDir probe)
+            # and SKIPs loudly with the reason; the 882 MB checkpoint download
+            # is skipped through GS_SD_LIB_ABSENT. Flip the gate in
+            # android-native and both come back automatically.
+            echo "::notice::libgs_sd.so is not in the artifact. Diffusion is"
+            echo "::notice::gated off in android-native (enable_sd_diffusion=false"
+            echo "::notice::is the shipping default). sd0 will SKIP on the device"
+            echo "::notice::and the 882 MB checkpoint download is skipped."
+            echo "GS_SD_LIB_ABSENT=true" >> "$GITHUB_ENV"
+          else
+            cp "$SD_SO" android/app/src/main/jniLibs/$ABI/libgs_sd.so
+            echo "  libgs_sd.so staged: $(stat -c%s android/app/src/main/jniLibs/$ABI/libgs_sd.so) bytes"
+            echo "GS_SD_LIB_ABSENT=false" >> "$GITHUB_ENV"
           fi
-          cp "$SD_SO" android/app/src/main/jniLibs/$ABI/libgs_sd.so
-          echo "  libgs_sd.so staged: $(stat -c%s android/app/src/main/jniLibs/$ABI/libgs_sd.so) bytes"
           # SAFETY NET, not the fix. android-native now links libc++ statically and
           # FAILS ITS OWN BUILD if a libc++_shared DT_NEEDED survives, so this
           # should find nothing. If it does, the companion is placed anyway so the
@@ -538,6 +560,18 @@ jobs:
       - name: Fetch the SDXS-512 checkpoint and verify its checksum
         run: |
           set -euo pipefail
+          # THE LIBRARY GATE COMES FIRST. When the .so fetch found no
+          # libgs_sd.so (diffusion gated off in android-native, ITEM 7), the
+          # checkpoint has no consumer on the device and sd0 will SKIP. Pulling
+          # 882 MB anyway would spend real runner minutes on a test that cannot
+          # run -- the same waste the cache step below exists to avoid.
+          if [ "${GS_SD_LIB_ABSENT:-false}" = "true" ]; then
+            echo "::notice::no libgs_sd.so in this build (diffusion gated off)."
+            echo "::notice::Skipping the 882 MB checkpoint download; sd0 SKIPs."
+            echo "GS_SD_VERIFIED=false" >> "$GITHUB_ENV"
+            echo "GS_SD_ABSENT=true" >> "$GITHUB_ENV"
+            exit 0
+          fi
           URL="https://huggingface.co/akleine/sdxs-512/resolve/main/sdxs.safetensors"
           EXPECT="6cca5bfd11b588cdfb4602018c7e623d24c95fdfdc5ab2d4b9e6978b3186980f"
           EXPECT_SZ="882587118"

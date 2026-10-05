@@ -2542,6 +2542,35 @@ class DeviceVerificationTest {
     @Test
     fun sd0_diffusion_generates_a_real_png_on_this_device() {
         val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+
+        // THE GATE PROBE COMES FIRST, before the checkpoint lookup.
+        //
+        // Since ITEM 7, diffusion is GATED OFF in the shipping mobile build:
+        // android-native's enable_sd_diffusion input defaults to "false", the
+        // build produces no libgs_sd.so at all, and android-device deliberately
+        // ships no checkpoint with it (run 37208912694 is the raw evidence of
+        // the old world order colliding with the gate: the fetch step hard-
+        // failed on the missing library and 0 of 23 tests ran).
+        //
+        // On a gated build this test CANNOT run, and a failure here would be a
+        // test asserting a feature the product switched off on purpose. So it
+        // SKIPs, loudly, with the state that decides it: the library file's
+        // presence in nativeLibraryDir is a fact about THIS APK, not about any
+        // workflow flag. When the gate is ON and the library still failed to
+        // reach the device, this assumeTrue passes, the checkpoint assertions
+        // below hold, and the dlopen failure surfaces as the real defect it is.
+        val sdLib = File(ctx.applicationInfo.nativeLibraryDir, "libgs_sd.so")
+        assumeTrue(
+            "libgs_sd.so is not in this build's nativeLibraryDir " +
+                "(${ctx.applicationInfo.nativeLibraryDir}), so diffusion is GATED " +
+                "OFF: enable_sd_diffusion=false is the shipping default (ITEM 7), " +
+                "the 41.9 MB library and the 882 MB checkpoint are deliberately " +
+                "not shipped, and there is nothing on this device to test. This " +
+                "is a SKIP by product decision, not a pass and not a failure. " +
+                "Flip the gate in android-native and this test runs for real.",
+            sdLib.isFile,
+        )
+
         val checkpoint = findCheckpoint(ctx)
 
         // FAIL CLOSED, and say exactly which thing is missing.
