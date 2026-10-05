@@ -394,15 +394,29 @@ jobs:
           #     internal API that was removed in Gradle 9.6.0.
           # ...with the runner on Gradle 9.8.0. The repo carries no
           # gradle-wrapper.jar BY DESIGN (no committed binaries), so the
-          # wrapper is GENERATED here from the runner's own Gradle and then
-          # every invocation goes through ./gradlew, which downloads the
-          # distribution the properties file pins (gradle-8.13-bin.zip).
-          # The generated jar lives only on the runner; nothing binary lands
-          # in the repository.
+          # wrapper is GENERATED here and every invocation goes through
+          # ./gradlew, which downloads the distribution the properties file
+          # pins (gradle-8.13-bin.zip). The generated jar lives only on the
+          # runner; nothing binary lands in the repository.
+          #
+          # GENERATED IN AN EMPTY DIRECTORY, NOT IN THIS ONE. `gradle wrapper`
+          # configures the build it runs in, which applies the AGP plugin --
+          # and AGP on the runner's Gradle 9.8 dies during that configuration
+          # (raw: run 37283167572, "could not generate the Gradle 8.13
+          # wrapper" wrapping the same InternalProblems error). A directory
+          # with no build files has no plugins to apply, so the wrapper task
+          # cannot fail there.
+          mkdir -p /tmp/gs-wrapper-gen && cd /tmp/gs-wrapper-gen
           gradle wrapper --gradle-version 8.13 --distribution-type bin --no-daemon \
             || { echo "::error::could not generate the Gradle 8.13 wrapper"; exit 1; }
+          cd "$GITHUB_WORKSPACE/android"
+          cp /tmp/gs-wrapper-gen/gradlew /tmp/gs-wrapper-gen/gradlew.bat .
+          chmod +x gradlew
+          # The jar is the only missing piece; the properties file is COMMITTED
+          # and is the source of truth for the pinned version.
+          cp /tmp/gs-wrapper-gen/gradle/wrapper/gradle-wrapper.jar gradle/wrapper/gradle-wrapper.jar
           ./gradlew --version | sed -n '1,9p'
-          grep -q "Gradle 8.13" <(./gradlew --version 2>/dev/null) \
+          ./gradlew --version 2>/dev/null | grep -q "Gradle 8.13" \
             || { echo "::error::the wrapper did not resolve Gradle 8.13"; exit 1; }
           # --no-daemon because a runner has one process and gradle's daemon
           # survives the step and eats the next one.

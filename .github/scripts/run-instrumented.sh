@@ -119,10 +119,19 @@ cd android
 # GENERATED here from the runner's own Gradle and every invocation below goes
 # through ./gradlew, which downloads the distribution the properties file pins
 # (gradle-8.13-bin.zip). The generated jar lives only on the runner.
-if ! ./gradlew --version >/dev/null 2>&1; then
-  gradle wrapper --gradle-version 8.13 --distribution-type bin --no-daemon \
-    || { echo "FAIL: could not generate the Gradle 8.13 wrapper"; exit 1; }
+# GENERATED IN AN EMPTY DIRECTORY, NOT IN THIS ONE (raw: android-app run
+# 37283167572 -- `gradle wrapper` inside the project configures the build,
+# applies AGP, and dies on the runner's Gradle 9.8 before generating anything).
+mkdir -p /tmp/gs-wrapper-gen && cd /tmp/gs-wrapper-gen
+if ! gradle wrapper --gradle-version 8.13 --distribution-type bin --no-daemon; then
+  echo "FAIL: could not generate the Gradle 8.13 wrapper"; exit 1
 fi
+cd "$OLDPWD"
+cp /tmp/gs-wrapper-gen/gradlew /tmp/gs-wrapper-gen/gradlew.bat .
+chmod +x gradlew
+# The jar is the only missing piece; the properties file is COMMITTED and is
+# the source of truth for the pinned version.
+cp /tmp/gs-wrapper-gen/gradle/wrapper/gradle-wrapper.jar gradle/wrapper/gradle-wrapper.jar
 ./gradlew --version | sed -n '1,9p'
 if ! ./gradlew --no-daemon --console=plain :app:assembleDebug :app:assembleDebugAndroidTest; then
   echo "BUILD FAILED -- the tests cannot run, and that is reported as a failure"
