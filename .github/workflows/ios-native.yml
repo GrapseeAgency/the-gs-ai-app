@@ -2177,6 +2177,22 @@ jobs:
             echo "::error::the copy in the container does not match the verified download"
             exit 1
           fi
+          # THE UI-TEST RUNNER IS NOT THE APP (ITEM 5). GsChatUITests runs in
+          # its own xctest runner process, which cannot read the APP's data
+          # container, so the container copy above proves nothing to it. The
+          # GSApp scheme's test action bakes GS_TEST_MODEL=/tmp/gs-ui-model.gguf
+          # (ios/project.yml environmentVariables), and /tmp on the runner host
+          # is visible inside the simulator -- so the runner-side guard and the
+          # app itself (via -gs_test_local_model) both read THIS file. It MUST
+          # be the same verified download, not a second fetch, or the UI test
+          # would be measuring weights nobody vouched for.
+          cp "$GGUF" /tmp/gs-ui-model.gguf
+          UI_SHA=$(shasum -a 256 /tmp/gs-ui-model.gguf | awk '{print $1}')
+          echo "model staged for the UI-test runner: /tmp/gs-ui-model.gguf ($UI_SHA)"
+          if [ "$UI_SHA" != "$WANT_SHA" ]; then
+            echo "::error::the UI-test staging copy does not match the verified download"
+            exit 1
+          fi
           echo "::endgroup::"
           echo "$UDID" > "$RUNNER_TEMP/provisioned_udid"
 

@@ -179,6 +179,13 @@ targets:
     platform: iOS
     sources:
       - path: App/Tests
+        # The UI test belongs to the GsChatUITests bundle ONLY (see below).
+        # Without this exclude the file compiles into BOTH bundles, and the
+        # unit bundle's copy runs inside the app host where XCUIApplication()
+        # has no runner -- it could only ever SKIP, which is the state the
+        # file sat in before ITEM 5 wired the real target.
+        excludes:
+          - "UITests/**"
     settings:
       base:
         # The test bundle links libgs_ffi.a itself, so it needs libc++ for the
@@ -221,6 +228,28 @@ targets:
       #   undefined symbol: _gs_ffi_mobile_chat
       - framework: Frameworks/GsFfi.xcframework
         embed: false
+  GsChatUITests:
+    # ITEM 5 of the current brief -- the ui-testing bundle GsChatUiTests.swift
+    # has been waiting for. It was in the unit bundle, where XCUIApplication()
+    # cannot launch anything, so the test's only possible outcome was a SKIP.
+    # A bundle.ui-testing target gets its own runner app: xcodebuild installs
+    # the runner, the runner spawns the app under test (GSApp), and the test
+    # drives the real UI from outside the app's process.
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: App/Tests/UITests
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: "YES"
+        PRODUCT_BUNDLE_IDENTIFIER: com.grapsee.gsai.uiTests
+    dependencies:
+      # The app under test. XcodeGen turns this into TEST_TARGET_NAME for the
+      # runner, which is how xcodebuild knows what XCUIApplication() launches.
+      - target: App
+      # A ui-testing bundle links NO app module and NO GsFfi: it must not
+      # import GSApp (the file's @testable import was removed for exactly that
+      # reason), so no framework dependency is declared here on purpose.
 schemes:
   GSApp:
     build:
@@ -229,3 +258,16 @@ schemes:
     test:
       targets:
         - AppTests
+        - GsChatUITests
+      # Read by the TEST RUNNER process (the xctest runner, not the app).
+      # GsChatUiTests.deviceModel() checks GS_UI_TEST_MODE as its honest-mode
+      # guard and GS_TEST_MODEL as the model path. /tmp on the runner host is
+      # visible inside the simulator; ios-native.yml stages the VERIFIED 0.5B
+      # download at that exact path before running the tests.
+      environmentVariables:
+        - variable: GS_UI_TEST_MODE
+          value: "1"
+          isEnabled: true
+        - variable: GS_TEST_MODEL
+          value: /tmp/gs-ui-model.gguf
+          isEnabled: true

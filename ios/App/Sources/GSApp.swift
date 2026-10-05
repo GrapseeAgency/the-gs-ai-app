@@ -18,6 +18,43 @@ struct GSApp: App {
     // font-scale slider drives real Dynamic Type app-wide.
     @ObservedObject private var settings = SettingsStore.shared
 
+    init() {
+        // TEST HOOKS (GsChatUITests, ITEM 5 of the current brief) — launch
+        // arguments, read HERE and nowhere else, and read only when present,
+        // so a normal launch takes none of these branches. They exist because
+        // an XCUITest runs OUTSIDE the app process and can set app state no
+        // other way: no UserDefaults, no stores, no direct initialisation.
+        //
+        //   -gs_test_session_active
+        //       Skips AuthFlowView and OnboardingView (both flags true), so
+        //       the launch lands on RootView — the conversation workspace IS
+        //       the app's root, which is the surface the UI test drives.
+        //
+        //   -gs_test_local_model <path>
+        //       Initialises the native engine with the model at <path>
+        //       BEFORE the first turn. Without this the app's local path is
+        //       never armed (nothing in production calls
+        //       GsNativeLoader.initialize yet — the offline reply would be
+        //       the canned localReply, which GsChatUiTests treats as a
+        //       FAILURE). The path is the verified 0.5B GGUF the ios-native
+        //       workflow stages on the runner host, visible inside the
+        //       simulator.
+        let args = ProcessInfo.processInfo.arguments
+        if args.contains("-gs_test_session_active") {
+            sessionActive = true
+            onboarded = true
+        }
+        if let i = args.firstIndex(of: "-gs_test_local_model"),
+           args.indices.contains(i + 1) {
+            let modelPath = args[i + 1]
+            if FileManager.default.fileExists(atPath: modelPath) {
+                GsNativeLoader.initialize(modelPath: modelPath)
+            } else {
+                NSLog("GSApp: -gs_test_local_model path missing: %@", modelPath)
+            }
+        }
+    }
+
     var body: some Scene {
         WindowGroup {
             Group {

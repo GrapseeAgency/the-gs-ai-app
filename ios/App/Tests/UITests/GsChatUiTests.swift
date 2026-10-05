@@ -1,5 +1,4 @@
 import XCTest
-@testable import GSApp
 
 /// Blocker 4 — a real UI test, the iOS counterpart of Android's
 /// `ChatUiReplyTest`.
@@ -11,15 +10,23 @@ import XCTest
 /// text is NOT the canned greeting `ChatViewModel.localReply` fabricates
 /// when the engine is absent.
 ///
-/// WIRING STATUS: XCTSkip-guarded unless every precondition is provisioned:
-///   1. `GS_UI_TEST_MODE=1` in the test process environment — without it the
-///      test skips even in a UI-testing bundle, so it can never fire a lonely
-///      XCUIApplication() launch from inside the unit-test host.
-///   2. A 0.5B GGUF at `$GS_TEST_MODEL` or in Application Support.
-///   3. Running under an XCUITest (ui-testing) target, not the AppTests unit
-///      bundle — see native/docs/ISSUE-LOG.md; App/project.yml currently has
-///      AppTests (bundle.unit-test) only, so making this EXECUTE requires a
-///      one-target addition (`bundle.ui-testing`) plus scheme wiring.
+/// WIRING STATUS: WIRED. This file lives in ios/App/Tests/UITests/ and belongs
+/// ONLY to the `GsChatUITests` bundle (bundle.ui-testing, ios/project.yml) —
+/// XCUITest drives the app from OUTSIDE its process, so it cannot and must not
+/// `@testable import GSApp`; that import compiled only while this file sat in
+/// the unit-test host and made the test SKIP instead of run. The remaining
+/// guards are the honest preconditions, not wiring gaps:
+///   1. `GS_UI_TEST_MODE=1` — baked into the GSApp scheme's test action
+///      (ios/project.yml environmentVariables).
+///   2. A 0.5B GGUF at `$GS_TEST_MODEL` — ios-native.yml copies the verified
+///      download to /tmp/gs-ui-model.gguf, the path the scheme bakes in.
+///      /tmp on the runner host is visible inside the simulator.
+///   3. The app is driven into a testable state with launch arguments that
+///      GSApp reads: `-gs_test_session_active` (past Auth + Onboarding) and
+///      `-gs_test_local_model <path>` (engine initialised with the model),
+///      so the reply comes from the local engine rather than the canned
+///      fallback. A reply that IS the canned prefix still FAILS this test —
+///      the launch arguments are provisioning, not a result.
 final class GsChatUiTests: XCTestCase {
 
     /// The model path, if one has been provisioned. `nil` means the model-backed
@@ -70,13 +77,18 @@ final class GsChatUiTests: XCTestCase {
 
     func testSendHelloRendersARealAssistantReply() throws {
         guard ProcessInfo.processInfo.environment["GS_UI_TEST_MODE"] == "1" else {
-            throw XCTSkip("set GS_UI_TEST_MODE=1 and run from a UI-testing target")
+            throw XCTSkip("set GS_UI_TEST_MODE=1 in the scheme's test action")
         }
-        guard deviceModel() != nil else {
+        guard let model = deviceModel() else {
             throw XCTSkip("no 0.5B GGUF provisioned — never a fabricated pass")
         }
 
+        // The launch arguments are the ONLY app state a UI test can set: the
+        // test process is outside the app's sandbox and cannot touch its
+        // UserDefaults or stores. GSApp reads both arguments in init.
         let app = XCUIApplication()
+        app.launchArguments += ["-gs_test_session_active",
+                                "-gs_test_local_model", model]
         app.launch()
 
         // 1. tap the chat input, 2. type "hello".
