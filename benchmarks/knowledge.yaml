@@ -57,7 +57,7 @@ benchmarks:
       id: allenai/IFBench_test          # PUBLIC official test prompts (allenai/IFBench is gated for anon; HF API evidence)
       split: train
     dataset_revision: resolve-at-download   # HF sha written to data/dataset-revisions.json by the task
-    n_samples: 300                      # honest correction: 58 was the count of new CONSTRAINT TYPES in the paper; the official test data holds 300 prompts (datasets-server size evidence)
+    n_samples: 200                      # PROTOCOL CHANGE 2026-10-06, measured: 300 prompts = 7.7h at the observed 39 samples/h (5.88h wall for 230/300 before run 36155160244's ifbench job hit the 6h GitHub job limit "maximum execution time of 6h0m0s"); 200 = 5.1h fits with margin. Partial-230 mean strict score 0.2783 recorded as corroboration in the worklog. The yaml value now also REACHES the harness (--max-samples wiring in cli/main.py).
     metric: accuracy                    # strict: prompt passes iff EVERY constraint holds (official evaluation_lib port)
     scorer: ifbench_strict_scorer
     timeout_per_sample_s: 240

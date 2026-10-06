@@ -386,6 +386,15 @@ def _run_inspect(entry: Dict[str, Any], model: str, res: Dict[str, Any], log_lin
     # their own GenerateConfig and error on unknown params.
     if entry.get("task_params") is not None:
         cmd += ["-T", f"temperature={entry.get('task_params', {}).get('temperature', 0.2)}"]
+    # The yaml n_samples IS the protocol -- wire it into the harness cap.
+    # Raw: run 36155160244 ifbench job was killed at the 6h GitHub job limit
+    # ("The job has exceeded the maximum execution time of 6h0m0s") with only
+    # 230/300 captured, because inspect ran the FULL dataset while the yaml
+    # n_samples never reached the inspect CLI. Measured throughput 39
+    # samples/h (5.88h wall for 230): 300 prompts = 7.7h, impossible on
+    # hosted runners; 200 prompts ~= 5.1h fits with margin.
+    if entry.get("n_samples"):
+        cmd += ["--max-samples", str(entry["n_samples"])]
     log_lines.append(f"# cmd: {' '.join(cmd)}")
     t0 = time.time()
     proc = subprocess.run(cmd, capture_output=True, text=True, env=env, timeout=_suite_timeout(entry))
