@@ -4322,3 +4322,19 @@ Work Log:
 Stage Summary:
 - BLOCKED: push+dispatch (dead credential, need new token), keypool refill (12 OpenRouter keys never delivered), tau2 funding.
 - NEXT: download the 1.16 MB ifbench artifact after rate reset and run the baseline assembler on it (partial ifbench row may suffice with tau2 BLOCK documented); investigate the ifbench cancellation cause from its raw log; continue ITEM 9 findings.
+
+---
+Task ID: HANDOFF-EXEC (ITEM 9 round: Welch fix, ISSUE-LOG note, ifbench timeout root cause)
+Agent: main (Z.ai Code)
+Task: Continue ITEM 9 locally while push/dispatch are credential-blocked.
+
+Work Log:
+- WELCH RED-NOISE FIXED (commit a68d869): root cause via page annotations of run 36110802093 -- "origin https://preview-chat-...space-z.ai not reachable (HTTP 000000) -- live eval is NEUTRAL" -> preflight reachable=false -> upload step skipped -> judged-regression download-artifact 'eval-run-36110802093' not found -> job red. Fix: eval-live exposes outputs.reachable; judged-regression if gains `needs.eval-live.outputs.reachable == 'true'` (skips honestly on a dead origin; still runs when reachable=true and the live leg BLOCKed). VERIFICATION HONESTY: YAML parse OK, structure OK, repo var-scope gate "ok: every run block's variables are assigned in it, in env:, or guarded" -- but NOT dispatch-verified (dispatch needs a live token); flagged accordingly, to be dispatch-proven when a token arrives.
+- ISSUE-LOG NOTE (commit 436b07d): CodeWorkspaceView.swift:72 TODO is canned Kotlin template content shown to users (inside engineLines), zero TODO scanners exist in CI; documented so it is not "fixed" by a future sweep.
+- IFBENCH CANCELLATION ROOT CAUSE (run 36155160244, job 108138190044): annotations -- "The job has exceeded the maximum execution time of 6h0m0s" + "The operation was canceled." The real-scoring leg HUNG until GitHub's default 6h job timeout; benchmark.yml sets no explicit timeout-minutes on eval jobs. Planned fix (explicit timeout-minutes + hang guard on the provider path) is deliberately DEFERRED until dispatch is possible: shipping unverified workflow edits is exactly the a5c6c71 failure pattern (5 startup-failure runs).
+- Run 17 final anatomy: build+escape SUCCESS, gpqa/aime honest subset-skips SUCCESS, tau2 exit 1 (expected unfunded-key BLOCK), ifbench 6h-timeout cancel. Run red = two honest signals, zero silent passes.
+- PUSH still BLOCKED (attempt this round, same raw error: "could not read Password for 'https://<token>@github.com'"). Four local commits pending: 99da4d0, a3b4b8c, a68d869, 436b07d.
+- BASELINE ASSEMBLY still BLOCKED: artifact download is REST-only; this sandbox's shared egress IP has its anonymous 60/hr quota consumed instantly by other tenants (remaining 0 right after reset), and no token exists in the sandbox. Artifact 10888587621 (results-ifbench-gs-ai-baseline, 1.16 MB) is identified and ready to download the moment a token exists.
+
+Stage Summary:
+- Everything locally verifiable is done and committed. The single blocking dependency for push, dispatch, artifact download, and keypool refill is the same: credentials from the operator (a GitHub token with repo+actions; the 12 OpenRouter keys for ITEM 1).
