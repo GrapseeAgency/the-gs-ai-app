@@ -79,6 +79,12 @@ jobs:
     runs-on: ubuntu-latest
     needs: suite-guard
     timeout-minutes: 75
+    outputs:
+      # Exposed so judged-regression can skip honestly when the origin was
+      # dead: no artifact is uploaded in that case and the download would
+      # otherwise red-noise the gate (raw: run 36110802093, HTTP 000000,
+      # download-artifact 'eval-run-36110802093' not found -> Welch job failed).
+      reachable: ${{ steps.preflight.outputs.reachable }}
     steps:
       - uses: actions/checkout@v4
 
@@ -143,7 +149,11 @@ jobs:
     name: Judged categories — Welch's t-test (register / reasoning quality)
     runs-on: ubuntu-latest
     needs: eval-live
-    if: ${{ always() && needs.eval-live.result != 'skipped' }}
+    # Skip honestly when the live leg never reached the origin (no artifact
+    # exists to Welch against; a NEUTRAL environment must not fake a verdict
+    # nor red-noise the gate). reachable=true but result=failure still runs:
+    # the artifact was uploaded with always() and remains worth judging.
+    if: ${{ always() && needs.eval-live.result != 'skipped' && needs.eval-live.outputs.reachable == 'true' }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
