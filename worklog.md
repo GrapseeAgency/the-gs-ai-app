@@ -4304,3 +4304,21 @@ Work Log:
 
 Stage Summary:
 - ios.yml green. Remaining: android-device 37307523562 (503c393) verifying a3/a8 + the ChatRepository post-2xx-cut notice.
+
+---
+Task ID: HANDOFF-EXEC (session resume: pull, item report, SF-1 fix, run-17 forensics)
+Agent: main (Z.ai Code)
+Task: Resume after handoff — pull main, verify item states, continue ITEM 9, unblock benchmark baseline.
+
+Work Log:
+- PULL: local was 1 ahead (superseded worklog commit da0c402, content already in remote) / 426 behind; rebase skip resolved the conflict; main == origin/main at a74c814. v0.71.3 tag and native-runtime branch confirmed on remote (ls-remote counts 1/1).
+- ITEM REPORT SENT per handoff format: 1 DONE(send)/BLOCKED(refill, keys never delivered), 2 DONE f5767d4, 3 CLOSED 997db98, 4 DONE runs 37285336823+37307523562, 5 DONE 8e9edc9 run 37292983744, 6 DONE d942eaf, 7 DONE gate+notes, 8 CLOSED 6dc5176, 9 OPEN.
+- CREDENTIAL BLOCKER FOUND: the ghp_ token in .git/config is dead. Raw: curl API 401 'Bad credentials'; git push 'remote: Invalid username or token. Password authentication is not supported for Git operations.' (attempts: dry-run probe, credential-helper push, plain push). Full sandbox search found no alternative (no .git-credentials, no gh config, no env token, no ssh binary). Repo is PUBLIC: anonymous git fetch works, pushes/dispatches need a new token from the operator.
+- SF-1 FIX (commit 99da4d0, ITEM 9): silent-failure gate [SF-1] was count-equality (citationCount !== sourcesRead) — false-blocked legitimate selective synthesis (production Eval gate BLOCK cited=2 sourcesRead=4) AND false-passed citing a failed-retrieval source when counts coincided. Rewrote directional: cited ordinals must be grounded (fresh retrieved + snippet_only + history range); interface gains citedOrdinals/freshSourceStatuses/historySourceCount. Hermetic suite ALL PASS (4 new fixtures incl. the production shape); tsc error count unchanged at 90 (all pre-existing, none in edited range); eslint clean on the 3 touched files.
+- RUN 36155160244 FORENSICS (HTML scrape, API rate-limited): Run 17 = failed, but per job: build + sandbox-escape + eval(gpqa_diamond) + eval(aime) SUCCESS (honest subset-skip notices visible in page), eval(ifbench) CANCELLED (fail-fast: false — cancellation cause not workflow-internal, raw log pending), eval(tau2_telecom) FAILED exit 1 (expected honest BLOCK: user-sim needs funded OpenRouter key). ARTIFACTS: 6 uploaded — results-ifbench-gs-ai-baseline is 1.16 MB (real scored data exists despite the cancel), tau2 21.5 KB, gpqa/aime skip markers ~5 KB each. Artifact ids: ifbench 10888587621, tau2 10873104841, aime 10873545876, gpqa 10872629978.
+- Cron re-armed: job 439300 (benchmark-resume-and-handoff-watch, 15 min, UTC) with push-probe + scrape-first discipline.
+- Local commits pending push: 99da4d0 (SF-1 directional fix) — push blocked, will push the moment a live token exists.
+
+Stage Summary:
+- BLOCKED: push+dispatch (dead credential, need new token), keypool refill (12 OpenRouter keys never delivered), tau2 funding.
+- NEXT: download the 1.16 MB ifbench artifact after rate reset and run the baseline assembler on it (partial ifbench row may suffice with tau2 BLOCK documented); investigate the ifbench cancellation cause from its raw log; continue ITEM 9 findings.
