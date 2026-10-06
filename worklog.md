@@ -4353,3 +4353,18 @@ Work Log:
 Stage Summary:
 - ITEM 1: DONE (refill + live 200). All nine handoff items are now DONE/CLOSED except ITEM 9 (ongoing loop) and the ITEM 6 re-measurement which waits for a real arm64 device.
 - NEXT: benchmark mission resume — download run 36155160244 artifacts (ifbench 1.16MB id 10888587621), assemble baseline, dispatch lever legs; dispatch eval-gate to dispatch-verify the Welch fix (a68d869).
+
+---
+Task ID: HANDOFF-EXEC (ifbench timeout root cause + protocol fix + both verification runs dispatched)
+Agent: main (Z.ai Code)
+Task: Fix the ifbench 6h-timeout failure and restart the benchmark mission.
+
+Work Log:
+- RUN 17 ARTIFACTS DOWNLOADED + PARSED (all 6): the ifbench leg was NOT hung-dead, it was THROUGHPUT-KILLED. Raw: inspect log 2026-09-25T15-37-28-00-00_ifbench-open_*.json captured 230/300 samples, ALL scored by the official strict verifier; wall span 5.88h => 39 samples/h measured; 300 prompts = 7.7h > the 6h GitHub job cap ("The job has exceeded the maximum execution time of 6h0m0s" annotation). Partial-230 mean strict score 0.2783 (corroboration, not the baseline row). Zero retries. tau2 BLOCKED verbatim (raw_reason "no tau2 trial rewards parsed from output dir"; started 15:37:22, 50 samples). gpqa/aime = SKIPPED_BY_SUBSET markers, honest.
+- ROOT CAUSE #2 (the real defect): cli/main.py _run_inspect never passed n_samples to inspect -- the yaml protocol number never reached the harness, so every leg ran the FULL dataset. FIX (commit b64a7f7): --max-samples wiring + ifbench protocol 300->200 in knowledge.yaml with the measured justification (200 x 92s = 5.1h fits; the flag's dispatch-proof will be the new leg's "# cmd:" log line showing --max-samples 200).
+- DISPATCHED: run 37428551164 = Benchmark scaffold=baseline benchmarks=ifbench at b64a7f7 (204), expected ~5.2h; run 37428595693 = Eval gate at b64a7f7 (204) to dispatch-verify the Welch fix a68d869 (origin default = the sandbox preview URL; dev server is up with keypool size 13 and upstream 200).
+- Cron replaced: 439300 deleted, 439423 armed (bench-mission-driver, 15 min): watches both runs, assembles tests/baseline-scaffold-v1.json when the ifbench leg lands, then drives levers aci -> verification -> context -> router one dispatch each with delta+CI+keep/revert.
+
+Stage Summary:
+- All nine handoff items now DONE/CLOSED (ITEM 6 re-measurement still waits for a real arm64 device; ITEM 1 refill verified live: POST messages 200 in 1.16s reply ALIVE, keypool size 13, upstream 200/152ms).
+- In flight: ifbench baseline leg (n=200) + eval-gate Welch verification. Cron drives the assembly and the lever sequence autonomously.
