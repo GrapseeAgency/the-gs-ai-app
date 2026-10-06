@@ -4338,3 +4338,18 @@ Work Log:
 
 Stage Summary:
 - Everything locally verifiable is done and committed. The single blocking dependency for push, dispatch, artifact download, and keypool refill is the same: credentials from the operator (a GitHub token with repo+actions; the 12 OpenRouter keys for ITEM 1).
+
+---
+Task ID: HANDOFF-EXEC (credentials delivered: push + ITEM 1 refill verified live)
+Agent: main (Z.ai Code)
+Task: Configure the new GitHub token, push pending commits, execute ITEM 1 keypool refill.
+
+Work Log:
+- TOKEN LIVE: remote reconfigured; API identity Grapsee-Official, authenticated quota 5000/hr. Pushed a74c814..d4fa1d4 (the five pending commits: SF-1 fix, worklogs, Welch fix, ISSUE-LOG note). main == origin/main.
+- ITEM 1 REFILL EXECUTED: bun scripts/provision-keys.ts (stdin) wrote 13 OpenRouter keys (operator supplied 13, labels said 12) to all three durable layers: secrets-file ok, db-vault ok, gs-vault ok. Keys never printed (last-4 only in output), never committed (.secrets/ and ~/.gs-vault/ are outside git).
+- DEV SERVER RESTARTED to reload the vault (old master PID 1075 started pre-refill with layer=none count=0 in dev.log; new master 3611, dev.pid updated).
+- LIVE VERIFICATION (the endpoint that 502'd on every model): POST /api/v1/conversations/cmuwc5a5i0000jispoy.../messages -> HTTP 200 in 1.16s, persisted assistant reply "ALIVE", turn trace row written, dev.log shows KEYPOOL layer=secrets-file count=13, modelRoute=openrouter/gs-swift, finalStatus=done. GET /api/health -> 200 with keypool size 13 + upstream openrouter probed ok status 200 latency 152ms.
+
+Stage Summary:
+- ITEM 1: DONE (refill + live 200). All nine handoff items are now DONE/CLOSED except ITEM 9 (ongoing loop) and the ITEM 6 re-measurement which waits for a real arm64 device.
+- NEXT: benchmark mission resume — download run 36155160244 artifacts (ifbench 1.16MB id 10888587621), assemble baseline, dispatch lever legs; dispatch eval-gate to dispatch-verify the Welch fix (a68d869).
