@@ -37,27 +37,50 @@ const base: SilentFailureInput = {
   sourcesRead: 0,
   sourcesFailed: 0,
   evidenceCount: 0,
-  citationCount: 0,
+  citedOrdinals: [],
+  freshSourceStatuses: [],
+  historySourceCount: 0,
   evidenceBlock: null,
   answerText: 'Here is what I found.',
 }
 
-// [SF-1] citation↔read integrity
-expectViolations('citation mismatch (cited 3, read 2)', { ...base, turnKind: 'research', searchExecuted: true, sourceCount: 5, sourcesRead: 2, citationCount: 3, evidenceCount: 5, evidenceBlock: 'evidence' }, 'citation_mismatch')
-expectClean('citations match reads', { ...base, turnKind: 'research', searchExecuted: true, sourceCount: 2, sourcesRead: 2, citationCount: 2, evidenceCount: 2, evidenceBlock: 'evidence' })
+// [SF-1] citation↔read integrity — directional: cited ordinals must be grounded
+// in sources actually presented as usable evidence.
+expectViolations(
+  'cites an ordinal beyond the read set (cited [1,2,3], read 2)',
+  { ...base, turnKind: 'research', searchExecuted: true, sourceCount: 5, sourcesRead: 2, citedOrdinals: [1, 2, 3], freshSourceStatuses: ['retrieved', 'retrieved', 'failed', 'failed', 'failed'], evidenceCount: 5, evidenceBlock: 'evidence' },
+  'citation_mismatch',
+)
+expectClean('citations match reads', { ...base, turnKind: 'research', searchExecuted: true, sourceCount: 2, sourcesRead: 2, citedOrdinals: [1, 2], freshSourceStatuses: ['retrieved', 'retrieved'], evidenceCount: 2, evidenceBlock: 'evidence' })
+// Production case 2026-10-06: selective synthesis reads 4, cites the 2 that
+// mattered. The old count-equality check false-blocked this shape.
+expectClean('selective synthesis (cited 2 of 4 read) is not a failure', { ...base, turnKind: 'research', searchExecuted: true, sourceCount: 4, sourcesRead: 4, citedOrdinals: [1, 3], freshSourceStatuses: ['retrieved', 'retrieved', 'retrieved', 'retrieved'], evidenceCount: 4, evidenceBlock: 'evidence' })
+// Citing a source whose retrieval FAILED is the silent-failure class itself —
+// the count-based predecessor passed this shape when counts coincided.
+expectViolations(
+  'cites a failed-retrieval source (cited [1,2], one failed)',
+  { ...base, turnKind: 'research', searchExecuted: true, sourceCount: 2, sourcesRead: 1, sourcesFailed: 1, citedOrdinals: [1, 2], freshSourceStatuses: ['retrieved', 'failed'], evidenceCount: 2, evidenceBlock: 'evidence' },
+  'citation_mismatch',
+)
+// History sources sit beyond the fresh range; only injected history survives
+// the upstream sanitize + parser bound, so a history-range cite is grounded.
+expectClean('cites an injected history source (cited [1,3], history 2)', { ...base, turnKind: 'research', searchExecuted: true, sourceCount: 1, sourcesRead: 1, citedOrdinals: [1, 3], freshSourceStatuses: ['retrieved'], historySourceCount: 2, evidenceCount: 3, evidenceBlock: 'evidence' })
+// snippet_only sources are presented under the SF-3 label and citable — note
+// the evidence block must still carry the label (SF-3) since the source is unread.
+expectClean('cites a snippet_only source (cited [1,2], one snippet)', { ...base, turnKind: 'research', searchExecuted: true, sourceCount: 2, sourcesRead: 1, citedOrdinals: [1, 2], freshSourceStatuses: ['retrieved', 'snippet_only'], evidenceCount: 2, evidenceBlock: '(2) STATUS: HEADLINE/SNIPPET ONLY — snippet not full text' })
 
 // [SF-2] zero-source grounding
-expectViolations('answered with zero sources read', { ...base, turnKind: 'research', searchExecuted: true, sourceCount: 4, sourcesRead: 0, sourcesFailed: 4, citationCount: 0, evidenceCount: 4, evidenceBlock: 'evidence' }, 'no_source_read')
-expectClean('honest no-results outcome is exempt', { ...base, turnKind: 'research', searchExecuted: true, sourceCount: 0, sourcesRead: 0, citationCount: 0, evidenceCount: 0, noResults: true })
+expectViolations('answered with zero sources read', { ...base, turnKind: 'research', searchExecuted: true, sourceCount: 4, sourcesRead: 0, sourcesFailed: 4, citedOrdinals: [], freshSourceStatuses: ['failed', 'failed', 'failed', 'failed'], evidenceCount: 4, evidenceBlock: 'evidence' }, 'no_source_read')
+expectClean('honest no-results outcome is exempt', { ...base, turnKind: 'research', searchExecuted: true, sourceCount: 0, sourcesRead: 0, citedOrdinals: [], noResults: true })
 
 // [SF-3] unread sources must be labeled
-expectViolations('unread sources unlabeled', { ...base, turnKind: 'research', searchExecuted: true, sourceCount: 3, sourcesRead: 1, citationCount: 1, evidenceCount: 3, evidenceBlock: '(1) Source A — full text' }, 'unlabeled_unread_sources')
-expectClean('unread sources carry the HEADLINE label', { ...base, turnKind: 'research', searchExecuted: true, sourceCount: 3, sourcesRead: 1, citationCount: 1, evidenceCount: 3, evidenceBlock: '(2) STATUS: HEADLINE/SNIPPET ONLY — the article was NOT retrieved' })
-expectClean('unread sources carry the NOT RETRIEVED label', { ...base, turnKind: 'research', searchExecuted: true, sourceCount: 3, sourcesRead: 1, citationCount: 1, evidenceCount: 3, evidenceBlock: '(3) STATUS: NOT RETRIEVED (timeout)' })
+expectViolations('unread sources unlabeled', { ...base, turnKind: 'research', searchExecuted: true, sourceCount: 3, sourcesRead: 1, citedOrdinals: [1], freshSourceStatuses: ['retrieved', 'snippet_only', 'snippet_only'], evidenceCount: 3, evidenceBlock: '(1) Source A — full text' }, 'unlabeled_unread_sources')
+expectClean('unread sources carry the HEADLINE label', { ...base, turnKind: 'research', searchExecuted: true, sourceCount: 3, sourcesRead: 1, citedOrdinals: [1], freshSourceStatuses: ['retrieved', 'snippet_only', 'snippet_only'], evidenceCount: 3, evidenceBlock: '(2) STATUS: HEADLINE/SNIPPET ONLY — the article was NOT retrieved' })
+expectClean('unread sources carry the NOT RETRIEVED label', { ...base, turnKind: 'research', searchExecuted: true, sourceCount: 3, sourcesRead: 1, citedOrdinals: [1], freshSourceStatuses: ['retrieved', 'snippet_only', 'snippet_only'], evidenceCount: 3, evidenceBlock: '(3) STATUS: NOT RETRIEVED (timeout)' })
 
 // [SF-5]/[SF-2b] evidence integrity
-expectViolations('evidence without sources', { ...base, turnKind: 'research', searchExecuted: true, sourceCount: 0, sourcesRead: 0, citationCount: 0, evidenceCount: 5, evidenceBlock: 'evidence' }, 'evidence_without_source')
-expectViolations('search executed but no evidence, not no-results', { ...base, turnKind: 'research', searchExecuted: true, sourceCount: 0, sourcesRead: 0, citationCount: 0, evidenceCount: 0 }, 'search_without_evidence')
+expectViolations('evidence without sources', { ...base, turnKind: 'research', searchExecuted: true, sourceCount: 0, sourcesRead: 0, citedOrdinals: [], evidenceCount: 5, evidenceBlock: 'evidence' }, 'evidence_without_source')
+expectViolations('search executed but no evidence, not no-results', { ...base, turnKind: 'research', searchExecuted: true, sourceCount: 0, sourcesRead: 0, citedOrdinals: [], evidenceCount: 0 }, 'search_without_evidence')
 
 // [SF-4] false offline label
 expectViolations('false offline label on persisted answer', { ...base, answerText: "I'm offline right now, try again later." }, 'false_offline_label')

@@ -53,8 +53,14 @@ export interface SilentFailureInput {
   sourcesFailed: number
   /** Evidence items presented to the model (maxOrdinal / reuse sources). */
   evidenceCount: number
-  /** Distinct [N] ordinals cited by the final answer. */
-  citationCount: number
+  /** Distinct [N] ordinals cited by the final answer (parser-bounded upstream). */
+  citedOrdinals: number[]
+  /** Per-fresh-source retrieval status in ordinal order (index i = ordinal i+1). */
+  freshSourceStatuses: string[]
+  /** History/reuse sources appended after the fresh range (their ordinals are
+   * grounded by upstream construction: only injected history survives the
+   * sanitize + parser bound, so anything in that range was actually shown). */
+  historySourceCount: number
   /** The evidence block shown to the model (null when the pipeline produced none). */
   evidenceBlock: string | null
   /** The final persisted answer text (null when no answer was persisted). */
@@ -83,13 +89,32 @@ export function runSilentFailureGate(input: SilentFailureInput): SilentFailureVe
 
   // --- search turns ----------------------------------------------------------
   if (input.searchExecuted) {
-    // [SF-1] citation↔read integrity: every ordinal cited must correspond to
-    // a source actually read, and every read source must be cited — a
-    // mismatch in either direction is evidence degradation.
-    if (answerPersisted && input.citationCount !== input.sourcesRead) {
-      violations.push(
-        `citation_mismatch: cited=${input.citationCount} sourcesRead=${input.sourcesRead} (citation-count must equal sources-read)`,
-      )
+    // [SF-1] citation↔read integrity, directional: an answer may cite ONLY
+    // ordinals that were actually presented as usable evidence. A source that
+    // failed retrieval was never read — citing it is the silent-failure class.
+    // Selective synthesis is NOT a failure: reading 4 sources and citing the
+    // 2 that mattered is legitimate (production evidence 2026-10-06: the
+    // previous count-equality check false-blocked cited=2 sourcesRead=4).
+    // Ordinals beyond the fresh range are history sources, grounded by
+    // upstream construction (parser + sanitize bound); the gate still
+    // verifies the set arithmetic so standalone misuse fires here.
+    if (answerPersisted) {
+      const grounded = new Set<number>()
+      input.freshSourceStatuses.forEach((status, i) => {
+        if (status === 'retrieved' || status === 'snippet_only') grounded.add(i + 1)
+      })
+      const freshCount = input.freshSourceStatuses.length
+      for (let o = freshCount + 1; o <= freshCount + input.historySourceCount; o++) {
+        grounded.add(o)
+      }
+      const ungrounded = input.citedOrdinals.filter((o) => !grounded.has(o))
+      if (ungrounded.length > 0) {
+        const retrieved = input.freshSourceStatuses.filter((s) => s === 'retrieved').length
+        const snippet = input.freshSourceStatuses.filter((s) => s === 'snippet_only').length
+        violations.push(
+          `citation_mismatch: cited ordinals [${ungrounded.join(',')}] not grounded in read sources (fresh retrieved=${retrieved} snippet_only=${snippet} history=${input.historySourceCount}; citation-count was ${input.citedOrdinals.length} vs sourcesRead ${input.sourcesRead})`,
+        )
+      }
     }
     // [SF-2] zero-source grounding: a search turn with an answer must have
     // read ≥1 source, unless the turn is the honest no-results outcome.

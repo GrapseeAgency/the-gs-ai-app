@@ -680,7 +680,16 @@ function buildGsCapLog(prep: Prep): Prep['gsCapLog'] {
       sourcesRead: gateSourcesRead,
       sourcesFailed: freshSources.filter((s) => s.status === 'failed').length,
       evidenceCount,
-      citationCount: extra?.cited ? new Set(extra.cited).size : 0,
+      citedOrdinals: extra?.cited ? Array.from(new Set(extra.cited)) : [],
+      freshSourceStatuses: turn?.kind === 'research' ? freshSources.map((s) => s.status) : [],
+      historySourceCount:
+        turn?.kind === 'research'
+          ? prep.includeHistoryEvidence
+            ? prep.historyWebSources.length
+            : 0
+          : turn?.kind === 'reuse'
+            ? turn.sources.length
+            : 0,
       evidenceBlock:
         turn?.kind === 'research'
           ? turn.evidenceBlock
