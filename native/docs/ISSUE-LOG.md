@@ -6690,3 +6690,15 @@ with the raw queue-time as evidence and move on"). The label has now been
 probed twice and produced zero executions across both attempts: the arm64
 emulator question remains unanswerable on this repository's runners, and the
 revert criterion for the Q4_0 default stays blocked on a real arm64 device.
+
+## ITEM 9 OF THE NEW BRIEF -- the CodeWorkspaceView TODO is template content, not an open defect
+
+`ios/App/Sources/Features/Create/CodeWorkspaceView.swift:72` carries
+`// TODO swap in the streaming client`. Read in context it sits INSIDE the
+canned Kotlin scaffold the Create screen generates for the user (`engineLines`,
+line 65-77): the string is demo content SHOWN to the user, teaching where a
+real integration would go. It is not a repo-side work item; no CI gate greps
+TODOs (checked scripts/ and .github/ -- zero scanners), so nothing can trip on
+it. Recorded here so a future sweep does not "fix" a teaching string by
+accident. If the operator wants it gone, the fix is rewording the template
+line, not opening a tracking issue.
