@@ -4368,3 +4368,20 @@ Work Log:
 Stage Summary:
 - All nine handoff items now DONE/CLOSED (ITEM 6 re-measurement still waits for a real arm64 device; ITEM 1 refill verified live: POST messages 200 in 1.16s reply ALIVE, keypool size 13, upstream 200/152ms).
 - In flight: ifbench baseline leg (n=200) + eval-gate Welch verification. Cron drives the assembly and the lever sequence autonomously.
+
+---
+Task ID: resume-4
+Agent: Z.ai Code (main session)
+Task: Reconnect credentials after context reset; align local main; identify outstanding key.
+
+Work Log:
+- Verified new GitHub PAT: api.github.com/user HTTP 200, login Grapsee-Official; remote URL reconfigured (token lives only in .git/config, never in text).
+- Ground truth vs prior session summary: the "5 unpushed commits" were already on origin under their own hashes. Confirmed in origin/main history: 99da4d0 (SF-1 directional gate, citedOrdinals interface), eval-gate.yml Welch reachable-output fix, ISSUE-LOG CodeWorkspaceView note, resume-3 worklog content.
+- Local main was stale-divergent (1 ahead / 435 behind). Reset --hard to origin/main at 7f06503. Remote also carries worklog "ifbench throughput root cause (230/300 in 5.88h, 39/h, 6h cap)" plus dispatched runs 37428551164 and 37428595693, which post-dates the prior summary.
+- Resolved dev.pid stash conflict to live next-dev PID 1109; dropped stash.
+- Keypool audit: no sk-or-v1 material anywhere (env count 0; only the prefix literal inside scripts/provision-keys.ts). The 13 OpenRouter keys from the prior session never reached this context; the summary carried only the prefix.
+
+Stage Summary:
+- main == origin/main at 7f06503; all prior work confirmed pushed; working tree clean after runtime sync.
+- Outstanding external input: 13 OpenRouter API keys (keypool refill -> POST messages live verification -> tau2 leg unblock).
+- Next: download artifact 10888587621 (ifbench) with token, assemble baseline, benchmark.yml explicit timeout-minutes + dispatch verification, eval-gate dispatch verification, then lever sequence aci -> verification -> context -> router.
