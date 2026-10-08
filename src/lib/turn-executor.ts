@@ -1291,17 +1291,26 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
           return onDelta(d)
         }
       : undefined
+    // GS-CONSTRAINT-GUARD (2026-10-08): a 200-with-empty-body from ANY layer
+    // must not ship as a bubble. Both measured failure shapes (OR chain 429
+    // exhaustion, primary empty completion under throttle) now fail the call
+    // so the fallback ladder or the route's honest error path handles it.
+    const emptyRejection = (where: string) => new Error(`${where}: empty completion (upstream returned no content)`)
     try {
       if (openRouterModels) {
         callStartedAt = Date.now()
-        return wrappedOnDelta
+        const text = wrappedOnDelta
           ? await orStreamChat(msgs, openRouterModels, wrappedOnDelta, orReasoning)
           : await orCompleteChat(msgs, openRouterModels, orReasoning).then((r) => r.text)
+        if (!text.trim()) throw emptyRejection('OpenRouter chain')
+        return text
       }
       callStartedAt = Date.now()
-      return wrappedOnDelta
+      const primaryText = wrappedOnDelta
         ? await streamChat(msgs, wrappedOnDelta, activeProviderModel, prep.thinking.config)
         : await completeChat(msgs, activeProviderModel, prep.thinking.config)
+      if (!primaryText.trim()) throw emptyRejection('primary provider')
+      return primaryText
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
       if (openRouterModels) {
@@ -1310,9 +1319,11 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
             `SYNTHESIS-FALLBACK conv=${id} OpenRouter chain exhausted (${message.slice(0, 80)}) → primary provider`
           )
           callStartedAt = Date.now()
-          return wrappedOnDelta
+          const fb = wrappedOnDelta
             ? await streamChat(msgs, wrappedOnDelta, activeProviderModel, prep.thinking.config)
             : await completeChat(msgs, activeProviderModel, prep.thinking.config)
+          if (!fb.trim()) throw emptyRejection('primary provider (fallback)')
+          return fb
         }
         throw e
       }
@@ -1321,9 +1332,11 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
           `SYNTHESIS-FALLBACK conv=${id} primary failed (${message.slice(0, 80)}) → OpenRouter free chain`
         )
         callStartedAt = Date.now()
-        return wrappedOnDelta
+        const fb = wrappedOnDelta
           ? await orStreamChat(msgs, OPENROUTER_MODELS['gs-free'], wrappedOnDelta, orReasoning)
           : await orCompleteChat(msgs, OPENROUTER_MODELS['gs-free'], orReasoning).then((r) => r.text)
+        if (!fb.trim()) throw emptyRejection('OpenRouter free chain (fallback)')
+        return fb
       }
       throw e
     }
