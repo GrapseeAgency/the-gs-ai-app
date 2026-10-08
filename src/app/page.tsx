@@ -1053,6 +1053,14 @@ export default function Home() {
               Grapsee Agency · platform command centre
             </p>
           </div>
+          <a
+            href="/benchmark-comparison.html"
+            className="hidden rounded-full border px-3.5 py-1.5 text-xs font-medium transition-transform active:scale-95 sm:block"
+            style={{ borderColor: C.outline, color: C.text }}
+            aria-label="Open benchmark comparison page"
+          >
+            Benchmarks
+          </a>
           <button
             onClick={newChat}
             className="mr-1 hidden rounded-full border px-3.5 py-1.5 text-xs font-medium transition-transform active:scale-95 sm:block"
