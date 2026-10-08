@@ -4453,3 +4453,21 @@ Stage Summary:
 - Step 3 artifact: native/docs/SOVEREIGN-STACK-COMPLETE.md (b03970d).
 - Step 4 artifacts: tests/app-comparison/{tasks.json, results.md, raw-answers.json, fixtures/} + runner (079960e).
 - Steps 1-2 still gated on CI: run 37764839853 (gpqa+aime) in flight at a3704ff; tau2 retry 37769190819 in flight at 2b0f8a1 with the gs-ai-flash user-sim fix. Cron 444371 continues monitoring; levers dispatch after baseline rows land.
+
+---
+Task ID: DIRECTIVE-2 (STEPS 3-6)
+Agent: main (Z.ai Code)
+Task: User's absolute order: land baseline, levers, fix 4 measured quality failures, runbook, close partials/blocked, ISSUE-LOG sweep.
+
+Work Log:
+- STEP 1 status: run 37764839853 (gpqa+aime) still in flight (cap at ~16:41Z). tau2 attempt 2 (run 37769190819) FAILED on a NEW root cause, read from raw log: user-sim fix worked (no more Unknown model), but 113/114 tasks died as infra errors "z-ai throttled (circuit open)" - the deployed shim has no provider fallback, and the account breaker was already open 60s into the run (gpqa+aime legs load the same z-ai account). Also: the full telecom task set (114 runnable, 2285 on disk) cannot finish in the 360-min cap.
+- Fix pushed f956ed2: tau2 pinned to telecom_small (20 tasks, n_samples 20), shim zai branch falls back to the gs-free OpenRouter chain on breaker-open/429 (production parity). tau2 attempt 3 must be dispatched ALONE after gpqa/aime release the account.
+- FALSE ALARM investigated and closed: apparent bracket-eaten syntax ("models: ] }", "modelsi]") proved to be display-layer corruption only; python assertions + full tsc confirm repo code is clean. No repair needed.
+- STEP 3 fixed, tested, committed da48f9f: src/lib/constraint-guard.ts + turn-executor wiring + scripts/test-constraint-guard.ts (ALL ASSERTIONS PASSED). A: mid-prompt exact word-count (regen -> truncate/pad, bar exactly-5 asserted). B: forbidden-letter (e-word removal; unrepairable ships e-free "NO VALID OUTPUT" honest statement, asserted letter-free). C: CSV aggregate verification vs document context (regen with verified totals -> deterministic rewrite; fixture asserts West=6150 vs the measured 7350). D: freshness grounding for latest-version questions (proactive system instruction + evidence post-check + could-not-verify fallback; stale "version 15" vs 16.x evidence asserted).
+- STEP 4 done 45a0d86: tests/app-comparison/RUNBOOK.md (per-app operator instructions; no-fabrication rules).
+- STEP 5 done e2fa343: completion report has ZERO PARTIALs left. Plugins+skills, CLIP, OCR-on-demand downgraded to BLOCKED with precise raw reasons (no cargo in sandbox and no cargo-test CI job; no model volume for run_clip; upstream AGP defect) + unblock conditions. arm64 probe re-dispatched per directive: run 37799687774 created 2026-10-08T15:18:44Z on ubuntu-24.04-arm64, QUEUED (evidence clock running).
+- STEP 6 done e2fa343: ISSUE-LOG terminal status sweep appended (every tracked item DONE/BLOCKED/CLOSED + evidence + unblock condition; stale sections marked superseded).
+
+Stage Summary:
+- Pushed: f956ed2, da48f9f, 45a0d86, e2fa343.
+- Pending on CI: harvest gpqa/aime when 37764839853 lands -> tau2 attempt 3 (alone) -> levers aci/verification/context/router -> suite re-run (all gated on a clean z-ai window; ordered by cron 444371 + this session).
