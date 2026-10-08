@@ -4404,3 +4404,21 @@ Stage Summary:
 - Baseline ifbench: LOCKED (0.4779 [0.388, 0.5692], matched-sample basis for lever deltas).
 - Run 37764839853 in flight for the remaining 3 baseline rows.
 - Next: harvest 37764839853 artifacts -> fill baseline rows -> dispatch lever arms in order aci -> verification -> context -> router (each: harvest -> delta+CI vs baseline -> verdict in the report). Cron replaced with updated discipline: append-only worklog, never reset/checkout main, stash noise + pull --rebase before push, harvest-not-reburn.
+
+---
+Task ID: BENCH-COMPARE-PAGE
+Agent: main (Z.ai Code)
+Task: Benchmark comparison page — GS-AI vs ChatGPT, Claude, DeepSeek, Dola (user request: "comparable picture", html first).
+
+Work Log:
+- Sourced published scores via web search (7 queries, results in /tmp/*.json): GPT-5 GPQA 88.4 / AIME 2025 94.6 (OpenAI Aug 2025), GPT-5.2 Thinking GPQA 92.4 (OpenAI Dec 2025), Claude Opus 4.5 GPQA 87.0 (Nov 2025 release coverage), Claude 4.x family IFBench 54.3-58.6 (Ai2 May 2026), Gemini 3 Flash 78.0 IFBench, MAI-Thinking-1 85.0 leaderboard top (benchlm Oct 2026), DeepSeek V3.2-Exp card GPQA 80.7 / AIME 88.4-89.3 with V3.2 release claim 96.0 (labeled as claim).
+- Dola identified: ByteDance Larus consumer assistant (dola.com) — no published GPQA/AIME/IFBench/tau2 anywhere; stated honestly as "no published benchmarks" instead of inventing numbers.
+- Built public/benchmark-comparison.html: self-contained, app design language (obsidian + teal accent), hero stat cards (measured IFBench 47.8 [38.8-56.9] n=113 with CI whisker chart vs Claude range band), full scorecard table with provenance chips per cell (measured / reported / not confirmed), methodology + gap-closing program sections, sticky footer, responsive, print-friendly.
+- App top bar gains a Benchmarks link (page.tsx header, styled like the existing pills).
+- Browser-verified via agent-browser: comparison page renders (title correct, 4 bar rows, 5 table rows, no page errors); main page shows the link; click navigates to /benchmark-comparison.html.
+- ESLint clean. Committed c64d6a3, pushed (c106a97..c64d6a3).
+
+Stage Summary:
+- Live page: /benchmark-comparison.html, reachable from the app top bar.
+- Every GS-AI number is measured and run-linked; every competitor number is source-linked or explicitly "not confirmed"; Dola honestly marked as having no published benchmarks.
+- Run 37764839853 (gpqa/aime/tau2 baseline legs) still in flight; cron 444371 will harvest and the page's in-flight cells get replaced with real scores in the next update.
