@@ -4422,3 +4422,19 @@ Stage Summary:
 - Live page: /benchmark-comparison.html, reachable from the app top bar.
 - Every GS-AI number is measured and run-linked; every competitor number is source-linked or explicitly "not confirmed"; Dola honestly marked as having no published benchmarks.
 - Run 37764839853 (gpqa/aime/tau2 baseline legs) still in flight; cron 444371 will harvest and the page's in-flight cells get replaced with real scores in the next update.
+
+---
+Task ID: STEP1-TAU2-FIX
+Agent: main (Z.ai Code)
+Task: User directive received (strict order): land baseline -> run 4 levers (aci, verification, context, router) with Wilson CI keep/revert -> SOVEREIGN-STACK-COMPLETE.md audit -> 20-task app-vs-app suite (GS-AI self-run only, competitor cells not run) -> STOP.
+
+Work Log:
+- Checked run 37764839853: build SUCCESS, sandbox-escape SUCCESS, ifbench leg SKIPPED_BY_SUBSET (correct, no re-burn), gpqa_diamond + aime legs IN_PROGRESS, tau2_telecom leg FAILED.
+- Downloaded tau2 artifact 11544911804 and read raw log: tau2 harness ran 114 telecom tasks but every task died on the FIRST user-simulator turn: litellm.NotFoundError "Unknown model 'gpt-4o-mini'" (shim serves gs-ai tiers + vendor-prefixed passthrough only; free OpenRouter tier cannot fund real OpenAI models). Zero conversations completed, "Total Tasks 0", CLI honestly BLOCKED with "no tau2 trial rewards parsed from output dir". Fixed cost: zero runner hours wasted re-running blind.
+- FIX: cli/main.py tau2 adapter default TAU2_USER_LLM openai/gpt-4o-mini -> openai/gs-ai-flash (our own production flash tier via the same shim, glm-4.5-flash, free; matches tau2's official cheap-simulator design intent). Env override preserved. Commit 2b0f8a1, pushed (a2db672..2b0f8a1).
+- DISPATCHED tau2 leg retry: benchmark.yml scaffold=baseline benchmarks=tau2_telecom -> HTTP 204, run 37769190819 created 2026-10-08T11:18:35Z at fixed head 2b0f8a1 (IN_PROGRESS).
+
+Stage Summary:
+- Run 37764839853 (gpqa+aime legs) still in flight at a3704ff; run 37769190819 (tau2 retry with fix) in flight at 2b0f8a1.
+- CRON NOTE: when harvesting levers later, tau2 legs in lever runs will use gs-ai-flash user sim automatically (checkout of main includes 2b0f8a1).
+- Next: harvest both runs when they land -> fill all 4 baseline rows (score, n, Wilson CI, provider distribution, latency p50/p95, failed/errored/skipped) -> then levers in order.
