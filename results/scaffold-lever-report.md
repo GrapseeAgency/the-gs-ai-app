@@ -52,7 +52,7 @@ Status marks: ✅ scored · ⏳ run in flight · 🚫 BLOCKED (raw reason in art
 | Baseline       | gpqa_diamond | ✅ SCORED_PARTIAL 0.6854 [0.583, 0.7725] (61/89 of 198, run 37764839853 harvest, cancelled at 6h cap; providers: glm-4-plus 51 + gs-free fallback 38) | — | — | — | baseline row locked |
 | Baseline       | aime         | ✅ SCORED_PARTIAL 1.0 [0.7575, 1.0] (12/12 of 30, run 37764839853 harvest, cancelled at 6h cap; small n: 12-sample CI is the honest range; providers: gs-free fallback 11 + glm-4-plus 1) | — | — | — | baseline row locked |
 | Baseline       | ifbench      | ✅ SCORED_PARTIAL 0.4779 [0.388, 0.5692] (54/113, run 37428551164 harvest, current protocol; n_target 200, cancelled at 6h cap) | — | — | — | baseline row locked; matched-sample basis for levers |
-| Baseline       | tau2_telecom | 🚫 BLOCKED (user-sim 402 on that run) → runner secret OPENROUTER_API_KEY rotated 2026-10-08 to a funded key; unblocked for next dispatch | — | — | — | pending baseline-completion dispatch |
+| Baseline       | tau2_telecom | 🚫 BLOCKED — 3 attempts spent: (1) user-sim model rejection [fixed 2b0f8a1], (2) 113/114 z-ai breaker infra errors + 360-min cap infeasibility [re-scoped telecom_small + shim fallback f956ed2], (3) upstream tau2 1.0.1 telecom_small loader TypeError (4.1s, zero samples). Full raw error in tests/baseline-scaffold-v1.json | — | — | — | upstream tau2 fix or a working task-split mechanism |
 | ACI            | all          | pending dispatch    | —                   | —      | —         | —       |
 | Verification   | all          | pending dispatch    | —                   | —      | —         | —       |
 | Context        | all          | pending dispatch    | —                   | —      | —         | —       |
@@ -103,6 +103,6 @@ No winner is declared on underpowered deltas (power discipline below).
 ## Execution sequence (current)
 
 1. Baseline ifbench: DONE via harvest (see dispatch log + tests/baseline-scaffold-v1.json).
-2. Dispatch baseline-completion: benchmarks=gpqa_diamond,aime,tau2_telecom (ifbench already locked).
+2. Baseline-completion DONE (runs 37764839853 + 37769190819 + 37814071288): gpqa_diamond + aime rows harvested (SCORED_PARTIAL); tau2_telecom BLOCKED after 3 attempts (see RESULTS).
 3. Then one arm per dispatch, in order: `scaffold=aci` → `verification` → `context` → `router`, each with benchmarks=ifbench,tau2_telecom (+gpqa_diamond confirm run for any arm that wins on the primary pair); after each: harvest artifacts → delta+CI vs baseline → verdict in this table.
 4. Harvest, never re-burn: cancelled runs with scored partial logs are data, not failures.
