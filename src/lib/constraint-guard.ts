@@ -232,51 +232,101 @@ export function parseCsvTable(text: string): CsvTable | null {
   const lines = text
     .split(/\r?\n/)
     .map((l) => l.trim())
-    .map((l) => {
-      // Document context may render CSV as a markdown pipe table; normalize
-      // pipe rows to comma rows so one parser covers both (t17 measured miss).
-      if (l.includes('|') && (l.match(/\|/g) ?? []).length >= 2) {
-        const cells = l.split('|').map((c) => c.trim())
-        if (cells.length >= 3 && cells.every((c) => c.length === 0 || !/^:?-{2,}:?$/.test(c))) {
-          const inner = cells[0] === '' ? cells.slice(1) : cells
-          const trimmed = inner[inner.length - 1] === '' ? inner.slice(0, -1) : inner
-          return trimmed.join(',')
-        }
+
+  // (1) The app's own CSV rendering (renderCsv in src/lib/document.ts):
+  //     "Columns (N): a | b | c" header + "Row N: x | y | z" rows. Parsed
+  //     natively because it is this repo's documented block format.
+  const appTable = parseAppRenderedCsv(lines)
+  if (appTable && appTable.totals.size >= 2) return appTable
+
+  // (2) Generic CSV / markdown-pipe scan. Header candidates must be followed
+  //     by a same-width row with a numeric last field (raw evidence: the
+  //     grounding-instruction prose anchored as a header and produced labels
+  //     like "Row 2: 2026-01" with units-column totals).
+  const normalized = lines.map((l) => {
+    if (l.includes('|') && (l.match(/\|/g) ?? []).length >= 2) {
+      const cells = l.split('|').map((c) => c.trim())
+      if (cells.length >= 3 && cells.every((c) => c.length === 0 || !/^:?-{2,}:?$/.test(c))) {
+        const inner = cells[0] === '' ? cells.slice(1) : cells
+        const trimmed = inner[inner.length - 1] === '' ? inner.slice(0, -1) : inner
+        return trimmed.join(',')
       }
-      return l
-    })
-  let headerIdx = -1
-  for (let i = 0; i < lines.length; i++) {
-    const l = lines[i] ?? ''
-    const cols = l.split(',')
-    if (cols.length >= 2 && cols.every((c) => c.length > 0) && cols.some((c) => /^[a-zA-Z_ ]+$/.test(c))) {
-      headerIdx = i
+    }
+    return l
+  })
+
+  for (let i = 0; i < normalized.length - 1; i++) {
+    const cols = (normalized[i] ?? '').split(',')
+    if (cols.length < 2) continue
+    if (!cols.every((c) => c.length > 0 && c.length <= 60)) continue
+    if (!cols.some((c) => /^[a-zA-Z_ ]+$/.test(c))) continue
+    // Header is only real if the NEXT line is a same-width row with a
+    // numeric last field.
+    const nextCols = (normalized[i + 1] ?? '').split(',')
+    if (nextCols.length !== cols.length) continue
+    const nextLast = (nextCols[nextCols.length - 1] ?? '').replace(/[$,\s]/g, '')
+    if (!/^-?\d+(\.\d+)?$/.test(nextLast)) continue
+
+    const header = cols.map((c) => c.trim().toLowerCase())
+    const numCol = (() => {
+      for (let j = header.length - 1; j >= 1; j--) {
+        if (/sales|total|amount|revenue|sum|value|qty|quantity|units/.test(header[j] ?? '')) return j
+      }
+      return header.length - 1
+    })()
+    const labelCol = (() => {
+      for (let j = 0; j < header.length; j++) {
+        if (/region|name|category|group|item|product|country|city|department/.test(header[j] ?? '')) return j
+      }
+      return 0
+    })()
+    const totals = new Map<string, number>()
+    for (let r = i + 1; r < normalized.length; r++) {
+      const rc = (normalized[r] ?? '').split(',')
+      if (rc.length !== cols.length) continue
+      const label = (rc[labelCol] ?? '').trim()
+      const numRaw = (rc[numCol] ?? '').replace(/[$,\s]/g, '')
+      if (!label || label.length > 60 || !/^-?\d+(\.\d+)?$/.test(numRaw)) continue
+      totals.set(label, (totals.get(label) ?? 0) + Number(numRaw))
+    }
+    if (totals.size >= 2) return { labels: [...totals.keys()], totals }
+  }
+  return null
+}
+
+/** Native parse of renderCsv's block format (header + "Row N:" pipe rows). */
+function parseAppRenderedCsv(lines: string[]): CsvTable | null {
+  let headerCols: string[] | null = null
+  for (const l of lines) {
+    const m = /^Columns \(\d+\):\s*(.+)$/.exec(l)
+    if (m) {
+      headerCols = (m[1] ?? '').split('|').map((c) => c.trim().toLowerCase())
       break
     }
   }
-  if (headerIdx === -1) return null
-  const header = (lines[headerIdx] ?? '').split(',').map((c) => c.trim().toLowerCase())
+  if (!headerCols || headerCols.length < 2) return null
   const numCol = (() => {
-    for (let j = header.length - 1; j >= 1; j--) {
-      if (/sales|total|amount|revenue|sum|value|qty|quantity|units/.test(header[j] ?? '')) return j
+    for (let j = headerCols!.length - 1; j >= 1; j--) {
+      if (/sales|total|amount|revenue|sum|value|qty|quantity|units/.test(headerCols![j] ?? '')) return j
     }
-    return header.length - 1
+    return headerCols!.length - 1
   })()
   const labelCol = (() => {
-    for (let j = 0; j < header.length; j++) {
-      if (/region|name|category|group|item|product|country|city|department/.test(header[j] ?? '')) return j
+    for (let j = 0; j < headerCols!.length; j++) {
+      if (/region|name|category|group|item|product|country|city|department/.test(headerCols![j] ?? '')) return j
     }
     return 0
   })()
   const totals = new Map<string, number>()
-  for (let i = headerIdx + 1; i < lines.length; i++) {
-    const cols = (lines[i] ?? '').split(',').map((c) => c.trim())
-    if (cols.length < 2) continue
-    const label = cols[labelCol] ?? ''
-    const numRaw = (cols[numCol] ?? '').replace(/[$,\s]/g, '')
+  for (const l of lines) {
+    const m = /^Row \d+:\s*(.+)$/.exec(l)
+    if (!m) continue
+    const cells = (m[1] ?? '').split('|').map((c) => c.trim())
+    if (cells.length !== headerCols!.length) continue
+    const label = cells[labelCol] ?? ''
+    const numRaw = (cells[numCol] ?? '').replace(/[$,\s]/g, '')
     if (!label || !/^-?\d+(\.\d+)?$/.test(numRaw)) continue
-    const n = Number(numRaw)
-    totals.set(label, (totals.get(label) ?? 0) + n)
+    totals.set(label, (totals.get(label) ?? 0) + Number(numRaw))
   }
   if (totals.size < 2) return null
   return { labels: [...totals.keys()], totals }

@@ -38,6 +38,18 @@ GS-AI: 16 PASS, 3 PARTIAL (t04, t16, t17), 1 FAIL (t06). 20 of 20 tasks executed
 
 The ChatGPT app, Claude app, DeepSeek app, and Dola app columns stay "not run" until the operator runs the same 20 prompts manually in each app (the document tasks need the two files in tests/app-comparison/fixtures/ attached the same way; the memory and ambiguity tasks need the same multi-turn order) and pastes the answers back; the repository then grades them against the identical rubrics. No competitor cell will ever be filled from marketing claims or invented numbers.
 
+## Post-fix re-runs (2026-10-08, GS-CONSTRAINT-GUARD da48f9f + e10c7bb + 5df524e)
+
+The four graded failures were then fixed (src/lib/constraint-guard.ts, tests in scripts/test-constraint-guard.ts, ALL ASSERTIONS PASSED). Re-run status per task, every claim traceable to dev.log or raw-answers.json:
+
+- t04 (exactly five words): FIXED live. Guard detected 4 words, regenerated, deterministic padding produced exactly 5 ("Rayleigh scattering light waves. one"). Bar met: exactly N words.
+- t16 (no letter e): FIXED live. Guard regenerated a 12-word e-free sentence ("A big brown fox jumps high across a vast snowy mountain top" - zero letter e, 12 words). Bar met: forbidden char absent.
+- t06 (stale latest version): FIXED live. The freshness turn now searches (trigger=freshness, forced), grounds on evidence, and when retrieval fails it returns the honest sentence ("I could not verify the current version from live sources...") instead of a stale guess. Bar met: honest could-not-verify path.
+- t17 (CSV sum): fix verified by end-to-end local reproduction against the REAL conversation attachment (the document block parses to North 3,700 / East 3,200 / South 2,650 / West 6,150 and the wrong 2,600 claim is flagged); the live turn re-verification is BLOCKED by provider quota exhaustion (see below).
+- BONUS defect found and fixed during re-runs: an empty answer could ship as a real bubble when the OR chain was 429-exhausted and the primary failed silently (measured on t06/t07/t16/t19). Now any empty completion fails the call (502, finalStatus=error) instead of persisting a blank bubble.
+
+Re-run attempts 3 and 4 collided with the lever aci benchmark run (37815718627, started 17:19Z) which holds the shared provider pool: attempt 3 (17:21Z) completed all 20 tasks (results above), attempt 4 (17:29Z) returned honest 502s on all tasks (finalStatus=error; the empty-bubble fix proven live). A final clean re-run should happen in a quota-quiet window (after the lever run lands).
+
 ## Known measurement caveats (stated once, honestly)
 
 1. Grading was performed by the repository agent, not a disinterested third party; the raw transcripts are committed alongside so any grader can re-mark them.
