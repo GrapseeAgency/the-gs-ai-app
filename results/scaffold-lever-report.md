@@ -49,8 +49,8 @@ Status marks: ✅ scored · ⏳ run in flight · 🚫 BLOCKED (raw reason in art
 
 | Lever          | Benchmark    | Score [CI]          | Δ vs baseline       | Cost Δ | Latency Δ | Verdict |
 |----------------|--------------|---------------------|---------------------|--------|-----------|---------|
-| Baseline       | gpqa_diamond | 🚫 BLOCKED — z-ai 429 lockdown + 6h runner cap (tests/baseline-scaffold-v1.json) | — | — | — | pending quota |
-| Baseline       | aime         | 🚫 BLOCKED — same (0 recoverable samples from partial inspect logs) | — | — | — | pending quota |
+| Baseline       | gpqa_diamond | ✅ SCORED_PARTIAL 0.6854 [0.583, 0.7725] (61/89 of 198, run 37764839853 harvest, cancelled at 6h cap; providers: glm-4-plus 51 + gs-free fallback 38) | — | — | — | baseline row locked |
+| Baseline       | aime         | ✅ SCORED_PARTIAL 1.0 [0.7575, 1.0] (12/12 of 30, run 37764839853 harvest, cancelled at 6h cap; small n: 12-sample CI is the honest range; providers: gs-free fallback 11 + glm-4-plus 1) | — | — | — | baseline row locked |
 | Baseline       | ifbench      | ✅ SCORED_PARTIAL 0.4779 [0.388, 0.5692] (54/113, run 37428551164 harvest, current protocol; n_target 200, cancelled at 6h cap) | — | — | — | baseline row locked; matched-sample basis for levers |
 | Baseline       | tau2_telecom | 🚫 BLOCKED (user-sim 402 on that run) → runner secret OPENROUTER_API_KEY rotated 2026-10-08 to a funded key; unblocked for next dispatch | — | — | — | pending baseline-completion dispatch |
 | ACI            | all          | pending dispatch    | —                   | —      | —         | —       |

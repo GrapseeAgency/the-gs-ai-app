@@ -71,19 +71,43 @@ def main() -> None:
     times: list[float] = []
     providers: dict[str, int] = {}
 
+    def score_value(sc: dict) -> float | None:
+        """Normalize inspect scorer output to 0/1.
+
+        Measured forms (raw logs, this repo):
+          - numeric 0/1 (ifbench_strict_scorer)
+          - 'C'/'I' letters (aime_scorer = Correct/Incorrect)
+          - choice letter in value vs correct letter in answer
+            (multiple_choice: value='C', answer='D')
+        """
+        v = sc.get("value")
+        a = sc.get("answer")
+        if isinstance(v, (int, float)):
+            return 1.0 if float(v) > 0 else 0.0
+        if isinstance(v, str):
+            vs = v.strip().upper()
+            if vs in ("C", "CORRECT", "PASS", "TRUE", "YES", "1"):
+                return 1.0
+            if vs in ("I", "INCORRECT", "FAIL", "FALSE", "NO", "0"):
+                return 0.0
+            try:
+                return 1.0 if float(vs) > 0 else 0.0
+            except ValueError:
+                pass
+            if a is not None and vs == str(a).strip().upper():
+                return 1.0
+            if a is not None:
+                return 0.0
+        return None
+
     for s in samples:
         status = s.get("status") or "complete"
         scores = s.get("scores") or {}
         value = None
         for _scorer, sc in scores.items():
-            v = sc.get("value")
-            if isinstance(v, (int, float)):
-                value = float(v)
-            elif isinstance(v, str):
-                try:
-                    value = float(v)
-                except ValueError:
-                    value = None
+            sv = score_value(sc)
+            if sv is not None:
+                value = sv
         if status == "skipped" or s.get("error") == "sample_skipped":
             skipped += 1
         elif s.get("error"):
