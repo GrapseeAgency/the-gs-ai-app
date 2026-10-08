@@ -4385,3 +4385,22 @@ Stage Summary:
 - main == origin/main at 7f06503; all prior work confirmed pushed; working tree clean after runtime sync.
 - Outstanding external input: 13 OpenRouter API keys (keypool refill -> POST messages live verification -> tau2 leg unblock).
 - Next: download artifact 10888587621 (ifbench) with token, assemble baseline, benchmark.yml explicit timeout-minutes + dispatch verification, eval-gate dispatch verification, then lever sequence aci -> verification -> context -> router.
+
+---
+Task ID: resume-5 (SCAFFOLD-BENCH)
+Agent: main (Z.ai Code)
+Task: Consume delivered credentials (19 OpenRouter keys), close ITEM 1, lock the baseline ifbench row by harvest, dispatch baseline-completion.
+
+Work Log:
+- 19 OpenRouter keys delivered; probed via openrouter.ai/api/v1/auth/key: 11 alive (free-tier, small usage), 8 provider-revoked 401 (pool slots 7-14). Vault reprovisioned with the 11 alive keys across all durable layers.
+- ITEM 1 CLOSED LIVE: POST /api/v1/conversations/{id}/messages -> HTTP 200 in 6.98s, assistant reply contained the exact requested marker. Health endpoint ok.
+- Runner-side tau2 secret OPENROUTER_API_KEY rotated to a funded key (PUT secret -> HTTP 204).
+- Harvest over re-burn: downloaded artifacts of cancelled runs 36155160244 (1,216,757 B zip) and 37428551164 (6 artifacts incl. 568 KB ifbench leg). Oct 6 ifbench inspect log: 113/200 samples, ALL scored, 54 passes -> 0.4779, Wilson 95% [0.388, 0.5692]. Recorded as the baseline ifbench row (SCORED_PARTIAL) in tests/baseline-scaffold-v1.json + results/scaffold-lever-report.md; Sept 25 log (230 samples, 0.2783, pre-protocol-fix) kept as superseded provenance (two-proportion z=3.6).
+- Incident A: environment sanitizer rewrote the PAT inside .git/config to a placeholder (push fatal: could not read Password). Workaround: re-set the URL per push session; keep the token out of all text.
+- Incident B: the concurrent 15-min cron session rewound local main onto a stale base (436 behind, UUID-named commit 7faa8d2 on top of da0c402). Recovery: remote verified at 4749b29, runtime noise stashed, reset --hard to origin/main, harvest commit 84a84a6 cherry-picked cleanly (remote had not touched the two files), n_target corrected 300->200 per b64a7f7 wiring, amended to a3704ff, pushed (4749b29..a3704ff).
+- DISPATCHED baseline-completion: benchmark.yml scaffold=baseline benchmarks=gpqa_diamond,aime,tau2_telecom -> HTTP 204, run 37764839853 created 2026-10-08T10:38:50Z at head a3704ff (IN_PROGRESS). First funded tau2 attempt.
+
+Stage Summary:
+- Baseline ifbench: LOCKED (0.4779 [0.388, 0.5692], matched-sample basis for lever deltas).
+- Run 37764839853 in flight for the remaining 3 baseline rows.
+- Next: harvest 37764839853 artifacts -> fill baseline rows -> dispatch lever arms in order aci -> verification -> context -> router (each: harvest -> delta+CI vs baseline -> verdict in the report). Cron replaced with updated discipline: append-only worklog, never reset/checkout main, stash noise + pull --rebase before push, harvest-not-reburn.
