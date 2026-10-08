@@ -4471,3 +4471,20 @@ Work Log:
 Stage Summary:
 - Pushed: f956ed2, da48f9f, 45a0d86, e2fa343.
 - Pending on CI: harvest gpqa/aime when 37764839853 lands -> tau2 attempt 3 (alone) -> levers aci/verification/context/router -> suite re-run (all gated on a clean z-ai window; ordered by cron 444371 + this session).
+
+---
+Task ID: DIRECTIVE-2 (STEP 1 HARVEST + ATTEMPT 3)
+Agent: main (Z.ai Code)
+Task: Harvest landed baseline legs; dispatch tau2 attempt 3; suite re-run.
+
+Work Log:
+- Run 37764839853 completed: gpqa + aime jobs CANCELLED at the 360-min cap; artifacts uploaded via if:always() and harvested (harvest-over-reburn, zero new runner time).
+- Harvester scripts/harvest-inspect-artifact.py written + validated against the recorded Sept 25 ifbench observation (64/230 = 0.2783 reproduced exactly); extended for the measured scorer forms (aime C/I letters, gpqa choice-letter vs answer, numeric).
+- BASELINE ROWS LANDED (commit ec96acc): gpqa_diamond SCORED_PARTIAL 0.6854 [0.583, 0.7725] 61/89 of 198, latency p50 19807/p95 21269 ms, providers glm-4-plus 51 + gs-free fallback 38; aime SCORED_PARTIAL 1.0 [0.7575, 1.0] 12/12 of 30 (small-n caveat recorded), latency p50 15770/p95 19213 ms, providers gs-free 11 + glm-4-plus 1. Baseline: 3 of 4 rows locked, tau2 pending.
+- Suite re-run round 1 (with guards): t04 FIXED live (exactly 5 words via repair padding), t16 FIXED live (e-free 14-word sentence), t06 EMPTY (regression found: OR chain 11x429 + openrouter/free reasoning-demand error + primary silent failure shipped an empty bubble), t17 still wrong (doc context renders CSV as a markdown PIPE table; parseCsvTable missed it).
+- Round-2 fixes pushed: e10c7bb (pipe-table parsing + empty-synthesis honest fallback in research/doc branch), 5df524e (empty completion from ANY synthesis layer fails the call: z-ai 200-with-empty path lacked the PHASE 8.1b empty check).
+- Suite re-run round 2 BLOCKED by total provider exhaustion (all 11 OR keys 429 + z-ai breaker open from the day's CI load): 13 of 20 tasks returned empty content with errors=0. To be re-run when quota recovers (cron note below).
+- tau2 attempt 3 DISPATCHED: run 37814071288 created 2026-10-08T17:07:06Z at 5df524e (telecom_small + shim fallback + empty-guards all live). Arm64 probe 37799687774 still QUEUED (1h49m at dispatch time, zero runner seconds).
+
+Stage Summary:
+- CRON NOTE: (1) harvest run 37814071288 when it lands -> fill tau2 row (telecom_small, n target 20). (2) Then dispatch lever aci: benchmark.yml scaffold=aci benchmarks=ifbench,tau2_telecom -> harvest -> delta+Newcombe/Wilson CI vs baseline matched samples -> verdict per the CI rule -> commit. (3) Then verification, context, router in order. (4) When provider quota recovers, re-run `bun scripts/run-app-comparison.ts` and update tests/app-comparison/results.md honestly (round 1: t04+t16 fixed live; t06/t17 fixes unit-asserted, live verification pending quota).
