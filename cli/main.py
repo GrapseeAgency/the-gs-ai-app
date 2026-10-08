@@ -483,7 +483,17 @@ def _run_tau2(entry: Dict[str, Any], model: str, res: Dict[str, Any], log_lines:
     # tau2 needs a REAL user-simulator model; when its provider rejects the
     # key (e.g. free OpenRouter tier vs a paid model) the run BLOCKS with the
     # raw reason — the simulator is never silently swapped for a weaker one.
-    user_llm = os.environ.get("TAU2_USER_LLM", "openai/gpt-4o-mini")
+    # Default gs-ai-flash (our own production flash tier via the same shim).
+    # Raw evidence for the default: run 37764839853, job 113270910306 — the
+    # old default openai/gpt-4o-mini was rejected by the shim endpoint
+    # ("Unknown model 'gpt-4o-mini'": bare ids are not OpenRouter passthrough
+    # and the free tier cannot fund real OpenAI models), so all 114 telecom
+    # tasks died on the first user-simulator turn and the leg BLOCKED with
+    # "no tau2 trial rewards parsed from output dir". gs-ai-flash is in the
+    # endpoint's own serving list (src/app/api/v1/openai/chat/completions
+    # route) and mirrors tau2's official design intent of a cheap user
+    # simulator (its published default is gpt-4o-mini).
+    user_llm = os.environ.get("TAU2_USER_LLM", "openai/gs-ai-flash")
     # Verified against `tau2 run --help` (tau2==1.0.1): agent/user take
     # component types; models ride --agent-llm/--user-llm in litellm naming.
     cmd = [
