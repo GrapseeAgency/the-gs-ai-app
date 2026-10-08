@@ -4438,3 +4438,18 @@ Stage Summary:
 - Run 37764839853 (gpqa+aime legs) still in flight at a3704ff; run 37769190819 (tau2 retry with fix) in flight at 2b0f8a1.
 - CRON NOTE: when harvesting levers later, tau2 legs in lever runs will use gs-ai-flash user sim automatically (checkout of main includes 2b0f8a1).
 - Next: harvest both runs when they land -> fill all 4 baseline rows (score, n, Wilson CI, provider distribution, latency p50/p95, failed/errored/skipped) -> then levers in order.
+
+---
+Task ID: STEP3-STEP4
+Agent: main (Z.ai Code)
+Task: Steps 3 and 4 of the strict directive: honest 25-item completion audit + 20-task app-vs-app suite (GS-AI leg self-run).
+
+Work Log:
+- STEP 3: audited all 25 scope items via repo evidence (docs, CI yml, run ids in ISSUE-LOG/RESULTS docs, source files). Wrote native/docs/SOVEREIGN-STACK-COMPLETE.md: DONE 18 / PARTIAL 3 (plugins-manifests unloaded, CLIP no recorded execution, OCR on-demand half closed upstream) / BLOCKED 3 (arm64 device run, Q4_0-vs-Q4_K_M on arm64, iOS signed .ipa) / CLOSED 2 (speculative decoding deleted with measurement 0.215x zero-of-930; Tesseract DFM closed permanently on upstream AGP defect, 6 versions byte-identical). Commit b03970d, pushed.
+- STEP 4: wrote tests/app-comparison/tasks.json (20 tasks, all 8 mandated categories, rubrics pre-written), fixtures (invoice.txt, sales.csv), runner scripts/run-app-comparison.ts (public API only). Fixed two runner bugs (upload mime type needed text/plain + text/csv). Dev server restart required mid-run (SQLite readonly after sibling stash replaced db file under the running process; restarted via .zscripts/dev.sh, verified 201).
+- Full clean run: 20/20 tasks, 22 turns, both fixtures read. Graded against rubrics: 16 PASS, 3 PARTIAL (t04 six words not five; t16 letter-e violated; t17 CSV total 7350 vs correct 6150), 1 FAIL (t06 claimed Next.js 15 latest in Oct 2026 while the server itself runs 16.1.3; search ran, 7 sources, answer stale). results.md has per-app rows: GS-AI graded, ChatGPT/Claude/DeepSeek/Dola = "not run" with operator instructions. No competitor number invented. Commit 079960e, pushed.
+
+Stage Summary:
+- Step 3 artifact: native/docs/SOVEREIGN-STACK-COMPLETE.md (b03970d).
+- Step 4 artifacts: tests/app-comparison/{tasks.json, results.md, raw-answers.json, fixtures/} + runner (079960e).
+- Steps 1-2 still gated on CI: run 37764839853 (gpqa+aime) in flight at a3704ff; tau2 retry 37769190819 in flight at 2b0f8a1 with the gs-ai-flash user-sim fix. Cron 444371 continues monitoring; levers dispatch after baseline rows land.
