@@ -134,7 +134,7 @@ def main() -> None:
         "latency_ms_p50": round(percentile(times, 50), 1) if times else None,
         "latency_ms_p95": round(percentile(times, 95), 1) if times else None,
         "provider_distribution": providers,
-        git_commit": (
+        "git_commit": (
             ((d.get("eval") or {}).get("revision") or {}).get("commit")
             if isinstance((d.get("eval") or {}).get("revision"), dict)
             else (d.get("eval") or {}).get("revision")
