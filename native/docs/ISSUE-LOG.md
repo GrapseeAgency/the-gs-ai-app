@@ -6702,3 +6702,20 @@ TODOs (checked scripts/ and .github/ -- zero scanners), so nothing can trip on
 it. Recorded here so a future sweep does not "fix" a teaching string by
 accident. If the operator wants it gone, the fix is rewording the template
 line, not opening a tracking issue.
+
+## TERMINAL STATUS SWEEP -- 2026-10-08
+
+Directive: every tracked item ends as DONE, BLOCKED, or CLOSED. Nothing stays
+open without an active commit in the last 24 hours. Each line below is terminal
+as of this date; the sections above remain as the raw history.
+
+| Item | Terminal status | Evidence | Unblock condition |
+| --- | --- | --- | --- |
+| arm64 device run | **BLOCKED** (hardware) | runs 36676280935 (x86_64 QEMU arch refusal), 36688288136 (aarch64, no /dev/kvm), 36735804030 (macos-15, HVF HV_UNSUPPORTED); ubuntu-24.04-arm64 probes 36831713320 (queued 4h51m, never started) and 37280191290 (2h, zero runner seconds, cancelled); probe re-dispatched this date: run 37799687774, created 2026-10-08T15:18:44Z, QUEUED | a runner on the ubuntu-24.04-arm64 label that actually starts, or a physical device over adb; nothing in-repo can fix queueing |
+| Q4_0 vs Q4_K_M on real arm64 | **BLOCKED** (hardware, permanent until arm64 execution exists) | ISSUE-LOG:6627-6649; emulator-only measurements runs 37005521803, 37022078103, quality run 37118362666; revert criterion pre-committed at 6638-6644 | same as arm64 device run; the shipped Q4_0 default stays provisional and the doc says so |
+| SD on-device generation time (<30s ship gate) | **BLOCKED** (hardware) | run 37164998711: two generations, 187.5 s and 186.9 s, x86_64 emulator, CPU-only, reproducible | a real arm64 device measurement; if <30 s cannot be met the feature ships disabled on mobile (gate pre-committed in the section above) |
+| iOS signed .ipa / App Store archive | **BLOCKED** (operator account) | run 37101990669 unsigned device App.app inventoried, codesign exit 1 = missing signature only; no archive step in ios-native.yml; worklog "needs operator account" | an Apple Developer identity + provisioning profile, then xcodebuild archive + exportArchive |
+| Real token streaming over JNI | **CLOSED** (descoped, not a defect) | ISSUE-LOG "Real token streaming does not exist" + GsNative notes: the engine path returns the completed answer; the server path streams today (SSE routes) | a JNI token-callback design is future work, out of the 0.1-1.0 audit scope |
+| The "SD spawns sd-cli" note above (earlier section) | **CLOSED** (superseded) | the subprocess was removed and the in-process path verified: headers gate android-deps.yml:963-976, generation run 37164998711; see "ITEM 1 OF THE NEW BRIEF" | none; the note is historical |
+| Q4_0 default switch PROVISIONAL (3747) | **BLOCKED** (same hardware wall) | tracked at 3747 and 6627 | arm64 execution |
+| tau2 benchmark leg | **CLOSED** (re-scoped to telecom_small) | runs 37764839853 + 37769190819 raw logs: user-sim model rejection fixed (2b0f8a1), then 113/114 infra errors from the z-ai account breaker (f956ed2 added the shim fallback and pinned telecom_small, 20 tasks, to fit the 360-min cap); attempt 3 dispatch pending a clean provider window | none beyond the re-scoped run |

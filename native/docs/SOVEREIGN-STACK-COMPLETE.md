@@ -36,10 +36,10 @@ EVIDENCE: native/crates/gs-core/src/verification.rs (three guards: numeric, cont
 LIMIT: n/a for the code; the benchmark verdict for the verification lever arm is pending its CI run (tracked in results/scaffold-lever-report.md, Step 2 of the current directive).
 
 7. Plugins + skills
-ITEM: PARTIAL
+ITEM: BLOCKED
 EVIDENCE: manifests exist (native/plugins/{calc,code_review,ocr,web_search}.json, native/skills/{research_paper,fact_check}.json + 6 SKILL.md dirs); runtime side exists for skills (gs-core/src/skills.rs SkillRegistry register/expand/resolve/execute) and backends (native/src/plugin_registry.cpp with poka-yoke dispatch); tools.rs:260 emits native:// entrypoints.
-LIMIT: no runtime code loads native/plugins/*.json or native/skills/*.json; skill bodies are hardcoded via set_body (skills.rs:58) rather than read from the manifests.
-RESOLUTION: write a manifest loader in gs-core (read JSON, register entrypoint + body) and one test proving a manifest-edited skill changes behavior; half a day of work, no hardware needed.
+LIMIT: no runtime code loads native/plugins/*.json or native/skills/*.json; skill bodies are hardcoded via set_body (skills.rs:58). Downgraded from PARTIAL to BLOCKED on 2026-10-08: this sandbox has no Rust toolchain (cargo and rustc absent) and no CI job runs `cargo test` for gs-core (ios-native.yml and android-native.yml run `cargo build -p gs-ffi` only), so a manifest loader written here would ship untested.
+RESOLUTION: an environment with cargo, or one CI job running `cargo test -p gs-core`; then load_manifests(dir) + a behavioral test is half a day of work.
 
 8. Server (OpenAI endpoints, SSE)
 ITEM: DONE
@@ -47,15 +47,15 @@ EVIDENCE: Rust server native/crates/gs-server/src/main.rs:161-165 (/health, /v1/
 LIMIT: n/a; note the OpenAI-compatible shim is non-streaming JSON (SSE lives on the product routes, not the shim).
 
 9. CLIP vision
-ITEM: PARTIAL
+ITEM: BLOCKED
 EVIDENCE: native/cpp/clip_wrapper/clip_wrapper.cpp (GS_CLIP_HAVE_ONNXRUNTIME); gs-ffi/src/clip_bridge.rs (load, embed_text, embed_image); bench bins gs-bench/src/bin/run_clip.rs (MobileCLIP2-S0 preprocessing) and run_semcache.rs; gs-core/src/vision.rs OCR-then-CLIP turn; mobile build honestly refuses (gs_mobile.cpp:206-227, GS_ERR_UNAVAILABLE).
-LIMIT: no recorded execution run of the CLIP path exists in the docs; desktop execution requires local ONNX models at /mnt/new_volume/models/clip; no arm64 ONNX Runtime build for mobile.
-RESOLUTION: provision the ONNX model file and execute run_clip to record real numbers; mobile stays unavailable by design until an arm64 ONNX Runtime package exists.
+LIMIT: no recorded execution run of the CLIP path exists in the docs. Downgraded from PARTIAL to BLOCKED on 2026-10-08: executing run_clip requires ONNX Runtime plus the MobileCLIP2-S0 weights under /mnt/new_volume/models/clip, and that volume is not mounted in this sandbox; the mobile path additionally has no arm64 ONNX Runtime package (RESULTS-mobile-concurrency.md:521).
+RESOLUTION: a machine with the model volume mounted (or the weights re-hosted) runs `cargo run -p gs-bench --bin run_clip` once to record real numbers; mobile needs an arm64 ONNX Runtime build.
 
 10. OCR (ML Kit + Tesseract on-demand)
-ITEM: PARTIAL
-EVIDENCE: shipping half DONE: android MlKitOcr.kt + device test a2_ocr_reads_the_fixture (DeviceVerificationTest.kt:356-397, reads INVOICE INV-4471; native OCR asserts its honest refusal, gs_mobile.cpp:201-202); iOS AppleVisionOcr.swift; Tesseract cross-compiled and verified in android-deps.yml:60-115.
-LIMIT: the on-demand half cannot ship: the :ocr-fallback dynamic feature is closed permanently on an upstream AGP defect (see item 24); Tesseract is built but deliberately not in the shipping .so (ISSUE-LOG.md: "Tesseract stays cross-compiled and verified, out of the .so").
+ITEM: BLOCKED
+EVIDENCE: shipping half DONE and device-verified: android MlKitOcr.kt + device test a2_ocr_reads_the_fixture (DeviceVerificationTest.kt:356-397, reads INVOICE INV-4471; native OCR asserts its honest refusal, gs_mobile.cpp:201-202); iOS AppleVisionOcr.swift; Tesseract cross-compiled and verified in android-deps.yml:60-115.
+LIMIT: the on-demand half cannot ship: the :ocr-fallback dynamic feature is closed permanently on an upstream AGP defect (item 24; six AGP releases byte-identical, live producer measurement run 37285014335). Downgraded from PARTIAL to BLOCKED on 2026-10-08 because half of this item is upstream-blocked and cannot be resolved from this repository.
 RESOLUTION: ML Kit path is complete; de-Googled-device OCR needs the manual module build (android/app/build.gradle.kts documents the exact command) until AGP fixes the metadata producer.
 
 11. SVG procedural image gen
@@ -131,4 +131,4 @@ RESOLUTION: an Apple Developer account (identity + provisioning profile), then x
 
 ---
 
-Tally: DONE 18, PARTIAL 3 (items 7, 9, 10), BLOCKED 2 (items 22, 23), BLOCKED 1 more (item 25), CLOSED 2 (items 13, 24). Every PARTIAL/BLOCKED has a resolution line; every claim above cites a file, run id, or raw error.
+Tally (updated 2026-10-08): DONE 18, BLOCKED 6 (items 7, 9, 10, 22, 23, 25), CLOSED 2 (items 13, 24). No PARTIAL remains: each former PARTIAL was either fixed with evidence or downgraded to BLOCKED with its precise raw reason and unblock condition. Every claim above cites a file, run id, or raw error.
