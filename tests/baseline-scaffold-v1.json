@@ -41,16 +41,18 @@
       "model": "gs-ai",
       "scaffold": "baseline",
       "status": "BLOCKED",
-      "n_samples": 50,
+      "n_samples": 20,
       "metric": "pass_k",
-      "git_commit": "b997585ba50e",
+      "git_commit": "5df524e",
       "dataset_revision": "unresolved-at-run-start",
       "harness": "tau2",
       "harness_version": "1.0.1",
       "docker_image_digest": "sha256:a1eedebd6aac70044ad61ac0c7f20633f223771c5ef51f0d962bd8f176dcd422",
       "raw_log_url": "tau2_telecom__gs-ai__1790297621.rawlog.txt",
-      "run_id": "14a6283d-b369-4c8f-ab4d-e1c6bffc0a5d",
-      "raw_reason": "RuntimeError: tau2 exited 1 (see raw log)"
+      "run_id": "37814071288 (attempt 3); prior: 37769190819 (attempt 2), 37764839853 (attempt 1)",
+      "raw_reason": "TypeError: get_tasks_small() got an unexpected keyword argument 'task_split_name' (tau2 1.0.1 cli.py -> runner/batch.py _load_run_tasks -> runner/helpers.py load_tasks; upstream loader signature mismatch for the telecom_small task set). Raw: 'RUN-ERROR: RuntimeError: tau2 exited 1 (see raw log)', exit=1 elapsed=4.1s, zero samples run. Attempt history: (1) run 37764839853 tau2 leg: user-simulator model rejected ('Unknown model gpt-4o-mini', 114 tasks died on the first user turn) - fixed 2b0f8a1; (2) run 37769190819: 113/114 infra errors 'z-ai throttled (circuit open)' + 360-min-cap infeasibility - fixed f956ed2 (shim gs-free fallback + telecom_small re-scope); (3) run 37814071288: upstream telecom_small loader TypeError. Three attempts spent; BLOCKED per the directive. Do not re-dispatch without an upstream tau2 fix or a working task-split mechanism.",
+      "n_target": 20,
+      "task_set": "telecom_small (pinned by f956ed2 after the full 114-task set proved cap-infeasible)"
     },
     {
       "benchmark": "gpqa_diamond",
