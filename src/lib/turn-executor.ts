@@ -79,6 +79,22 @@ import {
   type OutputDirective,
 } from '@/lib/output-directive'
 import {
+  detectOutputConstraints,
+  constraintViolations,
+  buildConstraintRetryMessages,
+  repairConstraints,
+  honestConstraintFailure,
+  parseCsvTable,
+  verifyCsvAggregates,
+  buildAggregateCorrection,
+  applyAggregateCorrection,
+  isFreshnessRequest,
+  freshnessViolations,
+  buildFreshnessRetryMessages,
+  honestFreshnessFallback,
+  type OutputConstraints,
+} from '@/lib/constraint-guard'
+import {
   collectDocumentContext,
   documentFailureMessage,
   isDocumentAttachment,
@@ -194,6 +210,7 @@ export type Prep = {
   historicalReligious: boolean
   numericCheck: boolean
   directive: OutputDirective | null
+  constraints: OutputConstraints | null
   clientTimezone?: string | null
   cap: ReturnType<typeof decideCapability>
   requestId: string
@@ -411,6 +428,7 @@ export async function prepareTurn(
   const historicalReligious = content.trim().length > 0 ? detectHistoricalReligious(content) : false
   const numericCheck = content.trim().length > 0 && isCountingRequest(content)
   const directive = content.trim().length > 0 ? detectOutputDirective(content) : null
+  const constraints = content.trim().length > 0 ? detectOutputConstraints(content) : null
   const clientTimezone = args.timezone ?? null
   const cap = decideCapability({
     content,
@@ -543,6 +561,7 @@ export async function prepareTurn(
     historicalReligious,
     numericCheck,
     directive,
+    constraints,
     clientTimezone,
     cap,
     requestId,
@@ -761,6 +780,7 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
   const useVision = prep.useVision
   const numericCheck = prep.numericCheck
   const directive = prep.directive
+  const constraints = prep.constraints
   const clientTimezone = prep.clientTimezone
   const allImagesFailed = prep.allImagesFailed
   const allDocsFailed = prep.allDocsFailed
@@ -1492,11 +1512,75 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
     const { messages: modelMessages, historySources, userTurnText } = await buildModelMessages(turn)
     let full: string
     if (turn.kind !== 'none' || docContext.block) {
-      const { text, violation } = await synthesizeValidated(turn, modelMessages, userTurnText)
+      // GS-CONSTRAINT-GUARD (Failure D, proactive): freshness-critical turns
+      // get the grounding requirement injected BEFORE the first synthesis, so
+      // the answer is composed from retrieved evidence, not model memory.
+      const freshnessActive =
+        isFreshnessRequest(content) && turn.kind === 'research' && !!turn.evidenceBlock
+      const synthesisMessages = freshnessActive
+        ? ([
+            { role: 'system', content: buildFreshnessInstruction() },
+            ...(modelMessages as ChatMessageInput[]),
+          ] as ChatMessageInput[])
+        : modelMessages
+      const { text, violation } = await synthesizeValidated(turn, synthesisMessages, userTurnText)
       if (violation) {
         console.log(`GS-GUARD conv=${id} emitted-after-retries violation=${violation.kind}`)
       }
       full = text
+      // GS-CONSTRAINT-GUARD (Failure C): verify draft arithmetic against a
+      // CSV-shaped table in the document context; regenerate once, then
+      // deterministically rewrite wrong totals. Raw evidence: t17 summed
+      // West to 7,350 when the rows total 6,150.
+      if (docContext.block) {
+        const table = parseCsvTable(docContext.block)
+        if (table) {
+          let aggv = verifyCsvAggregates(full, table)
+          if (aggv.length > 0) {
+            console.log(
+              `GS-CONSTRAINT-GUARD conv=${id} csv-aggregate mismatch ${aggv
+                .map((x) => `${x.label} ${x.claimed}->${x.actual}`)
+                .join('; ')} — regenerating`
+            )
+            const corrected = applyCorrection(
+              modelMessages,
+              userTurnText,
+              buildAggregateCorrection(aggv)
+            )
+            const retry = await synthesize(corrected)
+            aggv = verifyCsvAggregates(retry, table)
+            if (aggv.length === 0) {
+              full = retry
+              console.log(`GS-CONSTRAINT-GUARD conv=${id} csv retry accepted`)
+            } else {
+              const repaired = applyAggregateCorrection(full, aggv)
+              if (repaired !== null) {
+                full = repaired
+                console.log(`GS-CONSTRAINT-GUARD conv=${id} deterministic aggregate rewrite applied`)
+              } else {
+                console.log(`GS-CONSTRAINT-GUARD conv=${id} aggregate retry still wrong — emitting honest draft`)
+              }
+            }
+          }
+        }
+      }
+      // GS-CONSTRAINT-GUARD (Failure D): freshness-critical "latest version"
+      // answers may only claim versions that appear in the retrieved
+      // evidence. Raw evidence: t06 claimed Next.js 15 while the server ran
+      // 16.1.3 and the search had returned newer sources.
+      if (isFreshnessRequest(content) && turn.kind === 'research' && turn.evidenceBlock) {
+        const ungrounded = freshnessViolations(full, turn.evidenceBlock)
+        if (ungrounded.length > 0) {
+          console.log(
+            `GS-CONSTRAINT-GUARD conv=${id} freshness ungrounded versions ${ungrounded.join(', ')} — regenerating`
+          )
+          const retryMsgs = buildFreshnessRetryMessages(modelMessages as ChatMessageInput[], ungrounded)
+          const retry = await synthesize(retryMsgs)
+          const still = freshnessViolations(retry, turn.evidenceBlock)
+          full = still.length === 0 ? retry : honestFreshnessFallback(retry, turn.evidenceBlock)
+          console.log(`GS-CONSTRAINT-GUARD conv=${id} freshness ${still.length === 0 ? 'retry accepted' : 'honest fallback emitted'}`)
+        }
+      }
       if (push) for (const chunk of chunkDeltas(full)) push('delta', chunk)
     } else if (numericCheck) {
       let draft = await synthesize(modelMessages)
@@ -1540,6 +1624,32 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
         if (stripped !== null) {
           console.log(`GS-DIRECTIVE conv=${id} retry non-compliant — approach A deterministic strip`)
           draft = stripped
+        }
+      }
+      full = draft
+      if (push) for (const chunk of chunkDeltas(full)) push('delta', chunk)
+    } else if (constraints) {
+      // GS-CONSTRAINT-GUARD (Failures A and B): mid-prompt word-count
+      // constraints and forbidden-character constraints. Ladder: regenerate
+      // once with the constraint as the only system message, then repair
+      // deterministically, then state the failure honestly.
+      let draft = await synthesize(modelMessages)
+      let viols = constraintViolations(draft, constraints)
+      if (viols.length > 0) {
+        console.log(`GS-CONSTRAINT-GUARD conv=${id} ${viols.join('; ')} — regenerating with constraint restated`)
+        draft = await synthesize(buildConstraintRetryMessages(modelMessages as ChatMessageInput[], constraints))
+        viols = constraintViolations(draft, constraints)
+        if (viols.length > 0) {
+          const repaired = repairConstraints(draft, constraints)
+          if (repaired !== null) {
+            draft = repaired
+            console.log(`GS-CONSTRAINT-GUARD conv=${id} retry still violating — deterministic repair applied`)
+          } else {
+            draft = honestConstraintFailure(draft, constraints)
+            console.log(`GS-CONSTRAINT-GUARD conv=${id} unrepairable — honest failure statement emitted`)
+          }
+        } else {
+          console.log(`GS-CONSTRAINT-GUARD conv=${id} retry accepted`)
         }
       }
       full = draft
