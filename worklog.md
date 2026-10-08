@@ -4502,3 +4502,20 @@ Work Log:
 Stage Summary:
 - Baseline final state: ifbench 0.4779 [0.388, 0.5692] n=113; gpqa_diamond 0.6854 [0.583, 0.7725] n=89; aime 1.0 [0.7575, 1.0] n=12 (all SCORED_PARTIAL, matched-sample basis = first-n); tau2 BLOCKED with raw error.
 - CRON NOTE: when run 37815718627 lands (up to 6h), harvest all three legs with scripts/harvest-inspect-artifact.py, compute per-row delta vs the baseline matched samples with Wilson CI on the delta, apply the verdict rule (CI excludes zero + up = KEEP; excludes zero + down = REVERT; includes zero = NEUTRAL/REVERT), record in results/scaffold-lever-report.md, commit+push. Then dispatch verification, then context, then router (same benchmarks input).
+
+---
+Task ID: DIRECTIVE-2 (SUITE RERUNS + FINAL STATE)
+Agent: main (Z.ai Code)
+Task: Suite re-runs with the constraint guard; t17 deep fix; final state.
+
+Work Log:
+- Suite round 2 (17:04Z): 13/20 tasks empty - total provider exhaustion (11 OR keys 429 + z-ai breaker open). Diagnosed as a REAL defect: an empty answer could ship as a persisted bubble when OR chain exhausted AND the primary failed silently. Fixed 5df524e: any empty completion fails the call (502, finalStatus=error).
+- Suite round 3 (17:21Z): all 20 tasks answered. t04 FIXED live (exactly 5 words via guard padding), t16 FIXED live (12-word e-free sentence), t06 FIXED live (honest "could not verify" path after grounding check; the directive's bar met), t05/t07/t18 pass.
+- t17 deep fix: the guard never fired because parseCsvTable anchored its header on the grounding-instruction PROSE (a later cell is pure letters) and read the units column. parseCsvTable rewritten (6e416b6): native parse of the app's renderCsv format ("Columns (N): a | b | c" + "Row N: ..." pipe rows) + generic scan requires the header's next line to be a same-width numeric row. Verified end-to-end on the REAL t17 attachment: totals North 3700 / East 3200 / South 2650 / West 6150; the wrong "2,600" claim is flagged. Live turn re-verify BLOCKED by quota (round 4 at 17:29Z returned honest 502s - the lever aci run holds the pool).
+- Constraint-guard unit tests: ALL ASSERTIONS PASSED after every change.
+
+Stage Summary:
+- Quality: A fixed live, B fixed live, C fix verified by real-data reproduction (live turn pending quota), D fixed live (honest path). Empty-bubble bonus defect fixed and proven live.
+- Pushed: f956ed2, da48f9f, 45a0d86, e2fa343, 1c54952, 7b25118, ec96acc, c539662, 441505f, a64a6e2, e10c7bb, 5df524e, 7ab098f, 6e416b6.
+- IN FLIGHT: lever aci run 37815718627 (started 17:19:53Z, up to 6h; harvest -> delta+CI -> verdict -> then verification/context/router levers). Arm64 probe 37799687774 queued since 15:18:44Z.
+- CRON: after each lever run lands, harvest with scripts/harvest-inspect-artifact.py (point it at the inspect-logs dir), compute delta vs baseline matched samples with Wilson CI, verdict per the rule, commit+push, dispatch the next lever (verification -> context -> router, benchmarks=gpqa_diamond,aime,ifbench). When the last lever lands and quota frees, re-run bun scripts/run-app-comparison.ts once for the final results.md row.
