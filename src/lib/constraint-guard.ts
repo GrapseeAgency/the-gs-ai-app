@@ -229,7 +229,22 @@ interface CsvTable {
  * with commas, then comma rows whose last field is numeric.
  */
 export function parseCsvTable(text: string): CsvTable | null {
-  const lines = text.split(/\r?\n/).map((l) => l.trim())
+  const lines = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .map((l) => {
+      // Document context may render CSV as a markdown pipe table; normalize
+      // pipe rows to comma rows so one parser covers both (t17 measured miss).
+      if (l.includes('|') && (l.match(/\|/g) ?? []).length >= 2) {
+        const cells = l.split('|').map((c) => c.trim())
+        if (cells.length >= 3 && cells.every((c) => c.length === 0 || !/^:?-{2,}:?$/.test(c))) {
+          const inner = cells[0] === '' ? cells.slice(1) : cells
+          const trimmed = inner[inner.length - 1] === '' ? inner.slice(0, -1) : inner
+          return trimmed.join(',')
+        }
+      }
+      return l
+    })
   let headerIdx = -1
   for (let i = 0; i < lines.length; i++) {
     const l = lines[i] ?? ''

@@ -90,6 +90,7 @@ import {
   applyAggregateCorrection,
   isFreshnessRequest,
   freshnessViolations,
+  buildFreshnessInstruction,
   buildFreshnessRetryMessages,
   honestFreshnessFallback,
   type OutputConstraints,
@@ -1580,6 +1581,19 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
           full = still.length === 0 ? retry : honestFreshnessFallback(retry, turn.evidenceBlock)
           console.log(`GS-CONSTRAINT-GUARD conv=${id} freshness ${still.length === 0 ? 'retry accepted' : 'honest fallback emitted'}`)
         }
+      }
+      // GS-CONSTRAINT-GUARD: an EMPTY answer must never ship. Measured
+      // 2026-10-08 (t06 re-run): the OR chain exhausted (11 keys 429,
+      // openrouter/free demands reasoning), the primary fallback failed
+      // silently, and an empty bubble persisted with finalStatus=done.
+      if (full.trim().length === 0) {
+        console.log(
+          `GS-CONSTRAINT-GUARD conv=${id} empty synthesis after chain exhaustion — honest fallback emitted`
+        )
+        full =
+          turn.kind === 'research' && turn.evidenceBlock
+            ? honestFreshnessFallback('', turn.evidenceBlock)
+            : 'I could not complete this answer: the synthesis provider failed after every fallback. Please retry.'
       }
       if (push) for (const chunk of chunkDeltas(full)) push('delta', chunk)
     } else if (numericCheck) {
