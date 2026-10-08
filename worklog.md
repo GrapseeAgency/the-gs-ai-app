@@ -4488,3 +4488,17 @@ Work Log:
 
 Stage Summary:
 - CRON NOTE: (1) harvest run 37814071288 when it lands -> fill tau2 row (telecom_small, n target 20). (2) Then dispatch lever aci: benchmark.yml scaffold=aci benchmarks=ifbench,tau2_telecom -> harvest -> delta+Newcombe/Wilson CI vs baseline matched samples -> verdict per the CI rule -> commit. (3) Then verification, context, router in order. (4) When provider quota recovers, re-run `bun scripts/run-app-comparison.ts` and update tests/app-comparison/results.md honestly (round 1: t04+t16 fixed live; t06/t17 fixes unit-asserted, live verification pending quota).
+
+---
+Task ID: DIRECTIVE-2 (STEP 2 START)
+Agent: main (Z.ai Code)
+Task: tau2 attempt 3 verdict + lever aci dispatch.
+
+Work Log:
+- tau2 attempt 3 (run 37814071288 at 5df524e): FAILED in 4.1s with an UPSTREAM bug, zero samples run: "TypeError: get_tasks_small() got an unexpected keyword argument 'task_split_name'" (tau2 1.0.1 cli.py -> runner/batch.py -> runner/helpers.py load_tasks; the telecom_small loader signature does not accept what the CLI passes).
+- Three attempts spent (user-sim rejection -> breaker infra errors + cap infeasibility -> upstream loader TypeError). tau2_telecom marked BLOCKED in tests/baseline-scaffold-v1.json with the full raw error + attempt history (commit c539662); report row updated (441505f). No fourth dispatch per the directive.
+- STEP 2 STARTED: lever aci DISPATCHED - run 37815718627 created 2026-10-08T17:19:53Z at 441505f, scaffold=aci, benchmarks=gpqa_diamond,aime,ifbench (the same set as the baseline rows; tau2 excluded as BLOCKED).
+
+Stage Summary:
+- Baseline final state: ifbench 0.4779 [0.388, 0.5692] n=113; gpqa_diamond 0.6854 [0.583, 0.7725] n=89; aime 1.0 [0.7575, 1.0] n=12 (all SCORED_PARTIAL, matched-sample basis = first-n); tau2 BLOCKED with raw error.
+- CRON NOTE: when run 37815718627 lands (up to 6h), harvest all three legs with scripts/harvest-inspect-artifact.py, compute per-row delta vs the baseline matched samples with Wilson CI on the delta, apply the verdict rule (CI excludes zero + up = KEEP; excludes zero + down = REVERT; includes zero = NEUTRAL/REVERT), record in results/scaffold-lever-report.md, commit+push. Then dispatch verification, then context, then router (same benchmarks input).
