@@ -36,8 +36,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { completeChatWithMeta } from '@/lib/ai'
+import { completeChatWithMeta, zaiThrottleActive } from '@/lib/ai'
 import { orCompleteChat } from '@/lib/openrouter'
+import { OPENROUTER_MODELS } from '@/lib/models'
 import { parseScaffoldModel, runScaffoldCompletion } from '@/lib/bench/scaffold'
 
 export const runtime = 'nodejs'
@@ -210,9 +211,25 @@ export async function POST(req: NextRequest) {
         notes: outcome.notes.slice(0, 12),
       }
     } else if (resolved.backend === 'zai') {
-      const meta = await completeChatWithMeta(parsed.messages, resolved.providerModel, resolved.thinking)
-      text = meta.text
-      servedModel = meta.model
+      // RUN 37769190819 postmortem: sustained tau2 load trips the z-ai account
+      // throttle; the shim surfaced the breaker error as a hard 502, which
+      // tau2 recorded as 113 infra errors and an empty result dir. The
+      // production turn path already falls back to the gs-free OpenRouter
+      // chain; the shim now does the same and says so in its log line.
+      try {
+        const meta = await completeChatWithMeta(parsed.messages, resolved.providerModel, resolved.thinking)
+        text = meta.text
+        servedModel = meta.model
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        if (!zaiThrottleActive() && !/throttled|circuit open|429/i.test(msg)) throw e
+        console.log(
+          `BENCH-SHIM zai throttled (circuit open) — falling back to gs-free OpenRouter chain requested=${body.model ?? 'gs-ai'}`
+        )
+        const meta = await orCompleteChat(parsed.messages, OPENROUTER_MODELS['gs-free'], null)
+        text = meta.text
+        servedModel = meta.model
+      }
     } else {
       const meta = await orCompleteChat(parsed.messages, resolved.models, null)
       text = meta.text

@@ -74,11 +74,12 @@ benchmarks:
   - name: tau2_telecom
     harness: tau2
     task: telecom                  # tau2-bench bundled telecom domain
+    task_set: telecom_small        # 20 tasks; full set (114 runnable) cannot finish in the 360-min cap (runs 37764839853, 37769190819)
     dataset:
       id: git+sierra-research/tau2-bench   # tasks ship inside the package
       subset: telecom
     dataset_revision: resolve-at-download   # = tau2-bench git sha at build
-    n_samples: 50
+    n_samples: 20
     metric: pass_k
     pass_k: 1                      # pass^1 = single-attempt success rate
     timeout_per_sample_s: 900

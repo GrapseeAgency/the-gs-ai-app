@@ -496,10 +496,15 @@ def _run_tau2(entry: Dict[str, Any], model: str, res: Dict[str, Any], log_lines:
     user_llm = os.environ.get("TAU2_USER_LLM", "openai/gs-ai-flash")
     # Verified against `tau2 run --help` (tau2==1.0.1): agent/user take
     # component types; models ride --agent-llm/--user-llm in litellm naming.
+    # Task set comes from the entry (runs 37764839853 + 37769190819 proved the
+    # full telecom set cannot finish inside the 360-min eval cap: 114 tasks of
+    # up-to-200-step conversations; and the z-ai account breaker trips under
+    # sustained load). telecom_small = 20 tasks shipped by tau2-bench itself.
+    tau2_task_set = entry.get("task_set", entry["task"])
     cmd = [
         "tau2", "run",
         "--domain", "telecom",
-        "--task-set-name", "telecom",
+        "--task-set-name", tau2_task_set,
         "--agent", "llm_agent",
         "--agent-llm", f"openai/{model}",
         "--user", "user_simulator",
