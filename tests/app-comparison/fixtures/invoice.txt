@@ -1,0 +1,20 @@
+INVOICE
+=======
+Invoice Number: INV-2026-0042
+Issued: February 28, 2026
+From: Meridian Design Studio LLC
+To: Halvorsen Media Group
+Bill To: accounts@halvorsenmedia.example
+
+Line items:
+  Brand identity refresh .......... $950.00
+  Landing page design (3 pages) ... $640.00
+  Illustration pack (5 assets) .... $257.50
+
+Subtotal:  $1,847.50
+Tax (0%):  $0.00
+TOTAL AMOUNT DUE: $1,847.50
+
+PAYMENT DUE DATE: March 31, 2026
+Late fee: 1.5% per month after the due date.
+Payment method: bank transfer (details on file).

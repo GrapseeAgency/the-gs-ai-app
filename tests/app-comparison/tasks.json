@@ -1,0 +1,137 @@
+{
+  "schema": "gs-app-comparison-v1",
+  "description": "20-task side-by-side suite for comparing consumer AI apps. One row per task per app in results.md. GS-AI is run through its own public API (the harness). Competitor apps are NOT run by this repo: the operator runs the same 20 prompts manually in each app and pastes results back. No competitor score is ever fabricated.",
+  "grading": "Each task is graded pass / partial / fail by a human grader against the expected answer or rubric below. A one-sentence reason is mandatory per cell.",
+  "tasks": [
+    {
+      "id": "t01",
+      "category": "short_factual",
+      "prompt": "What is the chemical symbol for gold?",
+      "expected": "Au"
+    },
+    {
+      "id": "t02",
+      "category": "multi_step_reasoning",
+      "prompt": "A train leaves City A at 9:00 AM traveling at 80 km/h. A second train leaves City A at 10:00 AM on the same track traveling at 100 km/h. At what time does the second train catch the first?",
+      "expected": "2:00 PM. First train is 80 km ahead; closing speed 20 km/h; 80/20 = 4 h after 10:00 AM."
+    },
+    {
+      "id": "t03",
+      "category": "code_generation",
+      "prompt": "Write a Python function is_palindrome(s) that returns True if the string s is a palindrome ignoring case and all non-alphanumeric characters. Return only the function definition.",
+      "rubric": "Function normalizes case, filters non-alphanumerics, compares with reverse. Correct on 'A man, a plan, a canal: Panama' and on empty strings."
+    },
+    {
+      "id": "t04",
+      "category": "instruction_hard_constraint",
+      "prompt": "Answer with exactly five words, no more and no less: why is the sky blue?",
+      "rubric": "Exactly 5 words AND correct gist (scattered sunlight, shorter wavelengths). Both conditions required for pass; one failure is partial."
+    },
+    {
+      "id": "t05",
+      "category": "document",
+      "prompt": "Open the attached invoice and tell me the total amount due and the payment due date.",
+      "fixture": "invoice.txt",
+      "expected": "Total due $1,847.50; due date March 31, 2026 (both required)."
+    },
+    {
+      "id": "t06",
+      "category": "live_web_search",
+      "prompt": "What is the latest stable major version of the Next.js framework as of today, and what is one headline feature of it?",
+      "rubric": "Pass requires evidence of a live search (sources returned) plus a specific version number with a feature. Version must be plausible for today's date; an unsourced or training-data-only answer is a fail."
+    },
+    {
+      "id": "t07",
+      "category": "memory_of_earlier_turns",
+      "turns": [
+        "My project codename is VELVET-9. Remember it.",
+        "What is 17 times 3?",
+        "Without me repeating it: what is my project codename?"
+      ],
+      "expected": "Second answer 51; final answer must contain VELVET-9."
+    },
+    {
+      "id": "t08",
+      "category": "ambiguous_prompt",
+      "prompt": "How much does it cost?",
+      "rubric": "Pass: the app asks what 'it' refers to or states it needs more context. Fail: it invents a specific price for an unspecified product or service."
+    },
+    {
+      "id": "t09",
+      "category": "short_factual",
+      "prompt": "What currency does Japan use?",
+      "expected": "Japanese yen (JPY)."
+    },
+    {
+      "id": "t10",
+      "category": "multi_step_reasoning",
+      "prompt": "I have 3 boxes. Each box contains 4 bags. Each bag contains 5 marbles. I remove 2 marbles from each bag. How many marbles remain in total?",
+      "expected": "36 (60 minus 24)."
+    },
+    {
+      "id": "t11",
+      "category": "code_generation",
+      "prompt": "Write a SQL query against a table orders(id, customer_id, amount, created_at): return each customer_id with their total amount, but only customers whose total exceeds 1000, ordered by total descending.",
+      "rubric": "GROUP BY customer_id, SUM(amount), HAVING SUM(amount) > 1000 (or equivalent subquery), ORDER BY total DESC."
+    },
+    {
+      "id": "t12",
+      "category": "instruction_hard_constraint",
+      "prompt": "List exactly three primary colors as a numbered list of single words. Nothing else in your reply.",
+      "rubric": "Exactly 3 numbered lines, one single-word color each (red, blue, yellow family), zero extra sentences or preamble."
+    },
+    {
+      "id": "t13",
+      "category": "short_factual",
+      "prompt": "How long does sunlight take to reach Earth, approximately?",
+      "expected": "About 8 minutes (8 min 20 s)."
+    },
+    {
+      "id": "t14",
+      "category": "multi_step_reasoning",
+      "prompt": "A shirt costs $40. It is discounted by 25%, then an additional 10% is taken off the discounted price. What is the final price in dollars?",
+      "expected": "$27.00 (40 to 30 to 27; sequential percentages, not 35% of 40)."
+    },
+    {
+      "id": "t15",
+      "category": "code_generation",
+      "prompt": "This Python function crashes on an empty list: def avg(nums): return sum(nums) / len(nums). Rewrite it so it returns 0 for an empty list and keeps the same behavior otherwise. Give only the fixed function.",
+      "rubric": "Guards the empty case (len check or default) and returns 0 for []; unchanged math otherwise."
+    },
+    {
+      "id": "t16",
+      "category": "instruction_hard_constraint",
+      "prompt": "Write a single sentence of at least twelve words that does not contain the letter 'e' anywhere in it.",
+      "rubric": "Pass: at least 12 words AND zero letter 'e' (case-insensitive). Only one condition met is partial."
+    },
+    {
+      "id": "t17",
+      "category": "document",
+      "prompt": "Using the attached CSV, which region had the highest total sales, and what was that total?",
+      "fixture": "sales.csv",
+      "expected": "West with 6,150 (West rows 1250+2300+2600)."
+    },
+    {
+      "id": "t18",
+      "category": "live_web_search",
+      "prompt": "Who is the current CEO of the company that makes the PlayStation console, as of today?",
+      "rubric": "Pass requires a live search (sources returned) and a named current CEO of Sony (Interactive Entertainment). Answer must be sourced and plausible for today's date; a stale training-data-only name without sources is a fail."
+    },
+    {
+      "id": "t19",
+      "category": "memory_of_earlier_turns",
+      "turns": [
+        "I am allergic to peanuts. Keep that in mind.",
+        "Suggest three quick snack ideas.",
+        "Of the snacks you just listed, which should I avoid and why?"
+      ],
+      "rubric": "Final answer must identify the peanut-containing item(s) from its own list and connect them to the stated allergy. Naming nothing peanut-specific in its list should be reflected honestly (either no peanut items and saying so, or flagging any nut-risk item)."
+    },
+    {
+      "id": "t20",
+      "category": "ambiguous_prompt",
+      "prompt": "When is it coming out?",
+      "rubric": "Pass: the app asks what 'it' refers to or requests context. Fail: it picks a random product and asserts a release date for it."
+    }
+  ]
+}
