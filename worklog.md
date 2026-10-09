@@ -4553,3 +4553,18 @@ Work Log:
 Stage Summary:
 - Structural work committed as the ifbench protocol change; the split itself pre-exists and is documented with raw evidence.
 - Confirming dispatch: context lever on the new protocol (one lever per dispatch), dispatched right after this commit; the in-flight verification run 37935024936 (old protocol, head 1578951) is untouched and polled.
+
+---
+Task ID: 5-6 (partials + blocked + issue-log)
+Agent: Z.ai Code (strict scope session)
+Task: STEP 5 close partials/blocked; STEP 6 issue-log sweep.
+
+Work Log:
+- PARTIALs: already terminal (sibling session 2026-10-08) — items 7, 9, 10 downgraded to BLOCKED with precise raw reasons (no rust toolchain in sandbox for a manifest loader; /mnt/new_volume/models/clip volume not mounted for CLIP; :ocr-fallback closed on the upstream AGP defect). Verified in native/docs/SOVEREIGN-STACK-COMPLETE.md tally line: DONE 18, BLOCKED 6, CLOSED 2, no PARTIAL remains. Nothing to re-open.
+- arm64 device run: probe 37799687774 found still QUEUED (created 2026-10-08T15:18:44Z, 22h11m, zero runner seconds). Directive applied: no re-dispatch; run cancelled via API (HTTP 202, final status completed/cancelled); item 22 + ISSUE-LOG row closed WITH the queue-time evidence (cumulative 29h02m queued across probes 36831713320 + 37280191290 + 37799687774).
+- Q4_0 vs Q4_K_M: already in ISSUE-LOG terminal table as BLOCKED (hardware, permanent until arm64 execution exists) — verified, unchanged.
+- iOS signed .ipa: already in ISSUE-LOG terminal table as BLOCKED (operator account) — verified, unchanged.
+- ISSUE-LOG sweep: grepped for in-progress/pending/awaiting markers; all hits are historical section narratives explicitly superseded by the terminal sweep table (each has a terminal row; the SD re-dispatch pending did happen as run 37164998711 and ends BLOCKED-hardware). Rewrote the stale tau2 row ("attempt 3 dispatch pending") to terminal BLOCKED with the attempt-3 raw error. Added a dated 2026-10-09 sweep addendum documenting the re-read and both row changes.
+
+Stage Summary:
+- No PARTIAL remains; every blocked item carries raw evidence + unblock condition; ISSUE-LOG fully terminal as of 2026-10-09.

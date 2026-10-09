@@ -112,7 +112,7 @@ EVIDENCE: ChatViewModel.swift:493-494 routes to GsNative.chat when preferLocal, 
 22. arm64 device run
 ITEM: BLOCKED
 EVIDENCE: three hosts, three measured reasons: run 36676280935 (x86_64 host: "Avd's CPU Architecture 'arm64' is not supported by the QEMU2 emulator"), run 36688288136 (ubuntu-24.04-arm: no /dev/kvm), run 36735804030 (macos-15: HVF error: HV_UNSUPPORTED); finding: the blocker is nested virtualization, not arm64; correct-label probes ubuntu-24.04-arm64 queued 4h51m and never started (run 36831713320), two hours zero runner seconds then cancelled (run 37280191290); "No arm64 instruction has been executed by this repository" (RESULTS-mobile-concurrency.md).
-RESOLUTION: one of: a physical arm64 device reachable over adb in CI, a KVM-capable arm64 runner, or an HVF-capable bare-metal macOS runner. Cannot be resolved in this environment.
+RESOLUTION: one of: a physical arm64 device reachable over adb in CI, a KVM-capable arm64 runner, or an HVF-capable bare-metal macOS runner. Cannot be resolved in this environment. CLOSED WITH QUEUE-TIME EVIDENCE per the 2026-10-09 directive (no re-dispatch, three failed attempts already spent): the final probe run 37799687774 was QUEUED 2026-10-08T15:18:44Z and never received a runner; it was cancelled 2026-10-09T13:30Z after 22h11m in queue with zero runner seconds (conclusion: cancelled). Cumulative arm64 queue evidence: 4h51m (36831713320) + 2h (37280191290) + 22h11m (37799687774) = 29h02m queued across three probes, zero arm64 instructions ever executed.
 
 23. Q4_0 vs Q4_K_M on real arm64
 ITEM: BLOCKED
