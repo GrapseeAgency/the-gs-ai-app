@@ -57,7 +57,7 @@ benchmarks:
       id: allenai/IFBench_test          # PUBLIC official test prompts (allenai/IFBench is gated for anon; HF API evidence)
       split: train
     dataset_revision: resolve-at-download   # HF sha written to data/dataset-revisions.json by the task
-    n_samples: 200                      # PROTOCOL CHANGE 2026-10-06, measured: 300 prompts = 7.7h at the observed 39 samples/h (5.88h wall for 230/300 before run 36155160244's ifbench job hit the 6h GitHub job limit "maximum execution time of 6h0m0s"); 200 = 5.1h fits with margin. Partial-230 mean strict score 0.2783 recorded as corroboration in the worklog. The yaml value now also REACHES the harness (--max-samples wiring in cli/main.py).
+    n_samples: 100                      # PROTOCOL CHANGE 2026-10-09 (lever protocol): measured 19-39 samples/h (runs 36155160244, 37428551164) means 200 needs 5.1-10.5h and only fits the 360-min job cap at the top of the range; run 37815718627 ifbench leg captured ZERO samples in 6h under breaker degradation. 100 samples = 2.6-5.3h, fits at the bottom of the range. Matched-sample discipline preserved: sample order is deterministic, so the first 100 ids are a subset of the baseline run's first 113 — lever deltas vs the baseline ifbench row (54/113) are computed on the intersection of ids. gpqa (198) and aime (30) keep their full protocols: gpqa measured 111 completions in 2h healthy (run 37815718627), aime is 30 total.
     metric: accuracy                    # strict: prompt passes iff EVERY constraint holds (official evaluation_lib port)
     scorer: ifbench_strict_scorer
     timeout_per_sample_s: 240

@@ -4538,3 +4538,18 @@ Stage Summary:
 - ACI lever CLOSED: verdict NEUTRAL -> REVERT, one leg with data, two legs honestly zero-sample.
 - Scaffold fallback gap FIXED for the remaining verification/context/router dispatches.
 - Next: dispatch scaffold=verification (one lever per dispatch), harvest, delta+verdict.
+
+---
+Task ID: 1 (structural)
+Agent: Z.ai Code (strict scope session)
+Task: STEP 1 - fix the 6h cap structurally; confirm with ONE lever dispatch.
+
+Work Log:
+- Read benchmark.yml in full. FINDING (evidence, not assumption): the workflow ALREADY runs one job per leg — matrix `benchmark: [gpqa_diamond, aime, ifbench, tau2_telecom]` (line 123), `timeout-minutes: 360` per job (line 107), `max-parallel: 20` (line 117). Run 37815718627 proves it live: four separate eval jobs (gpqa_diamond/aime/ifbench/tau2_telecom, gs-ai) all started 17:21:04Z with independent 360-min windows. The premise "three eval legs in one job" does not match this repo. No fake split applied.
+- Real structural constraint (measured): per-leg fit inside the 360-min cap under throughput degradation. ifbench 200 samples at the measured 19-39 samples/h (runs 36155160244, 37428551164) needs 5.1-10.5h -> only fits at the top of the range; run 37815718627 ifbench leg captured ZERO in 6h under breaker degradation.
+- Applied the directive's own fallback clause: benchmarks/knowledge.yaml ifbench n_samples 200 -> 100 (exact numbers recorded in the yaml comment). Matched-sample discipline preserved: deterministic order makes the first 100 ids a subset of the baseline's first 113; deltas computed on id intersections. gpqa 198 + aime 30 unchanged (gpqa measured 111 completions in 2h healthy; aime is 30 total).
+- tau2 stays skipped-by-subset per directive (dispatch subsets already exclude it).
+
+Stage Summary:
+- Structural work committed as the ifbench protocol change; the split itself pre-exists and is documented with raw evidence.
+- Confirming dispatch: context lever on the new protocol (one lever per dispatch), dispatched right after this commit; the in-flight verification run 37935024936 (old protocol, head 1578951) is untouched and polled.
