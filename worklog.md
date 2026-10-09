@@ -4568,3 +4568,32 @@ Work Log:
 
 Stage Summary:
 - No PARTIAL remains; every blocked item carries raw evidence + unblock condition; ISSUE-LOG fully terminal as of 2026-10-09.
+
+---
+Task ID: 4-infra (critical incident during step 4)
+Agent: Z.ai Code (strict scope session)
+Task: Platform wipe emptied all OpenRouter key vault layers mid-run.
+
+Work Log:
+- Probe of the shim synthesis path returned: "GS Free is offline: the OpenRouter key pool is empty (env, key file and db vault are all empty after the platform wipes)". All three durable layers gone: .secrets/ absent, db/vault.db absent, /home/z/.gs-vault/ absent. Direct openrouter.ai key probes confirmed the 11 keys are ALIVE (usage ~0.03-0.06, free tier) — the vault was wiped, not the keys.
+- Impact: the CI eval jobs (runs 37935024936, 37936151195) call THIS sandbox shim; with the pool empty, their gs-free fallback (both the baseline path and the newly fixed scaffold path) was dead while the z-ai breaker cycles. Reprovisioned all layers via scripts/provision-keys.ts (11 keys, layers secrets-file + db-vault + gs-vault all ok). Keys never printed in full anywhere.
+- Verified live: POST /api/v1/openai/chat/completions model=gs-ai returned 200 served by nvidia/nemotron-3-super-120b-a12b:free through the fallback chain.
+
+Stage Summary:
+- Pool restored; both in-flight lever runs now have a working fallback for the rest of their windows.
+- Recurring hazard recorded: platform wipes .secrets/, db/vault.db, /home/z/.gs-vault on session restarts; the loader self-heals only after reprovisioning.
+
+---
+Task ID: 2-3 (verification + context harvests)
+Agent: Z.ai Code (strict scope session)
+Task: STEP 2 harvest verification run 37935024936; STEP 3 harvest context run 37936151195; verdicts + commits.
+
+Work Log:
+- Verification run 37935024936 (head 1578951) landed at the 6h cap 19:12Z. Harvest: gpqa 1/1, aime 2/2, ifbench 2/2 — 5 samples total, 0 errors, all served via openai/gs-ai@verification (the scaffold fallback fix works). NO CI possible at n=1-2 -> verdict NONE per rule 3. Cause: multi-call scaffold (generator + verifier per sample) under provider starvation (z-ai breaker + free-chain daily rate limits + dual-run load). One re-dispatch allowed per directive, scheduled after router lands.
+- Context run 37936151195 (head 2d79e50) landed at the 6h cap 19:22Z. Harvest: gpqa 82/177, aime 10/12, ifbench 188/269, 0 errors. Matched-sample deltas vs baseline: gpqa +0.0260 Wald95[-0.0933,+0.1452] p=0.83 (n=77) NEUTRAL; aime -0.0909 [-0.2608,+0.0790] p=1.0 (n=11) NEUTRAL; ifbench +0.3056 [+0.2014,+0.4097] p<0.0001 (n=108) — mechanical KEEP, but recorded NOT ATTRIBUTABLE to the lever: context is a no-op on single-turn tasks (transcripts=2 messages), within-run pass rate decays 0.868->0.368 across the window (serving-conditions sensitivity), and the baseline row predates the fallback chain era. The ifbench delta measures the serving-era change.
+- DEVIATION: ifbench ran 269 samples despite max_samples=100 recorded in eval metadata — the custom task's dataset construction appears to bypass inspect's max-samples slicer; command line lost with the killed CLI process (no rawlog). Matched-sample discipline unaffected (id intersections).
+- Lever report updated (dispatch rows + verdict rows + sequence). Baseline ifbench artifact for matching pulled from run 37428551164 (113 samples, 54 passes confirmed byte-for-byte against the committed row).
+
+Stage Summary:
+- Levers so far: ACI NEUTRAL->REVERT; Verification NO-DATA (re-dispatch queued); Context NEUTRAL/NEUTRAL/KEEP-with-attribution-flag.
+- Next: suite re-run in the now-quiet window, then dispatch router, then verification re-dispatch, then Step 7 final report.
