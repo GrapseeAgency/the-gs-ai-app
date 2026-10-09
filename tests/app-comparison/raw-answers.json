@@ -1,19 +1,22 @@
 {
-  "capturedAt": "2026-10-08T17:29:14.714Z",
+  "capturedAt": "2026-10-09T19:37:16.256Z",
   "base": "http://localhost:3000",
   "results": [
     {
       "id": "t01",
       "category": "short_factual",
-      "conversationId": "cmuzt8nn50076kgsehwfqiqej",
+      "conversationId": "cmv1d8zmy0001n19xhko9wdng",
       "attachmentIds": [],
       "turns": [
         {
           "request": "What is the chemical symbol for gold?",
-          "httpStatus": 502,
+          "httpStatus": 200,
           "response": {
-            "code": "upstream_error",
-            "message": "GS AI is temporarily unavailable. Please try again shortly."
+            "id": "cmv1d92u20005n19x6ax16rne",
+            "conversationId": "cmv1d8zmy0001n19xhko9wdng",
+            "role": "assistant",
+            "content": "Au",
+            "createdAt": "2026-10-09T19:36:27.291Z"
           }
         }
       ]
@@ -21,15 +24,18 @@
     {
       "id": "t02",
       "category": "multi_step_reasoning",
-      "conversationId": "cmuzt8qjk007akgseblhoupb6",
+      "conversationId": "cmv1d92ui0007n19x2ng3d1sz",
       "attachmentIds": [],
       "turns": [
         {
           "request": "A train leaves City A at 9:00 AM traveling at 80 km/h. A second train leaves City A at 10:00 AM on the same track traveling at 100 km/h. At what time does the second train catch the first?",
-          "httpStatus": 502,
+          "httpStatus": 200,
           "response": {
-            "code": "upstream_error",
-            "message": "GS AI is temporarily unavailable. Please try again shortly."
+            "id": "cmv1d95mb000bn19xt4ogwbj9",
+            "conversationId": "cmv1d92ui0007n19x2ng3d1sz",
+            "role": "assistant",
+            "content": "The second train will catch up to the first train at 11:00 AM.\n\nHere's the reasoning:\n- By 10:00 AM, the first train has already traveled 80 km (80 km/h × 1 hour).\n- The second train travels 20 km/h faster than the first train (100 km/h - 80 km/h).\n- To make up the 80 km gap at a relative speed of 20 km/h, it will take 4 hours (80 km ÷ 20 km/h).\n- Since the second train started at 10:00 AM, it will catch up at 2:00 PM (10:00 AM + 4 hours).\n\nWait, let me recalculate that:\n- The first train has a 1-hour head start, traveling 80 km by 10:00 AM.\n- The second train is 20 km/h faster, so it closes the gap at 20 km/h.\n- Time to close 80 km gap: 80 km ÷ 20 km/h = 4 hours.\n- 10:00 AM + 4 hours = 2:00 PM.\n\nThe second train catches the first train at 2:00 PM.",
+            "createdAt": "2026-10-09T19:36:30.899Z"
           }
         }
       ]
@@ -37,15 +43,18 @@
     {
       "id": "t03",
       "category": "code_generation",
-      "conversationId": "cmuzt8r9g007ekgse8o9gmv6f",
+      "conversationId": "cmv1d95mp000dn19xl561nbes",
       "attachmentIds": [],
       "turns": [
         {
           "request": "Write a Python function is_palindrome(s) that returns True if the string s is a palindrome ignoring case and all non-alphanumeric characters. Return only the function definition.",
-          "httpStatus": 502,
+          "httpStatus": 200,
           "response": {
-            "code": "upstream_error",
-            "message": "GS AI is temporarily unavailable. Please try again shortly."
+            "id": "cmv1d96al000hn19x8avcy0h8",
+            "conversationId": "cmv1d95mp000dn19xl561nbes",
+            "role": "assistant",
+            "content": "```python\ndef is_palindrome(s):\n    cleaned = ''.join(char.lower() for char in s if char.isalnum())\n    return cleaned == cleaned[::-1]\n```",
+            "createdAt": "2026-10-09T19:36:31.773Z"
           }
         }
       ]
@@ -53,15 +62,18 @@
     {
       "id": "t04",
       "category": "instruction_hard_constraint",
-      "conversationId": "cmuzt8ryw007ikgsefrv3ee6d",
+      "conversationId": "cmv1d96ax000jn19xaaithb6s",
       "attachmentIds": [],
       "turns": [
         {
           "request": "Answer with exactly five words, no more and no less: why is the sky blue?",
-          "httpStatus": 502,
+          "httpStatus": 200,
           "response": {
-            "code": "upstream_error",
-            "message": "GS AI is temporarily unavailable. Please try again shortly."
+            "id": "cmv1d96zi000nn19x33i8xnxx",
+            "conversationId": "cmv1d96ax000jn19xaaithb6s",
+            "role": "assistant",
+            "content": "Rayleigh scattering light waves. one",
+            "createdAt": "2026-10-09T19:36:32.670Z"
           }
         }
       ]
@@ -69,17 +81,20 @@
     {
       "id": "t05",
       "category": "document",
-      "conversationId": "cmuzt8sqy007mkgse9rkf7sou",
+      "conversationId": "cmv1d96zu000pn19xpe4l4w13",
       "attachmentIds": [
-        "cmuzt8srb007okgsewvuy63fw"
+        "cmv1d973a000rn19xrvfxbhng"
       ],
       "turns": [
         {
           "request": "Open the attached invoice and tell me the total amount due and the payment due date.",
-          "httpStatus": 502,
+          "httpStatus": 200,
           "response": {
-            "code": "upstream_error",
-            "message": "GS AI is temporarily unavailable. Please try again shortly."
+            "id": "cmv1d9849000vn19xlufwkfuh",
+            "conversationId": "cmv1d96zu000pn19xpe4l4w13",
+            "role": "assistant",
+            "content": "The total amount due is $1,847.50 and the payment due date is March 31, 2026.",
+            "createdAt": "2026-10-09T19:36:34.138Z"
           }
         }
       ]
@@ -87,15 +102,46 @@
     {
       "id": "t06",
       "category": "live_web_search",
-      "conversationId": "cmuzt8tik007skgsesgc6pxnx",
+      "conversationId": "cmv1d984l000xn19x8avgjivu",
       "attachmentIds": [],
       "turns": [
         {
           "request": "What is the latest stable major version of the Next.js framework as of today, and what is one headline feature of it?",
-          "httpStatus": 502,
+          "httpStatus": 200,
           "response": {
-            "code": "upstream_error",
-            "message": "GS AI is temporarily unavailable. Please try again shortly."
+            "id": "cmv1d9gja0011n19xzc74im64",
+            "conversationId": "cmv1d984l000xn19x8avgjivu",
+            "role": "assistant",
+            "content": "I could not verify the current version from live sources. The search results retrieved information about HarmonyOS and Node.js, but did not contain any information about Next.js versions or features. The sources mentioned Next.js only in passing as one of several frameworks built on Node.js, but did not provide version information or details about its features.",
+            "createdAt": "2026-10-09T19:36:45.046Z",
+            "sources": [
+              {
+                "id": "cmv1d9gjz0012n19x40ceayn8",
+                "ordinal": 1,
+                "title": "HarmonyOS version history",
+                "url": "https://en.wikipedia.org/wiki/HarmonyOS_version_history",
+                "domain": "en.wikipedia.org",
+                "snippet": "together with the first public beta version of the operating system's next major version . The next major stable version is then released every fourth quarter",
+                "query": "Next.js latest stable major version",
+                "retrievedAt": "2026-10-09T19:36:45.071Z",
+                "status": "retrieved",
+                "rank": 1,
+                "used": false
+              },
+              {
+                "id": "cmv1d9gjz0013n19x3qxfhcyf",
+                "ordinal": 2,
+                "title": "Node.js",
+                "url": "https://en.wikipedia.org/wiki/Node.js",
+                "domain": "en.wikipedia.org",
+                "snippet": "the updating of io. js with the latest Google V8 JavaScript engine releases, diverging from Node. js's approach at that time. The Node. js Foundation, formed",
+                "query": "Next.js latest stable major version",
+                "retrievedAt": "2026-10-09T19:36:45.071Z",
+                "status": "retrieved",
+                "rank": 2,
+                "used": false
+              }
+            ]
           }
         }
       ]
@@ -103,31 +149,40 @@
     {
       "id": "t07",
       "category": "memory_of_earlier_turns",
-      "conversationId": "cmuzt916t007wkgsekih5x4p1",
+      "conversationId": "cmv1d9gkv0015n19xvk4p7si1",
       "attachmentIds": [],
       "turns": [
         {
           "request": "My project codename is VELVET-9. Remember it.",
-          "httpStatus": 502,
+          "httpStatus": 200,
           "response": {
-            "code": "upstream_error",
-            "message": "GS AI is temporarily unavailable. Please try again shortly."
+            "id": "cmv1d9hf80019n19x4ris18oz",
+            "conversationId": "cmv1d9gkv0015n19xvk4p7si1",
+            "role": "assistant",
+            "content": "I'll remember your project codename is VELVET-9.",
+            "createdAt": "2026-10-09T19:36:46.196Z"
           }
         },
         {
           "request": "What is 17 times 3?",
-          "httpStatus": 502,
+          "httpStatus": 200,
           "response": {
-            "code": "upstream_error",
-            "message": "GS AI is temporarily unavailable. Please try again shortly."
+            "id": "cmv1d9htq001en19x4v7jh7gt",
+            "conversationId": "cmv1d9gkv0015n19xvk4p7si1",
+            "role": "assistant",
+            "content": "\n17 times 3 is 51.",
+            "createdAt": "2026-10-09T19:36:46.719Z"
           }
         },
         {
           "request": "Without me repeating it: what is my project codename?",
-          "httpStatus": 502,
+          "httpStatus": 200,
           "response": {
-            "code": "upstream_error",
-            "message": "GS AI is temporarily unavailable. Please try again shortly."
+            "id": "cmv1d9iiy001jn19xsjt3vgt2",
+            "conversationId": "cmv1d9gkv0015n19xvk4p7si1",
+            "role": "assistant",
+            "content": "\nYour project codename is VELVET-9.",
+            "createdAt": "2026-10-09T19:36:47.627Z"
           }
         }
       ]
@@ -135,15 +190,18 @@
     {
       "id": "t08",
       "category": "ambiguous_prompt",
-      "conversationId": "cmuzt93n60086kgseryxiym5z",
+      "conversationId": "cmv1d9ij9001ln19xzv75ii8v",
       "attachmentIds": [],
       "turns": [
         {
           "request": "How much does it cost?",
-          "httpStatus": 502,
+          "httpStatus": 200,
           "response": {
-            "code": "upstream_error",
-            "message": "GS AI is temporarily unavailable. Please try again shortly."
+            "id": "cmv1d9jd6001pn19x52pdyh0x",
+            "conversationId": "cmv1d9ij9001ln19xzv75ii8v",
+            "role": "assistant",
+            "content": "I don't have enough context to answer your question about cost. Could you please specify what product, service, or information you're asking about?",
+            "createdAt": "2026-10-09T19:36:48.714Z"
           }
         }
       ]
@@ -151,15 +209,18 @@
     {
       "id": "t09",
       "category": "short_factual",
-      "conversationId": "cmuzt94ga008akgsemd9opwz8",
+      "conversationId": "cmv1d9jdj001rn19xj7znhv71",
       "attachmentIds": [],
       "turns": [
         {
           "request": "What currency does Japan use?",
-          "httpStatus": 502,
+          "httpStatus": 200,
           "response": {
-            "code": "upstream_error",
-            "message": "GS AI is temporarily unavailable. Please try again shortly."
+            "id": "cmv1d9k0r001vn19x7fvezlam",
+            "conversationId": "cmv1d9jdj001rn19xj7znhv71",
+            "role": "assistant",
+            "content": "Japan uses the Japanese Yen (JPY) as its currency.",
+            "createdAt": "2026-10-09T19:36:49.564Z"
           }
         }
       ]
@@ -167,15 +228,18 @@
     {
       "id": "t10",
       "category": "multi_step_reasoning",
-      "conversationId": "cmuzt955q008ekgset8vckwn7",
+      "conversationId": "cmv1d9k14001xn19xwc7xs92u",
       "attachmentIds": [],
       "turns": [
         {
           "request": "I have 3 boxes. Each box contains 4 bags. Each bag contains 5 marbles. I remove 2 marbles from each bag. How many marbles remain in total?",
-          "httpStatus": 502,
+          "httpStatus": 200,
           "response": {
-            "code": "upstream_error",
-            "message": "GS AI is temporarily unavailable. Please try again shortly."
+            "id": "cmv1d9ld50021n19xwyq48v9y",
+            "conversationId": "cmv1d9k14001xn19xwc7xs92u",
+            "role": "assistant",
+            "content": "Let's calculate the total number of marbles remaining:\n\n1. Total marbles initially: 3 boxes × 4 bags × 5 marbles = 60 marbles\n2. Marbles removed: 3 boxes × 4 bags × 2 marbles = 24 marbles\n3. Marbles remaining: 60 - 24 = 36 marbles\n\nThere are 36 marbles remaining in total.",
+            "createdAt": "2026-10-09T19:36:51.305Z"
           }
         }
       ]
@@ -183,15 +247,18 @@
     {
       "id": "t11",
       "category": "code_generation",
-      "conversationId": "cmuzt95vq008ikgsedn58wffu",
+      "conversationId": "cmv1d9ldf0023n19xpma8dbnx",
       "attachmentIds": [],
       "turns": [
         {
           "request": "Write a SQL query against a table orders(id, customer_id, amount, created_at): return each customer_id with their total amount, but only customers whose total exceeds 1000, ordered by total descending.",
-          "httpStatus": 502,
+          "httpStatus": 200,
           "response": {
-            "code": "upstream_error",
-            "message": "GS AI is temporarily unavailable. Please try again shortly."
+            "id": "cmv1d9m190027n19x626p5xjb",
+            "conversationId": "cmv1d9ldf0023n19xpma8dbnx",
+            "role": "assistant",
+            "content": "```sql\nSELECT customer_id, SUM(amount) as total_amount\nFROM orders\nGROUP BY customer_id\nHAVING SUM(amount) > 1000\nORDER BY total_amount DESC;\n```",
+            "createdAt": "2026-10-09T19:36:52.174Z"
           }
         }
       ]
@@ -199,15 +266,18 @@
     {
       "id": "t12",
       "category": "instruction_hard_constraint",
-      "conversationId": "cmuzt96l7008mkgsepfp8q44h",
+      "conversationId": "cmv1d9m1l0029n19x835l7rqj",
       "attachmentIds": [],
       "turns": [
         {
           "request": "List exactly three primary colors as a numbered list of single words. Nothing else in your reply.",
-          "httpStatus": 502,
+          "httpStatus": 200,
           "response": {
-            "code": "upstream_error",
-            "message": "GS AI is temporarily unavailable. Please try again shortly."
+            "id": "cmv1d9mo3002dn19x6r5ybht6",
+            "conversationId": "cmv1d9m1l0029n19x835l7rqj",
+            "role": "assistant",
+            "content": "1. Red\n2. Blue\n3. Yellow",
+            "createdAt": "2026-10-09T19:36:52.995Z"
           }
         }
       ]
@@ -215,15 +285,18 @@
     {
       "id": "t13",
       "category": "short_factual",
-      "conversationId": "cmuzt97bu008qkgse6hmlxvgr",
+      "conversationId": "cmv1d9moe002fn19xvm2fgc0q",
       "attachmentIds": [],
       "turns": [
         {
           "request": "How long does sunlight take to reach Earth, approximately?",
-          "httpStatus": 502,
+          "httpStatus": 200,
           "response": {
-            "code": "upstream_error",
-            "message": "GS AI is temporarily unavailable. Please try again shortly."
+            "id": "cmv1d9nbl002jn19x2zf8fiho",
+            "conversationId": "cmv1d9moe002fn19xvm2fgc0q",
+            "role": "assistant",
+            "content": "About 8 minutes and 20 seconds.",
+            "createdAt": "2026-10-09T19:36:53.841Z"
           }
         }
       ]
@@ -231,15 +304,18 @@
     {
       "id": "t14",
       "category": "multi_step_reasoning",
-      "conversationId": "cmuzt98e0008ukgsesrwxmna1",
+      "conversationId": "cmv1d9nbv002ln19xzobqfjyf",
       "attachmentIds": [],
       "turns": [
         {
           "request": "A shirt costs $40. It is discounted by 25%, then an additional 10% is taken off the discounted price. What is the final price in dollars?",
-          "httpStatus": 502,
+          "httpStatus": 200,
           "response": {
-            "code": "upstream_error",
-            "message": "GS AI is temporarily unavailable. Please try again shortly."
+            "id": "cmv1d9oh7002pn19xdcotldvz",
+            "conversationId": "cmv1d9nbv002ln19xzobqfjyf",
+            "role": "assistant",
+            "content": "The final price is $27.\n\nHere's how to calculate it:\n1. First discount: 25% off $40 = $10 discount, so the price becomes $30\n2. Second discount: 10% off $30 = $3 discount, so the final price is $27",
+            "createdAt": "2026-10-09T19:36:55.340Z"
           }
         }
       ]
@@ -247,15 +323,18 @@
     {
       "id": "t15",
       "category": "code_generation",
-      "conversationId": "cmuzt995u008ykgsenf1srqww",
+      "conversationId": "cmv1d9ohj002rn19xk7lq4ic8",
       "attachmentIds": [],
       "turns": [
         {
           "request": "This Python function crashes on an empty list: def avg(nums): return sum(nums) / len(nums). Rewrite it so it returns 0 for an empty list and keeps the same behavior otherwise. Give only the fixed function.",
-          "httpStatus": 502,
+          "httpStatus": 200,
           "response": {
-            "code": "upstream_error",
-            "message": "GS AI is temporarily unavailable. Please try again shortly."
+            "id": "cmv1d9p0b002vn19xos0txywk",
+            "conversationId": "cmv1d9ohj002rn19xk7lq4ic8",
+            "role": "assistant",
+            "content": "```python\ndef avg(nums):\n    return sum(nums) / len(nums) if nums else 0\n```",
+            "createdAt": "2026-10-09T19:36:56.028Z"
           }
         }
       ]
@@ -263,15 +342,18 @@
     {
       "id": "t16",
       "category": "instruction_hard_constraint",
-      "conversationId": "cmuzt99w10092kgsewhd0zok6",
+      "conversationId": "cmv1d9p0q002xn19xpkmdxiuc",
       "attachmentIds": [],
       "turns": [
         {
           "request": "Write a single sentence of at least twelve words that does not contain the letter 'e' anywhere in it.",
-          "httpStatus": 502,
+          "httpStatus": 200,
           "response": {
-            "code": "upstream_error",
-            "message": "GS AI is temporarily unavailable. Please try again shortly."
+            "id": "cmv1d9q7d0031n19x44zeuwej",
+            "conversationId": "cmv1d9p0q002xn19xpkmdxiuc",
+            "role": "assistant",
+            "content": "A big brown fox jumps high across a tall, grassy hill without showing any signs of slowing down.",
+            "createdAt": "2026-10-09T19:36:57.578Z"
           }
         }
       ]
@@ -279,17 +361,20 @@
     {
       "id": "t17",
       "category": "document",
-      "conversationId": "cmuzt9aku0096kgseoydmnzkc",
+      "conversationId": "cmv1d9q7n0033n19x18a38bjd",
       "attachmentIds": [
-        "cmuzt9al20098kgseaqcdvus2"
+        "cmv1d9q7z0035n19x1rq0fhwj"
       ],
       "turns": [
         {
           "request": "Using the attached CSV, which region had the highest total sales, and what was that total?",
-          "httpStatus": 502,
+          "httpStatus": 200,
           "response": {
-            "code": "upstream_error",
-            "message": "GS AI is temporarily unavailable. Please try again shortly."
+            "id": "cmv1d9r3v0039n19xtdthqkoj",
+            "conversationId": "cmv1d9q7n0033n19x18a38bjd",
+            "role": "assistant",
+            "content": "Based on the CSV data, the West region had the highest total sales with 6150.",
+            "createdAt": "2026-10-09T19:36:58.747Z"
           }
         }
       ]
@@ -297,15 +382,116 @@
     {
       "id": "t18",
       "category": "live_web_search",
-      "conversationId": "cmuzt9bgu009ckgse6vebrrig",
+      "conversationId": "cmv1d9r47003bn19xhm87iihf",
       "attachmentIds": [],
       "turns": [
         {
           "request": "Who is the current CEO of the company that makes the PlayStation console, as of today?",
-          "httpStatus": 502,
+          "httpStatus": 200,
           "response": {
-            "code": "upstream_error",
-            "message": "GS AI is temporarily unavailable. Please try again shortly."
+            "id": "cmv1da0q1003fn19xqb8jkh9g",
+            "conversationId": "cmv1d9r47003bn19xhm87iihf",
+            "role": "assistant",
+            "content": "Based on the search results, the current CEO of Sony Interactive Entertainment (the company that makes PlayStation consoles) is Hideako Nishino. This information comes from a recent interview where he clarified PlayStation's plans regarding console exclusive games [2].",
+            "createdAt": "2026-10-09T19:37:11.209Z",
+            "sources": [
+              {
+                "id": "cmv1da0q3003gn19x03v1r6y5",
+                "ordinal": 1,
+                "title": "Sony Interactive Entertainment",
+                "url": "https://en.wikipedia.org/wiki/Sony_Interactive_Entertainment",
+                "domain": "en.wikipedia.org",
+                "snippet": "Sony Interactive Entertainment LLC (SIE) is an American, Japanese-owned, video game and digital entertainment company of Japanese conglomerate Sony Group",
+                "query": "PlayStation company CEO today",
+                "retrievedAt": "2026-10-09T19:37:11.211Z",
+                "status": "retrieved",
+                "rank": 1,
+                "used": false
+              },
+              {
+                "id": "cmv1da0q3003hn19xwf5xrcm1",
+                "ordinal": 2,
+                "title": "PlayStation CEO Clarifies Plans for Console Exclusive Games",
+                "url": "https://gamerant.com/playstation-5-console-exclusive-games-single-player/",
+                "domain": "gamerant.com",
+                "snippet": "Adrian has been writing, critiquing, and thinking about games since he first picked up an N64 controller many years ago. These days he writes reviews, news, and features for Game Rant and believes ...",
+                "publishedDate": "2026-06-18T23:00:00.000Z",
+                "query": "PlayStation company CEO today",
+                "retrievedAt": "2026-10-09T19:37:11.211Z",
+                "status": "retrieved",
+                "rank": 1,
+                "used": true
+              },
+              {
+                "id": "cmv1da0q3003in19x36ojepha",
+                "ordinal": 3,
+                "title": "PlayStation 4",
+                "url": "https://en.wikipedia.org/wiki/PlayStation_4",
+                "domain": "en.wikipedia.org",
+                "snippet": "April 19, 2017. Layden, Shawn (November 10, 2016). \" PlayStation 4 Pro Launches Today \". blog.us. playstation .com. Archived from the original on November 11,",
+                "query": "PlayStation company CEO today",
+                "retrievedAt": "2026-10-09T19:37:11.211Z",
+                "status": "retrieved",
+                "rank": 1,
+                "used": false
+              },
+              {
+                "id": "cmv1da0q3003jn19x3v3xl81a",
+                "ordinal": 4,
+                "title": "The console age is ending — even PlayStation's former CEO says so",
+                "url": "https://www.polygon.com/shawn-layden-interview-console-era-ending/",
+                "domain": "polygon.com",
+                "snippet": "As much as console makers might prefer otherwise, the market has spoken — and it doesn’t seem to be asking for double the teraflops every seven years. (Yes, we know, there are dozens of you who are.) ...",
+                "publishedDate": "2025-11-13T22:02:00.000Z",
+                "query": "PlayStation company CEO today",
+                "retrievedAt": "2026-10-09T19:37:11.211Z",
+                "status": "retrieved",
+                "rank": 3,
+                "used": false
+              },
+              {
+                "id": "cmv1da0q3003kn19x5d93sdd9",
+                "ordinal": 5,
+                "title": "PlayStation CEO Comments on Future Hardware",
+                "url": "https://gamerant.com/playstation-future-dedicated-console-ps6/",
+                "domain": "gamerant.com",
+                "snippet": "Adrian has been writing, critiquing, and thinking about games since he first picked up an N64 controller many years ago. These days he writes reviews, news, and features for Game Rant and believes ...",
+                "publishedDate": "2026-06-28T00:30:00.000Z",
+                "query": "PlayStation company CEO today",
+                "retrievedAt": "2026-10-09T19:37:11.211Z",
+                "status": "snippet_only",
+                "rank": 2,
+                "used": false
+              },
+              {
+                "id": "cmv1da0q3003ln19xwvbhfh3z",
+                "ordinal": 6,
+                "title": "PS6 live: Sony update on PlayStation 6 release date and price",
+                "url": "https://www.msn.com/en-au/gaming/general/ps6-live-sony-update-on-playstation-6-release-date-and-price/ar-AA2dw6iF",
+                "domain": "msn.com",
+                "snippet": "PS6 LIVE: Sony update on PlayStation 6 release date and price ...",
+                "publishedDate": "2026-10-04T03:25:53.000Z",
+                "query": "PlayStation company CEO today",
+                "retrievedAt": "2026-10-09T19:37:11.211Z",
+                "status": "snippet_only",
+                "rank": 2,
+                "used": false
+              },
+              {
+                "id": "cmv1da0q3003mn19xpt7rx3rz",
+                "ordinal": 7,
+                "title": "Sony CEO confirms the PS6 has no fixed launch date as RAM crisis continues",
+                "url": "https://www.msn.com/en-us/entertainment/gaming/sony-ceo-confirms-the-ps6-has-no-fixed-launch-date-as-ram-crisis-continues/ar-AA2an295",
+                "domain": "msn.com",
+                "snippet": "Sony CEO Hiroko Totoki says a release date for the PS6 has yet to be decided The global component shortage and trade wars have impacted Sony's decision-making Totoki says, \"We need to take some action ...",
+                "publishedDate": "2026-08-18T02:58:00.000Z",
+                "query": "PlayStation company CEO today",
+                "retrievedAt": "2026-10-09T19:37:11.211Z",
+                "status": "snippet_only",
+                "rank": 1,
+                "used": false
+              }
+            ]
           }
         }
       ]
@@ -313,31 +499,40 @@
     {
       "id": "t19",
       "category": "memory_of_earlier_turns",
-      "conversationId": "cmuzt9jtb009gkgse3w7nhewk",
+      "conversationId": "cmv1da0qf003on19x6c91qctg",
       "attachmentIds": [],
       "turns": [
         {
           "request": "I am allergic to peanuts. Keep that in mind.",
-          "httpStatus": 502,
+          "httpStatus": 200,
           "response": {
-            "code": "upstream_error",
-            "message": "GS AI is temporarily unavailable. Please try again shortly."
+            "id": "cmv1da1mx003sn19xiirp9m3p",
+            "conversationId": "cmv1da0qf003on19x6c91qctg",
+            "role": "assistant",
+            "content": "I'll keep in mind that you're allergic to peanuts. Is there something specific you'd like me to help you with regarding this allergy or any other topic?",
+            "createdAt": "2026-10-09T19:37:12.394Z"
           }
         },
         {
           "request": "Suggest three quick snack ideas.",
-          "httpStatus": 502,
+          "httpStatus": 200,
           "response": {
-            "code": "upstream_error",
-            "message": "GS AI is temporarily unavailable. Please try again shortly."
+            "id": "cmv1da2t1003xn19xftjt4mjf",
+            "conversationId": "cmv1da0qf003on19x6c91qctg",
+            "role": "assistant",
+            "content": "Here are three quick snack ideas that are peanut-free:\n\n1. Apple slices with a sprinkle of cinnamon\n2. Rice cakes with avocado and a pinch of salt\n3. Greek yogurt with berries and a drizzle of honey\n\nThese options are quick to prepare and avoid peanuts. Would you like more specific recipes or information about any of these snacks?",
+            "createdAt": "2026-10-09T19:37:13.909Z"
           }
         },
         {
           "request": "Of the snacks you just listed, which should I avoid and why?",
-          "httpStatus": 502,
+          "httpStatus": 200,
           "response": {
-            "code": "upstream_error",
-            "message": "GS AI is temporarily unavailable. Please try again shortly."
+            "id": "cmv1da3up0042n19x5a79dnu3",
+            "conversationId": "cmv1da0qf003on19x6c91qctg",
+            "role": "assistant",
+            "content": "\nNone of the snacks I listed contain peanuts or common peanut products. All three options (apple slices with cinnamon, rice cakes with avocado, and Greek yogurt with berries) are safe for someone with a peanut allergy. However, if you have other food allergies or sensitivities, you might want to check the ingredients of store-bought items like yogurt or rice cakes to ensure they don't contain any other ingredients you need to avoid.",
+            "createdAt": "2026-10-09T19:37:15.265Z"
           }
         }
       ]
@@ -345,15 +540,18 @@
     {
       "id": "t20",
       "category": "ambiguous_prompt",
-      "conversationId": "cmuzt9m43009qkgse3m1baxo7",
+      "conversationId": "cmv1da3v00044n19xxtiubdf6",
       "attachmentIds": [],
       "turns": [
         {
           "request": "When is it coming out?",
-          "httpStatus": 502,
+          "httpStatus": 200,
           "response": {
-            "code": "upstream_error",
-            "message": "GS AI is temporarily unavailable. Please try again shortly."
+            "id": "cmv1da4m40048n19xbyq9chyt",
+            "conversationId": "cmv1da3v00044n19xxtiubdf6",
+            "role": "assistant",
+            "content": "I don't have enough context to know what \"it\" refers to. Could you please specify what you're asking about?",
+            "createdAt": "2026-10-09T19:37:16.252Z"
           }
         }
       ]

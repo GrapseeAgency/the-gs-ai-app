@@ -4597,3 +4597,19 @@ Work Log:
 Stage Summary:
 - Levers so far: ACI NEUTRAL->REVERT; Verification NO-DATA (re-dispatch queued); Context NEUTRAL/NEUTRAL/KEEP-with-attribution-flag.
 - Next: suite re-run in the now-quiet window, then dispatch router, then verification re-dispatch, then Step 7 final report.
+
+---
+Task ID: 4e (suite re-run)
+Agent: Z.ai Code (strict scope session)
+Task: STEP 4 re-run the 20-task suite in the quiet window; update results.md.
+
+Work Log:
+- First re-run attempt: all 20 tasks errored instantly with "conversation create 500" - the known SQLite stale-handle failure (running dev server held a handle to a replaced db file). Fixed per the established recipe: killed dev PIDs (1062/1063), removed db journal/wal/shm, restarted via .zscripts/dev.sh, verified POST /api/v1/conversations -> 201.
+- Clean re-run completed 2026-10-09T19:37:16Z (all 20 tasks, 22 turns, raw transcripts committed).
+- Graded against the pre-committed rubrics: PASS 18 / PARTIAL 2 (t06, t18) / FAIL 0. Before/after: 16/3/1 -> 18/2/0.
+- All four mandated quality failures verified live in THIS run: A t04 exactly 5 words (padding path); B t16 18 words zero 'e'; C t17 West 6,150 (guard corrected live); D t06 honest could-not-verify fallback (no stale claim).
+- Honest notes recorded: t02 self-corrects mid-answer (initial wrong line, final answer 2:00 PM); t18 misspells the SIE CEO name ("Hideako" vs Hideaki Nishino) with correct person/role/source; t06 PARTIAL per its rubric (no version-bearing source retrieved; the D bar itself is met by design).
+
+Stage Summary:
+- Step 4 COMPLETE: results.md updated with the dated post-fix section and per-fix evidence.
+- Next: dispatch the router lever (quiet pool), then the single verification re-dispatch after it lands.
