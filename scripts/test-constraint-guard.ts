@@ -9,6 +9,7 @@
  *      starts with the could-not-verify sentence.
  */
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import {
   detectOutputConstraints,
   constraintViolations,
@@ -131,6 +132,20 @@ assert.equal(verifyCsvAggregates(correctedT17!, table!).length, 0, 'C: corrected
 // a correct draft passes untouched
 const goodT17 = 'West had the highest total sales at 6,150.'
 assert.equal(verifyCsvAggregates(goodT17, table!).length, 0, 'C: correct draft not flagged')
+
+// the REAL suite fixture (tests/app-comparison/fixtures/sales.csv) must also
+// yield West = 6,150 — drift-proof: if the fixture and the inline copy ever
+// diverge, this assertion fails before any suite run can grade a wrong sum.
+{
+  const fixture = readFileSync(
+    new URL('../tests/app-comparison/fixtures/sales.csv', import.meta.url),
+    'utf8'
+  )
+  const fixtureTable = parseCsvTable(fixture)
+  assert.notEqual(fixtureTable, null, 'C: fixture sales.csv must parse')
+  assert.equal(fixtureTable!.totals.get('West'), 6150, 'C: real fixture West total must be 6,150')
+  assert.equal(fixtureTable!.totals.get('North'), 3700, 'C: real fixture North total')
+}
 
 // ---------- FAILURE D: freshness ----------
 const t06 =
