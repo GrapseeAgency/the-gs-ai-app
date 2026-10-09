@@ -35,7 +35,9 @@
  * (turn executor, search pipeline, router) are untouched.
  */
 
-import { completeChatWithMeta } from '@/lib/ai'
+import { completeChatWithMeta, zaiThrottleActive } from '@/lib/ai'
+import { orCompleteChat } from '@/lib/openrouter'
+import { OPENROUTER_MODELS } from '@/lib/models'
 import { bingWeb, duckduckgoLite, wikipedia } from '@/lib/search/engines'
 import type { EngineQuery, RawResult } from '@/lib/search/types'
 import { createHash } from 'crypto'
@@ -162,7 +164,23 @@ async function callModel(
   role: typeof GENERATOR | typeof CHEAP | typeof PLANNER,
   temperature = 0.2
 ): Promise<{ text: string; model: string | null }> {
-  return completeChatWithMeta(messages, role.providerModel, role.thinking, temperature)
+  try {
+    return await completeChatWithMeta(messages, role.providerModel, role.thinking, temperature)
+  } catch (e) {
+    // RUN 37815718627 postmortem: the scaffold lever path had no gs-free
+    // fallback, so when the z-ai breaker opened mid-run every @aci call
+    // hard-failed (gpqa completions stopped 19:25Z; aime/ifbench logs carry
+    // ZERO completed samples). Same semantics as the baseline shim path:
+    // fall back ONLY on the breaker/throttle error, loudly logged; the served
+    // id the fallback returns is recorded per call so the provider mix stays
+    // visible in every harvest (no silent substitution, rule 5).
+    const msg = e instanceof Error ? e.message : String(e)
+    if (!zaiThrottleActive() && !/throttled|circuit open|429/i.test(msg)) throw e
+    console.log(
+      `BENCH-SCAFFOLD zai throttled (circuit open) — falling back to gs-free OpenRouter chain role=${role.providerModel}`
+    )
+    return orCompleteChat(messages, OPENROUTER_MODELS['gs-free'], null)
+  }
 }
 
 // ---------------------------------------------------------------------------

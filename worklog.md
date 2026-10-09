@@ -4519,3 +4519,22 @@ Stage Summary:
 - Pushed: f956ed2, da48f9f, 45a0d86, e2fa343, 1c54952, 7b25118, ec96acc, c539662, 441505f, a64a6e2, e10c7bb, 5df524e, 7ab098f, 6e416b6.
 - IN FLIGHT: lever aci run 37815718627 (started 17:19:53Z, up to 6h; harvest -> delta+CI -> verdict -> then verification/context/router levers). Arm64 probe 37799687774 queued since 15:18:44Z.
 - CRON: after each lever run lands, harvest with scripts/harvest-inspect-artifact.py (point it at the inspect-logs dir), compute delta vs baseline matched samples with Wilson CI, verdict per the rule, commit+push, dispatch the next lever (verification -> context -> router, benchmarks=gpqa_diamond,aime,ifbench). When the last lever lands and quota frees, re-run bun scripts/run-app-comparison.ts once for the final results.md row.
+
+---
+Task ID: 2-a (harvest)
+Agent: Z.ai Code (cron autopilot session)
+Task: Poll run 37815718627 (ACI lever), harvest, delta+verdict; diagnose zero-sample legs.
+
+Work Log:
+- Run 37815718627 (ACI lever, head 441505f): completed CANCELLED at the 6h cap (17:19:53Z -> 23:22Z). Build + sandbox-escape green; gpqa/aime/ifbench benchmark steps cancelled; tau2 honest SKIPPED_BY_SUBSET.
+- Downloaded all 5 artifacts. GPQA inspect log carries 111 samples: 66 correct = 0.5946 Wilson95 [0.5016, 0.6813], providers glm-4-plus 111/111 (no fallback), 0 errors, per-sample latency p50 6388ms p95 7400ms. Completions ran 17:22-19:25Z only, then a 4h dead window.
+- AIME + IFBench logs: status=started, ZERO samples written in 6h.
+- Matched-sample delta vs baseline (run 37764839853, 65 common ids): aci 42/65 = 0.6462 vs baseline 40/65 = 0.6154, delta +0.0308, paired Wald 95% [-0.0818, +0.1433], discordant 8 vs 6, McNemar exact p=0.79. Verdict: NEUTRAL -> REVERT (CI includes zero).
+- ROOT CAUSE (code review): gs-free OpenRouter fallback existed only on the baseline profile path in the shim; the scaffold lever path (callModel in src/lib/bench/scaffold.ts) had none, so breaker-open killed every @aci call. Fix wired into callModel with loud BENCH-SCAFFOLD fallback log lines and per-call served-id recording (no silent substitution). Lint clean.
+- Lever report updated: dispatch row for 37815718627, ACI results row with delta+verdict, execution-sequence items 3-6.
+- Local main had been rewound by a sibling cron session (1 ahead/462 behind); recovered via git reset --hard origin/main at a3186b9 (local-only commit edb4958 was a superseded worklog commit; nothing to cherry-pick).
+
+Stage Summary:
+- ACI lever CLOSED: verdict NEUTRAL -> REVERT, one leg with data, two legs honestly zero-sample.
+- Scaffold fallback gap FIXED for the remaining verification/context/router dispatches.
+- Next: dispatch scaffold=verification (one lever per dispatch), harvest, delta+verdict.
