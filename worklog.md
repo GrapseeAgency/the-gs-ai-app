@@ -4613,3 +4613,16 @@ Work Log:
 Stage Summary:
 - Step 4 COMPLETE: results.md updated with the dated post-fix section and per-fix evidence.
 - Next: dispatch the router lever (quiet pool), then the single verification re-dispatch after it lands.
+
+---
+Task ID: 3c + 7 (verification re-dispatch + final)
+Agent: Z.ai Code (strict scope session)
+Task: STEP 3c verification re-dispatch harvest; STEP 7 final report.
+
+Work Log:
+- Router run 37981778726 harvested earlier (commit b063923): gpqa 16/18 NEUTRAL, aime 9/9 NEUTRAL (no discordants), ifbench 27/34 mechanical KEEP flagged NOT CLEAN (+0.1667 Wald excludes zero, McNemar p=0.125 on 7 discordants, serving-era decay 1.00/1.00/0.50/0.70).
+- Verification re-dispatch run 38014575301 (head b063923) landed at the 6h cap 07:49Z with ZERO samples across all three legs (logs status=started, 0 errors recorded because 0 calls completed). Two dispatches spent, 5 samples total, no CI possible either time. Lever terminal state: BLOCKED (raw evidence in the report rows). Unblock: funded paid key for the benchmark window or restored z-ai quota headroom. Multi-call scaffolds are structurally penalized ~6x vs single-call under this starvation (verification 5 samples vs context 458 samples over identical 6h windows).
+- Lever report finalized: all four lever rows terminal (aci NEUTRAL/REVERT; verification BLOCKED; context NEUTRAL/NEUTRAL/KEEP-flagged; router NEUTRAL/NEUTRAL/KEEP-flagged).
+
+Stage Summary:
+- All seven steps of the strict scope are DONE or BLOCKED with evidence. Final report delivered in chat.
