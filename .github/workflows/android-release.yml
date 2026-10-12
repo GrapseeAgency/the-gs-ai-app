@@ -37,7 +37,7 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.9'
+          gradle-version: '8.13'
 
       # THE APK HAD NO NATIVE LIBRARY. This is the step that puts one in it.
       # libgs_sd.so is deliberately NOT staged -- diffusion is off on mobile, and
