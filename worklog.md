@@ -4626,3 +4626,35 @@ Work Log:
 
 Stage Summary:
 - All seven steps of the strict scope are DONE or BLOCKED with evidence. Final report delivered in chat.
+
+---
+Task ID: arm64-device-round2
+Agent: main session
+Task: Operator installed the app on a physical arm64 phone; send of "hi" failed with the midStreamNothingArrived notice. Operator ordered a brand new APK.
+
+Work Log:
+- Root-caused the phone failure from server-side evidence: dev.log has ZERO requests from the phone (no GS-CAP row, no GS-VERSION-MISMATCH, no 0.71.3 clientVersion anywhere) and the DB has no phone-created conversation (newest rows were only curl tests and eval runs). The request never reached the turn executor.
+- Reproduced the failure class live: the dev server had silently died (log ends clean, process gone, no crash output); the public gateway then returns an HTML 502 in ~0.07s for every send. That gateway 502 on a dead upstream is exactly what the phone experienced (matches the KNOWN OUTAGE note recorded in download/update-manifest.json).
+- Restarted the server via .zscripts/dev.sh (setsid detached). Post-restart live proof: CHAT turn 200 in 1.3s ("Hello! How can I help you today?"), WEB turn 200 in 10.6s with real searched content (Microsoft custom AI chips). A git reset --hard to origin/main (470 commits behind locally) had also flipped SQLite to readonly mid-session; dev.sh restart + db:push cleared it.
+- Keypool: all four vault layers verified EMPTY (env, .secrets/, db/vault.db, /home/z/.gs-vault) after the platform wipe; full keys are unrecoverable from disk (only prefixes survive in session context). Send path still serves real turns via the z-ai fallback route (modelRoute=zai/gs-swift). No keys fabricated.
+- Built the ordered new release: bumped android versionCode 77 -> 78, versionName 0.71.3 -> 0.71.4, aligned server CURRENT_APP_VERSION 0.68.2 -> 0.71.4 in turn-executor.ts + diagnostics/route.ts. Commit bb308a7 pushed to main; tag v0.71.4 pushed.
+- Release build run 38255801304 in flight on ref v0.71.4. Tag also auto-triggered arm64-runner-probe 38255801213; cancelled it per the no-more-CI-arm64-probes directive (HTTP 202).
+
+Stage Summary:
+- Phone failure was infrastructure (dead dev server -> gateway 502), not the v0.71.3 APK. Server is alive again with both CHAT and WEB proven live. v0.71.4 (versionCode 78) release build in flight; will verify the artifact (versionCode, arm64 libgs_ffi.so, baked origin) and refresh download/GS-AI-App.apk + update-manifest.json once it lands.
+
+---
+Task ID: arm64-device-round2-release
+Agent: main session
+Task: Deliver the ordered brand-new APK for the operator's arm64 device test.
+
+Work Log:
+- Run 38255801304 (tag v0.71.4) failed at Unit tests + assemble: AGP 8.13.2 on main requires Gradle >= 8.13 while the workflow pinned gradle-version 8.9 (raw: "Minimum supported Gradle version is 8.13. Current version is 8.9."; wrapper already at 8.13). Fixed the pin, commit 24e5d19, re-tagged v0.71.4 (forced).
+- Auto-triggered arm64-runner-probe on the tag pushes cancelled twice (38255801213, 38256416366) per the no-more-CI-arm64-probes directive.
+- Rerun 38256416195 completed success; release v0.71.4 created 2026-10-12T13:32:40Z with GS-AI-App.apk 84,072,106 bytes.
+- Artifact verified from the release download: versionCode 78, versionName 0.71.4, package com.grapsee.gsai (pyaxmlparser); lib/arm64-v8a/libgs_ffi.so present, 4,590,976 bytes, "ELF 64-bit LSB shared object, ARM aarch64, for Android 21, built by NDK r25c"; baked origin present in dex (2 hits); sha256 03f436bff9cd26ccf37bace1cfe8e2abe5006be15b27b136e4ad0e1111d07494.
+- LiveUpdate channel refreshed: download/GS-AI-App.apk replaced with the verified artifact, update-manifest.json rewritten (versionCode 78, sha256, size, honest notes on the dead-server 502 root cause and the empty keypool). Commit 59a9e8a pushed.
+- Post-ship liveness on the public origin: diagnostics 200; fresh CHAT turn 200 in 0.85s with a real reply.
+
+Stage Summary:
+- v0.71.4 (versionCode 78) is live at https://github.com/GrapseeAgency/the-gs-ai-app/releases/download/v0.71.4/GS-AI-App.apk, over-install safe (committed keystore, cert parity). Operator can install now; backend is serving real CHAT and WEB turns. OpenRouter keypool remains empty (unrecoverable after platform wipe; z-ai fallback carries routing). Risk: the sandbox dev server can silently die again and sends will 502; if the phone shows the no-reply notice again, check the server first, not the APK.
