@@ -60,7 +60,7 @@ struct ChatDetailView: View {
     @FocusState private var composerFocused: Bool
     @ObservedObject private var conversations = ConversationStore.shared
     // Voice entry (Step 4): the same shared Router every pushed surface reads
-    // (ChatsListView, VoiceView, AssistantDetailView, …) — the composer mic
+    // (ChatsListView, VoiceView, …) — the composer mic
     // appends .voice onto the stack this screen was pushed onto.
     @EnvironmentObject private var router: Router
     // Offline state (Step 4): one shared NWPathMonitor for the whole process.
@@ -1209,11 +1209,13 @@ private struct MessageBubble: View, Equatable {
         }
     }
 
-    /// Small assistant badge — mirrors the Android thread mark.
+    /// Small assistant badge — mirrors the Android thread mark. The identity
+    /// mark is the GS monogram, a glyph, not an illustration (the previous
+    /// sparkle is banned chrome under RULE ZERO).
     private var assistantAvatar: some View {
-        Image(systemName: "sparkles")
-            .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(Aero.accent)
+        Text("GS")
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundStyle(Aero.text)
             .frame(width: 26, height: 26)
             .background(Circle().fill(Aero.accent.opacity(0.12)))
             .overlay(Circle().stroke(Aero.outline, lineWidth: 1))

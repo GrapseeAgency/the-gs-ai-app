@@ -25,12 +25,12 @@ private struct StaggerIn<Content: View>: View {
 // MARK: - Search — one index over everything
 
 /// Pushed via `.search`. One query over the real on-device corpus: SQLite
-/// conversations and message bodies (FTS5-backed via `ConversationStore`),
-/// Library saved items, the assistant catalogue (samples + the user's own)
-/// and projects. Results arrive grouped with honest per-group counts and
-/// every row routes to its real destination. Store hiccups resolve to "no
-/// results", never an error. Kind chips gate the groups; recent searches are
-/// the queries the reader actually acted on.
+/// conversations and message bodies (FTS5-backed via `ConversationStore`).
+/// The demo catalogues (library / assistants / projects) died with their
+/// surfaces and the index follows them. Results arrive grouped with honest
+/// per-group counts and every row routes to its real destination. Store
+/// hiccups resolve to "no results", never an error. Kind chips gate the
+/// groups; recent searches are the queries the reader actually acted on.
 struct SearchView: View {
 
     // MARK: Result model
@@ -38,17 +38,11 @@ struct SearchView: View {
     private enum Kind: String, CaseIterable {
         case conversations = "Conversations"
         case messages = "Messages"
-        case library = "Library"
-        case assistants = "Assistants"
-        case projects = "Projects"
 
         var icon: String {
             switch self {
             case .conversations: return "bubble.left"
             case .messages: return "text.quote"
-            case .library: return "tray.full"
-            case .assistants: return "smarttoy"
-            case .projects: return "folder"
             }
         }
     }
@@ -79,8 +73,6 @@ struct SearchView: View {
     // MARK: State
 
     @ObservedObject private var store = ConversationStore.shared
-    @ObservedObject private var assistantsStore = AssistantsStore.shared
-    @ObservedObject private var projectStore = ProjectStore.shared
     @State private var query = ""
     @State private var activeKind: Kind?
     @State private var recents: [String] = RecentSearches.load()
@@ -96,9 +88,8 @@ struct SearchView: View {
 
     /// Same content, ordering and caps as the old synchronous pass — only the
     /// store's SQLite reads moved off the main actor
-    /// (ConversationStore.searchAsync). Library/assistants/projects are
-    /// in-memory + UserDefaults reads and stay inline. @MainActor so the
-    /// observed stores are only ever touched from the main actor.
+    /// (ConversationStore.searchAsync). @MainActor so the observed store is
+    /// only ever touched from the main actor.
     @MainActor
     private func computeResults(_ term: String) async -> [SearchHit] {
         var hits: [SearchHit] = []
@@ -119,47 +110,6 @@ struct SearchView: View {
                 title: hit.conversation.title,
                 detail: Self.snippet(hit.content, term: term) + " · " + Self.relative(hit.createdAt),
                 route: .chat(hit.conversation.id)))
-        }
-        for item in ConversationStore.shared.savedLibraryItems()
-            .filter({ $0.title.localizedCaseInsensitiveContains(term) || $0.content.localizedCaseInsensitiveContains(term) })
-            .prefix(10) {
-            let contentMatched = !item.title.localizedCaseInsensitiveContains(term)
-            let detail = (contentMatched ? Self.snippet(item.content, term: term) : "Saved \(item.kind)")
-                + " · " + Self.relative(item.createdAt)
-            hits.append(SearchHit(
-                id: "lib-\(item.id)",
-                kind: .library,
-                title: item.title,
-                detail: detail,
-                route: .library))
-        }
-        for assistant in (AssistantSample.catalog + assistantsStore.userAssistants)
-            .filter({
-                $0.name.localizedCaseInsensitiveContains(term) ||
-                $0.desc.localizedCaseInsensitiveContains(term) ||
-                $0.category.localizedCaseInsensitiveContains(term)
-            })
-            .prefix(8) {
-            hits.append(SearchHit(
-                id: "asst-\(assistant.id)",
-                kind: .assistants,
-                title: assistant.name,
-                detail: assistant.category,
-                route: .assistant(assistant.id)))
-        }
-        for project in projectStore.projects
-            .filter({
-                $0.name.localizedCaseInsensitiveContains(term) ||
-                $0.blurb.localizedCaseInsensitiveContains(term)
-            })
-            .prefix(8) {
-            let detail = project.blurb.isEmpty ? "\(project.chatIds.count) chats" : project.blurb
-            hits.append(SearchHit(
-                id: "proj-\(project.id)",
-                kind: .projects,
-                title: project.name,
-                detail: detail,
-                route: .project(project.id)))
         }
         return hits
     }
@@ -182,7 +132,7 @@ struct SearchView: View {
                         EmptyStateView(
                             icon: "magnifyingglass",
                             title: "Search everything",
-                            message: "Conversations, messages, library items, assistants and projects, one index over this device."
+                            message: "Conversations and message bodies, one index over this device."
                         )
                     }
                 } else if term.count < 2 {
@@ -238,7 +188,7 @@ struct SearchView: View {
     private var inputBar: some View {
         AeroInputBar(
             text: $query,
-            placeholder: "Search conversations, library, assistants…",
+            placeholder: "Search conversations and messages…",
             action: {},
             searchField: true
         )

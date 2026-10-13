@@ -21,25 +21,15 @@ enum AeroRoute: Hashable {
     /// — seed the draft, never auto-send). This case stays in place for the
     /// routing contract; it currently has no pusher.
     case chatAutoSend(String)
-    case assistant(String)
-    case assistantCreate
-    case assistantEdit(String)
-    case project(String)
     case search
     case settings
     case notifications
     case voice
-    case imageStudio              // Image Studio — also the New image quick action
     case chatArchive
     case chatSearch
 
     // Section roots — reached from the drawer (no tab bar anywhere)
     case chats
-    case explore
-    case createTab
-    case library
-    case projects
-    case assistants
     case profile
     case billing
 }
@@ -190,25 +180,15 @@ struct AeroDestinations: ViewModifier {
             case .chat(let id): ChatDetailView(conversationID: id)
             case .chatPrefill(let prompt): ChatDetailView(conversationID: nil, prefill: prompt)
             case .chatAutoSend(let prompt): ChatDetailView(conversationID: nil, prefill: prompt, autoSendPrefill: true)
-            case .assistant(let id): AssistantDetailView(assistantID: id)
-            case .assistantCreate: AssistantCreateView()
-            case .assistantEdit(let id): AssistantCreateView(editID: id)
-            case .project(let id): ProjectDetailView(projectID: id)
             case .search: SearchView()
             case .settings: SettingsView()
             case .notifications: NotificationsView()
             case .voice: VoiceView()
-            case .imageStudio: ImageStudioView()
             case .chatArchive: ArchivedChatsView()
             case .chatSearch: ChatSearchView()
 
             // Section roots (drawer)
             case .chats: ChatsListView()
-            case .explore: ExploreView()
-            case .createTab: CreateView()
-            case .library: LibraryView()
-            case .projects: ProjectsView()
-            case .assistants: AssistantsView()
             case .profile: ProfileView()
             case .billing: BillingView()
             }

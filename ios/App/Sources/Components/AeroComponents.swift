@@ -201,7 +201,9 @@ struct AeroInputBar: View {
     var body: some View {
         let _ = hc.highContrast
         HStack(spacing: Aero.Spacing.s) {
-            Image(systemName: "sparkles").foregroundStyle(Aero.accent)
+            if searchField {
+                Image(systemName: "magnifyingglass").foregroundStyle(Aero.textMuted)
+            }
             field
             if busy, let onStop {
                 // Send slot → Stop: always tappable (no text gate — stopping

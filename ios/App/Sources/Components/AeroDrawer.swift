@@ -12,9 +12,10 @@ import SwiftUI
  *      long-press for pin / rename / archive / delete. Genuine empty state —
  *      nothing is invented. "All chats" is the quiet overflow into the full
  *      history hub.
- *   4. MORE — one row. Explore, Create, Projects, Library, Assistants and
- *      Voice live behind it, one step away — present, but never competing
- *      with conversation at row parity.
+ *   4. VOICE — the one wired non-chat capability, a real row. The More
+ *      sheet it used to live behind (Explore / Create / Projects / Library /
+ *      Assistants demo catalogues) is deleted outright — the app opens as
+ *      chat + voice + account.
  *
  * Machinery (tracked dismissal, VoiceOver containment, rename alert,
  * edge-swipe entry) is unchanged.
@@ -38,7 +39,6 @@ struct AeroDrawer: View {
     @State private var renameTarget: StoredConversation?
     @State private var renameDraft = ""
     @State private var accountSheet = false
-    @State private var moreSheet = false
 
     /// Close-drag tracking (Task 85-e I9): while the finger is down the panel
     /// follows it 1:1 leftward; the state flip only happens on release, and
@@ -86,10 +86,6 @@ struct AeroDrawer: View {
             accountSheetView
                 .presentationDetents([.medium])
         }
-        .sheet(isPresented: $moreSheet) {
-            moreSheetView
-                .presentationDetents([.medium, .large])
-        }
     }
 
     // MARK: Body building blocks (type-check split — the previous single
@@ -110,6 +106,7 @@ struct AeroDrawer: View {
             ScrollView(showsIndicators: false) {
                 panelList
             }
+            footer
         }
         .padding(.top, Aero.Spacing.xl)
         .frame(width: panelWidth, alignment: .top)
@@ -127,14 +124,27 @@ struct AeroDrawer: View {
 
     private var panelList: some View {
         VStack(alignment: .leading, spacing: Aero.Spacing.s) {
-            header
             newChatRow
             recentGroup
             divider
-            moreRow
+            voiceRow
         }
         .padding(.horizontal, Aero.Spacing.m)
-        .padding(.bottom, Aero.Spacing.xl)
+        .padding(.bottom, Aero.Spacing.l)
+    }
+
+    /// Voice — the one wired non-chat capability, promoted to a real row.
+    private var voiceRow: some View {
+        row(title: "Voice", icon: "waveform", isSelected: activeRoute == .voice) { onRoute(.voice) }
+    }
+
+    /// Account footer — pinned to the bottom of the panel, outside the
+    /// scroll: identity + account sheet stay reachable from any scroll
+    /// position (the More row that used to sit here is gone).
+    private var footer: some View {
+        header
+            .padding(.horizontal, Aero.Spacing.m)
+            .padding(.bottom, Aero.Spacing.xl)
     }
 
     /// New chat + Search — the two conversation actions, always first.
@@ -197,12 +207,7 @@ struct AeroDrawer: View {
         }
     }
 
-    /// Every other product surface, one quiet row away.
-    private var moreRow: some View {
-        row(title: "More", icon: "ellipsis.circle") { moreSheet = true }
-    }
-
-    // MARK: Account / More reveal sheets
+    // MARK: Account reveal sheet
 
     private var accountSheetView: some View {
         AeroSheetShell(title: account.displayName.isEmpty ? "Account" : account.displayName) {
@@ -211,21 +216,6 @@ struct AeroDrawer: View {
                 sheetRow(title: "Settings", icon: "gearshape", isSelected: activeRoute == .settings) { onRoute(.settings) }
                 sheetRow(title: "Notifications", icon: "bell", isSelected: activeRoute == .notifications) { onRoute(.notifications) }
                 sheetRow(title: "Billing", icon: "creditcard", isSelected: activeRoute == .billing) { onRoute(.billing) }
-            }
-        }
-    }
-
-    private var moreSheetView: some View {
-        AeroSheetShell(title: "More") {
-            ScrollView {
-                VStack(spacing: Aero.Spacing.s) {
-                    sheetRow(title: "Explore", icon: "safari", isSelected: activeRoute == .explore) { onRoute(.explore) }
-                    sheetRow(title: "Create", icon: "sparkles", isSelected: activeRoute == .createTab) { onRoute(.createTab) }
-                    sheetRow(title: "Projects", icon: "folder", isSelected: activeRoute == .projects) { onRoute(.projects) }
-                    sheetRow(title: "Library", icon: "books.vertical", isSelected: activeRoute == .library) { onRoute(.library) }
-                    sheetRow(title: "Assistants", icon: "cpu", isSelected: activeRoute == .assistants) { onRoute(.assistants) }
-                    sheetRow(title: "Voice", icon: "waveform", isSelected: activeRoute == .voice) { onRoute(.voice) }
-                }
             }
         }
     }
@@ -361,7 +351,6 @@ struct AeroDrawer: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Account. Show account options")
-        .padding(.bottom, Aero.Spacing.m)
     }
 
     /// Up to two leading initials of the stored display name — derived only,

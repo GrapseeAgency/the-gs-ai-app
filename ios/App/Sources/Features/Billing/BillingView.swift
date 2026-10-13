@@ -52,7 +52,7 @@ struct BillingView: View {
     private var honestCard: some View {
         AeroCard {
             VStack(alignment: .leading, spacing: Aero.Spacing.s) {
-                Image(systemName: "sparkles")
+                Image(systemName: "leaf")
                     .font(.system(size: 18))
                     .foregroundStyle(Aero.accent)
                 Text("GS AI is in early access")

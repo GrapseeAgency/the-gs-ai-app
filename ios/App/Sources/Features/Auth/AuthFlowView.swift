@@ -116,9 +116,9 @@ struct AuthFlowView: View {
 
             StaggerIn(index: 1) {
                 VStack(spacing: Aero.Spacing.s) {
-                    valueRow("sparkles", "One AI for everything")
+                    valueRow("zap", "One AI for everything")
                     valueRow("lock.shield", "Your data stays yours")
-                    valueRow("bolt", "Native speed, editorial craft")
+                    valueRow("gauge", "Native speed, editorial craft")
                 }
             }
 
@@ -688,7 +688,7 @@ private struct OptionalFocus: ViewModifier {
     }
 }
 
-// MARK: Field helpers (capsule style per AssistantCreateView)
+// MARK: Field helpers (capsule style, the app's one input grammar)
 
     private func capsuleField(
         _ placeholder: String,
