@@ -267,6 +267,13 @@ Inline `code` and math ${'$'}a^2 + b^2 = c^2$."""
         // 6. Settings: the drawer gates it behind "More" (drawer evidence in
         // the v9 run: the row list ends at More, Settings lives one level in).
         if (tapDesc("Open menu") && tapText("More")) {
+            // The More sheet is taller than the screen: Settings sits below
+            // the fold (run 38437095380 evidence). Swipe, then look again.
+            if (!device.hasObject(By.textContains("Settings"))) {
+                device.swipe(device.displayWidth / 2, (device.displayHeight * 0.7).toInt(),
+                    device.displayWidth / 2, (device.displayHeight * 0.25).toInt(), 12)
+                device.waitForIdle(1_500)
+            }
             if (device.wait(Until.hasObject(By.textContains("Settings")), 10_000) &&
                 tapText("Settings")
             ) {
