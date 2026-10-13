@@ -272,7 +272,7 @@ private fun appendSpans(builder: AnnotatedString.Builder, spans: List<InlineSpan
                     TextLinkStyles(style = SpanStyle(color = theme.linkColor, textDecoration = TextDecoration.Underline)),
                     // TASK 1: tap opens the IN-APP browser. External open is the
                     // long-press path (GsLinks), never a plain tap.
-                    linkInteractionListener = { _, _ -> theme.openLink(span.url) }
+                    linkInteractionListener = { _ -> theme.openLink(span.url) }
                 )
             ) { builder.append(span.text) }
             is InlineSpan.CitationSpan -> {
@@ -292,7 +292,7 @@ private fun appendSpans(builder: AnnotatedString.Builder, spans: List<InlineSpan
                             TextLinkStyles(style = citationChipStyle(theme)),
                             // TASK 1: inline citation chips route through the
                             // in-app browser too — same tap contract as links.
-                            linkInteractionListener = { _, _ -> theme.openLink(url) }
+                            linkInteractionListener = { _ -> theme.openLink(url) }
                         )
                     ) {
                         withStyle(citationChipStyle(theme)) { builder.append(span.number.toString()) }

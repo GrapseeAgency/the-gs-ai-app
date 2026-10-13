@@ -475,6 +475,7 @@ fun SourceCardsRow(sources: List<SourceCard>, onOpenUrl: (String) -> Unit) {
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun SourceCardView(card: SourceCard, onOpenUrl: (String) -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
