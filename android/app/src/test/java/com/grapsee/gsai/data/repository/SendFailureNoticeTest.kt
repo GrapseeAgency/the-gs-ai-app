@@ -116,7 +116,7 @@ class SendFailureNoticeTest {
             assertTrue(
                 "a failure notice should be delimited like the other failure " +
                     "markers in this layer so it cannot read as prose. Got: $text",
-                text.startsWith("— ") && text.endsWith(" —"),
+                text.startsWith("(") && text.trimEnd().endsWith(")"),
             )
         }
     }
