@@ -18,6 +18,8 @@ import io.ktor.utils.io.readUTF8Line
 import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
+import java.security.cert.CertificateException
+import javax.net.ssl.SSLException
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.isActive
@@ -87,6 +89,33 @@ class GsBackendException(
     /** Sanitized server error text, or null when the body carried none. */
     val serverMessage: String?
 ) : Exception(serverMessage ?: "GS backend error (HTTP $status)")
+
+/**
+ * v0.71.6 TLS-HANDSHAKE DETECTION — walks the wrapping chain for the TLS
+ * shapes (the SSLException family and the CertificateException family).
+ * Ktor and the engine wrap these several layers deep; the leaf is the truth.
+ *
+ * Field evidence that this matters (operator's arm64 phone, v0.71.5 diag
+ * line): the handshake died with
+ *
+ *   CertificateException: Domain specific configurations require that
+ *   hostname aware checkServerTrusted(X509Certificate[], String, String)
+ *   is used
+ *
+ * and the wrapping machinery had turned that into "The connection dropped
+ * mid-turn" — a lie that cost days of misdiagnosis. No wrapping may bury
+ * this class again.
+ */
+internal fun Throwable.hasTlsFailureInChain(): Boolean {
+    var t: Throwable? = this
+    var depth = 0
+    while (t != null && t !== t.cause && depth < 6) {
+        if (t is SSLException || t is CertificateException) return true
+        t = t.cause
+        depth++
+    }
+    return false
+}
 
 /**
  * Thin typed client for the GS AI backend contract (shared-contracts/openapi.yaml v0.1.0).
@@ -253,6 +282,13 @@ class ApiClient(
             ) {
                 throw e
             }
+            // v0.71.6 TLS CLASS — a certificate/SSL failure is a HANDSHAKE death,
+            // not a mid-stream cut: no request was ever written, no response ever
+            // started. Wrapping it into GsStreamCutException renders exactly the
+            // lie the operator screenshotted on 2026-10-14 ("The connection
+            // dropped mid-turn... [CertificateException: ...]"). Rethrow unchanged
+            // so the classifier sees the real class.
+            if (e.hasTlsFailureInChain()) throw e
             throw GsStreamCutException(status = null, cause = e)
         }
         // FORENSIC AUDIT [5]: a non-2xx here is BACKEND_ERROR, not "offline".

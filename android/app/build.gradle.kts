@@ -177,8 +177,8 @@ android {
 
         minSdk = 26
         targetSdk = 35
-        versionCode = 79
-        versionName = "0.71.5"
+        versionCode = 80
+        versionName = "0.71.6"
 
 
         // REAL transport origin — applies to EVERY build type (v0.66.0 fix).
@@ -287,6 +287,10 @@ dependencies {
     implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.android)
     implementation(libs.ktor.client.cio)
+    // v0.71.6: production engine (TLS fix) — see libs.versions.toml for the
+    // full root-cause record. CIO stays as a dependency only for the
+    // androidTest harness (plain-HTTP local wire server).
+    implementation(libs.ktor.client.okhttp)
     implementation(libs.ktor.client.content.negotiation)
     implementation(libs.ktor.serialization.kotlinx.json)
     implementation(libs.kotlinx.serialization.json)

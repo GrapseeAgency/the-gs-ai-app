@@ -11,7 +11,7 @@ import com.grapsee.gsai.data.remote.GsApiJson
 import com.grapsee.gsai.data.repository.ChatRepository
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.HttpClientEngine
-import io.ktor.client.engine.cio.CIO
+import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpRequestRetry
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
@@ -23,15 +23,28 @@ import java.util.UUID
 internal const val GS_SESSION_HEADER = "x-session-id"
 
 /**
- * One HttpClient factory for the whole app. CIO engine keeps the stack
- * pure-Kotlin (JVM/Android friendly, easy to unit-test); 120s request timeout
- * lets SSE streams run long without the client cutting them off.
+ * One HttpClient factory for the whole app. 120s request timeout lets SSE
+ * streams run long without the client cutting them off.
  *
- * TRANSPORT FIX: every request carries `x-session-id` — the platform edge
- * rejects ALL invocations without it ("header 'x-session-id' is required for
- * header field session affinity"), which surfaced to users as a bare
- * "Network error" on uploads. [engine] is overridable so tests capture the
- * emitted request with MockEngine.
+ * v0.71.6 TRANSPORT FIX — the engine is OkHttp. CIO was here for years
+ * ("pure-Kotlin, JVM/Android friendly") and the app NEVER ONCE completed a
+ * TLS handshake to the origin on a real phone: CIO builds its SSLEngine
+ * anonymously (no peer host), and Android's NSC RootTrustManager refuses
+ * that shape when the device's network-security config carries per-domain
+ * entries — CertificateException "Domain specific configurations require
+ * that hostname aware checkServerTrusted(X509Certificate[], String, String)
+ * is used", captured verbatim by the v0.71.5 forensic diag line on the
+ * operator's arm64 phone. Every send died DURING the handshake, before the
+ * request was written — which is why the server logs showed zero phone
+ * rows while the SAME phone's browser chatted fine. OkHttp performs TLS on
+ * host-named sockets via the platform (Conscrypt) path — the same path the
+ * working browser effectively uses.
+ *
+ * TRANSPORT FIX (v0.66): every request carries `x-session-id` — the
+ * platform edge rejects ALL invocations without it ("header 'x-session-id'
+ * is required for header field session affinity"), which surfaced to users
+ * as a bare "Network error" on uploads. [engine] is overridable so tests
+ * capture the emitted request with MockEngine.
  */
 internal fun gsHttpClient(sessionId: String, engine: HttpClientEngine? = null): HttpClient =
     gsHttpClient({ sessionId }, engine)
@@ -47,7 +60,7 @@ internal fun gsHttpClient(sessionId: String, engine: HttpClientEngine? = null): 
  */
 internal fun gsHttpClient(sessionIdProvider: () -> String, engine: HttpClientEngine? = null): HttpClient =
     if (engine != null) HttpClient(engine) { configure(sessionIdProvider) }
-    else HttpClient(CIO) { configure(sessionIdProvider) }
+    else HttpClient(OkHttp) { configure(sessionIdProvider) }
 
 private fun io.ktor.client.HttpClientConfig<*>.configure(sessionIdProvider: () -> String) {
     defaultRequest {

@@ -8,7 +8,7 @@ import com.grapsee.gsai.BuildConfig
 import com.grapsee.gsai.data.remote.GsApiJson
 import com.grapsee.gsai.di.ServiceLocator
 import io.ktor.client.HttpClient
-import io.ktor.client.engine.cio.CIO
+import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.request.get
 import io.ktor.client.request.headers
@@ -111,9 +111,13 @@ object LiveUpdater {
 
     /** Dedicated client — long request timeout for a 20MB body over slow links,
      *  plus a per-read socket timeout so a stalled stream errors into a resume
-     *  instead of hanging the pill forever. */
+     *  instead of hanging the pill forever.
+     *  v0.71.6: OkHttp engine — the CIO engine's anonymous-SSLEngine TLS died
+     *  in the handshake on real devices (see ServiceLocator for the full
+     *  record), which silently took manifest checks and APK downloads with it.
+     */
     private val downloadClient: HttpClient by lazy {
-        HttpClient(CIO) {
+        HttpClient(OkHttp) {
             install(HttpTimeout) {
                 requestTimeoutMillis = 600_000
                 connectTimeoutMillis = 15_000

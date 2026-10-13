@@ -49,6 +49,15 @@ kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 ktor-client-core = { group = "io.ktor", name = "ktor-client-core", version.ref = "ktor" }
 ktor-client-android = { group = "io.ktor", name = "ktor-client-android", version.ref = "ktor" }
 ktor-client-cio = { group = "io.ktor", name = "ktor-client-cio", version.ref = "ktor" }
+# v0.71.6: the production transport engine. Ktor CIO creates its SSLEngine
+# WITHOUT the peer host, and Android's NSC RootTrustManager then throws
+# CertificateException "Domain specific configurations require that hostname
+# aware checkServerTrusted(X509Certificate[], String, String) is used" during
+# the TLS handshake — captured verbatim by the v0.71.5 forensic diag line on
+# the operator's arm64 phone (every send died before the request was written,
+# zero rows server-side). OkHttp does TLS on real host-named sockets and is
+# the battle-tested Android path.
+ktor-client-okhttp = { group = "io.ktor", name = "ktor-client-okhttp", version.ref = "ktor" }
 ktor-client-content-negotiation = { group = "io.ktor", name = "ktor-client-content-negotiation", version.ref = "ktor" }
 ktor-serialization-kotlinx-json = { group = "io.ktor", name = "ktor-serialization-kotlinx-json", version.ref = "ktor" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "serializationJson" }

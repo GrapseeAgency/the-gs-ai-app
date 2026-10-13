@@ -17,6 +17,7 @@ import com.grapsee.gsai.data.remote.ConversationDto
 import com.grapsee.gsai.data.remote.GsApiJson
 import com.grapsee.gsai.data.remote.GsBackendException
 import com.grapsee.gsai.data.remote.GsStreamCutException
+import com.grapsee.gsai.data.remote.hasTlsFailureInChain
 import com.grapsee.gsai.data.remote.MessageDto
 import com.grapsee.gsai.data.remote.MessageSourceDto
 import com.grapsee.gsai.data.remote.UpdateConversationRequest
@@ -81,10 +82,33 @@ private sealed class SendFailure {
         /** The local cause, when there was no server message to show. */
         val localReason: String? = null,
     ) : SendFailure()
+
+    /**
+     * (d) v0.71.6 — the TLS handshake itself failed (certificate/SSL error).
+     * The secure connection died BEFORE the request was written, so neither
+     * "unreachable" (the peer may be perfectly reachable; the handshake is
+     * what broke) nor "mid-turn cut" (nothing ever started) is true.
+     *
+     * Found live on the operator's arm64 phone via the v0.71.5 diag line:
+     * CertificateException "Domain specific configurations require that
+     * hostname aware checkServerTrusted(X509Certificate[], String, String) is
+     * used" — the Ktor CIO engine builds its SSLEngine without the peer host
+     * and Android's RootTrustManager refuses that shape. Engine moved to
+     * OkHttp in this same release; the class stays so any future TLS-shaped
+     * failure reads as what it is instead of masquerading as a cut.
+     */
+    object TlsHandshake : SendFailure()
 }
 
 private fun classifySendFailure(e: Exception, receivedAnyEvent: Boolean): SendFailure {
     if (receivedAnyEvent) return SendFailure.MidStreamCut
+    // v0.71.6 TLS CLASS — checked FIRST, before the cut arm: a TLS handshake
+    // death arrives here UNwrapped (ApiClient rethrows it unchanged) but older
+    // paths could still carry it inside a wrapper, and a cut label for a
+    // handshake that never completed is the exact lie v0.71.5 shipped to the
+    // operator's phone. The handshake runs BEFORE the request, so both the
+    // cut and the unreachable labels would be false.
+    if (e.hasTlsFailureInChain()) return SendFailure.TlsHandshake
     // A 2xx whose body then died. Classified BEFORE the unreachable check below,
     // because a cut is not unreachable: the backend accepted the request and began
     // answering, so "— Offline — cannot reach GS. —" would be false, and
@@ -587,7 +611,19 @@ class ChatRepository(
                     persistAssistant(activeId, assistantId, accumulated)
                     return activeId
                 }
-                // (2) GENUINE_UNREACHABLE — TCP connect failed. Honest label.
+                // (2) TLS_HANDSHAKE — the secure connection itself failed before
+                //     the request was written. v0.71.6; the honest label replaces
+                //     the mid-turn-cut lie the operator screenshotted. No affinity
+                //     rotation: a client-side handshake death is not a routing
+                //     problem, and rotating would imply a retry can fix it.
+                SendFailure.TlsHandshake -> {
+                    val notice = SendFailureNotice.tlsHandshake() + forensicSuffix(e)
+                    accumulated.append(notice)
+                    onDelta(notice)
+                    persistAssistant(activeId, assistantId, accumulated)
+                    return activeId
+                }
+                // (3) GENUINE_UNREACHABLE — TCP connect failed. Honest label.
                 SendFailure.GenuineUnreachable -> {
                     // v0.71.5: connect never happened — rotate the affinity id
                     // so the retry does not hammer the same dead routing slot.
@@ -602,7 +638,7 @@ class ChatRepository(
                     persistAssistant(activeId, assistantId, accumulated)
                     return activeId
                 }
-                // (3) BACKEND_ERROR — the server answered with an error
+                // (4) BACKEND_ERROR — the server answered with an error
                 //     status: show the SERVER'S SANITIZED error message.
                 is SendFailure.BackendError -> {
                     // The order is the point: a real server message wins, then the

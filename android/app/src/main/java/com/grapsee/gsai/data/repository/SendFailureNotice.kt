@@ -47,4 +47,20 @@ internal object SendFailureNotice {
             "failed before any part of the answer arrived, and " +
             "nothing was saved, so reopening this chat will not " +
             "help. Tap regenerate, or try again in a moment. —"
+
+    /**
+     * v0.71.6 — the TLS handshake itself failed: the secure connection to GS
+     * could not be established, so the request was never sent and nothing
+     * could arrive. Found live on a real arm64 phone (the v0.71.5 diag line:
+     * CertificateException "Domain specific configurations require that
+     * hostname aware checkServerTrusted(X509Certificate[], String, String) is
+     * used"), previously mislabeled as a mid-turn cut. Same honesty rules as
+     * the other two notices: no reopen promise, an action the user can take,
+     * delimited like the other failure markers.
+     */
+    fun tlsHandshake(): String =
+        "— GS could not establish a secure connection: the TLS handshake " +
+            "failed before the request was sent. Nothing arrived and nothing " +
+            "was saved. Update the app if a newer version is available, then " +
+            "try again. —"
 }
