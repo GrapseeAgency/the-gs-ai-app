@@ -40,6 +40,7 @@ struct SourceCardsView: View {
 private struct SourceCardRow: View {
 
     let source: MessageSource
+    @Environment(\.gsOpenInApp) private var inAppBrowser
 
     private var url: URL? {
         let lower = source.url.lowercased()
@@ -67,8 +68,10 @@ private struct SourceCardRow: View {
 
     var body: some View {
         Button {
+            // TASK 1c: tap opens the IN-APP browser when the screen hosts one;
+            // the system path remains the fallback on screens without a host.
             if let url {
-                UIApplication.shared.open(url)
+                gsOpenURL(url, inApp: inAppBrowser)
             }
         } label: {
             HStack(spacing: 10) {

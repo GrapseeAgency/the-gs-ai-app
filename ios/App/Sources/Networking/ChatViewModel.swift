@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import os.log
 
 /**
  * Owns one conversation: history load (store first, then network), optimistic
@@ -441,6 +442,10 @@ final class ChatViewModel: ObservableObject {
     /// gone — one mutation per flush, committed to the store once at finalize.
     private var streamBuffer = StreamAccumulator()
     private var flushTask: Task<Void, Never>?
+    // TASK 2 — tap-to-first-visible-char stopwatch state (send() start →
+    // first non-empty flush publish). Logged as GS-PERF, one line per stream.
+    private var sendTappedAt: Date?
+    private var firstCharLogged = false
 
     /// PHASE 8.1: search-trace events of the current stream queue here
     /// off-main and drain in wire order inside the flush loop / finalize.
@@ -479,6 +484,11 @@ final class ChatViewModel: ObservableObject {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty || !attachments.isEmpty, !isStreaming else { return }
         draft = ""
+        // TASK 2 — tap-to-first-visible-character stopwatch: the send tap and
+        // the first published non-empty content bound the number the operator
+        // asked for. Logged once per stream as GS-PERF.
+        sendTappedAt = Date()
+        firstCharLogged = false
         // Attachments-only turns are not regenerable: the ids are claimed by
         // the sent message server-side, so retry/regenerate stays text-only.
         lastSentText = text.isEmpty ? nil : text
@@ -791,6 +801,13 @@ final class ChatViewModel: ObservableObject {
         guard let index = messages.indices.last, messages[index].isStreaming else { return }
         let text = streamBuffer.snapshot()
         guard messages[index].content != text else { return }
+        if !firstCharLogged, !text.isEmpty {
+            firstCharLogged = true
+            if let tappedAt = sendTappedAt {
+                let ms = Int(Date().timeIntervalSince(tappedAt) * 1000)
+                os_log("GS-PERF tapToFirstVisibleCharMs=%d chars=%d", log: .app, type: .info, ms, text.count)
+            }
+        }
         messages[index].content = text
     }
 
@@ -1111,12 +1128,10 @@ final class ChatViewModel: ObservableObject {
     // MARK: - GS Lite (on-device responder)
 
     /**
-     * Streams the on-device reply word by word with the same cadence as
-     * Android, so an offline turn reads exactly like a networked one. Stop
-     * keeps whatever streamed before it was pressed. PHASE 5 note: an
-     * offline turn keeps its attachments on the LOCAL user message (they
-     * were uploaded earlier — a ready draft restores across relaunches); the
-     * responder answers from the text prompt exactly as before, unchanged.
+     * Delivers the on-device reply in ONE delta. PHASE 5 note: an offline turn
+     * keeps its attachments on the LOCAL user message (they were uploaded
+     * earlier — a ready draft restores across relaunches); the responder
+     * answers from the text prompt exactly as before, unchanged.
      */
     private func streamLocalReply(_ prompt: String) async {
         // COMMIT 1 (a) of the mobile wiring: try the native engine first, and
@@ -1128,15 +1143,13 @@ final class ChatViewModel: ObservableObject {
         // removed: a device with no model, a build with no framework, or a
         // generation that throws must still answer.
         let reply = nativeReply(prompt) ?? Self.localReply(prompt)
-        let words = reply.split(separator: " ", omittingEmptySubsequences: false)
-        for (index, word) in words.enumerated() {
-            streamBuffer.append((index == 0 ? "" : " ") + word)
-            do {
-                try await Task.sleep(nanoseconds: 26_000_000)
-            } catch {
-                break // Stop pressed mid-reply: keep what's on screen
-            }
-        }
+        // TASK 2 (no fake typewriter): this reply is COMPLETE work before the
+        // first character shows. Dribbling it word by word with a timer would
+        // imitate typing and lie about progress — the exact verdict the
+        // native-engine path already carries ("splitting a completed local
+        // answer with a timer would imitate typing and would be a lie"). The
+        // ~30 Hz flush loop publishes it on the next tick.
+        streamBuffer.append(reply)
     }
 
     /// A completion from the native engine, or nil when there is nothing to get.

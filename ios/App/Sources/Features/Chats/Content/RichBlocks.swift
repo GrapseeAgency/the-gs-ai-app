@@ -540,6 +540,7 @@ private struct ImageBlockView: View {
     let alt: String
     @State private var state: ImageLoadState = .loading
     @State private var viewerOpen = false
+    @Environment(\.gsOpenInApp) private var inAppBrowser
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -588,8 +589,9 @@ private struct ImageBlockView: View {
     private var metaRow: some View {
         HStack(spacing: 12) {
             Button("Open") {
+                // TASK 1c: in-app browser when the screen hosts one (chat does).
                 if let link = URL(string: url), ["https", "http"].contains(link.scheme?.lowercased() ?? "") {
-                    UIApplication.shared.open(link)
+                    gsOpenURL(link, inApp: inAppBrowser)
                 }
             }
             .font(Aero.responsive(13, relativeTo: .footnote))

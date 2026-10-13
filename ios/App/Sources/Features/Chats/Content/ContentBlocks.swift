@@ -494,3 +494,135 @@ private func parseDetails(_ lines: [GSLine], start: Int) -> (Block, Int) {
         i
     )
 }
+
+// MARK: - Streaming incremental parse (TASK 1b)
+
+/**
+ * Streaming parse: the exact twin of Android ContentBlocks.kt's
+ * `parseStreamingBlocks`. The reply must render THROUGH the block renderer
+ * while it streams, not as a plain-text blob that re-renders on finalize,
+ * but a full grammar parse at every ~30 Hz flush is quadratic.
+ *
+ * The grammar is append-only per LINE RUN: every family (paragraphs, lists,
+ * quotes, tables, fences, math, details) absorbs only CONSECUTIVE lines. So a
+ * flush re-parses only the LAST contiguous line-run and freezes everything
+ * before it: earlier block instances stay byte-identical across flushes, the
+ * LazyVStack skips completed rows, and only the live tail re-renders. A full
+ * parse happens only when genuinely necessary:
+ *   - cache cold ([previousBlocks] empty), or
+ *   - the append-only contract broke (content does not extend previousContent).
+ *
+ * The tail boundary is the whole last line-RUN, not just the last block: a
+ * flush can cut a line in a state that parses as a different family (a bare
+ * "-" or "1." pending marker parses as prose today, a list item tomorrow).
+ * Re-parsing from the last BLOCK alone would freeze a still-open list and
+ * spawn a duplicate sibling list on the next flush.
+ *
+ * The streaming path is metadata-free by contract, so every block carries a
+ * real source offset. Normalization collapses CRLF to LF and drops a trailing
+ * lone CR (a flush may split a CRLF pair; the normalized previous text must
+ * stay a strict prefix of the normalized current text).
+ */
+func parseStreamingBlocks(
+    previousContent: String,
+    previousBlocks: [Block],
+    content: String
+) -> [Block] {
+    let previous = normalizeStreamText(previousContent)
+    let current = normalizeStreamText(content)
+    if previousBlocks.isEmpty || !current.hasPrefix(previous) {
+        return parseBlocks(current)
+    }
+    let tailStart = lastLineRunStart(previous)
+    let head = previousBlocks.prefix { $0.sourceStart < tailStart }
+    if head.isEmpty { return parseBlocks(current) }
+    let tailText = String(current[current.index(current.startIndex, offsetBy: tailStart)...])
+    let tail = parseBlocks(tailText).map { shiftSource($0, by: tailStart) }
+    return Array(head) + tail
+}
+
+private func normalizeStreamText(_ text: String) -> String {
+    let replaced = text.replacingOccurrences(of: "\r\n", with: "\n")
+    return replaced.hasSuffix("\r") ? String(replaced.dropLast()) : replaced
+}
+
+/**
+ * Start offset of the last contiguous non-blank line-run (blank trailing
+ * lines are skipped). Character-index arithmetic, O(length of the run).
+ * Returns 0 when the document is one run or empty.
+ */
+private func lastLineRunStart(_ text: String) -> Int {
+    let chars = Array(text)
+    var end = chars.count
+    while end > 0 {
+        let c = chars[end - 1]
+        if c == "\n" || c == " " || c == "\t" || c == "\r" { end -= 1 } else { break }
+    }
+    if end == 0 { return 0 }
+    var runStart = 0
+    var searchEnd = end
+    while searchEnd > 0 {
+        var lineStart = 0
+        if searchEnd > 0 {
+            var idx = searchEnd - 1
+            while idx >= 0, chars[idx] != "\n" { idx -= 1 }
+            lineStart = idx + 1
+        }
+        var blank = true
+        var k = lineStart
+        while k < searchEnd {
+            let c = chars[k]
+            if c != " " && c != "\t" && c != "\r" { blank = false; break }
+            k += 1
+        }
+        if blank { break }
+        runStart = lineStart
+        if lineStart == 0 { break }
+        searchEnd = lineStart - 1
+    }
+    return runStart
+}
+
+/// Re-bases every source offset in the block (and its whole nested subtree —
+/// list children, quote and collapsible innards) from tail-relative space
+/// into absolute document space.
+private func shiftSource(_ block: Block, by delta: Int) -> Block {
+    switch block {
+    case .paragraph(let spans, let s):
+        return .paragraph(spans: spans, sourceStart: s + delta)
+    case .heading(let level, let spans, let s):
+        return .heading(level: level, spans: spans, sourceStart: s + delta)
+    case .bulletList(let items, let s):
+        return .bulletList(items: items.map { shiftItem($0, by: delta) }, sourceStart: s + delta)
+    case .orderedList(let start, let items, let s):
+        return .orderedList(start: start, items: items.map { shiftItem($0, by: delta) }, sourceStart: s + delta)
+    case .blockQuote(let blocks, let s):
+        return .blockQuote(blocks: blocks.map { shiftSource($0, by: delta) }, sourceStart: s + delta)
+    case .codeBlock(let language, let code, let open, let s):
+        return .codeBlock(language: language, code: code, open: open, sourceStart: s + delta)
+    case .table(let headers, let aligns, let rows, let s):
+        return .table(headers: headers, aligns: aligns, rows: rows, sourceStart: s + delta)
+    case .divider(let s):
+        return .divider(sourceStart: s + delta)
+    case .mathBlock(let latex, let s):
+        return .mathBlock(latex: latex, sourceStart: s + delta)
+    case .mermaid(let source, let s):
+        return .mermaid(source: source, sourceStart: s + delta)
+    case .image(let url, let alt, let s):
+        return .image(url: url, alt: alt, sourceStart: s + delta)
+    case .collapsible(let summary, let blocks, let s):
+        return .collapsible(summary: summary, blocks: blocks.map { shiftSource($0, by: delta) }, sourceStart: s + delta)
+    case .citations(let entries, let s):
+        return .citations(entries, sourceStart: s + delta)
+    case .toolResult(let entry, let s):
+        return .toolResult(entry, sourceStart: s + delta)
+    }
+}
+
+private func shiftItem(_ item: ListItem, by delta: Int) -> ListItem {
+    ListItem(
+        number: item.number,
+        spans: item.spans,
+        children: item.children.map { shiftSource($0, by: delta) }
+    )
+}

@@ -213,6 +213,9 @@ struct ChatDetailView: View {
                 onCopy: { _ in showToast("Copied") }
             )
         }
+        // TASK 1c: one in-app browser host for the whole chat surface —
+        // reply text links, citation chips and source cards all resolve here.
+        .gsInAppBrowserHost()
     }
 
     /// Real Translate: streams the tapped turn into the sheet, targeted at the
@@ -1157,16 +1160,23 @@ private struct MessageBubble: View, Equatable {
             assistantAvatar
             VStack(alignment: .leading, spacing: 8) {
                 if message.isStreaming {
-                    // Deep-perf pass 80-b: the live bubble is one plain Text +
-                    // the aurora indicator. Growing text re-renders at the
-                    // ~30Hz flush cadence — no fence/markdown/syntax regex
-                    // over the whole message per flush. The styled render
-                    // below happens once on finalize. Selection/links land
-                    // with it: text selection over a 30 Hz-growing Text
-                    // fights the reader's drag (Task 85-e I5 contract).
-                    Text(message.content.isEmpty ? "…" : message.content)
-                        .font(Aero.body())
-                        .foregroundStyle(Aero.text)
+                    // TASK 1b (2026-10-14 directive): the reply streams THROUGH
+                    // the block renderer. The old live bubble was one plain
+                    // Text that re-rendered wholesale at finalize — the exact
+                    // "everything arrives as plain paragraphs" the operator
+                    // called out. The incremental parser (parseStreamingBlocks)
+                    // freezes every completed line-run and re-parses only the
+                    // live tail, so the per-flush cost is tail-shaped, not
+                    // message-shaped. Selection: enabled as at finalize — the
+                    // parser freezes completed blocks, so a reader dragging
+                    // inside settled text no longer fights the live tail.
+                    if message.content.isEmpty {
+                        Text("\u{2026}")
+                            .font(Aero.body())
+                            .foregroundStyle(Aero.text)
+                    } else {
+                        BlocksView(blocks: streamingBlocks, citations: citationLinks)
+                    }
                     // Phase 4 + PHASE 8.1: the live bubble's activity orb —
                     // the honest mapping the caller computed from the REAL
                     // stream phase (searching/working/composing/…).
@@ -1253,6 +1263,40 @@ private struct MessageBubble: View, Equatable {
         let blocks = parseBlocks(message.content)
         blockCache.setObject(BlockBox(blocks), forKey: key)
         return blocks
+    }
+
+    // MARK: Live streaming parse cache (TASK 1b)
+
+    /// Incremental block parse for the LIVE bubble. One entry per streaming
+    /// message: the previous input + its frozen-prefix parse feed
+    /// parseStreamingBlocks so each ~30 Hz flush re-parses only the tail.
+    /// Bounded: a handful of live bubbles exist at once; entries for settled
+    /// messages simply age out of the ring.
+    private static let streamParseCache = StreamParseCache()
+
+    private var streamingBlocks: [Block] {
+        Self.streamParseCache.blocks(id: message.id, content: message.content)
+    }
+
+    private final class StreamParseCache {
+        private struct Entry {
+            let input: String
+            let blocks: [Block]
+        }
+        private var entries: [UUID: Entry] = [:]
+
+        func blocks(id: UUID, content: String) -> [Block] {
+            if let hit = entries[id], hit.input == content { return hit.blocks }
+            let previous = entries[id]
+            let parsed = parseStreamingBlocks(
+                previousContent: previous?.input ?? "",
+                previousBlocks: previous?.blocks ?? [],
+                content: content
+            )
+            if entries.count > 8 { entries.removeAll(keepingCapacity: true) }
+            entries[id] = Entry(input: content, blocks: parsed)
+            return parsed
+        }
     }
 
     /// Step 4 hierarchy: the visible row carries the three high-frequency
