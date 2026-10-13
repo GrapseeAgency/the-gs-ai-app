@@ -220,6 +220,11 @@ struct AttachmentDraft: Identifiable, Codable, Equatable {
     /// The staged copy's size is the truth — never picker metadata.
     var byteSize: Int
     var createdAt: String
+    /// TASK 3 vision input contract: on-device OCR text captured while
+    /// staging an image. Optional (nil = OCR unavailable or no text); the
+    /// server stores it as a sidecar and uses it ONLY when the image bytes
+    /// cannot reach the vision model. Never rendered, never a description.
+    var ocrText: String?
 
     var localURL: URL? { localPath.map { URL(fileURLWithPath: $0) } }
 
@@ -310,12 +315,13 @@ enum AttachmentTransitions {
     }
 
     /// staged, validation passed → uploading.
-    static func stagedForUpload(_ draft: AttachmentDraft, path: String, byteSize: Int) -> AttachmentDraft {
+    static func stagedForUpload(_ draft: AttachmentDraft, path: String, byteSize: Int, ocrText: String? = nil) -> AttachmentDraft {
         var next = draft
         next.phase = .uploading
         next.error = nil
         next.localPath = path
         next.byteSize = byteSize
+        next.ocrText = ocrText
         return next
     }
 
@@ -587,20 +593,22 @@ final class AttachmentStore: ObservableObject {
         let payload = sources[id]
         let directory = Self.stagingDirectory(for: id)
         let displayName = drafts[index].displayName
+        let mimeType = drafts[index].mimeType
 
         Task { [weak self] in
             let outcome = await Task.detached(priority: .userInitiated) { () -> StageOutcome in
                 AttachmentStore.stageSync(
                     payload: payload,
                     directory: directory,
-                    displayName: displayName)
+                    displayName: displayName,
+                    mimeType: mimeType)
             }.value
             self?.finishPrepare(id: id, outcome: outcome)
         }
     }
 
     private enum StageOutcome {
-        case staged(byteSize: Int, path: String)
+        case staged(byteSize: Int, path: String, ocrText: String?)
         case failure(AttachmentFailure)
     }
 
@@ -609,9 +617,11 @@ final class AttachmentStore: ObservableObject {
     nonisolated private static func stageSync(
         payload: SourcePayload?,
         directory: URL,
-        displayName: String
+        displayName: String,
+        mimeType: String
     ) -> StageOutcome {
         let fileManager = FileManager.default
+        let isImageMIME = mimeType.hasPrefix("image/")
         do {
             try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
             let target = directory.appendingPathComponent(displayName)
@@ -637,7 +647,21 @@ final class AttachmentStore: ObservableObject {
             try bytes.write(to: target, options: .atomic)
             let attrs = try? fileManager.attributesOfItem(atPath: target.path)
             let size = (attrs?[.size] as? NSNumber)?.intValue ?? bytes.count
-            return .staged(byteSize: size, path: target.path)
+            // TASK 3 vision input contract: OCR rides the PREPARING phase
+            // (real work on the staged copy). Images only; failure or empty
+            // text leaves the sidecar nil — the attachment never fails
+            // because OCR did.
+            var ocr: String?
+            if isImageMIME {
+                ocr = try? AppleVisionOcr.recogniseText(atPath: target.path)
+                if let trimmed = ocr?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !trimmed.isEmpty {
+                    ocr = String(trimmed.prefix(20_000))
+                } else {
+                    ocr = nil
+                }
+            }
+            return .staged(byteSize: size, path: target.path, ocrText: ocr)
         } catch {
             return .failure(.readFailed)
         }
@@ -648,7 +672,7 @@ final class AttachmentStore: ObservableObject {
         switch outcome {
         case .failure(let failure):
             drafts[index] = AttachmentTransitions.failed(drafts[index], with: failure)
-        case .staged(let byteSize, let path):
+        case .staged(let byteSize, let path, let ocrText):
             // Server is the authority — this pre-flight only fails fast.
             if let failure = AttachmentTransitions.validate(byteSize: byteSize, mimeType: drafts[index].mimeType) {
                 drafts[index] = AttachmentTransitions.failed(
@@ -657,7 +681,7 @@ final class AttachmentStore: ObservableObject {
                 return
             }
             drafts[index] = AttachmentTransitions.stagedForUpload(
-                drafts[index], path: path, byteSize: byteSize)
+                drafts[index], path: path, byteSize: byteSize, ocrText: ocrText)
             beginUpload(id: id)
         }
     }
@@ -677,6 +701,7 @@ final class AttachmentStore: ObservableObject {
         let url = Self.uploadsURL()
         let displayName = draft.displayName
         let mimeType = draft.mimeType
+        let ocrText = draft.ocrText
 
         Task { [weak self] in
             let outcome = await Task.detached(priority: .userInitiated) { () -> UploadOutcome in
@@ -685,7 +710,8 @@ final class AttachmentStore: ObservableObject {
                     boundary: boundary,
                     displayName: displayName,
                     mimeType: mimeType,
-                    stagedPath: path)
+                    stagedPath: path,
+                    ocrText: ocrText)
             }.value
             self?.finishUpload(id: id, outcome: outcome)
         }
@@ -704,7 +730,8 @@ final class AttachmentStore: ObservableObject {
         boundary: String,
         displayName: String,
         mimeType: String,
-        stagedPath: String
+        stagedPath: String,
+        ocrText: String?
     ) async -> UploadOutcome {
         guard let bytes = try? Data(contentsOf: URL(fileURLWithPath: stagedPath)),
               !bytes.isEmpty else {
@@ -716,13 +743,19 @@ final class AttachmentStore: ObservableObject {
         request.timeoutInterval = 120
         request.setValue(APIClient.sessionID, forHTTPHeaderField: APIClient.sessionHeaderName)
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        var extraFields = ["displayName": displayName]
+        // TASK 3 vision input contract: the OCR sidecar rides the same
+        // multipart body; the server stores it for the fallback path only.
+        if let ocrText, !ocrText.isEmpty {
+            extraFields["ocrText"] = ocrText
+        }
         request.httpBody = MultipartFormData.body(
             boundary: boundary,
             field: "file",
             filename: displayName,
             mimeType: mimeType,
             data: bytes,
-            extraFields: ["displayName": displayName])
+            extraFields: extraFields)
 
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
