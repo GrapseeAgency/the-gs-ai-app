@@ -46,11 +46,21 @@ class GsScreenshotSuite {
     private fun shot(name: String) {
         val dir = File(shotCtx.filesDir, "screens").apply { mkdirs() }
         val out = File(dir, "$name.png")
-        // Single-arg takeScreenshot: the (file, scale, quality) overload
-        // returned ok=true but wrote 0 bytes on the API 30 emulator (run
-        // 38422692350 evidence). The plain PNG path is the reliable one.
-        val ok = runCatching { device.takeScreenshot(out) }.isSuccess && out.length() > 0
-        println("GS-SCREENSHOT $name ok=$ok bytes=${out.length()}")
+        // Direct UiAutomation capture + manual PNG compress. Both
+        // UiDevice.takeScreenshot overloads failed silently on the API 30
+        // emulator (ok=true-but-0-bytes, then ok=false with no message — runs
+        // 38422692350 / 38424705700). This route surfaces the real error and
+        // does the compress write itself, so a failure is visible in logcat.
+        val result = runCatching {
+            val bitmap = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
+                ?: error("uiAutomation.takeScreenshot() returned null")
+            out.outputStream().use { fos ->
+                if (!bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, fos)) {
+                    error("PNG compress returned false")
+                }
+            }
+        }
+        println("GS-SCREENSHOT $name ok=${result.isSuccess} bytes=${out.length()} err=${result.exceptionOrNull()?.javaClass?.simpleName}:${result.exceptionOrNull()?.message}")
     }
 
     private fun resetSession(active: Boolean, onboarded: Boolean) {

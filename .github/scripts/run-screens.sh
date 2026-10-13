@@ -17,6 +17,7 @@ adb shell am instrument -w \
 # app's Android/data is not adb-readable). run-as works because the test APK
 # is debuggable; strip the CRLF adb adds to ls output.
 mkdir -p device-artifacts/screens
+adb shell run-as com.grapsee.gsai.test mkdir -p files/screens || true
 adb shell run-as com.grapsee.gsai.test ls files/screens || true
 SHOTS=$(adb shell run-as com.grapsee.gsai.test ls files/screens | tr -d '\r' || true)
 for f in $SHOTS; do
