@@ -1985,6 +1985,188 @@ public object GsIcons {
         }.build()
     }
 
+    public val File: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "GsIcons.File",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f,
+            defaultStrokeLineWidth = 2f,
+            defaultStrokeLineCap = StrokeCap.Round,
+            defaultStrokeLineJoin = StrokeJoin.Round,
+        ).apply {
+            addPath(
+                pathData = PathParser().parsePathDataString(
+                    "M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"
+                ).toNodes(),
+                fill = null,
+                stroke = SolidColor(Color.Black),
+            )
+            addPath(
+                pathData = PathParser().parsePathDataString(
+                    "M14 2v4a2 2 0 0 0 2 2h4"
+                ).toNodes(),
+                fill = null,
+                stroke = SolidColor(Color.Black),
+            )
+        }.build()
+    }
+
+    public val ImageOff: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "GsIcons.ImageOff",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f,
+            defaultStrokeLineWidth = 2f,
+            defaultStrokeLineCap = StrokeCap.Round,
+            defaultStrokeLineJoin = StrokeJoin.Round,
+        ).apply {
+            addPath(
+                pathData = PathParser().parsePathDataString(
+                    "M0,0 L0,0"
+                ).toNodes(),
+                fill = null,
+                stroke = SolidColor(Color.Black),
+            )
+            addPath(
+                pathData = PathParser().parsePathDataString(
+                    "M10.41 10.41a2 2 0 1 1-2.83-2.83"
+                ).toNodes(),
+                fill = null,
+                stroke = SolidColor(Color.Black),
+            )
+            addPath(
+                pathData = PathParser().parsePathDataString(
+                    "M0,0 L0,0"
+                ).toNodes(),
+                fill = null,
+                stroke = SolidColor(Color.Black),
+            )
+            addPath(
+                pathData = PathParser().parsePathDataString(
+                    "M0,0 L0,0"
+                ).toNodes(),
+                fill = null,
+                stroke = SolidColor(Color.Black),
+            )
+            addPath(
+                pathData = PathParser().parsePathDataString(
+                    "M3.59 3.59A1.99 1.99 0 0 0 3 5v14a2 2 0 0 0 2 2h14c.55 0 1.052-.22 1.41-.59"
+                ).toNodes(),
+                fill = null,
+                stroke = SolidColor(Color.Black),
+            )
+            addPath(
+                pathData = PathParser().parsePathDataString(
+                    "M21 15V5a2 2 0 0 0-2-2H9"
+                ).toNodes(),
+                fill = null,
+                stroke = SolidColor(Color.Black),
+            )
+        }.build()
+    }
+
+    public val CircleCheck: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "GsIcons.CircleCheck",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f,
+            defaultStrokeLineWidth = 2f,
+            defaultStrokeLineCap = StrokeCap.Round,
+            defaultStrokeLineJoin = StrokeJoin.Round,
+        ).apply {
+            addPath(
+                pathData = PathParser().parsePathDataString(
+                    "M2,12 a10,10 0 1,0 20,0 a10,10 0 1,0 -20,0"
+                ).toNodes(),
+                fill = null,
+                stroke = SolidColor(Color.Black),
+            )
+            addPath(
+                pathData = PathParser().parsePathDataString(
+                    "m9 12 2 2 4-4"
+                ).toNodes(),
+                fill = null,
+                stroke = SolidColor(Color.Black),
+            )
+        }.build()
+    }
+
+    public val SearchX: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "GsIcons.SearchX",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f,
+            defaultStrokeLineWidth = 2f,
+            defaultStrokeLineCap = StrokeCap.Round,
+            defaultStrokeLineJoin = StrokeJoin.Round,
+        ).apply {
+            addPath(
+                pathData = PathParser().parsePathDataString(
+                    "m13.5 8.5-5 5"
+                ).toNodes(),
+                fill = null,
+                stroke = SolidColor(Color.Black),
+            )
+            addPath(
+                pathData = PathParser().parsePathDataString(
+                    "m8.5 8.5 5 5"
+                ).toNodes(),
+                fill = null,
+                stroke = SolidColor(Color.Black),
+            )
+            addPath(
+                pathData = PathParser().parsePathDataString(
+                    "M3,11 a8,8 0 1,0 16,0 a8,8 0 1,0 -16,0"
+                ).toNodes(),
+                fill = null,
+                stroke = SolidColor(Color.Black),
+            )
+            addPath(
+                pathData = PathParser().parsePathDataString(
+                    "m21 21-4.3-4.3"
+                ).toNodes(),
+                fill = null,
+                stroke = SolidColor(Color.Black),
+            )
+        }.build()
+    }
+
+    public val Pencil: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "GsIcons.Pencil",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f,
+            defaultStrokeLineWidth = 2f,
+            defaultStrokeLineCap = StrokeCap.Round,
+            defaultStrokeLineJoin = StrokeJoin.Round,
+        ).apply {
+            addPath(
+                pathData = PathParser().parsePathDataString(
+                    "M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"
+                ).toNodes(),
+                fill = null,
+                stroke = SolidColor(Color.Black),
+            )
+            addPath(
+                pathData = PathParser().parsePathDataString(
+                    "m15 5 4 4"
+                ).toNodes(),
+                fill = null,
+                stroke = SolidColor(Color.Black),
+            )
+        }.build()
+    }
+
     public val Shield: ImageVector by lazy {
         ImageVector.Builder(
             name = "GsIcons.Shield",

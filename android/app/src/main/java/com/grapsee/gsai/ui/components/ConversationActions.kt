@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.ui.theme.GsMotion
 import com.grapsee.gsai.ui.theme.gsHaptic
 import com.grapsee.gsai.ui.theme.kineticPress
+import com.grapsee.gsai.ui.icons.GsIcons
 
 /**
  * Pin / rename / archive / delete — the full benchmark action set (ChatGPT's
@@ -78,21 +79,21 @@ fun ConversationActionsSheet(
                 modifier = Modifier.padding(bottom = GsMotion.spaceS)
             )
             SheetAction(
-                icon = Icons.Outlined.PushPin,
+                icon = GsIcons.Pin,
                 label = if (pinned) "Unpin" else "Pin to top",
                 onClick = onTogglePin
             )
             SheetAction(
-                icon = Icons.Outlined.DriveFileRenameOutline,
+                icon = GsIcons.Pencil,
                 label = "Rename",
                 onClick = { renameDraft = title; renameOpen = true }
             )
-            SheetAction(icon = Icons.Outlined.Archive, label = archiveLabel, onClick = onArchive)
+            SheetAction(icon = GsIcons.Archive, label = archiveLabel, onClick = onArchive)
             // The delete moment gets the heavy long-press haptic the system
             // lists play on destructive rows — gated by the Haptics setting.
             val view = LocalView.current
             SheetAction(
-                icon = Icons.Outlined.Delete,
+                icon = GsIcons.Trash2,
                 label = "Delete",
                 tone = MaterialTheme.colorScheme.error,
                 onClick = {

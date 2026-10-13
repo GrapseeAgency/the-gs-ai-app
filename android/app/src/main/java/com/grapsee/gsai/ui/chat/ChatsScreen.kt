@@ -65,6 +65,7 @@ import java.time.OffsetDateTime
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
+import com.grapsee.gsai.ui.icons.GsIcons
 
 /**
  * Chats hub — Room conversation list as the source of truth with the
@@ -110,11 +111,11 @@ fun ChatsScreen(onNavigate: (String) -> Unit) {
         title = "Chats",
         actions = {
             IconButton(onClick = { onNavigate(GsRoutes.CHAT_SEARCH) }) {
-                Icon(Icons.Outlined.Search, contentDescription = "Search chats",
+                Icon(GsIcons.Search, contentDescription = "Search chats",
                     tint = MaterialTheme.colorScheme.onBackground)
             }
             IconButton(onClick = { onNavigate(GsRoutes.chat(null)) }) {
-                Icon(Icons.Outlined.Add, contentDescription = "New chat",
+                Icon(GsIcons.Plus, contentDescription = "New chat",
                     tint = MaterialTheme.colorScheme.onBackground)
             }
         }
@@ -138,7 +139,7 @@ fun ChatsScreen(onNavigate: (String) -> Unit) {
             // it. Folders and Shared led to hardcoded fake screens and are
             // deliberately not offered.
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                QuickLink("Archive", Icons.Outlined.Archive) { onNavigate(GsRoutes.CHAT_ARCHIVE) }
+                QuickLink("Archive", GsIcons.Archive) { onNavigate(GsRoutes.CHAT_ARCHIVE) }
             }
 
             // All/Pinned only — both are computed from real Room state. The
@@ -160,7 +161,7 @@ fun ChatsScreen(onNavigate: (String) -> Unit) {
                     GsSkeleton(68)
                 }
                 rows.isEmpty() -> GsEmptyState(
-                    icon = Icons.Outlined.Inbox,
+                    icon = GsIcons.Inbox,
                     title = if (filter == FILTER_PINNED) "Nothing pinned yet" else "No conversations yet",
                     message = if (filter == FILTER_PINNED) {
                         "Pin a chat from its overflow menu and it will live here."
@@ -184,7 +185,7 @@ fun ChatsScreen(onNavigate: (String) -> Unit) {
                                 ) {
                                     Box(contentAlignment = Alignment.Center) {
                                         Icon(
-                                            Icons.Outlined.ChatBubbleOutline,
+                                            GsIcons.MessageCircle,
                                             contentDescription = null,
                                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                             modifier = Modifier.size(18.dp)
@@ -196,7 +197,7 @@ fun ChatsScreen(onNavigate: (String) -> Unit) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     if (entity.pinned) {
                                         Icon(
-                                            Icons.Filled.Star,
+                                            GsIcons.Star,
                                             contentDescription = "Pinned",
                                             tint = MaterialTheme.colorScheme.primary,
                                             modifier = Modifier.size(18.dp)
@@ -207,7 +208,7 @@ fun ChatsScreen(onNavigate: (String) -> Unit) {
                                         modifier = Modifier.size(30.dp)
                                     ) {
                                         Icon(
-                                            Icons.Outlined.MoreVert,
+                                            GsIcons.EllipsisVertical,
                                             contentDescription = "Conversation actions",
                                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                             modifier = Modifier.size(18.dp)

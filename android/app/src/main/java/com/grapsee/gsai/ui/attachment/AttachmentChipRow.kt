@@ -44,6 +44,7 @@ import com.grapsee.gsai.data.attachment.AttachmentKind
 import com.grapsee.gsai.data.attachment.AttachmentPhase
 import com.grapsee.gsai.data.attachment.AttachmentRules
 import java.io.File
+import com.grapsee.gsai.ui.icons.GsIcons
 
 /**
  * PHASE 5 composer/transcript chips (docs/ATTACHMENTS.md §6/§7).
@@ -132,14 +133,14 @@ private fun AttachmentChip(
             if (editable) {
                 if (draft.phase == AttachmentPhase.Failed) {
                     ChipButton(
-                        icon = Icons.Outlined.Refresh,
+                        icon = GsIcons.RefreshCw,
                         label = "Retry ${draft.displayName}",
                         tint = MaterialTheme.colorScheme.primary,
                         onClick = onRetry
                     )
                 }
                 ChipButton(
-                    icon = Icons.Outlined.Close,
+                    icon = GsIcons.X,
                     label = "Remove ${draft.displayName}",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     onClick = onRemove
@@ -167,7 +168,7 @@ private fun ChipThumbnail(draft: AttachmentDraft) {
     ) {
         if (draft.phase == AttachmentPhase.Failed) {
             Icon(
-                Icons.Outlined.ErrorOutline,
+                GsIcons.CircleAlert,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.error,
                 modifier = Modifier.size(20.dp)
@@ -237,9 +238,9 @@ private fun ChipButton(
 }
 
 private fun kindIcon(kind: AttachmentKind): ImageVector = when (kind) {
-    AttachmentKind.Image -> Icons.Outlined.Image
-    AttachmentKind.Pdf -> Icons.Outlined.PictureAsPdf
-    AttachmentKind.Document -> Icons.Outlined.InsertDriveFile
+    AttachmentKind.Image -> GsIcons.Image
+    AttachmentKind.Pdf -> GsIcons.FileText
+    AttachmentKind.Document -> GsIcons.File
 }
 
 /** Honest, human failure copy — taxonomy mapped 1:1, codes shown verbatim. */

@@ -46,6 +46,7 @@ import java.time.OffsetDateTime
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
+import com.grapsee.gsai.ui.icons.GsIcons
 
 private data class ChatHit(
     val conversationId: String,
@@ -109,7 +110,7 @@ fun ChatSearchScreen(
                 trailingIcon = {
                     IconButton(onClick = { commitSearch() }, enabled = term.length >= 2) {
                         Icon(
-                            Icons.Outlined.ManageSearch,
+                            GsIcons.TextSearch,
                             contentDescription = "Search",
                             tint = if (term.length >= 2) MaterialTheme.colorScheme.primary
                             else MaterialTheme.colorScheme.onSurfaceVariant
@@ -130,12 +131,12 @@ fun ChatSearchScreen(
 
             when {
                 term.length < 2 -> GsEmptyState(
-                    icon = Icons.Outlined.ManageSearch,
+                    icon = GsIcons.TextSearch,
                     title = "Search your chats",
                     message = "Start typing to find any conversation or message on this device."
                 )
                 searched && hits.isEmpty() -> GsEmptyState(
-                    icon = Icons.Outlined.SearchOff,
+                    icon = GsIcons.SearchX,
                     title = "No matches",
                     message = "Nothing matched \"$term\". Try a shorter word or different phrasing."
                 )
@@ -153,7 +154,7 @@ fun ChatSearchScreen(
                                 ) {
                                     Box(contentAlignment = Alignment.Center) {
                                         Icon(
-                                            Icons.Outlined.ChatBubbleOutline,
+                                            GsIcons.MessageCircle,
                                             contentDescription = null,
                                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                             modifier = Modifier.size(16.dp)

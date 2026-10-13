@@ -80,6 +80,7 @@ import kotlinx.coroutines.withContext
 import java.net.URL
 import javax.net.ssl.HttpsURLConnection
 import android.graphics.BitmapFactory
+import com.grapsee.gsai.ui.icons.GsIcons
 
 /**
  * STEP 5 renderer — the consumer half of the message → blocks seam.
@@ -732,7 +733,7 @@ private fun ImageBlockView(block: Block.ImageBlock) {
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
                 ) {
                     Icon(
-                        Icons.Outlined.BrokenImage,
+                        GsIcons.ImageOff,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(18.dp)
@@ -843,7 +844,7 @@ private fun CollapsibleBlockView(block: Block.CollapsibleBlock, citationUrls: Ma
                 }
         ) {
             Icon(
-                Icons.Outlined.ExpandMore,
+                GsIcons.ChevronDown,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier
@@ -942,10 +943,10 @@ private fun ToolResultBlockView(block: Block.ToolResultBlock) {
             ) {
                 Icon(
                     imageVector = when {
-                        block.entry.status in setOf("completed", "success", "done") -> Icons.Outlined.CheckCircle
-                        block.entry.status in setOf("failed", "error") -> Icons.Outlined.Cancel
-                        block.entry.kind in setOf("search", "research") -> Icons.Outlined.ManageSearch
-                        else -> Icons.Outlined.Search
+                        block.entry.status in setOf("completed", "success", "done") -> GsIcons.CircleCheck
+                        block.entry.status in setOf("failed", "error") -> GsIcons.X
+                        block.entry.kind in setOf("search", "research") -> GsIcons.TextSearch
+                        else -> GsIcons.Search
                     },
                     contentDescription = null,
                     tint = when {

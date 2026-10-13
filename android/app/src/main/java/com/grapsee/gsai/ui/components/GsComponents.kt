@@ -81,6 +81,7 @@ import com.grapsee.gsai.ui.theme.skeletonSurface
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.ImeAction
+import com.grapsee.gsai.ui.icons.GsIcons
 
 /**
  * AERUO KINETIC shared components — FROZEN API. All screens compose these.
@@ -397,7 +398,7 @@ fun GsInputBar(
                 enabled = enabled && canCommit
             ) {
                 Icon(
-                    imageVector = Icons.Outlined.Send,
+                    imageVector = GsIcons.ArrowUp,
                     contentDescription = "Send",
                     tint = if (canCommit) MaterialTheme.colorScheme.primary
                     else hcColor(MaterialTheme.colorScheme.onSurfaceVariant, MaterialTheme.colorScheme.onSurface)
@@ -494,7 +495,7 @@ fun GsOfflineBanner(visible: Boolean, modifier: Modifier = Modifier) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Icon(Icons.Outlined.CloudOff, contentDescription = null,
+                Icon(GsIcons.WifiOff, contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(16.dp))
                 Text("You're offline, changes will sync when you reconnect.",

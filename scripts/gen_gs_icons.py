@@ -80,6 +80,11 @@ ICONS = {
     "lock": "Lock",
     "accessibility": "Accessibility",
     "split": "Split",
+    "file": "File",
+    "image-off": "ImageOff",
+    "circle-check": "CircleCheck",
+    "search-x": "SearchX",
+    "pencil": "Pencil",
     # states / system
     "shield": "Shield",
     "info": "Info",
