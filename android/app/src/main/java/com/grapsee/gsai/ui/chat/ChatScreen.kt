@@ -175,6 +175,7 @@ import com.grapsee.gsai.ui.theme.GsMotion
 import com.grapsee.gsai.ui.theme.GsRadius
 import com.grapsee.gsai.ui.theme.GsHaptics
 import com.grapsee.gsai.ui.theme.GsEase
+import com.grapsee.gsai.ui.theme.messageAppear
 import com.grapsee.gsai.ui.icons.GsIcons
 import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -1271,51 +1272,57 @@ fun ChatScreen(
                                 // A failed stream with nothing committed: the
                                 // empty bubble is already gone, so the honest
                                 // system status stands alone, Regenerate attached.
-                                FailedTurnNotice(
-                                    hasPartial = false,
-                                    onRegenerate = { regenerate(message.id) }
-                                )
+                                Box(Modifier.messageAppear()) {
+                                    FailedTurnNotice(
+                                        hasPartial = false,
+                                        onRegenerate = { regenerate(message.id) }
+                                    )
+                                }
                             } else if (message.role == "user") {
-                                UserMessage(
-                                    message = message,
-                                    isEditing = editingId == message.id,
-                                    highlight = index == activeMatchIndex,
-                                    // Draft text travels as a reader lambda: typing
-                                    // while editing re-renders only the bubble being
-                                    // edited, never every visible row.
-                                    editingDraft = { editingDraft },
-                                    editEnabled = !isStreaming && editingId == null,
-                                    onEditingDraftChange = { editingDraft = it },
-                                    onEditStart = { editingDraft = message.content; editingId = message.id },
-                                    onEditCancel = { editingId = null },
-                                    onEditSubmit = { editAndResend(message.id, editingDraft) },
-                                    onCopy = copyText
-                                )
+                                Box(Modifier.messageAppear()) {
+                                    UserMessage(
+                                        message = message,
+                                        isEditing = editingId == message.id,
+                                        highlight = index == activeMatchIndex,
+                                        // Draft text travels as a reader lambda: typing
+                                        // while editing re-renders only the bubble being
+                                        // edited, never every visible row.
+                                        editingDraft = { editingDraft },
+                                        editEnabled = !isStreaming && editingId == null,
+                                        onEditingDraftChange = { editingDraft = it },
+                                        onEditStart = { editingDraft = message.content; editingId = message.id },
+                                        onEditCancel = { editingId = null },
+                                        onEditSubmit = { editAndResend(message.id, editingDraft) },
+                                        onCopy = copyText
+                                    )
+                                }
                             } else {
-                                AssistantMessage(
-                                    message = message,
-                                    isSpeaking = speakingMessageId == message.id,
-                                    highlight = index == activeMatchIndex,
-                                    showIdentity = assistantGroupStart,
-                                    // The growing answer is read inside the bubble
-                                    // (controller State), so mid-stream flushes
-                                    // touch exactly one item instead of the whole
-                                    // screen.
-                                    live = if (message.isStreaming) streamStateRaw else null,
-                                    onCopy = copyText,
-                                    onShare = { shareText(message.content) },
-                                    onRegenerate = { regenerate(message.id) },
-                                    onReadAloud = { readAloud(message.id, message.content) },
-                                    onBranch = { branchFrom(message.id) },
-                                    onSaveToLibrary = { saveToLibrary(message.content) },
-                                    onTranslate = { translateMessage(message.content) },
-                                    // PHASE 8.1: real search artifacts — trace
-                                    // card, source cards, citation chips, clarify
-                                    // quick-choices. A picked chip is sent as an
-                                    // ordinary user message through dispatch.
-                                    onOpenSource = openSource,
-                                    onClarifyOption = { option -> dispatch(option.label, echoUser = true) }
-                                )
+                                Box(Modifier.messageAppear()) {
+                                    AssistantMessage(
+                                        message = message,
+                                        isSpeaking = speakingMessageId == message.id,
+                                        highlight = index == activeMatchIndex,
+                                        showIdentity = assistantGroupStart,
+                                        // The growing answer is read inside the bubble
+                                        // (controller State), so mid-stream flushes
+                                        // touch exactly one item instead of the whole
+                                        // screen.
+                                        live = if (message.isStreaming) streamStateRaw else null,
+                                        onCopy = copyText,
+                                        onShare = { shareText(message.content) },
+                                        onRegenerate = { regenerate(message.id) },
+                                        onReadAloud = { readAloud(message.id, message.content) },
+                                        onBranch = { branchFrom(message.id) },
+                                        onSaveToLibrary = { saveToLibrary(message.content) },
+                                        onTranslate = { translateMessage(message.content) },
+                                        // PHASE 8.1: real search artifacts — trace
+                                        // card, source cards, citation chips, clarify
+                                        // quick-choices. A picked chip is sent as an
+                                        // ordinary user message through dispatch.
+                                        onOpenSource = openSource,
+                                        onClarifyOption = { option -> dispatch(option.label, echoUser = true) }
+                                    )
+                                }
                             }
                         }
                     }
@@ -2178,30 +2185,36 @@ private fun WorkspaceEmptyState(
         )
         if (draft.isBlank()) {
             Spacer(Modifier.height(GsMotion.spaceXL))
-            workspaceSuggestions.forEach { prompt ->
-                SuggestionPill(text = prompt, onClick = { onSuggestion(prompt) })
+            workspaceSuggestions.forEachIndexed { index, prompt ->
+                // Staggered entrance (30ms per pill, 200ms ease-out) — the
+                // actions arrive in reading order; static under reduce-motion.
+                Box(modifier = Modifier.messageAppear(GsMotion.staggerDelay(index))) {
+                    SuggestionPill(text = prompt, onClick = { onSuggestion(prompt) })
+                }
                 Spacer(Modifier.height(GsMotion.spaceS))
             }
         }
     }
 }
 
-/** One quiet composer suggestion — hairline outline pill, no surface fill. */
+/** One quiet composer suggestion — a filled quiet chip (the reference app's
+ *  mode-chip look): neutral surface, no outline, ink text. Fills read calmer
+ *  than hairline outlines at pill size and carry a real press state. */
 @Composable
 private fun SuggestionPill(text: String, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
         shape = GsRadius.pill,
-        color = androidx.compose.ui.graphics.Color.Transparent,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = Modifier.kineticPress()
     ) {
         Text(
             text = text,
             style = MaterialTheme.typography.bodyMedium,
-            color = GsTheme.colors.textSecondary,
+            color = GsTheme.colors.textPrimary,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             modifier = Modifier
-                .padding(horizontal = GsMotion.spaceL, vertical = 10.dp)
+                .padding(horizontal = GsMotion.spaceL, vertical = 12.dp)
                 .widthIn(max = 320.dp)
         )
     }

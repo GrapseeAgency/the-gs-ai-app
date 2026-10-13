@@ -64,14 +64,18 @@ public object GsEase {
 /**
  * Message-send motion: the message slides up 8dp and fades in over 150ms
  * (ease-out). Static (no offset, full alpha) under reduce-motion. Apply once
- * to a message row's root modifier.
+ * to a message row's root modifier. [delayMs] staggers entrances (drawer
+ * suggestions, list items) via [GsMotion.staggerDelay].
  */
-public fun Modifier.messageAppear(): Modifier = composed {
+public fun Modifier.messageAppear(delayMs: Int = 0): Modifier = composed {
     if (SettingsStore.reduceAnimations || SettingsStore.reduceMotion) {
         this
     } else {
         var appeared by remember { mutableStateOf(false) }
-        LaunchedEffect(Unit) { appeared = true }
+        LaunchedEffect(Unit) {
+            if (delayMs > 0) kotlinx.coroutines.delay(delayMs.toLong())
+            appeared = true
+        }
         val progress by animateFloatAsState(
             targetValue = if (appeared) 1f else 0f,
             animationSpec = tween(GsEase.MESSAGE_SEND_MS, easing = EaseOut),
