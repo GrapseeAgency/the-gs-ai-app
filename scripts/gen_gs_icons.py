@@ -251,20 +251,20 @@ FUNC = '''
             defaultHeight = 24.dp,
             viewportWidth = 24f,
             viewportHeight = 24f,
-            defaultStrokeLineWidth = 2f,
-            defaultStrokeLineCap = StrokeCap.Round,
-            defaultStrokeLineJoin = StrokeJoin.Round,
         ).apply {{
 {paths}
         }}.build()
     }}'''
 
 PATH_BLOCK = '''            addPath(
-                pathData = PathParser().parsePathDataString(
+                pathData = PathParser().parsePathString(
                     "{d}"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
+                strokeLineWidth = 2f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round,
             )'''
 
 

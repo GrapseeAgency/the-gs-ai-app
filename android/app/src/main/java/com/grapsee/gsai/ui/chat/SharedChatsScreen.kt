@@ -7,9 +7,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.DeleteOutline
-import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -59,7 +56,7 @@ fun SharedChatsScreen(onBack: () -> Unit) {
                             }
                             IconButton(onClick = {}, modifier = Modifier.size(32.dp)) {
                                 Icon(
-                                    GsIcons.Trash2Outline,
+                                    GsIcons.Trash2,
                                     contentDescription = "Revoke link",
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.size(18.dp)

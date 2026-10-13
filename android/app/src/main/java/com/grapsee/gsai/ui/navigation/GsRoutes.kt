@@ -5,19 +5,11 @@ import android.net.Uri
 /** AERUO KINETIC — route map. Screens are plain composables; this file owns all routing. */
 object GsRoutes {
     const val CHATS = "chats"
-    const val EXPLORE = "explore"
-    const val CREATE = "create"
-    const val LIBRARY = "library"
-    const val PROJECTS = "projects"
-    const val ASSISTANTS = "assistants"
     const val SEARCH = "search"
     const val PROFILE = "profile"
     const val SETTINGS = "settings"
     const val NOTIFICATIONS = "notifications"
     const val VOICE = "voice"
-    const val ASSISTANT_CREATE = "assistants/create"
-    const val ASSISTANT_EDIT = "assistants/edit/{assistantId}"
-    fun assistantEdit(id: String) = "assistants/edit/$id"
     // PHASE 2: the fabricated Folders/Shared destinations are gone — Archive
     // (real) remains the only chats hub quick-link.
     const val CHAT_ARCHIVE = "chats/archived"
@@ -30,13 +22,9 @@ object GsRoutes {
     // Billing / subscription (reached from Profile).
     const val BILLING = "billing"
 
-    // Blueprint workspaces — each Create tool gets its own room, not a chat dump.
+    // Blueprint workspaces — honest stubs, each its own room.
     const val RESEARCH = "research"
     const val VISION = "vision"
-    const val IMAGE_STUDIO = "create/image"
-    const val WRITING_STUDIO = "create/writing"
-    const val CODE_WORKSPACE = "create/code"
-    const val PROMPT_BUILDER = "create/prompt"
 
     const val CHAT = "chat/{conversationId}?prompt={prompt}&send={send}"
     const val ARG_CONVERSATION = "conversationId"
@@ -60,14 +48,6 @@ object GsRoutes {
         return if (params.isEmpty()) base else "$base?${params.joinToString("&")}"
     }
 
-    const val PROJECT_DETAIL = "project/{projectId}"
-    const val ARG_PROJECT = "projectId"
-    fun project(id: String) = "project/$id"
-
-    const val ASSISTANT_DETAIL = "assistant/{assistantId}"
-    const val ARG_ASSISTANT = "assistantId"
-    fun assistant(id: String) = "assistant/$id"
-
     // --- Shell navigation classes ---------------------------------------------
     //
     // The route map distinguishes three navigation classes so the shell can
@@ -84,10 +64,9 @@ object GsRoutes {
     //  DETAIL   — everything else: pushed on top of the current context with
     //             the directional transition and its own back affordance.
 
-    /** Root-level destinations the drawer's More surface switches to. */
+    /** Root-level destinations the drawer switches to. */
     val SECTION_ROUTES = setOf(
-        CHATS, EXPLORE, CREATE, LIBRARY,
-        PROJECTS, ASSISTANTS, SEARCH,
+        CHATS, SEARCH,
         PROFILE, NOTIFICATIONS, SETTINGS, BILLING
     )
 

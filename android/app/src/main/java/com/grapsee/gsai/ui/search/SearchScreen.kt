@@ -15,14 +15,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.BookmarkBorder
-import androidx.compose.material.icons.outlined.ChatBubbleOutline
-import androidx.compose.material.icons.outlined.Folder
-import androidx.compose.material.icons.outlined.ManageSearch
-import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.SearchOff
-import androidx.compose.material.icons.outlined.SmartToy
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -30,7 +22,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,10 +33,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.runtime.rememberCoroutineScope
-import com.grapsee.gsai.data.AssistantsStore
-import com.grapsee.gsai.data.ProjectStore
 import com.grapsee.gsai.data.local.ftsMatchQuery
-import com.grapsee.gsai.data.model.SampleData
 import com.grapsee.gsai.di.ServiceLocator
 import com.grapsee.gsai.ui.components.GsChip
 import com.grapsee.gsai.ui.components.GsEmptyState
@@ -67,19 +55,16 @@ import com.grapsee.gsai.ui.icons.GsIcons
  * AERUO KINETIC — SEARCH, the one-index entry point.
  * One query over the real on-device corpus: Room-backed conversations and
  * message bodies (FTS full-text index with a LIKE fallback for CJK/symbol
- * input), Library saved items, the assistant catalogue (samples + the user's
- * own) and projects. Results arrive grouped with honest per-group counts and
- * every row routes to its real destination. Store hiccups resolve to "no
- * matches", never an error. Kind chips gate the groups; recent searches are
- * the queries the reader actually acted on.
+ * input). Results arrive grouped with honest per-group counts and every row
+ * routes to its real destination. Store hiccups resolve to "no matches",
+ * never an error. Kind chips gate the groups; recent searches are the
+ * queries the reader actually acted on. The demo catalogues (library,
+ * assistants, projects) died with their surfaces — the index follows.
  */
 
 private enum class HitKind(val label: String, val icon: ImageVector) {
     CONVERSATIONS("Conversations", GsIcons.MessageCircle),
-    MESSAGES("Messages", GsIcons.MessageCircle),
-    LIBRARY("Library", GsIcons.Bookmark),
-    ASSISTANTS("Assistants", GsIcons.UsersRound),
-    PROJECTS("Projects", GsIcons.Folder)
+    MESSAGES("Messages", GsIcons.MessageCircle)
 }
 
 private data class SearchHit(
@@ -88,19 +73,6 @@ private data class SearchHit(
     val subtitle: String,
     val route: String
 )
-
-/** Search mirrors the Projects surface: user-created projects only, real meta. */
-private fun projectHitsFor(term: String): List<SearchHit> {
-    if (term.length < 2) return emptyList()
-    return ProjectStore.projects
-        .filter { it.name.contains(term, ignoreCase = true) || it.blurb.contains(term, ignoreCase = true) }
-        .take(8)
-        .map { project ->
-            val meta = if (project.blurb.isNotBlank()) project.blurb
-            else "${project.chatIds.size} chats"
-            SearchHit(HitKind.PROJECTS, project.name, meta, GsRoutes.project(project.id))
-        }
-}
 
 /** Recent searches the reader acted on — local-first, hiccup-safe, newest first. */
 private object RecentSearches {
@@ -132,14 +104,10 @@ fun SearchScreen(onNavigate: (String) -> Unit) {
     var recents by remember { mutableStateOf(RecentSearches.load(context)) }
     val scope = rememberCoroutineScope()
 
-    val savedItems by ServiceLocator.chat.savedItems().collectAsState(initial = emptyList())
-    val userAssistants by AssistantsStore.assistants.collectAsState()
-
     val term = query.trim()
 
-    // Room-backed half (conversations + messages) rides the debounce; the
-    // in-memory half (library/assistants/projects) filters live, so the
-    // screen answers instantly and the store results land a beat later.
+    // The whole index is Room-backed (conversations + messages FTS with a
+    // LIKE fallback); the debounce settles keystrokes before the store query.
     LaunchedEffect(term) {
         if (term.length < 2) {
             storeHits = emptyList()
@@ -150,46 +118,7 @@ fun SearchScreen(onNavigate: (String) -> Unit) {
         storeHits = searchConversationsAndMessages(term)
     }
 
-    val libraryHits = remember(savedItems, term) {
-        if (term.length < 2) emptyList()
-        else savedItems.asSequence()
-            .filter { it.title.contains(term, ignoreCase = true) || it.content.contains(term, ignoreCase = true) }
-            .take(10)
-            .map { item ->
-                val contentMatched = !item.title.contains(term, ignoreCase = true)
-                SearchHit(
-                    HitKind.LIBRARY,
-                    item.title,
-                    (if (contentMatched) snippet(item.content, term) else "Saved ${item.kind}") +
-                        " · " + relativeMoment(item.createdAt),
-                    GsRoutes.LIBRARY
-                )
-            }
-            .toList()
-    }
-    val assistantHits = remember(userAssistants, term) {
-        if (term.length < 2) emptyList()
-        else (SampleData.assistants + userAssistants)
-            .filter {
-                it.name.contains(term, ignoreCase = true) ||
-                    it.description.contains(term, ignoreCase = true) ||
-                    it.category.contains(term, ignoreCase = true)
-            }
-            .take(8)
-            .map { assistant ->
-                SearchHit(
-                    HitKind.ASSISTANTS,
-                    assistant.name,
-                    // PHASE 2: category only — the ★ rating was fabricated
-                    // marketplace telemetry.
-                    assistant.category,
-                    GsRoutes.assistant(assistant.id)
-                )
-            }
-    }
-    val projectHits = remember(term, ProjectStore.projects) { projectHitsFor(term) }
-
-    val allHits = storeHits + libraryHits + assistantHits + projectHits
+    val allHits = storeHits
     val visibleKinds = HitKind.entries.filter { kindFilter == null || it == kindFilter }
 
     // Insets come from GsScreenScaffold; imePadding keeps the keyboard from
@@ -278,7 +207,7 @@ fun SearchScreen(onNavigate: (String) -> Unit) {
                     term.isEmpty() -> GsEmptyState(
                         icon = GsIcons.Search,
                         title = "Search everything",
-                        message = "Conversations, messages, library items, assistants and projects, one index over this device."
+                        message = "Conversations and message bodies, one index over this device."
                     )
                     term.length < 2 -> GsEmptyState(
                         icon = GsIcons.TextSearch,
@@ -286,7 +215,7 @@ fun SearchScreen(onNavigate: (String) -> Unit) {
                         message = "At least two characters to search everything on this device."
                     )
                     allHits.isEmpty() -> GsEmptyState(
-                        icon = GsIcons.SearchOff,
+                        icon = GsIcons.SearchX,
                         title = "No matches",
                         message = "Nothing matched \"$term\". Try a shorter word or different phrasing."
                     )

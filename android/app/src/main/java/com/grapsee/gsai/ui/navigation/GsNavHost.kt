@@ -31,27 +31,15 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.grapsee.gsai.ShortcutBus
 import com.grapsee.gsai.data.SessionStore
-import com.grapsee.gsai.ui.assistants.AssistantCreateScreen
-import com.grapsee.gsai.ui.assistants.AssistantDetailScreen
-import com.grapsee.gsai.ui.assistants.AssistantsScreen
 import com.grapsee.gsai.ui.auth.AuthScreen
 import com.grapsee.gsai.ui.auth.OnboardingScreen
 import com.grapsee.gsai.ui.billing.BillingScreen
-import com.grapsee.gsai.ui.create.CodeWorkspaceScreen
-import com.grapsee.gsai.ui.create.ImageStudioScreen
-import com.grapsee.gsai.ui.create.PromptBuilderScreen
-import com.grapsee.gsai.ui.create.WritingStudioScreen
 import com.grapsee.gsai.ui.chat.ArchivedChatsScreen
 import com.grapsee.gsai.ui.chat.ChatScreen
 import com.grapsee.gsai.ui.chat.ChatSearchScreen
 import com.grapsee.gsai.ui.chat.ChatsScreen
-import com.grapsee.gsai.ui.create.CreateScreen
-import com.grapsee.gsai.ui.explore.ExploreScreen
-import com.grapsee.gsai.ui.library.LibraryScreen
 import com.grapsee.gsai.ui.notifications.NotificationsScreen
 import com.grapsee.gsai.ui.profile.ProfileScreen
-import com.grapsee.gsai.ui.projects.ProjectDetailScreen
-import com.grapsee.gsai.ui.projects.ProjectsScreen
 import com.grapsee.gsai.ui.research.ResearchScreen
 import com.grapsee.gsai.ui.search.SearchScreen
 import com.grapsee.gsai.ui.vision.VisionScreen
@@ -227,12 +215,7 @@ fun GsNavHost(modifier: Modifier = Modifier) {
         }
     ) {
         composable(GsRoutes.CHATS) { ChatsScreen(onNavigate = open) }
-        composable(GsRoutes.EXPLORE) { ExploreScreen(onNavigate = open) }
-        composable(GsRoutes.CREATE) { CreateScreen(onNavigate = open) }
-        composable(GsRoutes.LIBRARY) { LibraryScreen(onNavigate = open) }
-        composable(GsRoutes.PROJECTS) { ProjectsScreen(onNavigate = open) }
         composable(GsRoutes.SEARCH) { SearchScreen(onNavigate = open) }
-        composable(GsRoutes.ASSISTANTS) { AssistantsScreen(onNavigate = open) }
         composable(GsRoutes.PROFILE) { ProfileScreen(onNavigate = open) }
 
         composable(GsRoutes.SETTINGS) {
@@ -261,16 +244,6 @@ fun GsNavHost(modifier: Modifier = Modifier) {
                 onSendToChat = { spoken ->
                     navController.navigate(GsRoutes.chat(conversationId = null, prompt = spoken))
                 }
-            )
-        }
-        composable(GsRoutes.ASSISTANT_CREATE) { AssistantCreateScreen(onBack = back) }
-        composable(
-            route = GsRoutes.ASSISTANT_EDIT,
-            arguments = listOf(navArgument(GsRoutes.ARG_ASSISTANT) { type = NavType.StringType })
-        ) { entry ->
-            AssistantCreateScreen(
-                assistantId = entry.arguments?.getString(GsRoutes.ARG_ASSISTANT),
-                onBack = back
             )
         }
         composable(GsRoutes.CHAT_ARCHIVE) { ArchivedChatsScreen(onBack = back) }
@@ -309,12 +282,6 @@ fun GsNavHost(modifier: Modifier = Modifier) {
         // Blueprint workspaces
         composable(GsRoutes.RESEARCH) { ResearchScreen(onBack = back) }
         composable(GsRoutes.VISION) { VisionScreen(onBack = back) }
-        composable(GsRoutes.IMAGE_STUDIO) { ImageStudioScreen(onBack = back) }
-        composable(GsRoutes.WRITING_STUDIO) { WritingStudioScreen(onBack = back) }
-        composable(GsRoutes.CODE_WORKSPACE) { CodeWorkspaceScreen(onBack = back) }
-        composable(GsRoutes.PROMPT_BUILDER) {
-            PromptBuilderScreen(onBack = back, onNavigate = open)
-        }
 
         composable(
             route = GsRoutes.CHAT,
@@ -351,29 +318,7 @@ fun GsNavHost(modifier: Modifier = Modifier) {
                 onNavigateVoice = { navController.navigate(GsRoutes.VOICE) }
             )
         }
-
-        composable(
-            route = GsRoutes.PROJECT_DETAIL,
-            arguments = listOf(navArgument(GsRoutes.ARG_PROJECT) { type = NavType.StringType })
-        ) { entry ->
-            ProjectDetailScreen(
-                projectId = entry.arguments?.getString(GsRoutes.ARG_PROJECT).orEmpty(),
-                onBack = back
-            )
         }
-
-        composable(
-            route = GsRoutes.ASSISTANT_DETAIL,
-            arguments = listOf(navArgument(GsRoutes.ARG_ASSISTANT) { type = NavType.StringType })
-        ) { entry ->
-            AssistantDetailScreen(
-                assistantId = entry.arguments?.getString(GsRoutes.ARG_ASSISTANT).orEmpty(),
-                onBack = back,
-                onStartChat = { route -> navController.navigate(route) },
-                onEdit = { id -> navController.navigate(GsRoutes.assistantEdit(id)) }
-            )
-        }
-    }
     }
 }
 

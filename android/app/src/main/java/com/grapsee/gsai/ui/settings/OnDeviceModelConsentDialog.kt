@@ -1,6 +1,9 @@
 package com.grapsee.gsai.ui.settings
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.material3.AlertDialog
@@ -22,6 +25,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.data.local.ModelCatalog
+import com.grapsee.gsai.ui.components.GsStaggeredLoader
 import com.grapsee.gsai.data.local.ModelDownloader
 import com.grapsee.gsai.data.local.ModelStore
 import com.grapsee.gsai.data.local.ModelStore.Consent
@@ -32,8 +36,8 @@ import kotlinx.coroutines.launch
  * The one-time permission gate for an on-device model download.
  *
  * A Compose `AlertDialog`, which is what this app already uses for every other
- * modal (AssistantCreateScreen, AssistantDetailScreen, AssistantsScreen all use
- * `androidx.compose.material3.AlertDialog`). No Activity, no ViewController, no
+ * modal (`androidx.compose.material3.AlertDialog`, including the
+ * model-download wait state this dialog feeds). No Activity, no ViewController, no
  * nav route, no new design token, no new screen: it is a dialog over whatever is
  * already on the stack, which is what a permission gate is.
  *

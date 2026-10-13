@@ -685,7 +685,7 @@ class DeviceVerificationTest {
      * string rather than on the reply.
      *
      * Replaces a8_the_canned_responder_still_answers, which measured the wrong
-     * thing three times and printed `— GS backend error (HTTP 0) —` for all three:
+     * thing three times and printed `GS backend error (HTTP 0)` for all three:
      * a dead port (that arm RETURNS before streamLocalReply), a mid-stream cut
      * (MidStreamCut never calls streamLocalReply -- one call site, line 486, in
      * GenuineUnreachable), and a bare HttpClient (no ContentNegotiation, so the
@@ -696,9 +696,9 @@ class DeviceVerificationTest {
      * same string. What matters is the CLASSIFICATION, and the three arms are
      * distinguished by strings the source emits itself:
      *
-     *     GenuineUnreachable -> "— Offline — cannot reach GS. —"
-     *     MidStreamCut       -> "connection dropped mid-turn"
-     *     BackendError       -> "— GS backend error (HTTP 500) —"
+     *     GenuineUnreachable -> "(Offline, cannot reach GS.)"
+     *     MidStreamCut       -> "(The connection dropped mid-turn. ...)"
+     *     BackendError       -> "GS backend error (HTTP 500)"
      *
      * This is an indirect read and is labelled as such. What makes it trustworthy
      * is that the three are mutually exclusive and each is asserted against the
@@ -746,7 +746,7 @@ class DeviceVerificationTest {
             assertTrue(
                 "a refused TCP connect must be classified GenuineUnreachable, whose " +
                     "arm emits the offline label. Instead: ${reply.take(160)}",
-                reply.contains("— Offline —"),
+                reply.contains("(Offline, cannot reach GS.)"),
             )
         } finally {
             runCatching { db1.close() }
@@ -779,13 +779,13 @@ class DeviceVerificationTest {
             assertFalse(
                 "a MID-STREAM CUT is not an offline event and must not be labelled " +
                     "as one. The provider answered and then stopped, so claiming " +
-                    "\"— Offline — cannot reach GS. —\" tells the user their network " +
+                    "\"(Offline, cannot reach GS.)\" tells the user their network " +
                     "is down when it was not. Got: ${reply.take(160)}",
-                reply.contains("— Offline —"),
+                reply.contains("(Offline, cannot reach GS.)"),
             )
             // THE CLASSIFICATION ITSELF, named. `MidStreamCut` appends
             //
-            //   "— The connection dropped mid-turn. Reopen this chat in a moment —"
+            //   "(The connection dropped mid-turn. Nothing arrived before it went down, ...)"
             //
             // or, if recoverLatestAssistant finds a persisted answer, adopts that
             // instead. WireServer returns [] for history, so recovery finds
@@ -859,10 +859,10 @@ class DeviceVerificationTest {
                     reply.contains("HTTP 500"),
             )
             assertFalse(
-                "an HTTP 500 is the server answering, so labelling it \"— Offline —\" " +
+                "an HTTP 500 is the server answering, so labelling it \"(Offline, cannot reach GS.)\" " +
                     "is a lie the FORENSIC AUDIT [5] comment exists to prevent. " +
                     "Got: ${reply.take(160)}",
-                reply.contains("— Offline —"),
+                reply.contains("(Offline, cannot reach GS.)"),
             )
         } finally {
             runCatching { err.stop() }
@@ -896,10 +896,10 @@ class DeviceVerificationTest {
             )
             assertFalse(
                 "a clean break with a 200 is not an offline event. The provider was " +
-                    "reachable and answered, so \"— Offline — cannot reach GS. —\" " +
+                    "reachable and answered, so \"(Offline, cannot reach GS.)\" " +
                     "is a claim about the network that nothing here supports. " +
                     "Got: ${reply.take(160)}",
-                reply.contains("— Offline —"),
+                reply.contains("(Offline, cannot reach GS.)"),
             )
         } finally {
             runCatching { quiet.stop() }
@@ -1100,10 +1100,10 @@ class DeviceVerificationTest {
                 "with the provider unreachable the turn should open with the " +
                     "offline label, which is what proves it took the " +
                     "GenuineUnreachable arm. Got: ${reply.take(160)}",
-                reply.contains("— Offline —"),
+                reply.contains("(Offline, cannot reach GS.)"),
             )
             // ...and then the CANNED RESPONDER answered, at real length.
-            val afterLabel = reply.substringAfter("— Offline —")
+            val afterLabel = reply.substringAfter("(Offline, cannot reach GS.)")
             assertTrue(
                 "the canned responder produced nothing after the offline label, so " +
                     "a user with no network would see a bare notice: " +

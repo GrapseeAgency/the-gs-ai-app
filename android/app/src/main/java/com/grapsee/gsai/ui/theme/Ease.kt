@@ -8,7 +8,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.TweenSpec
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.composed
+import androidx.compose.ui.composed
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -65,7 +65,7 @@ public object GsEase {
  * Message-send motion: the message slides up 8dp and fades in over 150ms
  * (ease-out). Static (no offset, full alpha) under reduce-motion. Apply once
  * to a message row's root modifier. [delayMs] staggers entrances (drawer
- * suggestions, list items) via [GsMotion.staggerDelay].
+ * suggestions, list items) via the top-level staggerDelay(index) in theme/Motion.kt.
  */
 public fun Modifier.messageAppear(delayMs: Int = 0): Modifier = composed {
     if (SettingsStore.reduceAnimations || SettingsStore.reduceMotion) {
