@@ -9,6 +9,7 @@ import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
 import com.grapsee.gsai.data.SessionStore
+import com.grapsee.gsai.di.ServiceLocator
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
@@ -173,7 +174,7 @@ fun main() {
 - Venus rotates backwards
 - Earth is the only known life
 
-Inline `code` and math $a^2 + b^2 = c^2$."""
+Inline `code` and math ${'$'}a^2 + b^2 = c^2$."""
 
     @Test
     fun captureDesignPassScreens() {
