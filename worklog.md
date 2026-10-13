@@ -4676,3 +4676,21 @@ Work Log:
 
 Stage Summary:
 - Mobile-only failure root-caused to stale per-install session-affinity pinning and FIXED structurally (per-launch rotation + self-healing + field diagnostics). v0.71.5 live at https://github.com/GrapseeAgency/the-gs-ai-app/releases/download/v0.71.5/GS-AI-App.apk and on the LiveUpdate channel. Operator instructions: install v0.71.5 (over-install safe); alternatively clearing the app's storage on the current v0.71.4 also mints a fresh id immediately. Any future failure notice now self-identifies build + root cause + origin.
+
+---
+Task ID: arm64-device-round6-tls-fix
+Agent: main session
+Task: Operator installed v0.71.5 on the arm64 phone; send of "hi" failed again. The v0.71.5 forensic diag line captured the true root cause verbatim; root-cause it and ship the fix.
+
+Work Log:
+- SCREENSHOT FORENSICS (decisive): the operator's failure notice carried [GS diag · build 0.71.5/79 · origin ...space-z.ai · CertificateException: "Domain specific configurations require that hostname aware checkServerTrusted(X509Certificate[], String, String) is used"]. The device runs the correct latest build against the correct origin, and the failure is a TLS HANDSHAKE death client-side — which is why server logs had zero phone rows while the same phone's browser worked. Prior theories (VPN, dead server, stale affinity pin) are all dead: the app NEVER completed TLS to the origin on that device.
+- Mechanism verified against AOSP source (RootTrustManager.java): the NSC RootTrustManager throws exactly that string when the trust check runs without the peer hostname; Ktor CIO (the app's engine since inception) builds its SSLEngine anonymously (no peer host). Corroborated by a kotlinlang Slack thread reporting the identical error immediately after switching to the CIO engine on Android.
+- FIX shipped as v0.71.6 (versionCode 80, commit d287075): production engine CIO -> OkHttp in ServiceLocator (chat) and LiveUpdater (self-update downloads); ktor-client-okhttp added to libs.versions.toml (CIO dep kept for the androidTest plain-HTTP harness). Honesty fix: ApiClient rethrows TLS-shaped exceptions (SSLException/CertificateException chain walker hasTlsFailureInChain) UNWRAPPED; new SendFailure.TlsHandshake class + SendFailureNotice.tlsHandshake() so future TLS deaths read "GS could not establish a secure connection..." with diag suffix instead of the mid-turn-cut lie. Server handshake 0.71.5 -> 0.71.6 (turn-executor.ts + diagnostics route).
+- CI: run 38400225601 SUCCESS; auto-triggered arm64 probe 38400225613 cancelled (HTTP 202) per standing directive. Artifact verified from the release download: com.grapsee.gsai 80/0.71.6 (pyaxmlparser); dex contains okhttp3.internal x473 and io.ktor.client.engine.okhttp x57; baked origin x3; new TLS notice string present; lib/arm64-v8a/libgs_ffi.so 4,590,976 bytes; sha256 cc8d9bbaa31982553c596a0647f9d69a70e10e357765ec54ecdfa2ccd1f3c8ff; 84,088,502 bytes.
+- LiveUpdate channel refreshed (commit 9e13a86): download/GS-AI-App.apk replaced + manifest rewritten; raw manifest serves 80/0.71.6 and the downloaded APK's sha256 matches byte-for-byte.
+- Post-ship liveness: diagnostics 200 with versionMatch:true (0.71.6/0.71.6, backendRevision d287075); full CHAT turn through the public origin with the phone fingerprint (okhttp UA, x-gs-app-version 0.71.6, SSE) streamed a real reply end-to-end ("TLS FIX VERIFIED", done event, GS-CAP clientVersion=0.71.6).
+- INCIDENT during ship: OpenRouter keypool wiped AGAIN by the platform (all layers: .secrets/, db vault, /home/z/.gs-vault — operator's 36 keys unrecoverable from disk). Sends serve via the z-ai fallback route (proven live above). Operator must re-supply keys; reprovision command: bun scripts/provision-keys.ts "key1,key2,...".
+
+Stage Summary:
+- v0.71.6 live at https://github.com/GrapseeAgency/the-gs-ai-app/releases/download/v0.71.6/GS-AI-App.apk and on the LiveUpdate channel (raw manifest serving 80). Operator instruction: install v0.71.6 (over-install safe, committed keystore). If a send STILL fails, the notice now names the true failure class + root cause + origin by itself.
+- Key risk remains the sandbox dev server (dead server = instant 502) and the empty OpenRouter keypool (z-ai fallback carries turns).
