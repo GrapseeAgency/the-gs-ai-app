@@ -111,7 +111,7 @@ object ServiceLocator {
     /** Live affinity id — read at request time by the shared client's header provider. */
     internal fun currentClientId(): String = clientId
 
-    val http: HttpClient by lazy { gsHttpClient { currentClientId() } }
+    val http: HttpClient by lazy { gsHttpClient({ currentClientId() }) }
 
     fun init(context: Context) {
         if (::db.isInitialized) return
