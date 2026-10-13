@@ -82,3 +82,60 @@ No bounce. No spring for entrances/exits/state changes.
 - Home surface: reduced to the chat-first shell (the app IS chat).
 - Drawer: already a chat history panel; More sheet keeps the catalog one step
   away. Audit continues per-screen; deletions recorded in commits.
+
+## Outcome (design phase 2, shipped on main)
+
+Shipped units, one commit each:
+1. Foundation: GsIcons (Lucide 0.469.0, 98 curated stroke vectors), GsEase
+   motion spec, this document. 9902e1a
+2. Drawer (10): search pill + New chat accent top, recents weighted center,
+   account footer pinned bottom, Lucide, spacing-led groups. fb82117
+3. Composer (8): one calm pill, borderless field, plus/mic, ink-circle send
+   with up-arrow + layered press, neutral mode chip, ink stop control. 716e430
+4. Attach + mode sheet (9): rounded-square icon containers, spacing groups,
+   MD3-carousel mode row with peek + scale-in check. 66a4d96
+5. Empty chat + message motion (4, 5): filled quiet suggestion chips with
+   staggered entrance, every transcript row slides up 8dp + fades 150ms. 409c509
+6. A11y/CI semantics for the new send/stop controls. e098347
+7. Chat chrome (5, 6, 14): all Material glyphs to Lucide, assistant sparkle
+   becomes the GS monogram. c19b054
+8. Shared surfaces (6, 7, 11): chats list, chat search, rich blocks,
+   attachment chips, conversation actions, shared input bar. 4170a11
+9. Settings (12): group icons into the container spec, Lucide, stale accent
+   line tells the truth. 8d8674e
+10. Auth + onboarding (2, 3): Lucide sweep, capability cards get the check
+    scale-in. 84f2b50
+11. Splash + model download (1, 15): splash verified clean (no change), the
+    indeterminate download wait becomes the staggered three-dot loader. 4c56657
+12. Full-family sweep: 23 remaining surfaces to Lucide. 2c3f521
+13. Reduction (16): the More sheet deleted; demo surfaces
+    (Explore/Create/Projects/Library/Assistants) out of navigation; Voice
+    promoted to a drawer row. 1f49f9b
+14. Suite: drawer capture (20b) + Settings path via the account footer. ad59c72
+
+## Evaluated and deliberately dropped (with reasons)
+
+- uiverse #5 rotating outline sweep (New chat): decorative motion; in
+  monochrome the kineticPress carries the press honestly.
+- uiverse #1 glossy 3D checkbox: the native Switch keeps the platform
+  contract; glossy blur is decoration here.
+- uiverse #10 flip card: About is three rows of text; a flip card is a trick.
+- uiverse #6 animated-arrow pill: no continue-CTA surface exists where the
+  motion earns its keep; adding one would be inventing UI.
+- uiverse #11 blob loader: one loader language per app; a second organic
+  loader would compete with the orbs and the staggered dots.
+- uiverse #12 tooltip: needs a trigger layer that does not exist; adding one
+  crosses into new-feature territory the directive forbids.
+- 21st chat-reasoning panel: the thinking mode already labels itself honestly
+  in the orb row; a full trace panel is a larger build and stays a follow-up.
+
+## Follow-ups (documented, not started)
+
+- iOS mirror: SF Symbols remain (platform-coherent family); the structural
+  changes (composer pill, drawer footer, mode carousel) deserve the SwiftUI
+  equivalents next round. Static gates only in this sandbox.
+- Dead demo-screen files (Explore/Create/Library/Projects/Assistants
+  composables) are now unreachable from navigation; a cleanup pass can delete
+  the files and routes outright.
+- The 21st chat-message comparison adopted what was strictly better (up-arrow
+  send, per-production patterns); a deeper renderer diff is optional.
