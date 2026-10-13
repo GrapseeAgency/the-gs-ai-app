@@ -82,20 +82,11 @@ jobs:
           profile: Nexus 6
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -cores 4 -memory 3072
           disable-animations: true
-          script: |
-            set -euo pipefail
-            adb install -r android/app/build/outputs/apk/debug/app-debug.apk
-            adb install -r android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-            adb logcat -c
-            adb shell am instrument -w \
-              -e class com.grapsee.gsai.GsScreenshotSuite \
-              com.grapsee.gsai.test/androidx.test.runner.AndroidJUnitRunner \
-              | tee instrumentation-out.txt || true
-            mkdir -p device-artifacts/screens
-            adb pull "/sdcard/Android/data/com.grapsee.gsai/files/screens" device-artifacts/ 2>/dev/null \
-              || echo "::warning::screenshot dir not found on device"
-            adb logcat -d -v threadtime > device-artifacts/logcat.txt || true
-            ls -la device-artifacts/screens || true
+          # `bash <script>`, NOT an inline script: the runner executes the
+          # script field through /usr/bin/sh (dash), which rejects
+          # `set -o pipefail`. Same mode-bit-class workaround that
+          # android-device's run-instrumented.sh documents.
+          script: bash .github/scripts/run-screens.sh
 
       - name: Upload the screenshots
         if: always()
