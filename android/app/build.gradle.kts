@@ -321,6 +321,10 @@ dependencies {
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test:rules:1.6.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
+    // GsScreenshotSuite drives the design-pass screens with UiAutomator: the
+    // chat surface runs perpetual animations (orb, aurora) and a Compose test
+    // rule hangs waiting for recomposition quiescence on exactly those.
+    androidTestImplementation("androidx.test.uiautomator:uiautomator:2.3.0")
     // Blocker 4: ChatUiReplyTest drives the composer with Compose UI test.
     // The source set carried Espresso + JUnit but NOT the Compose test rule,
     // so a real UI assertion could not compile. One BOM platform line + the

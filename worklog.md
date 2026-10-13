@@ -4694,3 +4694,19 @@ Work Log:
 Stage Summary:
 - v0.71.6 live at https://github.com/GrapseeAgency/the-gs-ai-app/releases/download/v0.71.6/GS-AI-App.apk and on the LiveUpdate channel (raw manifest serving 80). Operator instruction: install v0.71.6 (over-install safe, committed keystore). If a send STILL fails, the notice now names the true failure class + root cause + origin by itself.
 - Key risk remains the sandbox dev server (dead server = instant 502) and the empty OpenRouter keypool (z-ai fallback carries turns).
+
+---
+Task ID: frontend-overhaul-1
+Agent: main session
+Task: NEW DIRECTION from operator: stop backend/benchmark work. Five frontend tasks: (1) rich content renderer both platforms, (2) speed the feel + measure tap-to-first-char, (3) fix vision input contract (no hedging, OCR fallback, honest refusal), (4) strip the system prompt to the 5-clause contract, (5) design pass on 8 screens with before/after screenshots. RULE ZERO: no AI slop (no emoji in chrome, no em-dashes in product copy, monochrome stays).
+
+Work Log:
+- Recon complete. Key audit findings (two Explore agents, line-verified):
+  - Android renderer (ui/chat/content/*) ALREADY: streams live into parsed blocks (StreamBlockCache, frozen-prefix incremental re-parse), code blocks w/ language label + highlighting (deferred to finalize mid-fence) + copy, aligned tables, latex-lite math, blockquotes, hr, inline citation chips. GAPS: links open EXTERNAL only (no in-app browser, no long-press rule); kinetic press missing on plain IconButtons; em-dashes in ~50 product-copy strings; MlKitOcr exists with ZERO production callers.
+  - iOS renderer (Features/Chats/Content/*) has the same block set, but the STREAMING bubble is a plain Text; BlocksView renders only at finalize (ChatDetailView.swift:1159-1178). GAPS: live-stream-into-render missing; no in-app browser; "🧠" emoji in chrome (ChatDetailView.swift:595); stale "Accent — Aurora teal" (SettingsView.swift:132); em-dashes ~45 strings; AppleVisionOcr unwired; GS Lite offline fallback has a word-by-word typewriter (ChatViewModel.swift:1121-1140).
+  - Vision contract (src/lib/vision.ts + turn-executor.ts): chat vision path ALREADY sends real image bytes (sharp-normalized data URLs) to glm-5v-turbo via createVision. NO CLIP scaffold exists in the production chat path (Vision screens are honest stubs; embedImage/embedText have no production callers). The hedge the operator saw is TAUGHT BY VISION_GROUNDING_PROMPT rule 2 ("mark it as such ('appears to be', 'resembles')") — src/lib/ai.ts:71. Operator images found: uploads/attachments/cmv6plpnw000vqsdu5q1rtfzy/18743.jpg (Center Fresh gum wrappers on carpet) and cmv6plpp3000xqsdu262kguo5/18523.jpg (three green guava-like fruits, glasses, laptop keyboard).
+  - SYSTEM_PROMPT (src/lib/ai.ts:56): ~88 words, contains hedged/self-limitation clauses to delete per TASK 4.
+- Operator's two audit images + 2 answer screenshots confirmed present in uploads/attachments/.
+
+Stage Summary:
+- Plan of units, each committed+pushed separately: U1 screenshot harness + workflow, BEFORE capture dispatched on current main; U2 TASK4 system prompt strip; U3 TASK3 backend (vision prompt rewrite, OCR sidecar via uploads route + prisma ocrText, deterministic "I cannot read this image"); U4 TASK3 Android OCR wire; U5 TASK1 Android in-app links; U6 TASK1 iOS live streaming blocks + in-app links; U7 TASK3 iOS OCR wire; U8 TASK2 typewriter removal (iOS GS Lite) + tap-to-first-char measurement both platforms; U9 TASK5 design sweep (emoji, em-dashes, press states, spacing, stale copy); U10 AFTER capture + report.
