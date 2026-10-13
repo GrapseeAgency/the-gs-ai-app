@@ -149,7 +149,7 @@ import { getRun } from '@/lib/run-store'
 const HISTORY_LIMIT = 20
 const MAX_CONTENT_LENGTH = 32000
 const DEFAULT_TITLE = 'New chat'
-const CURRENT_APP_VERSION = '0.71.6'
+const CURRENT_APP_VERSION = '0.72.0'
 
 export type TurnPush = (event: string, data: string) => void
 
