@@ -4710,3 +4710,33 @@ Work Log:
 
 Stage Summary:
 - Plan of units, each committed+pushed separately: U1 screenshot harness + workflow, BEFORE capture dispatched on current main; U2 TASK4 system prompt strip; U3 TASK3 backend (vision prompt rewrite, OCR sidecar via uploads route + prisma ocrText, deterministic "I cannot read this image"); U4 TASK3 Android OCR wire; U5 TASK1 Android in-app links; U6 TASK1 iOS live streaming blocks + in-app links; U7 TASK3 iOS OCR wire; U8 TASK2 typewriter removal (iOS GS Lite) + tap-to-first-char measurement both platforms; U9 TASK5 design sweep (emoji, em-dashes, press states, spacing, stale copy); U10 AFTER capture + report.
+
+---
+Task ID: frontend-overhaul-3
+Agent: main session
+Task: Screenshot evidence pipeline — 13 CI iterations to get real before/after PNGs.
+
+Work Log:
+- The emulator screenshot pipeline took 13 dispatch rounds to make honest; every failure is recorded in CI history: dash-incompatible inline script (runner executes script line-by-line); LinkAnnotation listener arity + ExperimentalFoundationApi opt-in; missing SystemClock import; UiDevice.takeScreenshot(file,scale,quality) returned ok-but-0-bytes on API 30; scoped-storage wrote to an unwritable dir (test uid vs app uid mismatch: am instrument runs IN the app process, so the test package's data dir is unwritable — fixed by writing the target app's own filesDir and pulling with run-as com.grapsee.gsai); drawer Settings lives behind a More sheet taller than the screen (swipe added); fixture compile fixes (ServiceLocator import, Kotlin raw-string $a template); GitHub setup-java input truncation from an earlier scripted edit; origin 502 windows during the sandbox dev server's reaper deaths (regenerate-retry loop added to the suite).
+- RESULT (after, run 38437095380): 10 real PNGs captured and committed to docs/design-pass/after/ — splash, auth gate, onboarding, empty chat, attach+mode sheet (x2), drawer/More state, streaming turn, settled network turn, and the DECISIVE 41-rich-reply-rendered.png: the fixture conversation renders heading + aligned table + syntax-highlighted kotlin code card with language label and copy button + blockquote + bullets + inline code/math, all monochrome.
+- Deterministic rich-render shot: the suite seeds a fixture conversation into the app's Room DB and opens it from the drawer — no network dependency.
+- Client TTFB evidence from the emulator runs: tapToFirstVisibleCharMs=8076/8715 (cold first turn incl. app+network warmup) and 3579/4075 on retry turns. Server-side: text firstEventMs=52; vision turns 4.1-6.3s; deterministic refusal 324ms; OCR fallback 745ms.
+
+Stage Summary:
+- AFTER evidence committed. BEFORE branch (design/before@main-workflow-restored) dispatching its final round. Remaining: before shots committed, iOS before/after documented as code-verified (no macOS in sandbox), final report.
+
+---
+Task ID: frontend-overhaul-final
+Agent: main session
+Task: Final evidence, cleanup, handover.
+
+Work Log:
+- BEFORE branch evidence captured (run 38438717344, 10 PNGs) then the design/before branch deleted (evidence lives in docs/design-pass/before/).
+- Both screenshot sets committed: docs/design-pass/before/ + docs/design-pass/after/ (10 PNGs each). The failure-notice pair is the visible RULE ZERO delta (em-dash wrap -> paren wrap); 41-rich-reply-rendered.png is the structured-renderer proof (table alignment, kotlin card, blockquote, list, inline math).
+- iOS compile verification: ios.yml has been failing since ~Oct 4 for a PRE-EXISTING reason (the app target hard-links GsFfi.xcframework, native toolchain output, never committed; the workflow needs a successful ios-native run first). Not a regression from this work. Local static gates (swift_structure_gate.py, ios_static_gates.py) PASS on all my Swift changes. InAppBrowser.swift is picked up automatically by XcodeGen's directory glob (ios/project.yml sources: App/Sources).
+- New file inventory is XcodeGen-globbed; no project surgery needed.
+- RELEASE NOT YET CUT: main carries 0.71.6 versionCode 80; the changes above are committed but untagged. Next step for a phone-visible build: bump versionName/versionCode to 0.71.7/81, align CURRENT_APP_VERSION (src/lib/), tag v0.71.7 (android-release.yml builds on v* tags), then refresh download/GS-AI-App.apk + download/update-manifest.json from the CI artifact and push the data commit (the LiveUpdate channel pattern from v0.71.5/v0.71.6 rounds).
+- webDevReview cron created (job 456967, every 15 min) with origin-keepalive as its first duty.
+
+Stage Summary:
+- All five tasks executed, committed and pushed as units. Evidence committed in-repo. Outstanding: release cut (mechanical, documented), Settings screen auto-capture (manual swipe needed one more step; drawer+More states captured), on-device latency measurement on real hardware for the official tap-to-first-char number.
