@@ -4807,3 +4807,16 @@ Work Log:
 
 Stage Summary:
 - Both platforms now agree on the reduction: chat + voice + account, no demo catalogues, one icon family, honest search index. Evidence re-capture in flight (38470681365). Known follow-ups: iOS structural mirror of composer pill/carousel/loaders (this round covered reduction + chrome), on-device back-with-drawer check, data-layer orphan cleanup on Android (AssistantsStore/ProjectStore/SampleData stay for schema stability).
+
+---
+Task ID: design2-fix-round-3 (evidence closed)
+Agent: main session
+Task: Harvest the re-dispatched AFTER evidence, verify the decisive frames visually, close the design phase 2 evidence loop.
+
+Work Log:
+- Run 38470681365 (head 64f04bc): SUCCESS, 244s, OK (1 test), 11 shots with clean names, zero MISSING markers: 10-splash, 11-auth, 12-onboarding, 20-empty-chat, 20b-drawer, 21-attach-mode-sheet, 22-attach-sheet, 30-settings, 40-active-chat-streaming, 41-rich-reply-rendered, 41-rich-reply.
+- Evidence set committed to docs/design-pass/after/ (e187508), replacing the pre-design2 set. Decisive frames inspected as images: 20b-drawer = the reduced navigation (search pill + New chat ink accent, fixture row under RECENT, All chats + Voice, GS account footer pinned bottom, no More sheet, no demo catalogues); 41-rich-reply-rendered = GS monogram mark, aligned table, kotlin code card with language label + copy, blockquote, bullets, one-pill composer with plus/mic/up-arrow, Lucide chrome end to end.
+- Ledger updated with the evidence closure + the two suite-UI contracts the first attempt exposed.
+
+Stage Summary:
+- Design phase 2 is now compile-green, emulator-verified, and evidence-committed on Android; iOS carries the same reduction + chrome rules (static-gate verified, real-device compile still blocked by the pre-existing GsFfi.xcframework CI gap). Open follow-ups: iOS structural mirror (composer pill / mode carousel / staggered loaders), on-device back-with-drawer check on a modern API device, Android data-layer orphan cleanup, 21st chat-reasoning panel.

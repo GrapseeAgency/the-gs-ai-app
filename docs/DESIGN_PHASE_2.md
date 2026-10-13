@@ -167,6 +167,13 @@ commits. Fix round 04afe08:
   release round.
 - AssistantsStore/ProjectStore/SampleData stay (persisted user data + schema
   stability); they are UI-orphaned and can go in a data-layer cleanup round.
+- AFTER evidence landed for real: run 38470681365 (head 64f04bc), 11 shots,
+  zero MISSING markers, committed to docs/design-pass/after/. The first
+  attempt (38468984193) was compile-green but exposed two suite-UI contracts:
+  the drawer does not consume BACK on the API 30 emulator (back exits to the
+  launcher with the drawer open) and the mid-session fixture seed never
+  reached the drawer's startup-loaded store - the suite now closes the drawer
+  with the scrim tap and seeds before launch.
 
 ## Follow-ups (carried)
 
