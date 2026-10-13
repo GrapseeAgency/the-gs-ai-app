@@ -1,10 +1,10 @@
 package com.grapsee.gsai.ui.navigation
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,26 +23,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.outlined.Apps
-import androidx.compose.material.icons.outlined.AutoAwesome
-import androidx.compose.material.icons.outlined.Bookmarks
-import androidx.compose.material.icons.outlined.CreditCard
-import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.outlined.Explore
-import androidx.compose.material.icons.outlined.Folder
-import androidx.compose.material.icons.outlined.GraphicEq
-import androidx.compose.material.icons.outlined.Inbox
-import androidx.compose.material.icons.outlined.Notifications
-import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.SmartToy
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -72,6 +54,7 @@ import com.grapsee.gsai.di.ServiceLocator
 import com.grapsee.gsai.ui.components.ConversationActionsSheet
 import com.grapsee.gsai.ui.components.GsButton
 import com.grapsee.gsai.ui.components.gsConversationTitle
+import com.grapsee.gsai.ui.icons.GsIcons
 import com.grapsee.gsai.ui.theme.GsHaptics
 import com.grapsee.gsai.ui.theme.GsMotion
 import com.grapsee.gsai.ui.theme.GsRadius
@@ -82,22 +65,21 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
 /**
- * AERUO KINETIC drawer — a CHAT HISTORY PANEL, not a route directory.
- * The sidebar is primarily about starting and navigating conversations:
+ * DESIGN PHASE 2 drawer — the Dola spirit, humbler. A CHAT HISTORY PANEL,
+ * not a route directory. Structure (one visual unit per group, groups
+ * separated by spacing, never borders):
  *
- *  1. ACCOUNT — one compact identity row; opening it reveals the account
- *     controls (Profile · Settings · Notifications · Billing) in a sheet
- *     instead of spending four sidebar rows on them.
- *  2. NEW CHAT + SEARCH — the two conversation actions, always first.
- *  3. RECENT — the visual heart: live conversations, tap to open, long-press
- *     for pin / rename / archive / delete. Genuine empty state — nothing is
- *     invented. "All chats" is the quiet overflow into the full history hub.
- *  4. MORE — one row. Explore, Create, Projects, Library, Assistants and
- *     Voice live behind it, in a sheet, one step away —
- *     present, but never competing with conversation at row parity.
+ *  1. TOP BAR — the search pill (calm, leading) and the one primary action
+ *     of this screen: New chat (the accent). Nothing else competes.
+ *  2. RECENT — the visual heart, weighted to fill: live conversations, tap
+ *     to open, long-press for pin / rename / archive / delete. Genuine
+ *     empty state. "All chats" is the quiet overflow row.
+ *  3. FOOTER — the account row, pinned to the bottom like the reference
+ *     app: identity lives where the thumb rests, never above the content.
  *
- * Everything else the old drawer exposed is gone from the first level. The
- * screens still exist underneath; the sidebar simply stops cataloguing them.
+ * Explore, Create, Projects, Library, Assistants and Voice remain one step
+ * away in the More sheet. Icons are Lucide via GsIcons — one family, one
+ * weight, neutral containers, no decorative glyphs (RULE ZERO).
  */
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -148,30 +130,122 @@ fun GsDrawerContent(
             .semantics { paneTitle = "Navigation drawer" }
             .statusBarsPadding()
             .navigationBarsPadding()
-            .verticalScroll(rememberScrollState())
             .padding(horizontal = GsMotion.spaceM)
     ) {
-        Spacer(Modifier.height(GsMotion.spaceL))
+        Spacer(Modifier.height(GsMotion.spaceM))
 
-        // 1 · Account — compact entry; the row reveals the account sheet.
-        val headerInteraction = remember { MutableInteractionSource() }
+        // 1 · Top bar — search pill + the screen's one primary action.
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
+        ) {
+            val searchInteraction = remember { MutableInteractionSource() }
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(44.dp)
+                    .clip(GsRadius.pill)
+                    .background(GsTheme.colors.raisedSurface)
+                    .kineticPress(searchInteraction)
+                    .clickable(
+                        interactionSource = searchInteraction,
+                        indication = LocalIndication.current,
+                        role = Role.Button,
+                        onClickLabel = "Search chats"
+                    ) {
+                        onClose()
+                        onNavigate(GsRoutes.CHAT_SEARCH)
+                    }
+                    .padding(horizontal = GsMotion.spaceM),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
+            ) {
+                Icon(
+                    GsIcons.Search,
+                    contentDescription = null,
+                    tint = GsTheme.colors.textSecondary,
+                    modifier = Modifier.size(18.dp)
+                )
+                Text(
+                    "Search",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = GsTheme.colors.textSecondary
+                )
+            }
+            GsButton(
+                label = "New chat",
+                leadingIcon = GsIcons.SquarePen,
+                onClick = {
+                    onClose()
+                    onNavigate(GsRoutes.chat(null))
+                }
+            )
+        }
+
+        Spacer(Modifier.height(GsMotion.spaceM))
+
+        // 2 · Recent — the heart, weighted to fill. Live history only; when
+        // the store is empty the panel says so honestly, nothing invented.
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+        ) {
+            DrawerLabel("Recent")
+            Spacer(Modifier.height(GsMotion.spaceS))
+            if (recents.isEmpty()) {
+                Text(
+                    "No conversations yet",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = GsTheme.colors.textSecondary,
+                    modifier = Modifier.padding(horizontal = GsMotion.spaceM, vertical = GsMotion.spaceS)
+                )
+            } else {
+                recents.take(RECENT_LIMIT).forEach { conversation ->
+                    RecentRow(
+                        conversation = conversation,
+                        onOpen = {
+                            onClose()
+                            onNavigate(GsRoutes.chat(conversation.id))
+                        },
+                        onActions = {
+                            // The reveal haptic the system lists play on long-press.
+                            GsHaptics.longPress(haptics)
+                            actionTarget = conversation
+                        }
+                    )
+                }
+            }
+            Spacer(Modifier.height(GsMotion.spaceXS))
+            DrawerRow("All chats", icon = GsIcons.Inbox, selected = selectedRoute == GsRoutes.CHATS) {
+                onClose(); onNavigate(GsRoutes.CHATS)
+            }
+            Spacer(Modifier.height(GsMotion.spaceXS))
+            // More — every other product surface, one quiet row away.
+            DrawerRow("More", icon = GsIcons.LayoutGrid) { moreSheetOpen = true }
+        }
+
+        Spacer(Modifier.height(GsMotion.spaceS))
+
+        // 3 · Footer — the account row, pinned where the thumb rests.
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(GsRadius.mdShape())
-                .kineticPress(headerInteraction)
+                .kineticPress()
                 .clickable(
-                    interactionSource = headerInteraction,
+                    interactionSource = remember { MutableInteractionSource() },
                     indication = LocalIndication.current,
                     role = Role.Button,
                     onClickLabel = "Account options"
                 ) { accountSheetOpen = true }
                 .padding(horizontal = GsMotion.spaceS, vertical = GsMotion.spaceS),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
         ) {
             Box(
                 modifier = Modifier
-                    .size(44.dp)
+                    .size(40.dp)
                     .clip(CircleShape)
                     .background(GsTheme.colors.accentSoft),
                 contentAlignment = Alignment.Center
@@ -183,103 +257,34 @@ fun GsDrawerContent(
                     color = GsTheme.colors.textPrimary
                 )
             }
-            Spacer(Modifier.width(GsMotion.spaceS))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     // Real identity only: the stored name, else a neutral
                     // label — never an invented "Admin".
                     storedName.ifBlank { "GS account" },
-                    style = MaterialTheme.typography.titleMedium,
-                    color = GsTheme.colors.textPrimary
+                    style = MaterialTheme.typography.titleSmall,
+                    color = GsTheme.colors.textPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     // The stored email, else a neutral line — never a
                     // fabricated address.
                     storedEmail.ifBlank { "Signed in" },
                     style = MaterialTheme.typography.labelMedium,
-                    color = GsTheme.colors.textSecondary
+                    color = GsTheme.colors.textSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
-        }
-
-        Spacer(Modifier.height(GsMotion.spaceL))
-
-        // 2 · New chat + Search — the two conversation actions, first.
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
-        ) {
-            GsButton(
-                label = "New chat",
-                leadingIcon = Icons.Outlined.Edit,
-                onClick = {
-                    onClose()
-                    onNavigate(GsRoutes.chat(null))
-                },
-                modifier = Modifier.weight(1f)
+            Icon(
+                GsIcons.ChevronRight,
+                contentDescription = null,
+                tint = GsTheme.colors.textSecondary,
+                modifier = Modifier.size(16.dp)
             )
-            IconButton(
-                onClick = {
-                    onClose()
-                    onNavigate(GsRoutes.CHAT_SEARCH)
-                },
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(GsRadius.mdShape())
-                    .background(GsTheme.colors.raisedSurface)
-            ) {
-                Icon(
-                    Icons.Outlined.Search,
-                    contentDescription = "Search chats",
-                    tint = GsTheme.colors.textPrimary
-                )
-            }
         }
-
-        Spacer(Modifier.height(GsMotion.spaceL))
-
-        // 3 · Recent — the heart of the sidebar. Live history only; when the
-        // store is empty the panel says so honestly and nothing is invented.
-        if (recents.isEmpty()) {
-            DrawerLabel("Recent")
-            Spacer(Modifier.height(GsMotion.spaceS))
-            Text(
-                "No conversations yet",
-                style = MaterialTheme.typography.bodyMedium,
-                color = GsTheme.colors.textSecondary,
-                modifier = Modifier.padding(horizontal = GsMotion.spaceM, vertical = GsMotion.spaceS)
-            )
-        } else {
-            DrawerLabel("Recent")
-            Spacer(Modifier.height(GsMotion.spaceS))
-            recents.take(RECENT_LIMIT).forEach { conversation ->
-                RecentRow(
-                    conversation = conversation,
-                    onOpen = {
-                        onClose()
-                        onNavigate(GsRoutes.chat(conversation.id))
-                    },
-                    onActions = {
-                        // The reveal haptic the system lists play on long-press.
-                        GsHaptics.longPress(haptics)
-                        actionTarget = conversation
-                    }
-                )
-            }
-        }
-        Spacer(Modifier.height(GsMotion.spaceXS))
-        DrawerRow("All chats", icon = Icons.Outlined.Inbox, selected = selectedRoute == GsRoutes.CHATS) {
-            onClose(); onNavigate(GsRoutes.CHATS)
-        }
-
-        Spacer(Modifier.height(GsMotion.spaceL))
-        DrawerDivider()
-        Spacer(Modifier.height(GsMotion.spaceL))
-
-        // 4 · More — every other product surface, one quiet row away.
-        DrawerRow("More", icon = Icons.Outlined.Apps) { moreSheetOpen = true }
-
-        Spacer(Modifier.height(GsMotion.spaceXL))
+        Spacer(Modifier.height(GsMotion.spaceS))
     }
 
     if (actionTarget != null) {
@@ -302,21 +307,21 @@ fun GsDrawerContent(
 
     if (accountSheetOpen) {
         DrawerNavSheet(onDismiss = { accountSheetOpen = false }) {
-            SheetRow("Profile", Icons.Outlined.Person) { navigateFromSheet(GsRoutes.PROFILE) }
-            SheetRow("Settings", Icons.Outlined.Settings) { navigateFromSheet(GsRoutes.SETTINGS) }
-            SheetRow("Notifications", Icons.Outlined.Notifications) { navigateFromSheet(GsRoutes.NOTIFICATIONS) }
-            SheetRow("Billing", Icons.Outlined.CreditCard) { navigateFromSheet(GsRoutes.BILLING) }
+            SheetRow("Profile", GsIcons.UserRound) { navigateFromSheet(GsRoutes.PROFILE) }
+            SheetRow("Settings", GsIcons.Settings) { navigateFromSheet(GsRoutes.SETTINGS) }
+            SheetRow("Notifications", GsIcons.Bell) { navigateFromSheet(GsRoutes.NOTIFICATIONS) }
+            SheetRow("Billing", GsIcons.CreditCard) { navigateFromSheet(GsRoutes.BILLING) }
         }
     }
 
     if (moreSheetOpen) {
         DrawerNavSheet(onDismiss = { moreSheetOpen = false }) {
-            SheetRow("Explore", Icons.Outlined.Explore, selectedRoute == GsRoutes.EXPLORE) { navigateFromSheet(GsRoutes.EXPLORE) }
-            SheetRow("Create", Icons.Outlined.AutoAwesome, selectedRoute == GsRoutes.CREATE) { navigateFromSheet(GsRoutes.CREATE) }
-            SheetRow("Projects", Icons.Outlined.Folder, selectedRoute == GsRoutes.PROJECTS) { navigateFromSheet(GsRoutes.PROJECTS) }
-            SheetRow("Library", Icons.Outlined.Bookmarks, selectedRoute == GsRoutes.LIBRARY) { navigateFromSheet(GsRoutes.LIBRARY) }
-            SheetRow("Assistants", Icons.Outlined.SmartToy, selectedRoute == GsRoutes.ASSISTANTS) { navigateFromSheet(GsRoutes.ASSISTANTS) }
-            SheetRow("Voice", Icons.Outlined.GraphicEq, selectedRoute == GsRoutes.VOICE) { navigateFromSheet(GsRoutes.VOICE) }
+            SheetRow("Explore", GsIcons.Compass, selectedRoute == GsRoutes.EXPLORE) { navigateFromSheet(GsRoutes.EXPLORE) }
+            SheetRow("Create", GsIcons.PenLine, selectedRoute == GsRoutes.CREATE) { navigateFromSheet(GsRoutes.CREATE) }
+            SheetRow("Projects", GsIcons.Folder, selectedRoute == GsRoutes.PROJECTS) { navigateFromSheet(GsRoutes.PROJECTS) }
+            SheetRow("Library", GsIcons.BookOpen, selectedRoute == GsRoutes.LIBRARY) { navigateFromSheet(GsRoutes.LIBRARY) }
+            SheetRow("Assistants", GsIcons.UsersRound, selectedRoute == GsRoutes.ASSISTANTS) { navigateFromSheet(GsRoutes.ASSISTANTS) }
+            SheetRow("Voice", GsIcons.AudioLines, selectedRoute == GsRoutes.VOICE) { navigateFromSheet(GsRoutes.VOICE) }
         }
     }
 }
@@ -356,7 +361,7 @@ private fun RecentRow(
         )
         if (conversation.pinned) {
             Icon(
-                Icons.Filled.Star,
+                GsIcons.Star,
                 contentDescription = "Pinned",
                 tint = GsTheme.colors.textSecondary,
                 modifier = Modifier.size(14.dp)
@@ -411,17 +416,27 @@ private fun SheetRow(
                 indication = LocalIndication.current,
                 role = Role.Button
             ) { onClick() }
-            .padding(horizontal = GsMotion.spaceM, vertical = 14.dp),
+            .padding(horizontal = GsMotion.spaceS, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
     ) {
         if (icon != null) {
-            Icon(
-                icon,
-                contentDescription = null,
-                tint = colors.textSecondary,
-                modifier = Modifier.size(18.dp)
-            )
+            // One container spec: 32dp rounded square, neutral fill, icon
+            // inside — the reference app's row rhythm, monochrome.
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(GsRadius.mdShape())
+                    .background(colors.raisedSurface),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = colors.textPrimary,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
         }
         Text(
             title,
@@ -441,12 +456,6 @@ private fun DrawerLabel(text: String) {
         color = GsTheme.colors.textSecondary,
         modifier = Modifier.padding(horizontal = 4.dp)
     )
-}
-
-/** The drawer's one hairline — structural separation between groups. */
-@Composable
-private fun DrawerDivider() {
-    HorizontalDivider(color = GsTheme.colors.divider, thickness = 1.dp)
 }
 
 /**
@@ -491,7 +500,7 @@ private fun DrawerRow(
         Text(
             title,
             style = MaterialTheme.typography.bodyMedium,
-            color = if (selected) colors.textPrimary else colors.textPrimary,
+            color = colors.textPrimary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )

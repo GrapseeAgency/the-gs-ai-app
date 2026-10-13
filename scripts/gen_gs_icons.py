@@ -75,6 +75,7 @@ ICONS = {
     "languages": "Languages",
     "telescope": "Telescope",
     "sliders-horizontal": "SlidersHorizontal",
+    "layout-grid": "LayoutGrid",
     # states / system
     "shield": "Shield",
     "info": "Info",
