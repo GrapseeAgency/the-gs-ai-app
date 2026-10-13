@@ -4757,3 +4757,19 @@ Work Log:
 
 Stage Summary:
 - v0.72.0 (versionCode 81) live at https://github.com/GrapseeAgency/the-gs-ai-app/releases/download/v0.72.0/GS-AI-App.apk and on the LiveUpdate channel. Built from bc602be which contains the full frontend-overhaul line. Known follow-ups recorded: androidTest em-dash staleness, iOS gate (pre-existing), keypool re-supply.
+
+---
+Task ID: design-phase-2
+Agent: main session
+Task: NEW DIRECTION - full structural frontend redesign. Dola-spirit consumer look, icon system overhaul, motion system, 16-screen worklist with before/after evidence, uiverse/21st/MD3 resources placed where they earn their keep, RULE ZERO enforced. Commit per screen.
+
+Work Log:
+- BEFORE evidence: android-screens run 38461696861 on main at edadc7a (pre-design2 state, head verified) - success, 10 PNGs.
+- Foundation commit 9902e1a: scripts/gen_gs_icons.py vendoring Lucide 0.469.0 (ISC) into ui/icons/GsIcons.kt (grew 66 -> 98 vectors as surfaces were swept); GsEase motion spec in ui/theme/Ease.kt (operator values: entrance 200ms ease-out, exit 150ms ease-in, state 180ms ease-in-out, sheet 250ms cubic-bezier(.2,0,0,1), message-appear 8dp+150ms, streaming 120ms, all flattened under the reduce-motion settings); docs/DESIGN_PHASE_2.md resource-to-screen mapping.
+- Screen commits: drawer fb82117 (search pill + New chat accent, recents weighted, account footer pinned bottom), composer 716e430 (one pill, borderless field, ink-circle up-arrow send with layered press per uiverse dull-ladybug-18, ink stop control; uiverse dolphin-47 ring evaluated and dropped as decoration), attach+mode sheet 66a4d96 (rounded-square icon containers, MD3-carousel mode row with peek + scale-in check per tiny-moose-42), empty chat + message motion 409c509 (filled quiet chips, staggered 30ms; transcript rows slide 8dp + fade 150ms), a11y semantics e098347 (Send/Stop contentDescription for screen readers + the CI suite's By.desc selectors), chat chrome c19b054 (all Material glyphs to Lucide; assistant sparkle -> GS monogram), shared surfaces 4170a11 (chats list, chat search, rich blocks, attachment chips, conversation actions, shared input bar - paper-plane -> up-arrow everywhere), settings 8d8674e (group icons into the one container spec; stale 'Accent: Aurora teal' -> 'Monochrome'), auth+onboarding 84f2b50, splash+model download 4c56657 (splash verified clean, indeterminate download -> staggered three-dot loader per fast-vampirebat-53), full sweep 2c3f521 (23 files; SmartToy robot and AutoAwesome sparkles - banned chrome - purged app-wide), reduction 1f49f9b (More sheet DELETED; demo surfaces Explore/Create/Projects/Library/Assistants out of navigation as static fake-product padding; Voice promoted to a drawer row), suite drawer shot + Settings-via-account-footer ad59c72, doc ledger 4be74c3.
+- AFTER evidence: android-screens re-dispatched on main at ad59c72 (stale 1f49f9b run 38464875431 cancelled, HTTP 202) to include the 20b-drawer shot and the fixed Settings path.
+- Dropped resources with reasons recorded in docs/DESIGN_PHASE_2.md (uiverse #1/#5/#6/#10/#11/#12 - decoration or missing trigger layer; 21st chat-reasoning panel = follow-up build).
+- iOS untouched this round (SF Symbols stay; SwiftUI mirror is the documented next round). Static demo composables remain routable but unreachable - file deletion is the documented cleanup pass.
+
+Stage Summary:
+- 15 pushed commits, one per screen/unit. Icon system: Lucide everywhere on Android, one weight, one container rule (rounded square, GsRadius.md, 32/34/36/40dp tiers). Motion: one curve family, reduced-motion static fallbacks. RULE ZERO: sparkles/robots/emoji purged, no new gradients, monochrome intact, product copy em-dash-free. Reduction: the navigation catalog is gone - the app opens as chat + voice + account. Known follow-ups: iOS mirror, dead-file cleanup, reasoning panel.
