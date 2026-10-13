@@ -201,6 +201,17 @@ Inline `code` and math ${'$'}a^2 + b^2 = c^2$."""
         device.waitForIdle(2_000)
         shot("20-empty-chat")
 
+        // 3b. The drawer (design phase 2 screen 10): search pill + New chat
+        // top, recents center, Voice row, account footer pinned bottom.
+        if (tapDesc("Open menu")) {
+            SystemClock.sleep(1_500)
+            shot("20b-drawer")
+            device.pressBack()
+            device.waitForIdle(1_500)
+        } else {
+            shot("20b-drawer-MISSING-MENU")
+        }
+
         // 5. The RICH RENDERER, deterministic: the seeded conversation renders
         // through the block pipeline with no network dependency.
         seedRichConversation()
