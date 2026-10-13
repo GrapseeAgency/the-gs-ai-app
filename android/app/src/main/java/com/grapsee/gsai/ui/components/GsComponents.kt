@@ -10,6 +10,12 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.EaseInOut
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalIndication
@@ -69,6 +75,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.ui.theme.auroraBackground
 import com.grapsee.gsai.ui.theme.Aeruo
 import com.grapsee.gsai.ui.theme.GsLayout
@@ -457,6 +464,47 @@ fun GsLoadingState(label: String = "Thinking", modifier: Modifier = Modifier) {
         }
         Text(label, style = MaterialTheme.typography.labelLarge,
             color = hcColor(MaterialTheme.colorScheme.onSurfaceVariant, MaterialTheme.colorScheme.onSurface))
+    }
+}
+
+/**
+ * The staggered wait-state loader (uiverse fast-vampirebat-53 intent,
+ * monochrome): three ink dots pulsing in sequence while a long operation runs
+ * with no measurable progress. A loading affordance, not decoration, so the
+ * loop is legitimate; under reduce-motion it holds the static mid-alpha frame
+ * like every other gated loop.
+ */
+@Composable
+fun GsStaggeredLoader(modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        repeat(3) { index ->
+            val alpha = if (SettingsStore.reduceAnimations || SettingsStore.reduceMotion) {
+                0.65f
+            } else {
+                val transition = rememberInfiniteTransition(label = "staggeredLoader")
+                val pulse by transition.animateFloat(
+                    initialValue = 0.25f,
+                    targetValue = 0.9f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(600, easing = androidx.compose.animation.core.EaseInOut,
+                            delayMillis = index * 150),
+                        repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
+                    ),
+                    label = "loaderDot$index"
+                )
+                pulse
+            }
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .graphicsLayer { this.alpha = alpha }
+                    .background(MaterialTheme.colorScheme.onSurface, CircleShape)
+            )
+        }
     }
 }
 

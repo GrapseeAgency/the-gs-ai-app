@@ -203,11 +203,17 @@ fun OnDeviceModelConsentDialog(
                             style = MaterialTheme.typography.bodySmall,
                         )
                     } else {
-                        // The server sent no Content-Length. An indeterminate bar
-                        // is the honest thing; a percentage would be invented.
-                        LinearProgressIndicator(
-                            modifier = Modifier.testTag("gs_consent_progress"),
-                        )
+                        // The server sent no Content-Length. A staggered
+                        // wait-state loader is the honest thing; a percentage
+                        // would be invented. (testTag kept on the loader row.)
+                        Row(
+                            modifier = Modifier
+                                .testTag("gs_consent_progress")
+                                .fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            GsStaggeredLoader()
+                        }
                         Spacer(Modifier.height(8.dp))
                         Text(
                             "${fmt(bytes)} downloaded",
