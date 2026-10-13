@@ -54,7 +54,6 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
@@ -226,22 +225,30 @@ private data class SpanTheme(
     val caretColor: Color,
     val fontSize: androidx.compose.ui.unit.TextUnit,
     /** PHASE 8.1: citation ordinal → source URL (empty map = all markers literal). */
-    val citations: Map<Int, String> = emptyMap()
+    val citations: Map<Int, String> = emptyMap(),
+    /**
+     * TASK 1: tap routing for every link annotation — in-app browser via
+     * GsLinks (external only on the explicit long-press paths).
+     */
+    val openLink: (String) -> Unit = {}
 )
 
 @Composable
 private fun rememberSpanTheme(
     defaultFontSize: androidx.compose.ui.unit.TextUnit,
     citationUrls: Map<Int, String> = emptyMap()
-): SpanTheme =
-    SpanTheme(
+): SpanTheme {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    return SpanTheme(
         codeBg = MaterialTheme.colorScheme.surfaceContainerHighest,
         linkColor = MaterialTheme.colorScheme.primary,
         textColor = MaterialTheme.colorScheme.onSurface,
         caretColor = MaterialTheme.colorScheme.primary,
         fontSize = defaultFontSize,
-        citations = citationUrls
+        citations = citationUrls,
+        openLink = { url -> com.grapsee.gsai.ui.components.GsLinks.openInApp(context, url) }
     )
+}
 
 private fun appendSpans(builder: AnnotatedString.Builder, spans: List<InlineSpan>, theme: SpanTheme) {
     for (span in spans) {
@@ -262,7 +269,10 @@ private fun appendSpans(builder: AnnotatedString.Builder, spans: List<InlineSpan
             is InlineSpan.LinkSpan -> builder.withLink(
                 LinkAnnotation.Url(
                     span.url,
-                    TextLinkStyles(style = SpanStyle(color = theme.linkColor, textDecoration = TextDecoration.Underline))
+                    TextLinkStyles(style = SpanStyle(color = theme.linkColor, textDecoration = TextDecoration.Underline)),
+                    // TASK 1: tap opens the IN-APP browser. External open is the
+                    // long-press path (GsLinks), never a plain tap.
+                    linkInteractionListener = { _, _ -> theme.openLink(span.url) }
                 )
             ) { builder.append(span.text) }
             is InlineSpan.CitationSpan -> {
@@ -277,7 +287,13 @@ private fun appendSpans(builder: AnnotatedString.Builder, spans: List<InlineSpan
                     builder.append("[${span.number}]")
                 } else {
                     builder.withLink(
-                        LinkAnnotation.Url(url, TextLinkStyles(style = citationChipStyle(theme)))
+                        LinkAnnotation.Url(
+                            url,
+                            TextLinkStyles(style = citationChipStyle(theme)),
+                            // TASK 1: inline citation chips route through the
+                            // in-app browser too — same tap contract as links.
+                            linkInteractionListener = { _, _ -> theme.openLink(url) }
+                        )
                     ) {
                         withStyle(citationChipStyle(theme)) { builder.append(span.number.toString()) }
                     }
@@ -748,11 +764,12 @@ private fun ImageBlockView(block: Block.ImageBlock) {
 
 @Composable
 private fun ImageMetaRow(block: Block.ImageBlock) {
-    val uriHandler = LocalUriHandler.current
+    val context = androidx.compose.ui.platform.LocalContext.current
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         TextButton(
-            onClick = { runCatching { uriHandler.openUri(block.url) } },
+            // TASK 1: in-app browser, same contract as reply links.
+            onClick = { com.grapsee.gsai.ui.components.GsLinks.openInApp(context, block.url) },
             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp)
         ) {
             Text("Open", style = MaterialTheme.typography.labelMedium)

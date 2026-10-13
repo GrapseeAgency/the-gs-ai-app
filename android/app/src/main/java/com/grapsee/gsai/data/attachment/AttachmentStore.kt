@@ -6,6 +6,7 @@ import android.provider.OpenableColumns
 import android.webkit.MimeTypeMap
 import com.grapsee.gsai.data.remote.AttachmentUploader
 import com.grapsee.gsai.data.remote.GsApiJson
+import com.grapsee.gsai.ocr.MlKitOcr
 import io.ktor.client.HttpClient
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -293,6 +294,20 @@ class AttachmentStore(
                 staged.delete()
                 throw AttachmentException(oversize)
             }
+            // TASK 3 vision input contract: run on-device OCR while the draft
+            // is still honestly in Preparing (real work on the staged copy).
+            // Images only; failure or empty text simply leaves the sidecar
+            // null — the attachment itself never fails because OCR did.
+            val ocrText = if (resolved.mimeType.startsWith("image/")) {
+                withContext(Dispatchers.Default) {
+                    runCatching {
+                        MlKitOcr.recognizeOrNull(context, staged.absolutePath).getOrNull()
+                    }.getOrNull()
+                }?.trim()?.takeIf { it.isNotEmpty() }
+                    ?.take(AttachmentRules.MAX_OCR_TEXT_CHARS)
+            } else {
+                null
+            }
             val preparing = current(id) ?: return
             update(
                 AttachmentStateMachine.prepared(
@@ -300,7 +315,8 @@ class AttachmentStore(
                     localPath = staged.absolutePath,
                     byteSize = byteSize,
                     displayName = resolved.displayName,
-                    mimeType = resolved.mimeType
+                    mimeType = resolved.mimeType,
+                    ocrText = ocrText
                 )
             )
             uploadStaged(id)
@@ -323,7 +339,12 @@ class AttachmentStore(
             return
         }
         try {
-            val remote = uploader.upload(stagedFile, draft.mimeType, draft.displayName)
+            val remote = uploader.upload(
+                stagedFile,
+                draft.mimeType,
+                draft.displayName,
+                ocrText = draft.ocrText
+            )
             val latest = current(id) ?: return
             update(AttachmentStateMachine.uploadSucceeded(latest, remote))
         } catch (ce: CancellationException) {

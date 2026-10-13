@@ -100,7 +100,14 @@ data class AttachmentDraft(
     val remoteUrl: String? = null,
     /** Server createdAt once uploaded. */
     val createdAt: String = "",
-    val thumbState: ThumbState = ThumbState.None
+    val thumbState: ThumbState = ThumbState.None,
+    /**
+     * TASK 3 vision input contract: on-device OCR text captured while staging
+     * an image. Optional by design (null = OCR unavailable/empty); the server
+     * stores it as a sidecar and uses it ONLY when the image bytes cannot
+     * reach the vision model. Never rendered, never treated as a description.
+     */
+    val ocrText: String? = null
 ) {
     /** True once a server record exists (removal becomes purely a draft op). */
     val isUploaded: Boolean get() = remoteId != null
@@ -135,6 +142,9 @@ object AttachmentRules {
 
     /** Cap of the sanitized display name, mirroring the backend exactly. */
     const val MAX_DISPLAY_NAME_LENGTH: Int = 120
+
+    /** OCR sidecar cap — mirrors the backend's MAX_OCR_TEXT_CHARS exactly. */
+    const val MAX_OCR_TEXT_CHARS: Int = 20_000
 
     fun isAllowed(mimeType: String): Boolean = mimeType.lowercase() in ALLOWED_MIME_TYPES
 
@@ -222,7 +232,8 @@ object AttachmentStateMachine {
         localPath: String,
         byteSize: Long,
         displayName: String,
-        mimeType: String
+        mimeType: String,
+        ocrText: String? = null
     ): AttachmentDraft {
         if (draft.phase != AttachmentPhase.Preparing) return draft
         return draft.copy(
@@ -232,6 +243,7 @@ object AttachmentStateMachine {
             displayName = displayName,
             mimeType = mimeType,
             kind = AttachmentRules.kindForMime(mimeType) ?: draft.kind,
+            ocrText = ocrText,
             failure = null,
             serverCode = null
         )

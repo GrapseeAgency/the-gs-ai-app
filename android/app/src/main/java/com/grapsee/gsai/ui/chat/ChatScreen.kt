@@ -461,11 +461,12 @@ fun ChatScreen(
             context.startActivity(Intent.createChooser(send, null))
         }.onFailure { showSnack("Sharing isn't set up on this device") }
     }
-    // PHASE 8.1: source cards + citation chips open the REAL article URL the
-    // backend persisted — a plain ACTION_VIEW, no in-app browser, and a quiet
-    // honest note when this device has no handler for it.
+    // PHASE 8.1 + TASK 1: source cards and citation chips open the REAL URL
+    // the backend persisted — now through the IN-APP browser (Custom Tabs).
+    // The external browser stays the long-press path (SourceCardView), and a
+    // quiet honest note when nothing can open it at all.
     val openSource: (String) -> Unit = { url ->
-        if (!openSourceUrl(context, url)) showSnack("No app can open this link")
+        com.grapsee.gsai.ui.components.GsLinks.openInApp(context, url)
     }
     // PHASE 5 real pickers — system Photo Picker, TakePicture through the
     // existing FileProvider, SAF OpenMultipleDocuments. No storage or camera

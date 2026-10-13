@@ -15,6 +15,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -476,14 +477,23 @@ fun SourceCardsRow(sources: List<SourceCard>, onOpenUrl: (String) -> Unit) {
 
 @Composable
 private fun SourceCardView(card: SourceCard, onOpenUrl: (String) -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
     Surface(
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         modifier = Modifier
             .width(184.dp)
-            .clickable(
-                enabled = card.url.startsWith("https://") || card.url.startsWith("http://")
-            ) { onOpenUrl(card.url) }
+            .combinedClickable(
+                enabled = card.url.startsWith("https://") || card.url.startsWith("http://"),
+                // TASK 1 contract: tap = in-app browser (onOpenUrl → GsLinks);
+                // LONG-PRESS = the explicit external-browser path.
+                onClick = { onOpenUrl(card.url) },
+                onLongClick = {
+                    haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                    com.grapsee.gsai.ui.components.GsLinks.openExternal(context, card.url)
+                }
+            )
     ) {
         Column(modifier = Modifier.padding(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {

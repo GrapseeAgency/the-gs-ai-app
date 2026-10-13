@@ -38,7 +38,8 @@ class AttachmentUploader(
         file: File,
         mimeType: String,
         displayName: String,
-        conversationId: String? = null
+        conversationId: String? = null,
+        ocrText: String? = null
     ): AttachmentDto {
         return try {
             // MultiPartFormDataContent ships in ktor-client-core 2.3.12 — no new
@@ -64,6 +65,12 @@ class AttachmentUploader(
                             append("displayName", displayName)
                             if (!conversationId.isNullOrBlank()) {
                                 append("conversationId", conversationId)
+                            }
+                            // TASK 3 vision input contract: the on-device OCR
+                            // sidecar rides the same multipart body. The server
+                            // stores it for the fallback path only.
+                            if (!ocrText.isNullOrBlank()) {
+                                append("ocrText", ocrText)
                             }
                         }
                     )
