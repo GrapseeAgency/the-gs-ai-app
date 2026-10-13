@@ -111,6 +111,70 @@ class GsScreenshotSuite {
         return device.wait(Until.findObject(By.clazz(android.widget.EditText::class.java)), 6_000)
     }
 
+    /**
+     * Seeds a rich conversation straight into the app's Room DB. The
+     * transcript then exercises the BLOCK RENDERER (headings, aligned table,
+     * code card, blockquote, list, inline math) with ZERO network — the
+     * deterministic renderer evidence that does not depend on the sandbox
+     * origin being up.
+     */
+    private fun seedRichConversation() {
+        val now = java.time.Instant.now().toString()
+        kotlinx.coroutines.runBlocking {
+            ServiceLocator.db.conversationDao().upsert(
+                com.grapsee.gsai.data.local.ConversationEntity(
+                    id = "shot-rich-1",
+                    title = "Design pass sample",
+                    modelId = null,
+                    pinned = false,
+                    archived = false,
+                    updatedAt = now,
+                    createdAt = now
+                )
+            )
+            ServiceLocator.db.messageDao().insertAll(
+                listOf(
+                    com.grapsee.gsai.data.local.MessageEntity(
+                        id = "shot-rich-1-u",
+                        conversationId = "shot-rich-1",
+                        role = "user",
+                        content = "Show the first three planets with a table and a hello in kotlin.",
+                        createdAt = now
+                    ),
+                    com.grapsee.gsai.data.local.MessageEntity(
+                        id = "shot-rich-1-a",
+                        conversationId = "shot-rich-1",
+                        role = "assistant",
+                        content = RICH_FIXTURE,
+                        createdAt = now
+                    )
+                )
+            )
+        }
+    }
+
+    private val RICH_FIXTURE = """## The first three planets
+
+| Planet | Moons | Orbit days |
+| :--- | :---: | ---: |
+| Mercury | 0 | 88 |
+| Venus | 0 | 225 |
+| Earth | 1 | 365 |
+
+```kotlin
+fun main() {
+    println("hello")
+}
+```
+
+> Distances grow fast: the Sun to Earth is 1 AU, to Mercury 0.39 AU.
+
+- Mercury is closest to the Sun
+- Venus rotates backwards
+- Earth is the only known life
+
+Inline `code` and math $a^2 + b^2 = c^2$."""
+
     @Test
     fun captureDesignPassScreens() {
         // 1. Splash + first-launch gate: cold start with NO session.
@@ -136,11 +200,22 @@ class GsScreenshotSuite {
         device.waitForIdle(2_000)
         shot("20-empty-chat")
 
-        // 4 + 5. Active chat with a streaming reply, then the settled rich
-        // reply. Done FIRST while the state is pristine. The prompt demands a
-        // table + a code block so the settled shot shows the structured
-        // renderer end to end. The emulator reaches the same public origin the
-        // phone ships with.
+        // 5. The RICH RENDERER, deterministic: the seeded conversation renders
+        // through the block pipeline with no network dependency.
+        seedRichConversation()
+        if (tapDesc("Open menu") && tapText("Design pass sample")) {
+            SystemClock.sleep(2_000)
+            shot("41-rich-reply-rendered")
+            device.pressBack()
+            device.waitForIdle(1_500)
+        } else {
+            shot("41-rich-reply-rendered-MISSING-ROW")
+        }
+
+        // 4. Active chat with a streaming reply, network best effort. The
+        // prompt demands a table + a code block so the settled shot shows the
+        // structured renderer end to end. The emulator reaches the same public
+        // origin the phone ships with.
         val input = findComposerInput()
         if (input != null) {
             runCatching {
@@ -188,9 +263,9 @@ class GsScreenshotSuite {
             shot("21-attach-mode-sheet-MISSING-TRIGGER")
         }
 
-        // 6. Settings, through the drawer. The row lookup WAITS on the
-        // drawer content rather than a sleep (run 38422692350 evidence).
-        if (tapDesc("Open menu")) {
+        // 6. Settings: the drawer gates it behind "More" (drawer evidence in
+        // the v9 run: the row list ends at More, Settings lives one level in).
+        if (tapDesc("Open menu") && tapText("More")) {
             if (device.wait(Until.hasObject(By.textContains("Settings")), 10_000) &&
                 tapText("Settings")
             ) {
@@ -202,7 +277,7 @@ class GsScreenshotSuite {
                 shot("30-settings-MISSING-ROW")
             }
         } else {
-            shot("30-settings-MISSING-MENU")
+            shot("30-settings-MISSING-MORE")
         }
 
         val dir = shotDir
