@@ -129,13 +129,48 @@ Shipped units, one commit each:
 - 21st chat-reasoning panel: the thinking mode already labels itself honestly
   in the orb row; a full trace panel is a larger build and stays a follow-up.
 
-## Follow-ups (documented, not started)
+## Fix round (the build the phase broke, and screen 16 finished)
 
-- iOS mirror: SF Symbols remain (platform-coherent family); the structural
-  changes (composer pill, drawer footer, mode carousel) deserve the SwiftUI
-  equivalents next round. Static gates only in this sandbox.
-- Dead demo-screen files (Explore/Create/Library/Projects/Assistants
-  composables) are now unreachable from navigation; a cleanup pass can delete
-  the files and routes outright.
-- The 21st chat-message comparison adopted what was strictly better (up-arrow
-  send, per-production patterns); a deeper renderer diff is optional.
+The design-phase commits never compiled: the icon generator's Kotlin template
+called an API that does not exist (`ImageVector.Builder` takes no
+`defaultStroke*` params; stroke width/cap/join are per-path on `addPath`;
+`PathParser().parsePathDataString` is `parsePathString`). The AFTER evidence
+run (38464946814 at ad59c72) caught it; no emulator had ever rendered these
+commits. Fix round 04afe08:
+
+- Generator template corrected against the verified compose 1.7.3
+  `ui-graphics` sources (addPath: pathData/fill/stroke/strokeLineWidth/
+  strokeLineCap/strokeLineJoin; PathParser.parsePathString().toNodes());
+  GsIcons.kt regenerated (98 icons, byte-identical geometry, new contract).
+- `Ease.kt`: `composed` imported from `androidx.compose.ui` (not runtime) —
+  this alone resolved the messageAppear/staggerDelay cascade.
+- Missing imports restored: GsComponents `background`; consent dialog
+  `Row/fillMaxWidth/Arrangement/GsStaggeredLoader`; onboarding + settings
+  `RoundedCornerShape`; ChatScreen `clickable` + top-level `staggerDelay`;
+  GsDrawer `contentDescription` semantics.
+- Wrong-icon names: SharedChatsScreen Trash2Outline -> Trash2, SearchScreen
+  SearchOff -> SearchX.
+- 141 dead `material.icons` imports purged across 21 files; zero `Icons.*`
+  expressions and zero material-icon imports remain in ui/ — the one-family
+  rule is now literal.
+- Screen 16 completed: the six unreachable demo dirs deleted outright
+  (ui/create x5 incl. the four studio workspaces, ui/explore, ui/library,
+  ui/projects x2, ui/assistants x3, ui/home) with their NavHost
+  registrations, route constants (EXPLORE/CREATE/LIBRARY/PROJECTS/ASSISTANTS,
+  assistant + project + studio routes) and SECTION_ROUTES entries.
+- Search index honestly reduced to the real Room corpus (conversations +
+  messages, FTS with LIKE fallback) after the fake library/assistant/project
+  catalogues died with their screens.
+- DeviceVerificationTest offline/backend-error assertions + doc comments now
+  assert the RULE ZERO paren-wrap production copy ("(Offline, cannot reach
+  GS.)"), matching the SendFailureNoticeTest treatment from the v0.72.0
+  release round.
+- AssistantsStore/ProjectStore/SampleData stay (persisted user data + schema
+  stability); they are UI-orphaned and can go in a data-layer cleanup round.
+
+## Follow-ups (carried)
+
+- iOS mirror (unchanged, next round).
+- The 21st chat-reasoning panel (unchanged).
+- Data-layer orphan cleanup (AssistantsStore/ProjectStore/SampleData now
+  UI-unreferenced; persisted-data migration needed before deletion).

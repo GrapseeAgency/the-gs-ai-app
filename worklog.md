@@ -4773,3 +4773,22 @@ Work Log:
 
 Stage Summary:
 - 15 pushed commits, one per screen/unit. Icon system: Lucide everywhere on Android, one weight, one container rule (rounded square, GsRadius.md, 32/34/36/40dp tiers). Motion: one curve family, reduced-motion static fallbacks. RULE ZERO: sparkles/robots/emoji purged, no new gradients, monochrome intact, product copy em-dash-free. Reduction: the navigation catalog is gone - the app opens as chat + voice + account. Known follow-ups: iOS mirror, dead-file cleanup, reasoning panel.
+
+---
+Task ID: design2-fix-round
+Agent: main session
+Task: The AFTER evidence run 38464946814 (android-screens at ad59c72) failed: compileDebugKotlin, 634 errors. The design-phase-2 commits never compiled - the icon generator emitted a Kotlin contract that does not exist (defaultStroke* builder params, parsePathDataString), Ease.kt imported composed from the wrong package, ~10 files missed imports, and the dead demo screens referenced unvendored icon names. Fix the build, complete screen 16, re-capture the AFTER evidence.
+
+Work Log:
+- Diagnosed from CI logs; verified the exact compose 1.7.3 ui-graphics API against the published sources jar (addPath: pathData/fill/stroke/strokeLineWidth/strokeLineCap/strokeLineJoin; PathParser().parsePathString().toNodes()) - no guessing.
+- scripts/gen_gs_icons.py template fixed at source; GsIcons.kt regenerated (98 icons, geometry untouched, correct contract).
+- Ease.kt: composed is androidx.compose.ui.composed; ChatScreen clickable + top-level staggerDelay import (it lives outside GsMotion in theme/Motion.kt); GsDrawer contentDescription semantics; GsComponents background; consent dialog Row/fillMaxWidth/Arrangement/GsStaggeredLoader; onboarding+settings RoundedCornerShape; SharedChatsScreen Trash2Outline->Trash2; SearchScreen SearchOff->SearchX.
+- 141 dead material-icons imports purged across 21 files; verified zero Icons.* expressions and zero material-icon imports remain in ui/ (one-family rule now literal); no bare-name usages (stash-verified before removal).
+- Screen 16 completion: deleted ui/create (5 files incl. 4 studio workspaces), ui/explore, ui/library, ui/projects (2), ui/assistants (3), ui/home (dead HomeScreen) = 14 files; NavHost registrations + GsRoutes constants (EXPLORE/CREATE/LIBRARY/PROJECTS/ASSISTANTS, assistant/project/studio routes) + SECTION_ROUTES trimmed; syntax-aware brace-depth profile matches HEAD exactly.
+- SearchScreen reduced to the honest corpus: conversations + messages (Room FTS/LIKE); the fake library/assistant/project catalogues died with their screens; copy + doc comments updated; AssistantsStore/ProjectStore/SampleData stay (persisted data, schema stability) as a documented data-layer follow-up.
+- DeviceVerificationTest: 5 contains + 1 substringAfter + doc comments moved from the em-dash offline label to the RULE ZERO paren wrap "(Offline, cannot reach GS.)"; mid-turn/backend-error doc formats refreshed.
+- Docs: DESIGN_PHASE_2.md fix-round ledger appended.
+- Commits: 04afe08 (code), docs commit; pushed; android-screens re-dispatched (label after).
+
+Stage Summary:
+- main compiles again by construction (verified API + zero unresolved-symbol greps); the emulator run is the arbiter. AFTER evidence harvest pending on the run going green.
