@@ -194,6 +194,10 @@ Inline `code` and math ${'$'}a^2 + b^2 = c^2$."""
         shot("12-onboarding")
 
         // 3. Empty chat workspace — the home surface for the rest of the run.
+        // The rich fixture seeds BEFORE this launch: the drawer's store reads
+        // Room at startup, so the seeded row is real drawer content for the
+        // 20b + 41 shots instead of a mid-session insert the snapshot misses.
+        seedRichConversation()
         resetSession(active = true, onboarded = true)
         launchApp()
         device.wait(Until.hasObject(By.textContains("GS")), 8_000)
@@ -206,15 +210,17 @@ Inline `code` and math ${'$'}a^2 + b^2 = c^2$."""
         if (tapDesc("Open menu")) {
             SystemClock.sleep(1_500)
             shot("20b-drawer")
-            device.pressBack()
+            // BACK is not the drawer's close affordance on this emulator
+            // (back exits to the launcher with the drawer open); the scrim
+            // tap is the user's close gesture and the suite uses it too.
+            device.click(device.displayWidth - 60, device.displayHeight / 2)
             device.waitForIdle(1_500)
         } else {
             shot("20b-drawer-MISSING-MENU")
         }
 
-        // 5. The RICH RENDERER, deterministic: the seeded conversation renders
-        // through the block pipeline with no network dependency.
-        seedRichConversation()
+        // 5. The RICH RENDERER, deterministic: the conversation seeded before
+        // launch renders through the block pipeline with no network dependency.
         if (tapDesc("Open menu") && tapText("Design pass sample")) {
             SystemClock.sleep(2_000)
             shot("41-rich-reply-rendered")
