@@ -34,12 +34,21 @@ class GsScreenshotSuite {
         UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
     private val ctx: Context
         get() = InstrumentationRegistry.getInstrumentation().targetContext
+    /**
+     * Screenshot dir: the INSTRUMENTATION context's own external files dir.
+     * The test package (com.grapsee.gsai.test) cannot write into the app's
+     * Android/data directory on API 30 scoped storage — writes there fail
+     * silently, which is exactly what the first run did. The instrumentation
+     * context's own dir is writable by the test and readable via adb pull.
+     */
+    private val shotCtx: Context
+        get() = InstrumentationRegistry.getInstrumentation().context
 
     private fun shot(name: String) {
-        val dir = File(ctx.getExternalFilesDir(null), "screens").apply { mkdirs() }
+        val dir = File(shotCtx.getExternalFilesDir(null), "screens").apply { mkdirs() }
         val out = File(dir, "$name.png")
-        runCatching { device.takeScreenshot(out, 1.0f, 19) }
-        println("GS-SCREENSHOT $name -> ${out.absolutePath} (${out.length()} bytes)")
+        val ok = runCatching { device.takeScreenshot(out, 1.0f, 19) }.isSuccess
+        println("GS-SCREENSHOT $name ok=$ok -> ${out.absolutePath} (${out.length()} bytes)")
     }
 
     private fun resetSession(active: Boolean, onboarded: Boolean) {
@@ -158,6 +167,7 @@ class GsScreenshotSuite {
             shot("40-streaming-MISSING-INPUT")
         }
 
-        println("GS-SCREENSHOT suite complete: ${File(File(ctx.getExternalFilesDir(null), "screens").absolutePath).list()?.joinToString()}")
+        val dir = File(shotCtx.getExternalFilesDir(null), "screens")
+        println("GS-SCREENSHOT suite complete (${dir.list()?.size ?: 0} files): ${dir.list()?.joinToString()}")
     }
 }

@@ -12,8 +12,12 @@ adb shell am instrument -w \
   -e class com.grapsee.gsai.GsScreenshotSuite \
   com.grapsee.gsai.test/androidx.test.runner.AndroidJUnitRunner \
   | tee instrumentation-out.txt || true
+# The suite writes into the INSTRUMENTATION package's own external dir
+# (com.grapsee.gsai.test) — the app's dir is not writable by the test on
+# API 30 scoped storage. List before pulling so a miss is visible evidence.
 mkdir -p device-artifacts/screens
-adb pull "/sdcard/Android/data/com.grapsee.gsai/files/screens" device-artifacts/ 2>/dev/null \
-  || echo "::warning::screenshot dir not found on device"
+adb shell ls -la "/sdcard/Android/data/com.grapsee.gsai.test/files/screens" || true
+adb pull "/sdcard/Android/data/com.grapsee.gsai.test/files/screens/." device-artifacts/screens/ \
+  || echo "::warning::screenshot pull failed"
 adb logcat -d -v threadtime > device-artifacts/logcat.txt || true
 ls -la device-artifacts/screens || true
