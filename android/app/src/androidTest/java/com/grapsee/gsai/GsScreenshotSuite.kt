@@ -154,6 +154,19 @@ class GsScreenshotSuite {
                 // disappears. Cap at two minutes; capture either way.
                 device.wait(Until.gone(By.desc("Stop generating")), 120_000)
                 SystemClock.sleep(2_500)
+                // The sandbox origin has flappy up-windows; a turn that lands
+                // in a dead window answers with the honest error notice. The
+                // suite REGENERATES through the flaps (up to four tries) so
+                // the rich-reply shot shows the real renderer, not the error.
+                var tries = 0
+                while (tries < 4 && device.hasObject(By.textContains("GS backend error"))) {
+                    tries++
+                    println("GS-SCREENSHOT retry $tries: origin was down mid-turn, regenerating")
+                    SystemClock.sleep(40_000)
+                    if (!tapDesc("Regenerate")) break
+                    device.wait(Until.gone(By.desc("Stop generating")), 120_000)
+                    SystemClock.sleep(2_500)
+                }
                 shot("41-rich-reply")
             } else {
                 shot("40-streaming-MISSING-SEND")
