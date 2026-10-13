@@ -14,14 +14,20 @@ import org.junit.runner.RunWith
 import java.io.File
 
 /**
- * GsScreenshotSuite — drives the app through the eight design-pass screens and
- * captures one PNG per screen into the app's external files dir.
+ * GsScreenshotSuite — drives the app through the design-pass screens and
+ * captures one PNG per screen.
  *
  * WHY UIAUTOMATOR AND NOT THE COMPOSE TEST RULE: the chat surface runs
  * perpetual animations (the activity orb, the aurora). A ComposeTestRule waits
  * for recomposition quiescence and hangs on exactly those surfaces. UiAutomator
  * has no idle contract — it matches accessibility text and grabs whatever is
  * on screen, which is what a screenshot run needs.
+ *
+ * STORAGE (run 38421472933 lesson): screenshots go to the INSTRUMENTATION
+ * package's INTERNAL files dir (context.filesDir) — always writable, and the
+ * runner pulls them with `adb exec-out run-as com.grapsee.gsai.test cat`.
+ * getExternalFilesDir proved unreliable from the test process, and the app's
+ * own Android/data dir is not writable by the test on API 30 scoped storage.
  *
  * Every step is defensive: a screen that fails to open still produces a
  * screenshot of wherever the app actually is, so a failed navigation is
@@ -34,21 +40,14 @@ class GsScreenshotSuite {
         UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
     private val ctx: Context
         get() = InstrumentationRegistry.getInstrumentation().targetContext
-    /**
-     * Screenshot dir: the INSTRUMENTATION context's own external files dir.
-     * The test package (com.grapsee.gsai.test) cannot write into the app's
-     * Android/data directory on API 30 scoped storage — writes there fail
-     * silently, which is exactly what the first run did. The instrumentation
-     * context's own dir is writable by the test and readable via adb pull.
-     */
     private val shotCtx: Context
         get() = InstrumentationRegistry.getInstrumentation().context
 
     private fun shot(name: String) {
-        val dir = File(shotCtx.getExternalFilesDir(null), "screens").apply { mkdirs() }
+        val dir = File(shotCtx.filesDir, "screens").apply { mkdirs() }
         val out = File(dir, "$name.png")
         val ok = runCatching { device.takeScreenshot(out, 1.0f, 19) }.isSuccess
-        println("GS-SCREENSHOT $name ok=$ok -> ${out.absolutePath} (${out.length()} bytes)")
+        println("GS-SCREENSHOT $name ok=$ok bytes=${out.length()}")
     }
 
     private fun resetSession(active: Boolean, onboarded: Boolean) {
@@ -62,6 +61,7 @@ class GsScreenshotSuite {
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
         InstrumentationRegistry.getInstrumentation().startActivitySync(intent)
         device.waitForIdle(4_000)
+        SystemClock.sleep(1_500)
     }
 
     private fun dismissConsentIfPresent() {
@@ -72,19 +72,24 @@ class GsScreenshotSuite {
         }
     }
 
-    private fun tapText(text: String, timeout: Long = 6_000): Boolean {
+    private fun tapText(text: String, timeout: Long = 8_000): Boolean {
         val node = device.wait(Until.findObject(By.textContains(text)), timeout) ?: return false
         return runCatching { node.click(); device.waitForIdle(2_000); true }.getOrDefault(false)
     }
 
-    private fun tapDesc(desc: String, timeout: Long = 6_000): Boolean {
+    private fun tapDesc(desc: String, timeout: Long = 8_000): Boolean {
         val node = device.wait(Until.findObject(By.descContains(desc)), timeout) ?: return false
         return runCatching { node.click(); device.waitForIdle(2_000); true }.getOrDefault(false)
     }
 
-    private fun goHome() {
-        device.pressBack()
+    private fun findComposerInput(): androidx.test.uiautomator.UiObject2? {
+        val direct = device.findObject(By.clazz(android.widget.EditText::class.java))
+        if (direct != null) return direct
+        // Compose fields can need a focus tap first: the composer sits at the
+        // bottom of the screen.
+        device.click(device.displayWidth / 2, device.displayHeight - 220)
         device.waitForIdle(1_500)
+        return device.wait(Until.findObject(By.clazz(android.widget.EditText::class.java)), 6_000)
     }
 
     @Test
@@ -104,7 +109,7 @@ class GsScreenshotSuite {
         device.waitForIdle(2_000)
         shot("12-onboarding")
 
-        // 3. Empty chat workspace.
+        // 3. Empty chat workspace — the home surface for the rest of the run.
         resetSession(active = true, onboarded = true)
         launchApp()
         device.wait(Until.hasObject(By.textContains("GS")), 8_000)
@@ -112,51 +117,22 @@ class GsScreenshotSuite {
         device.waitForIdle(2_000)
         shot("20-empty-chat")
 
-        // 4. Model / mode picker sheet.
-        if (tapText("Auto") || tapText("Thinking")) {
-            device.waitForIdle(1_500)
-            shot("21-mode-picker-sheet")
-            goHome()
-        } else {
-            shot("21-mode-picker-sheet-MISSING-TRIGGER")
-        }
-
-        // 5. Image attachment flow: the attach sheet the composer opens.
-        if (tapDesc("Attach")) {
-            device.waitForIdle(1_500)
-            shot("22-attach-sheet")
-            goHome()
-        } else {
-            shot("22-attach-sheet-MISSING-TRIGGER")
-        }
-
-        // 6. Settings.
-        if (tapDesc("Open menu")) {
-            if (tapText("Settings")) {
-                device.waitForIdle(2_000)
-                shot("30-settings")
-                goHome()
-            } else {
-                shot("30-settings-MISSING-ROW")
-            }
-        } else {
-            shot("30-settings-MISSING-MENU")
-        }
-
-        // 7. Active chat with a streaming reply, then the settled rich reply.
-        // The prompt demands a table + a code block so the settled shot shows
-        // the structured renderer end to end. The emulator reaches the same
-        // public origin the phone ships with.
-        val input = device.findObject(By.clazz(android.widget.EditText::class.java))
+        // 4 + 5. Active chat with a streaming reply, then the settled rich
+        // reply. Done FIRST while the state is pristine. The prompt demands a
+        // table + a code block so the settled shot shows the structured
+        // renderer end to end. The emulator reaches the same public origin the
+        // phone ships with.
+        val input = findComposerInput()
         if (input != null) {
-            runCatching { input.setText("Show a small markdown table of the first 3 planets (name, moons) and a short kotlin code block that prints hello.") }
+            runCatching {
+                input.setText("Show a small markdown table of the first 3 planets (name, moons) and a short kotlin code block that prints hello.")
+            }
             device.waitForIdle(1_000)
             if (tapDesc("Send")) {
-                SystemClock.sleep(1_200)
+                SystemClock.sleep(1_400)
                 shot("40-active-chat-streaming")
                 // Wait for the stream to settle: the inline stop control
-                // disappears and the send slot returns. Cap at two minutes;
-                // capture whatever state exists either way.
+                // disappears. Cap at two minutes; capture either way.
                 device.wait(Until.gone(By.desc("Stop generating")), 120_000)
                 SystemClock.sleep(2_500)
                 shot("41-rich-reply")
@@ -167,7 +143,35 @@ class GsScreenshotSuite {
             shot("40-streaming-MISSING-INPUT")
         }
 
-        val dir = File(shotCtx.getExternalFilesDir(null), "screens")
+        // 5. Attach + mode sheet: on this app the composer's attach control
+        // opens ONE sheet carrying both the attachment tiles and the mode
+        // picker, so one shot is the honest evidence for both screens.
+        if (tapDesc("Attach")) {
+            SystemClock.sleep(1_200)
+            shot("21-attach-mode-sheet")
+            shot("22-attach-sheet")
+            device.pressBack()
+            device.waitForIdle(1_500)
+        } else {
+            shot("21-attach-mode-sheet-MISSING-TRIGGER")
+        }
+
+        // 6. Settings, through the drawer.
+        if (tapDesc("Open menu")) {
+            SystemClock.sleep(1_200)
+            if (tapText("Settings")) {
+                SystemClock.sleep(1_500)
+                shot("30-settings")
+                device.pressBack()
+                device.waitForIdle(1_500)
+            } else {
+                shot("30-settings-MISSING-ROW")
+            }
+        } else {
+            shot("30-settings-MISSING-MENU")
+        }
+
+        val dir = File(shotCtx.filesDir, "screens")
         println("GS-SCREENSHOT suite complete (${dir.list()?.size ?: 0} files): ${dir.list()?.joinToString()}")
     }
 }

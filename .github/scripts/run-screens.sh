@@ -12,12 +12,17 @@ adb shell am instrument -w \
   -e class com.grapsee.gsai.GsScreenshotSuite \
   com.grapsee.gsai.test/androidx.test.runner.AndroidJUnitRunner \
   | tee instrumentation-out.txt || true
-# The suite writes into the INSTRUMENTATION package's own external dir
-# (com.grapsee.gsai.test) — the app's dir is not writable by the test on
-# API 30 scoped storage. List before pulling so a miss is visible evidence.
+# Screenshots live in the INSTRUMENTATION package's INTERNAL files dir
+# (scoped storage: the test package's external dirs proved unreliable and the
+# app's Android/data is not adb-readable). run-as works because the test APK
+# is debuggable; strip the CRLF adb adds to ls output.
 mkdir -p device-artifacts/screens
-adb shell ls -la "/sdcard/Android/data/com.grapsee.gsai.test/files/screens" || true
-adb pull "/sdcard/Android/data/com.grapsee.gsai.test/files/screens/." device-artifacts/screens/ \
-  || echo "::warning::screenshot pull failed"
+adb shell run-as com.grapsee.gsai.test ls files/screens || true
+SHOTS=$(adb shell run-as com.grapsee.gsai.test ls files/screens | tr -d '\r' || true)
+for f in $SHOTS; do
+  [ -n "$f" ] || continue
+  adb exec-out run-as com.grapsee.gsai.test cat "files/screens/$f" \
+    > "device-artifacts/screens/$f" 2>/dev/null || true
+done
 adb logcat -d -v threadtime > device-artifacts/logcat.txt || true
 ls -la device-artifacts/screens || true
