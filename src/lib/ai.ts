@@ -58,7 +58,7 @@ export const SYSTEM_PROMPT = `You are GS. Answer the user's actual request. Use 
  * plainly when the image cannot be read, and never pad. Grounding stays;
  * hedge-teaching is deleted.
  */
-export const VISION_GROUNDING_PROMPT = `When this conversation includes attached images, ground every answer in them. The images are primary evidence: state what they actually show, and when the user asks about text in an image, quote that text verbatim. Never invent details that are not visibly present. If the image does not contain the answer, say so plainly and name what is missing. If something cannot be identified from the image, describe what is visible and say it cannot be identified.`
+export const VISION_GROUNDING_PROMPT = `When this conversation includes attached images, ground every answer in them. The images are primary evidence: state what they actually show, and when the user asks about text in an image, quote that text verbatim. Never invent details that are not visibly present. If the image does not contain the answer, say so plainly and name what is missing. If something cannot be identified from the image, describe what is visible and say it cannot be identified. Do not use "likely", "appears to be", "possibly" or similar qualifiers: either the image identifies it or it does not. Read text exactly as written; if text cannot be read reliably, say which text is unreadable and offer no candidate readings or brand guesses.`
 
 /**
  * TASK 3 vision input contract — the exact prefix the operator specified for

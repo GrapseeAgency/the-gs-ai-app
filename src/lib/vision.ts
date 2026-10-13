@@ -26,13 +26,17 @@ import { readAttachmentFile } from './attachments'
 import type { Attachment } from '@prisma/client'
 
 /**
- * Normalization policy (§10 performance): provider payload bounded by
- * re-encoding to JPEG at a bounded longest edge. 1568 px is the largest edge
- * at which vision models retain full patch fidelity without inflating image
- * tokens; the probe measured ~424 prompt tokens for a 640x400 image.
+ * Normalization policy (§10 performance, REVISED by the operator's 2026-10-14
+ * TASK 3 audit): provider payload bounded by re-encoding to JPEG at a bounded
+ * longest edge. 1568 px was chosen for token economy, but the operator's real
+ * phone photos proved it destroys SMALL TEXT: wrapper/label text that is
+ * readable in the original 4000 px capture became unreadable mush at 1568 —
+ * the model then guessed. 2048 px keeps small-text fidelity (the whole point
+ * of "read the actual text") at ~1.7x the token cost of 1568 — a cost the
+ * flash-model turn budget absorbs easily.
  */
-export const VISION_MAX_EDGE = 1568
-export const VISION_JPEG_QUALITY = 85
+export const VISION_MAX_EDGE = 2048
+export const VISION_JPEG_QUALITY = 90
 
 /**
  * Follow-up policy (§13: "follow-up question without re-uploading"): user

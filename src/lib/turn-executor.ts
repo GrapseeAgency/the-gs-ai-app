@@ -1514,7 +1514,7 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
   // TASK 3 contract: with an OCR sidecar the turn STILL PROCEEDS (text path,
   // OCR text as evidence). With neither bytes nor OCR the reply is the
   // deterministic, honest refusal below — no model call, no guessing.
-  if (allImagesFailed && !ocrFallbackText) {
+  if (allImagesFailed && !prep.ocrFallbackText) {
     const reply = 'I cannot read this image.'
     console.log(
       `GS-VISION-REFUSAL conv=${id} msg=${userMessage.id} reasons=${prep.visionFailures
