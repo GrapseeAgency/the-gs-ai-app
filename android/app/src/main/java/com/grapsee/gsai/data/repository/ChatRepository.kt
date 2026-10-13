@@ -4,6 +4,7 @@ import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 
+import com.grapsee.gsai.BuildConfig
 import com.grapsee.gsai.data.attachment.AttachmentDraft
 import com.grapsee.gsai.data.attachment.AttachmentPhase
 import com.grapsee.gsai.data.local.AppDatabase
@@ -128,9 +129,32 @@ private fun classifySendFailure(e: Exception, receivedAnyEvent: Boolean): SendFa
     return SendFailure.BackendError(status = 0, serverMessage = null, localReason = cause)
 }
 
+/**
+ * v0.71.5 FIELD-DIAGNOSTICS — every send-failure notice self-identifies:
+ * exact build (name/versionCode), the ROOT-CAUSE exception (deepest cause in
+ * the wrapping chain — Ktor wraps transport errors; the leaf is the truth)
+ * and the origin the build actually targets. A failure screenshot is now a
+ * complete transport diagnosis: build, wire-level error, target host.
+ */
+private fun forensicSuffix(e: Exception?): String {
+    val base = "build ${BuildConfig.VERSION_NAME}/${BuildConfig.VERSION_CODE} · origin ${BuildConfig.BASE_URL}"
+    if (e == null) return "\n\n[GS diag · $base · stream ended with no events and no exception]"
+    var root: Throwable = e
+    var depth = 0
+    while (root.cause != null && root.cause !== root && depth < 6) {
+        root = root.cause!!
+        depth++
+    }
+    val exLine = root.javaClass.simpleName +
+        (root.message?.takeIf { it.isNotBlank() }?.let { ": ${it.take(140)}" } ?: "")
+    return "\n\n[GS diag · $base · $exLine]"
+}
+
 class ChatRepository(
     private val api: ApiClient,
-    private val db: AppDatabase
+    private val db: AppDatabase,
+    /** v0.71.5: invoked when a send proves the session-affinity pin is dead. */
+    private val onDeadSession: (() -> Unit)? = null
 ) {
     private val _connectionState = MutableStateFlow(false)
     val connectionState: StateFlow<Boolean> = _connectionState.asStateFlow()
@@ -524,8 +548,12 @@ class ChatRepository(
                     // assert it: they were inline in this function with no
                     // JVM-testable seam. That is why they are now pure,
                     // tested functions in SendFailureNotice.
+                    // v0.71.5: nothing usable arrived and recovery failed —
+                    // the affinity slot this install was pinned to is the
+                    // prime suspect. Rotate so the next send draws a live one.
+                    if (accumulated.isEmpty()) onDeadSession?.invoke()
                     if (accumulated.isNotEmpty()) {
-                        val tail = "\n\n" + SendFailureNotice.midStreamPartial()
+                        val tail = "\n\n" + SendFailureNotice.midStreamPartial() + forensicSuffix(e)
                         accumulated.append(tail)
                         onDelta(tail)
                     } else {
@@ -552,7 +580,7 @@ class ChatRepository(
                         val notice = "\u2014 The connection dropped mid-turn. " +
                             "Nothing arrived before it went down, and nothing " +
                             "was saved. Tap regenerate, or try again in a " +
-                            "moment. \u2014"
+                            "moment. \u2014" + forensicSuffix(e)
                         accumulated.append(notice)
                         onDelta(notice)
                     }
@@ -561,7 +589,10 @@ class ChatRepository(
                 }
                 // (2) GENUINE_UNREACHABLE — TCP connect failed. Honest label.
                 SendFailure.GenuineUnreachable -> {
-                    val marker = "— Offline — cannot reach GS. —\n\n"
+                    // v0.71.5: connect never happened — rotate the affinity id
+                    // so the retry does not hammer the same dead routing slot.
+                    onDeadSession?.invoke()
+                    val marker = "— Offline — cannot reach GS. —" + forensicSuffix(e) + "\n\n"
                     accumulated.append(marker)
                     onDelta(marker)
                     streamLocalReply(content) { chunk ->
@@ -582,7 +613,10 @@ class ChatRepository(
                     val serverText = failure.serverMessage?.takeIf { it.isNotBlank() }
                         ?: failure.localReason?.takeIf { it.isNotBlank() }
                         ?: "GS backend error (HTTP ${failure.status})"
-                    val marker = "— $serverText —\n\n"
+                    // v0.71.5: status 0 means NO HTTP response ever arrived —
+                    // same dead-pin suspicion as GenuineUnreachable. Rotate.
+                    if (failure.status == 0) onDeadSession?.invoke()
+                    val marker = "— $serverText —" + forensicSuffix(e) + "\n\n"
                     accumulated.append(marker)
                     onDelta(marker)
                     persistAssistant(activeId, assistantId, accumulated)
@@ -608,6 +642,13 @@ class ChatRepository(
                 onDone(recovered)
                 return activeId
             }
+            // v0.71.5 FIELD-DIAGNOSTICS: recovery failed and nothing streamed —
+            // never render a silent empty bubble, and treat the affinity pin
+            // as dead (same signature as the mid-turn cut with zero bytes).
+            onDeadSession?.invoke()
+            val diag = forensicSuffix(null)
+            accumulated.append(diag)
+            onDelta(diag)
         }
         persistAssistant(
             activeId,

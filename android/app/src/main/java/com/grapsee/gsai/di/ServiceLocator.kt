@@ -34,12 +34,24 @@ internal const val GS_SESSION_HEADER = "x-session-id"
  * emitted request with MockEngine.
  */
 internal fun gsHttpClient(sessionId: String, engine: HttpClientEngine? = null): HttpClient =
-    if (engine != null) HttpClient(engine) { configure(sessionId) }
-    else HttpClient(CIO) { configure(sessionId) }
+    gsHttpClient({ sessionId }, engine)
 
-private fun io.ktor.client.HttpClientConfig<*>.configure(sessionId: String) {
+/**
+ * v0.71.5 AFFINITY-ROTATION — the provider form reads the session id AT
+ * REQUEST TIME. The platform edge uses `x-session-id` for session affinity;
+ * a value baked at client construction can never be rotated, and a STALE pin
+ * routes every send of this install to whatever upstream the edge pinned it
+ * to weeks ago — observed live 2026-10-13: the app got a 2xx and then
+ * nothing, mid-turn cut with zero bytes, while the SAME phone's browser
+ * (fresh session id per page load) chatted fine against the same origin.
+ */
+internal fun gsHttpClient(sessionIdProvider: () -> String, engine: HttpClientEngine? = null): HttpClient =
+    if (engine != null) HttpClient(engine) { configure(sessionIdProvider) }
+    else HttpClient(CIO) { configure(sessionIdProvider) }
+
+private fun io.ktor.client.HttpClientConfig<*>.configure(sessionIdProvider: () -> String) {
     defaultRequest {
-        headers.append(GS_SESSION_HEADER, sessionId)
+        headers.append(GS_SESSION_HEADER, sessionIdProvider())
         // FORENSIC AUDIT [3] — every request carries the app version so the
         // backend can log the client build against its own revision and warn
         // on stale-APK audits (X-GS-* handshake).
@@ -86,22 +98,48 @@ object ServiceLocator {
     lateinit var chatStream: ChatStreamController
 
     /**
-     * Per-install affinity id. Seeded immediately (random) so a premature
-     * `http` access still works; init() replaces it with the persisted value
-     * BEFORE the lazy client is first touched (Application.onCreate ordering).
+     * Per-launch affinity id. Seeded immediately (random) so a premature
+     * `http` access still works; init() ROTATES it with a fresh persisted
+     * value BEFORE the lazy client is first touched (Application.onCreate
+     * ordering).
      */
     @Volatile
     private var clientId: String = UUID.randomUUID().toString()
 
-    val http: HttpClient by lazy { gsHttpClient(clientId) }
+    private lateinit var appContext: Context
+
+    /** Live affinity id — read at request time by the shared client's header provider. */
+    internal fun currentClientId(): String = clientId
+
+    val http: HttpClient by lazy { gsHttpClient { currentClientId() } }
 
     fun init(context: Context) {
         if (::db.isInitialized) return
-        clientId = SessionStore.stableClientId(context)
+        appContext = context.applicationContext
+        // v0.71.5 AFFINITY-ROTATION FIX: a FRESH session id EVERY launch.
+        // The old stable-per-install id outlived the backend instance it was
+        // pinned to — this install kept sending the same x-session-id for
+        // weeks across platform resurrections, and the edge kept honoring
+        // the dead pin. Per-launch ids keep affinity stable WITHIN the
+        // session (all requests of one launch share one id) and guarantee a
+        // live routing slot after any backend restart.
+        clientId = SessionStore.rotateClientId(context)
         db = AppDatabase.build(context)
         api = ApiClient(http)
-        chat = ChatRepository(api, db)
+        chat = ChatRepository(api, db, onDeadSession = { rotateSessionId() })
         chatStream = ChatStreamController(chat)
         attachments = AttachmentStore(http, context.applicationContext)
+    }
+
+    /**
+     * v0.71.5: mint + persist a fresh affinity id, callable mid-session when
+     * a send proves the current pin is dead. The shared client picks the new
+     * value up on the very next request (dynamic header) — no rebuild.
+     */
+    fun rotateSessionId(): String {
+        val fresh = UUID.randomUUID().toString()
+        clientId = fresh
+        if (::appContext.isInitialized) SessionStore.persistClientId(appContext, fresh)
+        return fresh
     }
 }

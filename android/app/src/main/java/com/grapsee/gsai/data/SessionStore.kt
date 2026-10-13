@@ -20,14 +20,29 @@ object SessionStore {
     /**
      * Stable per-install identifier sent as `x-session-id` on every request.
      * The platform edge REQUIRES it (session affinity — without the header the
-     * invocation is rejected 400 before reaching the app), and a stable value
-     * keeps this install affinity-pinned. First call mints and persists a UUID.
+     * invocation is rejected 400 before reaching the app). First call mints
+     * and persists a UUID.
+     *
+     * v0.71.5: superseded by [rotateClientId] — a stable FOREVER id pinned
+     * this install to a dead edge affinity slot. Kept for compatibility.
      */
     fun stableClientId(context: Context): String {
         prefs(context).getString(KEY_CLIENT_ID, null)?.let { return it }
         val fresh = java.util.UUID.randomUUID().toString()
-        prefs(context).edit().putString(KEY_CLIENT_ID, fresh).apply()
+        persistClientId(context, fresh)
         return fresh
+    }
+
+    /** v0.71.5: mint AND overwrite the persisted affinity id (per-launch freshness). */
+    fun rotateClientId(context: Context): String {
+        val fresh = java.util.UUID.randomUUID().toString()
+        persistClientId(context, fresh)
+        return fresh
+    }
+
+    /** v0.71.5: persist an explicit affinity id (mid-session failure rotation). */
+    fun persistClientId(context: Context, id: String) {
+        prefs(context).edit().putString(KEY_CLIENT_ID, id).apply()
     }
 
     fun isSessionActive(context: Context): Boolean =

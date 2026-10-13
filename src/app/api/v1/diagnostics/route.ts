@@ -32,7 +32,7 @@ import { getBackendRevision } from '@/lib/revision'
 
 export const dynamic = 'force-dynamic'
 
-const CURRENT_APP_VERSION = '0.71.4'
+const CURRENT_APP_VERSION = '0.71.5'
 const DEFAULT_LIMIT = 10
 const MAX_LIMIT = 50
 
