@@ -149,6 +149,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
@@ -1126,7 +1127,7 @@ fun ChatScreen(
                     modifier = Modifier.kineticPress()
                 ) {
                     Icon(
-                        Icons.Outlined.Menu,
+                        GsIcons.PanelLeft,
                         contentDescription = "Open menu",
                         tint = MaterialTheme.colorScheme.onBackground
                     )
@@ -1145,12 +1146,12 @@ fun ChatScreen(
                 },
                 modifier = Modifier.kineticPress()
             ) {
-                Icon(Icons.Outlined.Search, contentDescription = "Search in chat",
+                Icon(GsIcons.Search, contentDescription = "Search in chat",
                     tint = MaterialTheme.colorScheme.onBackground)
             }
             if (newChatAction != null) {
                 IconButton(onClick = newChatAction, modifier = Modifier.kineticPress()) {
-                    Icon(Icons.Outlined.Add, contentDescription = "New chat",
+                    Icon(GsIcons.Plus, contentDescription = "New chat",
                         tint = MaterialTheme.colorScheme.onBackground)
                 }
             }
@@ -1189,14 +1190,14 @@ fun ChatScreen(
                     )
                     IconButton(onClick = { stepSearch(-1) }, enabled = matchIndices.isNotEmpty()) {
                         Icon(
-                            Icons.Outlined.KeyboardArrowUp,
+                            GsIcons.ChevronUp,
                             contentDescription = "Previous match",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     IconButton(onClick = { stepSearch(1) }, enabled = matchIndices.isNotEmpty()) {
                         Icon(
-                            Icons.Outlined.KeyboardArrowDown,
+                            GsIcons.ChevronDown,
                             contentDescription = "Next match",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -1207,7 +1208,7 @@ fun ChatScreen(
                         searchActiveIndex = 0
                     }) {
                         Icon(
-                            Icons.Outlined.Close,
+                            GsIcons.X,
                             contentDescription = "Close search",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -1575,9 +1576,9 @@ private fun UserMessage(
                         modifier = Modifier.padding(end = 6.dp)
                     )
                 }
-                BubbleAction(Icons.Outlined.ContentCopy, "Copy") { onCopy(message.content) }
+                BubbleAction(GsIcons.Copy, "Copy") { onCopy(message.content) }
                 if (editEnabled) {
-                    BubbleAction(Icons.Outlined.Edit, "Edit", onEditStart)
+                    BubbleAction(GsIcons.SquarePen, "Edit", onEditStart)
                 }
             }
         }
@@ -1803,7 +1804,7 @@ private fun JumpToLatestPill(onClick: () -> Unit) {
     ) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.size(40.dp)) {
             Icon(
-                Icons.Outlined.ArrowDownward,
+                GsIcons.ChevronDown,
                 contentDescription = "Jump to latest",
                 tint = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.size(18.dp)
@@ -1994,14 +1995,14 @@ private fun AssistantMessage(
                             modifier = Modifier.padding(end = 4.dp)
                         )
                     }
-                    BubbleAction(Icons.Outlined.ContentCopy, "Copy") { onCopy(message.content) }
-                    BubbleAction(Icons.Outlined.Refresh, "Regenerate", onRegenerate)
+                    BubbleAction(GsIcons.Copy, "Copy") { onCopy(message.content) }
+                    BubbleAction(GsIcons.RefreshCw, "Regenerate", onRegenerate)
                     BubbleAction(
-                        if (isSpeaking) Icons.Outlined.VolumeOff else Icons.Outlined.VolumeUp,
+                        if (isSpeaking) GsIcons.VolumeX else GsIcons.Volume2,
                         if (isSpeaking) "Stop reading" else "Read aloud",
                         onReadAloud
                     )
-                    BubbleAction(Icons.Outlined.Share, "Share", onShare)
+                    BubbleAction(GsIcons.Share, "Share", onShare)
                 }
                 if (message.failed) {
                     Spacer(Modifier.height(6.dp))
@@ -2019,7 +2020,7 @@ private fun AssistantMessage(
             DropdownMenuItem(
                 text = { Text("Translate") },
                 leadingIcon = {
-                    Icon(Icons.Outlined.Translate, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Icon(GsIcons.Languages, contentDescription = null, modifier = Modifier.size(18.dp))
                 },
                 onClick = {
                     menuExpanded = false
@@ -2029,7 +2030,7 @@ private fun AssistantMessage(
             DropdownMenuItem(
                 text = { Text("Save to Library") },
                 leadingIcon = {
-                    Icon(Icons.Outlined.Save, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Icon(GsIcons.Bookmark, contentDescription = null, modifier = Modifier.size(18.dp))
                 },
                 onClick = {
                     menuExpanded = false
@@ -2039,7 +2040,7 @@ private fun AssistantMessage(
             DropdownMenuItem(
                 text = { Text("Branch new chat") },
                 leadingIcon = {
-                    Icon(Icons.Outlined.CallSplit, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Icon(GsIcons.Split, contentDescription = null, modifier = Modifier.size(18.dp))
                 },
                 onClick = {
                     menuExpanded = false
@@ -2054,6 +2055,8 @@ private fun AssistantMessage(
  *  turn-group header row (decorative: the name text carries the meaning). */
 @Composable
 private fun AssistantAvatar() {
+    // The identity mark is the GS monogram — a glyph, not an illustration.
+    // (The previous sparkle icon is banned chrome under RULE ZERO.)
     Box(
         modifier = Modifier
             .size(22.dp)
@@ -2061,11 +2064,11 @@ private fun AssistantAvatar() {
             .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
         contentAlignment = Alignment.Center
     ) {
-        Icon(
-            Icons.Outlined.AutoAwesome,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(13.dp)
+        Text(
+            text = "GS",
+            style = MaterialTheme.typography.labelMedium,
+            fontSize = 8.sp,
+            color = MaterialTheme.colorScheme.onSurface
         )
     }
 }
@@ -2084,7 +2087,7 @@ private fun FailedTurnNotice(hasPartial: Boolean, onRegenerate: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
-            Icons.Outlined.ErrorOutline,
+            GsIcons.CircleAlert,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.error,
             modifier = Modifier.size(16.dp)
@@ -2279,7 +2282,7 @@ private fun TranslationSheet(
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        Icons.Outlined.Translate,
+                        GsIcons.Languages,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(20.dp)
@@ -2312,7 +2315,7 @@ private fun TranslationSheet(
                     enabled = !busy,
                     contentPadding = PaddingValues(horizontal = 8.dp)
                 ) {
-                    Icon(Icons.Outlined.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Icon(GsIcons.Copy, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
                     Text("Copy translation")
                 }

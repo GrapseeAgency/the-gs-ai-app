@@ -79,6 +79,7 @@ ICONS = {
     "square": "Square",
     "lock": "Lock",
     "accessibility": "Accessibility",
+    "split": "Split",
     # states / system
     "shield": "Shield",
     "info": "Info",

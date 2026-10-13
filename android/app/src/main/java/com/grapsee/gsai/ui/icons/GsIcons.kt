@@ -1943,6 +1943,48 @@ public object GsIcons {
         }.build()
     }
 
+    public val Split: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "GsIcons.Split",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f,
+            defaultStrokeLineWidth = 2f,
+            defaultStrokeLineCap = StrokeCap.Round,
+            defaultStrokeLineJoin = StrokeJoin.Round,
+        ).apply {
+            addPath(
+                pathData = PathParser().parsePathDataString(
+                    "M16 3h5v5"
+                ).toNodes(),
+                fill = null,
+                stroke = SolidColor(Color.Black),
+            )
+            addPath(
+                pathData = PathParser().parsePathDataString(
+                    "M8 3H3v5"
+                ).toNodes(),
+                fill = null,
+                stroke = SolidColor(Color.Black),
+            )
+            addPath(
+                pathData = PathParser().parsePathDataString(
+                    "M12 22v-8.3a4 4 0 0 0-1.172-2.872L3 3"
+                ).toNodes(),
+                fill = null,
+                stroke = SolidColor(Color.Black),
+            )
+            addPath(
+                pathData = PathParser().parsePathDataString(
+                    "m15 9 6-6"
+                ).toNodes(),
+                fill = null,
+                stroke = SolidColor(Color.Black),
+            )
+        }.build()
+    }
+
     public val Shield: ImageVector by lazy {
         ImageVector.Builder(
             name = "GsIcons.Shield",
