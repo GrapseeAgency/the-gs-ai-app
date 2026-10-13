@@ -17,12 +17,12 @@ adb shell am instrument -w \
 # app's Android/data is not adb-readable). run-as works because the test APK
 # is debuggable; strip the CRLF adb adds to ls output.
 mkdir -p device-artifacts/screens
-adb shell run-as com.grapsee.gsai.test mkdir -p files/screens || true
-adb shell run-as com.grapsee.gsai.test ls files/screens || true
-SHOTS=$(adb shell run-as com.grapsee.gsai.test ls files/screens | tr -d '\r' || true)
+adb shell run-as com.grapsee.gsai mkdir -p files/screens || true
+adb shell run-as com.grapsee.gsai ls files/screens || true
+SHOTS=$(adb shell run-as com.grapsee.gsai ls files/screens | tr -d '\r' || true)
 for f in $SHOTS; do
   [ -n "$f" ] || continue
-  adb exec-out run-as com.grapsee.gsai.test cat "files/screens/$f" \
+  adb exec-out run-as com.grapsee.gsai cat "files/screens/$f" \
     > "device-artifacts/screens/$f" 2>/dev/null || true
 done
 adb logcat -d -v threadtime > device-artifacts/logcat.txt || true

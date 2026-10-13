@@ -25,7 +25,7 @@ import java.io.File
  *
  * STORAGE (run 38421472933 lesson): screenshots go to the INSTRUMENTATION
  * package's INTERNAL files dir (context.filesDir) — always writable, and the
- * runner pulls them with `adb exec-out run-as com.grapsee.gsai.test cat`.
+ * runner pulls them with `adb exec-out run-as com.grapsee.gsai cat`.
  * getExternalFilesDir proved unreliable from the test process, and the app's
  * own Android/data dir is not writable by the test on API 30 scoped storage.
  *
@@ -40,11 +40,17 @@ class GsScreenshotSuite {
         UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
     private val ctx: Context
         get() = InstrumentationRegistry.getInstrumentation().targetContext
-    private val shotCtx: Context
-        get() = InstrumentationRegistry.getInstrumentation().context
+    // am instrument runs this code INSIDE the target app's process (the
+    // app's uid), so the ONLY guaranteed-writable dir is the TARGET package's
+    // own filesDir — writes into the test package's data dir fail with
+    // ENOENT-through-EACCES (run 38426476180 evidence: mkdirs silently false,
+    // FileNotFoundException on open). The runner pulls with
+    // `adb exec-out run-as com.grapsee.gsai cat ...` (debug APK = runnable).
+    private val shotDir: File
+        get() = File(ctx.filesDir, "screens")
 
     private fun shot(name: String) {
-        val dir = File(shotCtx.filesDir, "screens").apply { mkdirs() }
+        val dir = shotDir.apply { mkdirs() }
         val out = File(dir, "$name.png")
         // Direct UiAutomation capture + manual PNG compress. Both
         // UiDevice.takeScreenshot overloads failed silently on the API 30
@@ -186,7 +192,7 @@ class GsScreenshotSuite {
             shot("30-settings-MISSING-MENU")
         }
 
-        val dir = File(shotCtx.filesDir, "screens")
+        val dir = shotDir
         println("GS-SCREENSHOT suite complete (${dir.list()?.size ?: 0} files): ${dir.list()?.joinToString()}")
     }
 }
