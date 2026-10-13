@@ -166,10 +166,6 @@ targets:
             UIApplicationShortcutItemTitle: New chat
             UIApplicationShortcutItemSubtitle: Start a new chat
             UIApplicationShortcutItemIconSymbolName: bubble.left
-          - UIApplicationShortcutItemType: com.grapsee.gsai.quick.newImage
-            UIApplicationShortcutItemTitle: New image
-            UIApplicationShortcutItemSubtitle: Open Image Studio
-            UIApplicationShortcutItemIconSymbolName: photo
           - UIApplicationShortcutItemType: com.grapsee.gsai.quick.ask
             UIApplicationShortcutItemTitle: Ask GS
             UIApplicationShortcutItemSubtitle: Ask with your voice

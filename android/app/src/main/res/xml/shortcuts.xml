@@ -21,20 +21,6 @@
             android:value="chat/new" />
     </shortcut>
 
-    <shortcut
-        android:shortcutId="new_image"
-        android:enabled="true"
-        android:icon="@drawable/ic_shortcut_image"
-        android:shortcutShortLabel="@string/shortcut_new_image"
-        android:shortcutLongLabel="@string/shortcut_new_image_long">
-        <intent
-            android:action="com.grapsee.gsai.action.QUICK"
-            android:targetPackage="com.grapsee.gsai"
-            android:targetClass="com.grapsee.gsai.MainActivity" />
-        <extra
-            android:name="gs.route"
-            android:value="create/image" />
-    </shortcut>
 
     <shortcut
         android:shortcutId="ask_gs"

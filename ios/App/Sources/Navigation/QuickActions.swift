@@ -3,19 +3,17 @@ import UIKit
 
 /**
  * Home-screen quick actions — the iOS counterpart of Android's static
- * shortcuts (New chat / New image / Ask GS). Static UIApplicationShortcutItems
+ * shortcuts (New chat / Ask GS). Static UIApplicationShortcutItems
  * live in Info.plist; the scene delegate forwards the tapped type into a bus,
  * and RootView consumes it into the matching AeroRoute.
  */
 enum QuickAction: String {
     case newChat = "com.grapsee.gsai.quick.newChat"
-    case newImage = "com.grapsee.gsai.quick.newImage"
     case askGS = "com.grapsee.gsai.quick.ask"
 
     var route: AeroRoute {
         switch self {
         case .newChat: return .chat(nil)
-        case .newImage: return .imageStudio
         case .askGS: return .voice
         }
     }
