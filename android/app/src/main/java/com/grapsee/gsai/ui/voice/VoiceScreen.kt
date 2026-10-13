@@ -79,6 +79,7 @@ import com.grapsee.gsai.ui.theme.GsHaptics
 import com.grapsee.gsai.ui.theme.GsMotion
 import com.grapsee.gsai.ui.theme.GsTheme
 import com.grapsee.gsai.ui.theme.gsHaptic
+import com.grapsee.gsai.ui.icons.GsIcons
 
 /**
  * Honest engine states. Every status line the user can ever see maps to what
@@ -288,7 +289,7 @@ fun VoiceScreen(
             Row(modifier = Modifier.fillMaxWidth()) {
                 IconButton(onClick = onBack) {
                     Icon(
-                        imageVector = Icons.Outlined.Close,
+                        imageVector = GsIcons.X,
                         contentDescription = "Close voice mode",
                         tint = GsTheme.colors.textPrimary
                     )
@@ -441,7 +442,7 @@ fun VoiceScreen(
             ) {
                 VoiceCircle(
                     icon = if (phase == VoicePhase.Listening || phase == VoicePhase.Processing)
-                        Icons.Outlined.Mic else Icons.Outlined.MicOff,
+                        GsIcons.Mic else GsIcons.MicOff,
                     container = GsTheme.colors.elevatedSurface,
                     tint = if (phase == VoicePhase.Listening) GsTheme.colors.textPrimary else GsTheme.colors.textSecondary,
                     contentDescription = if (phase == VoicePhase.Listening) "Pause" else "Start listening"
@@ -449,7 +450,7 @@ fun VoiceScreen(
                     toggleMute()
                 }
                 VoiceCircle(
-                    icon = Icons.Outlined.CallEnd,
+                    icon = GsIcons.PhoneOff,
                     container = GsTheme.colors.error.copy(alpha = 0.18f),
                     tint = GsTheme.colors.error,
                     contentDescription = "End voice session"
@@ -457,7 +458,7 @@ fun VoiceScreen(
                     onBack()
                 }
                 VoiceCircle(
-                    icon = if (speakerOn) Icons.Outlined.VolumeUp else Icons.Outlined.VolumeOff,
+                    icon = if (speakerOn) GsIcons.Volume2 else GsIcons.VolumeX,
                     container = GsTheme.colors.elevatedSurface,
                     tint = if (speakerOn) GsTheme.colors.textPrimary else GsTheme.colors.textSecondary,
                     contentDescription = if (speakerOn) "Read-back on" else "Read-back off"

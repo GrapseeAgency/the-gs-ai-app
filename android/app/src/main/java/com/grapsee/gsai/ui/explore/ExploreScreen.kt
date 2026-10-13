@@ -47,6 +47,7 @@ import com.grapsee.gsai.ui.components.GsScreenScaffold
 import com.grapsee.gsai.ui.components.GsSectionHeader
 import com.grapsee.gsai.ui.navigation.GsRoutes
 import com.grapsee.gsai.ui.theme.GsMotion
+import com.grapsee.gsai.ui.icons.GsIcons
 
 /**
  * AERUO KINETIC — EXPLORE, the discovery layer / curated catalogue.
@@ -128,7 +129,7 @@ fun ExploreScreen(onNavigate: (String) -> Unit) {
 
                 if (nothingToShow) {
                     GsEmptyState(
-                        icon = Icons.Outlined.Search,
+                        icon = GsIcons.Search,
                         title = if (term.isEmpty()) "Nothing in $category yet" else "No matches for \"$term\"",
                         message = if (term.isEmpty()) {
                             "Try another category to browse the catalogue."
@@ -364,7 +365,7 @@ private fun AssistantBadge(person: Boolean = false) {
     ) {
         Box(contentAlignment = Alignment.Center) {
             Icon(
-                imageVector = if (person) Icons.Outlined.Person else Icons.Outlined.SmartToy,
+                imageVector = if (person) GsIcons.UserRound else GsIcons.UsersRound,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(18.dp)

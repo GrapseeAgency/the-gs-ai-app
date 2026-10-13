@@ -50,6 +50,7 @@ import com.grapsee.gsai.ui.components.GsScreenScaffold
 import com.grapsee.gsai.ui.theme.GsMotion
 import java.time.Duration
 import java.time.OffsetDateTime
+import com.grapsee.gsai.ui.icons.GsIcons
 
 /**
  * AERUO KINETIC — PROJECT DETAIL.
@@ -82,7 +83,7 @@ fun ProjectDetailScreen(projectId: String, onBack: () -> Unit) {
             actions = {
                 IconButton(onClick = { showEdit = true }) {
                     Icon(
-                        imageVector = Icons.Outlined.Settings,
+                        imageVector = GsIcons.Settings,
                         contentDescription = "Project settings",
                         tint = MaterialTheme.colorScheme.onBackground
                     )
@@ -238,11 +239,11 @@ private fun ChatsTab(project: ProjectStore.Project, onOpenLinker: () -> Unit) {
             GsListItem(
                 title = row.title,
                 subtitle = "updated ${relativeMoment(row.updatedAt)}",
-                leading = { TabBadge(Icons.Outlined.ChatBubbleOutline) },
+                leading = { TabBadge(GsIcons.MessageCircle) },
                 trailing = {
                     IconButton(onClick = { ProjectStore.unlinkChat(project.id, row.id) }) {
                         Icon(
-                            imageVector = Icons.Outlined.Close,
+                            imageVector = GsIcons.X,
                             contentDescription = "Remove ${row.title} from project",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(18.dp)
@@ -350,7 +351,7 @@ private fun ActivityTab(project: ProjectStore.Project) {
             GsListItem(
                 title = event.text,
                 subtitle = relativeMoment(event.at),
-                leading = { TabBadge(Icons.Outlined.History) }
+                leading = { TabBadge(GsIcons.History) }
             )
         }
     }
@@ -399,7 +400,7 @@ private fun InitialsBadge(initials: String) {
     ) {
         Box(contentAlignment = Alignment.Center) {
             Icon(
-                imageVector = Icons.Outlined.Person,
+                imageVector = GsIcons.UserRound,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(18.dp)

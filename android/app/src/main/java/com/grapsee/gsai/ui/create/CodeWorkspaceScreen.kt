@@ -49,6 +49,7 @@ import com.grapsee.gsai.ui.theme.GsMotion
 import com.grapsee.gsai.ui.theme.GsTheme
 import com.grapsee.gsai.ui.theme.rememberAuroraBrush
 import kotlinx.coroutines.delay
+import com.grapsee.gsai.ui.icons.GsIcons
 
 /**
  * AERUO KINETIC — CODE WORKSPACE.
@@ -271,7 +272,7 @@ private fun OutputCard(runPhase: Int) {
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Outlined.CheckCircle,
+                            imageVector = GsIcons.CircleCheck,
                             contentDescription = null,
                             tint = GsTheme.colors.success,
                             modifier = Modifier.size(14.dp)

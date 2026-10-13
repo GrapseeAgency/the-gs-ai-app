@@ -278,7 +278,7 @@ private fun AuthStepScaffold(
         if (onBack != null) {
             IconButton(onClick = onBack) {
                 Icon(
-                    imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowLeft,
+                    imageVector = GsIcons.ChevronLeft,
                     contentDescription = "Back",
                     tint = MaterialTheme.colorScheme.onBackground
                 )

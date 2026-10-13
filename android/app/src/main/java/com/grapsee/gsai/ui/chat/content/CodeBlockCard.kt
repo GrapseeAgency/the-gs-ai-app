@@ -35,6 +35,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.ui.theme.GsTheme
 import kotlinx.coroutines.delay
+import com.grapsee.gsai.ui.icons.GsIcons
 
 /**
  * Fenced code block — the Step-4 card upgraded: language label, copied-state
@@ -92,7 +93,7 @@ fun CodeBlockCard(
                 )
                 IconButton(onClick = { onCopyCode(code); copied = true }, modifier = Modifier.size(28.dp)) {
                     Icon(
-                        if (copied) Icons.Filled.Check else Icons.Outlined.ContentCopy,
+                        if (copied) GsIcons.Check else GsIcons.Copy,
                         contentDescription = if (copied) "Copied" else "Copy code",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(14.dp)

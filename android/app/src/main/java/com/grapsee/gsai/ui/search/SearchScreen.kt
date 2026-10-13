@@ -61,6 +61,7 @@ import java.time.Instant
 import java.time.OffsetDateTime
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import com.grapsee.gsai.ui.icons.GsIcons
 
 /**
  * AERUO KINETIC — SEARCH, the one-index entry point.
@@ -74,11 +75,11 @@ import kotlinx.coroutines.launch
  */
 
 private enum class HitKind(val label: String, val icon: ImageVector) {
-    CONVERSATIONS("Conversations", Icons.Outlined.ChatBubbleOutline),
-    MESSAGES("Messages", Icons.Outlined.ChatBubbleOutline),
-    LIBRARY("Library", Icons.Outlined.BookmarkBorder),
-    ASSISTANTS("Assistants", Icons.Outlined.SmartToy),
-    PROJECTS("Projects", Icons.Outlined.Folder)
+    CONVERSATIONS("Conversations", GsIcons.MessageCircle),
+    MESSAGES("Messages", GsIcons.MessageCircle),
+    LIBRARY("Library", GsIcons.Bookmark),
+    ASSISTANTS("Assistants", GsIcons.UsersRound),
+    PROJECTS("Projects", GsIcons.Folder)
 }
 
 private data class SearchHit(
@@ -225,7 +226,7 @@ fun SearchScreen(onNavigate: (String) -> Unit) {
                             enabled = term.isNotBlank()
                         ) {
                             Icon(
-                                Icons.Outlined.Search,
+                                GsIcons.Search,
                                 contentDescription = "Search",
                                 tint = if (term.isNotBlank()) MaterialTheme.colorScheme.primary
                                 else MaterialTheme.colorScheme.onSurfaceVariant
@@ -275,17 +276,17 @@ fun SearchScreen(onNavigate: (String) -> Unit) {
 
                 when {
                     term.isEmpty() -> GsEmptyState(
-                        icon = Icons.Outlined.Search,
+                        icon = GsIcons.Search,
                         title = "Search everything",
                         message = "Conversations, messages, library items, assistants and projects, one index over this device."
                     )
                     term.length < 2 -> GsEmptyState(
-                        icon = Icons.Outlined.ManageSearch,
+                        icon = GsIcons.TextSearch,
                         title = "Keep typing",
                         message = "At least two characters to search everything on this device."
                     )
                     allHits.isEmpty() -> GsEmptyState(
-                        icon = Icons.Outlined.SearchOff,
+                        icon = GsIcons.SearchOff,
                         title = "No matches",
                         message = "Nothing matched \"$term\". Try a shorter word or different phrasing."
                     )

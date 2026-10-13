@@ -30,6 +30,7 @@ import com.grapsee.gsai.ui.components.GsScreenScaffold
 import com.grapsee.gsai.ui.components.GsSectionHeader
 import com.grapsee.gsai.ui.navigation.GsRoutes
 import com.grapsee.gsai.ui.theme.GsMotion
+import com.grapsee.gsai.ui.icons.GsIcons
 
 /**
  * Profile — the honest version. The identity is the REAL stored account
@@ -96,13 +97,13 @@ fun ProfileScreen(onNavigate: (String) -> Unit) {
                 GsListItem(
                     title = "Settings",
                     subtitle = "Appearance, privacy, security, accessibility",
-                    leading = { AccountIcon(Icons.Outlined.Settings) },
+                    leading = { AccountIcon(GsIcons.Settings) },
                     onClick = { onNavigate(GsRoutes.SETTINGS) }
                 )
                 GsListItem(
                     title = "Billing",
                     subtitle = "GS AI is in early access",
-                    leading = { AccountIcon(Icons.Outlined.CreditCard) },
+                    leading = { AccountIcon(GsIcons.CreditCard) },
                     onClick = { onNavigate(GsRoutes.BILLING) }
                 )
             }

@@ -66,6 +66,7 @@ import com.grapsee.gsai.ui.components.GsChip
 import com.grapsee.gsai.ui.theme.GsMotion
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import com.grapsee.gsai.ui.icons.GsIcons
 
 /**
  * PHASE 8.1/8.2 — the search-turn UI seam: search trace card, source cards and
@@ -146,7 +147,7 @@ fun SearchTraceCard(
                     .clickable(enabled = expandable) { expanded = !expanded }
             ) {
                 Icon(
-                    Icons.Outlined.ManageSearch,
+                    GsIcons.TextSearch,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(16.dp)
@@ -163,7 +164,7 @@ fun SearchTraceCard(
                 )
                 if (expandable) {
                     Icon(
-                        Icons.Outlined.ExpandMore,
+                        GsIcons.ChevronDown,
                         contentDescription = if (expanded) "Collapse search trace" else "Expand search trace",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier
@@ -344,7 +345,7 @@ private fun ResearchDetailsSection(
                 modifier = Modifier.weight(1f)
             )
             Icon(
-                Icons.Outlined.ExpandMore,
+                GsIcons.ChevronDown,
                 contentDescription = if (expanded) "Collapse research details" else "Expand research details",
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier

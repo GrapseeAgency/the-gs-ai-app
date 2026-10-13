@@ -23,6 +23,7 @@ import com.grapsee.gsai.ui.components.GsListItem
 import com.grapsee.gsai.ui.components.GsScreenScaffold
 import com.grapsee.gsai.ui.components.GsSectionHeader
 import com.grapsee.gsai.ui.theme.GsMotion
+import com.grapsee.gsai.ui.icons.GsIcons
 
 private data class SharedChat(val title: String, val subtitle: String)
 
@@ -50,7 +51,7 @@ fun SharedChatsScreen(onBack: () -> Unit) {
                             GsChip(text = "Anyone with link", selected = false, onClick = {})
                             IconButton(onClick = {}, modifier = Modifier.size(32.dp)) {
                                 Icon(
-                                    Icons.Outlined.Link,
+                                    GsIcons.Link,
                                     contentDescription = "Copy link",
                                     tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(18.dp)
@@ -58,7 +59,7 @@ fun SharedChatsScreen(onBack: () -> Unit) {
                             }
                             IconButton(onClick = {}, modifier = Modifier.size(32.dp)) {
                                 Icon(
-                                    Icons.Outlined.DeleteOutline,
+                                    GsIcons.Trash2Outline,
                                     contentDescription = "Revoke link",
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.size(18.dp)

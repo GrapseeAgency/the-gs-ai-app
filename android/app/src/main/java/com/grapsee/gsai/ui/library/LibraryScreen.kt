@@ -64,6 +64,7 @@ import com.grapsee.gsai.ui.components.GsListItem
 import com.grapsee.gsai.ui.components.GsScreenScaffold
 import com.grapsee.gsai.ui.navigation.GsRoutes
 import com.grapsee.gsai.ui.theme.GsMotion
+import com.grapsee.gsai.ui.icons.GsIcons
 
 /**
  * AERUO KINETIC — LIBRARY, the personal knowledge space.
@@ -149,7 +150,7 @@ fun LibraryScreen(onNavigate: (String) -> Unit) {
                 if (visible.isEmpty()) {
                     item(key = "empty") {
                         GsEmptyState(
-                            icon = if (term.isEmpty()) Icons.Outlined.Folder else Icons.Outlined.Search,
+                            icon = if (term.isEmpty()) GsIcons.Folder else GsIcons.Search,
                             title = when {
                                 term.isNotEmpty() -> "No matches for \"$term\""
                                 selectedFilter == 0 -> "Nothing saved yet"
@@ -165,10 +166,10 @@ fun LibraryScreen(onNavigate: (String) -> Unit) {
                 } else {
                     items(visible, key = { "save-${it.id}" }) { item ->
                         val (badge, label) = when (item.kind) {
-                            "image" -> Icons.Outlined.Image to "Saved image"
-                            "document" -> Icons.Outlined.Description to "Saved document"
-                            "file" -> Icons.Outlined.Description to "Saved file"
-                            else -> Icons.Outlined.BookmarkBorder to "Saved message"
+                            "image" -> GsIcons.Image to "Saved image"
+                            "document" -> GsIcons.FileText to "Saved document"
+                            "file" -> GsIcons.FileText to "Saved file"
+                            else -> GsIcons.Bookmark to "Saved message"
                         }
                         GsListItem(
                             title = item.title,
@@ -176,7 +177,7 @@ fun LibraryScreen(onNavigate: (String) -> Unit) {
                             leading = { ItemBadge(badge) },
                             trailing = {
                                 Icon(
-                                    imageVector = Icons.Outlined.MoreVert,
+                                    imageVector = GsIcons.EllipsisVertical,
                                     contentDescription = "More",
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.size(20.dp)
@@ -300,7 +301,7 @@ private fun SavedItemSheet(
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        Icons.Outlined.BookmarkBorder,
+                        GsIcons.Bookmark,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(20.dp)
@@ -334,17 +335,17 @@ private fun SavedItemSheet(
             }
             Row(horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)) {
                 TextButton(onClick = onContinueInChat) {
-                    Icon(Icons.Outlined.ChatBubbleOutline, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Icon(GsIcons.MessageCircle, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
                     Text("Continue in chat")
                 }
                 TextButton(onClick = { onCopy(item.content) }) {
-                    Icon(Icons.Outlined.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Icon(GsIcons.Copy, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
                     Text("Copy")
                 }
                 TextButton(onClick = onDelete) {
-                    Icon(Icons.Outlined.DeleteOutline, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Icon(GsIcons.Trash2Outline, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
                     Text("Delete", color = MaterialTheme.colorScheme.error)
                 }

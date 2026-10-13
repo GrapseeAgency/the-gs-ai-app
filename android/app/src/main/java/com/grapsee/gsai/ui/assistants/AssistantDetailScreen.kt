@@ -52,6 +52,7 @@ import com.grapsee.gsai.ui.components.GsListItem
 import com.grapsee.gsai.ui.components.GsScreenScaffold
 import com.grapsee.gsai.ui.navigation.GsRoutes
 import com.grapsee.gsai.ui.theme.GsMotion
+import com.grapsee.gsai.ui.icons.GsIcons
 
 /**
  * Assistant profile. GsNavHost calls this with (assistantId, onBack); the
@@ -100,7 +101,7 @@ fun AssistantDetailScreen(
             if (isUserAssistant) {
                 IconButton(onClick = { onEdit?.invoke(assistantId) }) {
                     Icon(
-                        imageVector = Icons.Outlined.Edit,
+                        imageVector = GsIcons.SquarePen,
                         contentDescription = "Edit",
                         tint = MaterialTheme.colorScheme.onBackground
                     )
@@ -108,7 +109,7 @@ fun AssistantDetailScreen(
             } else {
                 IconButton(onClick = shareAssistant) {
                     Icon(
-                        imageVector = Icons.Outlined.Share,
+                        imageVector = GsIcons.Share,
                         contentDescription = "Share",
                         tint = MaterialTheme.colorScheme.onBackground
                     )
@@ -117,7 +118,7 @@ fun AssistantDetailScreen(
             if (isUserAssistant) {
                 IconButton(onClick = { showDeleteConfirm = true }) {
                     Icon(
-                        imageVector = Icons.Outlined.Delete,
+                        imageVector = GsIcons.Trash2,
                         contentDescription = "Delete assistant",
                         tint = MaterialTheme.colorScheme.onBackground
                     )
@@ -126,13 +127,13 @@ fun AssistantDetailScreen(
             IconButton(onClick = { AssistantsStore.toggleFavourite(assistantId) }) {
                 if (favourited) {
                     Icon(
-                        imageVector = Icons.Filled.Favorite,
+                        imageVector = GsIcons.Heart,
                         contentDescription = "Favourited",
                         tint = MaterialTheme.colorScheme.primary
                     )
                 } else {
                     Icon(
-                        imageVector = Icons.Outlined.FavoriteBorder,
+                        imageVector = GsIcons.Heart,
                         contentDescription = "Favourite",
                         tint = MaterialTheme.colorScheme.onBackground
                     )
@@ -157,7 +158,7 @@ fun AssistantDetailScreen(
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
-                            imageVector = Icons.Outlined.SmartToy,
+                            imageVector = GsIcons.UsersRound,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(30.dp)
@@ -193,7 +194,7 @@ fun AssistantDetailScreen(
                         title = starter,
                         leading = {
                             Icon(
-                                imageVector = Icons.Outlined.ChatBubbleOutline,
+                                imageVector = GsIcons.MessageCircle,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(18.dp)
@@ -201,7 +202,7 @@ fun AssistantDetailScreen(
                         },
                         trailing = {
                             Icon(
-                                imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                                imageVector = GsIcons.ChevronRight,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(18.dp)

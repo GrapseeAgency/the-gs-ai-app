@@ -202,7 +202,7 @@ fun OnboardingScreen(onFinished: () -> Unit) {
                 enabled = stepIndex in 1..OnboardingStep.entries.lastIndex - 1
             ) {
                 Icon(
-                    imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowLeft,
+                    imageVector = GsIcons.ChevronLeft,
                     contentDescription = "Back"
                 )
             }

@@ -23,13 +23,14 @@ import com.grapsee.gsai.ui.components.GsCard
 import com.grapsee.gsai.ui.components.GsScreenScaffold
 import com.grapsee.gsai.ui.components.GsSectionHeader
 import com.grapsee.gsai.ui.theme.GsMotion
+import com.grapsee.gsai.ui.icons.GsIcons
 
 private data class ChatFolder(val name: String, val count: Int, val icon: ImageVector)
 
 private val chatFolders = listOf(
-    ChatFolder("Work", 12, Icons.Outlined.Work),
-    ChatFolder("Learning", 7, Icons.Outlined.School),
-    ChatFolder("Client drafts", 3, Icons.Outlined.Description)
+    ChatFolder("Work", 12, GsIcons.Briefcase),
+    ChatFolder("Learning", 7, GsIcons.GraduationCap),
+    ChatFolder("Client drafts", 3, GsIcons.FileText)
 )
 
 /** Folders — two-column grid of named buckets plus a creation tile. */
@@ -73,7 +74,7 @@ fun ConversationFoldersScreen(onBack: () -> Unit) {
                     GsCard(onClick = {}) {
                         Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceXS)) {
                             Icon(
-                                Icons.Outlined.CreateNewFolder,
+                                GsIcons.FolderPlus,
                                 contentDescription = "New folder",
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(22.dp)

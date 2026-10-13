@@ -10,6 +10,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.grapsee.gsai.ui.components.GsEmptyState
 import com.grapsee.gsai.ui.components.GsScreenScaffold
+import com.grapsee.gsai.ui.icons.GsIcons
 
 /**
  * Notifications — honest gate. No notification channel is wired yet, so
@@ -26,7 +27,7 @@ fun NotificationsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit) {
             contentAlignment = Alignment.Center
         ) {
             GsEmptyState(
-                icon = Icons.Outlined.Notifications,
+                icon = GsIcons.Bell,
                 title = "You're all caught up",
                 message = "Updates about your conversations will appear here.",
                 modifier = Modifier.fillMaxWidth()

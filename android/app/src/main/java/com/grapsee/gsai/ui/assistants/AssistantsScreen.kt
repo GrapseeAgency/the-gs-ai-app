@@ -57,6 +57,7 @@ import com.grapsee.gsai.ui.components.GsScreenScaffold
 import com.grapsee.gsai.ui.components.SheetAction
 import com.grapsee.gsai.ui.navigation.GsRoutes
 import com.grapsee.gsai.ui.theme.GsMotion
+import com.grapsee.gsai.ui.icons.GsIcons
 
 private val segmentTabs = listOf("Marketplace", "My assistants", "Favourites", "Published", "Archived")
 
@@ -83,7 +84,7 @@ fun AssistantsScreen(onNavigate: (String) -> Unit) {
         actions = {
             IconButton(onClick = { onNavigate(GsRoutes.ASSISTANT_CREATE) }) {
                 Icon(
-                    imageVector = Icons.Outlined.Add,
+                    imageVector = GsIcons.Plus,
                     contentDescription = "Create assistant",
                     tint = MaterialTheme.colorScheme.onBackground
                 )
@@ -124,7 +125,7 @@ fun AssistantsScreen(onNavigate: (String) -> Unit) {
                     else -> "Nothing here yet" to "Assistants you create or save will appear in this space."
                 }
                 GsEmptyState(
-                    icon = Icons.Outlined.SmartToy,
+                    icon = GsIcons.UsersRound,
                     title = emptyTitle,
                     message = emptyMessage
                 )
@@ -239,7 +240,7 @@ private fun AssistantCard(
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
-                                imageVector = Icons.Outlined.SmartToy,
+                                imageVector = GsIcons.UsersRound,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(20.dp)
@@ -249,7 +250,7 @@ private fun AssistantCard(
                     Spacer(modifier = Modifier.weight(1f))
                     if (assistant.pinned) {
                         Icon(
-                            imageVector = Icons.Filled.PushPin,
+                            imageVector = GsIcons.Pin,
                             contentDescription = "Pinned",
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(14.dp)
@@ -260,7 +261,7 @@ private fun AssistantCard(
                     }
                     if (favourited) {
                         Icon(
-                            imageVector = Icons.Filled.Favorite,
+                            imageVector = GsIcons.Heart,
                             contentDescription = "Favourited",
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(14.dp)
@@ -315,28 +316,28 @@ private fun AssistantActionsSheet(
                 modifier = Modifier.padding(bottom = GsMotion.spaceS)
             )
             SheetAction(
-                icon = if (favourited) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                icon = if (favourited) GsIcons.Heart else GsIcons.Heart,
                 label = if (favourited) "Remove from favourites" else "Favourite",
                 onClick = onToggleFavourite
             )
             if (isUserAssistant) {
                 SheetAction(
-                    icon = Icons.Outlined.PushPin,
+                    icon = GsIcons.Pin,
                     label = if (assistant.pinned) "Unpin" else "Pin to top",
                     onClick = onTogglePin
                 )
                 SheetAction(
-                    icon = Icons.Outlined.Edit,
+                    icon = GsIcons.SquarePen,
                     label = "Edit",
                     onClick = onEdit
                 )
                 SheetAction(
-                    icon = Icons.Outlined.Archive,
+                    icon = GsIcons.Archive,
                     label = if (assistant.archived) "Unarchive" else "Archive",
                     onClick = onToggleArchive
                 )
                 SheetAction(
-                    icon = Icons.Outlined.Delete,
+                    icon = GsIcons.Trash2,
                     label = "Delete",
                     tone = MaterialTheme.colorScheme.error,
                     onClick = onDeleteRequest

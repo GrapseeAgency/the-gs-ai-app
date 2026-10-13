@@ -43,6 +43,7 @@ import com.grapsee.gsai.ui.theme.GsMotion
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
+import com.grapsee.gsai.ui.icons.GsIcons
 
 /**
  * Archive shelf — live from the Room cache (every archived chat, not a demo
@@ -69,7 +70,7 @@ fun ArchivedChatsScreen(onBack: () -> Unit) {
             ) {
                 GsSectionHeader("Recently archived")
                 GsEmptyState(
-                    icon = Icons.Outlined.Archive,
+                    icon = GsIcons.Archive,
                     title = "Nothing archived yet",
                     message = "Chats you archive from the drawer or list will rest here until you bring them back."
                 )
@@ -93,7 +94,7 @@ fun ArchivedChatsScreen(onBack: () -> Unit) {
                                 ) {
                                     Box(contentAlignment = Alignment.Center) {
                                         Icon(
-                                            Icons.Outlined.Archive,
+                                            GsIcons.Archive,
                                             contentDescription = null,
                                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                             modifier = Modifier.size(16.dp)
@@ -112,7 +113,7 @@ fun ArchivedChatsScreen(onBack: () -> Unit) {
                                         modifier = Modifier.size(32.dp)
                                     ) {
                                         Icon(
-                                            Icons.Outlined.Unarchive,
+                                            GsIcons.ArchiveRestore,
                                             contentDescription = "Unarchive",
                                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                             modifier = Modifier.size(18.dp)
@@ -123,7 +124,7 @@ fun ArchivedChatsScreen(onBack: () -> Unit) {
                                         modifier = Modifier.size(32.dp)
                                     ) {
                                         Icon(
-                                            Icons.Outlined.Delete,
+                                            GsIcons.Trash2,
                                             contentDescription = "Delete permanently",
                                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                             modifier = Modifier.size(18.dp)

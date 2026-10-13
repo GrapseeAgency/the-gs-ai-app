@@ -118,6 +118,7 @@ import kotlinx.coroutines.launch
 import java.time.Duration
 import java.time.OffsetDateTime
 import java.util.Calendar
+import com.grapsee.gsai.ui.icons.GsIcons
 
 /**
  * PHASE 2 — Home is a CONVERSATION-FIRST launch surface. The hierarchy is:
@@ -324,7 +325,7 @@ private fun TopBar(
     ) {
         // Menu — opens the drawer
         CircleButton(
-            icon = Icons.Outlined.Menu,
+            icon = GsIcons.PanelLeft,
             contentDescription = "Open menu",
             onClick = onOpenDrawer
         )
@@ -353,7 +354,7 @@ private fun TopBar(
         Spacer(Modifier.weight(1f))
 
         CircleButton(
-            icon = Icons.Outlined.Add,
+            icon = GsIcons.Plus,
             contentDescription = "New chat",
             onClick = { onNavigate(GsRoutes.chat(null)) }
         )
@@ -428,7 +429,7 @@ private fun HeroBlock(displayName: String) {
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                Icons.Outlined.AutoAwesome,
+                GsIcons.Zap,
                 contentDescription = "GS",
                 tint = GsTheme.colors.textPrimary,
                 modifier = Modifier.size(16.dp)
@@ -527,7 +528,7 @@ private fun HomeConversationRow(
         }
         if (conversation.pinned) {
             Icon(
-                Icons.Filled.Star,
+                GsIcons.Star,
                 contentDescription = "Pinned",
                 tint = GsTheme.colors.accent,
                 modifier = Modifier.size(14.dp)
@@ -780,7 +781,7 @@ private fun HomeComposer(
         ) {
             if (listening) VoicePulseHalo()
             Icon(
-                Icons.Outlined.Mic,
+                GsIcons.Mic,
                 contentDescription = "Voice input",
                 tint = if (listening) GsTheme.colors.accent else GsTheme.colors.textSecondary,
                 modifier = Modifier.size(22.dp)

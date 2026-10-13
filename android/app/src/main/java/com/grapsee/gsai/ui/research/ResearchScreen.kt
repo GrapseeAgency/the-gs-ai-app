@@ -10,6 +10,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.grapsee.gsai.ui.components.GsEmptyState
 import com.grapsee.gsai.ui.components.GsScreenScaffold
+import com.grapsee.gsai.ui.icons.GsIcons
 
 /**
  * Research — honest gate. Multi-source research with citations does not
@@ -27,7 +28,7 @@ fun ResearchScreen(onBack: () -> Unit) {
             contentAlignment = Alignment.Center
         ) {
             GsEmptyState(
-                icon = Icons.Outlined.TravelExplore,
+                icon = GsIcons.Telescope,
                 title = "Research is coming soon",
                 message = "Multi-source research with citations isn't available yet. " +
                     "You can ask questions in a chat today. Research will appear here when it's ready.",

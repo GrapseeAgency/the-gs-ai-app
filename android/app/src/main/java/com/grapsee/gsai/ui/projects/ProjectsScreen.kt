@@ -36,6 +36,7 @@ import com.grapsee.gsai.ui.navigation.GsRoutes
 import com.grapsee.gsai.ui.theme.GsMotion
 import java.time.Duration
 import java.time.OffsetDateTime
+import com.grapsee.gsai.ui.icons.GsIcons
 
 /**
  * AERUO KINETIC — PROJECTS dashboard.
@@ -71,7 +72,7 @@ fun ProjectsScreen(onNavigate: (String) -> Unit) {
             actions = {
                 IconButton(onClick = { showCreate = true }) {
                     Icon(
-                        imageVector = Icons.Outlined.Add,
+                        imageVector = GsIcons.Plus,
                         contentDescription = "New project",
                         tint = MaterialTheme.colorScheme.onBackground
                     )
@@ -156,7 +157,7 @@ private fun NewProjectCard(onClick: () -> Unit) {
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
-                        imageVector = Icons.Outlined.Add,
+                        imageVector = GsIcons.Plus,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(24.dp)

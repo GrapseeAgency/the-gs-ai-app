@@ -657,7 +657,7 @@ fun GsScreenScaffold(
         ) {
             if (onBack != null) {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Outlined.ArrowBack,
+                    Icon(GsIcons.ChevronLeft,
                         contentDescription = "Back",
                         tint = MaterialTheme.colorScheme.onBackground)
                 }

@@ -57,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import kotlin.math.min
+import com.grapsee.gsai.ui.icons.GsIcons
 
 /**
  * STEP 5 — native Mermaid rendering. NO WebView, NO remote page, NO new
@@ -541,7 +542,7 @@ private fun MermaidCard(
                     modifier = Modifier.size(28.dp)
                 ) {
                     Icon(
-                        if (copied) Icons.Filled.Check else Icons.Outlined.ContentCopy,
+                        if (copied) GsIcons.Check else GsIcons.Copy,
                         contentDescription = if (copied) "Copied" else "Copy diagram source",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(14.dp)
@@ -581,7 +582,7 @@ private fun MermaidFallback(reason: String, source: String, onCopyCode: (String)
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(
-                    Icons.Outlined.Info,
+                    GsIcons.Info,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(16.dp)

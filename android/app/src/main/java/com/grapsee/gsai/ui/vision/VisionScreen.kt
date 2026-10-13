@@ -10,6 +10,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.grapsee.gsai.ui.components.GsEmptyState
 import com.grapsee.gsai.ui.components.GsScreenScaffold
+import com.grapsee.gsai.ui.icons.GsIcons
 
 /**
  * Vision — honest gate. Image analysis is not wired to a model yet: the
@@ -27,7 +28,7 @@ fun VisionScreen(onBack: () -> Unit) {
             contentAlignment = Alignment.Center
         ) {
             GsEmptyState(
-                icon = Icons.Outlined.Image,
+                icon = GsIcons.Image,
                 title = "Vision is coming soon",
                 message = "Image analysis isn't available yet. When it arrives " +
                     "you'll be able to analyse photos, screenshots and charts here.",

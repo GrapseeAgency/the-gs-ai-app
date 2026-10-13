@@ -46,6 +46,7 @@ import com.grapsee.gsai.ui.components.GsScreenScaffold
 import com.grapsee.gsai.ui.components.GsSectionHeader
 import com.grapsee.gsai.ui.navigation.GsRoutes
 import com.grapsee.gsai.ui.theme.GsMotion
+import com.grapsee.gsai.ui.icons.GsIcons
 
 /**
  * AERUO KINETIC — CREATE, the generation lobby.
@@ -64,16 +65,16 @@ private data class CreateTool(
 // Workspace tools route to their dedicated studios (Task 8-c — wired in GsNavHost);
 // everything else seeds a fresh chat, so no tile dead-ends into a blank composer.
 private val createTools = listOf(
-    CreateTool("AI image", "Generate art from a prompt", Icons.Outlined.Palette, "create/image"),
-    CreateTool("Image edit", "Retouch and restyle", Icons.Outlined.AutoFixHigh, "create/image"),
-    CreateTool("Document", "Reports, briefs and memos", Icons.Outlined.Description, GsRoutes.chat(null, "Draft a document, brief, memo or report, about: ")),
-    CreateTool("Presentation", "Decks from a single prompt", Icons.Outlined.Slideshow, GsRoutes.chat(null, "Draft a slide deck outline about: ")),
-    CreateTool("Spreadsheet", "Tables with live formulas", Icons.Outlined.TableChart, GsRoutes.chat(null, "Build a spreadsheet with formulas for: ")),
-    CreateTool("Writing", "Drafts in your voice", Icons.Outlined.EditNote, "create/writing"),
-    CreateTool("Code", "Snippets and scaffolds", Icons.Outlined.Code, "create/code"),
-    CreateTool("Diagram", "Architecture and flows", Icons.Outlined.AccountTree, GsRoutes.chat(null, "Describe the system or flow to diagram: ")),
-    CreateTool("Prompt builder", "Compose reusable prompts", Icons.Outlined.TipsAndUpdates, "create/prompt"),
-    CreateTool("Assistant builder", "Design your own AI", Icons.Outlined.SmartToy, GsRoutes.ASSISTANT_CREATE)
+    CreateTool("AI image", "Generate art from a prompt", GsIcons.Palette, "create/image"),
+    CreateTool("Image edit", "Retouch and restyle", GsIcons.Wand, "create/image"),
+    CreateTool("Document", "Reports, briefs and memos", GsIcons.FileText, GsRoutes.chat(null, "Draft a document, brief, memo or report, about: ")),
+    CreateTool("Presentation", "Decks from a single prompt", GsIcons.Presentation, GsRoutes.chat(null, "Draft a slide deck outline about: ")),
+    CreateTool("Spreadsheet", "Tables with live formulas", GsIcons.Table, GsRoutes.chat(null, "Build a spreadsheet with formulas for: ")),
+    CreateTool("Writing", "Drafts in your voice", GsIcons.SquarePenNote, "create/writing"),
+    CreateTool("Code", "Snippets and scaffolds", GsIcons.Code, "create/code"),
+    CreateTool("Diagram", "Architecture and flows", GsIcons.Network, GsRoutes.chat(null, "Describe the system or flow to diagram: ")),
+    CreateTool("Prompt builder", "Compose reusable prompts", GsIcons.Lightbulb, "create/prompt"),
+    CreateTool("Assistant builder", "Design your own AI", GsIcons.UsersRound, GsRoutes.ASSISTANT_CREATE)
 )
 
 @Composable
@@ -159,7 +160,7 @@ private fun RecentCreationsSection(onNavigate: (String) -> Unit) {
         GsSectionHeader(title = "Recent creations")
         if (recent.isEmpty()) {
             GsEmptyState(
-                icon = Icons.Outlined.HourglassEmpty,
+                icon = GsIcons.Hourglass,
                 title = "Nothing yet",
                 message = "Your generated images, docs and decks will live here."
             )
@@ -183,9 +184,9 @@ private fun creationLabel(kind: String): String = when (kind) {
 }
 
 private fun creationIcon(kind: String): ImageVector = when (kind) {
-    "image" -> Icons.Outlined.Image
-    "document" -> Icons.Outlined.Description
-    else -> Icons.Outlined.AutoFixHigh
+    "image" -> GsIcons.Image
+    "document" -> GsIcons.FileText
+    else -> GsIcons.Wand
 }
 
 @Composable

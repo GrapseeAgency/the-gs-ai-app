@@ -49,6 +49,7 @@ import com.grapsee.gsai.ui.theme.GsMotion
 import com.grapsee.gsai.ui.theme.rememberAuroraBrush
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import com.grapsee.gsai.ui.icons.GsIcons
 
 /**
  * AERUO KINETIC — IMAGE STUDIO.
@@ -254,7 +255,7 @@ private fun ResultTile(
             .background(MaterialTheme.colorScheme.primary.copy(alpha = alpha))
     ) {
         Icon(
-            imageVector = Icons.Outlined.Image,
+            imageVector = GsIcons.Image,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier
@@ -269,7 +270,7 @@ private fun ResultTile(
                 .size(32.dp)
         ) {
             Icon(
-                imageVector = Icons.Outlined.Download,
+                imageVector = GsIcons.Download,
                 contentDescription = "Save to Library",
                 tint = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.size(18.dp)
