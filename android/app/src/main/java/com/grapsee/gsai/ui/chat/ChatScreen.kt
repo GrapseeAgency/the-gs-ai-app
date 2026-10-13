@@ -51,6 +51,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.relocation.BringIntoViewRequester
@@ -2221,12 +2224,12 @@ private data class AttachOption(
 )
 
 private val attachOptions = listOf(
-    AttachOption("Gallery", Icons.Outlined.Image),
-    AttachOption("Camera", Icons.Outlined.PhotoCamera),
-    AttachOption("Files", Icons.Outlined.Folder),
-    AttachOption("Voice note", Icons.Outlined.Mic, isVoice = true),
-    AttachOption("Code snippet", Icons.Outlined.Code, available = false),
-    AttachOption("Prompt template", Icons.Outlined.StickyNote2, available = false)
+    AttachOption("Gallery", GsIcons.Image),
+    AttachOption("Camera", GsIcons.Camera),
+    AttachOption("Files", GsIcons.Folder),
+    AttachOption("Voice note", GsIcons.Mic, isVoice = true),
+    AttachOption("Code snippet", GsIcons.Code, available = false),
+    AttachOption("Prompt template", GsIcons.FileText, available = false)
 )
 
 /**
@@ -2307,8 +2310,15 @@ private fun TranslationSheet(
     }
 }
 
-/** 2-column grid of attach entry points — real pickers for the real
- *  capabilities, explicitly-unavailable tiles for the rest (PHASE 5 §6). */
+/**
+ * DESIGN PHASE 2 attach + mode sheet. Attach tiles first (real pickers for
+ * the real capabilities, honest unavailable tiles for the rest), then Mode —
+ * a horizontal MD3-carousel selection row (the operator's Resource 3): one
+ * item per mode, next item peeking, selected state is the ink container with
+ * a scale-in check (uiverse tiny-moose-42's animated stroke-check intent,
+ * monochrome), state change 180ms ease-in-out, touch targets 44dp minimum.
+ * Group separation is spacing, not a divider.
+ */
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
 private fun AttachSheet(
@@ -2318,7 +2328,7 @@ private fun AttachSheet(
     onFiles: () -> Unit,
     onVoice: () -> Unit,
     onUnavailable: (String) -> Unit,
-    // FLASH MODE (Phase 3) — the Mode section at the top of the sheet.
+    // FLASH MODE (Phase 3) — the Mode section at the bottom of the sheet.
     selectedMode: String = "flash",
     onModeSelected: (String) -> Unit = {}
 ) {
@@ -2330,11 +2340,11 @@ private fun AttachSheet(
                 .padding(bottom = GsMotion.spaceL),
             verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
         ) {
-            // --- Attach (FIRST — FLASH-MODE BUG 2: ChatGPT/Kimi put attach
-            //     on top of the sheet; behavioral modes sit at the bottom). ---
+            // --- Attach (FIRST — ChatGPT/Kimi put attach on top of the
+            //     sheet; behavioral modes sit at the bottom). ---
             Text(
                 text = "Attach",
-                style = MaterialTheme.typography.headlineSmall,
+                style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onBackground
             )
             attachOptions.chunked(2).forEach { rowOptions ->
@@ -2362,52 +2372,108 @@ private fun AttachSheet(
                     }
                 }
             }
-            // Divider — attach (intent) above, mode (infrastructure) below.
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            // --- Mode (LAST). -------------------------------------------------
+            // Spacing — attach (intent) above, mode (infrastructure) below.
+            Spacer(Modifier.height(GsMotion.spaceM))
+            // --- Mode (LAST): the MD3 carousel selection row. ---------------
             Text(
                 text = "Mode",
-                style = MaterialTheme.typography.headlineSmall,
+                style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onBackground
             )
             val modes = listOf(
                 Triple("flash", "Flash", "Instant replies"),
-                Triple("thinking", "Thinking", "Deep reasoning · this chat"),
+                Triple("thinking", "Thinking", "Deep reasoning"),
                 Triple("auto", "Auto", "System decides")
             )
-            modes.forEach { (value, label, hint) ->
-                Surface(
-                    onClick = { onModeSelected(value) },
-                    shape = RoundedCornerShape(14.dp),
-                    color = if (selectedMode == value) MaterialTheme.colorScheme.secondaryContainer
-                            else MaterialTheme.colorScheme.surfaceContainerLow
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        RadioButton(
-                            selected = selectedMode == value,
-                            onClick = { onModeSelected(value) }
-                        )
-                        Column {
-                            Text(
-                                text = label,
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = hint,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS),
+                contentPadding = PaddingValues(horizontal = 2.dp)
+            ) {
+                items(modes, key = { it.first }) { (value, label, hint) ->
+                    ModeCarouselItem(
+                        label = label,
+                        hint = hint,
+                        selected = selectedMode == value,
+                        onClick = { onModeSelected(value) }
+                    )
                 }
             }
+        }
+    }
+}
+
+/** One carousel item: 148dp wide (next item peeks), 88dp tall, radius card.
+ *  Selected = the ink container, inverted text, scale-in check. The state
+ *  change animates 180ms ease-in-out per the motion spec. */
+@Composable
+private fun ModeCarouselItem(
+    label: String,
+    hint: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    val colors = GsTheme.colors
+    val container by animateColorAsState(
+        targetValue = if (selected) colors.textPrimary else colors.raisedSurface,
+        animationSpec = GsEase.state(),
+        label = "modeContainer"
+    )
+    val contentColor by animateColorAsState(
+        targetValue = if (selected) colors.appBackground else colors.textPrimary,
+        animationSpec = GsEase.state(),
+        label = "modeContent"
+    )
+    val checkScale by animateFloatAsState(
+        targetValue = if (selected) 1f else 0f,
+        animationSpec = GsEase.state(),
+        label = "modeCheck"
+    )
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(GsRadius.card),
+        color = container,
+        modifier = Modifier
+            .width(148.dp)
+            .kineticPress()
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = contentColor
+                )
+                Box(
+                    modifier = Modifier
+                        .size(18.dp)
+                        .graphicsLayer {
+                            scaleX = checkScale
+                            scaleY = checkScale
+                            alpha = checkScale
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        GsIcons.Check,
+                        contentDescription = if (selected) "Selected" else null,
+                        tint = contentColor,
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
+            }
+            Text(
+                text = hint,
+                style = MaterialTheme.typography.labelSmall,
+                color = contentColor.copy(alpha = 0.7f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
@@ -2421,18 +2487,19 @@ private fun AttachTile(
     Surface(
         onClick = onClick,
         modifier = modifier,
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(GsRadius.card),
         color = MaterialTheme.colorScheme.surfaceContainerLow
     ) {
         Row(
             modifier = Modifier
-                .padding(horizontal = 14.dp, vertical = 12.dp)
+                .padding(horizontal = 12.dp, vertical = 12.dp)
                 .alpha(if (option.available) 1f else 0.45f),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            // One container spec: rounded square, neutral fill, ink icon.
             Surface(
-                shape = CircleShape,
+                shape = RoundedCornerShape(GsRadius.md),
                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 modifier = Modifier.size(36.dp)
             ) {
@@ -2440,7 +2507,7 @@ private fun AttachTile(
                     Icon(
                         imageVector = option.icon,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
+                        tint = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.size(18.dp)
                     )
                 }
