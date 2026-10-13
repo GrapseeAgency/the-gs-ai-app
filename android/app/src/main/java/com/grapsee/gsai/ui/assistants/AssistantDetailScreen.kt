@@ -85,7 +85,7 @@ fun AssistantDetailScreen(
                 type = "text/plain"
                 putExtra(
                     Intent.EXTRA_TEXT,
-                    "${assistant.name} — ${assistant.description}\n" +
+                    "${assistant.name}, ${assistant.description}\n" +
                         "An assistant in the GS AI app."
                 )
             }

@@ -156,7 +156,7 @@ fun LibraryScreen(onNavigate: (String) -> Unit) {
                                 else -> "No saved ${filter.lowercase()} yet"
                             },
                             message = when {
-                                term.isNotEmpty() -> "Try different words — or save something new from a chat."
+                                term.isNotEmpty() -> "Try different words, or save something new from a chat."
                                 selectedFilter == 0 -> "Save messages and files from your chats and they'll appear here."
                                 else -> "Save something from a chat and it will land under this filter."
                             }

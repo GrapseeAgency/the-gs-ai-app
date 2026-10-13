@@ -274,7 +274,7 @@ fun HomeScreen(
                 )
                 Spacer(Modifier.height(GsMotion.spaceS))
                 Text(
-                    "GS can make mistakes — double-check important info.",
+                    "GS can make mistakes, double-check important info.",
                     style = MaterialTheme.typography.labelMedium,
                     color = GsTheme.colors.textSecondary,
                     modifier = Modifier
@@ -673,7 +673,7 @@ private fun HomeComposer(
             view.gsHaptic(android.view.HapticFeedbackConstants.CLOCK_TICK)
             holdScope.launch {
                 val result = snackbarHostState.showSnackbar(
-                    message = "Microphone is off — allow it in Settings to talk",
+                    message = "Microphone is off, allow it in Settings to talk",
                     actionLabel = "Open Settings",
                     duration = SnackbarDuration.Long
                 )

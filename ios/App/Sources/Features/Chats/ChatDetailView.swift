@@ -586,7 +586,7 @@ struct ChatDetailView: View {
                 .buttonStyle(KineticPressStyle())
                 .disabled(attachments.remainingSlots <= 0)
                 .accessibilityLabel(attachments.remainingSlots <= 0
-                    ? "Attachments full — six per message"
+                    ? "Attachments full, six per message"
                     : "Add attachment")
 
                 // FLASH-MODE BUG 2: the mode chip — left of the input, opens
@@ -595,7 +595,7 @@ struct ChatDetailView: View {
                     Button {
                         showingAttachments = true
                     } label: {
-                        Text(vm.chatMode == "thinking" ? "🧠 Thinking ▾" : "⨍ Auto ▾")
+                        Text(vm.chatMode == "thinking" ? "Thinking ▾" : "Auto ▾")
                             .font(Aero.caption())
                             .foregroundStyle(Aero.text)
                             .padding(.horizontal, 10)
@@ -647,7 +647,7 @@ struct ChatDetailView: View {
         HStack(spacing: Aero.Spacing.s) {
             Image(systemName: "wifi.slash")
                 .font(.system(size: 12))
-            Text("Offline — replies come from the on-device responder until you reconnect.")
+            Text("Offline, replies come from the on-device responder until you reconnect.")
                 .font(Aero.label())
                 .foregroundStyle(Aero.textMuted)
                 .multilineTextAlignment(.leading)

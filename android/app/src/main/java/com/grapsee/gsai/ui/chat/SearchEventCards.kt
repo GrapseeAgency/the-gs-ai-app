@@ -285,9 +285,9 @@ private fun EngineLine(round: Int, outcome: EngineOutcome, showRound: Boolean) {
     val color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
     val detail = when (outcome.status) {
         "ok" -> outcome.count?.let { " · $it results" } ?: ""
-        "failed" -> outcome.error?.let { " — ${it.take(SHORT_ERROR_CHARS)}" } ?: ""
-        "empty" -> " — no results"
-        else -> outcome.error?.let { " — ${it.take(SHORT_ERROR_CHARS)}" } ?: ""
+        "failed" -> outcome.error?.let { ", ${it.take(SHORT_ERROR_CHARS)}" } ?: ""
+        "empty" -> ", no results"
+        else -> outcome.error?.let { ", ${it.take(SHORT_ERROR_CHARS)}" } ?: ""
     }
     val prefix = if (showRound) "Round $round · " else ""
     Row(verticalAlignment = Alignment.Top) {
@@ -386,7 +386,7 @@ private fun ResearchDetailsSection(
                 if (read > 0) sourceParts += "$read read"
                 if (failed > 0) sourceParts += "$failed failed"
                 if (sourceParts.isNotEmpty()) {
-                    DetailLine("Sources — " + sourceParts.joinToString(" · "))
+                    DetailLine("Sources, " + sourceParts.joinToString(" · "))
                 }
                 // Syndicated groups (v2 wire field, per round).
                 val syndicated = rounds.sumOf { it.syndicatedGroups ?: 0 }
@@ -405,7 +405,7 @@ private fun ResearchDetailsSection(
                     done.timings?.firstTokenMs?.let { timingParts += "first token ${msLabel(it)}" }
                     done.totalMs?.let { timingParts += "total ${msLabel(it)}" }
                     if (timingParts.isNotEmpty()) {
-                        DetailLine("Timing — " + timingParts.joinToString(" · "))
+                        DetailLine("Timing, " + timingParts.joinToString(" · "))
                     }
                 }
             }

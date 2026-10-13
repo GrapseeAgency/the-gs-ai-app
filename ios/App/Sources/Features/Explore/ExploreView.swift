@@ -102,7 +102,7 @@ struct ExploreView: View {
 
     private var nothingMessage: String {
         term.isEmpty
-            ? "No assistants or prompts in this category — try another one."
+            ? "No assistants or prompts in this category, try another one."
             : "Nothing matched “\(term)”. Try different words or another category."
     }
 

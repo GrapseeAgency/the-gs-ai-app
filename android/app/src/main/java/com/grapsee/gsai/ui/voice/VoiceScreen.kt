@@ -264,10 +264,10 @@ fun VoiceScreen(
         VoicePhase.Processing -> if (transcript.isBlank()) "Starting the mic…" else "Processing…"
         VoicePhase.Result -> "Got it"
         VoicePhase.Paused -> "Paused"
-        VoicePhase.Denied -> "Microphone permission is off — allow it to speak"
+        VoicePhase.Denied -> "Microphone permission is off, allow it to speak"
         VoicePhase.Unavailable -> "Speech recognition isn't available on this device"
-        VoicePhase.NoSpeech -> "Didn't catch that — tap the mic and try again"
-        VoicePhase.Error -> "That didn't come through — tap the mic and try again"
+        VoicePhase.NoSpeech -> "Didn't catch that, tap the mic and try again"
+        VoicePhase.Error -> "That didn't come through, tap the mic and try again"
     }
 
     Box(

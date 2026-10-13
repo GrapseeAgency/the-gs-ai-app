@@ -22,7 +22,7 @@ struct ResearchView: View {
                     EmptyStateView(
                         icon: "doc.text.magnifyingglass",
                         title: "Research is coming soon",
-                        message: "Multi-source research with citations isn't available yet. You can ask questions in a chat today — Research will appear here when it's ready."
+                        message: "Multi-source research with citations isn't available yet. You can ask questions in a chat today. Research will appear here when it's ready."
                     )
                     .padding(.horizontal, Aero.Spacing.m)
                     .padding(.bottom, Aero.Spacing.xl)

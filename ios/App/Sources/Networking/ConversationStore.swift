@@ -392,7 +392,7 @@ extension ConversationStore {
 
     private static let savedLibraryKey = "gs_saved_library_items"
 
-    /// Real "Save to Library" — chat turns land as "message"; the studios
+    /// Real "Save to Library", chat turns land as "message"; the studios
     /// save images and drafts under their own kind so Library filters catch
     /// them. An explicit title (e.g. "Invoice Jul 2025") beats the prefix.
     func saveToLibrary(content: String, kind: String = "message", title: String? = nil) {

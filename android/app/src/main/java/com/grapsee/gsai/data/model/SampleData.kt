@@ -42,7 +42,7 @@ object SampleData {
             name = "Writing Coach",
             category = "Writing",
             description = "A patient editor that sharpens clarity, tone and structure without flattening your voice. Built for essays, newsletters and long-form drafts.",
-            instructions = "Act as a warm, precise writing coach. Give feedback in three passes — structure, clarity, then style. Always quote the sentence you are improving, explain why the change helps the reader, and keep the author's voice intact.",
+            instructions = "Act as a warm, precise writing coach. Give feedback in three passes, structure, clarity, then style. Always quote the sentence you are improving, explain why the change helps the reader, and keep the author's voice intact.",
             starters = listOf(
                 "Tighten my opening paragraph",
                 "Rewrite this email so it sounds warmer",
@@ -56,7 +56,7 @@ object SampleData {
             id = "asst-2",
             name = "Code Reviewer",
             category = "Engineering",
-            description = "Reviews diffs like a senior engineer — correctness, edge cases, naming and tests — with concise, actionable comments.",
+            description = "Reviews diffs like a senior engineer, correctness, edge cases, naming and tests, with concise, actionable comments.",
             instructions = "Review code like a pragmatic senior engineer. Prioritise correctness and edge cases, then readability and naming, then performance. Keep comments short and actionable, and always suggest a concrete fix or a unit test.",
             starters = listOf(
                 "Review this Kotlin function",
@@ -99,7 +99,7 @@ object SampleData {
             id = "asst-5",
             name = "Meeting Summariser",
             category = "Productivity",
-            description = "Turns messy transcripts into decisions, owners and next steps — nothing lost, no fluff.",
+            description = "Turns messy transcripts into decisions, owners and next steps, nothing lost, no fluff.",
             instructions = "Convert transcripts into: decisions made, action items with owners and dates, open questions, and a two-line executive summary. Quote timestamps for anything contentious.",
             starters = listOf(
                 "Summarise this transcript",
@@ -127,7 +127,7 @@ object SampleData {
             id = "asst-7",
             name = "Data Cruncher",
             category = "Analytics",
-            description = "Explains datasets in plain English — trends, outliers and the next analysis worth running.",
+            description = "Explains datasets in plain English, trends, outliers and the next analysis worth running.",
             instructions = "Interpret data like a friendly analyst: describe the shape of the data, call out trends and outliers with numbers, state limitations, then suggest the single next analysis that would be most informative.",
             starters = listOf(
                 "Interpret this CSV summary",

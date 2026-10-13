@@ -229,7 +229,7 @@ private fun ChatsTab(project: ProjectStore.Project, onOpenLinker: () -> Unit) {
         GsChip(text = "Add chats", selected = false, onClick = onOpenLinker)
         if (rows.isEmpty()) {
             Text(
-                text = "No chats linked yet — add conversations to bundle them with these instructions.",
+                text = "No chats linked yet, add conversations to bundle them with these instructions.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -328,7 +328,7 @@ private fun ChatLinkerDialog(project: ProjectStore.Project, onDismiss: () -> Uni
 private fun FilesTab() {
     Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)) {
         Text(
-            text = "File attachments aren't supported yet — projects hold files once on-device storage lands.",
+            text = "File attachments aren't supported yet, projects hold files once on-device storage lands.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -339,7 +339,7 @@ private fun FilesTab() {
 private fun ActivityTab(project: ProjectStore.Project) {
     if (project.events.isEmpty()) {
         Text(
-            text = "Nothing yet — actions you take on this project show up here.",
+            text = "Nothing yet, actions you take on this project show up here.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )

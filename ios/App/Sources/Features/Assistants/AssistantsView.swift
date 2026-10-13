@@ -217,7 +217,7 @@ struct AssistantsView: View {
             filteredList(
                 store.userAssistants.filter(\.archived),
                 emptyTitle: "Nothing archived",
-                emptyMessage: "Archived assistants rest here — unarchive any time."
+                emptyMessage: "Archived assistants rest here, unarchive any time."
             )
         }
     }

@@ -215,8 +215,8 @@ struct AssistantCreateView: View {
         .opacity(name.isEmpty ? 0.4 : 1)
         .confirmationDialog(
             editID == nil
-                ? "Assistant created — it now lives in My assistants."
-                : "Assistant saved — it lives in My assistants.",
+                ? "Assistant created, it now lives in My assistants."
+                : "Assistant saved, it lives in My assistants.",
             isPresented: $showCreated,
             titleVisibility: .visible
         ) {

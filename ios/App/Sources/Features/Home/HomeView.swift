@@ -446,7 +446,7 @@ struct HomeView: View {
 
                 voiceHoldOrb
             }
-            Text("GS can make mistakes — double-check important info.")
+            Text("GS can make mistakes, double-check important info.")
                 .font(Aero.caption())
                 .foregroundColor(Aero.textSecondary)
                 .frame(maxWidth: .infinity)
@@ -529,7 +529,7 @@ struct HomeView: View {
         // assistive tech without an explicit element — one button with a
         // named action that drives the same dictation state the finger does.
         .accessibilityElement()
-        .accessibilityLabel("Voice input — hold to dictate, tap for voice mode")
+        .accessibilityLabel("Voice input, hold to dictate, tap for voice mode")
         .accessibilityAddTraits(.isButton)
         .accessibilityHint("Activates voice dictation")
         .accessibilityAction(named: dictation.isListening ? "Stop listening" : "Start listening") {

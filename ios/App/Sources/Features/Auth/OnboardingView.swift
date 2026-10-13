@@ -139,7 +139,7 @@ struct OnboardingView: View {
                     Text("What are you into?")
                         .font(Aero.headline())
                         .foregroundStyle(Aero.text)
-                    Text("Pick a few — GS tunes itself to your world.")
+                    Text("Pick a few. GS tunes itself to your world.")
                         .font(Aero.caption())
                         .foregroundStyle(Aero.textMuted)
                 }
@@ -172,7 +172,7 @@ struct OnboardingView: View {
                     Text("Tune your AI")
                         .font(Aero.headline())
                         .foregroundStyle(Aero.text)
-                    Text("Set the defaults — every chat can override them.")
+                    Text("Set the defaults, every chat can override them.")
                         .font(Aero.caption())
                         .foregroundStyle(Aero.textMuted)
                 }
@@ -285,7 +285,7 @@ struct OnboardingView: View {
                     Text("Stay in the loop")
                         .font(Aero.headline())
                         .foregroundStyle(Aero.text)
-                    Text("Quiet by default — only what you ask for.")
+                    Text("Quiet by default, only what you ask for.")
                         .font(Aero.caption())
                         .foregroundStyle(Aero.textMuted)
                 }
@@ -320,7 +320,7 @@ struct OnboardingView: View {
                     Text("Make it yours")
                         .font(Aero.headline())
                         .foregroundStyle(Aero.text)
-                    Text("A name and a colour — that's all it takes.")
+                    Text("A name and a colour, that's all it takes.")
                         .font(Aero.caption())
                         .foregroundStyle(Aero.textMuted)
                 }

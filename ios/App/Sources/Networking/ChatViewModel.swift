@@ -635,7 +635,7 @@ final class ChatViewModel: ObservableObject {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "" }
         let prompt = "Translate the following text into \(targetLanguage). " +
-            "Reply with the translation only — no notes, no quotes.\n\n\(trimmed)"
+            "Reply with the translation only, no notes, no quotes.\n\n\(trimmed)"
         var scratchID = ""
         defer {
             if !scratchID.isEmpty {
@@ -734,7 +734,7 @@ final class ChatViewModel: ObservableObject {
                 } else if !self.streamBuffer.isEmpty {
                     // Partial stream that broke mid-flight: keep what arrived on
                     // screen and disk, close with the same tail Android appends.
-                    let tail = "\n\n—I'll pick the thread back up right here."
+                    let tail = "\n\n. I'll pick the thread back up right here."
                     self.streamBuffer.append(tail)
                     self.flushStreamingText()
                     self.finalizeLocal()
@@ -753,7 +753,7 @@ final class ChatViewModel: ObservableObject {
     /// create it server-side; offline, fabricate a local row so the thread,
     /// recents and pins keep working until the backend is reachable again.
     /// Task 86-e: the first-message auto-title honours Settings → "Auto-title
-    /// chats" — when it is off, the thread keeps the default "New chat" title
+    /// chats", when it is off, the thread keeps the default "New chat" title
     /// (the same default the store materialises for non-user turns) until it
     /// is renamed.
     private func ensureConversation(for text: String) async throws -> String {
@@ -1196,14 +1196,14 @@ final class ChatViewModel: ObservableObject {
         }
 
         if lower.range(of: "^(hi|hey|hello|yo|sup|hola|good (morning|afternoon|evening))[!.? ]*$", options: .regularExpression) != nil {
-            return "Hey — good to see you. What are we making today?\n\nI can draft, plan, " +
+            return "Hey, good to see you. What are we making today?\n\nI can draft, plan, " +
                 "refactor, brainstorm or just think out loud with you. Drop an idea and " +
                 "I'll take it from there."
         }
         if lower.contains("what can you do") || lower.contains("who are you") || lower.contains("your name") {
-            return "I'm GS — your pocket think-tank.\n\n• Draft & rewrite: emails, posts, docs\n" +
+            return "I'm GS, your pocket think-tank.\n\n• Draft & rewrite: emails, posts, docs\n" +
                 "• Plan & break down: projects, trips, launches\n• Explain: code, concepts, " +
-                "contracts\n• Generate: images, prompts, study notes\n\nStart anywhere — " +
+                "contracts\n• Generate: images, prompts, study notes\n\nStart anywhere, " +
                 "even a half-formed thought works."
         }
         if lower.hasPrefix("code") || lower.contains("kotlin") || lower.contains("swift") ||
@@ -1219,7 +1219,7 @@ final class ChatViewModel: ObservableObject {
         }
         if lower.contains("plan") || lower.contains("roadmap") || lower.contains("launch") ||
             lower.contains("trip") || lower.contains("schedule") {
-            return "Love it — \"\(topic)\" breaks down like this:\n\n• Scope: pick the one outcome that " +
+            return "Love it, \"\(topic)\" breaks down like this:\n\n• Scope: pick the one outcome that " +
                 "defines success\n• Milestones: 3 checkpoints, each shippable on its own\n" +
                 "• Risks: name the top two and their plan B\n• Next step: the 30-minute " +
                 "action you can take today\n\nTell me the deadline and I'll back-plan every phase."
@@ -1231,7 +1231,7 @@ final class ChatViewModel: ObservableObject {
                 "hedge words.\n\nWant it warmer, punchier, or more formal? I'll rewrite in place."
         }
         return pick(
-            "\"\(topic)\" — good thread to pull. Here's my take:\n\n• Start from the outcome " +
+            "\"\(topic)\", good thread to pull. Here's my take:\n\n• Start from the outcome " +
                 "you want, work backwards\n• Cut the problem to the smallest version that " +
                 "still matters\n• Ship a rough v0 today; refine with real feedback\n\n" +
                 "Ask me to expand any point and I'll go deeper.",
@@ -1241,7 +1241,7 @@ final class ChatViewModel: ObservableObject {
             "Thinking through \"\(topic)\":\n\n1. What does success look like in one sentence?\n" +
                 "2. What's the biggest unknown blocking it?\n3. What can you test about that " +
                 "unknown in under an hour?\n\nAnswer those three and the path usually " +
-                "reveals itself — I'm here to think it through with you."
+                "reveals itself. I'm here to think it through with you."
         )
     }
 
@@ -1350,23 +1350,23 @@ final class ChatViewModel: ObservableObject {
         switch conversationID {
         case "demo-1":
             return [
-                ChatMessage(role: "user", content: "Send the revised deck plan for Q3 pricing — one page, new tiers first."),
-                ChatMessage(role: "assistant", content: "Here's the one-page skeleton:\n\n1. Lead with the three tiers (Starter · Studio · Scale) — value before price.\n2. Frame the founder discount as early-adopter lock-in, not a markdown.\n3. Close with the migration path for existing accounts.\n\nWant me to tighten the discount wording?")
+                ChatMessage(role: "user", content: "Send the revised deck plan for Q3 pricing, one page, new tiers first."),
+                ChatMessage(role: "assistant", content: "Here's the one-page skeleton:\n\n1. Lead with the three tiers (Starter · Studio · Scale), value before price.\n2. Frame the founder discount as early-adopter lock-in, not a markdown.\n3. Close with the migration path for existing accounts.\n\nWant me to tighten the discount wording?")
             ]
         case "demo-2":
             return [
-                ChatMessage(role: "user", content: "Five days in Kyoto, temples before 9am, food after dark — sketch an itinerary."),
-                ChatMessage(role: "assistant", content: "Day 1 — Higashiyama at dawn: Kiyomizu-dera before the crowds, then the Philosopher's Path.\nDay 2 — Arashiyama bamboo grove at 7am, river lunch, Nishiki market at dusk.\nDay 3 — Fushimi Inari at sunrise, then a kaiseki splurge.\n\nWant train times added?")
+                ChatMessage(role: "user", content: "Five days in Kyoto, temples before 9am, food after dark, sketch an itinerary."),
+                ChatMessage(role: "assistant", content: "Day 1. Higashiyama at dawn: Kiyomizu-dera before the crowds, then the Philosopher's Path.\nDay 2. Arashiyama bamboo grove at 7am, river lunch, Nishiki market at dusk.\nDay 3. Fushimi Inari at sunrise, then a kaiseki splurge.\n\nWant train times added?")
             ]
         case "demo-3":
             return [
                 ChatMessage(role: "user", content: "Why does my coroutine inside launch block the calling thread here?"),
-                ChatMessage(role: "assistant", content: "It usually doesn't — unless something on that dispatcher is blocking. Two usual suspects:\n\n1. runBlocking on a dispatcher the launched job also uses.\n2. A Mutex/withContext cycle back to the same single-threaded dispatcher.\n\nPaste the snippet around the launch and I'll point at the line.")
+                ChatMessage(role: "assistant", content: "It usually doesn't, unless something on that dispatcher is blocking. Two usual suspects:\n\n1. runBlocking on a dispatcher the launched job also uses.\n2. A Mutex/withContext cycle back to the same single-threaded dispatcher.\n\nPaste the snippet around the launch and I'll point at the line.")
             ]
         case "demo-4":
             return [
-                ChatMessage(role: "user", content: "Three tone pillars for the brand — sharper than 'friendly but expert'."),
-                ChatMessage(role: "assistant", content: "Try these:\n\n· Plainspoken — short sentences, zero jargon debt.\n· Warmly precise — numbers and names, delivered like a good host.\n· Quietly confident — no exclamation marks doing the work.\n\nShall I rewrite the landing hero in this voice?")
+                ChatMessage(role: "user", content: "Three tone pillars for the brand, sharper than 'friendly but expert'."),
+                ChatMessage(role: "assistant", content: "Try these:\n\n· Plainspoken, short sentences, zero jargon debt.\n· Warmly precise, numbers and names, delivered like a good host.\n· Quietly confident, no exclamation marks doing the work.\n\nShall I rewrite the landing hero in this voice?")
             ]
         default:
             return []

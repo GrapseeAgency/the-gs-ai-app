@@ -64,39 +64,39 @@ private val tones = listOf("Warm", "Sharp", "Neutral", "Playful")
 
 private val outlinesByType = mapOf(
     "Blog post" to listOf(
-        "Hook — open with the tension the reader feels",
-        "Context — why now, in three sentences",
-        "Argument — three moves, one section each",
-        "Counterpoint — steel-man the sceptic, then answer",
-        "Close — the single sentence worth quoting"
+        "Hook, open with the tension the reader feels",
+        "Context, why now, in three sentences",
+        "Argument, three moves, one section each",
+        "Counterpoint, steel-man the sceptic, then answer",
+        "Close, the single sentence worth quoting"
     ),
     "Essay" to listOf(
-        "Thesis — state the claim precisely",
-        "Grounds — evidence and examples, oldest to newest",
-        "Warrant — connect the evidence to the claim",
-        "Objection — the strongest counter-reading",
-        "Synthesis — restate the thesis, widened"
+        "Thesis, state the claim precisely",
+        "Grounds, evidence and examples, oldest to newest",
+        "Warrant, connect the evidence to the claim",
+        "Objection, the strongest counter-reading",
+        "Synthesis, restate the thesis, widened"
     ),
     "Email" to listOf(
-        "Subject — five words, decision-forward",
-        "Opening line — the ask, stated plainly",
-        "Context — two bullets of background",
-        "Options — what needs deciding, by when",
-        "Sign-off — one line, next step dated"
+        "Subject, five words, decision-forward",
+        "Opening line, the ask, stated plainly",
+        "Context, two bullets of background",
+        "Options, what needs deciding, by when",
+        "Sign-off, one line, next step dated"
     ),
     "Script" to listOf(
-        "Cold open — the moment before the problem",
-        "Setup — introduce the world in thirty seconds",
-        "Turn — the decision that changes everything",
-        "Rise — escalating stakes across three beats",
-        "Button — the final line, held for a beat"
+        "Cold open, the moment before the problem",
+        "Setup, introduce the world in thirty seconds",
+        "Turn, the decision that changes everything",
+        "Rise, escalating stakes across three beats",
+        "Button, the final line, held for a beat"
     )
 )
 
 private val draftsByType = mapOf(
-    "Blog post" to "The best writing tools disappear. You notice them only when they interrupt — a menu where a sentence should be, a suggestion that mistakes decoration for voice.\n\nWe built this editor backwards from that observation: no chrome, no modes, just a page that keeps up with the pace of thought. The result reads less like software and more like a well-set page.",
-    "Essay" to "Every claim about attention begins with an unexamined metaphor. We say we spend it, pay it, capture it — as if attention were currency moving between pockets.\n\nThe metaphor is convenient and wrong. Attention is closer to a posture than a purse: it is a way of holding body and mind at once, and it cannot be stockpiled, only practised.",
-    "Email" to "Hi Maya,\n\nQuick one: can you sign off on the Q3 creative budget by Friday? Two options attached — the lean plan holds at £48k, the ambitious one at £61k.\n\nEither works; I just need a name against one of them before the vendor holds expire.\n\nThanks,\nSam",
+    "Blog post" to "The best writing tools disappear. You notice them only when they interrupt, a menu where a sentence should be, a suggestion that mistakes decoration for voice.\n\nWe built this editor backwards from that observation: no chrome, no modes, just a page that keeps up with the pace of thought. The result reads less like software and more like a well-set page.",
+    "Essay" to "Every claim about attention begins with an unexamined metaphor. We say we spend it, pay it, capture it, as if attention were currency moving between pockets.\n\nThe metaphor is convenient and wrong. Attention is closer to a posture than a purse: it is a way of holding body and mind at once, and it cannot be stockpiled, only practised.",
+    "Email" to "Hi Maya,\n\nQuick one: can you sign off on the Q3 creative budget by Friday? Two options attached, the lean plan holds at £48k, the ambitious one at £61k.\n\nEither works; I just need a name against one of them before the vendor holds expire.\n\nThanks,\nSam",
     "Script" to "INT. STUDIO - NIGHT\n\nA single desk lamp. MAYA reads the same line for the third time.\n\nMAYA\n(to no one)\nRun it again.\n\nThe engine hums. The cursor blinks, patient as a lighthouse."
 )
 
@@ -181,7 +181,7 @@ fun WritingStudioScreen(onBack: () -> Unit) {
                     minLines = 4,
                     placeholder = {
                         Text(
-                            "Describe what you need — audience, length, angle…",
+                            "Describe what you need, audience, length, angle…",
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     },

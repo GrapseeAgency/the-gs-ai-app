@@ -39,40 +39,40 @@ struct WritingStudioView: View {
 
     private let outlines: [String: [String]] = [
         "Blog post": [
-            "Hook — the reader's Monday-morning problem",
+            "Hook, the reader's Monday-morning problem",
             "Why the old playbook stopped working",
             "Three moves that work in 2025",
             "A worked example from our own stack",
-            "Close — one next action"
+            "Close, one next action"
         ],
         "Essay": [
-            "Thesis — state the claim plainly",
-            "Evidence — two studies, one counterexample",
-            "Counterargument — steel-man the opposition",
-            "Synthesis — where the truth likely sits",
-            "Conclusion — what changes if we agree"
+            "Thesis, state the claim plainly",
+            "Evidence, two studies, one counterexample",
+            "Counterargument, steel-man the opposition",
+            "Synthesis, where the truth likely sits",
+            "Conclusion, what changes if we agree"
         ],
         "Email": [
-            "Subject — specific and short",
+            "Subject, specific and short",
             "One line of context the reader already knows",
             "The ask, stated in the first third",
             "Two bullets of supporting detail",
             "Sign-off with a clear deadline"
         ],
         "Script": [
-            "Cold open — one line of tension",
-            "Set-up — who wants what, and why now",
-            "Beat — the plan meets reality",
-            "Turn — the choice that costs something",
-            "Button — final line, echo the open"
+            "Cold open, one line of tension",
+            "Set-up, who wants what, and why now",
+            "Beat, the plan meets reality",
+            "Turn, the choice that costs something",
+            "Button, final line, echo the open"
         ]
     ]
 
     private let drafts: [String: String] = [
-        "Blog post": "Every team I know is quietly rebuilding the same three AI workflows. The interesting part is not the models — it is the scaffolding around them. Here is what actually moved the needle for us, and what to skip.",
+        "Blog post": "Every team I know is quietly rebuilding the same three AI workflows. The interesting part is not the models, it is the scaffolding around them. Here is what actually moved the needle for us, and what to skip.",
         "Essay": "The claim is simple: taste is becoming the scarce input, not compute. Two studies and one awkward counterexample later, the honest answer sits somewhere more useful than either camp admits.",
-        "Email": "Subject: Pricing page test — decision by Friday. You know the Q3 numbers; the ask is a one-week test on the annual toggle. Two bullets of context below, and I need a yes or no by Friday noon.",
-        "Script": "OPEN on a phone screen, 3am. MAYA wants the launch to land tomorrow; the build is not ready. When the demo finally runs, it says the one thing she never scripted — and the room goes quiet."
+        "Email": "Subject: Pricing page test, decision by Friday. You know the Q3 numbers; the ask is a one-week test on the annual toggle. Two bullets of context below, and I need a yes or no by Friday noon.",
+        "Script": "OPEN on a phone screen, 3am. MAYA wants the launch to land tomorrow; the build is not ready. When the demo finally runs, it says the one thing she never scripted, and the room goes quiet."
     ]
 
     // MARK: State
@@ -197,7 +197,7 @@ struct WritingStudioView: View {
             VStack(alignment: .leading, spacing: Aero.Spacing.s) {
                 SectionHeader(title: "Brief")
                 editorContainer(
-                    "What should this piece say — and for whom?",
+                    "What should this piece say, and for whom?",
                     text: $brief,
                     height: 90
                 )

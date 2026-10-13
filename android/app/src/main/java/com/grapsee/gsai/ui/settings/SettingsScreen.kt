@@ -208,7 +208,7 @@ fun SettingsScreen(
                 SwitchRow(
                     title = "Prefer on-device AI",
                     subtitle = if (ModelStore.installedPath == null) {
-                        "Needs a model first — tap to download"
+                        "Needs a model first, tap to download"
                     } else {
                         "Answer on this device before using the network"
                     },
@@ -259,7 +259,7 @@ fun SettingsScreen(
                 if (CrashReporter.lastReport(context) != null) {
                     ActionRow(
                         title = "Send crash report",
-                        subtitle = "The last launch captured an error — share its details",
+                        subtitle = "The last launch captured an error, share its details",
                         leading = Icons.Outlined.BugReport,
                         onClick = {
                             val report = CrashReporter.lastReport(context) ?: return@ActionRow
@@ -388,7 +388,7 @@ fun SettingsScreen(
                         steps = 5
                     )
                     Text(
-                        text = "Aa — How your chats will read",
+                        text = "Aa. How your chats will read",
                         style = MaterialTheme.typography.bodyMedium.copy(fontSize = (15 * SettingsStore.fontScale).sp),
                         color = MaterialTheme.colorScheme.onSurface
                     )

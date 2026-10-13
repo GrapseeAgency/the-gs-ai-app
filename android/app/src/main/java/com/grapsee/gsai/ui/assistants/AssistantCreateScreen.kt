@@ -260,7 +260,7 @@ fun AssistantCreateScreen(assistantId: String? = null, onBack: () -> Unit) {
                     if (assistantId == null) {
                         "“${name.trim()}” is ready. You can refine its behaviour, starters and capabilities any time."
                     } else {
-                        "“${name.trim()}” now lives in My assistants — refine it any time."
+                        "“${name.trim()}” now lives in My assistants, refine it any time."
                     }
                 )
             },

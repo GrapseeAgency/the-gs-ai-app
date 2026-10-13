@@ -170,6 +170,11 @@ class ChatStreamController(private val chat: ChatRepository) {
         val token = assistantMessageId
         val buffer = StringBuilder()
         var lastPaint = 0L
+        // TASK 2 — tap-to-first-visible-character stopwatch. send() is invoked
+        // synchronously by the composer's send tap; the first PUBLISHED paint
+        // with non-empty text is the first character the reader can see.
+        val sendCalledAt = SystemClock.uptimeMillis()
+        var firstCharLogged = false
         val search = SearchStreamAccumulator()
         _state.value = StreamState(
             conversationId = conversationId,
@@ -233,6 +238,13 @@ class ChatStreamController(private val chat: ChatRepository) {
                         val now = SystemClock.uptimeMillis()
                         if (now - lastPaint >= STREAM_PAINT_MS) {
                             lastPaint = now
+                            if (!firstCharLogged && buffer.isNotEmpty()) {
+                                firstCharLogged = true
+                                android.util.Log.i(
+                                    "GS-PERF",
+                                    "tapToFirstVisibleCharMs=${now - sendCalledAt} chars=${buffer.length}"
+                                )
+                            }
                             publishIfMine(token) { it.copy(streamText = buffer.toString()) }
                         }
                     },
@@ -387,7 +399,7 @@ private class SearchStreamAccumulator {
             searchPhase = "searching",
             traceItems = state.traceItems + SearchTraceItem(
                 SearchTraceItem.Kind.Query,
-                "Search — ${event.query}",
+                "Search, ${event.query}",
                 round = event.round
             )
         )
@@ -435,7 +447,7 @@ private class SearchStreamAccumulator {
             } else {
                 state.traceItems + SearchTraceItem(
                     SearchTraceItem.Kind.SearchFailed,
-                    "Search failed" + (event.reason?.let { " — $it" } ?: "")
+                    "Search failed" + (event.reason?.let { ", $it" } ?: "")
                 )
             }
         )
@@ -509,7 +521,7 @@ private class SearchStreamAccumulator {
             traceItems = state.traceItems + SearchTraceItem(
                 SearchTraceItem.Kind.SourceSkipped,
                 "Skipped ${domainOf(state, event.ordinal)}" +
-                    (event.reason?.let { " — $it" } ?: "")
+                    (event.reason?.let { ", $it" } ?: "")
             )
         )
         }
@@ -621,7 +633,7 @@ private class SearchStreamAccumulator {
             } else {
                 state.traceItems + SearchTraceItem(
                     SearchTraceItem.Kind.SearchFailed,
-                    "Research failed" + (event.reason?.let { " — $it" } ?: "")
+                    "Research failed" + (event.reason?.let { ", $it" } ?: "")
                 )
             }
             state.copy(
@@ -642,14 +654,14 @@ private class SearchStreamAccumulator {
         }
     }
 
-    /** "Read <domain> — <title>" — the title comes from the discovered card (real wire data). */
+    /** "Read <domain>, <title>" — the title comes from the discovered card (real wire data). */
     private fun readLine(
         state: ChatStreamController.StreamState,
         ordinal: Int
     ): SearchTraceItem {
         val card = state.sources.firstOrNull { it.ordinal == ordinal }
         val title = card?.title?.takeIf { it.isNotBlank() && it != card.domain }
-        val text = "Read ${card?.domain ?: "source $ordinal"}" + (title?.let { " — $it" } ?: "")
+        val text = "Read ${card?.domain ?: "source $ordinal"}" + (title?.let { ", $it" } ?: "")
         return SearchTraceItem(SearchTraceItem.Kind.Read, text)
     }
 

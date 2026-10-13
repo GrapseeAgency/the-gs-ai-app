@@ -68,7 +68,7 @@ private val codeKeywords = setOf("fun", "val", "return", "if")
 
 private val codeSamples: Map<String, List<String>> = mapOf(
     "Main.kt" to listOf(
-        "// Entry point — greets the engine.",
+        "// Entry point, greets the engine.",
         "fun main() {",
         "    val engine = Engine(\"Aeruo\")",
         "    if (engine.ready) {",

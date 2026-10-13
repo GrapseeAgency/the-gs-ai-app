@@ -104,7 +104,7 @@ struct AuthFlowView: View {
                     Text("GS AI")
                         .font(Aero.displayTitle())
                         .foregroundStyle(Aero.text)
-                    Text("Calm, fast and private — your AI command centre.")
+                    Text("Calm, fast and private, your AI command centre.")
                         .font(Aero.caption())
                         .foregroundStyle(Aero.textMuted)
                         .multilineTextAlignment(.center)
@@ -358,8 +358,8 @@ struct AuthFlowView: View {
     private var strengthLabel: String {
         switch passwordStrength {
         case 0: return "Password strength"
-        case 1: return "Weak — keep going"
-        case 2: return "Good — add symbols for extra strength"
+        case 1: return "Weak, keep going"
+        case 2: return "Good, add symbols for extra strength"
         default: return "Strong password"
         }
     }

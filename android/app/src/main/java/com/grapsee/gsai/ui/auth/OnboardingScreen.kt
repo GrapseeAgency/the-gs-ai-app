@@ -253,7 +253,7 @@ private fun InterestsStep(interests: SnapshotStateList<String>) {
     StepColumn {
         StepHeading(
             title = "What are you into?",
-            caption = "Pick at least one — GS tunes itself to your world. You can change these anytime."
+            caption = "Pick at least one. GS tunes itself to your world. You can change these anytime."
         )
         interestOptions.chunked(3).forEach { row ->
             Row(
@@ -287,7 +287,7 @@ private fun AiPreferencesStep(
     StepColumn {
         StepHeading(
             title = "Tune your AI",
-            caption = "Set the defaults — every chat can override them."
+            caption = "Set the defaults, every chat can override them."
         )
         PreferenceChipCard(
             title = "Response style",
@@ -441,7 +441,7 @@ private fun NotificationsStep(
     StepColumn {
         StepHeading(
             title = "Stay in the loop",
-            caption = "Quiet by default — only the pings you actually want."
+            caption = "Quiet by default, only the pings you actually want."
         )
         GsCard {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -481,7 +481,7 @@ private fun PersonalisationStep(
     StepColumn {
         StepHeading(
             title = "Make it yours",
-            caption = "A name and an accent — that's all GS needs."
+            caption = "A name and an accent, that's all GS needs."
         )
         GsCard {
             Text(

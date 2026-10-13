@@ -277,7 +277,7 @@ fun SearchScreen(onNavigate: (String) -> Unit) {
                     term.isEmpty() -> GsEmptyState(
                         icon = Icons.Outlined.Search,
                         title = "Search everything",
-                        message = "Conversations, messages, library items, assistants and projects — one index over this device."
+                        message = "Conversations, messages, library items, assistants and projects, one index over this device."
                     )
                     term.length < 2 -> GsEmptyState(
                         icon = Icons.Outlined.ManageSearch,

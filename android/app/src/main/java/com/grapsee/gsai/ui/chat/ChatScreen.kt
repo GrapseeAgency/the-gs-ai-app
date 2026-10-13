@@ -171,6 +171,7 @@ import com.grapsee.gsai.ui.components.rememberDeviceOffline
 import com.grapsee.gsai.ui.theme.GsMotion
 import com.grapsee.gsai.ui.theme.GsRadius
 import com.grapsee.gsai.ui.theme.GsHaptics
+import com.grapsee.gsai.ui.theme.kineticPress
 import com.grapsee.gsai.ui.chat.content.BlocksContent
 import com.grapsee.gsai.ui.orbs.OrbSize
 import com.grapsee.gsai.ui.orbs.OrbState
@@ -1105,26 +1106,36 @@ fun ChatScreen(
         onBack = if (atWorkspaceRoot) null else onBack,
         leading = if (atWorkspaceRoot && menuAction != null) {
             {
-                IconButton(onClick = menuAction) {
-                    Icon(Icons.Outlined.Menu, contentDescription = "Open menu",
-                        tint = MaterialTheme.colorScheme.onBackground)
+                IconButton(
+                    onClick = menuAction,
+                    // TASK 5: visible press state on the chrome icon buttons.
+                    modifier = Modifier.kineticPress()
+                ) {
+                    Icon(
+                        Icons.Outlined.Menu,
+                        contentDescription = "Open menu",
+                        tint = MaterialTheme.colorScheme.onBackground
+                    )
                 }
             }
         } else null,
         compactTitle = true,
         actions = {
-            IconButton(onClick = {
-                searchOpen = !searchOpen
-                if (!searchOpen) {
-                    searchQuery = ""
-                    searchActiveIndex = 0
-                }
-            }) {
+            IconButton(
+                onClick = {
+                    searchOpen = !searchOpen
+                    if (!searchOpen) {
+                        searchQuery = ""
+                        searchActiveIndex = 0
+                    }
+                },
+                modifier = Modifier.kineticPress()
+            ) {
                 Icon(Icons.Outlined.Search, contentDescription = "Search in chat",
                     tint = MaterialTheme.colorScheme.onBackground)
             }
             if (newChatAction != null) {
-                IconButton(onClick = newChatAction) {
+                IconButton(onClick = newChatAction, modifier = Modifier.kineticPress()) {
                     Icon(Icons.Outlined.Add, contentDescription = "New chat",
                         tint = MaterialTheme.colorScheme.onBackground)
                 }
@@ -1431,7 +1442,7 @@ fun ChatScreen(
             },
             onUnavailable = { label ->
                 attachSheetOpen = false
-                showSnack("$label isn't available yet — nothing fake behind it")
+                showSnack("$label isn't available yet, nothing fake behind it")
             }
         )
     }
@@ -1661,6 +1672,7 @@ private fun StopGeneratingControl(onStop: () -> Unit) {
         modifier = Modifier
             .padding(end = 4.dp)
             .size(40.dp)
+            .kineticPress()
     ) {
         Box(contentAlignment = Alignment.Center) {
             Icon(
@@ -1980,7 +1992,7 @@ private fun FailedTurnNotice(hasPartial: Boolean, onRegenerate: () -> Unit) {
             )
             Text(
                 text = if (hasPartial) {
-                    "GS stopped before finishing — the part that arrived is kept above."
+                    "GS stopped before finishing, the part that arrived is kept above."
                 } else {
                     "GS couldn't generate a reply for this turn."
                 },
@@ -1994,7 +2006,14 @@ private fun FailedTurnNotice(hasPartial: Boolean, onRegenerate: () -> Unit) {
 
 @Composable
 private fun BubbleAction(icon: ImageVector, label: String, onClick: () -> Unit) {
-    IconButton(onClick = onClick, modifier = Modifier.size(28.dp)) {
+    // TASK 5: every interactive element gets a visible press state — the
+    // icon-only buttons previously had only the default ripple, no scale.
+    IconButton(
+        onClick = onClick,
+        modifier = Modifier
+            .size(28.dp)
+            .kineticPress()
+    ) {
         Icon(
             icon,
             contentDescription = label,

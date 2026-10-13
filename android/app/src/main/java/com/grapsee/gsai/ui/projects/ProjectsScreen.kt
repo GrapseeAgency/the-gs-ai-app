@@ -88,7 +88,7 @@ fun ProjectsScreen(onNavigate: (String) -> Unit) {
                 NewProjectCard(onClick = { showCreate = true })
                 if (projects.isEmpty()) {
                     Text(
-                        text = "No projects yet — create one to bundle chats, instructions and context.",
+                        text = "No projects yet, create one to bundle chats, instructions and context.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.fillMaxWidth()

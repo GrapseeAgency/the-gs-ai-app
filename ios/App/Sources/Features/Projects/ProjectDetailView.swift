@@ -199,7 +199,7 @@ struct ProjectDetailView: View {
                 showLinker = true
             })
             if linked.isEmpty {
-                Text("No chats linked yet — add conversations to bundle them with these instructions.")
+                Text("No chats linked yet, add conversations to bundle them with these instructions.")
                     .font(Aero.caption())
                     .foregroundStyle(Aero.textMuted)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -291,7 +291,7 @@ struct ProjectDetailView: View {
     // MARK: Files tab — honest gate
 
     private var filesTab: some View {
-        Text("File attachments aren't supported yet — projects hold files once on-device storage lands.")
+        Text("File attachments aren't supported yet, projects hold files once on-device storage lands.")
             .font(Aero.caption())
             .foregroundStyle(Aero.textMuted)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -302,7 +302,7 @@ struct ProjectDetailView: View {
     private func activityTab(_ project: ProjectStore.Project) -> some View {
         VStack(spacing: Aero.Spacing.s) {
             if project.events.isEmpty {
-                Text("Nothing yet — actions you take on this project show up here.")
+                Text("Nothing yet, actions you take on this project show up here.")
                     .font(Aero.caption())
                     .foregroundStyle(Aero.textMuted)
                     .frame(maxWidth: .infinity, alignment: .leading)

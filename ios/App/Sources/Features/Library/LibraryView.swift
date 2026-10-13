@@ -112,7 +112,7 @@ struct LibraryView: View {
                     EmptyStateView(
                         icon: "magnifyingglass",
                         title: "No matches for \"\(term)\"",
-                        message: "Try different words — or save something new from a chat."
+                        message: "Try different words, or save something new from a chat."
                     )
                     .gsListRowChrome(rowInsets)
                 }
@@ -165,7 +165,7 @@ struct LibraryView: View {
                 .font(Aero.displayTitle())
                 .foregroundStyle(Aero.text)
                 .accessibilityAddTraits(.isHeader)
-            Text("Everything you save — messages, docs, files and prompts.")
+            Text("Everything you save, messages, docs, files and prompts.")
                 .font(Aero.caption())
                 .foregroundStyle(Aero.textMuted)
         }

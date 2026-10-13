@@ -66,7 +66,7 @@ private data class CreateTool(
 private val createTools = listOf(
     CreateTool("AI image", "Generate art from a prompt", Icons.Outlined.Palette, "create/image"),
     CreateTool("Image edit", "Retouch and restyle", Icons.Outlined.AutoFixHigh, "create/image"),
-    CreateTool("Document", "Reports, briefs and memos", Icons.Outlined.Description, GsRoutes.chat(null, "Draft a document — brief, memo or report — about: ")),
+    CreateTool("Document", "Reports, briefs and memos", Icons.Outlined.Description, GsRoutes.chat(null, "Draft a document, brief, memo or report, about: ")),
     CreateTool("Presentation", "Decks from a single prompt", Icons.Outlined.Slideshow, GsRoutes.chat(null, "Draft a slide deck outline about: ")),
     CreateTool("Spreadsheet", "Tables with live formulas", Icons.Outlined.TableChart, GsRoutes.chat(null, "Build a spreadsheet with formulas for: ")),
     CreateTool("Writing", "Drafts in your voice", Icons.Outlined.EditNote, "create/writing"),

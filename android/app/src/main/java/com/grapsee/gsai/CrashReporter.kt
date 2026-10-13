@@ -33,7 +33,7 @@ object CrashReporter {
                         "${Build.MANUFACTURER} ${Build.MODEL} · Android ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})"
                     File(dir, FILE).writeText(
                         buildString {
-                            appendLine("GS AI App crash — ${OffsetDateTime.now()}")
+                            appendLine("GS AI App crash, ${OffsetDateTime.now()}")
                             appendLine("App: $versionName (build $versionCode)")
                             appendLine("Device: $device")
                             appendLine("Thread: ${thread.name}")

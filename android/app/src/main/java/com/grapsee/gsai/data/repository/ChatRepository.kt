@@ -111,7 +111,7 @@ private fun classifySendFailure(e: Exception, receivedAnyEvent: Boolean): SendFa
     if (e.hasTlsFailureInChain()) return SendFailure.TlsHandshake
     // A 2xx whose body then died. Classified BEFORE the unreachable check below,
     // because a cut is not unreachable: the backend accepted the request and began
-    // answering, so "— Offline — cannot reach GS. —" would be false, and
+    // answering, so ". Offline, cannot reach GS., " would be false, and
     // BackendError(0, null) would invent a status code that does not exist.
     //
     // Run 36779646507 measured exactly that user-visible string for a provider
@@ -301,7 +301,7 @@ class ChatRepository(
         val trimmed = text.trim()
         if (trimmed.isEmpty()) return ""
         val prompt = "Translate the following text into $targetLanguage. " +
-            "Reply with the translation only — no notes, no quotes.\n\n$trimmed"
+            "Reply with the translation only, no notes, no quotes.\n\n$trimmed"
         var scratchId = ""
         val accumulated = StringBuilder()
         try {
@@ -601,10 +601,10 @@ class ChatRepository(
                         // a connection existed and the cut happened at or
                         // after the request. "Before any part arrived" is
                         // therefore not a claim this arm may make.
-                        val notice = "\u2014 The connection dropped mid-turn. " +
+                        val notice = "(The connection dropped mid-turn. " +
                             "Nothing arrived before it went down, and nothing " +
                             "was saved. Tap regenerate, or try again in a " +
-                            "moment. \u2014" + forensicSuffix(e)
+                            "moment.) " + forensicSuffix(e)
                         accumulated.append(notice)
                         onDelta(notice)
                     }
@@ -628,7 +628,7 @@ class ChatRepository(
                     // v0.71.5: connect never happened — rotate the affinity id
                     // so the retry does not hammer the same dead routing slot.
                     onDeadSession?.invoke()
-                    val marker = "— Offline — cannot reach GS. —" + forensicSuffix(e) + "\n\n"
+                    val marker = "(Offline, cannot reach GS.) " + forensicSuffix(e) + "\n\n"
                     accumulated.append(marker)
                     onDelta(marker)
                     streamLocalReply(content) { chunk ->
@@ -652,7 +652,7 @@ class ChatRepository(
                     // v0.71.5: status 0 means NO HTTP response ever arrived —
                     // same dead-pin suspicion as GenuineUnreachable. Rotate.
                     if (failure.status == 0) onDeadSession?.invoke()
-                    val marker = "— $serverText —" + forensicSuffix(e) + "\n\n"
+                    val marker = "($serverText) " + forensicSuffix(e) + "\n\n"
                     accumulated.append(marker)
                     onDelta(marker)
                     persistAssistant(activeId, assistantId, accumulated)
@@ -879,13 +879,13 @@ class ChatRepository(
 
         return when {
             lower.matches(Regex("^(hi|hey|hello|yo|sup|hola|good (morning|afternoon|evening))[!.? ]*$")) ->
-                "Hey — good to see you. What are we making today?\n\nI can draft, plan, " +
+                "Hey, good to see you. What are we making today?\n\nI can draft, plan, " +
                     "refactor, brainstorm or just think out loud with you. Drop an idea and " +
                     "I'll take it from there."
             "what can you do" in lower || "who are you" in lower || "your name" in lower ->
-                "I'm GS — your pocket think-tank.\n\n• Draft & rewrite: emails, posts, docs\n" +
+                "I'm GS, your pocket think-tank.\n\n• Draft & rewrite: emails, posts, docs\n" +
                     "• Plan & break down: projects, trips, launches\n• Explain: code, concepts, " +
-                    "contracts\n• Generate: images, prompts, study notes\n\nStart anywhere — " +
+                    "contracts\n• Generate: images, prompts, study notes\n\nStart anywhere, " +
                     "even a half-formed thought works."
             lower.startsWith("code") || "kotlin" in lower || "swift" in lower ||
                 "function" in lower || "bug" in lower || "error" in lower ->
@@ -899,7 +899,7 @@ class ChatRepository(
                 )
             "plan" in lower || "roadmap" in lower || "launch" in lower ||
                 "trip" in lower || "schedule" in lower ->
-                "Love it — \"$topic\" breaks down like this:\n\n• Scope: pick the one outcome that " +
+                "Love it, \"$topic\" breaks down like this:\n\n• Scope: pick the one outcome that " +
                     "defines success\n• Milestones: 3 checkpoints, each shippable on its own\n" +
                     "• Risks: name the top two and their plan B\n• Next step: the 30-minute " +
                     "action you can take today\n\nTell me the deadline and I'll back-plan every phase."
@@ -910,7 +910,7 @@ class ChatRepository(
                     "hedge words.\n\nWant it warmer, punchier, or more formal? I'll rewrite in place."
             else ->
                 pick(
-                    "\"$topic\" — good thread to pull. Here's my take:\n\n• Start from the outcome " +
+                    "\"$topic\", good thread to pull. Here's my take:\n\n• Start from the outcome " +
                         "you want, work backwards\n• Cut the problem to the smallest version that " +
                         "still matters\n• Ship a rough v0 today; refine with real feedback\n\n" +
                         "Ask me to expand any point and I'll go deeper.",
@@ -920,7 +920,7 @@ class ChatRepository(
                     "Thinking through \"$topic\":\n\n1. What does success look like in one sentence?\n" +
                         "2. What's the biggest unknown blocking it?\n3. What can you test about that " +
                         "unknown in under an hour?\n\nAnswer those three and the path usually " +
-                        "reveals itself — I'm here to think it through with you."
+                        "reveals itself. I'm here to think it through with you."
                 )
         }
     }

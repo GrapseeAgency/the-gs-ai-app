@@ -60,7 +60,7 @@ struct CreateView: View {
     private let tools: [CreateTool] = [
         .init(label: "AI image", icon: "wand.and.stars", detail: "Generate art from a prompt", route: .chat(nil), workspace: .image),
         .init(label: "Image edit", icon: "wand.and.rays", detail: "Retouch, extend, restyle", route: .chat(nil), workspace: .image),
-        .init(label: "Document", icon: "doc.text", detail: "Reports, briefs and memos", route: .chatPrefill("Draft a document — brief, memo or report — about: ")),
+        .init(label: "Document", icon: "doc.text", detail: "Reports, briefs and memos", route: .chatPrefill("Draft a document, brief, memo or report, about: ")),
         .init(label: "Presentation", icon: "rectangle.on.rectangle", detail: "Decks from an outline", route: .chatPrefill("Draft a slide deck outline about: ")),
         .init(label: "Spreadsheet", icon: "tablecells", detail: "Tables with formulas", route: .chatPrefill("Build a spreadsheet with formulas for: ")),
         .init(label: "Writing", icon: "pencil.line", detail: "Drafts in your voice", route: .chat(nil), workspace: .writing),
@@ -126,7 +126,7 @@ struct CreateView: View {
             Text("Make anything")
                 .font(Aero.displayTitle())
                 .foregroundStyle(Aero.text)
-            Text("Pick a tool — every generator gets its own workspace.")
+            Text("Pick a tool, every generator gets its own workspace.")
                 .font(Aero.caption())
                 .foregroundStyle(Aero.textMuted)
         }

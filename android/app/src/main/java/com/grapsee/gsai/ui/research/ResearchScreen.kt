@@ -30,7 +30,7 @@ fun ResearchScreen(onBack: () -> Unit) {
                 icon = Icons.Outlined.TravelExplore,
                 title = "Research is coming soon",
                 message = "Multi-source research with citations isn't available yet. " +
-                    "You can ask questions in a chat today — Research will appear here when it's ready.",
+                    "You can ask questions in a chat today. Research will appear here when it's ready.",
                 modifier = Modifier.fillMaxWidth()
             )
         }

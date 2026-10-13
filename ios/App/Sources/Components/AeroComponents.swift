@@ -404,7 +404,7 @@ struct OfflineBanner: View {
         if isVisible {
             HStack(spacing: Aero.Spacing.s) {
                 Image(systemName: "wifi.slash").font(.system(size: 12))
-                Text("You're offline — changes will sync when you reconnect.")
+                Text("You're offline, changes will sync when you reconnect.")
                     .font(Aero.label())
             }
             .foregroundStyle(Aero.textMuted)

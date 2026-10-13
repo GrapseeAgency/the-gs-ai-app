@@ -62,9 +62,9 @@ struct AttachmentSheetView: View {
     /// FLASH MODE (Phase 3) — the one-line truth under the mode picker.
     private var modeHint: String {
         switch selectedMode {
-        case "thinking": return "Deep reasoning — applies to this chat."
+        case "thinking": return "Deep reasoning, applies to this chat."
         case "auto": return "The system decides per turn."
-        default: return "Instant replies — the clean default."
+        default: return "Instant replies, the clean default."
         }
     }
 
@@ -100,7 +100,7 @@ struct AttachmentSheetView: View {
                 // --- Attach (FIRST — FLASH-MODE BUG 2: ChatGPT/Kimi put
                 //     attach on top; behavioral modes sit at the bottom). ---
                 if atCapacity {
-                    Text("Six attachments per message — remove one to add another.")
+                    Text("Six attachments per message, remove one to add another.")
                         .font(Aero.caption())
                         .foregroundStyle(Aero.textMuted)
                 } else if loadingGallery {
@@ -111,7 +111,7 @@ struct AttachmentSheetView: View {
                             .foregroundStyle(Aero.textMuted)
                     }
                 } else {
-                    Text("Photos, documents and voice — files are uploaded to the conversation when you send.")
+                    Text("Photos, documents and voice, files are uploaded to the conversation when you send.")
                         .font(Aero.caption())
                         .foregroundStyle(Aero.textMuted)
                 }
@@ -191,7 +191,7 @@ struct AttachmentSheetView: View {
         }
         .buttonStyle(KineticPressStyle())
         .disabled(atCapacity || loadingGallery)
-        .accessibilityLabel(atCapacity ? "Gallery — six attachments per message" : "Add from Gallery")
+        .accessibilityLabel(atCapacity ? "Gallery, six attachments per message" : "Add from Gallery")
     }
 
     private var cameraTile: some View {
@@ -202,7 +202,7 @@ struct AttachmentSheetView: View {
         }
         .buttonStyle(KineticPressStyle())
         .disabled(atCapacity)
-        .accessibilityLabel(atCapacity ? "Camera — six attachments per message" : "Take a photo")
+        .accessibilityLabel(atCapacity ? "Camera, six attachments per message" : "Take a photo")
     }
 
     private var filesTile: some View {
@@ -213,7 +213,7 @@ struct AttachmentSheetView: View {
         }
         .buttonStyle(KineticPressStyle())
         .disabled(atCapacity)
-        .accessibilityLabel(atCapacity ? "Files — six attachments per message" : "Add a document")
+        .accessibilityLabel(atCapacity ? "Files, six attachments per message" : "Add a document")
     }
 
     /// Voice note → the dedicated voice experience (the same route the
@@ -305,12 +305,12 @@ struct AttachmentSheetView: View {
                 if granted {
                     showCamera = true
                 } else {
-                    onUnavailable("Camera access is off — enable it in Settings")
+                    onUnavailable("Camera access is off, enable it in Settings")
                 }
             }
         default:
             // Denied / restricted — say exactly that, once. No retry loop.
-            onUnavailable("Camera access is off — enable it in Settings")
+            onUnavailable("Camera access is off, enable it in Settings")
         }
     }
 }

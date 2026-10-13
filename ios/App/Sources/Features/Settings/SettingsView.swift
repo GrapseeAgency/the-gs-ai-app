@@ -129,7 +129,7 @@ struct SettingsView: View {
                 Circle()
                     .fill(Aero.accent)
                     .frame(width: 18, height: 18)
-                Text("Accent — Aurora teal")
+                Text("Accent")
                     .font(Aero.caption())
                     .foregroundStyle(Aero.textMuted)
                 Spacer()

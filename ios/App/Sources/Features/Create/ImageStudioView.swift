@@ -128,7 +128,7 @@ struct ImageStudioView: View {
             VStack(alignment: .leading, spacing: Aero.Spacing.s) {
                 SectionHeader(title: "Prompt")
                 editorContainer(
-                    "Describe the image — subject, mood, light…",
+                    "Describe the image, subject, mood, light…",
                     text: $prompt,
                     height: 80
                 )

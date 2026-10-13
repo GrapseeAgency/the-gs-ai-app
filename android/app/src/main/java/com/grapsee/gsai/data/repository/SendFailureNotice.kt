@@ -34,19 +34,19 @@ internal object SendFailureNotice {
      * already, so the notice explains the gap instead of apologising for it.
      */
     fun midStreamPartial(): String =
-        "— The connection dropped mid-turn. " +
+        "(The connection dropped mid-turn. " +
             "Everything above is all that arrived; nothing further " +
-            "was saved. Tap regenerate to try again. —"
+            "was saved. Tap regenerate to try again.) "
 
     /**
      * Nothing arrived at all. Not an aborted answer -- a request that never
      * produced one. Says so, and offers the action that works.
      */
     fun midStreamNothingArrived(): String =
-        "— No reply came back. The request to GS " +
+        "(No reply came back. The request to GS " +
             "failed before any part of the answer arrived, and " +
             "nothing was saved, so reopening this chat will not " +
-            "help. Tap regenerate, or try again in a moment. —"
+            "help. Tap regenerate, or try again in a moment.) "
 
     /**
      * v0.71.6 — the TLS handshake itself failed: the secure connection to GS
@@ -59,8 +59,8 @@ internal object SendFailureNotice {
      * delimited like the other failure markers.
      */
     fun tlsHandshake(): String =
-        "— GS could not establish a secure connection: the TLS handshake " +
+        "(GS could not establish a secure connection: the TLS handshake " +
             "failed before the request was sent. Nothing arrived and nothing " +
             "was saved. Update the app if a newer version is available, then " +
-            "try again. —"
+            "try again.) "
 }

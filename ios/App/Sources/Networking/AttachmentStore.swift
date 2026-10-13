@@ -59,8 +59,8 @@ enum AttachmentFailure: Equatable {
         case .tooLarge: return "File is larger than the 10 MB limit"
         case .unsupported: return "This file type isn't accepted yet"
         case .readFailed: return "Couldn't read a copy of the file"
-        case .network: return "Upload failed — check your connection"
-        case .server(429): return "Too many uploads — try again in a moment"
+        case .network: return "Upload failed, check your connection"
+        case .server(429): return "Too many uploads, try again in a moment"
         case .server(let code): return "Upload failed (server error \(code))"
         }
     }
@@ -283,7 +283,7 @@ enum AttachmentTransitions {
     static func sendBlockReason(_ drafts: [AttachmentDraft]) -> String? {
         guard !drafts.isEmpty else { return nil }
         if drafts.contains(where: { $0.phase == .failed }) {
-            return "An attachment failed — retry or remove it to send"
+            return "An attachment failed, retry or remove it to send"
         }
         if drafts.contains(where: { $0.phase != .ready }) {
             return "Attachments are still uploading"

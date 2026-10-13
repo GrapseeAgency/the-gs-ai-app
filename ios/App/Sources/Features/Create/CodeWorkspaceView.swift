@@ -48,7 +48,7 @@ struct CodeWorkspaceView: View {
     }
 
     private let mainLines: [String] = [
-        "// Entry point — engine smoke test",
+        "// Entry point, engine smoke test",
         "package app.aeruo.main",
         "",
         "import app.aeruo.engine.Engine",
@@ -93,7 +93,7 @@ struct CodeWorkspaceView: View {
     ]
 
     private let gradleLines: [String] = [
-        "// App module — pinned versions",
+        "// App module, pinned versions",
         "plugins {",
         "    alias(libs.plugins.android.application)",
         "    alias(libs.plugins.kotlin.android)",

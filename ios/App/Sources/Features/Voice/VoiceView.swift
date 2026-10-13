@@ -91,10 +91,10 @@ struct VoiceView: View {
         case .listening: return "Listening…"
         case .processing: return dictation.transcript.isEmpty ? "Starting the mic…" : "Processing…"
         case .result: return "Got it"
-        case .noSpeech: return "Didn't catch that — tap the mic and try again"
-        case .denied: return "Microphone access is off — enable it in Settings to speak"
+        case .noSpeech: return "Didn't catch that, tap the mic and try again"
+        case .denied: return "Microphone access is off, enable it in Settings to speak"
         case .unavailable: return "Speech recognition isn't available right now"
-        case .error: return "That didn't come through — tap the mic and try again"
+        case .error: return "That didn't come through, tap the mic and try again"
         }
     }
 

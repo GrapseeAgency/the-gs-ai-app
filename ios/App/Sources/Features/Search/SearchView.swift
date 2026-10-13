@@ -182,7 +182,7 @@ struct SearchView: View {
                         EmptyStateView(
                             icon: "magnifyingglass",
                             title: "Search everything",
-                            message: "Conversations, messages, library items, assistants and projects — one index over this device."
+                            message: "Conversations, messages, library items, assistants and projects, one index over this device."
                         )
                     }
                 } else if term.count < 2 {
@@ -198,7 +198,7 @@ struct SearchView: View {
                         EmptyStateView(
                             icon: "tray",
                             title: "No results",
-                            message: "Nothing matches “\(term)” yet — try another term or clear a filter."
+                            message: "Nothing matches “\(term)” yet, try another term or clear a filter."
                         )
                     }
                 } else {

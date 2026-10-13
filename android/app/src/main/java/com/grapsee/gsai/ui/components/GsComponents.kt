@@ -216,7 +216,7 @@ fun GsChip(
     if (chipClick != null) {
         val interaction = remember { MutableInteractionSource() }
         // Chips carry selected-state semantics, so the announced click stays the
-        // factual "activate" — some chips toggle selection, some just act ("Try
+        // factual "activate", some chips toggle selection, some just act ("Try
         // again"), and a hint must never claim the wrong affordance.
         val chipHintModifier: Modifier = if (LocalScreenReaderHints.current) {
             Modifier.semantics { onClick("activate") { chipClick(); true } }
@@ -497,7 +497,7 @@ fun GsOfflineBanner(visible: Boolean, modifier: Modifier = Modifier) {
                 Icon(Icons.Outlined.CloudOff, contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(16.dp))
-                Text("You're offline — changes will sync when you reconnect.",
+                Text("You're offline, changes will sync when you reconnect.",
                     style = MaterialTheme.typography.labelMedium,
                     color = hcColor(MaterialTheme.colorScheme.onSurfaceVariant, MaterialTheme.colorScheme.onSurface))
             }

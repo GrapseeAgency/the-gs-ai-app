@@ -52,7 +52,7 @@ struct FoldersView: View {
         .alert("Folders", isPresented: $showingNewFolderNote) {
             Button("Got it", role: .cancel) {}
         } message: {
-            Text("Folders are coming alive next build — create, pin and sort chats your way.")
+            Text("Folders are coming alive next build, create, pin and sort chats your way.")
         }
     }
 

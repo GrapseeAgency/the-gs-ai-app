@@ -75,7 +75,7 @@ struct AssistantDetailView: View {
                     }
                     .accessibilityLabel("Delete assistant")
                 } else {
-                    ShareLink(item: "\(assistant.name) — \(assistant.desc)") {
+                    ShareLink(item: "\(assistant.name), \(assistant.desc)") {
                         Image(systemName: "square.and.arrow.up")
                             .font(.system(size: 15))
                             .foregroundStyle(Aero.text)

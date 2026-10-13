@@ -120,7 +120,7 @@ fun AssistantsScreen(onNavigate: (String) -> Unit) {
                 val (emptyTitle, emptyMessage) = when (tab) {
                     1 -> "No assistants yet" to "Create your first assistant and it will live here."
                     2 -> "Nothing starred yet" to "Tap the heart on any assistant to keep it close."
-                    4 -> "Nothing archived" to "Archived assistants rest here — unarchive any time."
+                    4 -> "Nothing archived" to "Archived assistants rest here, unarchive any time."
                     else -> "Nothing here yet" to "Assistants you create or save will appear in this space."
                 }
                 GsEmptyState(

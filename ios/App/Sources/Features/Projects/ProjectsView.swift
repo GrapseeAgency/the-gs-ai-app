@@ -47,7 +47,7 @@ struct ProjectsView: View {
                 StaggerIn(index: 1) { newProjectCard }
                 if store.projects.isEmpty {
                     StaggerIn(index: 2) {
-                        Text("No projects yet — create one to bundle chats, instructions and context.")
+                        Text("No projects yet, create one to bundle chats, instructions and context.")
                             .font(Aero.caption())
                             .foregroundStyle(Aero.textMuted)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -99,7 +99,7 @@ struct ProjectsView: View {
             Text("Projects")
                 .font(Aero.displayTitle())
                 .foregroundStyle(Aero.text)
-            Text("Chats, files and instructions — bundled per mission.")
+            Text("Chats, files and instructions, bundled per mission.")
                 .font(Aero.caption())
                 .foregroundStyle(Aero.textMuted)
         }
