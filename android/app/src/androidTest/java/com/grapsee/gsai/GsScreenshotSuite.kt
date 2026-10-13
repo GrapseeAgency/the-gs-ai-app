@@ -46,7 +46,10 @@ class GsScreenshotSuite {
     private fun shot(name: String) {
         val dir = File(shotCtx.filesDir, "screens").apply { mkdirs() }
         val out = File(dir, "$name.png")
-        val ok = runCatching { device.takeScreenshot(out, 1.0f, 19) }.isSuccess
+        // Single-arg takeScreenshot: the (file, scale, quality) overload
+        // returned ok=true but wrote 0 bytes on the API 30 emulator (run
+        // 38422692350 evidence). The plain PNG path is the reliable one.
+        val ok = runCatching { device.takeScreenshot(out) }.isSuccess && out.length() > 0
         println("GS-SCREENSHOT $name ok=$ok bytes=${out.length()}")
     }
 
@@ -156,10 +159,12 @@ class GsScreenshotSuite {
             shot("21-attach-mode-sheet-MISSING-TRIGGER")
         }
 
-        // 6. Settings, through the drawer.
+        // 6. Settings, through the drawer. The row lookup WAITS on the
+        // drawer content rather than a sleep (run 38422692350 evidence).
         if (tapDesc("Open menu")) {
-            SystemClock.sleep(1_200)
-            if (tapText("Settings")) {
+            if (device.wait(Until.hasObject(By.textContains("Settings")), 10_000) &&
+                tapText("Settings")
+            ) {
                 SystemClock.sleep(1_500)
                 shot("30-settings")
                 device.pressBack()
