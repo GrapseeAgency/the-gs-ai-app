@@ -77,9 +77,16 @@ import kotlinx.coroutines.launch
  *  3. FOOTER — the account row, pinned to the bottom like the reference
  *     app: identity lives where the thumb rests, never above the content.
  *
- * Explore, Create, Projects, Library, Assistants and Voice remain one step
- * away in the More sheet. Icons are Lucide via GsIcons — one family, one
- * weight, neutral containers, no decorative glyphs (RULE ZERO).
+ * REDUCTION (design phase 2, screen 16): the More sheet is GONE. Explore,
+ * Create, Projects, Library and Assistants were static demo surfaces —
+ * sample conversations, invented assistants, fake collections — exactly the
+ * "system design tool" padding the operator rejected. Voice stays: it is a
+ * real, wired capability, promoted to its own drawer row. The underlying
+ * composables remain routable for now but no navigation surface advertises
+ * them; a later cleanup pass deletes the files.
+ *
+ * Icons are Lucide via GsIcons — one family, one weight, neutral containers,
+ * no decorative glyphs (RULE ZERO).
  */
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -102,13 +109,11 @@ fun GsDrawerContent(
 
     var actionTarget by remember { mutableStateOf<ConversationEntity?>(null) }
     var accountSheetOpen by remember { mutableStateOf(false) }
-    var moreSheetOpen by remember { mutableStateOf(false) }
 
     // Sheet rows dismiss their own sheet first, then close the drawer and
     // navigate — no stuck bottom sheet over the destination.
     val navigateFromSheet: (String) -> Unit = { route ->
         accountSheetOpen = false
-        moreSheetOpen = false
         onClose()
         onNavigate(route)
     }
@@ -221,8 +226,11 @@ fun GsDrawerContent(
                 onClose(); onNavigate(GsRoutes.CHATS)
             }
             Spacer(Modifier.height(GsMotion.spaceXS))
-            // More — every other product surface, one quiet row away.
-            DrawerRow("More", icon = GsIcons.LayoutGrid) { moreSheetOpen = true }
+            // Voice — the one non-chat capability with a real, wired screen
+            // earns its row. The demo surfaces are reduced out (screen 16).
+            DrawerRow("Voice", icon = GsIcons.AudioLines, selected = selectedRoute == GsRoutes.VOICE) {
+                onClose(); onNavigate(GsRoutes.VOICE)
+            }
         }
 
         Spacer(Modifier.height(GsMotion.spaceS))
@@ -239,6 +247,7 @@ fun GsDrawerContent(
                     role = Role.Button,
                     onClickLabel = "Account options"
                 ) { accountSheetOpen = true }
+                .semantics { contentDescription = "Account options" }
                 .padding(horizontal = GsMotion.spaceS, vertical = GsMotion.spaceS),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
@@ -311,17 +320,6 @@ fun GsDrawerContent(
             SheetRow("Settings", GsIcons.Settings) { navigateFromSheet(GsRoutes.SETTINGS) }
             SheetRow("Notifications", GsIcons.Bell) { navigateFromSheet(GsRoutes.NOTIFICATIONS) }
             SheetRow("Billing", GsIcons.CreditCard) { navigateFromSheet(GsRoutes.BILLING) }
-        }
-    }
-
-    if (moreSheetOpen) {
-        DrawerNavSheet(onDismiss = { moreSheetOpen = false }) {
-            SheetRow("Explore", GsIcons.Compass, selectedRoute == GsRoutes.EXPLORE) { navigateFromSheet(GsRoutes.EXPLORE) }
-            SheetRow("Create", GsIcons.PenLine, selectedRoute == GsRoutes.CREATE) { navigateFromSheet(GsRoutes.CREATE) }
-            SheetRow("Projects", GsIcons.Folder, selectedRoute == GsRoutes.PROJECTS) { navigateFromSheet(GsRoutes.PROJECTS) }
-            SheetRow("Library", GsIcons.BookOpen, selectedRoute == GsRoutes.LIBRARY) { navigateFromSheet(GsRoutes.LIBRARY) }
-            SheetRow("Assistants", GsIcons.UsersRound, selectedRoute == GsRoutes.ASSISTANTS) { navigateFromSheet(GsRoutes.ASSISTANTS) }
-            SheetRow("Voice", GsIcons.AudioLines, selectedRoute == GsRoutes.VOICE) { navigateFromSheet(GsRoutes.VOICE) }
         }
     }
 }
