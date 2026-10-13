@@ -30,6 +30,7 @@ import { planRoute } from '@/lib/router'
 import {
   SYSTEM_PROMPT,
   VISION_GROUNDING_PROMPT,
+  VISION_OCR_FALLBACK_PREFIX,
   streamChat,
   completeChat,
   streamVisionChat,
@@ -203,6 +204,12 @@ export type Prep = {
   visionPrepared: PreparedVisionImage[]
   visionFailures: VisionImageFailure[]
   allImagesFailed: boolean
+  /**
+   * TASK 3 vision input contract — OCR sidecar text from the current turn's
+   * image attachments. Non-null ONLY for image turns; consumed exclusively
+   * when the image bytes cannot reach the vision model (allImagesFailed).
+   */
+  ocrFallbackText: string | null
   docContext: { block: string | null; failures: { displayName?: string }[]; readableCount: number }
   allDocsFailed: boolean
   webGate: { trigger: 'explicit' | 'recency' | null }
@@ -385,6 +392,19 @@ export async function prepareTurn(
     .map((m) => m.id)
   const useVision = imageAttachments.length > 0 || recentImageTurnIds.length > 0
 
+  // TASK 3 vision input contract — OCR sidecar. Clients run OCR at attach
+  // time and upload it alongside the bytes. Here it is only COLLECTED; it is
+  // consumed in exactly two places:
+  //   - buildModelMessages: when the image bytes are unusable, the OCR text
+  //     rides as evidence with the honest prefix (never as a description).
+  //   - the pre-turn gate: images unusable AND no OCR text -> the reply is
+  //     the deterministic "I cannot read this image." — no model call.
+  const ocrFallbackText =
+    imageAttachments
+      .map((a) => (a.ocrText ?? '').trim())
+      .filter((t) => t.length > 0)
+      .join('\n\n') || null
+
   const currentTurnDocs = claimedAttachments.filter(isDocumentAttachment)
   const historyDocTurns = recentDesc
     .filter((m) => m.role.toLowerCase() === 'user' && m.attachments.some(isDocumentAttachment))
@@ -554,6 +574,7 @@ export async function prepareTurn(
     visionPrepared: [],
     visionFailures: [],
     allImagesFailed: false,
+    ocrFallbackText,
     docContext,
     allDocsFailed,
     webGate,
@@ -1100,10 +1121,24 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
         : prep.currentTurnDocs.length > 0
           ? DOCUMENT_ONLY_DEFAULT
           : useVision
-            ? 'Describe this image.'
+            ? prep.ocrFallbackText
+              ? 'Read the image text provided above and answer.'
+              : 'Describe this image.'
             : ''
 
-    const evidenceBlocks = [crystallization.block, docContext.block, historyBlock?.block ?? null, toolResultBlock]
+    const evidenceBlocks = [
+      crystallization.block,
+      docContext.block,
+      historyBlock?.block ?? null,
+      toolResultBlock,
+      // TASK 3 — OCR sidecar evidence. Present ONLY when the image bytes
+      // could not be sent (allImagesFailed); the prefix is the operator's
+      // exact contract wording, so the model reads it as text, not a
+      // description, and never as an invitation to guess.
+      prep.ocrFallbackText
+        ? `${VISION_OCR_FALLBACK_PREFIX}\n\n${prep.ocrFallbackText}`
+        : null,
+    ]
 
     if (useVision && !allImagesFailed) {
       const textPayload = content.trim().length > 0 ? content : 'Describe this image.'
@@ -1264,7 +1299,10 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
     modelMessages: ChatMessageInput[] | VisionChatMessage[],
     onDelta?: (d: string) => void
   ): Promise<string> => {
-    if (useVision) {
+    // TASK 3 — the vision endpoint is used only when images actually ride the
+    // request. An OCR-fallback turn (allImagesFailed, OCR text present) is a
+    // TEXT turn end to end: text-shaped messages, text model, flash speed.
+    if (useVision && !allImagesFailed) {
       return onDelta
         ? (await streamVisionChat(modelMessages as VisionChatMessage[], onDelta)).text
         : (await completeVisionChat(modelMessages as VisionChatMessage[])).text
@@ -1473,15 +1511,27 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
 
   // §3/§16 — pre-turn honesty gates (verbatim from the route): all images or
   // all documents unreadable is a 422-class outcome, never a fabricated answer.
-  if (allImagesFailed) {
-    gsCapLog('error', null, { error: 'all image attachments unreadable' })
-    const message = `None of the attached images could be opened. ${prep.visionFailures
-      .map(visionFailureMessage)
-      .join(' ')}`
-    if (push) push('error', message)
-    result.finalStatus = 'error'
-    result.errorRaw = 'all image attachments unreadable'
-    result.errorResponse = { status: 422, code: 'unsupported_media', message }
+  // TASK 3 contract: with an OCR sidecar the turn STILL PROCEEDS (text path,
+  // OCR text as evidence). With neither bytes nor OCR the reply is the
+  // deterministic, honest refusal below — no model call, no guessing.
+  if (allImagesFailed && !ocrFallbackText) {
+    const reply = 'I cannot read this image.'
+    console.log(
+      `GS-VISION-REFUSAL conv=${id} msg=${userMessage.id} reasons=${prep.visionFailures
+        .map((f) => f.reason)
+        .join(',') || 'unknown'} — deterministic refusal, no model call`
+    )
+    if (push) for (const chunk of chunkDeltas(reply)) push('delta', chunk)
+    const saved = await createAssistantMessage({
+      conversationId: id,
+      role: 'assistant',
+      content: reply,
+    })
+    gsCapLog('done', null)
+    if (push) push('done', JSON.stringify(messageToJson(saved)))
+    result.finalStatus = 'done'
+    result.assistantMessageId = saved.id
+    result.savedMessage = messageToJson(saved) as unknown as Record<string, unknown>
     return result
   }
   if (allDocsFailed) {

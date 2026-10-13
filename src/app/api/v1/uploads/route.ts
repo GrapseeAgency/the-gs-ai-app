@@ -4,6 +4,7 @@ import { clientKey, rateLimit } from '@/lib/rate-limit'
 import {
   ALLOWED_MIME_TYPES,
   MAX_ATTACHMENT_BYTES,
+  MAX_OCR_TEXT_CHARS,
   contentHash,
   kindForMime,
   sniffMatchesMime,
@@ -102,6 +103,17 @@ export async function POST(req: NextRequest) {
       ? displayNameField.trim()
       : file.name || 'attachment'
 
+  // TASK 3 vision input contract: the client runs OCR at attach time and may
+  // send the extracted text alongside the bytes. Stored as a sidecar only:
+  // images are still handed to the vision model as real bytes, and the OCR
+  // text is used exclusively when the bytes cannot be (see turn-executor).
+  // Images only, bounded, whitespace-normalized; empty means no sidecar.
+  const rawOcr = form.get('ocrText')
+  const ocrText =
+    kind === 'image' && typeof rawOcr === 'string' && rawOcr.trim().length > 0
+      ? rawOcr.replace(/\s+/g, ' ').trim().slice(0, MAX_OCR_TEXT_CHARS)
+      : null
+
   try {
     const created = await db.$transaction(async (tx) => {
       const attachment = await tx.attachment.create({
@@ -112,6 +124,7 @@ export async function POST(req: NextRequest) {
           byteSize: bytes.byteLength,
           storagePath: 'pending', // finalized below once the row id exists
           conversationId,
+          ocrText,
         },
       })
       const storagePath = await writeAttachmentFile(attachment.id, displayName, bytes)
@@ -120,7 +133,7 @@ export async function POST(req: NextRequest) {
 
     // Structured log line — fingerprint only, never file contents.
     console.log(
-      `[uploads] stored attachment=${created.id} kind=${created.kind} bytes=${created.byteSize} hash=${contentHash(bytes)}`
+      `[uploads] stored attachment=${created.id} kind=${created.kind} bytes=${created.byteSize} hash=${contentHash(bytes)} ocr=${created.ocrText ? created.ocrText.length : 0}`
     )
     return NextResponse.json({ attachment: attachmentToJson(created) }, { status: 201 })
   } catch (e) {

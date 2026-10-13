@@ -122,6 +122,13 @@ model Attachment {
   storagePath    String
   width          Int?
   height         Int?
+  // TASK 3 vision input contract: on-device OCR text captured at attach time.
+  // Empty for documents and for images whose OCR found nothing. The turn
+  // executor uses it ONLY when the image bytes themselves cannot reach the
+  // vision model (storage missing / corrupt / unsupported format) — the OCR
+  // text becomes the fallback evidence with its honest prefix. Never sent
+  // while the real image is sent; never treated as a description.
+  ocrText        String?
   createdAt      DateTime      @default(now())
 
   @@index([conversationId])

@@ -17,6 +17,12 @@ import type { Attachment } from '@prisma/client'
 export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024 // 10 MB
 /** Hard cap per message. */
 export const MAX_ATTACHMENTS_PER_MESSAGE = 6
+/**
+ * TASK 3 vision input contract — cap on the client-supplied OCR sidecar for
+ * image attachments. Bounded at the receive layer so a client cannot smuggle
+ * an unbounded prompt payload in through the upload form.
+ */
+export const MAX_OCR_TEXT_CHARS = 20_000
 
 /**
  * Receive allowlist. Audio/video are deliberately ABSENT — the platform has no
