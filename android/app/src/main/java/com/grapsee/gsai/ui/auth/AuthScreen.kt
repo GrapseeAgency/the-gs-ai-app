@@ -84,6 +84,7 @@ import com.grapsee.gsai.ui.theme.GsMotion
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import kotlinx.coroutines.launch
+import com.grapsee.gsai.ui.icons.GsIcons
 
 /** Internal auth flow state machine — self-contained, no nav dependency. */
 private enum class AuthStep { Welcome, SignIn, SignUp, VerifyEmail, TwoFactor, ResetPassword, ResetSent }
@@ -310,19 +311,19 @@ private fun WelcomeStep(onCreateAccount: () -> Unit, onSignIn: () -> Unit) {
         )
         Spacer(Modifier.height(GsMotion.spaceXL))
         WelcomeValueRow(
-            icon = Icons.Outlined.AutoAwesome,
+            icon = GsIcons.Zap,
             title = "One AI for everything",
             caption = "Chat, write, research and build in one place"
         )
         Spacer(Modifier.height(GsMotion.spaceM))
         WelcomeValueRow(
-            icon = Icons.Outlined.Lock,
+            icon = GsIcons.Lock,
             title = "Your data stays yours",
             caption = "On-device history. No ads, no tracking."
         )
         Spacer(Modifier.height(GsMotion.spaceM))
         WelcomeValueRow(
-            icon = Icons.Outlined.Speed,
+            icon = GsIcons.Gauge,
             title = "Native speed, editorial craft",
             caption = "Built native. Designed with care."
         )
@@ -441,7 +442,7 @@ private fun SignInStep(
         Spacer(Modifier.height(GsMotion.spaceL))
         OutlinedButton(onClick = onSocialSignIn, modifier = Modifier.fillMaxWidth()) {
             Icon(
-                imageVector = Icons.Outlined.Language,
+                imageVector = GsIcons.Globe,
                 contentDescription = null,
                 modifier = Modifier.size(18.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
@@ -452,7 +453,7 @@ private fun SignInStep(
         Spacer(Modifier.height(GsMotion.spaceS))
         OutlinedButton(onClick = onSocialSignIn, modifier = Modifier.fillMaxWidth()) {
             Icon(
-                imageVector = Icons.Outlined.PhoneIphone,
+                imageVector = GsIcons.Smartphone,
                 contentDescription = null,
                 modifier = Modifier.size(18.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
@@ -463,7 +464,7 @@ private fun SignInStep(
         Spacer(Modifier.height(GsMotion.spaceS))
         FilledTonalButton(onClick = onPasskey, modifier = Modifier.fillMaxWidth()) {
             Icon(
-                imageVector = Icons.Outlined.Fingerprint,
+                imageVector = GsIcons.Fingerprint,
                 contentDescription = null,
                 modifier = Modifier.size(18.dp),
                 tint = MaterialTheme.colorScheme.primary
@@ -579,7 +580,7 @@ private fun VerifyEmailStep(
     onResend: () -> Unit
 ) {
     AuthStepScaffold(centered = true) {
-        IconCircle(icon = Icons.Outlined.Mail)
+        IconCircle(icon = GsIcons.Mail)
         Spacer(Modifier.height(GsMotion.spaceM))
         Text(
             text = "Check your inbox",
@@ -618,7 +619,7 @@ private fun TwoFactorStep(
     onBackupCode: () -> Unit
 ) {
     AuthStepScaffold(centered = true) {
-        IconCircle(icon = Icons.Outlined.Shield)
+        IconCircle(icon = GsIcons.Shield)
         Spacer(Modifier.height(GsMotion.spaceM))
         Text(
             text = "Two-factor authentication",
@@ -688,7 +689,7 @@ private fun ResetPasswordStep(
 @Composable
 private fun ResetSentStep(email: String, onBackToSignIn: () -> Unit) {
     AuthStepScaffold(centered = true) {
-        IconCircle(icon = Icons.Outlined.MarkEmailRead)
+        IconCircle(icon = GsIcons.MailCheck)
         Spacer(Modifier.height(GsMotion.spaceM))
         Text(
             text = "Reset link sent",
@@ -750,9 +751,9 @@ private fun AuthTextField(
                 IconButton(onClick = { showPassword = !showPassword }) {
                     Icon(
                         imageVector = if (showPassword) {
-                            Icons.Outlined.VisibilityOff
+                            GsIcons.EyeOff
                         } else {
-                            Icons.Outlined.Visibility
+                            GsIcons.Eye
                         },
                         contentDescription = if (showPassword) "Hide password" else "Show password",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant

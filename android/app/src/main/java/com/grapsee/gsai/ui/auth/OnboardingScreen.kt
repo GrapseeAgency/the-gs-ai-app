@@ -2,6 +2,7 @@ package com.grapsee.gsai.ui.auth
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ContentTransform
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -66,6 +67,9 @@ import com.grapsee.gsai.ui.components.GsChip
 import com.grapsee.gsai.ui.theme.GsMotion
 import com.grapsee.gsai.ui.theme.GsTheme
 import com.grapsee.gsai.ui.theme.rememberAuroraBrush
+import com.grapsee.gsai.ui.theme.GsEase
+import com.grapsee.gsai.ui.theme.GsRadius
+import com.grapsee.gsai.ui.icons.GsIcons
 
 /** Six-step onboarding wizard — all selections are screen-local state. */
 private enum class OnboardingStep { Interests, AiPreferences, Capabilities, Notifications, Personalisation, Ready }
@@ -346,12 +350,12 @@ private fun CapabilitiesStep(capabilities: SnapshotStateList<String>) {
             caption = "Choose the tools to pin to your command centre. Pick at least one."
         )
         val capabilityItems = listOf(
-            Triple(Icons.Outlined.EditNote, "Draft and write", "Docs, emails and posts in your voice"),
-            Triple(Icons.Outlined.TravelExplore, "Research the web", "Sourced answers with links"),
-            Triple(Icons.Outlined.Image, "Analyse images", "Charts, screenshots and photos"),
-            Triple(Icons.Outlined.Code, "Write and fix code", "Reviews, refactors and tests"),
-            Triple(Icons.Outlined.Summarize, "Summarise documents", "PDFs, reports and long threads"),
-            Triple(Icons.Outlined.Lightbulb, "Brainstorm ideas", "Naming, plans and fresh angles")
+            Triple(GsIcons.NotebookPen, "Draft and write", "Docs, emails and posts in your voice"),
+            Triple(GsIcons.Telescope, "Research the web", "Sourced answers with links"),
+            Triple(GsIcons.Image, "Analyse images", "Charts, screenshots and photos"),
+            Triple(GsIcons.Code, "Write and fix code", "Reviews, refactors and tests"),
+            Triple(GsIcons.FileText, "Summarise documents", "PDFs, reports and long threads"),
+            Triple(GsIcons.Lightbulb, "Brainstorm ideas", "Naming, plans and fresh angles")
         )
         capabilityItems.forEach { (icon, title, caption) ->
             CapabilityCard(
@@ -376,13 +380,20 @@ private fun CapabilityCard(
     selected: Boolean,
     onToggle: () -> Unit
 ) {
+    // uiverse tiny-moose-42 intent, monochrome: a quiet multi-select card
+    // whose check arrives with a scale-in state change (180ms ease-in-out).
+    val checkScale by animateFloatAsState(
+        targetValue = if (selected) 1f else 0f,
+        animationSpec = GsEase.state(),
+        label = "capabilityCheck"
+    )
     GsCard(onClick = onToggle) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Surface(
-                shape = CircleShape,
+                shape = RoundedCornerShape(GsRadius.md),
                 color = if (selected) {
                     MaterialTheme.colorScheme.primary
                 } else {
@@ -397,7 +408,7 @@ private fun CapabilityCard(
                         tint = if (selected) {
                             MaterialTheme.colorScheme.onPrimary
                         } else {
-                            MaterialTheme.colorScheme.primary
+                            MaterialTheme.colorScheme.onSurface
                         },
                         modifier = Modifier.size(20.dp)
                     )
@@ -415,11 +426,19 @@ private fun CapabilityCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            if (selected) {
+            Box(
+                modifier = Modifier
+                    .size(20.dp)
+                    .graphicsLayer {
+                        scaleX = checkScale
+                        scaleY = checkScale
+                        alpha = checkScale
+                    }
+            ) {
                 Icon(
-                    imageVector = Icons.Outlined.Check,
+                    imageVector = GsIcons.Check,
                     contentDescription = "Selected",
-                    tint = MaterialTheme.colorScheme.primary,
+                    tint = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -520,7 +539,7 @@ private fun PersonalisationStep(
                             Box(contentAlignment = Alignment.Center) {
                                 if (index == accentIndex) {
                                     Icon(
-                                        imageVector = Icons.Outlined.Check,
+                                        imageVector = GsIcons.Check,
                                         contentDescription = "Selected",
                                         tint = MaterialTheme.colorScheme.onPrimary,
                                         modifier = Modifier.size(20.dp)
