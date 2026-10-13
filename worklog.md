@@ -4740,3 +4740,20 @@ Work Log:
 
 Stage Summary:
 - All five tasks executed, committed and pushed as units. Evidence committed in-repo. Outstanding: release cut (mechanical, documented), Settings screen auto-capture (manual swipe needed one more step; drawer+More states captured), on-device latency measurement on real hardware for the official tap-to-first-char number.
+
+---
+Task ID: release-v0.72.0
+Agent: main session
+Task: Operator ordered the release cut: versionCode +1, versionName +1 minor, push to main, tag, wait for android-release CI; report only when the CI-built APK is on the releases page. No new work.
+
+Work Log:
+- Bumped android versionCode 80 -> 81, versionName 0.71.6 -> 0.72.0 (operator's "+1 minor" applied to the actual 0.71.6 line); aligned server CURRENT_APP_VERSION in turn-executor.ts + diagnostics/route.ts. Commit 9e03f6c pushed, tag v0.72.0 pushed.
+- Run 38444981061 FAILED at testDebugUnitTest: SendFailureNoticeTest.assertion at line 116 still asserted the OLD em-dash delimiter (startsWith("— ") && endsWith(" —")) while the v0.72.0 design pass had intentionally moved the notices to the paren wrap per RULE ZERO. Fixed the stale assertion to the paren wrap (commit bc602be). androidTest DeviceVerificationTest still asserts the old "— Offline —" label (production is now "(Offline, cannot reach GS.)") — NOT in the release gate (only testDebugUnitTest + assemble run there); flagged for the audit/next round, not touched.
+- Re-tagged v0.72.0 at bc602be (delete + re-push, the v0.71.4/v0.71.5 pattern). Auto-triggered arm64 probes cancelled on both tag pushes (38444980592, 38445556511, HTTP 202) per standing directive.
+- Run 38445556714 SUCCESS (started 18:17:39Z, head bc602be): Unit tests + assemble, Gates (badging, cert, BASE_URL), Attach to release all green. Release v0.72.0 created with GS-AI-App.apk 84,194,103 bytes.
+- Artifact verified from the release download: com.grapsee.gsai 81/0.72.0 (pyaxmlparser); lib/arm64-v8a/libgs_ffi.so 4,590,976 bytes (ELF aarch64, NDK r25c); libmlkit_google_ocr_pipeline.so present (ML Kit OCR wire); baked origin 3 dex hits (classes6/10/12); okhttp3.internal 473 hits (OkHttp TLS line continues). sha256 2acda81200ed273f7cec481a82b642063b5b16e5d9802f8c49378d947f6327e2.
+- Build-from-commit confirmation: tag v0.72.0 -> bc602be; CI head_sha bc602be; the frontend-overhaul design commits 9d4f87c (before/after evidence) and d12f1a9 (final round) are ancestors of bc602be (merge-base --is-ancestor both true). The APK is built from the commit carrying today's design changes, not an older one.
+- LiveUpdate channel refreshed: download/GS-AI-App.apk replaced with the release artifact (sha256 byte-identical), manifest rewritten (81/0.72.0, sha, size, honest notes incl. the iOS pre-existing gate and the androidTest staleness).
+
+Stage Summary:
+- v0.72.0 (versionCode 81) live at https://github.com/GrapseeAgency/the-gs-ai-app/releases/download/v0.72.0/GS-AI-App.apk and on the LiveUpdate channel. Built from bc602be which contains the full frontend-overhaul line. Known follow-ups recorded: androidTest em-dash staleness, iOS gate (pre-existing), keypool re-supply.
