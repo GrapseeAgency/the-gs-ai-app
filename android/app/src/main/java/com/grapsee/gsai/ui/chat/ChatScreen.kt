@@ -178,6 +178,8 @@ import com.grapsee.gsai.ui.theme.GsEase
 import com.grapsee.gsai.ui.theme.messageAppear
 import com.grapsee.gsai.ui.icons.GsIcons
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -1743,7 +1745,8 @@ private fun GsSendButton(enabled: Boolean, onSend: () -> Unit) {
                 enabled = enabled,
                 role = Role.Button,
                 onClickLabel = "Send"
-            ) { onSend() },
+            ) { onSend() }
+            .semantics { contentDescription = "Send" },
         contentAlignment = Alignment.Center
     ) {
         Icon(
@@ -1775,7 +1778,8 @@ private fun StopGeneratingControl(onStop: () -> Unit) {
                 indication = null,
                 role = Role.Button,
                 onClickLabel = "Stop generating"
-            ) { onStop() },
+            ) { onStop() }
+            .semantics { contentDescription = "Stop generating" },
         contentAlignment = Alignment.Center
     ) {
         Icon(
