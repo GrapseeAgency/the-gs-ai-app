@@ -2,6 +2,7 @@ package com.grapsee.gsai
 
 import android.content.Context
 import android.content.Intent
+import android.os.SystemClock
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
