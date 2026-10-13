@@ -4820,3 +4820,22 @@ Work Log:
 
 Stage Summary:
 - Design phase 2 is now compile-green, emulator-verified, and evidence-committed on Android; iOS carries the same reduction + chrome rules (static-gate verified, real-device compile still blocked by the pre-existing GsFfi.xcframework CI gap). Open follow-ups: iOS structural mirror (composer pill / mode carousel / staggered loaders), on-device back-with-drawer check on a modern API device, Android data-layer orphan cleanup, 21st chat-reasoning panel.
+
+---
+Task ID: release-v0.73.0
+Agent: main session
+Task: Operator found no new APK and no new frontend UI anywhere ("no new apk ... no new frontend design ui nothing there"). Root cause: the entire design phase 2 era (reduction, Lucide family, motion spec, surface restructures — 27 commits) was merged to main AFTER the v0.72.0 cut and never released. Cut the design-era release so the reduced app actually ships.
+
+Work Log:
+- Confirmed via GitHub API that v0.72.0 (built from bc602be) was still the latest release; bc602be..HEAD held 27 unreleased design commits.
+- Bumped versionCode 81 -> 82, versionName 0.72.0 -> 0.73.0 (android/app/build.gradle.kts) and aligned server CURRENT_APP_VERSION in turn-executor.ts + diagnostics/route.ts (commit 8d5c357, pushed).
+- Tagged v0.73.0 at 8d5c357; auto-triggered arm64 probe 38475159677 cancelled (HTTP 202) per standing directive.
+- Android release run 38475159744 SUCCESS (unit tests + assemble + badging/cert/BASE_URL gates + attach-to-release).
+- Release v0.73.0 published 2026-10-13T22:06:48Z with GS-AI-App.apk 83,881,112 bytes: https://github.com/GrapseeAgency/the-gs-ai-app/releases/download/v0.73.0/GS-AI-App.apk
+- Artifact verified from the release download: com.grapsee.gsai 82/0.73.0 (pyaxmlparser); libgs_ffi.so + libmlkit_google_ocr_pipeline.so present; baked origin 3 dex hits; sha256 dc8651c96e121df79d9b3d1f62f4af821a3d5b62272982ed419b14ae1e02f989.
+- Design-era proof: merge-base --is-ancestor TRUE for 9902e1a (GsIcons+GsEase foundation), 1f49f9b (More sheet deletion), 04afe08 (demo dirs deleted), 4dc5a41 (iOS mirror), 64f04bc (suite fix), 87b7b2a (ledger) — the APK is built from the design-era head. Dex forensics: the six deleted demo package paths (ui/assistants|create|library|projects|explore|home) have ZERO hits in the 18-dex blob; design-era strings present ('Search chats' x2, chats/archived x2, chats/search x2).
+- LiveUpdate channel refreshed: download/GS-AI-App.apk replaced with the release artifact (sha256 byte-identical), update-manifest.json rewritten (82/0.73.0, sha, size, design-era notes, knownLimitations now also record the drawer-BACK emulator behavior and the three zero-caller route registrations).
+
+Stage Summary:
+- v0.73.0 (versionCode 82) is the first release containing the reduced, redesigned app: no More sheet, no demo catalogues, Lucide family, GsEase motion, restructured composer/drawer/settings. Live on the releases page and the LiveUpdate channel.
+- Known follow-ups carried forward: androidTest em-dash staleness, iOS gate (pre-existing GsFfi.xcframework), drawer-BACK on-device check, zero-caller route cleanup (search/research/vision), keypool re-supply, iOS structural mirror of composer/carousel/loaders.
