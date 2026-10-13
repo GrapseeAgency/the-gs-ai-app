@@ -4792,3 +4792,18 @@ Work Log:
 
 Stage Summary:
 - main compiles again by construction (verified API + zero unresolved-symbol greps); the emulator run is the arbiter. AFTER evidence harvest pending on the run going green.
+
+---
+Task ID: design2-fix-round-2
+Agent: main session
+Task: Fix the suite-UI contracts the first AFTER run exposed, mirror the reduction to iOS (the documented next round), purge the banned chrome iOS still carried, and remove the stale New image quick action whose route the deletion killed.
+
+Work Log:
+- Run 38468984193 (after, head 8f4e6f0) was GREEN on compile but 4 of 10 shots degraded: byte-size forensics + PNG inspection showed the home launcher captured from "41-rich-reply-rendered-MISSING-ROW" onward (715KB wallpaper, then three byte-identical frozen frames). Root causes: (1) the drawer does not consume BACK on the API 30 emulator - back exits to the launcher with the drawer open (the old suite only ever pressed back over a ModalBottomSheet); (2) the rich fixture seeded mid-session never reached the drawer's startup-loaded store. Suite fixed: scrim-tap close (the user's own close gesture), seed moved before the step-3 launch. 64f04bc pushed; run 38470681365 dispatched.
+- Quick-action parity (fc6be52): Android shortcuts.xml still advertised create/image - a home-screen shortcut that would crash navigate() ("no destination matches") since the route died; removed with strings + drawable. iOS QuickAction.newImage + Info.plist item removed. Both platforms now advertise exactly New chat + Ask GS.
+- iOS mirror (4dc5a41): More sheet deleted (drawer = chat history + Voice row + pinned account footer, the Android structure); 13 demo view files deleted (assistants x3, create x5, explore, library, projects x2, home) with router cases and destinations; SearchView reduced to conversations + messages; banned chrome purged (sparkles -> magnifier/nothing in the input bar, zap/lock.shield/gauge auth rows, GS monogram assistant avatar exactly as Android's, leaf on the billing early-access card). Static gates PASS (swift_structure_gate + ios_static_gates).
+- iOS orphaned stores deleted after the CI run exposed theAssistantSample dangling type: Networking/AssistantsStore.swift + ProjectStore.swift (UserDefaults-backed, zero live consumers after the reduction; ConversationStore stays - SettingsView uses savedLibraryItems).
+- Flagged risk (needs on-device check on modern API): back with the drawer open exits the app on the API 30 emulator; predictive back on 33+ likely closes it, but this is unverified product behavior, not just suite behavior.
+
+Stage Summary:
+- Both platforms now agree on the reduction: chat + voice + account, no demo catalogues, one icon family, honest search index. Evidence re-capture in flight (38470681365). Known follow-ups: iOS structural mirror of composer pill/carousel/loaders (this round covered reduction + chrome), on-device back-with-drawer check, data-layer orphan cleanup on Android (AssistantsStore/ProjectStore/SampleData stay for schema stability).
