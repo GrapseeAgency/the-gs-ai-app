@@ -76,6 +76,7 @@ ICONS = {
     "telescope": "Telescope",
     "sliders-horizontal": "SlidersHorizontal",
     "layout-grid": "LayoutGrid",
+    "square": "Square",
     # states / system
     "shield": "Shield",
     "info": "Info",

@@ -171,6 +171,14 @@ import com.grapsee.gsai.ui.components.rememberDeviceOffline
 import com.grapsee.gsai.ui.theme.GsMotion
 import com.grapsee.gsai.ui.theme.GsRadius
 import com.grapsee.gsai.ui.theme.GsHaptics
+import com.grapsee.gsai.ui.theme.GsEase
+import com.grapsee.gsai.ui.icons.GsIcons
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.foundation.text.BasicTextField
 import com.grapsee.gsai.ui.theme.kineticPress
 import com.grapsee.gsai.ui.chat.content.BlocksContent
 import com.grapsee.gsai.ui.orbs.OrbSize
@@ -1565,16 +1573,19 @@ private fun UserMessage(
 }
 
 /**
- * Composer row isolated into its own recompose scope: keystrokes re-render
- * this and only this — the transcript, scaffold and snackbar never react.
+ * DESIGN PHASE 2 composer — one calm pill, nothing competing (the Dola bar,
+ * humbler; layout studied from 21st.dev ai-prompt-box). Structure:
  *
- * STEP 4 hierarchy: [attach] [expanding input] [mic] [send/stop]. The send/
- * stop slot lives INSIDE GsInputBar's trailing slot — while a stream is live
- * that slot hands over to the accent-outline stop control, so the composer
- * never disappears behind a full-width bar and stop is exactly where send
- * always is. The mic is a real voice entry ([onMic]); it is hidden — not left
- * disabled-dead — when no voice route was wired, and the attach sheet keeps
- * its own Voice option as the honest fallback.
+ *   [+] [mode chip?] [ field ] [mic?] (send | stop)
+ *
+ * The pill is a raised neutral surface with NO outline border; the field is
+ * borderless inside it, grows to six lines, then scrolls internally. Send is
+ * the ink circle with the up arrow (the production AI chat pattern, per the
+ * assistant-ui comparison: every shipping app uses it; the paper-plane is the
+ * odd one out) with a layered press (uiverse dull-ladybug-18 intent: the
+ * icon lifts as the container scales). uiverse dangerous-dolphin-47's ring
+ * was evaluated and dropped deliberately: in monochrome its glow reads as
+ * decoration, and the pill plus cursor are affordance enough.
  */
 @Composable
 private fun ComposerRow(
@@ -1591,9 +1602,8 @@ private fun ComposerRow(
     drafts: List<AttachmentDraft> = emptyList(),
     onRemoveAttachment: (String) -> Unit = {},
     onRetryAttachment: (String) -> Unit = {},
-    // FLASH-MODE BUG 2 — the mode chip sits INSIDE the row, LEFT of the text
-    // input (Kimi's pattern); tapping it opens the options sheet. null = the
-    // silent flash default.
+    // FLASH-MODE BUG 2 — the mode chip sits INSIDE the pill, LEFT of the text
+    // input; tapping it opens the options sheet. null = the silent flash default.
     modeLabel: String? = null,
     onModeChipClick: () -> Unit = {}
 ) {
@@ -1603,85 +1613,167 @@ private fun ComposerRow(
             onRemove = onRemoveAttachment,
             onRetry = onRetryAttachment
         )
-        Row(verticalAlignment = Alignment.Bottom) {
-        IconButton(onClick = onAttach) {
-            Icon(
-                Icons.Outlined.AttachFile,
-                contentDescription = "Attach",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        // FLASH-MODE BUG 2: the mode chip — left of the input, opens the
-        // options sheet. Rendered only for non-flash modes.
-        if (modeLabel != null) {
-            Surface(
-                onClick = onModeChipClick,
-                shape = RoundedCornerShape(999.dp),
-                color = MaterialTheme.colorScheme.secondaryContainer,
-                modifier = Modifier.padding(end = 4.dp)
+        val canSend = draftText().isNotBlank() || drafts.isNotEmpty()
+        Surface(
+            shape = RoundedCornerShape(GsRadius.input),
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.Bottom
             ) {
-                Text(
-                    text = modeLabel,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                // Add — opens the attach sheet (gallery, camera, files, voice).
+                IconButton(onClick = onAttach) {
+                    Icon(
+                        GsIcons.Plus,
+                        contentDescription = "Attach",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (modeLabel != null) {
+                    Surface(
+                        onClick = onModeChipClick,
+                        shape = RoundedCornerShape(999.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        modifier = Modifier.padding(end = 4.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(start = 10.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Text(
+                                text = modeLabel.removeSuffix(" \u25BE"),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Icon(
+                                GsIcons.ChevronDown,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(12.dp)
+                            )
+                        }
+                    }
+                }
+                BasicTextField(
+                    value = draftText(),
+                    onValueChange = onDraftChange,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(vertical = 12.dp),
+                    enabled = !isStreaming,
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(
+                        color = MaterialTheme.colorScheme.onSurface
+                    ),
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.onSurface),
+                    keyboardOptions = KeyboardOptions(imeAction = if (enterToSend) ImeAction.Send else ImeAction.Default),
+                    keyboardActions = KeyboardActions(onSend = { if (canSend) onSend(draftText().trim()) }),
+                    maxLines = 6,
+                    decorationBox = { inner ->
+                        Box {
+                            if (draftText().isEmpty()) {
+                                Text(
+                                    text = "Ask anything\u2026",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            inner()
+                        }
+                    }
                 )
+                if (onMic != null) {
+                    IconButton(onClick = onMic) {
+                        Icon(
+                            GsIcons.Mic,
+                            contentDescription = "Dictate with voice",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                if (isStreaming) {
+                    StopGeneratingControl(onStop = onStop)
+                } else {
+                    GsSendButton(enabled = canSend) { onSend(draftText().trim()) }
+                }
             }
-        }
-        GsInputBar(
-            value = draftText(),
-            onValueChange = onDraftChange,
-            onSend = onSend,
-            placeholder = "Ask anything…",
-            modifier = Modifier.weight(1f),
-            imeAction = if (enterToSend) ImeAction.Send else ImeAction.Default,
-            // Native multiline composer: one line at rest, six at most — past
-            // that the field scrolls internally instead of eating the
-            // transcript. (The shared bar keeps its old 4-line default for the
-            // search/library/vision/research call sites.)
-            maxLines = 6,
-            // PHASE 5: attachments-only sends are real — the send affordance
-            // stays live on an empty field when ready attachments exist.
-            allowEmptySend = drafts.isNotEmpty(),
-            trailingIcon = if (isStreaming) {
-                { StopGeneratingControl(onStop = onStop) }
-            } else null
-        )
-        if (onMic != null) {
-            IconButton(onClick = onMic) {
-                Icon(
-                    Icons.Outlined.Mic,
-                    contentDescription = "Dictate with voice",
-                    tint = MaterialTheme.colorScheme.primary
-                )
-            }
-        }
         }
     }
 }
 
-/** Accent-outline stop control living in the composer's send slot — the
- *  streaming-active affordance, semantically "Stop generating". */
+/**
+ * The composer's send control — a 36dp ink circle with the up arrow. The
+ * layered press (uiverse dull-ladybug-18 intent, monochrome): the container
+ * scales via kineticPress while the arrow lifts 1dp under the finger. Empty
+ * field with no attachments: neutral container, no arrow motion, still 44dp
+ * touch target via minimumInteractiveComponentSize.
+ */
+@Composable
+private fun GsSendButton(enabled: Boolean, onSend: () -> Unit) {
+    val colors = GsTheme.colors
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val lift by animateFloatAsState(
+        targetValue = if (pressed && enabled) 1f else 0f,
+        animationSpec = GsEase.state(),
+        label = "sendLift"
+    )
+    Box(
+        modifier = Modifier
+            .padding(end = 4.dp, bottom = 2.dp)
+            .size(36.dp)
+            .kineticPress(interaction)
+            .clip(CircleShape)
+            .background(if (enabled) colors.textPrimary else colors.raisedSurface)
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                enabled = enabled,
+                role = Role.Button,
+                onClickLabel = "Send"
+            ) { onSend() },
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            GsIcons.ArrowUp,
+            contentDescription = null,
+            tint = if (enabled) colors.appBackground else colors.textSecondary,
+            modifier = Modifier
+                .size(20.dp)
+                .graphicsLayer { translationY = -lift * 1.dp.toPx() }
+        )
+    }
+}
+
+/** Stop control living in the composer's send slot — the streaming-active
+ *  affordance, semantically "Stop generating". Ink circle, same slot as send:
+ *  the accent is the shape of the action, not a hue. */
 @Composable
 private fun StopGeneratingControl(onStop: () -> Unit) {
-    Surface(
-        onClick = onStop,
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary),
+    val colors = GsTheme.colors
+    Box(
         modifier = Modifier
-            .padding(end = 4.dp)
-            .size(40.dp)
+            .padding(end = 4.dp, bottom = 2.dp)
+            .size(36.dp)
             .kineticPress()
+            .clip(CircleShape)
+            .background(colors.textPrimary)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                role = Role.Button,
+                onClickLabel = "Stop generating"
+            ) { onStop() },
+        contentAlignment = Alignment.Center
     ) {
-        Box(contentAlignment = Alignment.Center) {
-            Icon(
-                Icons.Filled.Stop,
-                contentDescription = "Stop generating",
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(20.dp)
-            )
-        }
+        Icon(
+            GsIcons.Square,
+            contentDescription = null,
+            tint = colors.appBackground,
+            modifier = Modifier.size(12.dp)
+        )
     }
 }
 
