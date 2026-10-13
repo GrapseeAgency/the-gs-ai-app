@@ -66,8 +66,12 @@ import com.grapsee.gsai.BuildConfig
 import com.grapsee.gsai.CrashReporter
 import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.di.ServiceLocator
+import com.grapsee.gsai.ui.icons.GsIcons
 import com.grapsee.gsai.ui.components.GsScreenScaffold
+import com.grapsee.gsai.ui.theme.GsRadius
 import com.grapsee.gsai.ui.theme.GsMotion
+import com.grapsee.gsai.ui.theme.messageAppear
+import com.grapsee.gsai.ui.theme.kineticPress
 import com.grapsee.gsai.ui.theme.gsHaptic
 import androidx.activity.compose.BackHandler
 import java.time.OffsetDateTime
@@ -120,7 +124,7 @@ fun SettingsScreen(
         ) {
             ExpandCard(
                 id = "appearance",
-                icon = Icons.Outlined.Palette,
+                icon = GsIcons.Palette,
                 title = "Appearance",
                 expandedId = expandedId,
                 onToggle = { expandedId = if (expandedId == "appearance") null else "appearance" }
@@ -142,7 +146,9 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "Aurora teal",
+                            // The truth since the monochrome pass: there is
+                            // no hue to name.
+                            text = "Monochrome",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -159,7 +165,7 @@ fun SettingsScreen(
 
             ExpandCard(
                 id = "chat",
-                icon = Icons.Outlined.ChatBubbleOutline,
+                icon = GsIcons.MessageCircle,
                 title = "Chat",
                 expandedId = expandedId,
                 onToggle = { expandedId = if (expandedId == "chat") null else "chat" }
@@ -184,7 +190,7 @@ fun SettingsScreen(
 
             ExpandCard(
                 id = "ai",
-                icon = Icons.Outlined.AutoAwesome,
+                icon = GsIcons.Brain,
                 title = "AI",
                 expandedId = expandedId,
                 onToggle = { expandedId = if (expandedId == "ai") null else "ai" }
@@ -233,7 +239,7 @@ fun SettingsScreen(
 
             ExpandCard(
                 id = "privacy",
-                icon = Icons.Outlined.PrivacyTip,
+                icon = GsIcons.Shield,
                 title = "Privacy",
                 expandedId = expandedId,
                 onToggle = { expandedId = if (expandedId == "privacy") null else "privacy" }
@@ -241,7 +247,7 @@ fun SettingsScreen(
                 ActionRow(
                     title = "Export data",
                     subtitle = "Download a copy of your data",
-                    leading = Icons.Outlined.Download,
+                    leading = GsIcons.Download,
                     onClick = { exportData.launch("gs-ai-export.json") }
                 )
                 SwitchRow(
@@ -253,14 +259,14 @@ fun SettingsScreen(
                 ActionRow(
                     title = "Clear local data",
                     subtitle = "Remove cached chats and files on this device",
-                    leading = Icons.Outlined.DeleteOutline,
+                    leading = GsIcons.Trash2,
                     onClick = { showClearData = true }
                 )
                 if (CrashReporter.lastReport(context) != null) {
                     ActionRow(
                         title = "Send crash report",
                         subtitle = "The last launch captured an error, share its details",
-                        leading = Icons.Outlined.BugReport,
+                        leading = GsIcons.CircleAlert,
                         onClick = {
                             val report = CrashReporter.lastReport(context) ?: return@ActionRow
                             runCatching {
@@ -287,7 +293,7 @@ fun SettingsScreen(
 
             ExpandCard(
                 id = "security",
-                icon = Icons.Outlined.Shield,
+                icon = GsIcons.Lock,
                 title = "Security",
                 expandedId = expandedId,
                 onToggle = { expandedId = if (expandedId == "security") null else "security" }
@@ -310,7 +316,7 @@ fun SettingsScreen(
 
             ExpandCard(
                 id = "notifications",
-                icon = Icons.Outlined.Notifications,
+                icon = GsIcons.Bell,
                 title = "Notifications",
                 expandedId = expandedId,
                 onToggle = { expandedId = if (expandedId == "notifications") null else "notifications" }
@@ -339,7 +345,7 @@ fun SettingsScreen(
 
             ExpandCard(
                 id = "language",
-                icon = Icons.Outlined.Language,
+                icon = GsIcons.Languages,
                 title = "Language",
                 expandedId = expandedId,
                 onToggle = { expandedId = if (expandedId == "language") null else "language" }
@@ -356,7 +362,7 @@ fun SettingsScreen(
 
             ExpandCard(
                 id = "accessibility",
-                icon = Icons.Outlined.Accessibility,
+                icon = GsIcons.Accessibility,
                 title = "Accessibility",
                 expandedId = expandedId,
                 onToggle = { expandedId = if (expandedId == "accessibility") null else "accessibility" }
@@ -421,7 +427,7 @@ fun SettingsScreen(
 
             ExpandCard(
                 id = "about",
-                icon = Icons.Outlined.Info,
+                icon = GsIcons.Info,
                 title = "About",
                 expandedId = expandedId,
                 onToggle = { expandedId = if (expandedId == "about") null else "about" }
@@ -498,7 +504,14 @@ fun SettingsScreen(
     }
 }
 
-/** Expandable category card: header row always visible, content revealed on tap. */
+/**
+ * Expandable category group (DESIGN PHASE 2): one raised container per
+ * group, separated by spacing like the reference app's settings. The icon
+ * lives in the app's single rounded-square container spec, ink-tinted (the
+ * group title is the hierarchy, not a hue). Chevron swaps with the 180ms
+ * state curve; expansion animates via animateContentSize unless the user
+ * asked the system to stand still.
+ */
 @Composable
 private fun ExpandCard(
     id: String,
@@ -524,7 +537,7 @@ private fun ExpandCard(
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Surface(
-                    shape = CircleShape,
+                    shape = RoundedCornerShape(GsRadius.md),
                     color = MaterialTheme.colorScheme.surfaceContainerHigh,
                     modifier = Modifier.size(34.dp)
                 ) {
@@ -532,7 +545,7 @@ private fun ExpandCard(
                         Icon(
                             imageVector = icon,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
+                            tint = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.size(18.dp)
                         )
                     }
@@ -544,11 +557,7 @@ private fun ExpandCard(
                     modifier = Modifier.weight(1f)
                 )
                 Icon(
-                    imageVector = if (expanded) {
-                        Icons.Outlined.KeyboardArrowUp
-                    } else {
-                        Icons.Outlined.KeyboardArrowDown
-                    },
+                    imageVector = if (expanded) GsIcons.ChevronUp else GsIcons.ChevronDown,
                     contentDescription = if (expanded) "Collapse" else "Expand",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(20.dp)

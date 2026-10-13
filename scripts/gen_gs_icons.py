@@ -77,6 +77,8 @@ ICONS = {
     "sliders-horizontal": "SlidersHorizontal",
     "layout-grid": "LayoutGrid",
     "square": "Square",
+    "lock": "Lock",
+    "accessibility": "Accessibility",
     # states / system
     "shield": "Shield",
     "info": "Info",
