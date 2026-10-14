@@ -4897,3 +4897,21 @@ Stage Summary:
 - Live at raw manifest URL (download/GS-AI-App.apk on main) and GitHub Release v0.73.1
 - Learned: android-release.yml attaches to GitHub Release ONLY on tag push; workflow_dispatch uploads nothing — always release via tag
 - Full PAT auth restored: push + CI both operational
+
+---
+Task ID: incident-chat-429
+Agent: Z.ai Code (main)
+Task: Diagnose "can't chat with GS" from freshly installed v0.73.1 APK
+
+Work Log:
+- Screenshot diag: origin reachable, conversation+messages GET 200 — app->edge->backend path HEALTHY
+- dev.log TURN-ERROR: "z-ai throttled (circuit open)"; ZAI-BREAKER opened after raw 429 "Too many requests"
+- Standalone SDK probe (bypasses breaker): 429 persists 8+ min straight (10:31-10:38 UTC), fast-fail ~25ms = account-level throttle, not latency
+- Keypool audit: .secrets MISSING, /home/z/.gs-vault MISSING, no OPENROUTER in .env, db vault empty -> OpenRouter fallback has ZERO keys; z-ai is the only live chat path
+- No background z-ai consumers found (callers: turn-executor, websearch, planner, engines, fixtures relay) — nothing on our side is burning quota in a loop
+- Breaker behavior verified in src/lib/ai.ts: 429 -> 10min short-circuit, per-process, re-probes after expiry; if provider still 429s it re-opens. Server NOT restarted (restart would only reset the breaker, not the provider throttle)
+
+Stage Summary:
+- ROOT CAUSE: upstream z-ai account-level 429 (multi-minute, precedent: 2026-09-20 window lasted hours). App + backend + APK all healthy.
+- TWO RECOVERY PATHS: (1) operator runs: bun scripts/provision-keys.ts "sk-or-v1-...,..." -> sends immediately route to OpenRouter; (2) wait out the throttle — app recovers by itself on the next post-breaker probe, no reinstall needed
+- NEXT webDevReview cron runs MUST: probe z-ai (bun /tmp/zai-probe.mjs) and report recovery; do NOT restart server for this; do NOT spam probes (1 per cron run max)
