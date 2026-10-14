@@ -1179,7 +1179,7 @@ export default function Home() {
                               className="truncate rounded px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide"
                               style={{ background: C.raised, color: C.muted }}
                             >
-                              ✦ {c.assistantName}
+                              {c.assistantName}
                             </span>
                           )}
                         </span>
@@ -1222,7 +1222,7 @@ export default function Home() {
                   className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium"
                   style={{ borderColor: C.accentDeep, color: C.accent, background: 'rgba(45,212,168,0.08)' }}
                 >
-                  ✦ {activeAssistant.name}
+                  {activeAssistant.name}
                 </span>
               )}
               <div className="flex-1" />
@@ -1261,7 +1261,9 @@ export default function Home() {
                     className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full"
                     style={{ background: C.container }}
                   >
-                    <span style={{ color: C.accent }}>✦</span>
+                    <span className="text-xs font-semibold" style={{ color: C.accent }} aria-hidden="true">
+                      GS
+                    </span>
                   </div>
                   <p className="font-serif text-lg">
                     {activeAssistant ? `Chatting with ${activeAssistant.name}` : 'Ask anything'}
@@ -1478,7 +1480,7 @@ export default function Home() {
                       background: mode === 'thinking' ? 'rgba(45,212,168,0.08)' : 'transparent',
                     }}
                   >
-                    {mode === 'thinking' ? '🧠 Thinking' : '⨍ Auto'} ▾
+                    {mode === 'thinking' ? 'Thinking' : 'Auto'} ▾
                   </button>
                 )}
                 <input
