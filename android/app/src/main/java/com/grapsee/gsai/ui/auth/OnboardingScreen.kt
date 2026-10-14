@@ -2,16 +2,25 @@ package com.grapsee.gsai.ui.auth
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ContentTransform
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.AnimationSpec
+import androidx.compose.animation.core.EaseOut
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,7 +39,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -50,10 +58,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.ui.components.GsCard
 import com.grapsee.gsai.ui.components.GsChip
 import com.grapsee.gsai.ui.theme.GsMotion
@@ -101,6 +115,9 @@ fun OnboardingScreen(onFinished: () -> Unit) {
     var productNews by remember { mutableStateOf(false) }
     var displayName by remember { mutableStateOf("") }
     var accentIndex by remember { mutableIntStateOf(0) }
+    // uiverse sour-dragon-56: the ONE onboarding tooltip. Armed once per visit,
+    // retired by any press anywhere (observed without consuming, below).
+    var showHint by remember { mutableStateOf(true) }
 
     val currentStep = OnboardingStep.entries[stepIndex]
     val canContinue = when (currentStep) {
@@ -125,6 +142,15 @@ fun OnboardingScreen(onFinished: () -> Unit) {
             .background(MaterialTheme.colorScheme.background)
             .statusBarsPadding()
             .navigationBarsPadding()
+            .pointerInput(Unit) {
+                // The tooltip's dismissal surface: every press on the screen
+                // (buttons, chips, switches, empty canvas) retires it. Events
+                // are observed, never consumed, so real controls still work.
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false)
+                    showHint = false
+                }
+            }
     ) {
         Column(
             modifier = Modifier
@@ -154,7 +180,7 @@ fun OnboardingScreen(onFinished: () -> Unit) {
             label = "onboardingStep"
         ) { index ->
             when (OnboardingStep.entries[index]) {
-                OnboardingStep.Interests -> InterestsStep(interests = interests)
+                OnboardingStep.Interests -> InterestsStep(interests = interests, showHint = showHint)
                 OnboardingStep.AiPreferences -> AiPreferencesStep(
                     responseStyle = responseStyle,
                     onStyleChange = { responseStyle = it },
@@ -198,17 +224,83 @@ fun OnboardingScreen(onFinished: () -> Unit) {
                     contentDescription = "Back"
                 )
             }
-            Button(
+            GsArrowPillButton(
+                label = if (currentStep == OnboardingStep.Ready) "Enter GS AI" else "Continue",
+                enabled = canContinue,
                 onClick = {
                     if (stepIndex < OnboardingStep.entries.lastIndex) stepIndex++ else onFinished()
                 },
-                enabled = canContinue,
                 modifier = Modifier.weight(1f)
-            ) {
-                Text(
-                    if (currentStep == OnboardingStep.Ready) "Enter GS AI" else "Continue"
-                )
-            }
+            )
+        }
+    }
+}
+
+/**
+ * uiverse clever-insect-61, materialised: the onboarding CONTINUE pill. Solid
+ * primary fill (no gradient), label + trailing ArrowRight. Press slides the
+ * arrow 4dp right and settles the pill 1dp down over 120ms ease-out; release
+ * returns on the app's standard spring. Reduced motion holds the resting
+ * frame: no shift, no sink.
+ */
+@Composable
+private fun GsArrowPillButton(
+    label: String,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val reduced = SettingsStore.reduceAnimations || SettingsStore.reduceMotion
+    val settleSpec: AnimationSpec<Float> = when {
+        reduced -> tween(1)
+        pressed -> tween(durationMillis = 120, easing = EaseOut)
+        else -> GsMotion.standard()
+    }
+    val arrowShift by animateFloatAsState(
+        targetValue = if (pressed && !reduced) 4f else 0f,
+        animationSpec = settleSpec,
+        label = "continueArrowShift"
+    )
+    val pillSink by animateFloatAsState(
+        targetValue = if (pressed && !reduced) 1f else 0f,
+        animationSpec = settleSpec,
+        label = "continuePillSink"
+    )
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        interactionSource = interaction,
+        shape = RoundedCornerShape(percent = 50),
+        color = if (enabled) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+        },
+        contentColor = if (enabled) {
+            MaterialTheme.colorScheme.onPrimary
+        } else {
+            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+        },
+        modifier = modifier
+            .height(48.dp)
+            .graphicsLayer { translationY = pillSink.dp.toPx() }
+    ) {
+        Row(
+            modifier = Modifier.fillMaxSize(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Text(text = label, style = MaterialTheme.typography.labelLarge)
+            Spacer(Modifier.width(8.dp))
+            Icon(
+                imageVector = GsIcons.ArrowRight,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(24.dp)
+                    .graphicsLayer { translationX = arrowShift.dp.toPx() }
+            )
         }
     }
 }
@@ -245,12 +337,17 @@ private fun StepHeading(title: String, caption: String) {
 }
 
 @Composable
-private fun InterestsStep(interests: SnapshotStateList<String>) {
+private fun InterestsStep(interests: SnapshotStateList<String>, showHint: Boolean) {
     StepColumn {
         StepHeading(
             title = "What are you into?",
             caption = "Pick at least one. GS tunes itself to your world. You can change these anytime."
         )
+        if (showHint) {
+            // uiverse sour-dragon-56: one tooltip, above the first control.
+            HintBubble(text = "Tap the topics you like. GS uses them to tune your answers.")
+            Spacer(Modifier.height(4.dp))
+        }
         interestOptions.chunked(3).forEach { row ->
             Row(
                 modifier = Modifier
@@ -269,6 +366,42 @@ private fun InterestsStep(interests: SnapshotStateList<String>) {
                 }
             }
             Spacer(Modifier.height(GsMotion.spaceS))
+        }
+    }
+}
+
+/**
+ * uiverse sour-dragon-56, materialised: a small dark bubble (inverseSurface on
+ * inverseOnSurface, 12dp radius, 4dp tail) pointing at the first onboarding
+ * control. Shown once; any press anywhere on the screen dismisses it.
+ */
+@Composable
+private fun HintBubble(text: String) {
+    val bubbleColor = MaterialTheme.colorScheme.inverseSurface
+    Column {
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = bubbleColor,
+            contentColor = MaterialTheme.colorScheme.inverseOnSurface
+        ) {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+            )
+        }
+        Canvas(
+            modifier = Modifier
+                .padding(start = 24.dp)
+                .size(width = 8.dp, height = 4.dp)
+        ) {
+            val tail = Path().apply {
+                moveTo(0f, 0f)
+                lineTo(size.width, 0f)
+                lineTo(size.width / 2f, size.height)
+                close()
+            }
+            drawPath(tail, color = bubbleColor)
         }
     }
 }
@@ -372,8 +505,11 @@ private fun CapabilityCard(
     selected: Boolean,
     onToggle: () -> Unit
 ) {
-    // uiverse tiny-moose-42 intent, monochrome: a quiet multi-select card
-    // whose check arrives with a scale-in state change (180ms ease-in-out).
+    // uiverse tiny-moose-42, materialised: a quiet multi-select card whose
+    // check circle carries a 2dp accent ring and one static radial glow
+    // (accent at 12% fading out) while selected; unselected is a quiet
+    // monochrome outline. The check itself arrives with a scale-in state
+    // change (180ms ease-in-out). No looping animation anywhere.
     val checkScale by animateFloatAsState(
         targetValue = if (selected) 1f else 0f,
         animationSpec = GsEase.state(),
@@ -418,20 +554,48 @@ private fun CapabilityCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+            val ringColor by animateColorAsState(
+                targetValue = if (selected) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.outline
+                },
+                animationSpec = GsEase.state(),
+                label = "capabilityCheckRing"
+            )
+            val glowColor = MaterialTheme.colorScheme.primary
             Box(
                 modifier = Modifier
-                    .size(20.dp)
-                    .graphicsLayer {
-                        scaleX = checkScale
-                        scaleY = checkScale
-                        alpha = checkScale
+                    .size(24.dp)
+                    .drawBehind {
+                        if (selected) {
+                            drawCircle(
+                                brush = Brush.radialGradient(
+                                    colors = listOf(
+                                        glowColor.copy(alpha = 0.12f),
+                                        Color.Transparent
+                                    ),
+                                    center = center,
+                                    radius = size.maxDimension
+                                ),
+                                radius = size.maxDimension
+                            )
+                        }
                     }
+                    .border(2.dp, ringColor, CircleShape),
+                contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = GsIcons.Check,
-                    contentDescription = "Selected",
-                    tint = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.size(20.dp)
+                    contentDescription = if (selected) "Selected" else null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .size(16.dp)
+                        .graphicsLayer {
+                            scaleX = checkScale
+                            scaleY = checkScale
+                            alpha = checkScale
+                        }
                 )
             }
         }

@@ -46,6 +46,7 @@ ICONS = {
     "history": "History",
     # composer / chat
     "arrow-up": "ArrowUp",
+    "arrow-right": "ArrowRight",
     "mic": "Mic",
     "camera": "Camera",
     "image-plus": "ImagePlus",
@@ -76,6 +77,7 @@ ICONS = {
     "heart": "Heart",
     "clipboard-list": "ClipboardList",
     "code": "Code",
+    "cpu": "Cpu",
     "star": "Star",
     "clock": "Clock",
     "text-search": "TextSearch",

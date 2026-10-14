@@ -54,7 +54,6 @@ import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.di.ServiceLocator
 import com.grapsee.gsai.ui.icons.GsIcons
 import com.grapsee.gsai.ui.components.GsScreenScaffold
-import com.grapsee.gsai.ui.theme.GsRadius
 import com.grapsee.gsai.ui.theme.GsMotion
 import com.grapsee.gsai.ui.theme.messageAppear
 import com.grapsee.gsai.ui.theme.kineticPress
@@ -176,7 +175,7 @@ fun SettingsScreen(
 
             ExpandCard(
                 id = "ai",
-                icon = GsIcons.Brain,
+                icon = GsIcons.Cpu,
                 title = "AI",
                 expandedId = expandedId,
                 onToggle = { expandedId = if (expandedId == "ai") null else "ai" }
@@ -493,10 +492,11 @@ fun SettingsScreen(
 /**
  * Expandable category group (DESIGN PHASE 2): one raised container per
  * group, separated by spacing like the reference app's settings. The icon
- * lives in the app's single rounded-square container spec, ink-tinted (the
- * group title is the hierarchy, not a hue). Chevron swaps with the 180ms
- * state curve; expansion animates via animateContentSize unless the user
- * asked the system to stand still.
+ * lives in the app's single icon-container spec (design law): a 40dp
+ * rounded square, 12dp corner radius, surfaceContainerHighest tint, 24dp
+ * stroke icon centered, ink-tinted (the group title is the hierarchy, not a
+ * hue). Chevron swaps with the 180ms state curve; expansion animates via
+ * animateContentSize unless the user asked the system to stand still.
  */
 @Composable
 private fun ExpandCard(
@@ -523,16 +523,16 @@ private fun ExpandCard(
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Surface(
-                    shape = RoundedCornerShape(GsRadius.md),
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    modifier = Modifier.size(34.dp)
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    modifier = Modifier.size(40.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = icon,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(24.dp)
                         )
                     }
                 }
