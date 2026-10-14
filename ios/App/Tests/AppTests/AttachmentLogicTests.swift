@@ -132,7 +132,7 @@ final class AttachmentLogicTests: XCTestCase {
         let draft = AttachmentTransitions.failed(makeDraft(phase: .uploading), with: .server(429))
         XCTAssertEqual(draft.phase, .failed)
         XCTAssertEqual(draft.error, .server(429))
-        XCTAssertEqual(draft.error?.label, "Too many uploads — try again in a moment")
+        XCTAssertEqual(draft.error?.label, "Too many uploads, try again in a moment")
     }
 
     func testRetryStepReRunsOnlyTheFailedStep() {
@@ -168,7 +168,7 @@ final class AttachmentLogicTests: XCTestCase {
         XCTAssertEqual(uploading, "Attachments are still uploading")
 
         let failed = AttachmentTransitions.sendBlockReason([makeDraft(phase: .ready), makeDraft(phase: .failed)])
-        XCTAssertEqual(failed, "An attachment failed — retry or remove it to send")
+        XCTAssertEqual(failed, "An attachment failed, retry or remove it to send")
     }
 
     // MARK: - Multipart body (manual build, no external deps)
