@@ -99,6 +99,27 @@ function extractDelta(parsed: unknown): string {
   return typeof direct === 'string' ? direct : ''
 }
 
+/** The provider's thinking trace (`choices[0].delta.reasoning_content`, the
+ * glm/zai stream shape for enabled thinking). Empty for every non-thinking
+ * response, so callers can wire it unconditionally. */
+function extractReasoningDelta(parsed: unknown): string {
+  const p = parsed as
+    | {
+        choices?: {
+          delta?: { reasoning_content?: unknown; reasoning?: unknown }
+          message?: { reasoning_content?: unknown }
+        }[]
+      }
+    | null
+  if (!p) return ''
+  const r =
+    p.choices?.[0]?.delta?.reasoning_content ??
+    p.choices?.[0]?.delta?.reasoning ??
+    p.choices?.[0]?.message?.reasoning_content ??
+    ''
+  return typeof r === 'string' ? r : ''
+}
+
 /**
  * Consume the SDK's raw SSE byte stream, forwarding each text delta to
  * `onDelta` and returning the accumulated full text.
@@ -106,7 +127,8 @@ function extractDelta(parsed: unknown): string {
 export async function consumeSseStream(
   body: ReadableStream<Uint8Array>,
   onDelta: (t: string) => Promise<void> | void,
-  onModel?: (model: string) => void
+  onModel?: (model: string) => void,
+  onReasoning?: (t: string) => void
 ): Promise<string> {
   const reader = body.getReader()
   const decoder = new TextDecoder()
@@ -126,6 +148,13 @@ export async function consumeSseStream(
       const parsed = JSON.parse(payload) as { model?: unknown }
       if (onModel && typeof parsed?.model === 'string' && parsed.model.length > 0) onModel(parsed.model)
       delta = extractDelta(parsed)
+      // REASONING TRACE — thinking-enabled calls stream the model's reasoning
+      // separately from the answer; carried out when a listener is wired
+      // (turn-executor forwards it to clients as `reasoning` events).
+      if (onReasoning) {
+        const r = extractReasoningDelta(parsed)
+        if (r) await onReasoning(r)
+      }
     } catch {
       // Non-JSON payload (plain-text chunk) — treat the whole payload as a delta.
       delta = payload
@@ -233,7 +262,8 @@ export async function streamChat(
   messages: ChatMessageInput[],
   onDelta: (t: string) => Promise<void> | void,
   providerModel?: string | null,
-  thinking?: ThinkingCallConfig
+  thinking?: ThinkingCallConfig,
+  onReasoning?: (t: string) => void
 ): Promise<string> {
   let lastError = 'Upstream unavailable'
   let activeModel = typeof providerModel === 'string' && providerModel.length > 0 ? providerModel : null
@@ -264,7 +294,7 @@ export async function streamChat(
           forwarded = true
           return onDelta(t)
         }
-        return await consumeSseStream(response, guardedOnDelta)
+        return await consumeSseStream(response, guardedOnDelta, undefined, onReasoning)
       }
 
       // Upstream ignored `stream: true` — fall back to a single full-text delta.

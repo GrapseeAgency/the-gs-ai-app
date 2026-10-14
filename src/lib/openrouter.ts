@@ -242,7 +242,8 @@ export async function orStreamChat(
   messages: ChatMessageInput[],
   models: string[],
   onDelta: (t: string) => Promise<void> | void,
-  reasoning?: OrReasoningConfig
+  reasoning?: OrReasoningConfig,
+  onReasoning?: (t: string) => void
 ): Promise<string> {
   const keys = (await loadKeyPool()).keys
   if (keys.length === 0) throw new Error('GS Free is offline: the OpenRouter key pool is empty (env, key file and db vault are all empty after the platform wipes). Re-provision keys to restore free-tier models.')
@@ -280,7 +281,7 @@ export async function orStreamChat(
           forwarded = true
           return onDelta(t)
         }
-        const full = await consumeSseStream(response.body, guardedOnDelta)
+        const full = await consumeSseStream(response.body, guardedOnDelta, undefined, onReasoning)
         if (full.trim().length === 0 && !forwarded) {
           // PHASE 8.1b — nothing reached the client yet: safe to rotate.
           lastError = 'empty completion from upstream'

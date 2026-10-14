@@ -1320,6 +1320,11 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
     const thinkingOn = prep.thinking.config?.mode === 'thinking'
     let callStartedAt = Date.now()
     let ttftMarked = false
+    // The forwarder exists only when a client is listening AND thinking is on
+    // AND the call is streaming. flush() after each await: an unflushed tail
+    // would leave the client's panel missing its last words at `done`.
+    const reasoningForward =
+      onDelta && thinkingOn && push ? makeReasoningForwarder(push) : null
     const wrappedOnDelta = onDelta
       ? (d: string) => {
           if (thinkingOn && !ttftMarked && prep.thinkingLatencyMs === null) {
@@ -1338,15 +1343,17 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
       if (openRouterModels) {
         callStartedAt = Date.now()
         const text = wrappedOnDelta
-          ? await orStreamChat(msgs, openRouterModels, wrappedOnDelta, orReasoning)
+          ? await orStreamChat(msgs, openRouterModels, wrappedOnDelta, orReasoning, reasoningForward?.onDelta)
           : await orCompleteChat(msgs, openRouterModels, orReasoning).then((r) => r.text)
+        reasoningForward?.flush()
         if (!text.trim()) throw emptyRejection('OpenRouter chain')
         return text
       }
       callStartedAt = Date.now()
       const primaryText = wrappedOnDelta
-        ? await streamChat(msgs, wrappedOnDelta, activeProviderModel, prep.thinking.config)
+        ? await streamChat(msgs, wrappedOnDelta, activeProviderModel, prep.thinking.config, reasoningForward?.onDelta)
         : await completeChat(msgs, activeProviderModel, prep.thinking.config)
+      reasoningForward?.flush()
       if (!primaryText.trim()) throw emptyRejection('primary provider')
       return primaryText
     } catch (e) {
@@ -1358,8 +1365,9 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
           )
           callStartedAt = Date.now()
           const fb = wrappedOnDelta
-            ? await streamChat(msgs, wrappedOnDelta, activeProviderModel, prep.thinking.config)
+            ? await streamChat(msgs, wrappedOnDelta, activeProviderModel, prep.thinking.config, reasoningForward?.onDelta)
             : await completeChat(msgs, activeProviderModel, prep.thinking.config)
+          reasoningForward?.flush()
           if (!fb.trim()) throw emptyRejection('primary provider (fallback)')
           return fb
         }
@@ -1371,8 +1379,9 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
         )
         callStartedAt = Date.now()
         const fb = wrappedOnDelta
-          ? await orStreamChat(msgs, OPENROUTER_MODELS['gs-free'], wrappedOnDelta, orReasoning)
+          ? await orStreamChat(msgs, OPENROUTER_MODELS['gs-free'], wrappedOnDelta, orReasoning, reasoningForward?.onDelta)
           : await orCompleteChat(msgs, OPENROUTER_MODELS['gs-free'], orReasoning).then((r) => r.text)
+        reasoningForward?.flush()
         if (!fb.trim()) throw emptyRejection('OpenRouter free chain (fallback)')
         return fb
       }
@@ -1440,6 +1449,34 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
     const chunks: string[] = []
     for (let i = 0; i < text.length; i += size) chunks.push(text.slice(i, i + size))
     return chunks.length > 0 ? chunks : ['']
+  }
+
+  // REASONING TRACE (chat-reasoning panel) — thinking-enabled STREAM calls
+  // forward the provider's reasoning deltas as `reasoning` events, batched
+  // (raw deltas outpace the SSE fan-out). Clients that predate the event
+  // ignore it by contract (web else-if chain, Android when-without-else,
+  // iOS switch-without-default). Buffered paths carry no reasoning — the
+  // provider never streams one there to forward.
+  const makeReasoningForwarder = (pushFn: TurnPush) => {
+    let buf = ''
+    let lastFlush = 0
+    const onDelta = (t: string) => {
+      buf += t
+      const now = Date.now()
+      if (now - lastFlush >= 300) {
+        pushFn('reasoning', JSON.stringify({ delta: buf }))
+        buf = ''
+        lastFlush = now
+      }
+    }
+    const flush = () => {
+      if (buf) {
+        pushFn('reasoning', JSON.stringify({ delta: buf }))
+        buf = ''
+      }
+      lastFlush = Date.now()
+    }
+    return { onDelta, flush }
   }
 
   const emit: SearchEventEmitter | null = push

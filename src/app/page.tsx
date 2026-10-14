@@ -395,6 +395,15 @@ export default function Home() {
   const [draft, setDraft] = useState('')
   const [streamText, setStreamText] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
+  // REASONING TRACE (chat-reasoning panel): the model's thinking stream, shown
+  // in a collapsible quiet panel above the answer. Open while the model
+  // thinks, auto-collapses when the first answer token lands (reopenable);
+  // the seconds label is the MEASURED span from first reasoning delta to
+  // first answer delta, never a timer.
+  const [reasoningText, setReasoningText] = useState('')
+  const [reasoningOpen, setReasoningOpen] = useState(true)
+  const [reasoningStart, setReasoningStart] = useState<number | null>(null)
+  const [reasoningEnd, setReasoningEnd] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null)
   const [startingChat, setStartingChat] = useState<string | null>(null)
@@ -607,6 +616,10 @@ export default function Home() {
       setLiveSources([])
       setPhase(null)
       setClarify(null)
+      setReasoningText('')
+      setReasoningOpen(true)
+      setReasoningStart(null)
+      setReasoningEnd(null)
       setMessages((prev) => [...prev, { role: 'user', content: text }])
       setIsStreaming(true)
 
@@ -650,9 +663,23 @@ export default function Home() {
           try {
             const event = { event: eventName, data: dataRaw }
             if (event.event === 'delta') {
+              // First answer token closes the thinking phase (panel collapses;
+              // the measured span freezes — no live counter, no timer).
+              setReasoningEnd((prev) => prev ?? Date.now())
+              setReasoningOpen(false)
               acc += event.data ?? ''
               accRef.current = acc
               setStreamText(acc)
+            } else if (event.event === 'reasoning') {
+              try {
+                const p = JSON.parse(event.data || '{}') as { delta?: unknown }
+                if (typeof p.delta === 'string' && p.delta) {
+                  setReasoningStart((prev) => prev ?? Date.now())
+                  setReasoningText((prev) => prev + p.delta)
+                }
+              } catch {
+                /* malformed reasoning frame — skip, never break the stream */
+              }
             } else if (event.event === 'status') {
               setPhase(event.data)
               if (event.data === 'search_failed') {
@@ -1308,6 +1335,50 @@ export default function Home() {
 
               {isStreaming && clarify && (
                 <ClarifyChips clarify={clarify} onPick={(label) => sendRef.current(label)} />
+              )}
+
+              {reasoningText && (
+                <div className="flex justify-start">
+                  <div
+                    className="w-full max-w-[92%] overflow-hidden rounded-2xl"
+                    style={{ border: `1px solid ${C.outline}`, background: C.container }}
+                  >
+                    <button
+                      onClick={() => setReasoningOpen((o) => !o)}
+                      aria-expanded={reasoningOpen}
+                      className="flex w-full items-center gap-2 px-4 py-2.5 text-left transition-colors hover:opacity-80"
+                    >
+                      <svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className={`shrink-0 transition-transform duration-200 ${reasoningOpen ? 'rotate-90' : ''}`}
+                        style={{ color: C.muted }}
+                        aria-hidden="true"
+                      >
+                        <path d="m9 18 6-6-6-6" />
+                      </svg>
+                      <span className="text-xs font-medium" style={{ color: C.muted }}>
+                        {reasoningStart && reasoningEnd
+                          ? `Thought for ${((reasoningEnd - reasoningStart) / 1000).toFixed(1)}s`
+                          : 'Thinking…'}
+                      </span>
+                    </button>
+                    {reasoningOpen && (
+                      <div
+                        className="max-h-64 overflow-y-auto whitespace-pre-wrap px-4 pb-3 text-xs leading-relaxed"
+                        style={{ color: C.muted, opacity: 0.9 }}
+                      >
+                        {reasoningText}
+                      </div>
+                    )}
+                  </div>
+                </div>
               )}
 
               {streamText && (
