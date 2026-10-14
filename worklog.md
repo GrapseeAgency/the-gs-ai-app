@@ -4934,3 +4934,22 @@ Stage Summary:
 - CHAT RESTORED. Sends complete via OpenRouter fallback (39 keys, rotation in openrouter.ts) while z-ai account throttle persists; when zai recovers it resumes as primary
 - No APK reinstall needed; no client change
 - Platform rewound repo AGAIN mid-session (second time today) — push-after-every-commit remains mandatory; watch for inode staleness after any rewind: symptom = fresh-process sqlite write OK + server SQLITE_READONLY_ROLLBACK; fix = dev server restart
+
+---
+Task ID: design-2-a
+Agent: general-purpose
+Task: Land the previously promised uiverse.io components NOW in Settings and Onboarding (operator escalation: links were never materialized). Design law: monochrome + one accent, no gradients, no emoji, no em-dash in copy, 24dp stroke icons in 40dp/12dp rounded-square containers, all motion gated on the reduce-motion settings, spacing 4/8/12/16/24, MaterialTheme roles only.
+
+Work Log:
+- GsIcons.kt: vendored `Cpu` (lucide-static 0.469.0: rect 16x16 @(4,4) rx=2, rect 6x6 @(9,9) rx=1, eight 2dp pins) and `ArrowRight` (M5 12h14 + m12 5 7 7-7 7) in the EXACT generator block style; verified geometry against the pinned CDN svgs; added both stems to scripts/gen_gs_icons.py ICONS so a regen reproduces the file.
+- SettingsScreen.kt: "AI" group icon Brain -> Cpu (the only Brain usage in the app); the ExpandCard group-row icon container conformed to the design law (34dp/GsRadius.md/18dp icon/surfaceContainerHigh -> 40dp, 12dp radius, 24dp icon, surfaceContainerHighest); dropped the now-unused GsRadius import.
+- OnboardingScreen.kt CONTINUE -> uiverse clever-insect-61: solid primary pill (48dp, RoundedCornerShape(percent=50)) with label + trailing 24dp ArrowRight; press slides the arrow 4dp right and sinks the pill 1dp over 120ms ease-out, release returns on GsMotion.standard(); reduced motion (SettingsStore.reduceAnimations || SettingsStore.reduceMotion, the GsEase gate pattern) holds the resting frame; disabled state uses MD3 onSurface alphas.
+- OnboardingScreen.kt multi-select capability cards -> uiverse tiny-moose-42: 24dp check circle, unselected = quiet 2dp outline ring, selected = 2dp primary accent ring + one static drawBehind radial glow (primary at 0.12 alpha fading to transparent, radius = box maxDimension), check scales in on GsEase.state(); no looping animation.
+- OnboardingScreen.kt tooltip -> uiverse sour-dragon-56: ONE HintBubble (inverseSurface bg, inverseOnSurface text, 12dp radius, 8x4dp inverseSurface tail) above the first interest chip row, shown once per visit, dismissed by any press anywhere via a root pointerInput awaitEachGesture observer that never consumes events.
+- 3a note: GsIcons.Brain was NOT used in OnboardingScreen (Lightbulb already carries "Brainstorm ideas") so no swap was needed there; "Brainstorm ideas" copy untouched per instruction.
+- Sanity: python brace/paren/bracket balance check BALANCED on all three touched Kotlin files; em-dash sweep of user-visible string literals: none (remaining em-dashes are pre-existing code comments, not copy). ChatScreen.kt (other agent's working tree) and db/custom.db left untouched and unstaged.
+
+Stage Summary:
+- design-2-a landed on origin/main (commit 334422d): uiverse clever-insect-61 = onboarding Continue arrow pill; uiverse tiny-moose-42 = capability multi-select glow/ring checkbox; uiverse sour-dragon-56 = the single one-shot onboarding tooltip; GsIcons.Cpu = Settings "AI" group icon; Settings group icon containers now at the 40dp/12dp law. All new motion is reduce-motion gated via the existing GsEase/SettingsStore pattern; no new colors, no gradients, no emoji.
+- Files: ui/icons/GsIcons.kt, ui/settings/SettingsScreen.kt, ui/auth/OnboardingScreen.kt, scripts/gen_gs_icons.py (+ this worklog).
+- CI is the compile gate (no local Android build): watch the android-app workflow on 334422d.
