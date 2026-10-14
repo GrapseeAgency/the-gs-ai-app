@@ -475,6 +475,18 @@ fun parseClarifyPayload(payload: String?): ClarifyPrompt? {
     }.getOrNull()
 }
 
+/**
+ * REASONING TRACE payload — `{"delta":"..."}` from thinking-enabled stream
+ * turns. Tolerant by contract: any malformed frame yields null and the
+ * stream never breaks on a reasoning event.
+ */
+fun parseReasoningPayload(payload: String?): String? {
+    if (payload.isNullOrBlank()) return null
+    return runCatching {
+        GsApiJson.parseToJsonElement(payload).jsonObject["delta"]?.jsonPrimitive?.content
+    }.getOrNull()?.takeIf { it.isNotEmpty() }
+}
+
 /** Wire source record → UI card. `used` wins over `status` (cited in the answer). */
 fun MessageSourceDto.toSourceCard(): SourceCard = SourceCard(
     ordinal = ordinal,

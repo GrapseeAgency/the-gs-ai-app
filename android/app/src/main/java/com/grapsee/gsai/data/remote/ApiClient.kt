@@ -221,7 +221,10 @@ class ApiClient(
         onSearchEvent: (String) -> Unit = {},
         onSourceEvent: (String) -> Unit = {},
         onClarifyEvent: (String) -> Unit = {},
-        onResearchEvent: (String) -> Unit = {}
+        onResearchEvent: (String) -> Unit = {},
+        /** REASONING TRACE: raw {"delta":"..."} frames from thinking-enabled
+         *  stream turns. Forwarded untouched; empty payload ignored. */
+        onReasoningEvent: (String) -> Unit = {}
     ) {
         // THE POST IS INSIDE THE GUARD TOO, AND IT IS WHERE THE CUT ACTUALLY
         // SURFACES.
@@ -359,6 +362,9 @@ class ApiClient(
                     // PHASE 8.2: research-level events (§research) — same double-encoded
                     // payload shape, same empty-payload tolerance.
                     "research" -> if (!event.data.isNullOrBlank()) onResearchEvent(event.data)
+                    // REASONING TRACE — unknown to pre-reasoning parsers, which
+                    // skip it silently (when-without-else contract).
+                    "reasoning" -> if (!event.data.isNullOrBlank()) onReasoningEvent(event.data)
                     "done" -> {
                         val message = event.data?.let { data ->
                             runCatching { GsApiJson.decodeFromString<MessageDto>(data) }.getOrNull()

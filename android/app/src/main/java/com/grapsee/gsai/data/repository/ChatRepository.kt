@@ -438,6 +438,8 @@ class ChatRepository(
         onClarify: (String) -> Unit = {},
         /** PHASE 8.2: research-level SSE events (protocol v2 §research), raw. */
         onResearch: (String) -> Unit = {},
+        /** REASONING TRACE: raw {"delta":"..."} frames from thinking turns. */
+        onReasoning: (String) -> Unit = {},
         onDone: (MessageDto?) -> Unit = {},
         onDelta: (String) -> Unit
     ): String {
@@ -527,6 +529,7 @@ class ChatRepository(
                 onSourceEvent = { e -> receivedAnyEvent = true; onSourceEvent(e) },
                 onClarifyEvent = { c -> receivedAnyEvent = true; onClarify(c) },
                 onResearchEvent = { r -> receivedAnyEvent = true; onResearch(r) },
+                onReasoningEvent = { r -> receivedAnyEvent = true; onReasoning(r) },
                 onDone = { done ->
                     doneMessage = done
                     val doneId = done?.id

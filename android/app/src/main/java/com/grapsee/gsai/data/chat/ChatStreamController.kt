@@ -128,7 +128,16 @@ class ChatStreamController(private val chat: ChatRepository) {
          *  ("flash"|"thinking"; null = no mode event yet — pre-v0.70 backend).
          *  Drives the honest indicator: the "Thinking…" label renders ONLY
          *  while this is "thinking". */
-        val effectiveMode: String? = null
+        val effectiveMode: String? = null,
+        /** REASONING TRACE (chat-reasoning panel): the model's thinking stream
+         *  for THIS turn (null = none arrived — flash turns, buffered paths).
+         *  Stream-only by design: never persisted, the panel lives with the
+         *  turn and is gone at the next send. */
+        val reasoning: String? = null,
+        /** Measured thinking span: first reasoning delta → first answer delta.
+         *  Wall-clock from the moment the delta published; no timer. */
+        val reasoningStartMs: Long? = null,
+        val reasoningEndMs: Long? = null
     )
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -229,6 +238,17 @@ class ChatStreamController(private val chat: ChatRepository) {
                             publishIfMine(token) { it.copy(clarify = clarify) }
                         }
                     },
+                    onReasoning = { payload ->
+                        parseReasoningPayload(payload)?.let { delta ->
+                            publishIfMine(token) { current ->
+                                current.copy(
+                                    reasoning = (current.reasoning ?: "") + delta,
+                                    reasoningStartMs = current.reasoningStartMs
+                                        ?: SystemClock.uptimeMillis()
+                                )
+                            }
+                        }
+                    },
                     onDelta = { delta ->
                         // One growing buffer for the whole streamed answer —
                         // per-chunk concatenation re-allocated the entire prefix
@@ -245,7 +265,15 @@ class ChatStreamController(private val chat: ChatRepository) {
                                     "tapToFirstVisibleCharMs=${now - sendCalledAt} chars=${buffer.length}"
                                 )
                             }
-                            publishIfMine(token) { it.copy(streamText = buffer.toString()) }
+                            publishIfMine(token) { current ->
+                                current.copy(
+                                    streamText = buffer.toString(),
+                                    // The first answer token freezes the measured
+                                    // thinking span (only when reasoning ran).
+                                    reasoningEndMs = current.reasoningEndMs
+                                        ?: (if (current.reasoning != null) SystemClock.uptimeMillis() else null)
+                                )
+                            }
                         }
                     },
                     // The done message's persisted sources[] are the AUTHORITATIVE

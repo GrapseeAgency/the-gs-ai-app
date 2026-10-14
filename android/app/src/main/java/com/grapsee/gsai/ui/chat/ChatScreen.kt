@@ -43,6 +43,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imeNestedScroll
 import androidx.compose.foundation.layout.imePadding
@@ -1908,6 +1909,19 @@ private fun AssistantMessage(
                     Spacer(Modifier.height(8.dp))
                 }
             }
+            // REASONING TRACE (chat-reasoning): above the answer while THIS
+            // turn's reasoning streams — stream-only, gone at the next send.
+            if (message.isStreaming) {
+                val st = live?.value
+                if (!st?.reasoning.isNullOrEmpty()) {
+                    ReasoningPanel(
+                        text = st!!.reasoning.orEmpty(),
+                        startMs = st.reasoningStartMs,
+                        endMs = st.reasoningEndMs
+                    )
+                    Spacer(Modifier.height(8.dp))
+                }
+            }
             // Document-style content: no card container, no border — just the
             // answer on the app background. The content column carries the
             // long-press context menu and (when this turn is the active search
@@ -2572,3 +2586,76 @@ private fun dayLabel(iso: String): String? = runCatching {
         else -> date.format(DAY_LABEL_FORMAT)
     }
 }.getOrNull()
+
+/**
+ * REASONING TRACE panel (the 21st chat-reasoning intent, monochrome): a quiet
+ * collapsible card above the streamed answer. Open while the model thinks,
+ * auto-collapsed once the answer's first token lands, reopenable. The seconds
+ * label is the MEASURED span from the first reasoning delta to the first
+ * answer delta, never a timer. Stream-only: renders while this turn is live.
+ */
+@Composable
+private fun ReasoningPanel(
+    text: String,
+    startMs: Long?,
+    endMs: Long?
+) {
+    val colors = GsTheme.colors
+    var expanded by remember { mutableStateOf(true) }
+    // The answer started: collapse once. A manual re-open after that sticks —
+    // the effect only fires on the endMs null → set transition.
+    LaunchedEffect(endMs) {
+        if (endMs != null) expanded = false
+    }
+    val chevron by animateFloatAsState(
+        targetValue = if (expanded) 90f else 0f,
+        animationSpec = GsEase.state(),
+        label = "reasoningChevron"
+    )
+    Surface(
+        shape = RoundedCornerShape(GsRadius.card),
+        color = colors.raisedSurface,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded }
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    GsIcons.ChevronRight,
+                    contentDescription = if (expanded) "Collapse reasoning" else "Expand reasoning",
+                    tint = colors.textSecondary,
+                    modifier = Modifier
+                        .size(14.dp)
+                        .graphicsLayer { rotationZ = chevron }
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = if (startMs != null && endMs != null) {
+                        val seconds = ((endMs - startMs).coerceAtLeast(0L)) / 1000.0
+                        String.format(java.util.Locale.US, "Thought for %.1f seconds", seconds)
+                    } else {
+                        "Thinking…"
+                    },
+                    style = MaterialTheme.typography.labelMedium,
+                    color = colors.textSecondary
+                )
+            }
+            if (expanded) {
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.textSecondary.copy(alpha = 0.85f),
+                    modifier = Modifier
+                        .heightIn(max = 240.dp)
+                        .verticalScroll(rememberScrollState())
+                        .padding(start = 32.dp, end = 12.dp, bottom = 12.dp)
+                )
+            }
+        }
+    }
+}
