@@ -19,6 +19,22 @@ import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouse
  * ambiguous news requests surface the backend's native quick choices.
  */
 
+/** JSON with an honest failure. The send/attach paths surface `e.message`
+ * verbatim, so a raw `res.json()` TypeError ("Failed to execute 'json' on
+ * 'Response': Unexpected end of JSON input") leaked into the error surface
+ * when a proxy/breaker answered with an empty body (raw: operator
+ * screenshot, red error box + the '1 Issue' dev-overlay badge). Text-first
+ * parsing turns every unreadable body into one readable sentence.
+ */
+async function readJson<T>(res: Response): Promise<T> {
+  const text = await res.text()
+  try {
+    return JSON.parse(text) as T
+  } catch {
+    throw new Error(`GS backend answered HTTP ${res.status} with a body that is not readable JSON`)
+  }
+}
+
 const C = {
   bg: '#0A0D12',
   surface: '#11151C',
@@ -613,7 +629,7 @@ export default function Home() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ title: text.slice(0, 40) }),
-          }).then((r) => r.json())
+          }).then((r) => readJson<{ id: string }>(r))
           convId = created?.id ?? null
           setConversationId(convId)
         }
@@ -771,7 +787,7 @@ export default function Home() {
             signal: controller.signal,
           })
           if (!start.ok) throw new Error(`Backend responded ${start.status}`)
-          const started = (await start.json()) as { streamId: string; runId: string }
+          const started = (await readJson<{ streamId: string; runId: string }>(start))
 
           let sawFinal = false
           let cursor = ''
@@ -992,7 +1008,7 @@ export default function Home() {
         form.append('file', file)
         const res = await fetch('/api/v1/uploads', { method: 'POST', body: form })
         if (!res.ok) throw new Error(`upload failed (${res.status})`)
-        const saved = (await res.json()) as { id: string; kind: string; displayName?: string }
+        const saved = (await readJson<{ id: string; kind: string; displayName?: string }>(res))
         setPendingAttachments((prev) =>
           prev.map((a) =>
             a.id === tempId
