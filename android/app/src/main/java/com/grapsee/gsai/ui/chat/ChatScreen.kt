@@ -47,7 +47,9 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imeNestedScroll
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -142,7 +144,7 @@ import com.grapsee.gsai.ui.components.GsOfflineBanner
 import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.data.tts.TtsFocus
 import com.grapsee.gsai.ui.components.GsInputBar
-import com.grapsee.gsai.ui.components.GsScreenScaffold
+import com.grapsee.gsai.ui.components.gsContentWidth
 import com.grapsee.gsai.ui.components.rememberDeviceOffline
 import com.grapsee.gsai.ui.theme.GsMotion
 import com.grapsee.gsai.ui.theme.GsRadius
@@ -164,9 +166,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.clickable
 import com.grapsee.gsai.ui.theme.kineticPress
 import com.grapsee.gsai.ui.chat.content.BlocksContent
-import com.grapsee.gsai.ui.orbs.OrbSize
 import com.grapsee.gsai.ui.orbs.OrbState
-import com.grapsee.gsai.ui.orbs.ThinkingOrb
 import com.grapsee.gsai.ui.orbs.orbStateForChatStream
 import com.grapsee.gsai.ui.theme.GsTheme
 import com.grapsee.gsai.ui.theme.gsHaptic
@@ -525,6 +525,15 @@ fun ChatScreen(
             val info = listState.layoutInfo
             val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: -1
             lastVisible >= info.totalItemsCount - 1
+        }
+    }
+    // Top-bar scroll signal (design-3-b): the 1dp outlineVariant divider under
+    // the header exists only while the transcript is actually displaced from
+    // its top — an empty surface (no messages, nothing scrolled) never raises it.
+    val transcriptScrolled by remember {
+        derivedStateOf {
+            messages.isNotEmpty() &&
+                (listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0)
         }
     }
     // The banner tracks the phone's actual connectivity (see GsComponents).
@@ -1092,52 +1101,72 @@ fun ChatScreen(
     // Workspace header: menu (at root) / back (pushed) and the quiet title.
     val menuAction = onOpenDrawer
     val newChatAction = onNewChat
-    GsScreenScaffold(
-        title = conversationTitle,
-        onBack = if (atWorkspaceRoot) null else onBack,
-        leading = if (atWorkspaceRoot && menuAction != null) {
-            {
-                IconButton(
-                    onClick = menuAction,
-                    // TASK 5: visible press state on the chrome icon buttons.
-                    modifier = Modifier.kineticPress()
-                ) {
-                    Icon(
-                        GsIcons.PanelLeft,
-                        contentDescription = "Open menu",
-                        tint = MaterialTheme.colorScheme.onBackground
-                    )
+    // design-3-b: the chat top bar is owned here instead of the shared
+    // scaffold, so this surface photographs differently: 20sp weight-600 sans
+    // title onBackground (no serif tier), 24dp icons in 40dp rounded-square
+    // (12dp radius) hit targets, and a 1dp outlineVariant divider that exists
+    // only while the transcript is scrolled. Same inset + content-width
+    // contract as GsScreenScaffold (status/nav bar padding, gsContentWidth).
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .gsContentWidth()
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .padding(top = GsMotion.spaceM)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = GsMotion.spaceM),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (atWorkspaceRoot) {
+                    if (menuAction != null) {
+                        ChatTopIconButton(GsIcons.PanelLeft, "Open menu", menuAction)
+                    }
+                } else {
+                    ChatTopIconButton(GsIcons.ChevronLeft, "Back", onBack)
                 }
-            }
-        } else null,
-        compactTitle = true,
-        actions = {
-            IconButton(
-                onClick = {
+                Text(
+                    text = conversationTitle,
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontSize = 20.sp,
+                        lineHeight = 26.sp,
+                        fontWeight = FontWeight.SemiBold
+                    ),
+                    color = MaterialTheme.colorScheme.onBackground,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f).padding(start = 8.dp)
+                )
+                ChatTopIconButton(
+                    GsIcons.Search,
+                    if (searchOpen) "Close search" else "Search in chat"
+                ) {
                     searchOpen = !searchOpen
                     if (!searchOpen) {
                         searchQuery = ""
                         searchActiveIndex = 0
                     }
-                },
-                modifier = Modifier.kineticPress()
-            ) {
-                Icon(GsIcons.Search, contentDescription = "Search in chat",
-                    tint = MaterialTheme.colorScheme.onBackground)
-            }
-            if (newChatAction != null) {
-                IconButton(onClick = newChatAction, modifier = Modifier.kineticPress()) {
-                    Icon(GsIcons.Plus, contentDescription = "New chat",
-                        tint = MaterialTheme.colorScheme.onBackground)
+                }
+                if (newChatAction != null) {
+                    ChatTopIconButton(GsIcons.Plus, "New chat", newChatAction)
                 }
             }
+            if (transcriptScrolled) {
+                HorizontalDivider(
+                    thickness = 1.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant
+                )
+            }
         }
-    ) {
+        Spacer(Modifier.height(GsMotion.spaceS))
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .imePadding(),
+                .imePadding()
+                .padding(horizontal = GsMotion.spaceM),
             verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
         ) {
             // Honest connectivity in the primary surface — same banner as the
@@ -1214,7 +1243,7 @@ fun ChatScreen(
                         modifier = Modifier
                             .fillMaxSize()
                             .imeNestedScroll(),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         itemsIndexed(
                             messages,
@@ -1325,14 +1354,14 @@ fun ChatScreen(
 
             // The composer NEVER disappears while streaming: the send slot
             // inside the input bar becomes the stop control (stop lives exactly
-            // where send always is), and the activity orb sits directly on top
-            // of the composer row. The REAL stream phase drives it (Phase 4):
+            // where send always is), and the static thinking dots sit directly
+            // on top of the composer row. The REAL stream phase drives it (Phase 4):
             // "Thinking…" before the first token, "Composing…" while tokens
             // flow — never a fabricated state, never a full-width bar
             // replacing the composer, never a distraction from the answer.
             // FLASH-MODE BUG 1: the word "Thinking…" renders ONLY when the
             // wire's `mode` event resolved this turn to effectiveMode=
-            // "thinking" — a Flash turn shows the bare orb (neutral, no
+            // "thinking" — a Flash turn shows the bare dots (neutral, no
             // label). Search/Working states keep their honest labels in every
             // mode: those are real pipeline phases, not mode statements.
             liveOrbState?.let { orbState ->
@@ -1343,7 +1372,7 @@ fun ChatScreen(
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    ThinkingOrb(state = orbState, size = OrbSize.INLINE)
+                    ThinkingDots()
                     if (showLabel) {
                         Spacer(Modifier.width(8.dp))
                         Text(
@@ -1446,6 +1475,39 @@ fun ChatScreen(
     }
 }
 
+// --- top bar chrome -----------------------------------------------------------
+
+/**
+ * design-3-b top-bar hit target: a 24dp icon in a 40dp rounded-square (12dp
+ * radius) press target, tinted onBackground. The visible press state comes
+ * from the existing kineticPress pattern (reduce-motion gated internally);
+ * the label doubles as the content description for TalkBack.
+ */
+@Composable
+private fun ChatTopIconButton(icon: ImageVector, label: String, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(40.dp)
+            .kineticPress()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                role = Role.Button,
+                onClickLabel = label
+            ) { onClick() }
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onBackground,
+            modifier = Modifier.size(24.dp)
+        )
+    }
+}
+
 // --- bubbles ----------------------------------------------------------------
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -1512,30 +1574,42 @@ private fun UserMessage(
                 )
             }
             if (message.content.isNotEmpty()) {
+                // design-3-b identity: the user turn is the screen's ONE accent
+                // fill — solid primary with onPrimary text (the tonal gray is
+                // gone), the 20dp corner family with a 4dp bottom-right tail
+                // corner, hard cap at 85% of the row width. The find-in-chat
+                // hit keeps the fill and lifts with a 2dp onPrimary ring.
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    Surface(
-                        modifier = Modifier
-                            // Long user turns wrap inside a readable column instead
-                            // of spanning the full width edge to edge.
-                            .widthIn(max = 340.dp)
-                            .combinedClickable(
+                    Box(
+                        modifier = Modifier.fillMaxWidth(0.85f),
+                        contentAlignment = Alignment.CenterEnd
+                    ) {
+                        Surface(
+                            modifier = Modifier.combinedClickable(
                                 onClick = {},
                                 onLongClick = {
                                     if (GsHaptics.enabled()) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                                     onCopy(message.content)
                                 }
                             ),
-                        shape = RoundedCornerShape(18.dp),
-                        color = MaterialTheme.colorScheme.primary.copy(
-                            alpha = if (highlight) 0.34f else 0.14f
-                        )
-                    ) {
-                        Text(
-                            text = message.content,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
-                        )
+                            shape = RoundedCornerShape(
+                                topStart = 20.dp,
+                                topEnd = 20.dp,
+                                bottomStart = 20.dp,
+                                bottomEnd = 4.dp
+                            ),
+                            color = MaterialTheme.colorScheme.primary,
+                            border = if (highlight) {
+                                BorderStroke(2.dp, MaterialTheme.colorScheme.onPrimary)
+                            } else null
+                        ) {
+                            Text(
+                                text = message.content,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -1807,9 +1881,9 @@ private fun JumpToLatestPill(onClick: () -> Unit) {
 
 /**
  * One assistant turn — DOCUMENT style. The answer is not a card: content sits
- * directly on the app background at the scaffold's reading column (the shell
- * clamps the whole surface to GsLayout.contentMaxWidth, so tablets get the
- * reading column and phones full width minus padding). Identity is a compact
+ * directly on the app background at the reading column (bodyLarge measure,
+ * 16sp / 24sp line height, hard-capped at 640dp; the shell clamps the whole
+ * surface to GsLayout.contentMaxWidth and centers it). Identity is a compact
  * avatar+name row rendered once per turn GROUP ([showIdentity] — see the
  * grouping logic at the call site), not a badge on every turn. Actions are a
  * quiet icon row BELOW the content (Copy / Regenerate / Read aloud / Share;
@@ -1941,11 +2015,15 @@ private fun AssistantMessage(
                 }
             }
             // Document-style content: no card container, no border — just the
-            // answer on the app background. The content column carries the
+            // answer on the app background at the bodyLarge measure (16sp /
+            // 24sp, the BlocksContent base style), hard-capped at the 640dp
+            // reading width the shell centers. The content column carries the
             // long-press context menu and (when this turn is the active search
             // hit) a soft accent field instead of the old card border.
             Column(
                 modifier = Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 640.dp)
                     .background(
                         color = if (highlight) MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
                         else androidx.compose.ui.graphics.Color.Transparent,
@@ -2056,24 +2134,27 @@ private fun AssistantMessage(
     }
 }
 
-/** Compact assistant identity mark — small avatar beside the "GS" name in the
- *  turn-group header row (decorative: the name text carries the meaning). */
+/** Compact assistant identity mark — the 24dp GS monogram circle beside the
+ *  "GS" name in the turn-group header row (design-3-b role header: solid
+ *  primary container, onPrimary glyph). Rendered only on the FIRST assistant
+ *  block of a turn; the name text carries the meaning. */
 @Composable
 private fun AssistantAvatar() {
     // The identity mark is the GS monogram — a glyph, not an illustration.
     // (The previous sparkle icon is banned chrome under RULE ZERO.)
     Box(
         modifier = Modifier
-            .size(22.dp)
+            .size(24.dp)
             .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+            .background(MaterialTheme.colorScheme.primary),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = "GS",
             style = MaterialTheme.typography.labelMedium,
             fontSize = 8.sp,
-            color = MaterialTheme.colorScheme.onSurface
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onPrimary
         )
     }
 }
@@ -2137,28 +2218,39 @@ private fun BubbleAction(icon: ImageVector, label: String, onClick: () -> Unit) 
     }
 }
 
-// --- workspace empty state ---------------------------------------------------
-
-/** Time-of-day greeting — the empty state's written identity (the Phase 4
- *  breathing orb above it is the living one; neither is a hero). */
-private fun greetingFor(): String {
-    val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
-    return when (hour) {
-        in 23..23, in 0..4 -> "Up late?"
-        in 5..11 -> "Good morning"
-        in 12..17 -> "Good afternoon"
-        else -> "Good evening"
+/**
+ * design-3-b thinking affordance: three static 4dp dots, onSurfaceVariant,
+ * 4dp apart. Deliberately NOT animated — the honest activity wording stays in
+ * the label beside the dots, and no looping motion exists on this surface.
+ */
+@Composable
+private fun ThinkingDots() {
+    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        repeat(3) {
+            Box(
+                modifier = Modifier
+                    .size(4.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.onSurfaceVariant)
+            )
+        }
     }
 }
 
+// --- workspace empty state ---------------------------------------------------
+
 /**
- * PHASE 3 empty state, uiverse pass. The fresh workspace IS this: a small
- * greeting, one 3D-press New chat primary (uiverse marcelodolza
- * stupid-vampirebat-24), ONE capability showcase card (uiverse Ashon-G
- * big-chipmunk-8), readable empty space, and the composer already waiting at
- * the bottom. No halo, no navigation. The block yields to the transcript on
- * the first turn and steps aside the moment the reader types: the composer
- * takes the floor.
+ * design-3-b empty-state recomposition. The fresh workspace photographs as ONE
+ * centered identity column, vertically centered in the available space with
+ * 24dp side padding: the 72dp GS monogram circle leads (solid primary fill,
+ * onPrimary "GS" at 28sp bold), then the 24sp weight-600 greeting "What can I
+ * do for you?" (sans, never the serif display tier), an 8dp gap, the 3D-press
+ * New chat primary (uiverse marcelodolza stupid-vampirebat-24, unchanged from
+ * design-2-b), a 16dp gap, and the ONE capability showcase card (uiverse
+ * Ashon-G big-chipmunk-8, unchanged). The former breathing orb identity mark
+ * is gone from this surface. The block yields to the transcript on the first
+ * turn; while the reader types, the actions step aside (existing draft-aware
+ * behavior) and the monogram + greeting hold the floor.
  */
 @Composable
 private fun WorkspaceEmptyState(
@@ -2169,31 +2261,47 @@ private fun WorkspaceEmptyState(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = GsMotion.spaceM),
+            .padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        // Phase 4 §14: a very restrained breathing identity mark — small,
-        // monochrome, calm, and strictly secondary to the composer below.
-        ThinkingOrb(
-            state = OrbState.BREATHING,
-            size = OrbSize.STANDARD,
-            contentDescription = "GS assistant"
-        )
-        Spacer(Modifier.height(GsMotion.spaceM))
+        // 72dp GS monogram circle — the screen's identity mark: solid primary
+        // fill, onPrimary glyph, nothing orbiting it.
+        Box(
+            modifier = Modifier
+                .size(72.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primary),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "GS",
+                style = MaterialTheme.typography.titleLarge.copy(
+                    fontSize = 28.sp,
+                    lineHeight = 32.sp,
+                    fontWeight = FontWeight.Bold
+                ),
+                color = MaterialTheme.colorScheme.onPrimary
+            )
+        }
+        Spacer(Modifier.height(24.dp))
         Text(
-            text = greetingFor(),
-            style = MaterialTheme.typography.headlineSmall,
-            color = GsTheme.colors.textPrimary,
+            text = "What can I do for you?",
+            style = MaterialTheme.typography.titleLarge.copy(
+                fontSize = 24.sp,
+                lineHeight = 30.sp,
+                fontWeight = FontWeight.SemiBold
+            ),
+            color = MaterialTheme.colorScheme.onBackground,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             modifier = Modifier.semantics { heading() }
         )
         if (draft.isBlank()) {
-            Spacer(Modifier.height(GsMotion.spaceL))
+            Spacer(Modifier.height(8.dp))
             if (onNewChat != null) {
                 NewChatButton(onClick = onNewChat)
             }
-            Spacer(Modifier.height(GsMotion.spaceM))
+            Spacer(Modifier.height(16.dp))
             EmptyCapabilityCard()
         }
     }
