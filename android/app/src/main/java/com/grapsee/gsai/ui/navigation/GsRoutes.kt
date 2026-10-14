@@ -61,7 +61,7 @@ object GsRoutes {
 
     /** Root-level destinations the drawer switches to. */
     val SECTION_ROUTES = setOf(
-        CHATS, SEARCH,
+        CHATS,
         PROFILE, NOTIFICATIONS, SETTINGS, BILLING
     )
 
