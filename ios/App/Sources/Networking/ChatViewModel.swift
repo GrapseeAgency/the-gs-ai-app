@@ -805,7 +805,10 @@ final class ChatViewModel: ObservableObject {
             firstCharLogged = true
             if let tappedAt = sendTappedAt {
                 let ms = Int(Date().timeIntervalSince(tappedAt) * 1000)
-                os_log("GS-PERF tapToFirstVisibleCharMs=%d chars=%d", log: .app, type: .info, ms, text.count)
+                // OSLog has no `.app` member (raw: iOS run 38470835743, "type
+                // 'OSLog' has no member 'app'"). The GS-PERF prefix keeps the
+                // line greppable from the process' default log handle.
+                os_log("GS-PERF tapToFirstVisibleCharMs=%d chars=%d", log: .default, type: .info, ms, text.count)
             }
         }
         messages[index].content = text
