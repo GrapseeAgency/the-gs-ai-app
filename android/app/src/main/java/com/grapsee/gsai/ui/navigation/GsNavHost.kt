@@ -40,9 +40,6 @@ import com.grapsee.gsai.ui.chat.ChatSearchScreen
 import com.grapsee.gsai.ui.chat.ChatsScreen
 import com.grapsee.gsai.ui.notifications.NotificationsScreen
 import com.grapsee.gsai.ui.profile.ProfileScreen
-import com.grapsee.gsai.ui.research.ResearchScreen
-import com.grapsee.gsai.ui.search.SearchScreen
-import com.grapsee.gsai.ui.vision.VisionScreen
 import com.grapsee.gsai.ui.settings.SettingsScreen
 import com.grapsee.gsai.ui.voice.VoiceScreen
 import com.grapsee.gsai.ui.theme.GsMotion
@@ -215,7 +212,6 @@ fun GsNavHost(modifier: Modifier = Modifier) {
         }
     ) {
         composable(GsRoutes.CHATS) { ChatsScreen(onNavigate = open) }
-        composable(GsRoutes.SEARCH) { SearchScreen(onNavigate = open) }
         composable(GsRoutes.PROFILE) { ProfileScreen(onNavigate = open) }
 
         composable(GsRoutes.SETTINGS) {
@@ -278,10 +274,6 @@ fun GsNavHost(modifier: Modifier = Modifier) {
 
         // Billing
         composable(GsRoutes.BILLING) { BillingScreen(onBack = back) }
-
-        // Blueprint workspaces
-        composable(GsRoutes.RESEARCH) { ResearchScreen(onBack = back) }
-        composable(GsRoutes.VISION) { VisionScreen(onBack = back) }
 
         composable(
             route = GsRoutes.CHAT,

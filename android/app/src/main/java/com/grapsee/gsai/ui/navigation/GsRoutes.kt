@@ -5,7 +5,6 @@ import android.net.Uri
 /** AERUO KINETIC — route map. Screens are plain composables; this file owns all routing. */
 object GsRoutes {
     const val CHATS = "chats"
-    const val SEARCH = "search"
     const val PROFILE = "profile"
     const val SETTINGS = "settings"
     const val NOTIFICATIONS = "notifications"
@@ -21,10 +20,6 @@ object GsRoutes {
 
     // Billing / subscription (reached from Profile).
     const val BILLING = "billing"
-
-    // Blueprint workspaces — honest stubs, each its own room.
-    const val RESEARCH = "research"
-    const val VISION = "vision"
 
     const val CHAT = "chat/{conversationId}?prompt={prompt}&send={send}"
     const val ARG_CONVERSATION = "conversationId"
