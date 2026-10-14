@@ -4877,3 +4877,23 @@ Work Log:
 Stage Summary:
 - Push LIVE (9 commits this session), iOS compile gate GREEN for the first time, Android orphan + zero-caller cleanups landed, the last design-resource follow-up (chat-reasoning panel) shipped on all four layers, web honest-error + RULE ZERO fixed and browser-verified.
 - Pending: CI verdicts on the reasoning mirror (android-app + android-screens + iOS on 0d369a5); live reasoning-panel verification when z-ai quota returns; operator must sideload v0.73.0 once (their 0.71.5 cannot self-update); drawer-BACK on-device check still needs a real device.
+
+---
+Task ID: release-0.73.1
+Agent: Z.ai Code (main)
+Task: Cut and ship new APK after user supplied fresh GitHub PAT
+
+Work Log:
+- Verified remote auth with new PAT: fetch+push green, origin/main at 6cf2ede, local==remote
+- Bumped android versionCode 82->83 / versionName 0.73.0->0.73.1, commit ccd770c, pushed
+- Triggered android-release.yml via workflow_dispatch (HTTP 204): run 38540783911 succeeded BUT 'Attach to release' skipped (dispatch trigger does not attach; only tag pushes do) and zero artifacts uploaded
+- Switched to tag route: tagged v0.73.1 @ ccd770c, push triggered run 38541312461 (run_number 29), success in ~2.5min, all gates green (badging, cert, BASE_URL)
+- Downloaded release asset GS-AI-App.apk (83,831,960 B, sha256 d5f284ef662670bb258f226b5629b6fed4c94b7beda87276bf9326665388c920), verified libgs_ffi.so + libmlkit_google_ocr_pipeline.so present
+- Updated download/update-manifest.json (83 / 0.73.1 / new sha256 / size / notes), committed APK+manifest c189530, pushed
+- Created webDevReview cron job 458588 (every 15min, Asia/Dhaka)
+
+Stage Summary:
+- NEW APK AVAILABLE: v0.73.1 (versionCode 83), includes android reasoning trace mirror (4e5e169) + web rule-zero sweep (b5051c3)
+- Live at raw manifest URL (download/GS-AI-App.apk on main) and GitHub Release v0.73.1
+- Learned: android-release.yml attaches to GitHub Release ONLY on tag push; workflow_dispatch uploads nothing — always release via tag
+- Full PAT auth restored: push + CI both operational
