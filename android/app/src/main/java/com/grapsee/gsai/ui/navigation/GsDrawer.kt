@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -49,6 +50,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.grapsee.gsai.data.local.ConversationEntity
 import com.grapsee.gsai.data.AccountStore
 import com.grapsee.gsai.di.ServiceLocator
@@ -59,24 +61,28 @@ import com.grapsee.gsai.ui.icons.GsIcons
 import com.grapsee.gsai.ui.theme.GsHaptics
 import com.grapsee.gsai.ui.theme.GsMotion
 import com.grapsee.gsai.ui.theme.GsRadius
-import com.grapsee.gsai.ui.theme.GsTheme
 import com.grapsee.gsai.ui.theme.kineticPress
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
 /**
- * DESIGN PHASE 2 drawer — the Dola spirit, humbler. A CHAT HISTORY PANEL,
- * not a route directory. Structure (one visual unit per group, groups
- * separated by spacing, never borders):
+ * DESIGN 3 IDENTITY drawer. A CHAT HISTORY PANEL, not a route directory.
+ * Structure (one visual unit per group, groups separated by spacing,
+ * never borders):
  *
- *  1. TOP BAR — the search pill (calm, leading) and the one primary action
- *     of this screen: New chat (the accent). Nothing else competes.
- *  2. RECENT — the visual heart, weighted to fill: live conversations, tap
- *     to open, long-press for pin / rename / archive / delete. Genuine
- *     empty state. "All chats" is the quiet overflow row.
+ *  1. TOP BAR — the search pill (44dp, surfaceContainer, 22dp radius) and
+ *     the one primary action of this screen: New chat (the accent). Nothing
+ *     else competes.
+ *  2. RECENT — micro-label ramp (11sp medium, uppercase, 1.2sp tracking),
+ *     then live conversations at 52dp: 15sp/500 titles, one line
+ *     ellipsized, the active row a surfaceContainer pill. Long-press for
+ *     pin / rename / archive / delete. Genuine empty state. "All chats"
+ *     and "Voice" carry the row glyph spec: a 40dp rounded square (12dp
+ *     radius, surfaceContainerHighest) around the 24dp icon.
  *  3. FOOTER — the account row, pinned to the bottom like the reference
- *     app: identity lives where the thumb rests, never above the content.
+ *     app: a 40dp primary monogram, the real name, the email at 13sp, and
+ *     a ChevronRight. Identity lives where the thumb rests.
  *
  * REDUCTION (design phase 2, screen 16): the More sheet is GONE. Explore,
  * Create, Projects, Library and Assistants were static demo surfaces —
@@ -87,7 +93,7 @@ import kotlinx.coroutines.launch
  * them; a later cleanup pass deletes the files.
  *
  * Icons are Lucide via GsIcons — one family, one weight, neutral containers,
- * no decorative glyphs (RULE ZERO).
+ * no decorative glyphs (RULE ZERO). All color reads MaterialTheme roles.
  */
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -132,7 +138,7 @@ fun GsDrawerContent(
             .fillMaxHeight()
             .width(304.dp)
             .clip(RoundedCornerShape(topEnd = GsRadius.sheet, bottomEnd = GsRadius.sheet))
-            .background(GsTheme.colors.navSurface)
+            .background(MaterialTheme.colorScheme.surface)
             .semantics { paneTitle = "Navigation drawer" }
             .statusBarsPadding()
             .navigationBarsPadding()
@@ -150,8 +156,8 @@ fun GsDrawerContent(
                 modifier = Modifier
                     .weight(1f)
                     .height(44.dp)
-                    .clip(GsRadius.pill)
-                    .background(GsTheme.colors.raisedSurface)
+                    .clip(RoundedCornerShape(22.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainer)
                     .kineticPress(searchInteraction)
                     .clickable(
                         interactionSource = searchInteraction,
@@ -169,13 +175,13 @@ fun GsDrawerContent(
                 Icon(
                     GsIcons.Search,
                     contentDescription = null,
-                    tint = GsTheme.colors.textSecondary,
-                    modifier = Modifier.size(18.dp)
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
                 )
                 Text(
                     "Search",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = GsTheme.colors.textSecondary
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             GsButton(
@@ -188,8 +194,6 @@ fun GsDrawerContent(
             )
         }
 
-        Spacer(Modifier.height(GsMotion.spaceM))
-
         // 2 · Recent — the heart, weighted to fill. Live history only; when
         // the store is empty the panel says so honestly, nothing invented.
         Column(
@@ -198,18 +202,18 @@ fun GsDrawerContent(
                 .verticalScroll(rememberScrollState())
         ) {
             DrawerLabel("Recent")
-            Spacer(Modifier.height(GsMotion.spaceS))
             if (recents.isEmpty()) {
                 Text(
                     "No conversations yet",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = GsTheme.colors.textSecondary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = GsMotion.spaceM, vertical = GsMotion.spaceS)
                 )
             } else {
                 recents.take(RECENT_LIMIT).forEach { conversation ->
                     RecentRow(
                         conversation = conversation,
+                        selected = selectedRoute == GsRoutes.chat(conversation.id),
                         onOpen = {
                             onClose()
                             onNavigate(GsRoutes.chat(conversation.id))
@@ -257,14 +261,17 @@ fun GsDrawerContent(
                 modifier = Modifier
                     .size(40.dp)
                     .clip(CircleShape)
-                    .background(GsTheme.colors.accentSoft),
+                    .background(MaterialTheme.colorScheme.primary),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     initialsFor(storedName),
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = GsTheme.colors.textPrimary
+                    style = MaterialTheme.typography.labelLarge.copy(
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.sp
+                    ),
+                    color = MaterialTheme.colorScheme.onPrimary
                 )
             }
             Column(modifier = Modifier.weight(1f)) {
@@ -272,8 +279,12 @@ fun GsDrawerContent(
                     // Real identity only: the stored name, else a neutral
                     // label — never an invented "Admin".
                     storedName.ifBlank { "GS account" },
-                    style = MaterialTheme.typography.titleSmall,
-                    color = GsTheme.colors.textPrimary,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium,
+                        letterSpacing = 0.sp
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -281,8 +292,11 @@ fun GsDrawerContent(
                     // The stored email, else a neutral line — never a
                     // fabricated address.
                     storedEmail.ifBlank { "Signed in" },
-                    style = MaterialTheme.typography.labelMedium,
-                    color = GsTheme.colors.textSecondary,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontSize = 13.sp,
+                        letterSpacing = 0.sp
+                    ),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -290,7 +304,7 @@ fun GsDrawerContent(
             Icon(
                 GsIcons.ChevronRight,
                 contentDescription = null,
-                tint = GsTheme.colors.textSecondary,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(16.dp)
             )
         }
@@ -325,11 +339,16 @@ fun GsDrawerContent(
     }
 }
 
-/** One live recent: tap to open, long-press for the benchmark action set. */
+/**
+ * One live recent: tap to open, long-press for the benchmark action set.
+ * 52dp tall, 15sp/500 title on one ellipsized line; the ACTIVE conversation
+ * wears the surfaceContainer pill, everything else stays flat on the canvas.
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun RecentRow(
     conversation: ConversationEntity,
+    selected: Boolean,
     onOpen: () -> Unit,
     onActions: () -> Unit
 ) {
@@ -337,7 +356,9 @@ private fun RecentRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(GsRadius.mdShape())
+            .heightIn(min = 52.dp)
+            .clip(RoundedCornerShape(26.dp))
+            .background(if (selected) MaterialTheme.colorScheme.surfaceContainer else MaterialTheme.colorScheme.surface.copy(alpha = 0f))
             .kineticPress(folderInteraction)
             .combinedClickable(
                 interactionSource = folderInteraction,
@@ -346,14 +367,18 @@ private fun RecentRow(
                 onClick = onOpen,
                 onLongClick = onActions
             )
-            .padding(horizontal = GsMotion.spaceM, vertical = 12.dp),
+            .padding(horizontal = GsMotion.spaceM, vertical = GsMotion.spaceS),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
     ) {
         Text(
             gsConversationTitle(conversation.title),
-            style = MaterialTheme.typography.bodyMedium,
-            color = GsTheme.colors.textPrimary,
+            style = MaterialTheme.typography.bodyMedium.copy(
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Medium,
+                letterSpacing = 0.sp
+            ),
+            color = MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f)
@@ -362,7 +387,7 @@ private fun RecentRow(
             Icon(
                 GsIcons.Star,
                 contentDescription = "Pinned",
-                tint = GsTheme.colors.textSecondary,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(14.dp)
             )
         }
@@ -402,64 +427,77 @@ private fun SheetRow(
     selected: Boolean = false,
     onClick: () -> Unit
 ) {
-    val colors = GsTheme.colors
     val rowInteraction = remember { MutableInteractionSource() }
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(min = 52.dp)
             .clip(GsRadius.mdShape())
-            .background(if (selected) colors.accentSoft else colors.appBackground.copy(alpha = 0f))
+            .background(if (selected) MaterialTheme.colorScheme.surfaceContainer else MaterialTheme.colorScheme.surface.copy(alpha = 0f))
             .kineticPress(rowInteraction)
             .clickable(
                 interactionSource = rowInteraction,
                 indication = LocalIndication.current,
                 role = Role.Button
             ) { onClick() }
-            .padding(horizontal = GsMotion.spaceS, vertical = 12.dp),
+            .padding(horizontal = GsMotion.spaceS, vertical = GsMotion.spaceS),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
     ) {
         if (icon != null) {
-            // One container spec: 32dp rounded square, neutral fill, icon
-            // inside — the reference app's row rhythm, monochrome.
+            // One container spec: 40dp rounded square, 12dp radius, 24dp
+            // stroke icon centered — the row glyph law, monochrome.
             Box(
                 modifier = Modifier
-                    .size(32.dp)
-                    .clip(GsRadius.mdShape())
-                    .background(colors.raisedSurface),
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainerHighest),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     icon,
                     contentDescription = null,
-                    tint = colors.textPrimary,
-                    modifier = Modifier.size(16.dp)
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.size(24.dp)
                 )
             }
         }
         Text(
             title,
-            style = MaterialTheme.typography.bodyLarge,
-            color = colors.textPrimary,
+            style = MaterialTheme.typography.bodyMedium.copy(
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Medium,
+                letterSpacing = 0.sp
+            ),
+            color = MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
     }
 }
 
+/**
+ * Section micro-label per the type ramp: 11sp medium, uppercase, 1.2sp
+ * tracking, onSurfaceVariant, 16dp top / 8dp bottom. TalkBack heading.
+ */
 @Composable
 private fun DrawerLabel(text: String) {
     Text(
         text.uppercase(),
-        style = MaterialTheme.typography.labelMedium,
-        color = GsTheme.colors.textSecondary,
-        modifier = Modifier.padding(horizontal = 4.dp)
+        style = MaterialTheme.typography.labelMedium.copy(
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium,
+            letterSpacing = 1.2.sp
+        ),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
     )
 }
 
 /**
- * One navigation row. [selected] marks the drawer's answer to "where am I":
- * a soft neutral container — quiet, readable, colourless.
+ * One navigation row: 52dp, 15sp/500 title, the 40dp/12dp row glyph
+ * container, and the ACTIVE route wearing the surfaceContainer pill —
+ * quiet, readable, colourless.
  */
 @Composable
 private fun DrawerRow(
@@ -468,13 +506,13 @@ private fun DrawerRow(
     selected: Boolean = false,
     onClick: () -> Unit
 ) {
-    val colors = GsTheme.colors
     val navRowInteraction = remember { MutableInteractionSource() }
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(GsRadius.mdShape())
-            .background(if (selected) colors.accentSoft else colors.appBackground.copy(alpha = 0f))
+            .heightIn(min = 52.dp)
+            .clip(RoundedCornerShape(26.dp))
+            .background(if (selected) MaterialTheme.colorScheme.surfaceContainer else MaterialTheme.colorScheme.surface.copy(alpha = 0f))
             .kineticPress(navRowInteraction)
             .clickable(
                 interactionSource = navRowInteraction,
@@ -482,24 +520,36 @@ private fun DrawerRow(
                 role = Role.Button
             ) { onClick() }
             .semantics { this.selected = selected }
-            .padding(horizontal = GsMotion.spaceM, vertical = 12.dp),
+            .padding(horizontal = GsMotion.spaceS, vertical = GsMotion.spaceS),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
     ) {
         if (icon != null) {
-            Icon(
-                icon,
-                contentDescription = null,
-                tint = if (selected) colors.textPrimary else colors.textSecondary,
-                modifier = Modifier.size(18.dp)
-            )
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
         } else {
             Spacer(Modifier.width(2.dp))
         }
         Text(
             title,
-            style = MaterialTheme.typography.bodyMedium,
-            color = colors.textPrimary,
+            style = MaterialTheme.typography.bodyMedium.copy(
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Medium,
+                letterSpacing = 0.sp
+            ),
+            color = MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
