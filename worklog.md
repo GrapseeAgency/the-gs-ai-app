@@ -4970,3 +4970,19 @@ Work Log:
 
 Stage Summary:
 - All three assigned uiverse components are now materialized in the chat screen: dangerous-dolphin-47 as the bordered 28dp composer pill (gradient omitted by design law), dull-ladybug-18 as the send button's layered press physics, stupid-vampirebat-24 as the 3D-key New chat primary, big-chipmunk-8 as the single capability showcase card. Commit 742f020 (ChatScreen.kt only) pushed to origin/main; CI compile verdict pending as the gate.
+
+---
+Task ID: design-2-c
+Agent: Z.ai Code (main)
+Task: Assistant voice rule + release v0.73.2 with the uiverse materialization round
+
+Work Log:
+- SYSTEM_PROMPT (src/lib/ai.ts): appended ban on emoji and em-dash in assistant replies (root fix for the 'Hi! wave' greeting the operator screenshotted; model output, not a canned string)
+- Bumped versionCode 84 / versionName 0.73.2, tagged v0.73.2 @ 9dea7db
+- CI android-release run 38560334080 SUCCESS (~3min) — both agents' Kotlin compiled clean, gates green
+- APK 83,848,344 B (sha256 ea978109...) downloaded, manifest updated, committed f7d68b0, pushed
+
+Stage Summary:
+- v0.73.2 ships the operator's uiverse links as REAL components: dangerous-dolphin-47 (composer container), dull-ladybug-18 (send press), stupid-vampirebat-24 (New chat 3D press), big-chipmunk-8 (single capability card), clever-insect-61 (continue pill), tiny-moose-42 (glow checkbox), sour-dragon-56 (one tooltip) + Brain->Cpu and settings container spec
+- design-2-a agent: commits 334422d, 3d47c76; design-2-b agent: 742f020, 8142525; me: 9dea7db, f7d68b0
+- Remaining unused uiverse links (need their target surfaces next round): evil-shrimp-6 (high-emphasis toggles), andrew-manzyk/fast-vampirebat-53 vs young-walrus-64 (download loader, pick one), byllzie/great-wombat-13 (folder card), ElSombrero2/tricky-robin-67 (flip card), Cobp/cowardly-goat-90 (attach expansion), Cobp/hot-dodo-99 (orb) — ledger lives in manifest notes
