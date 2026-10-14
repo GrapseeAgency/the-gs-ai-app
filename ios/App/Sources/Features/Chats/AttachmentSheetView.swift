@@ -133,15 +133,7 @@ struct AttachmentSheetView: View {
                     Text("Mode")
                         .font(Aero.label())
                         .foregroundStyle(Aero.textMuted)
-                    Picker("Mode", selection: Binding(
-                        get: { selectedMode },
-                        set: { onModeSelected($0) }
-                    )) {
-                        Text("Flash").tag("flash")
-                        Text("Thinking").tag("thinking")
-                        Text("Auto").tag("auto")
-                    }
-                    .pickerStyle(.segmented)
+                    ModeCarouselRow(selected: selectedMode, onSelect: onModeSelected)
                     Text(modeHint)
                         .font(Aero.caption())
                         .foregroundStyle(Aero.textMuted)
@@ -149,7 +141,9 @@ struct AttachmentSheetView: View {
                 Spacer(minLength: 0)
             }
         }
-        .presentationDetents([.height(360)])
+        // 420: the carousel row (88pt cards) + labels need more vertical room
+        // than the segmented picker this row replaced.
+        .presentationDetents([.height(420)])
         .onChange(of: pickerItems) { items in
             guard !items.isEmpty else { return }
             pickerItems = [] // re-arm the picker for the next visit
@@ -286,6 +280,93 @@ struct AttachmentSheetView: View {
             }
             loadingGallery = false
             dismiss()
+        }
+    }
+
+    // MARK: Mode carousel (DESIGN PHASE 2 iOS mirror)
+
+    /// The iOS mirror of ChatScreen.kt's ModeCarouselItem: a horizontal
+    /// MD3-carousel selection row. 148pt cards so the next item peeks past
+    /// the edge, selected state is the ink container with inverted text and
+    /// a scale-in check, the hint line rides under each label, state change
+    /// animates with `Aero.gentle` (reduce motion degrades it to calm linear).
+    /// Touch target is the full 148x88 card, 44pt+ in both axes.
+    private struct ModeCarouselRow: View {
+        let selected: String
+        let onSelect: (String) -> Void
+
+        private var modes: [(value: String, label: String, hint: String)] {
+            [
+                ("flash", "Flash", "Instant replies"),
+                ("thinking", "Thinking", "Deep reasoning"),
+                ("auto", "Auto", "System decides"),
+            ]
+        }
+
+        var body: some View {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: Aero.Spacing.s) {
+                    ForEach(modes, id: \.value) { mode in
+                        ModeCarouselCard(
+                            label: mode.label,
+                            hint: mode.hint,
+                            selected: selected == mode.value,
+                            onSelect: { onSelect(mode.value) }
+                        )
+                    }
+                }
+                .padding(.horizontal, 2)
+            }
+        }
+    }
+
+    /// One carousel card: 148x88, radius 16, ink fill when selected with the
+    /// inverted label and the scale-in check (uiverse tiny-moose-42's animated
+    /// check intent, monochrome). The check view is always present and scales
+    /// to zero when unselected — exactly the Android graphicsLayer shape — so
+    /// selection animates in place instead of inserting a view.
+    private struct ModeCarouselCard: View {
+        let label: String
+        let hint: String
+        let selected: Bool
+        let onSelect: () -> Void
+
+        var body: some View {
+            Button(action: onSelect) {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 4) {
+                        Text(label)
+                            .font(Aero.label())
+                            .foregroundStyle(selected ? Aero.textInverted : Aero.text)
+                        Spacer(minLength: 0)
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(selected ? Aero.textInverted : Aero.text)
+                            .scaleEffect(selected ? 1 : 0.4)
+                            .opacity(selected ? 1 : 0)
+                            .frame(width: 18, height: 18)
+                    }
+                    Text(hint)
+                        .font(Aero.metadata())
+                        .foregroundStyle((selected ? Aero.textInverted : Aero.text).opacity(0.7))
+                        .lineLimit(1)
+                }
+                .padding(12)
+                .frame(width: 148, height: 88, alignment: .topLeading)
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(selected ? Aero.text : Aero.raisedSurface)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(selected ? Aero.text : Aero.outline, lineWidth: 1)
+                )
+                .contentShape(RoundedRectangle(cornerRadius: 16))
+            }
+            .buttonStyle(KineticPressStyle())
+            .animation(Aero.gentle, value: selected)
+            .accessibilityLabel("\(label), \(hint)")
+            .accessibilityAddTraits(selected ? [.isSelected] : [])
         }
     }
 
