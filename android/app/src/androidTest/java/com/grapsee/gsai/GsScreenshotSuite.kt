@@ -10,6 +10,7 @@ import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
 import com.grapsee.gsai.data.SessionStore
 import com.grapsee.gsai.di.ServiceLocator
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
@@ -50,6 +51,15 @@ class GsScreenshotSuite {
     private val shotDir: File
         get() = File(ctx.filesDir, "screens")
 
+    /** Capture health, asserted at the end of the capture test (lint contract:
+     * every test can fail — check_tests_can_fail.py, android-app run
+     * 38535241938). MISSING-name variants stay legitimate evidence (an
+     * expected-absent element still frames the truth); a frame whose bitmap
+     * or PNG write failed is NOT evidence, and a run that produced no frames
+     * proves nothing. */
+    private var shotOk = 0
+    private var shotFailed = 0
+
     private fun shot(name: String) {
         val dir = shotDir.apply { mkdirs() }
         val out = File(dir, "$name.png")
@@ -68,6 +78,7 @@ class GsScreenshotSuite {
             }
         }
         println("GS-SCREENSHOT $name ok=${result.isSuccess} bytes=${out.length()} err=${result.exceptionOrNull()?.javaClass?.simpleName}:${result.exceptionOrNull()?.message}")
+        if (result.isSuccess) shotOk++ else shotFailed++
     }
 
     private fun resetSession(active: Boolean, onboarded: Boolean) {
@@ -301,5 +312,13 @@ Inline `code` and math ${'$'}a^2 + b^2 = c^2$."""
 
         val dir = shotDir
         println("GS-SCREENSHOT suite complete (${dir.list()?.size ?: 0} files): ${dir.list()?.joinToString()}")
+        // The load-bearing assertion: the suite walks 11+ surfaces on a healthy
+        // run; a capture path that silently dies (the exact silent-failure class
+        // both UiDevice.takeScreenshot overloads showed) or writes no frames
+        // must fail HERE, not pass as a green run with zero evidence.
+        assertTrue(
+            "screenshot capture is not evidence-bearing: $shotOk ok frame(s), $shotFailed failed",
+            shotOk >= 8 && shotFailed == 0
+        )
     }
 }
