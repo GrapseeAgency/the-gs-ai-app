@@ -149,14 +149,16 @@ import com.grapsee.gsai.ui.theme.GsRadius
 import com.grapsee.gsai.ui.theme.GsHaptics
 import com.grapsee.gsai.ui.theme.GsEase
 import com.grapsee.gsai.ui.theme.messageAppear
-import com.grapsee.gsai.ui.theme.staggerDelay
 import com.grapsee.gsai.ui.icons.GsIcons
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.animation.core.AnimationSpec
+import androidx.compose.animation.core.EaseOut
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.clickable
@@ -1192,15 +1194,16 @@ fun ChatScreen(
 
             Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
                 if (messages.isEmpty()) {
-                    // PHASE 3 empty state — part of the chat surface, not a
-                    // separate landing composition: a quiet greeting, a handful
-                    // of composer suggestions, and space. Suggestions vanish
-                    // the moment the reader types; the greeting stays until the
-                    // first real turn replaces the whole block with the
-                    // transcript. Same screen throughout — no navigation hop.
+                    // PHASE 3 empty state, uiverse pass — part of the chat
+                    // surface, not a separate landing composition: a quiet
+                    // greeting, one 3D-press New chat primary, one capability
+                    // showcase card, and space. The block steps aside the
+                    // moment the reader types; the first real turn replaces
+                    // the whole block with the transcript. Same screen
+                    // throughout — no navigation hop.
                     WorkspaceEmptyState(
                         draft = draft,
-                        onSuggestion = { suggestion -> draft = suggestion }
+                        onNewChat = newChatAction
                     )
                 } else {
                     LazyColumn(
@@ -1601,9 +1604,13 @@ private fun ComposerRow(
             onRetry = onRetryAttachment
         )
         val canSend = draftText().isNotBlank() || drafts.isNotEmpty()
+        // uiverse Cobp dangerous-dolphin-47, materialized WITHOUT its
+        // gradient: the one-pill composer as a calm bordered container — a
+        // clean 1dp hairline (outlineVariant) wrapped on a 28dp pill.
         Surface(
-            shape = RoundedCornerShape(GsRadius.input),
+            shape = RoundedCornerShape(28.dp),
             color = MaterialTheme.colorScheme.surfaceContainerLow,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
             modifier = Modifier.fillMaxWidth()
         ) {
             Row(
@@ -1691,27 +1698,40 @@ private fun ComposerRow(
 }
 
 /**
- * The composer's send control — a 36dp ink circle with the up arrow. The
- * layered press (uiverse dull-ladybug-18 intent, monochrome): the container
- * scales via kineticPress while the arrow lifts 1dp under the finger. Empty
- * field with no attachments: neutral container, no arrow motion, still 44dp
- * touch target via minimumInteractiveComponentSize.
+ * The composer's send control, a 36dp ink circle with the up arrow. uiverse
+ * vinodjangid07 dull-ladybug-18 press physics materialized monochrome: on
+ * press the whole control settles to 0.96 scale and 1dp down over 120ms
+ * ease-out; release springs back; reduce motion (settings or OS) applies both
+ * states instantly with no animation. Empty field with no attachments:
+ * neutral container, inert press, still a 44dp touch target via
+ * minimumInteractiveComponentSize.
  */
 @Composable
 private fun GsSendButton(enabled: Boolean, onSend: () -> Unit) {
     val colors = GsTheme.colors
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val lift by animateFloatAsState(
+    val reduced = SettingsStore.reduceAnimations || SettingsStore.reduceMotion
+    val pressSpec: AnimationSpec<Float> = when {
+        reduced -> snap()
+        pressed && enabled -> tween(120, easing = EaseOut)
+        else -> GsMotion.snappy()
+    }
+    val press by animateFloatAsState(
         targetValue = if (pressed && enabled) 1f else 0f,
-        animationSpec = GsEase.state(),
-        label = "sendLift"
+        animationSpec = pressSpec,
+        label = "sendPress"
     )
     Box(
         modifier = Modifier
             .padding(end = 4.dp, bottom = 2.dp)
             .size(36.dp)
-            .kineticPress(interaction)
+            .graphicsLayer {
+                val scale = 1f - 0.04f * press
+                scaleX = scale
+                scaleY = scale
+                translationY = press * 1.dp.toPx()
+            }
             .clip(CircleShape)
             .background(if (enabled) colors.textPrimary else colors.raisedSurface)
             .clickable(
@@ -1728,9 +1748,7 @@ private fun GsSendButton(enabled: Boolean, onSend: () -> Unit) {
             GsIcons.ArrowUp,
             contentDescription = null,
             tint = if (enabled) colors.appBackground else colors.textSecondary,
-            modifier = Modifier
-                .size(20.dp)
-                .graphicsLayer { translationY = -lift * 1.dp.toPx() }
+            modifier = Modifier.size(20.dp)
         )
     }
 }
@@ -2121,12 +2139,6 @@ private fun BubbleAction(icon: ImageVector, label: String, onClick: () -> Unit) 
 
 // --- workspace empty state ---------------------------------------------------
 
-private val workspaceSuggestions = listOf(
-    "Draft a crisp product update email for our beta testers",
-    "Explain Kotlin coroutines like I'm a senior Java developer",
-    "Plan a three-day Tokyo itinerary focused on design studios"
-)
-
 /** Time-of-day greeting — the empty state's written identity (the Phase 4
  *  breathing orb above it is the living one; neither is a hero). */
 private fun greetingFor(): String {
@@ -2140,19 +2152,18 @@ private fun greetingFor(): String {
 }
 
 /**
- * PHASE 3 empty state — the fresh workspace IS this: a small greeting, a few
- * quiet composer suggestions, readable empty space, and the composer already
- * waiting at the bottom. No halo, no invitation cards, no navigation. A
- * suggestion taps INTO the composer (the reader stays in control of the
- * send) and the whole block yields to the transcript on the first turn.
- * Phase 4 adds exactly one identity element: a small, calm, breathing orb —
- * secondary to the composer by contract (§14), gone once the conversation
- * takes over the surface.
+ * PHASE 3 empty state, uiverse pass. The fresh workspace IS this: a small
+ * greeting, one 3D-press New chat primary (uiverse marcelodolza
+ * stupid-vampirebat-24), ONE capability showcase card (uiverse Ashon-G
+ * big-chipmunk-8), readable empty space, and the composer already waiting at
+ * the bottom. No halo, no navigation. The block yields to the transcript on
+ * the first turn and steps aside the moment the reader types: the composer
+ * takes the floor.
  */
 @Composable
 private fun WorkspaceEmptyState(
     draft: String,
-    onSuggestion: (String) -> Unit
+    onNewChat: (() -> Unit)?
 ) {
     Column(
         modifier = Modifier
@@ -2178,39 +2189,134 @@ private fun WorkspaceEmptyState(
             modifier = Modifier.semantics { heading() }
         )
         if (draft.isBlank()) {
-            Spacer(Modifier.height(GsMotion.spaceXL))
-            workspaceSuggestions.forEachIndexed { index, prompt ->
-                // Staggered entrance (30ms per pill, 200ms ease-out) — the
-                // actions arrive in reading order; static under reduce-motion.
-                Box(modifier = Modifier.messageAppear(staggerDelay(index))) {
-                    SuggestionPill(text = prompt, onClick = { onSuggestion(prompt) })
-                }
-                Spacer(Modifier.height(GsMotion.spaceS))
+            Spacer(Modifier.height(GsMotion.spaceL))
+            if (onNewChat != null) {
+                NewChatButton(onClick = onNewChat)
             }
+            Spacer(Modifier.height(GsMotion.spaceM))
+            EmptyCapabilityCard()
         }
     }
 }
 
-/** One quiet composer suggestion — a filled quiet chip (the reference app's
- *  mode-chip look): neutral surface, no outline, ink text. Fills read calmer
- *  than hairline outlines at pill size and carry a real press state. */
+/**
+ * uiverse marcelodolza stupid-vampirebat-24, materialized monochrome: the
+ * New chat primary is a solid accent fill with a HARD bottom edge, a 4dp tall
+ * darker layer beneath with the same 16dp radius, drawn as a second background
+ * box (never an elevation shadow, no gradient, no glow). Pressing rides the
+ * cap 2dp down while the edge compresses to 2dp: the classic 3D key press.
+ * Press-in runs 120ms ease-out, release springs back, and reduce motion
+ * (settings or OS) applies both states instantly. The accent fill is the
+ * screen's one accent; everything around it stays ink-on-paper.
+ */
 @Composable
-private fun SuggestionPill(text: String, onClick: () -> Unit) {
-    Surface(
-        onClick = onClick,
-        shape = GsRadius.pill,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        modifier = Modifier.kineticPress()
+private fun NewChatButton(onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val reduced = SettingsStore.reduceAnimations || SettingsStore.reduceMotion
+    val pressSpec: AnimationSpec<Float> = when {
+        reduced -> snap()
+        pressed -> tween(120, easing = EaseOut)
+        else -> GsMotion.snappy()
+    }
+    val press by animateFloatAsState(
+        targetValue = if (pressed) 1f else 0f,
+        animationSpec = pressSpec,
+        label = "newChat3DPress"
+    )
+    Box(
+        modifier = Modifier
+            .widthIn(max = 360.dp)
+            .fillMaxWidth()
+            .height(52.dp)
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                role = Role.Button,
+                onClickLabel = "New chat"
+            ) { onClick() }
     ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.bodyMedium,
-            color = GsTheme.colors.textPrimary,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+        // The hard edge: accentStrong, one step stronger than the accent
+        // fill, so it reads as the darker (light) / brighter (dark) step in
+        // both appearances. Bottom corners match the cap radius.
+        Box(
             modifier = Modifier
-                .padding(horizontal = GsMotion.spaceL, vertical = 12.dp)
-                .widthIn(max = 320.dp)
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .height(4.dp - (2.dp * press))
+                .clip(RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp))
+                .background(MaterialTheme.colorScheme.secondary)
         )
+        // The key cap: solid primary fill, onPrimary label, rides 2dp down.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp)
+                .graphicsLayer { translationY = press * 2.dp.toPx() }
+                .clip(RoundedCornerShape(16.dp))
+                .background(MaterialTheme.colorScheme.primary),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "New chat",
+                style = GsTheme.textStyles.button,
+                color = MaterialTheme.colorScheme.onPrimary
+            )
+        }
+    }
+}
+
+/**
+ * uiverse Ashon-G big-chipmunk-8, materialized as ONE capability showcase
+ * card: a 40dp rounded-square icon container (12dp radius) with a 24dp
+ * Lucide glyph, a bold title and one supporting line on surfaceContainer,
+ * 16dp radius, capped at 360dp. Static on purpose: it showcases what the
+ * composer below can do, it does not navigate.
+ */
+@Composable
+private fun EmptyCapabilityCard() {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier
+            .widthIn(max = 360.dp)
+            .fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    GsIcons.MessageCircle,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+            Column {
+                Text(
+                    text = "Ask GS anything",
+                    style = MaterialTheme.typography.titleMedium
+                        .copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = "Type below and GS answers, drafts, plans and codes with you.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
     }
 }
 
