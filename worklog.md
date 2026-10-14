@@ -4915,3 +4915,22 @@ Stage Summary:
 - ROOT CAUSE: upstream z-ai account-level 429 (multi-minute, precedent: 2026-09-20 window lasted hours). App + backend + APK all healthy.
 - TWO RECOVERY PATHS: (1) operator runs: bun scripts/provision-keys.ts "sk-or-v1-...,..." -> sends immediately route to OpenRouter; (2) wait out the throttle — app recovers by itself on the next post-breaker probe, no reinstall needed
 - NEXT webDevReview cron runs MUST: probe z-ai (bun /tmp/zai-probe.mjs) and report recovery; do NOT restart server for this; do NOT spam probes (1 per cron run max)
+
+---
+Task ID: incident-chat-429-fix
+Agent: Z.ai Code (main)
+Task: Operator supplied 39 OpenRouter keys — provision and restore chat
+
+Work Log:
+- Provisioned 39 keys via scripts/provision-keys.ts -> all three vault layers ok (secrets-file / db-vault / gs-vault); verified gitignored (lines 80-88) so no key leak to GitHub
+- loadKeyPool() is awaited per-call (turn-executor:491, openrouter.ts x4) — no restart needed for key pickup
+- Direct OR probe: key VALID; gpt-4o-mini 403 geo-blocked in sandbox region, but catalogue model nvidia/nemotron-3-super-120b-a12b:free routes fine via Nvidia provider
+- NEW BREAK while testing: POST /api/v1/conversations 500 "attempt to write a readonly database" (sqlite 1032) — fresh-process write OK, so running next-server held stale pre-rewind inode handle (platform repo rewind struck again mid-session; local main had diverged behind 555, reset --hard to origin 1f958c0 earlier, then re-pushed 9fdd3e0)
+- Restarted dev server (portal kill risk: one spawn died, respawned + verified listening in same call)
+- END-TO-END GREEN: create conv 201 -> inline SSE POST messages -> assistant content "recovered" (finalStatus=done); planned route zai/gs-balanced with silent provider fallback serving the turn while zai still 429s on direct probes
+- z-ai direct probe still 429 at 10:52 — irrelevant now: 39-key OpenRouter fallback is live
+
+Stage Summary:
+- CHAT RESTORED. Sends complete via OpenRouter fallback (39 keys, rotation in openrouter.ts) while z-ai account throttle persists; when zai recovers it resumes as primary
+- No APK reinstall needed; no client change
+- Platform rewound repo AGAIN mid-session (second time today) — push-after-every-commit remains mandatory; watch for inode staleness after any rewind: symptom = fresh-process sqlite write OK + server SQLITE_READONLY_ROLLBACK; fix = dev server restart
