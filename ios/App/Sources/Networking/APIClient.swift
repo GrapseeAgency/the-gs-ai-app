@@ -181,6 +181,12 @@ final class APIClient {
             switch event.event {
             case "delta":
                 onDelta(event.data ?? "")
+            case "reasoning":
+                // REASONING TRACE: thinking turns stream the model's reasoning
+                // as raw {"delta":"..."} frames — reach the consumer raw, same
+                // shape as the trace events (decode + mapping live in
+                // ChatViewModel).
+                onEvent(event)
             case "done":
                 let final = event.data.flatMap { try? decoder.decode(Message.self, from: Data($0.utf8)) }
                 onDone(final)

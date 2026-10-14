@@ -205,6 +205,11 @@ private struct ModeEventPayload: Decodable {
     var requested: String?
 }
 
+/// REASONING TRACE wire frame: `{"delta":"..."}`.
+private struct ReasoningEventPayload: Decodable {
+    var delta: String?
+}
+
 /// Tolerant decode of the double-encoded `search` event payload — every
 /// field beyond the discriminator is optional, so an unknown/renamed field
 /// degrades instead of failing the whole event.
@@ -430,6 +435,12 @@ final class ChatViewModel: ObservableObject {
     /// ("flash"|"thinking"; nil = no mode event — pre-v0.70 backend). The
     /// word "Thinking…" renders ONLY while this is "thinking".
     @Published private(set) var effectiveMode: String?
+    // REASONING TRACE (chat-reasoning panel): the model's thinking stream for
+    // the LIVE turn. Stream-only by contract (never persisted): reset at send,
+    // the measured start/end dates freeze when the first answer delta lands.
+    @Published private(set) var reasoningText: String?
+    @Published private(set) var reasoningStart: Date?
+    @Published private(set) var reasoningEnd: Date?
 
     // MARK: - Private state
 
@@ -484,6 +495,10 @@ final class ChatViewModel: ObservableObject {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty || !attachments.isEmpty, !isStreaming else { return }
         draft = ""
+        // REASONING TRACE: the panel lives with one turn only.
+        reasoningText = nil
+        reasoningStart = nil
+        reasoningEnd = nil
         // TASK 2 — tap-to-first-visible-character stopwatch: the send tap and
         // the first published non-empty content bound the number the operator
         // asked for. Logged once per stream as GS-PERF.
@@ -803,6 +818,8 @@ final class ChatViewModel: ObservableObject {
         guard messages[index].content != text else { return }
         if !firstCharLogged, !text.isEmpty {
             firstCharLogged = true
+            // The first answer paint freezes the measured thinking span.
+            if reasoningStart != nil, reasoningEnd == nil { reasoningEnd = Date() }
             if let tappedAt = sendTappedAt {
                 let ms = Int(Date().timeIntervalSince(tappedAt) * 1000)
                 // OSLog has no `.app` member (raw: iOS run 38470835743, "type
@@ -855,6 +872,16 @@ final class ChatViewModel: ObservableObject {
             // pipeline — decode tolerantly, append only what really came.
             guard let payload = try? JSONDecoder().decode(ResearchEventPayload.self, from: Data(data.utf8)) else { return }
             applyResearchEvent(payload)
+        case "reasoning":
+            // REASONING TRACE — {"delta":"..."} from thinking-enabled stream
+            // turns. Tolerant: a malformed frame is dropped, never breaks the
+            // turn. The start date is the first reasoning delta; the end date
+            // freezes at the first ANSWER delta (set in the delta path).
+            if let payload = try? JSONDecoder().decode(ReasoningEventPayload.self, from: Data(data.utf8)),
+               !payload.delta.isEmpty {
+                if reasoningStart == nil { reasoningStart = Date() }
+                reasoningText = (reasoningText ?? "") + payload.delta
+            }
         default:
             break
         }

@@ -394,6 +394,9 @@ struct ChatDetailView: View {
                         liveContentEmpty: message.content.isEmpty,
                         requestHasAttachments: pendingTurnHasAttachments,
                         searchPhase: vm.searchPhase),
+                    reasoning: message.isStreaming ? vm.reasoningText : nil,
+                    reasoningStart: message.isStreaming ? vm.reasoningStart : nil,
+                    reasoningEnd: message.isStreaming ? vm.reasoningEnd : nil,
                     onRegenerate: {
                         userIsReading = false
                         vm.regenerate()
@@ -1054,6 +1057,12 @@ private struct MessageBubble: View, Equatable {
     /// caller from the real stream/search phase. nil = settled turn (the
     /// mapping helper already returned nil for non-streaming rows).
     var orbState: OrbState? = nil
+    /// REASONING TRACE (chat-reasoning panel): the live turn's thinking
+    /// stream + measured span, passed explicitly because this row is
+    /// Equatable on visible inputs only (vm state is not observed here).
+    var reasoning: String? = nil
+    var reasoningStart: Date? = nil
+    var reasoningEnd: Date? = nil
     var onRegenerate: () -> Void = {}
     var onReadAloud: () -> Void = {}
     var onTranslate: () -> Void = {}
@@ -1076,7 +1085,10 @@ private struct MessageBubble: View, Equatable {
         lhs.isSpeaking == rhs.isSpeaking &&
         lhs.editEnabled == rhs.editEnabled &&
         lhs.highlight == rhs.highlight &&
-        lhs.orbState == rhs.orbState
+        lhs.orbState == rhs.orbState &&
+        lhs.reasoning == rhs.reasoning &&
+        lhs.reasoningStart == rhs.reasoningStart &&
+        lhs.reasoningEnd == rhs.reasoningEnd
     }
 
     /// Benchmark copy feedback: the icon answers with a brief checkmark —
@@ -1160,6 +1172,16 @@ private struct MessageBubble: View, Equatable {
             assistantAvatar
             VStack(alignment: .leading, spacing: 8) {
                 if message.isStreaming {
+                    // REASONING TRACE (chat-reasoning): the collapsible quiet
+                    // panel rides ABOVE the answer while this turn's thinking
+                    // streams; auto-collapses at the first answer paint.
+                    if let reasoning, !reasoning.isEmpty {
+                        ReasoningTracePanel(
+                            text: reasoning,
+                            start: reasoningStart,
+                            end: reasoningEnd
+                        )
+                    }
                     // TASK 1b (2026-10-14 directive): the reply streams THROUGH
                     // the block renderer. The old live bubble was one plain
                     // Text that re-rendered wholesale at finalize — the exact
@@ -1400,4 +1422,85 @@ private func dayLabel(_ iso: String) -> String? {
     if day == today { return "Today" }
     if day == calendar.date(byAdding: .day, value: -1, to: today) { return "Yesterday" }
     return GSFormatters.dayTitle.string(from: date)
+}
+
+// MARK: - Reasoning trace panel (chat-reasoning)
+
+/// The 21st chat-reasoning intent, monochrome: a quiet collapsible card above
+/// the streamed answer. Open while the model thinks, auto-collapsed once the
+/// answer's first token paints, reopenable. The seconds label is the MEASURED
+/// span from the first reasoning delta to the first answer delta, never a
+/// timer. Stream-only: renders while this turn is live.
+private struct ReasoningTracePanel: View {
+    let text: String
+    let start: Date?
+    let end: Date?
+
+    @State private var expanded = true
+    // The answer started: collapse once. A manual re-open after that sticks —
+    // the effect only fires on the nil → set transition.
+    @State private var autoCollapsed = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                expanded.toggle()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(Aero.textMuted)
+                        .rotationEffect(.degrees(expanded ? 90 : 0))
+                    Text(label)
+                        .font(Aero.label())
+                        .foregroundStyle(Aero.textMuted)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(expanded ? "Collapse reasoning" : "Expand reasoning, \(label)")
+
+            if expanded {
+                ScrollView(.vertical, showsIndicators: false) {
+                    Text(text)
+                        .font(Aero.caption())
+                        .foregroundStyle(Aero.textMuted.opacity(0.9))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 240)
+                .padding(.leading, 28)
+                .padding(.trailing, 12)
+                .padding(.bottom, 12)
+            }
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Aero.raisedSurface)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Aero.outline, lineWidth: 1)
+        )
+        .onAppear {
+            if end != nil, !autoCollapsed {
+                withAnimation(Aero.gentle) { expanded = false }
+                autoCollapsed = true
+            }
+        }
+        .onChange(of: end) { newValue in
+            if newValue != nil, !autoCollapsed {
+                withAnimation(Aero.gentle) { expanded = false }
+                autoCollapsed = true
+            }
+        }
+    }
+
+    private var label: String {
+        guard let start, let end else { return "Thinking…" }
+        let seconds = max(0, end.timeIntervalSince(start))
+        return String(format: "Thought for %.1f seconds", seconds)
+    }
 }
