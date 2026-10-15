@@ -315,6 +315,22 @@ ensure_conv2(){
   CONV2_DONE=1
 }
 
+# Fresh-install gate (run-4/5 evidence: focus sat on NexusLauncher because the
+# nav start destination is AUTH on a pm-cleared install and nothing walked it).
+# The auth flow is simulated locally, so adb can complete it: Welcome ->
+# Sign in -> Email/Password -> Sign in. Onboarding is walked separately by
+# 40-42 so those interactions measure the real steps.
+seed_auth(){
+  local c
+  c="$(find_any "Sign in" 2>/dev/null)" || return 0   # session active: chat direct
+  tap $c; sleep 1.2                                    # Welcome -> SignIn step
+  c="$(find_any "Email" 2>/dev/null)" && { tap $c; sleep 0.6; typetext "checker@gsai.dev"; }
+  c="$(find_any "Password" 2>/dev/null)" && { tap $c; sleep 0.6; typetext "checker123456"; }
+  c="$(find_any "Sign in" 2>/dev/null)"
+  [ -n "$c" ] && { tap $c; sleep 1.5; }
+  key 4; sleep 0.3
+}
+
 # ----------------------------------------------------- prep (unmeasured) ---
 do_prep(){
   case "$1" in
@@ -327,11 +343,29 @@ do_prep(){
     shc "am force-stop $PKG" >/dev/null; sleep 1.2
     grants
     ;;
-  40) open_app ;;
-  41) : ;;
+  40)
+    open_app
+    seed_auth
+    ;;
+  41)
+    # Interests/Capabilities gate the Continue pill; pick one chip (unmeasured)
+    # so the measured advance actually advances.
+    tap "$((W*35/100))" "$((H*38/100))"; sleep 0.5
+    ;;
   42)
-    FOUND_XY="$(find_any "Get started" "Get Started" "Start" "Done" "Continue" "Skip" 2>/dev/null)"
-    [ -z "$FOUND_XY" ] && FOUND_XY="$((W/2)) $((H*80/100))"
+    # Walk the remaining onboarding steps (unmeasured) so the measured action
+    # is the actual completion transition: Enter GS AI -> first chat frame.
+    local i c
+    for i in 1 2 3 4 5; do
+      c="$(find_any "call you" 2>/dev/null)"
+      [ -n "$c" ] && { tap $c; sleep 0.5; typetext "Checker"; sleep 0.3; }
+      tap "$((W*35/100))" "$((H*38/100))"; sleep 0.4
+      c="$(find_any "Continue" 2>/dev/null)"
+      [ -z "$c" ] && break
+      tap $c; sleep 1.2
+      c="$(find_any "Enter GS AI" 2>/dev/null)" && break
+    done
+    FOUND_XY="$(find_any "Enter GS AI" "Continue" 2>/dev/null)" || FOUND_XY="$((W/2)) $((H*88/100))"
     ;;
   02) key 4; sleep 0.8; sleep 1.0 ;;
   03) key 3; sleep 1.4 ;;
@@ -437,12 +471,13 @@ do_action(){
   41)
     swipe "$((W*80/100))" "$((H/2))" "$((W*20/100))" "$((H/2))" 250
     sleep 1.2
+    tap_ui "Continue" "$((W/2)) $((H*88/100))"
+    sleep 1.0
     ;;
   42)
     tap $FOUND_XY
     sleep 2.0
-    ;;
-  02)
+    ;;  02)
     shc "am start -W -n $ACT" > "$OUT/02-amstart.raw"
     sleep 1.2
     ;;
