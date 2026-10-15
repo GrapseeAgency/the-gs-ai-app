@@ -364,7 +364,7 @@ struct AttachmentSheetView: View {
                 .contentShape(RoundedRectangle(cornerRadius: 16))
             }
             .buttonStyle(KineticPressStyle())
-            .animation(Aero.gentle, value: selected)
+            .animation(Aero.chatCurve, value: selected)
             .accessibilityLabel("\(label), \(hint)")
             .accessibilityAddTraits(selected ? [.isSelected] : [])
         }

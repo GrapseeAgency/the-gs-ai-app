@@ -342,6 +342,11 @@ enum Aero {
     static var gentle: Animation {
         motionReduced ? .linear(duration: 0.2) : Animation.spring(response: 0.5, dampingFraction: 0.9)
     }
+    /// perf-4 (technique B): the chat screen's ONE curve. Deployment
+    /// target is iOS 16, so the .smooth API is unavailable; .easeInOut(0.2)
+    /// is the closest single curve. Reduced motion flattens it.
+    static var chatCurve: Animation { motionReduced ? .linear(duration: 0.2) : .easeInOut(duration: 0.2) }
+
     static var pressScale: CGFloat { motionReduced ? 1.0 : 0.97 }
     static var staggerStep: Double { motionReduced ? 0 : 0.03 }
 

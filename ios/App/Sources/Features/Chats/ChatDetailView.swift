@@ -327,7 +327,7 @@ struct ChatDetailView: View {
             }
             .onChange(of: vm.messages.last?.content) { _ in
                 guard !userIsReading else { return }
-                withAnimation(Aero.gentle) {
+                withAnimation(Aero.chatCurve) {
                     // Pin the sentinel, not the bubble: the 1pt row stays
                     // materialized at the viewport bottom, so atBottom holds
                     // steady and the jump button never flickers mid-stream.
@@ -473,7 +473,7 @@ struct ChatDetailView: View {
         if userIsReading && !vm.messages.isEmpty {
             Button {
                 userIsReading = false
-                withAnimation(Aero.gentle) {
+                withAnimation(Aero.chatCurve) {
                     proxy.scrollTo(liveEdgeID, anchor: .bottom)
                 }
             } label: {
@@ -810,7 +810,7 @@ struct ChatDetailView: View {
         let matches = searchMatches
         guard !matches.isEmpty else { return }
         searchIndex = ((searchIndex + direction) % matches.count + matches.count) % matches.count
-        withAnimation(Aero.gentle) {
+        withAnimation(Aero.chatCurve) {
             proxy.scrollTo(vm.messages[matches[searchIndex]].id, anchor: .center)
         }
     }
@@ -832,7 +832,7 @@ struct ChatDetailView: View {
                     let matches = searchMatches
                     guard !matches.isEmpty else { return }
                     searchIndex = 0
-                    withAnimation(Aero.gentle) {
+                    withAnimation(Aero.chatCurve) {
                         proxy.scrollTo(vm.messages[matches[0]].id, anchor: .center)
                     }
                 }
@@ -1025,9 +1025,9 @@ private struct TranslationSheet: View {
                 Button {
                     UIPasteboard.general.string = translated
                     onCopy(translated)
-                    withAnimation(.easeOut(duration: 0.15)) { copied = true }
+                    withAnimation(Aero.chatCurve) { copied = true }
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
-                        withAnimation(.easeIn(duration: 0.2)) { copied = false }
+                        withAnimation(Aero.chatCurve) { copied = false }
                     }
                 } label: {
                     Label(
@@ -1096,9 +1096,9 @@ private struct MessageBubble: View, Equatable {
     private func copyAndConfirm(_ text: String) {
         UIPasteboard.general.string = text
         GSHaptics.success()
-        withAnimation(.easeOut(duration: 0.15)) { copied = true }
+        withAnimation(Aero.chatCurve) { copied = true }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
-            withAnimation(.easeIn(duration: 0.2)) { copied = false }
+            withAnimation(Aero.chatCurve) { copied = false }
         }
     }
 
@@ -1486,13 +1486,13 @@ private struct ReasoningTracePanel: View {
         )
         .onAppear {
             if end != nil, !autoCollapsed {
-                withAnimation(Aero.gentle) { expanded = false }
+                withAnimation(Aero.chatCurve) { expanded = false }
                 autoCollapsed = true
             }
         }
         .onChange(of: end) { newValue in
             if newValue != nil, !autoCollapsed {
-                withAnimation(Aero.gentle) { expanded = false }
+                withAnimation(Aero.chatCurve) { expanded = false }
                 autoCollapsed = true
             }
         }
