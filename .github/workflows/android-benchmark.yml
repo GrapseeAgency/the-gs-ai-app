@@ -44,11 +44,13 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |
-            cd android && bash -c 'set -o pipefail; gradle :benchmark:connectedCheck --no-daemon --stacktrace 2>&1 | tee ../benchmark-raw.log; gradle :benchmark:dependencies --configuration releaseRuntimeClasspath > ../dep-report.log 2>&1 || true
-    unzip -p benchmark/build/outputs/apk/release/benchmark-release.apk classes.dex > ../classes.dex 2>/dev/null || true
-    strings ../classes.dex 2>/dev/null | grep -c MacrobenchmarkRunner > ../dex-scan.log || true
-    strings ../classes.dex 2>/dev/null | grep -c MacrobenchmarkRule >> ../dex-scan.log || true
-    ls -la benchmark/build/outputs/apk/release/ > ../apk-list.log 2>&1 || true'
+            cd android && bash -c 'set -o pipefail; \
+              gradle :benchmark:connectedCheck --no-daemon --stacktrace 2>&1 | tee ../benchmark-raw.log; \
+              gradle :benchmark:dependencies --configuration releaseRuntimeClasspath > ../dep-report.log 2>&1 || true; \
+              unzip -p benchmark/build/outputs/apk/release/benchmark-release.apk classes.dex > ../classes.dex 2>/dev/null || true; \
+              strings ../classes.dex | grep -c MacrobenchmarkRunner > ../dex-scan.log || true; \
+              strings ../classes.dex | grep -c MacrobenchmarkRule >> ../dex-scan.log || true; \
+              ls -la benchmark/build/outputs/apk/release/ > ../apk-list.log 2>&1 || true'
       - name: Upload raw benchmark evidence
         if: always()
         uses: actions/upload-artifact@v4
