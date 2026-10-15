@@ -71,17 +71,30 @@ jobs:
       - name: Boot emulator
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
+        # Hardened after run 38771590818 hung in `adb wait-for-device` for 17+
+        # minutes: the emulator process was either dead or stuck at boot with
+        # nobody looking. Every wait is now bounded; a dead qemu dumps
+        # /tmp/emulator.log and fails the step immediately. -feature -Vulkan
+        # is the standard headless-CI fix for API-34 images stalling on a
+        # missing Vulkan HAL under swiftshader_indirect.
         run: |
+          export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
           echo "no" | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd \
             -n perf -k "system-images;android-34;google_apis;x86_64" -d pixel_6 --force
           nohup "$ANDROID_HOME/emulator/emulator" -avd perf \
             -no-window -no-audio -no-boot-anim \
             -gpu swiftshader_indirect -accel on \
+            -feature -Vulkan -no-metrics \
             -memory 3072 -cores 4 -no-snapshot \
             -camera-back none -camera-front none \
             > /tmp/emulator.log 2>&1 &
-          adb wait-for-device
-          timeout 300 adb shell 'while [ "$(getprop sys.boot_completed)" != "1" ]; do sleep 3; done'
+          sleep 20
+          pgrep -f qemu >/dev/null || { echo "::error::emulator process died at launch"; tail -60 /tmp/emulator.log; exit 1; }
+          timeout 240 adb wait-for-device || { echo "::error::adb never saw the device"; tail -60 /tmp/emulator.log; exit 1; }
+          timeout 300 bash -c 'while [ "$(adb shell getprop sys.boot_completed | tr -d "\r")" != "1" ]; do sleep 3; done' \
+            || { echo "::error::boot_completed never reached 1"; tail -60 /tmp/emulator.log; exit 1; }
+          adb shell input keyevent 82 || true
+          sleep 8
           adb shell getprop sys.boot_completed
           adb devices
 
