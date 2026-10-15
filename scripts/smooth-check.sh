@@ -57,6 +57,28 @@ swipe(){ shc "input swipe $1 $2 $3 $4 ${5:-250}" >/dev/null; }
 key(){ shc "input keyevent $1" >/dev/null; }
 typetext(){ shc "input text $1" >/dev/null; }
 
+# Preflight the session gate directly (run-8 evidence: the auth+onboarding adb
+# walk loses races with Pixel Launcher ANRs on the thrashing emulator, and
+# every later row measured the AUTH screen). The CI build is debuggable, so
+# run-as can write the session prefs: next launch starts at CHAT, which is the
+# state the operator's phone is actually in. Onboarding rows 40-42 then
+# measure the post-onboarding baseline (documented in attempts.md).
+preflight_session(){
+  local tmp="/data/local/tmp/gs_session.xml"
+  cat > /tmp/gs_session.xml <<'XML'
+<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+<map>
+    <boolean name="gs.session.active" value="true" />
+    <boolean name="gs.onboarded" value="true" />
+</map>
+XML
+  "$ADB" push /tmp/gs_session.xml "$tmp" >/dev/null 2>&1 || return 1
+  shc "run-as $PKG mkdir -p shared_prefs" >/dev/null
+  shc "run-as $PKG cp $tmp shared_prefs/gs_session.xml" >/dev/null
+  shc "rm -f $tmp" >/dev/null
+  rm -f /tmp/gs_session.xml
+}
+
 cleanup(){
   shc "cmd connectivity airplane-mode disable" >/dev/null
   shc "rm /sdcard/smuidump.xml" >/dev/null
@@ -110,7 +132,7 @@ ASDK="$(shc 'getprop ro.build.version.sdk')"
 
 # ------------------------------------------------------------- ui lookup ---
 ui_dump(){
-  shc "uiautomator dump /sdcard/smuidump.xml" >/dev/null
+  shc "uiautomator dump --compressed /sdcard/smuidump.xml" >/dev/null
   "$ADB" pull /sdcard/smuidump.xml "$OUT/uidump-last.xml" >/dev/null 2>&1
 }
 ui_center(){ # $1 attr (text|content-desc)  $2 needle -> "cx cy" or rc=1
@@ -143,12 +165,12 @@ tap_ui(){ # $1 needle  $2 fallback "x y"
 # ----------------------------------------------------------------- gfx -----
 gfx_reset(){ shc "dumpsys gfxinfo $PKG reset" >/dev/null; }
 
-PF_WINDOW=6
+PF_WINDOW=4
 PF_T0=0
 pf_start(){ # $1 id
   [ "$PF_ON" = "1" ] || return 0
   PF_T0="$(date +%s)"
-  shc "perfetto -o /data/misc/perfetto-traces/sm-$1.pftrace -t ${PF_WINDOW}s gfx wm am sched view freq idle -b 32mb >/dev/null 2>&1 &"
+  shc "perfetto -o /data/misc/perfetto-traces/sm-$1.pftrace -t ${PF_WINDOW}s gfx wm am sched view freq idle -b 16mb >/dev/null 2>&1 &"
 }
 pf_stop(){ # $1 id
   [ "$PF_ON" = "1" ] || return 0
@@ -375,8 +397,14 @@ do_prep(){
     fi
     shc "am force-stop $PKG" >/dev/null; sleep 1.2
     grants
+    preflight_session || say "   WARNING: session preflight failed; auth walker will drive the flow"
+    shc "am force-stop $PKG" >/dev/null; sleep 0.8
     ;;
   40)
+    # With the session preflighted the nav gate goes straight to CHAT; the
+    # onboarding rows measure the post-onboarding baseline render (see
+    # preflight_session note). seed_auth stays as the fallback if preflight
+    # failed and the app did land on AUTH.
     open_app
     seed_auth
     ;;
