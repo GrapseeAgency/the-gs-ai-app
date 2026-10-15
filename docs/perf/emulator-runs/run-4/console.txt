@@ -1,0 +1,153 @@
+smooth-check: com.grapsee.gsai on sdk_gphone64_x86_64 (android 14, 1080x2400 @ 60Hz, budget 16.67ms, perfetto=1)
+raw data: docs/perf/runs/20261015-172922
+-- 01 cold-start-first-frame
+   pm clear com.grapsee.gsai in 3s (checker seeds its own state; app data is wiped)
+[01] cold-start-first-frame -> FAIL  (frames=4 jank=100.00% p50=3050 p95=3150 p99=3150 worst=-)
+-- 40 onboarding-first-slide
+[40] onboarding-first-slide -> FAIL  (frames=0 jank=0.00% p50=4950 p95=4950 p99=4950 worst=-)
+-- 41 onboarding-advance
+[41] onboarding-advance -> FAIL  (frames=0 jank=0.00% p50=4950 p95=4950 p99=4950 worst=-)
+-- 42 onboarding-complete
+[42] onboarding-complete -> FAIL  (frames=0 jank=0.00% p50=4950 p95=4950 p99=4950 worst=-)
+-- 02 warm-start-first-frame
+[02] warm-start-first-frame -> FAIL  (frames=3 jank=100.00% p50=1800 p95=2100 p99=2100 worst=-)
+-- 03 resume-from-background
+[03] resume-from-background -> FAIL  (frames=1 jank=100.00% p50=200 p95=200 p99=200 worst=-)
+-- 04 empty-chat-render
+[04] empty-chat-render -> FAIL  (frames=0 jank=0.00% p50=4950 p95=4950 p99=4950 worst=-)
+-- 05 first-message-send
+[05] first-message-send -> FAIL  (frames=7 jank=42.86% p50=36 p95=150 p99=150 worst=-)
+-- 06 streaming-reply-5s
+[06] streaming-reply-5s -> FAIL  (frames=6 jank=50.00% p50=38 p95=77 p99=77 worst=-)
+-- 07 short-chat-scroll-20-swipe
+[07] short-chat-scroll-20-swipe -> FAIL  (frames=0 jank=0.00% p50=4950 p95=4950 p99=4950 worst=-)
+-- 08 long-chat-scroll-50-message
+   seeding 50 messages (unmeasured, takes about 2 minutes)
+[08] long-chat-scroll-50-message -> FAIL  (frames=1 jank=100.00% p50=150 p95=150 p99=150 worst=-)
+-- 09 long-chat-fling-top-to-bottom
+[09] long-chat-fling-top-to-bottom -> FAIL  (frames=0 jank=0.00% p50=4950 p95=4950 p99=4950 worst=-)
+-- 10 rich-reply-render-table
+[10] rich-reply-render-table -> FAIL  (frames=0 jank=0.00% p50=4950 p95=4950 p99=4950 worst=-)
+-- 11 rich-reply-render-code
+[11] rich-reply-render-code -> FAIL  (frames=0 jank=0.00% p50=4950 p95=4950 p99=4950 worst=-)
+-- 12 rich-reply-render-image
+[12] rich-reply-render-image -> FAIL  (frames=0 jank=0.00% p50=4950 p95=4950 p99=4950 worst=-)
+-- 13 citation-tap-response
+[13] citation-tap-response -> FAIL  (frames=0 jank=0.00% p50=4950 p95=4950 p99=4950 worst=-)
+-- 14 composer-open
+[14] composer-open -> FAIL  (frames=0 jank=0.00% p50=4950 p95=4950 p99=4950 worst=-)
+-- 15 composer-type-50-chars
+[15] composer-type-50-chars -> FAIL  (frames=0 jank=0.00% p50=4950 p95=4950 p99=4950 worst=-)
+-- 16 composer-expand-attach
+[16] composer-expand-attach -> FAIL  (frames=0 jank=0.00% p50=4950 p95=4950 p99=4950 worst=-)
+-- 17 composer-collapse
+[17] composer-collapse -> FAIL  (frames=0 jank=0.00% p50=4950 p95=4950 p99=4950 worst=-)
+-- 18 composer-send-button-press
+[18] composer-send-button-press -> FAIL  (frames=0 jank=0.00% p50=4950 p95=4950 p99=4950 worst=-)
+-- 19 image-picker-open
+[19] image-picker-open -> FAIL  (frames=0 jank=0.00% p50=4950 p95=4950 p99=4950 worst=-)
+-- 20 image-preview-render
+[20] image-preview-render -> FAIL  (frames=0 jank=0.00% p50=4950 p95=4950 p99=4950 worst=-)
+-- 21 image-upload-progress
+[21] image-upload-progress -> FAIL  (frames=0 jank=0.00% p50=4950 p95=4950 p99=4950 worst=-)
+-- 22 image-upload-complete
+[22] image-upload-complete -> FAIL  (frames=0 jank=0.00% p50=4950 p95=4950 p99=4950 worst=-)
+-- 23 drawer-open
+[23] drawer-open -> FAIL  (frames=2 jank=100.00% p50=1800 p95=1800 p99=1800 worst=-)
+-- 24 drawer-scroll
+[24] drawer-scroll -> FAIL  (frames=0 jank=0.00% p50=4950 p95=4950 p99=4950 worst=-)
+-- 25 drawer-close
+[25] drawer-close -> FAIL  (frames=0 jank=0.00% p50=4950 p95=4950 p99=4950 worst=-)
+-- 26 drawer-tap-conversation
+[26] drawer-tap-conversation -> FAIL  (frames=0 jank=0.00% p50=4950 p95=4950 p99=4950 worst=-)
+-- 27 conversation-switch
+[27] conversation-switch -> FAIL  (frames=0 jank=0.00% p50=4950 p95=4950 p99=4950 worst=-)
+-- 28 mode-picker-open
+[28] mode-picker-open -> FAIL  (frames=3 jank=66.67% p50=400 p95=1300 p99=1300 worst=-)
+-- 29 mode-picker-scroll
+[29] mode-picker-scroll -> FAIL  (frames=0 jank=0.00% p50=4950 p95=4950 p99=4950 worst=-)
+-- 30 mode-picker-select
+[30] mode-picker-select -> FAIL  (frames=0 jank=0.00% p50=4950 p95=4950 p99=4950 worst=-)
+-- 31 mode-picker-close
+[31] mode-picker-close -> FAIL  (frames=0 jank=0.00% p50=4950 p95=4950 p99=4950 worst=-)
+-- 32 search-open
+[32] search-open -> FAIL  (frames=0 jank=0.00% p50=4950 p95=4950 p99=4950 worst=-)
+-- 33 search-type
+[33] search-type -> FAIL  (frames=0 jank=0.00% p50=4950 p95=4950 p99=4950 worst=-)
+-- 34 search-results-render
+[34] search-results-render -> FAIL  (frames=0 jank=0.00% p50=4950 p95=4950 p99=4950 worst=-)
+-- 35 settings-open
+[35] settings-open -> FAIL  (frames=0 jank=0.00% p50=4950 p95=4950 p99=4950 worst=-)
+-- 36 settings-scroll
+[36] settings-scroll -> FAIL  (frames=0 jank=0.00% p50=4950 p95=4950 p99=4950 worst=-)
+-- 37 settings-toggle-response
+[37] settings-toggle-response -> FAIL  (frames=0 jank=0.00% p50=4950 p95=4950 p99=4950 worst=-)
+-- 38 settings-submenu-open
+[38] settings-submenu-open -> FAIL  (frames=0 jank=0.00% p50=4950 p95=4950 p99=4950 worst=-)
+-- 39 settings-back
+[39] settings-back -> FAIL  (frames=0 jank=0.00% p50=4950 p95=4950 p99=4950 worst=-)
+-- 43 network-error-state
+[43] network-error-state -> FAIL  (frames=7 jank=28.57% p50=23 p95=121 p99=121 worst=-)
+-- 44 retry-after-error
+[44] retry-after-error -> FAIL  (frames=0 jank=0.00% p50=4950 p95=4950 p99=4950 worst=-)
+-- 45 model-download-progress
+[45] model-download-progress -> FAIL  (frames=0 jank=0.00% p50=4950 p95=4950 p99=4950 worst=-)
+-- 46 model-download-complete
+[46] model-download-complete -> FAIL  (frames=0 jank=0.00% p50=4950 p95=4950 p99=4950 worst=-)
+-- 47 model-load-first-use
+[47] model-load-first-use -> FAIL  (frames=9 jank=44.44% p50=27 p95=1050 p99=1050 worst=-)
+-- 48 splash-to-first-frame
+[48] splash-to-first-frame -> FAIL  (frames=5 jank=80.00% p50=150 p95=1000 p99=1000 worst=-)
+
+INTERACTION                            FRAMES  JANKY   JANK%    P50    P95    P99  VERDICT
+01-cold-start-first-frame                   4      4 100.00%   3050   3150   3150  FAIL
+02-warm-start-first-frame                   3      3 100.00%   1800   2100   2100  FAIL
+03-resume-from-background                   1      1 100.00%    200    200    200  FAIL
+04-empty-chat-render                        0      0   0.00%   4950   4950   4950  FAIL
+05-first-message-send                       7      3  42.86%     36    150    150  FAIL
+06-streaming-reply-5s                       6      3  50.00%     38     77     77  FAIL
+07-short-chat-scroll-20-swipe               0      0   0.00%   4950   4950   4950  FAIL
+08-long-chat-scroll-50-message              1      1 100.00%    150    150    150  FAIL
+09-long-chat-fling-top-to-bottom            0      0   0.00%   4950   4950   4950  FAIL
+10-rich-reply-render-table                  0      0   0.00%   4950   4950   4950  FAIL
+11-rich-reply-render-code                   0      0   0.00%   4950   4950   4950  FAIL
+12-rich-reply-render-image                  0      0   0.00%   4950   4950   4950  FAIL
+13-citation-tap-response                    0      0   0.00%   4950   4950   4950  FAIL
+14-composer-open                            0      0   0.00%   4950   4950   4950  FAIL
+15-composer-type-50-chars                   0      0   0.00%   4950   4950   4950  FAIL
+16-composer-expand-attach                   0      0   0.00%   4950   4950   4950  FAIL
+17-composer-collapse                        0      0   0.00%   4950   4950   4950  FAIL
+18-composer-send-button-press               0      0   0.00%   4950   4950   4950  FAIL
+19-image-picker-open                        0      0   0.00%   4950   4950   4950  FAIL
+20-image-preview-render                     0      0   0.00%   4950   4950   4950  FAIL
+21-image-upload-progress                    0      0   0.00%   4950   4950   4950  FAIL
+22-image-upload-complete                    0      0   0.00%   4950   4950   4950  FAIL
+23-drawer-open                              2      2 100.00%   1800   1800   1800  FAIL
+24-drawer-scroll                            0      0   0.00%   4950   4950   4950  FAIL
+25-drawer-close                             0      0   0.00%   4950   4950   4950  FAIL
+26-drawer-tap-conversation                  0      0   0.00%   4950   4950   4950  FAIL
+27-conversation-switch                      0      0   0.00%   4950   4950   4950  FAIL
+28-mode-picker-open                         3      2  66.67%    400   1300   1300  FAIL
+29-mode-picker-scroll                       0      0   0.00%   4950   4950   4950  FAIL
+30-mode-picker-select                       0      0   0.00%   4950   4950   4950  FAIL
+31-mode-picker-close                        0      0   0.00%   4950   4950   4950  FAIL
+32-search-open                              0      0   0.00%   4950   4950   4950  FAIL
+33-search-type                              0      0   0.00%   4950   4950   4950  FAIL
+34-search-results-render                    0      0   0.00%   4950   4950   4950  FAIL
+35-settings-open                            0      0   0.00%   4950   4950   4950  FAIL
+36-settings-scroll                          0      0   0.00%   4950   4950   4950  FAIL
+37-settings-toggle-response                 0      0   0.00%   4950   4950   4950  FAIL
+38-settings-submenu-open                    0      0   0.00%   4950   4950   4950  FAIL
+39-settings-back                            0      0   0.00%   4950   4950   4950  FAIL
+40-onboarding-first-slide                   0      0   0.00%   4950   4950   4950  FAIL
+41-onboarding-advance                       0      0   0.00%   4950   4950   4950  FAIL
+42-onboarding-complete                      0      0   0.00%   4950   4950   4950  FAIL
+43-network-error-state                      7      2  28.57%     23    121    121  FAIL
+44-retry-after-error                        0      0   0.00%   4950   4950   4950  FAIL
+45-model-download-progress                  0      0   0.00%   4950   4950   4950  FAIL
+46-model-download-complete                  0      0   0.00%   4950   4950   4950  FAIL
+47-model-load-first-use                     9      4  44.44%     27   1050   1050  FAIL
+48-splash-to-first-frame                    5      4  80.00%    150   1000   1000  FAIL
+
+TOTAL: 0 of 48 PASS, 48 FAIL
+raw data + summary.md written to docs/perf/runs/20261015-172922
