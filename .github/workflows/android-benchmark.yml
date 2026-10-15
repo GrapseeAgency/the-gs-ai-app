@@ -27,6 +27,11 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
+      - name: Enable KVM (raw evidence: run 38704622804 booted without it and never completed)
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
       - name: Run chat screen macrobenchmark on API 34 emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -37,7 +42,7 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |
-            ./gradlew :benchmark:connectedCheck --no-daemon --stacktrace 2>&1 | tee benchmark-raw.log
+            bash -c 'set -o pipefail; ./gradlew :benchmark:connectedCheck --no-daemon --stacktrace 2>&1 | tee benchmark-raw.log'
       - name: Upload raw benchmark evidence
         if: always()
         uses: actions/upload-artifact@v4
