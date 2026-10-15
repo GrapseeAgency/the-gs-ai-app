@@ -94,7 +94,7 @@ jobs:
             -no-window -no-audio -no-boot-anim \
             -gpu swiftshader_indirect -accel on \
             -feature -Vulkan -no-metrics \
-            -memory 3072 -cores 4 -no-snapshot \
+            -memory 4096 -cores 4 -no-snapshot \
             -camera-back none -camera-front none \
             > /tmp/emulator.log 2>&1 &
           sleep 20

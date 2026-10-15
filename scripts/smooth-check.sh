@@ -148,7 +148,7 @@ PF_T0=0
 pf_start(){ # $1 id
   [ "$PF_ON" = "1" ] || return 0
   PF_T0="$(date +%s)"
-  shc "perfetto -o /data/misc/perfetto-traces/sm-$1.pftrace -t ${PF_WINDOW}s gfx wm am sched view freq idle -b 64mb >/dev/null 2>&1 &"
+  shc "perfetto -o /data/misc/perfetto-traces/sm-$1.pftrace -t ${PF_WINDOW}s gfx wm am sched view freq idle -b 32mb >/dev/null 2>&1 &"
 }
 pf_stop(){ # $1 id
   [ "$PF_ON" = "1" ] || return 0
