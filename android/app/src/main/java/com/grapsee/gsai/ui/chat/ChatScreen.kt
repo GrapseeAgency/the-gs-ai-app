@@ -1816,6 +1816,25 @@ private fun LiveStreamText(
 }
 
 /**
+ * perf-smooth-1 (cause 4/5): the reasoning text flushes per token, so the
+ * live?.value read lives here -- inside the smallest possible scope --
+ * instead of in [AssistantMessage], where it used to re-compose the whole
+ * assistant row ~30 times a second while a reasoning phase streamed. Emits
+ * the panel plus its trailing spacer only while reasoning text is present.
+ */
+@Composable
+private fun LiveReasoning(live: State<ChatStreamController.StreamState?>?) {
+    val st = live?.value ?: return
+    if (st.reasoning.isNullOrEmpty()) return
+    ReasoningPanel(
+        text = st.reasoning.orEmpty(),
+        startMs = st.reasoningStartMs,
+        endMs = st.reasoningEndMs
+    )
+    Spacer(Modifier.height(8.dp))
+}
+
+/**
  * The composer's send control, a 36dp ink circle with the up arrow. uiverse
  * vinodjangid07 dull-ladybug-18 press physics materialized monochrome: on
  * press the whole control settles to 0.96 scale and 1dp down over 120ms
@@ -1969,15 +1988,27 @@ private fun AssistantMessage(
     val haptics = LocalHapticFeedback.current
     // PHASE 8.1: the live stream wins while this bubble is the streaming one;
     // the committed turn data (memory, or Room after a reload) wins after.
-    val liveState = live?.value
-    val turnSources = if (message.isStreaming) liveState?.sources.orEmpty() else message.sources
+    // perf-smooth-1 (cause 4/5): token flushes (~30 Hz) must NOT recompose
+    // this row. The old code read live?.value here, subscribing the whole
+    // AssistantMessage scope to every stream token even though only the text
+    // node (LiveStreamText) and the reasoning panel consume per-token data.
+    // Each field now reads through derivedStateOf keyed on list identity:
+    // StreamState.copy() preserves field instances, so these recompose only
+    // when that field actually changes (source events, trace rows) -- never
+    // on streamText growth.
+    val liveSources by remember(live) { derivedStateOf { live?.value?.sources } }
+    val liveTraceItems by remember(live) { derivedStateOf { live?.value?.traceItems } }
+    val liveEngineRows by remember(live) { derivedStateOf { live?.value?.engineRows } }
+    val liveResearchNotes by remember(live) { derivedStateOf { live?.value?.researchPhaseNotes } }
+    val liveUsedCitations by remember(live) { derivedStateOf { live?.value?.usedCitations } }
+    val turnSources = if (message.isStreaming) liveSources.orEmpty() else message.sources
     val turnClarify = if (message.isStreaming) null else message.clarify
-    val turnTraceItems = liveState?.traceItems ?: message.traceItems
+    val turnTraceItems = liveTraceItems ?: message.traceItems
     // PHASE 8.2: the research-level detail rides the same live-vs-committed
     // seam as the trace items.
-    val turnEngineRows = liveState?.engineRows ?: message.engineRows
-    val turnResearchNotes = liveState?.researchPhaseNotes ?: message.researchNotes
-    val turnUsedCitations = liveState?.usedCitations ?: message.usedCitations
+    val turnEngineRows = liveEngineRows ?: message.engineRows
+    val turnResearchNotes = liveResearchNotes ?: message.researchNotes
+    val turnUsedCitations = liveUsedCitations ?: message.usedCitations
     // Reload-time collapsed summary: the trace detail is memory-only, so a
     // reloaded turn honestly derives its one-liner from what persisted.
     val turnTraceSummary = message.traceSummary
@@ -2043,16 +2074,10 @@ private fun AssistantMessage(
             }
             // REASONING TRACE (chat-reasoning): above the answer while THIS
             // turn's reasoning streams — stream-only, gone at the next send.
+            // perf-smooth-1: the read lives inside [LiveReasoning], so token
+            // flushes never re-compose this row.
             if (message.isStreaming) {
-                val st = live?.value
-                if (!st?.reasoning.isNullOrEmpty()) {
-                    ReasoningPanel(
-                        text = st!!.reasoning.orEmpty(),
-                        startMs = st.reasoningStartMs,
-                        endMs = st.reasoningEndMs
-                    )
-                    Spacer(Modifier.height(8.dp))
-                }
+                LiveReasoning(live = live)
             }
             // Document-style content: no card container, no border — just the
             // answer on the app background at the bodyLarge measure (16sp /
