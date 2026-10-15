@@ -221,6 +221,18 @@ run_interaction(){ # $1 id  $2 name
   say "-- $id $name"
   FOUND_XY=""
   do_prep "$id"
+  # run-6/7 evidence: stray fallback taps opened Google Messages and the
+  # launcher, poisoning every later row. Guarantee the app holds the
+  # foreground before anything is measured.
+  local foc
+  foc="$(shc "dumpsys window" | grep -m1 'mCurrentFocus' )"
+  case "$foc" in
+    *"$PKG"*) : ;;
+    *)
+      say "   foreground lost ($foc) — re-launching"
+      shc "am start -W -n $ACT" >/dev/null; sleep 1.5
+      ;;
+  esac
   # Which window actually holds focus after prep? Run-4 rows with 0 frames
   # were un-diagnosable without this: taps landing on the IME or a wrong
   # screen looked identical to a frozen app.
@@ -315,20 +327,41 @@ ensure_conv2(){
   CONV2_DONE=1
 }
 
-# Fresh-install gate (run-4/5 evidence: focus sat on NexusLauncher because the
-# nav start destination is AUTH on a pm-cleared install and nothing walked it).
-# The auth flow is simulated locally, so adb can complete it: Welcome ->
-# Sign in -> Email/Password -> Sign in. Onboarding is walked separately by
-# 40-42 so those interactions measure the real steps.
+# Fresh-install gate (run-4/5/6/7 evidence). The nav start destination is AUTH
+# on a pm-cleared install, and the simulated flow is FOUR steps deep:
+# Welcome -> Sign in -> VerifyEmail (6 boxes) -> TwoFactor (6 boxes) ->
+# session -> Onboarding. run-7 stopped at the code screens and every later
+# fallback tap landed on other apps (Google Messages) or the launcher. This
+# walker drives whichever auth step is live until the session activates.
 seed_auth(){
-  local c
-  c="$(find_any "Sign in" 2>/dev/null)" || return 0   # session active: chat direct
-  tap $c; sleep 1.2                                    # Welcome -> SignIn step
-  c="$(find_any "Email" 2>/dev/null)" && { tap $c; sleep 0.6; typetext "checker@gsai.dev"; }
-  c="$(find_any "Password" 2>/dev/null)" && { tap $c; sleep 0.6; typetext "checker123456"; }
-  c="$(find_any "Sign in" 2>/dev/null)"
-  [ -n "$c" ] && { tap $c; sleep 1.5; }
-  key 4; sleep 0.3
+  local i c
+  for i in 1 2 3 4 5 6 7 8; do
+    c="$(find_any "Sign in" 2>/dev/null)"
+    if [ -n "$c" ]; then
+      tap $c; sleep 1.2                                     # Welcome -> SignIn
+      c="$(find_any "Email" 2>/dev/null)" && { tap $c; sleep 0.5; typetext "checker@gsai.dev"; }
+      c="$(find_any "Password" 2>/dev/null)" && { tap $c; sleep 0.5; typetext "checker123456"; }
+      c="$(find_any "Sign in" 2>/dev/null)" && { tap $c; sleep 1.5; }
+      continue
+    fi
+    if ui_dump && grep -qE "Check your inbox|Two-factor authentication" "$OUT/uidump-last.xml" 2>/dev/null; then
+      # SixCodeRow: first box is auto-focused on entry; digits auto-advance.
+      # If focus was lost, tap the leftmost box of the centered row and retry
+      # on the next loop pass.
+      typetext "123456"; sleep 0.5
+      c="$(find_any "Verify" 2>/dev/null)" && { tap $c; sleep 1.5; }
+      c="$(find_any "Verify" 2>/dev/null)" && { tap "$((W/2 - 180))" "$((H*45/100))"; sleep 0.4; typetext "123456"; sleep 0.5; tap $c; sleep 1.5; }
+      continue
+    fi
+    ui_dump || return 0
+    if grep -qE "What should GS call you?|Enter GS AI" "$OUT/uidump-last.xml" 2>/dev/null; then
+      return 0                                              # onboarding reached
+    fi
+    if grep -q "New chat" "$OUT/uidump-last.xml" 2>/dev/null; then
+      return 0                                              # chat reached
+    fi
+    return 0
+  done
 }
 
 # ----------------------------------------------------- prep (unmeasured) ---

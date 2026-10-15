@@ -175,5 +175,13 @@ jobs:
           # run 38780804440 failed here: main moved while the 60-minute job ran
           # (attempts.md analysis pushed mid-run) and HEAD:main push was
           # rejected non-fast-forward. Rebase the results commit onto main.
-          git pull --rebase origin main
+          # run 38784673957: the rebase itself conflicted on
+          # docs/perf/emulator-baseline.md (main also carried a baseline update).
+          # During a rebase, --theirs is the commit being applied = THIS run's
+          # fresh results; prefer it, then continue.
+          git pull --rebase origin main || {
+            git checkout --theirs docs/perf/emulator-baseline.md 2>/dev/null || true
+            git add -A
+            GIT_EDITOR=true git rebase --continue || true
+          }
           git push origin HEAD:main
