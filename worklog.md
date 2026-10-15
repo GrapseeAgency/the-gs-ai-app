@@ -5097,3 +5097,18 @@ Work Log:
 Stage Summary:
 - Checker pushed @ 11e032f (7cd3ec5..11e032f). Baseline awaiting operator: run `bash scripts/smooth-check.sh` on the phone, paste output -> commits verbatim to docs/perf/baseline.md, then fix loop starts (worst jank% first, one fix per commit, revert+log non-movers in docs/perf/attempts.md).
 - Known tuning risk: uiautomator needles/coordinate fallbacks are best-effort until first operator run; misses will show as FAIL rows with raw numbers and get tuned per iteration.
+---
+Task ID: PERF-SMOOTH-1
+Agent: main (Z.ai Code)
+Task: Run the 48-interaction checker on the emulator in CI, fix bottlenecks, ship v0.74.0 (operator tests after).
+
+Work Log:
+- Built smooth-check.yml (dispatch-only CI): KVM AVD android-34 x86_64, :app assembleDebug, runs scripts/smooth-check.sh, commits results + updates docs/perf/emulator-baseline.md, uploads raw run incl. perfetto traces.
+- 9 CI runs total; 7 were harness-hardening iterations, each fix cites its failing run: platform-tools PATH (38769712321), bounded boot + liveness + -feature -Vulkan (38771590818), ANDROID_AVD_HOME pin (38775646716), IME discipline + 4950ms no-data sentinel fix + focus/uidump evidence (38780804440), crash-evidence capture + baseline rebase conflict resolution (38784123399), full auth walker + ensure_foreground (38784673957), session preflight via run-as + uiautomator --compressed + 4GB AVD + 16mb traces (38789594585 -> FIRST VALID TABLE, run 9 = 38792996490).
+- Code fixes shipped (one commit each, cause cited): perf(06-streaming) AssistantMessage token-flush scope isolation via per-field derivedStateOf + LiveReasoning (compose cause 4/5); perf(40-42-onboarding) Ready sweep animation moved inside ReadyStep (cause 5).
+- 15-cause audit across every screen: keys/contentType present on all 6 lazy lists, ChatUiMessage @Immutable, derivedStateOf on scroll reads, IO off main thread (ThumbLoader/RichBlocks), graphicsLayer-driven animations (messageAppear/kineticPress/caret/chevron), Coil async image, no shadows in lists, StreamBlockCache incremental streaming parse, strong skipping on (Kotlin 2.0.20). Remaining rows' costs are swiftshader frame costs, not app main-thread work.
+- Shipped v0.74.0 (versionCode 86): ce3e976..7eacb78, tag pushed, release run 38796134335 green.
+
+Stage Summary:
+- Valid emulator baseline: docs/perf/emulator-baseline.md (run 9). Ordering signal: attach-open 100%/117ms, long-scroll 87.7%/85ms, IME resize 87.0%/125ms, streaming 85.9%/89ms, model-load 85.3%/85ms. Software-render floor makes the 1% gate unreachable on emulator; ordering is the signal per mandate. 0-frame rows documented with evidence in docs/perf/attempts.md.
+- Release: https://github.com/GrapseeAgency/the-gs-ai-app/releases/tag/v0.74.0 — operator: reinstall and try it.
