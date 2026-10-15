@@ -18,6 +18,10 @@ android {
         // macrobenchmark 1.3 removed MacrobenchmarkRunner: the instrumentation
         // runner is the plain AndroidJUnitRunner (the JUnit4 rule drives it).
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // Run 38714979782 raw: macrobenchmark's logcat detector fails every
+        // test on the emulator's own ERROR lines. Suppressed per the official
+        // instrumentation-argument contract for emulator CI.
+        testInstrumentationRunnerArguments["androidx.benchmark.suppressErrors"] = "EMULATOR,UNLOCKED,LOW-BATTERY"
     }
 
     targetProjectPath = ":app"
