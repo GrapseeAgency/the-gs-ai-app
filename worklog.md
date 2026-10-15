@@ -5079,3 +5079,21 @@ Stage Summary:
 - Chat screen code edits (perf-4-a/b/c) are behavior-preserving and shipped
 - The benchmark harness is now a permanent CI asset: green end-to-end, executes the 4 contract methods every push to android/**
 - The six targets are honestly reported, none softened: one measured-miss (startup), four blocked-on-seed-data, one needs an on-device run for the app's own telemetry
+---
+Task ID: PERF-SMOOTH-0
+Agent: main (Z.ai Code)
+Task: DELIVERABLE 1 of the all-screens smoothness gate — build scripts/smooth-check.sh (adb-only, 48 interactions), push, hand to operator as measurement instrument.
+
+Work Log:
+- Repo rollback detected again (ahead 1 / behind 595) -> git reset --hard origin/main @ 7cd3ec5; ChatScreen.kt baseline intact; PAT re-set on origin URL before push.
+- Built scripts/smooth-check.sh (631 lines, bash + adb only): measures all 48 specified interactions (lifecycle, chat, composer, attachment, nav, mode picker, search, settings, onboarding, errors, model, splash).
+- Gating: device refresh rate read via dumpsys display (fallbacks: mRefreshRate / peak_refresh_rate, floor 60); budget = 1000/Hz; PASS requires janky%<1.0 AND p95<budget AND worst<33.0ms; missing data = FAIL (strict).
+- Frame stats: dumpsys gfxinfo reset per interaction; FRAMES/JANKY/JANK% from full-window summary; P50/P90/P95/P99/WORST from framestats (FrameCompleted-IntendedVsync), last ~120 frames (adb limitation, documented); percentile engine verified against synthetic 17-column PROFILEDATA (n=100, p50=5.05, p95/worst=25.00 as expected).
+- Perfetto: per-interaction 6s trace (sm-<id>.pftrace) when device has perfetto; pulled into docs/perf/runs/<ts>/ for ui.perfetto.dev frame-timeline reads.
+- State self-seeding: pm clear at start (3s warning), runtime grants, onboarding walk, 50-message seed via cached composer/send coords, screencap-pushed image, airplane-mode error state (restored by EXIT trap). SMOOTH_SKIP_RESET=1 for iteration re-runs. COMPOSER_XY / SEND_XY env overrides for coordinate tuning.
+- Element lookup: single uiautomator dump per find_any call (text then content-desc); bounds->center via sed+awk; fixed an awk field-shift bug (][ produces empty split field) found by synthetic-parse test; finders run in unmeasured prep windows only.
+- Verified pipelines offline (no device in sandbox): bounds parsing (1015 2185 expected = correct), duration/percentile awk, bash -n clean.
+
+Stage Summary:
+- Checker pushed @ 11e032f (7cd3ec5..11e032f). Baseline awaiting operator: run `bash scripts/smooth-check.sh` on the phone, paste output -> commits verbatim to docs/perf/baseline.md, then fix loop starts (worst jank% first, one fix per commit, revert+log non-movers in docs/perf/attempts.md).
+- Known tuning risk: uiautomator needles/coordinate fallbacks are best-effort until first operator run; misses will show as FAIL rows with raw numbers and get tuned per iteration.
