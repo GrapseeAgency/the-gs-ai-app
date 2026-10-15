@@ -191,12 +191,14 @@ score_and_record(){ # $1 id  $2 name
     frames="$stot"; janky="${sjank:-0}"
     jankp="${spct:-$(awk -v j="$janky" -v t="$frames" 'BEGIN{printf "%.2f", j*100/t}')}"
   else
-    frames="${n:-0}"; janky="$jder"
-    jankp="$(awk -v j="$jder" -v t="${n:-0}" 'BEGIN{if(t>0) printf "%.2f", j*100/t; else print "0.00"}')"
+    # Android prints a 4950ms sentinel in the percentile lines when zero
+    # frames rendered (run-4 evidence). That is device garbage, not data:
+    # report an invalid measurement honestly instead of propagating it.
+    frames="0"; janky="0"; jankp="0.00"; p50=""; p90=""; p95=""; p99=""; worst=""
   fi
 
   # percentile fallback to the summary block when framestats is unusable
-  if [ -z "$p95" ]; then
+  if [ -z "$p95" ] && [ "${stot:-0}" -gt 0 ]; then
     p50="$(grep -oE '50th percentile: [0-9.]+' "$OUT/$id-summary.raw" | awk '{print $3}' | sed 's/ms$//' | tail -1)"
     p90="$(grep -oE '90th percentile: [0-9.]+' "$OUT/$id-summary.raw" | awk '{print $3}' | sed 's/ms$//' | tail -1)"
     p95="$(grep -oE '95th percentile: [0-9.]+' "$OUT/$id-summary.raw" | awk '{print $3}' | sed 's/ms$//' | tail -1)"
@@ -219,6 +221,11 @@ run_interaction(){ # $1 id  $2 name
   say "-- $id $name"
   FOUND_XY=""
   do_prep "$id"
+  # Which window actually holds focus after prep? Run-4 rows with 0 frames
+  # were un-diagnosable without this: taps landing on the IME or a wrong
+  # screen looked identical to a frozen app.
+  shc "dumpsys window" | grep -m1 -E 'mCurrentFocus|mFocusedWindow' > "$OUT/$id-focus.txt" 2>/dev/null
+  [ -f "$OUT/uidump-last.xml" ] && cp -f "$OUT/uidump-last.xml" "$OUT/$id-uidump.xml" 2>/dev/null || true
   pf_start "$id"
   gfx_reset
   do_action "$id"
@@ -266,6 +273,10 @@ send_msg(){ # $1 text (no spaces, no percent signs)
   composer_tap; sleep 0.8
   typetext "$1"
   send_tap; sleep 0.5
+  # run-4 evidence: the IME stayed open after sends, so every later swipe
+  # (07/08/09) started INSIDE the keyboard and scrolled the suggestion strip
+  # while the app rendered zero frames. Close the IME as part of the send.
+  key 4; sleep 0.4
 }
 seed_msgs(){ # $1 count  (resolve composer+send once, keyboard stays open)
   local i c sc
@@ -280,7 +291,7 @@ seed_msgs(){ # $1 count  (resolve composer+send once, keyboard stays open)
     typetext "seed_msg_$i"
     tap $sc; sleep 0.4
   done
-  key 4
+  key 4; sleep 0.4
 }
 seed_image(){
   shc "screencap -p /sdcard/Pictures/smooth-check.png" >/dev/null
@@ -440,36 +451,37 @@ do_action(){
     sleep 1.5
     ;;
   04)
-    swipe "$((W/2))" "$((H*60/100))" "$((W/2))" "$((H*50/100))" 200
-    sleep 0.6
-    swipe "$((W/2))" "$((H*50/100))" "$((W/2))" "$((H*60/100))" 200
-    sleep 0.5
+    # run-4 evidence: a pulse swipe on an EMPTY chat invalidates nothing and
+    # renders zero frames. A real render event on the empty state is the IME
+    # riding up over it (full chat layout across the resize) and back down.
+    composer_tap; sleep 1.3
+    key 4; sleep 0.8
     ;;
   05) send_msg "hello_gs_first_message"; sleep 2.5 ;;
   06) send_msg "tell_me_a_very_long_story_about_a_robot"; sleep 5.0 ;;
   07)
     for i in $(seq 1 10); do
-      swipe "$((W/2))" "$((H*65/100))" "$((W/2))" "$((H*35/100))" 180
+      swipe "$((W/2))" "$((H*55/100))" "$((W/2))" "$((H*25/100))" 180
       sleep 0.15
     done
     for i in $(seq 1 10); do
-      swipe "$((W/2))" "$((H*35/100))" "$((W/2))" "$((H*65/100))" 180
+      swipe "$((W/2))" "$((H*25/100))" "$((W/2))" "$((H*55/100))" 180
       sleep 0.15
     done
     ;;
   08)
     for i in $(seq 1 6); do
-      swipe "$((W/2))" "$((H*70/100))" "$((W/2))" "$((H*20/100))" 400
+      swipe "$((W/2))" "$((H*55/100))" "$((W/2))" "$((H*10/100))" 400
       sleep 0.3
     done
     for i in $(seq 1 6); do
-      swipe "$((W/2))" "$((H*20/100))" "$((W/2))" "$((H*70/100))" 400
+      swipe "$((W/2))" "$((H*10/100))" "$((W/2))" "$((H*55/100))" 400
       sleep 0.3
     done
     ;;
   09)
     for i in 1 2 3; do
-      swipe "$((W/2))" "$((H*85/100))" "$((W/2))" "$((H*5/100))" 80
+      swipe "$((W/2))" "$((H*70/100))" "$((W/2))" "$((H*5/100))" 80
       sleep 0.6
     done
     ;;
@@ -481,7 +493,7 @@ do_action(){
   15) typetext "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJ"; sleep 1.0 ;;
   16) tap $FOUND_XY; sleep 1.6 ;;
   17) key 4; sleep 1.0 ;;
-  18) typetext "press_test"; send_tap; sleep 1.0 ;;
+  18) typetext "press_test"; send_tap; sleep 1.0; key 4; sleep 0.4 ;;
   19) tap $FOUND_XY; sleep 1.8 ;;
   20) tap "$((W*30/100))" "$((H*30/100))"; sleep 2.0 ;;
   21) tap $FOUND_XY; sleep 3.0 ;;
@@ -496,7 +508,7 @@ do_action(){
   30) tap "$((W/2))" "$((H*50/100))"; sleep 1.4 ;;
   31) key 4; sleep 0.9 ;;
   32) tap_ui "Search" "$((W/2)) $((H*12/100))"; sleep 1.4 ;;
-  33) typetext "seed"; sleep 1.4 ;;
+  33) typetext "seed"; sleep 1.4; key 4; sleep 0.4 ;;
   34) typetext "_msg"; sleep 1.6 ;;
   35) tap_ui "Settings" "$((W*35/100)) $((H*85/100))"; sleep 1.5 ;;
   36) swipe "$((W/2))" "$((H*70/100))" "$((W/2))" "$((H*30/100))" 300; sleep 1.0 ;;
