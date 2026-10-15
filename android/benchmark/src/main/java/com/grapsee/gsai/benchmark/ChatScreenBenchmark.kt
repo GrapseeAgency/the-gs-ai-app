@@ -24,13 +24,15 @@ import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class ChatScreenBenchmark {
 
-    private val benchmarkRule = MacrobenchmarkRule()
+    @get:Rule
+    val benchmarkRule = MacrobenchmarkRule()
 
     private val device: UiDevice =
         UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
