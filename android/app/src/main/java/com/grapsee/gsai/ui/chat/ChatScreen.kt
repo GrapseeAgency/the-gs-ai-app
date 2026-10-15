@@ -89,6 +89,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -181,7 +182,12 @@ import kotlinx.coroutines.launch
  *  surface renders an honest inline system-status notice under the turn instead
  *  of pretending the failure is assistant prose. Failed turns are transient
  *  presentation state: they are never persisted to Room, so a reload shows the
- *  committed partial as an ordinary turn. */
+ *  committed partial as an ordinary turn.
+ *
+ *  perf-4-a (technique D): @Immutable so LazyColumn rows carrying this model
+ *  stay skippable — every field is a val of a stable or immutable type; the
+ *  DTO list element types carry @Immutable themselves. */
+@Immutable
 private data class ChatUiMessage(
     val id: String,
     val role: String,
@@ -1772,6 +1778,44 @@ private fun ComposerRow(
 }
 
 /**
+ * perf-4-a (technique B): the chat screen's SINGLE press-motion source.
+ * Every press-driven animateFloatAsState on this screen (send button, New
+ * chat key) routes through this one function — no per-element durations,
+ * no duplicate mechanisms. Reduced motion snaps instantly.
+ */
+private fun chatPressSpec(reduced: Boolean, pressed: Boolean): AnimationSpec<Float> = when {
+    reduced -> snap()
+    pressed -> tween(120, easing = EaseOut)
+    else -> GsMotion.snappy()
+}
+
+/**
+ * perf-4-a (technique C): the ONLY composition scope that reads the live
+ * stream state. Stream flushes (~30 Hz) recompose this text node alone —
+ * never the message row, the LazyColumn, or the screen. Reading [live]
+ * inside the row body would re-execute the whole row per flush; isolating
+ * the read here keeps every settled row skippable. Semantics preserved
+ * verbatim from the previous inline read: null stream state falls back to
+ * the committed content; a blank stream text renders blank (the caret-only
+ * pre-first-token frame is a feature, not a bug to fix here).
+ */
+@Composable
+private fun LiveStreamText(
+    live: State<ChatStreamController.StreamState?>?,
+    fallback: String,
+    isStreaming: Boolean,
+    onCopyCode: (String) -> Unit,
+    citationUrls: Map<Int, String>
+) {
+    BlocksContent(
+        content = live?.value?.streamText ?: fallback,
+        isStreaming = isStreaming,
+        onCopyCode = onCopyCode,
+        citationUrls = citationUrls
+    )
+}
+
+/**
  * The composer's send control, a 36dp ink circle with the up arrow. uiverse
  * vinodjangid07 dull-ladybug-18 press physics materialized monochrome: on
  * press the whole control settles to 0.96 scale and 1dp down over 120ms
@@ -1786,11 +1830,7 @@ private fun GsSendButton(enabled: Boolean, onSend: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val reduced = SettingsStore.reduceAnimations || SettingsStore.reduceMotion
-    val pressSpec: AnimationSpec<Float> = when {
-        reduced -> snap()
-        pressed && enabled -> tween(120, easing = EaseOut)
-        else -> GsMotion.snappy()
-    }
+    val pressSpec: AnimationSpec<Float> = chatPressSpec(reduced, pressed && enabled)
     val press by animateFloatAsState(
         targetValue = if (pressed && enabled) 1f else 0f,
         animationSpec = pressSpec,
@@ -2038,8 +2078,12 @@ private fun AssistantMessage(
                         }
                     )
             ) {
-                BlocksContent(
-                    content = live?.value?.streamText ?: message.content,
+                // perf-4-a (technique C): the live stream read is isolated in
+                // [LiveStreamText] so ~30 Hz text flushes recompose the text
+                // node alone — never this row, the LazyColumn, or the screen.
+                LiveStreamText(
+                    live = live,
+                    fallback = message.content,
                     isStreaming = message.isStreaming,
                     onCopyCode = onCopy,
                     // PHASE 8.1: citation markers [N] become tappable chips
@@ -2322,11 +2366,7 @@ private fun NewChatButton(onClick: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val reduced = SettingsStore.reduceAnimations || SettingsStore.reduceMotion
-    val pressSpec: AnimationSpec<Float> = when {
-        reduced -> snap()
-        pressed -> tween(120, easing = EaseOut)
-        else -> GsMotion.snappy()
-    }
+    val pressSpec: AnimationSpec<Float> = chatPressSpec(reduced, pressed)
     val press by animateFloatAsState(
         targetValue = if (pressed) 1f else 0f,
         animationSpec = pressSpec,

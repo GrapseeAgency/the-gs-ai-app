@@ -1,5 +1,6 @@
 package com.grapsee.gsai.data.remote
 
+import androidx.compose.runtime.Immutable
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -90,6 +91,7 @@ data class MessageDto(
  * createdAt, url}. `url` is the server-relative "/api/v1/files/<id>";
  * resolve against the configured base URL, never render it as an absolute link.
  */
+@Immutable
 @Serializable
 data class AttachmentDto(
     val id: String,
