@@ -51,7 +51,7 @@ mkdir -p "$OUT" || exit 2
 : > "$OUT/commands.log"
 
 say(){ printf '%s\n' "$*" | tee -a "$OUT/checker.log" >/dev/null; printf '%s\n' "$*"; }
-shc(){ printf '$ adb shell %s\n' "$*" >>"$OUT/commands.log"; "$ADB" shell "$@" 2>/dev/null | tr -d '\r'; }
+shc(){ printf '$ adb shell %s\n' "$*" >>"$OUT/commands.log"; "$ADB" shell "$@" 2>/dev/null | tr -d '\r' 2>/dev/null; }
 tap(){ shc "input tap $1 $2" >/dev/null; }
 swipe(){ shc "input swipe $1 $2 $3 $4 ${5:-250}" >/dev/null; }
 key(){ shc "input keyevent $1" >/dev/null; }

@@ -119,12 +119,23 @@ jobs:
           set -e
           tail -8 console.txt
 
+      - name: Capture crash evidence
+        if: always()
+        run: |
+          RUN_DIR="$(ls -dt docs/perf/runs/*/ | head -1)"
+          adb logcat -d -b crash > "$RUN_DIR/logcat-crash.txt" 2>/dev/null || true
+          adb logcat -d 2>/dev/null | grep -E "FATAL EXCEPTION|AndroidRuntime|Process: com.grapsee.gsai|Force finishing activity" | tail -100 > "$RUN_DIR/logcat-fatal.txt" 2>/dev/null || true
+          adb shell dumpsys dropbox --print 2>/dev/null | grep -A40 "com.grapsee.gsai" | tail -120 > "$RUN_DIR/dropbox.txt" 2>/dev/null || true
+          adb shell "ps -A | grep grapsee" > "$RUN_DIR/process-state.txt" 2>/dev/null || true
+          echo "--- fatal grep ---"; cat "$RUN_DIR/logcat-fatal.txt" || true
+          echo "--- dropbox ---"; head -60 "$RUN_DIR/dropbox.txt" || true
+
       - name: Collect results
         run: |
           RUN_DIR="$(ls -dt docs/perf/runs/*/ | head -1)"
           echo "RUN_DIR=$RUN_DIR" >> "$GITHUB_ENV"
           mkdir -p "docs/perf/emulator-runs/run-${{ github.run_number }}"
-          for f in table.txt summary.md results.tsv device.txt checker.log commands.log; do
+          for f in table.txt summary.md results.tsv device.txt checker.log commands.log logcat-fatal.txt logcat-crash.txt dropbox.txt process-state.txt; do
             [ -f "$RUN_DIR/$f" ] && cp "$RUN_DIR/$f" "docs/perf/emulator-runs/run-${{ github.run_number }}/" || true
           done
           cp console.txt exit-code.txt "docs/perf/emulator-runs/run-${{ github.run_number }}/" || true
@@ -161,4 +172,8 @@ jobs:
           git config user.email "perf-bot@users.noreply.github.com"
           git add docs/perf/emulator-runs docs/perf/emulator-baseline.md 2>/dev/null || true
           git commit -m "perf: emulator smooth-check run ${{ github.run_number }} [skip ci]" || echo "nothing to commit"
+          # run 38780804440 failed here: main moved while the 60-minute job ran
+          # (attempts.md analysis pushed mid-run) and HEAD:main push was
+          # rejected non-fast-forward. Rebase the results commit onto main.
+          git pull --rebase origin main
           git push origin HEAD:main
