@@ -5062,3 +5062,20 @@ Work Log:
 Stage Summary:
 - Chat screen code edits are behavior-preserving and pushed; benchmark evidence run in flight
 - Known risk: CI emulator uses swiftshader (software GPU) — the 0-frames-over-16.67ms bar may be unreachable there; contract says report raw numbers + BLOCKED if missed, no softening
+
+---
+Task ID: perf-4-evidence
+Agent: Z.ai Code (main)
+Task: Macrobenchmark evidence run for the chat screen frame-budget contract
+
+Work Log:
+- 10 CI iterations to green (each fix evidence-driven from raw logs): KVM udev perms -> YAML step-name colon -> cd android (per-line sh) -> bare gradle (no committed wrapper) -> gradle 8.13 pin (AGP vs runner 9.8.1) -> plugin via catalogue (classpath collision) -> kotlin-android on module + androidComponents release-only (testBuildType val) -> create(release) (test modules ship none) -> ROOT CAUSE of runner CNFE: macrobenchmark 1.3 REMOVED MacrobenchmarkRunner, runner is AndroidJUnitRunner (my defaultConfig had the 1.2 name) -> @get:Rule -> suppressErrors EMULATOR
+- GREEN RUN 38715548485: 4/4 tests completed, 0 failed, BUILD SUCCESSFUL in 17m21s on API 34 emulator (KVM boot 28s)
+- RAW NUMBERS (benchmarkData.json): coldStartup timeToInitialDisplayMs median 1050.69 (runs 1238.93/1024.33/1050.69), timeToFullDisplayMs median 1178.21; scrollJank frameCount 3/run; composerToggle frameCount 4; streamingAppend frameCount 3
+- VERDICT per contract: target 6 MISSED on CI emulator (1050.7ms vs <400ms, swiftshader software GPU) -> BLOCKED; targets 1-4 unmeasurable at depth: fresh emulator install has NO seeded conversation (app opens empty; blind gestures produce ~3 frames), 50-message scroll + real streaming need seeded data + resource-id hooks -> harness green, numbers not meaningful, BLOCKED with raw numbers
+- Evidence artifacts captured: benchmarkData.json, perfetto traces per iteration, per-test logcat, test-results XML, dex-scan/apk-list/dep-report
+
+Stage Summary:
+- Chat screen code edits (perf-4-a/b/c) are behavior-preserving and shipped
+- The benchmark harness is now a permanent CI asset: green end-to-end, executes the 4 contract methods every push to android/**
+- The six targets are honestly reported, none softened: one measured-miss (startup), four blocked-on-seed-data, one needs an on-device run for the app's own telemetry
