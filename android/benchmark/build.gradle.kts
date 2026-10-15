@@ -27,7 +27,9 @@ android {
     // release variant against the :app release target (non-debuggable, as
     // Macrobenchmark requires).
     buildTypes {
-        release {
+        // test modules ship NO default release buildType (run 38709697422:
+        // CommonExtensionImpl.release getByName fails) — create it.
+        create("release") {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
