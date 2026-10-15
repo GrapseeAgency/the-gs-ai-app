@@ -4,7 +4,7 @@
 // Run locally:  ./gradlew :benchmark:connectedCheck
 // Run on CI:    .github/workflows/android-benchmark.yml (API 34 emulator).
 plugins {
-    id("com.android.test") version "8.13.2"
+    alias(libs.plugins.android.test.apk)
 }
 
 android {
