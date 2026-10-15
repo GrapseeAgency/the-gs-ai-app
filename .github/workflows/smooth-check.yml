@@ -54,6 +54,12 @@ jobs:
           sudo chmod 666 /dev/kvm || true
           echo '::endgroup::'
 
+      # Run 38769712321 died here with `adb: command not found` -- platform-tools
+      # is installed by sdkmanager but is never on the runner PATH. Every step
+      # below (and scripts/smooth-check.sh itself) shells out to `adb`.
+      - name: Add adb to PATH
+        run: echo "/usr/local/lib/android/sdk/platform-tools" >> "$GITHUB_PATH"
+
       - name: Install emulator + system image
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
