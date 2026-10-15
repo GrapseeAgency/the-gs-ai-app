@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <queries>
+        <package android:name="com.grapsee.gsai" />
+    </queries>
+    <instrumentation android:name="androidx.benchmark.macro.junit4.MacrobenchmarkRunner"
+        android:targetPackage="com.grapsee.gsai"
+        android:label="ChatScreenBenchmark" />
+</manifest>
