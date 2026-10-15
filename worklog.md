@@ -5046,3 +5046,19 @@ Stage Summary:
 - v0.73.3 = the visually loud round: 34sp large titles, micro-label sections, flat hairline groups (no bordered cards), primary-filled user bubbles with tail corner, GS monogram identity on assistant turns + empty state, drawer pill selection, serif tier gone
 - Lesson recorded: platform redacts remote URL tokens periodically; symptom = 'could not read Password for [REDACTED:github_token]'; fix = re-set-url with operator PAT; token itself remains valid
 - Safety bundle of pre-push work now also mirrored to /tmp/design3-round.bundle + /home/z/.gs-vault/ (542MB full main bundle)
+
+---
+Task ID: perf-4
+Agent: Z.ai Code (main)
+Task: Chat screen frame budget (operator contract: six targets, five artifacts)
+
+Work Log:
+- Platform rewound repo a FOURTH time mid-session (agents' Task infra also errored out); recovered via reset --hard to origin, all work re-pushed
+- perf-4-a (f083356): C — live stream read isolated in new LiveStreamText node (only ~30Hz flush recompose scope); B — single chatPressSpec routed through send + New chat presses; D — @Immutable on ChatUiMessage + AttachmentDto (SearchEvents DTOs already annotated); E keys + G graphicsLayer + F no-remember-IO verified ALREADY present; A not applicable at BOM 2024.09.03 (MotionScheme = material3 1.4+)
+- perf-4-b (c8affe4): :benchmark module (com.android.test, AGP 8.13.2, macro 1.3.3, target :app release w/ liveUpdate signing), ChatScreenBenchmark.kt (scrollJank/composerToggle/streamingAppend/coldStartup), profileable manifest tag, android-benchmark.yml (API 34 emulator, pixel_6, raw log + outputs as artifacts)
+- perf-4-c (691154a): iOS — chatCurve (.easeInOut 0.2, .smooth unavailable at iOS 16 target) unified across 11 withAnimation/.animation sites; plist CADisableMinimumFrameDurationOnPhone ALREADY present (true); reduce-motion gate ALREADY present (Aero.motionReduced reads UIAccessibility.isReduceMotionEnabled); flush loop is Task-driven (no Timer) — CADisplayLink N/A; tap-to-first-char telemetry ALREADY instrumented (GS-PERF tapToFirstVisibleCharMs)
+- Auto-triggered benchmark run 38704622804 @ c8affe4 — polling for raw numbers
+
+Stage Summary:
+- Chat screen code edits are behavior-preserving and pushed; benchmark evidence run in flight
+- Known risk: CI emulator uses swiftshader (software GPU) — the 0-frames-over-16.67ms bar may be unreachable there; contract says report raw numbers + BLOCKED if missed, no softening
