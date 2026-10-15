@@ -5,6 +5,7 @@
 // Run on CI:    .github/workflows/android-benchmark.yml (API 34 emulator).
 plugins {
     alias(libs.plugins.android.test.apk)
+    alias(libs.plugins.kotlin.android)
 }
 
 android {
@@ -17,13 +18,15 @@ android {
         testInstrumentationRunner = "androidx.benchmark.macro.junit4.MacrobenchmarkRunner"
     }
 
-    testBuildType = "release"
     targetProjectPath = ":app"
     experimentalProperties["android.experimental.self-instrumenting"] = true
 
+    // perf-4-b: testBuildType is a val on the AGP 8.13 TestExtension DSL, so
+    // the release-only shape is expressed through androidComponents instead:
+    // the debug variant is disabled outright and connectedCheck runs the
+    // release variant against the :app release target (non-debuggable, as
+    // Macrobenchmark requires).
     buildTypes {
-        debug {
-        }
         release {
             signingConfig = signingConfigs.getByName("debug")
         }
@@ -35,6 +38,12 @@ android {
     }
     kotlinOptions {
         jvmTarget = "17"
+    }
+}
+
+androidComponents {
+    beforeVariants(selector().all()) { variant ->
+        variant.enable = variant.buildType == "release"
     }
 }
 
