@@ -15,7 +15,9 @@ android {
     defaultConfig {
         minSdk = 26
         targetSdk = 35
-        testInstrumentationRunner = "androidx.benchmark.macro.junit4.MacrobenchmarkRunner"
+        // macrobenchmark 1.3 removed MacrobenchmarkRunner: the instrumentation
+        // runner is the plain AndroidJUnitRunner (the JUnit4 rule drives it).
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     targetProjectPath = ":app"

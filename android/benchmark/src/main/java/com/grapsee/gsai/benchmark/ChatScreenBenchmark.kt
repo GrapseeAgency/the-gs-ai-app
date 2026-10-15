@@ -42,16 +42,6 @@ class ChatScreenBenchmark {
     private val composerY: Int get() = device.displayHeight - 140
     private val sendX: Int get() = device.displayWidth - 80
 
-    /*
-     * perf-4-b evidence (run 38712332370 dex-scan.log): MacrobenchmarkRule
-     * (referenced from code) survives into classes.dex with 9 string hits
-     * while MacrobenchmarkRunner (referenced only from the merged manifest)
-     * is stripped from the APK dex at merge time, crashing instrumentation
-     * with ClassNotFoundException. A code-level reference pins the class.
-     */
-    @Suppress("unused")
-    private val keepRunnerInDex: String = androidx.benchmark.macro.junit4.MacrobenchmarkRunner::class.java.name
-
     @Before
     fun settleOnHome() {
         device.pressHome()
