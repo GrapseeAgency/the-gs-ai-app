@@ -129,12 +129,10 @@ fun OnboardingScreen(onFinished: () -> Unit) {
         OnboardingStep.Ready -> true
     }
 
-    // The single sanctioned aurora moment: the Ready setup bar sweeping 0 -> 1.
-    val readyProgress by animateFloatAsState(
-        targetValue = if (currentStep == OnboardingStep.Ready) 1f else 0f,
-        animationSpec = tween(durationMillis = 1200),
-        label = "readyProgress"
-    )
+    // perf-smooth-2 (cause 5): the Ready progress sweep is animated INSIDE
+    // ReadyStep now. The old screen-level animateFloatAsState re-composed the
+    // whole onboarding screen every frame of the 1200ms sweep; the read now
+    // lives in the only composable that draws it.
 
     Column(
         modifier = Modifier
@@ -204,7 +202,7 @@ fun OnboardingScreen(onFinished: () -> Unit) {
                     accentIndex = accentIndex,
                     onAccentChange = { accentIndex = it }
                 )
-                OnboardingStep.Ready -> ReadyStep(name = displayName, progress = readyProgress)
+                OnboardingStep.Ready -> ReadyStep(name = displayName)
             }
         }
 
@@ -718,7 +716,15 @@ private fun PersonalisationStep(
 
 /** The Ready step: aurora progress sweeps to full while the serif headline lands. */
 @Composable
-private fun ReadyStep(name: String, progress: Float) {
+private fun ReadyStep(name: String) {
+    // perf-smooth-2 (cause 5): this is the single sanctioned aurora moment --
+    // the Ready setup bar sweeping 0 -> 1. The 1200ms animation and its read
+    // both live in this scope, so the sweep re-composes only this step.
+    val readyProgress by animateFloatAsState(
+        targetValue = 1f,
+        animationSpec = tween(durationMillis = 1200),
+        label = "readyProgress"
+    )
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -735,7 +741,7 @@ private fun ReadyStep(name: String, progress: Float) {
         ) {
             Box(
                 modifier = Modifier
-                    .fillMaxWidth(progress.coerceIn(0.02f, 1f))
+                    .fillMaxWidth(readyProgress.coerceIn(0.02f, 1f))
                     .height(8.dp)
                     .clip(CircleShape)
                     .background(rememberAuroraBrush(shape = CircleShape))
