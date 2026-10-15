@@ -79,8 +79,17 @@ jobs:
         # missing Vulkan HAL under swiftshader_indirect.
         run: |
           export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
+          # Run 38775646716: emulator 37.x said "Unknown AVD name [perf] ... no
+          # file perf.ini in $HOME/.android/avd" 20s after avdmanager had just
+          # created it. Cause: avdmanager (newer cmdline-tools) and the emulator
+          # disagree on the AVD home directory when ANDROID_AVD_HOME is unset.
+          # Pinning ANDROID_AVD_HOME for BOTH creator and consumer makes them
+          # agree by construction.
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
           echo "no" | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd \
             -n perf -k "system-images;android-34;google_apis;x86_64" -d pixel_6 --force
+          ls -la "$ANDROID_AVD_HOME" || true
           nohup "$ANDROID_HOME/emulator/emulator" -avd perf \
             -no-window -no-audio -no-boot-anim \
             -gpu swiftshader_indirect -accel on \
