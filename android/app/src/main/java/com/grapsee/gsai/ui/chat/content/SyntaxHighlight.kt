@@ -5,6 +5,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import com.grapsee.gsai.ui.theme.GsColors
+import android.util.LruCache
 
 /**
  * Lightweight syntax colouring — comments, strings, numbers, keywords.
@@ -138,6 +139,33 @@ private fun keywordSet(language: String?): Set<String>? {
 }
 
 fun highlightCode(code: String, language: String?, colors: GsColors): AnnotatedString {
+    highlightMemo(code, language, colors)?.let { return it }
+    val annotated = highlightCodeUncached(code, language, colors)
+    if (code.length <= MAX_HIGHLIGHT_CACHED_CHARS) {
+        highlightLru.put(highlightKey(code, language, colors), annotated)
+    }
+    return annotated
+}
+
+/**
+ * perf-smooth-3 (emulator 11/12 -- rich code render, long-scroll): every code
+ * block scrolling back into the viewport re-ran the full regex tokenizer on
+ * the main thread, even though the result only depends on (code, language,
+ * code-palette). Memoized process-wide; theme changes key the cache entry, so
+ * re-colouring happens naturally on the first miss after a palette switch.
+ */
+private const val MAX_HIGHLIGHT_CACHED_CHARS = 24_000
+private val highlightLru = LruCache<String, AnnotatedString>(64)
+
+private fun highlightKey(code: String, language: String?, colors: GsColors): String =
+    language + '\u0000' + code + '\u0000' +
+        colors.codeKeyword.value + '\u0000' + colors.codeString.value + '\u0000' +
+        colors.codeComment.value + '\u0000' + colors.codeNumber.value
+
+private fun highlightMemo(code: String, language: String?, colors: GsColors): AnnotatedString? =
+    if (code.length > MAX_HIGHLIGHT_CACHED_CHARS) null else highlightLru.get(highlightKey(code, language, colors))
+
+private fun highlightCodeUncached(code: String, language: String?, colors: GsColors): AnnotatedString {
     val kw = colors.codeKeyword
     val str = colors.codeString
     val com = colors.codeComment
