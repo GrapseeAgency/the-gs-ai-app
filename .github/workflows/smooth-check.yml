@@ -19,6 +19,11 @@ on:
         required: false
         default: 'false'
         type: string
+      capture_profile:
+        description: 'after the check: build RELEASE, exercise it, dump the ART profile, commit android/app/src/main/baseline-prof.txt'
+        required: false
+        default: 'false'
+        type: string
 
 permissions:
   contents: write
