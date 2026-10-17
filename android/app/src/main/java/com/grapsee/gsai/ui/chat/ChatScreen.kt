@@ -1237,7 +1237,7 @@ fun ChatScreen(
                     // the whole block with the transcript. Same screen
                     // throughout — no navigation hop.
                     WorkspaceEmptyState(
-                        draft = draft,
+                        draftText = { draft },
                         onNewChat = newChatAction
                     )
                 } else {
@@ -2323,7 +2323,13 @@ private fun ThinkingDots() {
  */
 @Composable
 private fun WorkspaceEmptyState(
-    draft: String,
+    // perf-smooth-3 (emulator 15 -- composer typing): the draft arrived as a raw
+    // String read at the SCREEN scope, so every keystroke on the empty chat
+    // invalidated the entire ChatScreen body (transcript branch decision, top
+    // bar, composer, sheet conditionals) instead of just the text that depends
+    // on it. A deferred read moves the state read down into the one line that
+    // uses it; the screen no longer subscribes to keystrokes.
+    draftText: () -> String,
     onNewChat: (() -> Unit)?
 ) {
     Column(
@@ -2365,7 +2371,7 @@ private fun WorkspaceEmptyState(
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             modifier = Modifier.semantics { heading() }
         )
-        if (draft.isBlank()) {
+        if (draftText().isBlank()) {
             Spacer(Modifier.height(8.dp))
             if (onNewChat != null) {
                 NewChatButton(onClick = onNewChat)
