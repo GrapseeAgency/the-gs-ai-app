@@ -1,0 +1,68 @@
+# smooth-check run 20261017-203617
+
+- date: 2026-10-17T20:46:43Z
+- package: com.grapsee.gsai  activity: com.grapsee.gsai/.MainActivity
+- device: sdk_gphone64_x86_64 (android 14, sdk 34), screen 1080x2400, refresh 60Hz, budget 16.67ms
+- perfetto captured: 1 (1 = traces sm-<id>.pftrace in this folder, open at ui.perfetto.dev)
+
+```
+INTERACTION                            FRAMES  JANKY   JANK%    P50    P95    P99  VERDICT
+01-cold-start-first-frame                   0      0   0.00%      -      -      -  FAIL
+02-warm-start-first-frame                   0      0   0.00%      -      -      -  FAIL
+03-resume-from-background                   0      0   0.00%      -      -      -  FAIL
+04-empty-chat-render                       20     17  85.00%    125    300    300  FAIL
+05-first-message-send                      78     65  83.33%     89    200    350  FAIL
+06-streaming-reply-5s                     102     92  90.20%     97    200    300  FAIL
+07-short-chat-scroll-20-swipe               0      0   0.00%      -      -      -  FAIL
+08-long-chat-scroll-50-message             86     82  95.35%    117    200    300  FAIL
+09-long-chat-fling-top-to-bottom            0      0   0.00%      -      -      -  FAIL
+10-rich-reply-render-table                  6      5  83.33%    101    150    150  FAIL
+11-rich-reply-render-code                  86     71  82.56%     81    150    400  FAIL
+12-rich-reply-render-image                109     95  87.16%     89    150    300  FAIL
+13-citation-tap-response                    0      0   0.00%      -      -      -  FAIL
+14-composer-open                           18     13  72.22%     57    133    133  FAIL
+15-composer-type-50-chars                  59     54  91.53%    105    150    150  FAIL
+16-composer-expand-attach                  24     22  91.67%    150    650    650  FAIL
+17-composer-collapse                       27     19  70.37%     73    113    129  FAIL
+18-composer-send-button-press              60     45  75.00%     73    133    200  FAIL
+19-image-picker-open                       18     18 100.00%    150    650    650  FAIL
+20-image-preview-render                    10      7  70.00%     73    105    105  FAIL
+21-image-upload-progress                    0      0   0.00%      -      -      -  FAIL
+22-image-upload-complete                    0      0   0.00%      -      -      -  FAIL
+23-drawer-open                              1      1 100.00%     40     40     40  FAIL
+24-drawer-scroll                            0      0   0.00%      -      -      -  FAIL
+25-drawer-close                             1      1 100.00%     48     48     48  FAIL
+26-drawer-tap-conversation                  0      0   0.00%      -      -      -  FAIL
+27-conversation-switch                      0      0   0.00%      -      -      -  FAIL
+28-mode-picker-open                         1      0   0.00%      9      9      9  FAIL
+29-mode-picker-scroll                       0      0   0.00%      -      -      -  FAIL
+30-mode-picker-select                       9      7  77.78%     61    150    150  FAIL
+31-mode-picker-close                        1      1 100.00%     93     93     93  FAIL
+32-search-open                             10      6  60.00%     48    150    150  FAIL
+33-search-type                             16     13  81.25%     44     77     77  FAIL
+34-search-results-render                    0      0   0.00%      -      -      -  FAIL
+35-settings-open                            1      0   0.00%      8      8      8  FAIL
+36-settings-scroll                          0      0   0.00%      -      -      -  FAIL
+37-settings-toggle-response                 0      0   0.00%      -      -      -  FAIL
+38-settings-submenu-open                    0      0   0.00%      -      -      -  FAIL
+39-settings-back                            1      1 100.00%    121    121    121  FAIL
+40-onboarding-first-slide                   0      0   0.00%      -      -      -  FAIL
+41-onboarding-advance                       2      2 100.00%    150    150    150  FAIL
+42-onboarding-complete                      0      0   0.00%      -      -      -  FAIL
+43-network-error-state                     54     41  75.93%     73    150    200  FAIL
+44-retry-after-error                        0      0   0.00%      -      -      -  FAIL
+45-model-download-progress                  9      7  77.78%     69    150    150  FAIL
+46-model-download-complete                  0      0   0.00%      -      -      -  FAIL
+47-model-load-first-use                    67     61  91.04%     89    150    350  FAIL
+48-splash-to-first-frame                    0      0   0.00%      -      -      -  FAIL
+```
+
+TOTAL: 0 of 48 PASS, 48 FAIL
+
+Stat sources: FRAMES/JANKY/JANK% from dumpsys gfxinfo summary since reset
+(device jank definition, full window). P50/P90/P95/P99/WORST from
+gfxinfo framestats per-frame durations, FrameCompleted-IntendedVsync,
+last ~120 frames (adb limitation). Worst frame source: read the
+matching sm-<id>.pftrace at ui.perfetto.dev frame timeline.
+Raw command log: commands.log. Raw frame data: <id>-framestats.raw,
+<id>-summary.raw, <id>.durs, <id>.sorted. Launch timings: <id>-amstart.raw.
