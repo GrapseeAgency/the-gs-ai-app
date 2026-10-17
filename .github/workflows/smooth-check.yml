@@ -160,6 +160,71 @@ jobs:
           fi
           cat "docs/perf/emulator-runs/run-${{ github.run_number }}/table.txt" || true
 
+      # perf-smooth-4: the checker itself IS the profile generator. The release
+      # APK (non-minified, liveUpdate-signed — same inputs as the release CI
+      # build, so dex checksums match what ships) gets installed fresh, walked
+      # through the real user paths, then its ART JIT profile is dumped with
+      # profman and committed as android/app/src/main/baseline-prof.txt. AGP
+      # compiles that file into every later release build, so a FRESH INSTALL
+      # starts AOT-compiled instead of cold-JIT (the reinstall-laggy trap).
+      - name: Capture baseline profile from release build
+        if: inputs.capture_profile == 'true'
+        run: |
+          set -e
+          cd android
+          gradle --no-build-cache --max-workers=2 :app:assembleRelease
+          cd ..
+          adb install -r android/app/build/outputs/apk/release/app-release.apk
+          adb shell pm clear com.grapsee.gsai || true
+          # --- walk the real paths (taps are best-effort; missing UI = skip) ---
+          adb shell am start -n com.grapsee.gsai/.MainActivity || true
+          sleep 6
+          W=$(adb shell wm size | tr -d '\r' | grep -o '[0-9]*' | tail -1)
+          H=$(adb shell wm size | tr -d '\r' | grep -o '[0-9]*' | tail -1)
+          [ "$W" -gt 0 ] || W=1080
+          [ "$H" -gt 0 ] || H=2400
+          CX=$((W/2))
+          for i in 1 2 3 4; do adb shell input tap $CX $((H-150)); sleep 1.5; done
+          adb shell input tap $CX $((H-170)); sleep 1.5
+          adb shell input text smooth; sleep 1
+          adb shell input keyevent 4; sleep 1
+          adb shell input swipe $CX $((H/2)) $CX $((H/5)) 150; sleep 1
+          adb shell input swipe $CX $((H/3)) $CX $((H-200)) 150; sleep 1
+          adb shell input swipe 40 $((H/2)) $((W/2)) $((H/2)) 250; sleep 1.5
+          adb shell input keyevent 4; sleep 1.5
+          adb shell input tap $CX $((H-170)); sleep 1
+          adb shell input keyevent 4; sleep 1
+          # --- flush the JIT profile to disk ---
+          adb shell am force-stop com.grapsee.gsai
+          sleep 6
+          adb root || true
+          sleep 3
+          APK=$(adb shell pm path com.grapsee.gsai | head -1 | tr -d '\r' | sed 's/package://')
+          PROF=/data/misc/profiles/cur/0/com.grapsee.gsai/primary.prof
+          adb shell "test -f $PROF && echo PROFILE_EXISTS || echo PROFILE_MISSING"
+          adb shell "ls -la $PROF" || true
+          adb shell "PROFMAN=/apex/com.android.art/bin/profman; $PROFMAN --dump-classes-and-methods --profile-file=$PROF --apk=$APK > /data/local/tmp/bp.txt 2>/data/local/tmp/bp.err; echo profman_exit=$?; head -c 300 /data/local/tmp/bp.err || true"
+          adb shell "wc -l /data/local/tmp/bp.txt" || true
+          adb pull /data/local/tmp/bp.txt /tmp/bp-dump.txt
+          head -5 /tmp/bp-dump.txt
+          # Merge: keep the hand-curated rules, add the machine dump, dedupe.
+          mkdir -p android/app/src/main
+          { cat /tmp/bp-dump.txt; cat android/app/src/main/baseline-prof.txt; } | awk '!seen[$0]++' > /tmp/bp-merged.txt
+          mv /tmp/bp-merged.txt android/app/src/main/baseline-prof.txt
+          echo "merged rules: $(wc -l < android/app/src/main/baseline-prof.txt)"
+          echo "app rules: $(grep -c 'com/grapsee/gsai' android/app/src/main/baseline-prof.txt || true)"
+
+      - name: Commit baseline profile
+        if: inputs.capture_profile == 'true'
+        run: |
+          git config user.name "perf-bot"
+          git config user.email "perf-bot@users.noreply.github.com"
+          git add android/app/src/main/baseline-prof.txt
+          if git diff --cached --quiet; then echo "no profile changes"; else
+            git commit -m "perf: ART baseline profile captured from release build [skip ci]"
+            git push origin main
+          fi
+
       - name: Upload full raw run (incl. perfetto traces) as artifact
         uses: actions/upload-artifact@v4
         with:
