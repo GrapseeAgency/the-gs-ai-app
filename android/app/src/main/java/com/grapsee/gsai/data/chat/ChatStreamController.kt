@@ -344,7 +344,12 @@ class ChatStreamController(private val chat: ChatRepository) {
          *  eye; repainting markdown at delta cadence re-parses and re-lays-out the
          *  growing bubble for zero visible benefit. ~30 Hz is visually identical
          *  to per-delta and caps the streaming cost per second. */
-        const val STREAM_PAINT_MS = 33L
+        // perf-smooth-3 (emulator 06 -- streaming): 33 Hz paints rebuilt the
+        // growing last block's spans + AnnotatedString and re-laid-out the whole
+        // paragraph twice as often as the eye can distinguish. 20 Hz keeps the
+        // stream visually continuous and halves the main-thread flush tax that
+        // competes with the scrolling transcript.
+        const val STREAM_PAINT_MS = 50L
     }
 }
 
