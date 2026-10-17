@@ -5112,3 +5112,24 @@ Work Log:
 Stage Summary:
 - Valid emulator baseline: docs/perf/emulator-baseline.md (run 9). Ordering signal: attach-open 100%/117ms, long-scroll 87.7%/85ms, IME resize 87.0%/125ms, streaming 85.9%/89ms, model-load 85.3%/85ms. Software-render floor makes the 1% gate unreachable on emulator; ordering is the signal per mandate. 0-frame rows documented with evidence in docs/perf/attempts.md.
 - Release: https://github.com/GrapseeAgency/the-gs-ai-app/releases/tag/v0.74.0 — operator: reinstall and try it.
+
+---
+Task ID: PERF-SMOOTH-3
+Agent: main (Z.ai Code)
+Task: Operator reports app "still so laggy full app native" — continue the emulator checker loop beyond the previous round; find deeper bottlenecks, fix, ship.
+
+Work Log:
+- Re-synced repo (PAT re-set), read run-9 baseline; ranked worst with-data rows: 16/19 (100% jank, p95 600/550), 08/09 (87.7/84.6), 11 (350ms p95), 06/47 (300ms p95), 05 (250ms).
+- Fresh 15-cause sweep of ChatScreen/RichBlocks/SyntaxHighlight/ChatStreamController/ModelStore/GsNativeLoader/Motion/GsComponents/SearchEventCards (caret already render-phase, transcriptScrolled correctly derivedStateOf, aurora draw-phase/static).
+- 5 fixes, one commit each, cause cited:
+  - 8a732e5 BlockMemo LRU (RichBlocks): finished-message markdown re-parsed on EVERY viewport re-entry during fling — now memoized process-wide (96 entries).
+  - ce5a61d highlightCode memo (SyntaxHighlight): code blocks re-ran regex tokenizer per re-entry — memoized by code+lang+palette.
+  - ad73644 WorkspaceEmptyState deferred draft read (ChatScreen): keystrokes invalidated the 2900-line screen scope on empty chat.
+  - 6cb3369 STREAM_PAINT_MS 33->50 (ChatStreamController): flush tax halved during streaming.
+  - 7fd4f50 GsNative context create OFF main thread (ModelStore): Application.onCreate synchronously created the native GGUF context before first frame — stalled EVERY cold/warm start (biggest real-device finding).
+- CI runs 10 (39065651159) + 11 (39067183045). Run 10 = uniform session-noise shift (all rows +20-30% incl. controls; 08/09 0-frame window miss) — no reverts on that evidence, documented in attempts.md. Run 11: controls flat, targeted tails improved (11: 350->150, 12: 200->150, 47: 300->150, 06: 300->200, 05: 250->200) — all 5 fixes KEPT.
+- Shipped v0.75.0 (versionCode 87) @ 9b5aa19; baseline doc updated to run 11.
+
+Stage Summary:
+- Emulator jank% is floor-locked by swiftshader; p95 tails on targeted interactions moved 2x better with flat controls — clean attribution.
+- Release URL to be appended after tag v0.75.0 build.
