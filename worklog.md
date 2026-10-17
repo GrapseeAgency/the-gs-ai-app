@@ -5133,3 +5133,18 @@ Work Log:
 Stage Summary:
 - Emulator jank% is floor-locked by swiftshader; p95 tails on targeted interactions moved 2x better with flat controls — clean attribution.
 - Release URL to be appended after tag v0.75.0 build.
+
+---
+Task ID: PERF-SMOOTH-4
+Agent: main (Z.ai Code)
+Task: Operator: "not smooth at all... write powerful robust native language code swift kotlin" — go deeper than interaction fixes.
+
+Work Log:
+- Cause-10 sweep of every animate*AsState/Animatable call site: found kineticPress(interactionSource) overload driving press animation through Modifier.scale() composition read; fixed to graphicsLayer render-phase read (024df2a). All other sites verified render-phase already.
+- Baseline profile: identified fresh-install cold-JIT as the systemic reinstall-lag cause. androidx.baselineprofile plugin attempt failed silently (zero tasks registered) → reverted; built manual deterministic pipeline inside smooth-check.yml (dispatch input capture_profile): release build → install → walk real paths → profman dump → merge+dedupe → commit src/main/baseline-prof.txt. Two CI bugs found+fixed (silent no-op replace; shell quoting). Profile @ 48489ef: 37,654 rules / 922 app methods.
+- Run 12 (kineticPress): noise-band, no regression, kept. Runs 13-15: harness iterations.
+- Shipped v0.76.0 (versionCode 88) = kineticPress fix + embedded baseline profile.
+
+Stage Summary:
+- AGP compiles src/main/baseline-prof.txt via compileReleaseArtProfile (task verified present in run-14 log) — release CI build at tag embeds it; ProfileInstaller drives it on install.
+- Release URL appended below after tag build.

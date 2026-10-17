@@ -44,3 +44,13 @@ Run 10 (6cb3369, fixes 1-4): UNIFORM +20-30% shift across ALL rows including unt
 
 ## RUN 11 VERDICT (all 5 fixes, 7fd4f50)
 Controls flat (19/30/39/45 within noise of run 9). Targeted tails improved: 11 p95 350->150, 12 200->150, 47 300->150, 06 300->200, 05 250->200. Jank% band unchanged (swiftshader floor). ALL 5 FIXES KEPT; no reverts. Run 10's uniform shift confirmed as session noise.
+
+## ITERATION 4 (perf-smooth-4) — runs 12-15
+
+Fixes:
+- 024df2a perf(cause-10, whole app): kineticPress(interaction) — Modifier.scale(scale) read the animated value IN COMPOSITION: every press frame recomposed every component that passes its own interaction source (mode tiles, drawer rows, settings rows, chips). Now read inside graphicsLayer = render-thread only, zero recompositions per press. (Run 12: within noise band, no regression, kept.)
+- Baseline profile pipeline (THE real-device lever): operator reinstalls fresh APKs every test — every reinstall ran cold JIT, which is why each new build feels laggy in its first sessions.
+  - androidx.baselineprofile plugin 1.3.3 attempt REVERTED: registered zero tasks on both modules (runs 39071875652, 39072743301).
+  - Manual deterministic pipeline (runs 13-15): smooth-check workflow builds the RELEASE apk (same inputs as release CI → identical dex checksums), installs it, pm clear, walks real user paths (cold start, onboarding exit, composer+typing, transcript fling, drawer, back), force-stops to flush ProfileSaver, adb root + profman --dump-classes-and-methods, merges with the hand-curated rules and dedupes → android/app/src/main/baseline-prof.txt committed @ 48489ef (37,654 rules, 922 app-method rules).
+  - Two harness bugs fixed en route: silent no-op python replace (steps never inserted, run 13); double-quoted adb shell let LOCAL bash expand $PROFMAN to empty → device executed "--dump-classes-and-methods" as a command, wrote an empty dump (run 14).
+- v0.76.0 (versionCode 88): kineticPress fix + embedded baseline profile.
