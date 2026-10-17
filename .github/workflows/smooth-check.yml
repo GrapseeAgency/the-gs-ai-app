@@ -199,12 +199,10 @@ jobs:
           sleep 6
           adb root || true
           sleep 3
-          APK=$(adb shell pm path com.grapsee.gsai | head -1 | tr -d '\r' | sed 's/package://')
-          PROF=/data/misc/profiles/cur/0/com.grapsee.gsai/primary.prof
-          adb shell "test -f $PROF && echo PROFILE_EXISTS || echo PROFILE_MISSING"
-          adb shell "ls -la $PROF" || true
-          adb shell "PROFMAN=/apex/com.android.art/bin/profman; $PROFMAN --dump-classes-and-methods --profile-file=$PROF --apk=$APK > /data/local/tmp/bp.txt 2>/data/local/tmp/bp.err; echo profman_exit=$?; head -c 300 /data/local/tmp/bp.err || true"
-          adb shell "wc -l /data/local/tmp/bp.txt" || true
+          # NOTE: single quotes — the previous double-quoted version let the
+          # LOCAL bash expand $PROFMAN to empty, so the device executed
+          # "--dump-classes-and-methods" as a command and wrote an empty dump.
+          adb shell 'PROF=/data/misc/profiles/cur/0/com.grapsee.gsai/primary.prof; test -f $PROF && echo PROFILE_EXISTS || echo PROFILE_MISSING; ls -la $PROF; APK=$(pm path com.grapsee.gsai | head -1 | tr -d "\r" | sed "s/package://"); PROFMAN=/apex/com.android.art/bin/profman; [ -x $PROFMAN ] || PROFMAN=$(command -v profman); $PROFMAN --dump-classes-and-methods --profile-file=$PROF --apk=$APK > /data/local/tmp/bp.txt 2>/data/local/tmp/bp.err; echo profman_exit=$?; wc -l /data/local/tmp/bp.txt; head -c 200 /data/local/tmp/bp.err'
           adb pull /data/local/tmp/bp.txt /tmp/bp-dump.txt
           head -5 /tmp/bp-dump.txt
           # Merge: keep the hand-curated rules, add the machine dump, dedupe.
