@@ -76,6 +76,25 @@ object ModelStore {
         refreshInstalled()
     }
 
+    /**
+     * perf-smooth-3 (emulator 01/02/47 -- cold-start, warm-start, model-load):
+     * GsNativeLoader.initWith used to run synchronously inside Application.onCreate
+     * on the MAIN thread -- a full native context create (mmap + warm a 500 MB GGUF)
+     * executed before the app could draw its first frame. Every cold start paid it,
+     * every interaction after start competed with it. The installed-path state above
+     * stays synchronous (cheap prefs), but the engine load moves to a background
+     * single-thread executor; generation reads isAvailable() lazily and the load is
+     * synchronized in GsNativeLoader, so ordering is safe.
+     */
+    private val engineIo = java.util.concurrent.Executors.newSingleThreadExecutor()
+
+    private fun loadEngineAsync(modelPath: String) {
+        engineIo.execute {
+            runCatching { GsNativeLoader.initWith(modelPath) }
+                .onFailure { android.util.Log.e("ModelStore", "engine init failed", it) }
+        }
+    }
+
     private object K {
         const val consent = "local.consent"
         const val installedPath = "local.installedPath"
@@ -177,7 +196,7 @@ object ModelStore {
             installedModelId = runCatching { prefs?.getString(K.installedModelId, null) }.getOrNull()
             // The path exists, so the engine can be pointed at it. Cheap after
             // the first call, and a no-op if it is already loaded.
-            GsNativeLoader.initWith(f.absolutePath)
+            loadEngineAsync(f.absolutePath)
             return
         }
         // Either nothing recorded, or recorded-and-missing. Look for a model on
@@ -192,7 +211,7 @@ object ModelStore {
             installedModelId = found.nameWithoutExtension
             prefs?.edit()?.putString(K.installedPath, found.absolutePath)?.apply()
             prefs?.edit()?.putString(K.installedModelId, found.nameWithoutExtension)?.apply()
-            GsNativeLoader.initWith(found.absolutePath)
+            loadEngineAsync(found.absolutePath)
         } else {
             installedPath = null
             installedModelId = null
@@ -204,7 +223,7 @@ object ModelStore {
         installedModelId = modelId
         prefs?.edit()?.putString(K.installedPath, file.absolutePath)?.apply()
         prefs?.edit()?.putString(K.installedModelId, modelId)?.apply()
-        GsNativeLoader.initWith(file.absolutePath)
+        loadEngineAsync(file.absolutePath)
     }
 
     /** Remove the model and forget it. Consent is untouched. */
