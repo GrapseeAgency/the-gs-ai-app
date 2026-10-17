@@ -148,7 +148,17 @@ fun Modifier.kineticPress(
         animationSpec = GsMotion.standard(),
         label = "kineticPress"
     )
-    this.scale(scale)
+    // perf-smooth-4 (cause 10, whole app): this used Modifier.scale(scale) — the
+    // animated value read IN COMPOSITION, so every press frame recomposed the
+    // decorated node (top bar, mode tiles, drawer rows, settings rows — every
+    // component that passes its own interaction source). The same value read
+    // inside the graphicsLayer block runs the animation on the render thread:
+    // zero recompositions per press, identical pixels.
+    this.graphicsLayer {
+        val s = scale
+        scaleX = s
+        scaleY = s
+    }
 }
 
 /**
