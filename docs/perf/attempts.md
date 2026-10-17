@@ -30,3 +30,14 @@ Each reverted or non-moving fix attempt is logged here, one entry per attempt:
 - The emulator floor: swiftshader renders a well-formed Compose frame in 85-125ms vs the 60Hz 16.67ms budget, so every content-bearing interaction sits at 75-100% janky regardless of app health (the 6ms mode-picker row still shows jank rows from single hitches). The 1%-jank gate is physically unreachable on software rendering; the ORDERING is the deliverable, as the mandate states.
 - Remaining 0-frame rows (02/03/07/13/21/22/24/26/27/29/34/36-38/40/42/44/46/48): launch-window rows (01/02/48) collect after gfx_reset timing windows that the thrashing emulator occasionally empties; state-flow rows (21/22/26/27/34/36-38/44) need per-screen needle tuning on the next operator-backed iteration. All raw evidence retained per run in docs/perf/emulator-runs/.
 - Checker harness iterations this round: PATH fix (38769712321), boot hardening + Vulkan-off (38771590818), ANDROID_AVD_HOME pin (38775646716), IME discipline + no-data sentinel fix (38780804440), crash-evidence capture + CI rebase (38784123399), full auth walker + foreground guard (38784673957), session preflight via run-as (38789594585->valid), memory relief 4GB + trace 16mb.
+
+## ITERATION 3 (perf-smooth-3) — runs 10/11
+
+Fixes shipped (one commit each):
+- 8a732e5 perf(08/09/10/11/12): BlockMemo LRU — finished-message block parse memoized process-wide (viewport re-entry no longer re-parses markdown on main thread).
+- ce5a61d perf(11): highlightCode memo by code+lang+palette (no regex tokenizer re-run on code block re-entry).
+- ad73644 perf(15): WorkspaceEmptyState draft deferred read (keystrokes no longer invalidate screen scope on empty chat).
+- 6cb3369 perf(06): STREAM_PAINT_MS 33->50ms (flush tax halved).
+- 7fd4f50 perf(01/02/47): GsNative context create moved OFF main thread — root cause: ModelStore.init ran GsNativeLoader.initWith (native GGUF context create) synchronously in Application.onCreate, stalling first frame of every start.
+
+Run 10 (6cb3369, fixes 1-4): UNIFORM +20-30% shift across ALL rows including untouched ones (19: 100->94 jank% w/ p95 550 same, 43: 74.1->85.7, 30: 70->77.8, 45: 75->80) while direct-target rows 08/09 recorded 0 frames (measurement window miss, no data). A uniform shift across unrelated rows = session-wide emulator slowdown (uiautomator churn visible in logcat-fatal), NOT per-fix regression. No reverts on this evidence; run 11 (7fd4f50, all 5 fixes) re-measures. Verdict for fixes 1-4 deferred to run 11.
