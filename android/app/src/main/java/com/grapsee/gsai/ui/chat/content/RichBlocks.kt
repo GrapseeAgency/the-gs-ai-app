@@ -87,6 +87,31 @@ import com.grapsee.gsai.ui.icons.GsIcons
 // Entry point
 // ---------------------------------------------------------------------------
 
+/**
+ * perf-smooth-3 (emulator 08/09/10/11/12 -- long-scroll, fling, rich renders):
+ * every transcript item that left the viewport disposed its StreamBlockCache,
+ * so re-entering it during a fling re-ran the FULL markdown parse on the main
+ * thread -- per item, per viewport re-entry, exactly when frames matter most.
+ *
+ * The parse result of a finished (non-streaming) message is a pure function of
+ * its content string, so it is memoized process-wide. A fling past 50 messages
+ * now pays the parse once per distinct content, then O(1) lookups forever.
+ * Streaming content bypasses this (it mutates in place and the per-composition
+ * cache already handles the incremental path).
+ */
+private object BlockMemo {
+    private const val MAX_CACHED_CHARS = 24_000
+    private val lru = android.util.LruCache<String, List<Block>>(96)
+
+    fun parse(content: String): List<Block> {
+        if (content.isEmpty() || content.length > MAX_CACHED_CHARS) return parseBlocks(content)
+        lru.get(content)?.let { return it }
+        val blocks = parseBlocks(content)
+        lru.put(content, blocks)
+        return blocks
+    }
+}
+
 private class StreamBlockCache {
     var content: String = ""
     var blocks: List<Block> = emptyList()
@@ -95,7 +120,7 @@ private class StreamBlockCache {
         val next = if (streaming) {
             parseStreamingBlocks(content, blocks, newContent)
         } else {
-            parseBlocks(newContent)
+            BlockMemo.parse(newContent)
         }
         content = newContent
         blocks = next
