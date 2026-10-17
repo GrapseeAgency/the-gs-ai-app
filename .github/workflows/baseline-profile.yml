@@ -77,6 +77,12 @@ jobs:
           sleep 8
           adb devices
 
+      - name: Diagnose registered baseline tasks
+        working-directory: android
+        run: |
+          gradle --no-build-cache --max-workers=2 :app:tasks --all 2>/dev/null | grep -iE "baseline|profile" || echo "NO baseline/profile tasks in :app"
+          gradle --no-build-cache --max-workers=2 :benchmark:tasks --all 2>/dev/null | grep -iE "baseline|profile" || echo "NO baseline/profile tasks in :benchmark"
+
       - name: Generate baseline profile
         working-directory: android
         run: gradle --no-build-cache --max-workers=2 :app:generateReleaseBaselineProfile --stacktrace
