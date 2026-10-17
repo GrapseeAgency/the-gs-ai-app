@@ -41,3 +41,6 @@ Fixes shipped (one commit each):
 - 7fd4f50 perf(01/02/47): GsNative context create moved OFF main thread — root cause: ModelStore.init ran GsNativeLoader.initWith (native GGUF context create) synchronously in Application.onCreate, stalling first frame of every start.
 
 Run 10 (6cb3369, fixes 1-4): UNIFORM +20-30% shift across ALL rows including untouched ones (19: 100->94 jank% w/ p95 550 same, 43: 74.1->85.7, 30: 70->77.8, 45: 75->80) while direct-target rows 08/09 recorded 0 frames (measurement window miss, no data). A uniform shift across unrelated rows = session-wide emulator slowdown (uiautomator churn visible in logcat-fatal), NOT per-fix regression. No reverts on this evidence; run 11 (7fd4f50, all 5 fixes) re-measures. Verdict for fixes 1-4 deferred to run 11.
+
+## RUN 11 VERDICT (all 5 fixes, 7fd4f50)
+Controls flat (19/30/39/45 within noise of run 9). Targeted tails improved: 11 p95 350->150, 12 200->150, 47 300->150, 06 300->200, 05 250->200. Jank% band unchanged (swiftshader floor). ALL 5 FIXES KEPT; no reverts. Run 10's uniform shift confirmed as session noise.
