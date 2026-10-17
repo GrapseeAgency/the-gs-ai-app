@@ -1,0 +1,201 @@
+smooth-check: com.grapsee.gsai on sdk_gphone64_x86_64 (android 14, 1080x2400 @ 60Hz, budget 16.67ms, perfetto=1)
+raw data: docs/perf/runs/20261017-224822
+-- 01 cold-start-first-frame
+   pm clear com.grapsee.gsai in 3s (checker seeds its own state; app data is wiped)
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[01] cold-start-first-frame -> FAIL  (frames=3 jank=100.00% p50=150 p95=150 p99=150 worst=-)
+-- 40 onboarding-first-slide
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[40] onboarding-first-slide -> FAIL  (frames=0 jank=0.00% p50=- p95=- p99=- worst=-)
+-- 41 onboarding-advance
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[41] onboarding-advance -> FAIL  (frames=2 jank=100.00% p50=117 p95=117 p99=117 worst=-)
+-- 42 onboarding-complete
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[42] onboarding-complete -> FAIL  (frames=0 jank=0.00% p50=- p95=- p99=- worst=-)
+-- 02 warm-start-first-frame
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[02] warm-start-first-frame -> FAIL  (frames=0 jank=0.00% p50=- p95=- p99=- worst=-)
+-- 03 resume-from-background
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[03] resume-from-background -> FAIL  (frames=0 jank=0.00% p50=- p95=- p99=- worst=-)
+-- 04 empty-chat-render
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[04] empty-chat-render -> FAIL  (frames=17 jank=94.12% p50=150 p95=350 p99=350 worst=-)
+-- 05 first-message-send
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[05] first-message-send -> FAIL  (frames=72 jank=90.28% p50=125 p95=300 p99=450 worst=-)
+-- 06 streaming-reply-5s
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[06] streaming-reply-5s -> FAIL  (frames=104 jank=96.15% p50=150 p95=250 p99=300 worst=-)
+-- 07 short-chat-scroll-20-swipe
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[07] short-chat-scroll-20-swipe -> FAIL  (frames=0 jank=0.00% p50=- p95=- p99=- worst=-)
+-- 08 long-chat-scroll-50-message
+   seeding 50 messages (unmeasured, takes about 2 minutes)
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[08] long-chat-scroll-50-message -> FAIL  (frames=75 jank=94.67% p50=150 p95=250 p99=400 worst=-)
+-- 09 long-chat-fling-top-to-bottom
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[09] long-chat-fling-top-to-bottom -> FAIL  (frames=47 jank=91.49% p50=97 p95=150 p99=200 worst=-)
+-- 10 rich-reply-render-table
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[10] rich-reply-render-table -> FAIL  (frames=8 jank=62.50% p50=150 p95=400 p99=400 worst=-)
+-- 11 rich-reply-render-code
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[11] rich-reply-render-code -> FAIL  (frames=87 jank=91.95% p50=101 p95=150 p99=350 worst=-)
+-- 12 rich-reply-render-image
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[12] rich-reply-render-image -> FAIL  (frames=89 jank=95.51% p50=109 p95=200 p99=300 worst=-)
+-- 13 citation-tap-response
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[13] citation-tap-response -> FAIL  (frames=0 jank=0.00% p50=- p95=- p99=- worst=-)
+-- 14 composer-open
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[14] composer-open -> FAIL  (frames=16 jank=75.00% p50=81 p95=133 p99=133 worst=-)
+-- 15 composer-type-50-chars
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[15] composer-type-50-chars -> FAIL  (frames=78 jank=92.31% p50=150 p95=150 p99=200 worst=-)
+-- 16 composer-expand-attach
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[16] composer-expand-attach -> FAIL  (frames=24 jank=95.83% p50=150 p95=700 p99=850 worst=-)
+-- 17 composer-collapse
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[17] composer-collapse -> FAIL  (frames=26 jank=61.54% p50=81 p95=133 p99=150 worst=-)
+-- 18 composer-send-button-press
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[18] composer-send-button-press -> FAIL  (frames=58 jank=84.48% p50=109 p95=300 p99=650 worst=-)
+-- 19 image-picker-open
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[19] image-picker-open -> FAIL  (frames=19 jank=94.74% p50=133 p95=600 p99=600 worst=-)
+-- 20 image-preview-render
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[20] image-preview-render -> FAIL  (frames=9 jank=88.89% p50=53 p95=150 p99=150 worst=-)
+-- 21 image-upload-progress
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[21] image-upload-progress -> FAIL  (frames=0 jank=0.00% p50=- p95=- p99=- worst=-)
+-- 22 image-upload-complete
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[22] image-upload-complete -> FAIL  (frames=0 jank=0.00% p50=- p95=- p99=- worst=-)
+-- 23 drawer-open
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[23] drawer-open -> FAIL  (frames=1 jank=100.00% p50=150 p95=150 p99=150 worst=-)
+-- 24 drawer-scroll
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[24] drawer-scroll -> FAIL  (frames=0 jank=0.00% p50=- p95=- p99=- worst=-)
+-- 25 drawer-close
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[25] drawer-close -> FAIL  (frames=0 jank=0.00% p50=- p95=- p99=- worst=-)
+-- 26 drawer-tap-conversation
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[26] drawer-tap-conversation -> FAIL  (frames=0 jank=0.00% p50=- p95=- p99=- worst=-)
+-- 27 conversation-switch
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[27] conversation-switch -> FAIL  (frames=0 jank=0.00% p50=- p95=- p99=- worst=-)
+-- 28 mode-picker-open
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[28] mode-picker-open -> FAIL  (frames=1 jank=0.00% p50=10 p95=10 p99=10 worst=-)
+-- 29 mode-picker-scroll
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[29] mode-picker-scroll -> FAIL  (frames=0 jank=0.00% p50=- p95=- p99=- worst=-)
+-- 30 mode-picker-select
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[30] mode-picker-select -> FAIL  (frames=9 jank=100.00% p50=109 p95=150 p99=150 worst=-)
+-- 31 mode-picker-close
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[31] mode-picker-close -> FAIL  (frames=1 jank=100.00% p50=53 p95=53 p99=53 worst=-)
+-- 32 search-open
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[32] search-open -> FAIL  (frames=0 jank=0.00% p50=- p95=- p99=- worst=-)
+-- 33 search-type
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[33] search-type -> FAIL  (frames=2 jank=100.00% p50=69 p95=69 p99=69 worst=-)
+-- 34 search-results-render
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[34] search-results-render -> FAIL  (frames=0 jank=0.00% p50=- p95=- p99=- worst=-)
+-- 35 settings-open
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[35] settings-open -> FAIL  (frames=1 jank=0.00% p50=15 p95=15 p99=15 worst=-)
+-- 36 settings-scroll
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[36] settings-scroll -> FAIL  (frames=0 jank=0.00% p50=- p95=- p99=- worst=-)
+-- 37 settings-toggle-response
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[37] settings-toggle-response -> FAIL  (frames=0 jank=0.00% p50=- p95=- p99=- worst=-)
+-- 38 settings-submenu-open
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[38] settings-submenu-open -> FAIL  (frames=0 jank=0.00% p50=- p95=- p99=- worst=-)
+-- 39 settings-back
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[39] settings-back -> FAIL  (frames=1 jank=100.00% p50=69 p95=69 p99=69 worst=-)
+-- 43 network-error-state
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[43] network-error-state -> FAIL  (frames=71 jank=90.14% p50=105 p95=250 p99=350 worst=-)
+-- 44 retry-after-error
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[44] retry-after-error -> FAIL  (frames=0 jank=0.00% p50=- p95=- p99=- worst=-)
+-- 45 model-download-progress
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[45] model-download-progress -> FAIL  (frames=8 jank=100.00% p50=101 p95=200 p99=200 worst=-)
+-- 46 model-download-complete
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[46] model-download-complete -> FAIL  (frames=0 jank=0.00% p50=- p95=- p99=- worst=-)
+-- 47 model-load-first-use
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[47] model-load-first-use -> FAIL  (frames=55 jank=90.91% p50=117 p95=250 p99=350 worst=-)
+-- 48 splash-to-first-frame
+   foreground lost (  mCurrentFocus=Window{348d1dc u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}) — re-launching
+[48] splash-to-first-frame -> FAIL  (frames=0 jank=0.00% p50=- p95=- p99=- worst=-)
+
+INTERACTION                            FRAMES  JANKY   JANK%    P50    P95    P99  VERDICT
+01-cold-start-first-frame                   3      3 100.00%    150    150    150  FAIL
+02-warm-start-first-frame                   0      0   0.00%      -      -      -  FAIL
+03-resume-from-background                   0      0   0.00%      -      -      -  FAIL
+04-empty-chat-render                       17     16  94.12%    150    350    350  FAIL
+05-first-message-send                      72     65  90.28%    125    300    450  FAIL
+06-streaming-reply-5s                     104    100  96.15%    150    250    300  FAIL
+07-short-chat-scroll-20-swipe               0      0   0.00%      -      -      -  FAIL
+08-long-chat-scroll-50-message             75     71  94.67%    150    250    400  FAIL
+09-long-chat-fling-top-to-bottom           47     43  91.49%     97    150    200  FAIL
+10-rich-reply-render-table                  8      5  62.50%    150    400    400  FAIL
+11-rich-reply-render-code                  87     80  91.95%    101    150    350  FAIL
+12-rich-reply-render-image                 89     85  95.51%    109    200    300  FAIL
+13-citation-tap-response                    0      0   0.00%      -      -      -  FAIL
+14-composer-open                           16     12  75.00%     81    133    133  FAIL
+15-composer-type-50-chars                  78     72  92.31%    150    150    200  FAIL
+16-composer-expand-attach                  24     23  95.83%    150    700    850  FAIL
+17-composer-collapse                       26     16  61.54%     81    133    150  FAIL
+18-composer-send-button-press              58     49  84.48%    109    300    650  FAIL
+19-image-picker-open                       19     18  94.74%    133    600    600  FAIL
+20-image-preview-render                     9      8  88.89%     53    150    150  FAIL
+21-image-upload-progress                    0      0   0.00%      -      -      -  FAIL
+22-image-upload-complete                    0      0   0.00%      -      -      -  FAIL
+23-drawer-open                              1      1 100.00%    150    150    150  FAIL
+24-drawer-scroll                            0      0   0.00%      -      -      -  FAIL
+25-drawer-close                             0      0   0.00%      -      -      -  FAIL
+26-drawer-tap-conversation                  0      0   0.00%      -      -      -  FAIL
+27-conversation-switch                      0      0   0.00%      -      -      -  FAIL
+28-mode-picker-open                         1      0   0.00%     10     10     10  FAIL
+29-mode-picker-scroll                       0      0   0.00%      -      -      -  FAIL
+30-mode-picker-select                       9      9 100.00%    109    150    150  FAIL
+31-mode-picker-close                        1      1 100.00%     53     53     53  FAIL
+32-search-open                              0      0   0.00%      -      -      -  FAIL
+33-search-type                              2      2 100.00%     69     69     69  FAIL
+34-search-results-render                    0      0   0.00%      -      -      -  FAIL
+35-settings-open                            1      0   0.00%     15     15     15  FAIL
+36-settings-scroll                          0      0   0.00%      -      -      -  FAIL
+37-settings-toggle-response                 0      0   0.00%      -      -      -  FAIL
+38-settings-submenu-open                    0      0   0.00%      -      -      -  FAIL
+39-settings-back                            1      1 100.00%     69     69     69  FAIL
+40-onboarding-first-slide                   0      0   0.00%      -      -      -  FAIL
+41-onboarding-advance                       2      2 100.00%    117    117    117  FAIL
+42-onboarding-complete                      0      0   0.00%      -      -      -  FAIL
+43-network-error-state                     71     64  90.14%    105    250    350  FAIL
+44-retry-after-error                        0      0   0.00%      -      -      -  FAIL
+45-model-download-progress                  8      8 100.00%    101    200    200  FAIL
+46-model-download-complete                  0      0   0.00%      -      -      -  FAIL
+47-model-load-first-use                    55     50  90.91%    117    250    350  FAIL
+48-splash-to-first-frame                    0      0   0.00%      -      -      -  FAIL
+
+TOTAL: 0 of 48 PASS, 48 FAIL
+raw data + summary.md written to docs/perf/runs/20261017-224822
