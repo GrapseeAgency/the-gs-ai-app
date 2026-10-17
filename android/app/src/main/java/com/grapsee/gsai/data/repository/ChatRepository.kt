@@ -28,12 +28,14 @@ import kotlinx.serialization.encodeToString
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
+import java.util.concurrent.Executors
 import kotlin.math.abs
 import java.time.Instant
 import java.time.ZoneOffset
@@ -184,6 +186,25 @@ class ChatRepository(
     val connectionState: StateFlow<Boolean> = _connectionState.asStateFlow()
 
     private var activeJob: Job? = null
+
+    /**
+     * perf-smooth-5: the ONE thread that ever runs local inference.
+     *
+     * Single-threaded on purpose. The native engine keeps a single mutable
+     * llama context; two concurrent generations would corrupt it, and the
+     * single thread also means the nice-value demotion below cannot leak into
+     * unrelated coroutines the way Dispatchers.Default would.
+     *
+     * Created lazily so a build with no engine never pays for the thread.
+     */
+    private val inferenceDispatcher by lazy {
+        Executors.newSingleThreadExecutor { runnable ->
+            Thread(runnable, "gs-inference").apply {
+                isDaemon = true
+                priority = Thread.MIN_PRIORITY
+            }
+        }.asCoroutineDispatcher()
+    }
 
     fun conversations(): Flow<List<ConversationEntity>> = db.conversationDao().observeRecent()
 
@@ -862,16 +883,50 @@ class ChatRepository(
      * responder. [GsNative.chat] itself throws on failure and that is caught
      * here — a thrown exception out of the local path would take down a chat
      * turn that had a perfectly good answer available.
+     *
+     * perf-smooth-5 (cause 0b, the hard freeze): THIS CALL USED TO RUN ON THE
+     * CALLER'S DISPATCHER, WHICH IS MAIN.
+     *
+     * The chain was ChatScreen -> ChatStreamController.start() -> `scope.launch`
+     * where scope is `CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)`
+     * -> ChatRepository.send() -> streamLocalFirst() -> here. [GsNative.chat] is a
+     * blocking JNI call that runs llama.cpp generation to completion — it does
+     * not stream and it does not return until the last token exists. So on the
+     * on-device path the UI thread was blocked for the WHOLE generation: no
+     * scrolling, no caret, no orb, no touch response, for tens of seconds. That
+     * is not jank, it is an ANR waiting to be reported.
+     *
+     * Two things happen here:
+     *   1. The call moves to a dedicated single-thread dispatcher, so it can
+     *      never share a thread with composition or the main looper.
+     *   2. That thread is dropped to THREAD_PRIORITY_BACKGROUND. llama.cpp spawns
+     *      its worker threads from this one, and pthreads inherit the nice value,
+     *      so the whole inference pool yields to RenderThread the moment a frame
+     *      is due. When the UI is idle it still gets the core — this costs
+     *      almost nothing in tokens/sec and buys every frame.
      */
-    private fun nativeReply(prompt: String): String? {
+    private suspend fun nativeReply(prompt: String): String? {
         if (!GsNativeLoader.isAvailable()) return null
         return try {
-            GsNative.chat(prompt).takeIf { it.isNotBlank() }
+            onInferenceThread { GsNative.chat(prompt) }.takeIf { it.isNotBlank() }
         } catch (t: Throwable) {
             Log.w("ChatRepository", "native generation failed; using the built-in responder", t)
             null
         }
     }
+
+    /**
+     * Runs [block] on the inference thread at background priority. See
+     * [nativeReply] for why both parts are required.
+     */
+    private suspend fun <T> onInferenceThread(block: () -> T): T =
+        withContext(inferenceDispatcher) {
+            // Applies to THIS thread; llama.cpp's workers are created below it
+            // and inherit the nice value. Restored by the dispatcher's thread
+            // being dedicated, so no other work inherits the demotion.
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND)
+            block()
+        }
 
     private fun localReply(prompt: String): String {
         val p = prompt.trim()
