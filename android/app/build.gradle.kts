@@ -177,8 +177,8 @@ android {
 
         minSdk = 26
         targetSdk = 35
-        versionCode = 88
-        versionName = "0.76.0"
+        versionCode = 89
+        versionName = "0.77.0"
 
 
         // REAL transport origin — applies to EVERY build type (v0.66.0 fix).
@@ -218,7 +218,37 @@ android {
             signingConfig = signingConfigs.getByName("liveUpdate")
         }
         release {
-            isMinifyEnabled = false
+            // perf-smooth-5 (cause 0, the whole app): THE RELEASE APK WAS A
+            // DEBUG BUILD.
+            //
+            // android-release.yml built `:app:assembleDebug` and then uploaded
+            // `app/build/outputs/apk/debug/app-debug.apk` under the name
+            // GS-AI-App.apk. So every "release" the operator installed carried
+            // android:debuggable="true" -- which on Android means:
+            //
+            //   * ART never AOT-compiles the app; everything is interpreted and
+            //     JIT'd at runtime, per process start, forever. That is the
+            //     cold-start and first-scroll cost nobody could find in the
+            //     source, because it is not in the source.
+            //   * Compose keeps its debug runtime checks (composition tracing,
+            //     slot-table validation) on every recomposition.
+            //   * No R8: 18 dex files, classes.dex alone ~39 MB, every class
+            //     verified at load and none of it inlined or merged.
+            //   * CheckJNI is enabled.
+            //
+            // Verified by unzipping download/GS-AI-App.apk and parsing the
+            // binary manifest: versionName 0.73.3, application debuggable=true,
+            // 18 dex, no assets/dexopt/baseline.prof. The 37,654-rule baseline
+            // profile committed for v0.76.0 could never help an artifact that
+            // is debuggable, and never reached the operator at all.
+            //
+            // Obfuscation stays OFF deliberately: CrashReporter ships stack
+            // traces to the operator and they are read by humans, and the JNI
+            // symbols are resolved by class+method name. Shrinking and
+            // optimization are where the frame time is, not in the names.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            isDebuggable = false
             signingConfig = signingConfigs.getByName("liveUpdate")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

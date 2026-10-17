@@ -69,13 +69,20 @@ jobs:
         #
         # This is the same shape as the bug this release already fixed twice: naming
         # the thing you want instead of "everything, and find out".
-        run: gradle --no-build-cache --max-workers=2 :app:testDebugUnitTest :app:assembleDebug
+        #
+        # perf-smooth-5: assembleDEBUG -> assembleRELEASE. This line is why every
+        # shipped APK was debuggable, unoptimized, and 18 dex files wide. Unit
+        # tests stay on the debug variant (that is what they are written against);
+        # the ARTIFACT is now the release variant. The gate below asserts it.
+        run: gradle --no-build-cache --max-workers=2 :app:testDebugUnitTest :app:assembleRelease
 
-      - name: Gates (badging, cert, BASE_URL)
+      - name: Gates (badging, cert, BASE_URL, not-debuggable)
         working-directory: android
         run: |
           SDK_BUILDTOOLS="$ANDROID_HOME/build-tools/35.0.0"
-          APK=app/build/outputs/apk/debug/app-debug.apk
+          APK=app/build/outputs/apk/release/app-release.apk
+          test -f "$APK" || { echo "::error::$APK was not produced"; ls -R app/build/outputs/apk || true; exit 1; }
+
           # `grep -q` IN A PIPELINE, IN A `|| exit 1` GATE, IS A LANDMINE.
           #
           # The originals were:
@@ -151,6 +158,34 @@ jobs:
           fi
           unzip -p "$APK" 'classes*.dex' | grep -q "https://preview-chat-c945696f-6447-4dfa-b510-971d8b9eb5bf.space-z.ai" || { echo "FATAL: public origin missing from dex"; exit 1; }
           if unzip -p "$APK" 'classes*.dex' | grep -q "http://10.0.2.2:3000"; then echo "FATAL: emulator loopback leaked into build"; exit 1; fi
+
+          # perf-smooth-5: THE GATE THAT WOULD HAVE CAUGHT THE REAL BUG.
+          #
+          # Everything above checks that the APK is the right app, signed right,
+          # pointed at the right server. None of it checks that the APK is
+          # OPTIMIZED -- so a debug build passed every gate for 89 versionCodes
+          # while running interpreted. Assert the property directly, on the
+          # artifact, rather than trusting the build file to stay correct.
+          # `aapt2 dump badging` reports the flag as a bare line
+          # "application-debuggable", not as key='value' -- grepping for the
+          # latter would pass every debug APK silently, which is the exact
+          # failure mode this gate exists to prevent.
+          if printf '%s\n' "$BADGING" | grep -q "^application-debuggable"; then
+            echo "::error::RELEASE APK IS DEBUGGABLE. It will run interpreted (no AOT, no R8,"
+            echo "::error::no baseline profile) and will feel laggy on every device."
+            echo "::error::The artifact must come from :app:assembleRelease."
+            exit 1
+          fi
+          # Baseline profile must be INSIDE the APK, not just committed to src/.
+          # The v0.76.0 pipeline committed 37,654 rules and never verified that
+          # AGP packaged them; an absent assets/dexopt/baseline.prof is a silent
+          # no-op that looks exactly like success.
+          if ! unzip -l "$APK" | grep -q "assets/dexopt/baseline.prof"; then
+            echo "::error::assets/dexopt/baseline.prof is missing -- the committed baseline"
+            echo "::error::profile was not packaged, so first-launch is still cold JIT."
+            exit 1
+          fi
+          echo "  dex count: $(unzip -l "$APK" | grep -c 'classes.*\.dex')"
           echo "gates ok"
 
       - name: Attach to release
@@ -160,7 +195,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
-          cp app/build/outputs/apk/debug/app-debug.apk GS-AI-App.apk
+          cp app/build/outputs/apk/release/app-release.apk GS-AI-App.apk
           gh release create "$TAG" --verify-tag --title "$TAG" --notes "CI build" 2>/dev/null || true
           gh release upload "$TAG" GS-AI-App.apk --clobber
           echo "uploaded GS-AI-App.apk for $TAG"
