@@ -1,0 +1,41 @@
+  18% 4276/com.grapsee.gsai: 5.3% user + 13% kernel / faults: 33768 minor 2519 major
+  14% 906/com.android.systemui: 0.7% user + 13% kernel / faults: 7264 minor 7 major
+  12% 425/surfaceflinger: 0.9% user + 11% kernel / faults: 568 minor
+  5.8% 544/system_server: 3% user + 2.7% kernel / faults: 80398 minor 2 major
+  5.6% 454/traced_probes: 1.3% user + 4.2% kernel / faults: 130017 minor
+  4.4% 1182/com.google.android.apps.nexuslauncher: 0.4% user + 4% kernel / faults: 6378 minor
+  2.8% 1674/com.google.android.inputmethod.latin: 1% user + 1.7% kernel / faults: 6191 minor 9 major
+  1.3% 379/android.hardware.sensors-service.multihal: 0.1% user + 1.2% kernel
+  1.1% 1972/com.google.android.googlequicksearchbox:search: 0.6% user + 0.5% kernel / faults: 16765 minor 4 major
+31% TOTAL: 5.2% user + 25% kernel + 0.3% iowait + 0.1% softirq
+Subject: Input dispatching timed out ([Gesture Monitor] swipe-up (server) is not responding. Waited 5001ms for MotionEvent(deviceId=-1, eventTime=414852000000, source=TOUCHSCREEN, displayId=0, action=MOVE, actionButton=0x00000000, flags=0x00000000, metaState=0x00000000, buttonState=0x00000000, classification=NONE, edgeFlags=0x00000000, xPrecision=1.0, yPrecision=1.0, xCursorPosition=nan, yCursorPosition=nan, pointers=[0: (50.8, 1200.0)]), policyFlags=0x6b000000)
+RssHwmKb: 319568
+RssKb: 178752
+RssAnonKb: 76148
+RssShmemKb: 1320
+VmSwapKb: 0
+
+
+--- CriticalEventLog ---
+capacity: 20
+timestamp_ms: 1792275336459
+window_ms: 300000
+
+----- dumping pid: 1182 at 419884
+
+----- pid 1182 at 2026-10-17 22:15:36.486977575+0000 -----
+Cmd line: com.google.android.apps.nexuslauncher
+Build fingerprint: 'google/sdk_gphone64_x86_64/emu64xa:14/UE1A.230829.050/12077443:userdebug/dev-keys'
+ABI: 'x86_64'
+Build type: optimized
+suspend all histogram:	Sum: 1.441ms 99% C.I. 0.163us-1036.800us Avg: 33.511us Max: 1303us
+DALVIK THREADS (46):
+"main" prio=5 tid=1 Native
+  | group="main" sCount=1 ucsCount=0 flags=1 obj=0x73371f98 self=0x786be539e2c0
+  | sysTid=1182 nice=-10 cgrp=top-app sched=0/0 handle=0x786d7fafa4f8
+  | state=S schedstat=( 1218990274 4816167054 8229 ) utm=86 stm=35 core=3 HZ=100
+  | stack=0x7fff4b1a1000-0x7fff4b1a3000 stackSize=8188KB
+  | held mutexes=
+  native: #00 pc 000b94da  /apex/com.android.runtime/lib64/bionic/libc.so (__epoll_pwait+10) (BuildId: fa337969c798946280caa45e2d71a2e7)
+  native: #01 pc 0000fa9f  /system/lib64/libutils.so (android::Looper::pollOnce+303) (BuildId: c777bd164e6d4a5c070cb5e2d9bb92e0)
+  native: #02 pc 00179ea3  /system/lib64/libandroid_runtime.so (android::android_os_MessageQueue_nativePollOnce+35) (BuildId: 58f47cb2665b829aa74415f458f1922a)
