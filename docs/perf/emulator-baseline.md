@@ -1,67 +1,57 @@
 # Emulator baseline -- smooth-check 48 interactions
 
-Run: https://github.com/GrapseeAgency/the-gs-ai-app/actions/runs/39067183045 (run 11, v0.75.0 code)
+Run: https://github.com/GrapseeAgency/the-gs-ai-app/actions/runs/39071960321
 Absolute numbers are emulator garbage; the ordering is the signal.
-
-## perf-smooth-3 outcome (runs 10-11 vs run 9 baseline)
-
-Five root-cause fixes shipped, attribution vs control rows (19/30/39/45 flat):
-- 11 rich-code: p95 350 -> 150ms (highlightCode memo)
-- 12 rich-image: p95 200 -> 150ms (BlockMemo parse memo)
-- 47 model-load: p95 300 -> 150ms (GsNative context create off main thread; also was stalling every cold/warm start from Application.onCreate)
-- 06 streaming: p95 300 -> 200ms (flush coalescing 33 -> 50ms)
-- 05 first-send: p95 250 -> 200ms
-Jank% stays in the swiftshader software-render floor band (every frame >16.7ms counts); the 1% gate is unreachable on emulator, ordering + tails are the signal per mandate.
 
 ```
 INTERACTION                            FRAMES  JANKY   JANK%    P50    P95    P99  VERDICT
 01-cold-start-first-frame                   0      0   0.00%      -      -      -  FAIL
 02-warm-start-first-frame                   0      0   0.00%      -      -      -  FAIL
 03-resume-from-background                   0      0   0.00%      -      -      -  FAIL
-04-empty-chat-render                       20     17  85.00%    125    300    300  FAIL
-05-first-message-send                      78     65  83.33%     89    200    350  FAIL
-06-streaming-reply-5s                     102     92  90.20%     97    200    300  FAIL
+04-empty-chat-render                       20     18  90.00%    125    200    200  FAIL
+05-first-message-send                      74     65  87.84%    117    250   1250  FAIL
+06-streaming-reply-5s                      91     83  91.21%    109    250    900  FAIL
 07-short-chat-scroll-20-swipe               0      0   0.00%      -      -      -  FAIL
-08-long-chat-scroll-50-message             86     82  95.35%    117    200    300  FAIL
+08-long-chat-scroll-50-message            110    104  94.55%     97    200    400  FAIL
 09-long-chat-fling-top-to-bottom            0      0   0.00%      -      -      -  FAIL
-10-rich-reply-render-table                  6      5  83.33%    101    150    150  FAIL
-11-rich-reply-render-code                  86     71  82.56%     81    150    400  FAIL
-12-rich-reply-render-image                109     95  87.16%     89    150    300  FAIL
+10-rich-reply-render-table                  6      4  66.67%    150    150    150  FAIL
+11-rich-reply-render-code                  90     84  93.33%     97    150    350  FAIL
+12-rich-reply-render-image                 84     72  85.71%     93    150    400  FAIL
 13-citation-tap-response                    0      0   0.00%      -      -      -  FAIL
-14-composer-open                           18     13  72.22%     57    133    133  FAIL
-15-composer-type-50-chars                  59     54  91.53%    105    150    150  FAIL
-16-composer-expand-attach                  24     22  91.67%    150    650    650  FAIL
-17-composer-collapse                       27     19  70.37%     73    113    129  FAIL
-18-composer-send-button-press              60     45  75.00%     73    133    200  FAIL
-19-image-picker-open                       18     18 100.00%    150    650    650  FAIL
-20-image-preview-render                    10      7  70.00%     73    105    105  FAIL
+14-composer-open                           17     12  70.59%     69    121    121  FAIL
+15-composer-type-50-chars                  78     72  92.31%    117    150    200  FAIL
+16-composer-expand-attach                  23     23 100.00%    200    650    750  FAIL
+17-composer-collapse                       27     20  74.07%     81    113    129  FAIL
+18-composer-send-button-press              50     43  86.00%     73    150    250  FAIL
+19-image-picker-open                       18     18 100.00%    150    450    450  FAIL
+20-image-preview-render                     9      8  88.89%     77    150    150  FAIL
 21-image-upload-progress                    0      0   0.00%      -      -      -  FAIL
 22-image-upload-complete                    0      0   0.00%      -      -      -  FAIL
-23-drawer-open                              1      1 100.00%     40     40     40  FAIL
-24-drawer-scroll                            0      0   0.00%      -      -      -  FAIL
-25-drawer-close                             1      1 100.00%     48     48     48  FAIL
-26-drawer-tap-conversation                  0      0   0.00%      -      -      -  FAIL
+23-drawer-open                             10     10 100.00%     93    150    150  FAIL
+24-drawer-scroll                            1      1 100.00%    150    150    150  FAIL
+25-drawer-close                             1      1 100.00%     53     53     53  FAIL
+26-drawer-tap-conversation                  1      1 100.00%    150    150    150  FAIL
 27-conversation-switch                      0      0   0.00%      -      -      -  FAIL
-28-mode-picker-open                         1      0   0.00%      9      9      9  FAIL
+28-mode-picker-open                         2      1  50.00%    200    200    200  FAIL
 29-mode-picker-scroll                       0      0   0.00%      -      -      -  FAIL
-30-mode-picker-select                       9      7  77.78%     61    150    150  FAIL
-31-mode-picker-close                        1      1 100.00%     93     93     93  FAIL
-32-search-open                             10      6  60.00%     48    150    150  FAIL
-33-search-type                             16     13  81.25%     44     77     77  FAIL
+30-mode-picker-select                       9      6  66.67%     89    150    150  FAIL
+31-mode-picker-close                        1      1 100.00%     61     61     61  FAIL
+32-search-open                              1      1 100.00%     73     73     73  FAIL
+33-search-type                              1      1 100.00%     16     16     16  FAIL
 34-search-results-render                    0      0   0.00%      -      -      -  FAIL
-35-settings-open                            1      0   0.00%      8      8      8  FAIL
+35-settings-open                            0      0   0.00%      -      -      -  FAIL
 36-settings-scroll                          0      0   0.00%      -      -      -  FAIL
 37-settings-toggle-response                 0      0   0.00%      -      -      -  FAIL
 38-settings-submenu-open                    0      0   0.00%      -      -      -  FAIL
-39-settings-back                            1      1 100.00%    121    121    121  FAIL
+39-settings-back                            0      0   0.00%      -      -      -  FAIL
 40-onboarding-first-slide                   0      0   0.00%      -      -      -  FAIL
-41-onboarding-advance                       2      2 100.00%    150    150    150  FAIL
+41-onboarding-advance                       1      1 100.00%     81     81     81  FAIL
 42-onboarding-complete                      0      0   0.00%      -      -      -  FAIL
-43-network-error-state                     54     41  75.93%     73    150    200  FAIL
-44-retry-after-error                        0      0   0.00%      -      -      -  FAIL
-45-model-download-progress                  9      7  77.78%     69    150    150  FAIL
+43-network-error-state                      2      2 100.00%     53     53     53  FAIL
+44-retry-after-error                        1      1 100.00%     97     97     97  FAIL
+45-model-download-progress                  0      0   0.00%      -      -      -  FAIL
 46-model-download-complete                  0      0   0.00%      -      -      -  FAIL
-47-model-load-first-use                    67     61  91.04%     89    150    350  FAIL
+47-model-load-first-use                     2      2 100.00%     18     18     18  FAIL
 48-splash-to-first-frame                    0      0   0.00%      -      -      -  FAIL
 ```
 
