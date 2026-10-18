@@ -18,6 +18,7 @@
  */
 
 import type { RawResult, SearchEngineId, TimeRange } from './types'
+import { crossScript, tokensOf } from './tokens'
 
 const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'
@@ -240,17 +241,25 @@ export const bingWeb: EngineAdapter = {
     // results masquerade as evidence (spec §7: never return unrelated
     // industries because the provider happened to return them).
     if (out.length > 0) {
-      const qWords = new Set(
-        q.query.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter((w) => w.length > 3)
-      )
-      let bestOverlap = 0
-      for (const r of out) {
-        const tWords = r.title.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/)
-        let hits = 0
-        for (const w of qWords) if (tWords.includes(w)) hits += 1
-        bestOverlap = Math.max(bestOverlap, hits)
+      const qWords = tokensOf(q.query, 2)
+      if (qWords.size > 0) {
+        let judged = 0
+        let bestOverlap = 0
+        for (const r of out) {
+          const tWords = tokensOf(r.title, 2)
+          // Same rule as the aggregator guard: a Latin query against Bengali
+          // results is a TRANSLATION, not a decoy, and cannot be judged by
+          // token overlap. Skipping the pair is what keeps the guard from
+          // deleting every result for the app's first language.
+          if (tWords.size === 0 || crossScript(qWords, tWords)) continue
+          judged += 1
+          let hits = 0
+          for (const w of qWords) if (tWords.has(w)) hits += 1
+          bestOverlap = Math.max(bestOverlap, hits)
+        }
+        // Only discard when at least one title was actually comparable.
+        if (judged > 0 && bestOverlap === 0) return []
       }
-      if (qWords.size > 0 && bestOverlap === 0) return []
     }
     return out
   },

@@ -10,6 +10,7 @@
  */
 
 import { fetchPage, FetchPageError, isSafePublicHttpUrl } from './fetcher'
+import { tokensOf } from './tokens'
 
 export type ExtractedArticle = {
   title: string | null
@@ -134,7 +135,10 @@ export function extractArticle(
 
   const maxChars = Math.max(EXTRACT_MAX_TEXT_CHARS, opts?.maxTextChars ?? EXTRACT_MAX_TEXT_CHARS)
   if (text.length > maxChars) {
-    const qWords = (opts?.windowQuery ?? '').toLowerCase().match(/[a-z0-9]{4,}/g) ?? []
+    // Script-aware terms: the old /[a-z0-9]{4,}/ produced NOTHING for a
+    // Bengali query, so qWords.length was 0 and every long Bengali page was
+    // truncated from the top — the query-centred window never ran.
+    const qWords = [...tokensOf(opts?.windowQuery ?? '', 2)]
     let kept: string | null = null
     if (qWords.length > 0) {
       let bestIdx = -1

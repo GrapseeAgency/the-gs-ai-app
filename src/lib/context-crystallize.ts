@@ -21,6 +21,7 @@
  */
 
 import { db } from '@/lib/db'
+import { tokensOf } from '@/lib/search/tokens'
 
 /** Working-context saturation threshold (history chars) before crystallizing. */
 export const CONTEXT_SATURATION_CHARS = 18_000
@@ -155,11 +156,10 @@ export async function crystallizeIfNeeded(
   }
 
   // DUAL-PATH RETRIEVAL — recover precise nodes matching the current question
-  const questionTerms = currentQuestion
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .split(/\s+/)
-    .filter((w) => w.length >= 4)
+  // Script-aware: with the old ASCII-only split a Bengali question produced no
+  // terms, `hits` was 0 for every node, and the crystallised context never
+  // contributed anything to a Bengali turn.
+  const questionTerms = [...tokensOf(currentQuestion, 2)]
   const nodes = await db.knowledgeNode.findMany({
     where: { conversationId, kind: { in: ['snapshot', 'value', 'claim'] } },
     orderBy: { createdAt: 'desc' },

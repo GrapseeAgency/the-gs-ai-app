@@ -22,6 +22,7 @@ import { FetchPageError } from './fetcher'
 import { sourceIdFor } from '@/lib/websearch'
 import type { ResearchSource, SearchEventEmitter, SearchIntent, TimeRange } from './types'
 import { NOOP_EMIT } from './types'
+import { tokensOf } from './tokens'
 
 /**
  * Baseline S39 hardening — EVERY read failure is logged in a fixed machine-
@@ -140,7 +141,7 @@ export function evidenceWindow(extract: string, query: string, windowChars = 1_8
   // a Bengali query, so bestHits stayed 0 and every long Bengali article was
   // sent as its first 1800 characters — the nav bar and the lede, never the
   // paragraph that answers the question.
-  const words = query.toLowerCase().match(/[\p{L}\p{M}\p{N}]{4,}/gu) ?? []
+  const words = [...tokensOf(query, 2)]
   let bestIdx = -1
   let bestHits = 0
   // The scan used to stop at 12 000 characters while the extractor admits up to

@@ -12,6 +12,7 @@
  */
 
 import { db } from '@/lib/db'
+import { tokensOf } from '@/lib/search/tokens'
 
 export interface Claim {
   id: string
@@ -120,11 +121,10 @@ export function stripCommandPrefix(q: string): string {
 
 /** Key terms of a question — the coverage vocabulary for gaps. */
 export function keyTerms(question: string): string[] {
-  const words = question
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, ' ')
-    .split(/\s+/)
-    .filter((w) => w.length >= 4 && !STOP_TERMS.has(w))
+  // Script-aware: the old ASCII-only filter returned [] for a Bengali question,
+  // which silently disabled gap detection and left claimsFromExtract with no
+  // query terms to score against.
+  const words = [...tokensOf(question, 2)].filter((w) => !STOP_TERMS.has(w))
   return Array.from(new Set(words)).slice(0, 12)
 }
 
@@ -136,7 +136,10 @@ export function claimsFromExtract(
 ): Claim[] {
   const sentences = extract
     .replace(/\s+/g, ' ')
-    .split(/(?<=[.!?])\s+(?=[A-Z0-9])/)
+    // Bengali ends a sentence with "।" (danda), and a Bengali sentence starts
+    // with a Bengali letter — neither matched, so the whole article arrived as
+    // ONE "sentence" and claim extraction produced a single unusable blob.
+    .split(/(?<=[.!?।])\s+(?=[A-Z0-9\u0980-\u09FF])/)
     .slice(0, 40)
   const claims: Claim[] = []
   for (const sentence of sentences) {
