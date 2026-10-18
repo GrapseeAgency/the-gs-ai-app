@@ -17,6 +17,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -60,6 +61,11 @@ fun ConversationActionsSheet(
 ) {
     var renameOpen by remember { mutableStateOf(false) }
     var renameDraft by remember { mutableStateOf(title) }
+    // Delete is terminal — repository.delete removes the conversation local
+    // AND server-side — so it gets the benchmark confirmation step instead of
+    // firing straight from the sheet row. (No undo snackbar is honest here:
+    // there is nothing to restore with once the server copy is gone.)
+    var confirmDelete by remember { mutableStateOf(false) }
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
@@ -96,10 +102,32 @@ fun ConversationActionsSheet(
                 tone = MaterialTheme.colorScheme.error,
                 onClick = {
                     view.gsHaptic(HapticFeedbackConstants.LONG_PRESS)
-                    onDelete()
+                    confirmDelete = true
                 }
             )
         }
+    }
+
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("Delete this chat?") },
+            text = { Text("\"$title\" and its messages will be removed from this device and the server. This cannot be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmDelete = false
+                        onDelete()
+                    },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDelete = false }) { Text("Keep") }
+            }
+        )
     }
 
     if (renameOpen) {

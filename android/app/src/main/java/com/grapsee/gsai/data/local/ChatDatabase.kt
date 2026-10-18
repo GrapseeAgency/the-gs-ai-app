@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Database
+import androidx.room.Embedded
 import androidx.room.Entity
 import androidx.room.Fts4
 import androidx.room.Index
@@ -32,6 +33,17 @@ data class ConversationEntity(
     val archived: Boolean,
     val updatedAt: String,
     val createdAt: String
+)
+
+/**
+ * A conversation row for the hub list plus its newest message text —
+ * [ConversationDao.observeActiveWithPreview] resolves both in one query so
+ * the row subtitle is a REAL last-message preview, not a timestamp label.
+ * @param lastMessage null when the conversation has no turns yet.
+ */
+data class ConversationPreviewRow(
+    @Embedded val conversation: ConversationEntity,
+    val lastMessage: String?
 )
 
 @Entity(
@@ -103,6 +115,24 @@ interface ConversationDao {
     /** Inbox view: archived hidden, pins float — same ordering language as the benchmark apps. */
     @Query("SELECT * FROM conversations WHERE archived = 0 ORDER BY pinned DESC, updatedAt DESC")
     fun observeActive(): Flow<List<ConversationEntity>>
+
+    /**
+     * Inbox view WITH the real last message per conversation. The scalar
+     * subquery resolves the newest turn's content — the list row can show
+     * what was actually said last instead of a "Last message ·" label
+     * glued to a timestamp (which claimed a preview it never had).
+     */
+    @Query(
+        "SELECT c.*, (" +
+            "SELECT m.content FROM messages m " +
+            "WHERE m.conversationId = c.id " +
+            "ORDER BY m.createdAt DESC LIMIT 1" +
+            ") AS lastMessage " +
+            "FROM conversations c " +
+            "WHERE c.archived = 0 " +
+            "ORDER BY c.pinned DESC, c.updatedAt DESC"
+    )
+    fun observeActiveWithPreview(): Flow<List<ConversationPreviewRow>>
 
     @Query("SELECT * FROM conversations WHERE archived = 1 ORDER BY updatedAt DESC")
     fun observeArchived(): Flow<List<ConversationEntity>>

@@ -38,6 +38,7 @@ import android.view.HapticFeedbackConstants
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.data.local.ConversationEntity
+import com.grapsee.gsai.data.local.ConversationPreviewRow
 import com.grapsee.gsai.di.ServiceLocator
 import com.grapsee.gsai.ui.components.ConversationActionsSheet
 import com.grapsee.gsai.ui.components.GsCard
@@ -70,7 +71,7 @@ import com.grapsee.gsai.ui.icons.GsIcons
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatsScreen(onNavigate: (String) -> Unit) {
-    val conversationList = remember { conversationsFlow() }
+    val conversationList = remember { conversationsPreviewFlow() }
     val conversations by conversationList.collectAsStateWithLifecycle(initialValue = emptyList())
     val offline by rememberDeviceOffline()
     val scope = rememberCoroutineScope()
@@ -94,7 +95,7 @@ fun ChatsScreen(onNavigate: (String) -> Unit) {
 
     // No sample fallback: when Room is empty the honest empty state shows.
     val rows = when (filter) {
-        FILTER_PINNED -> conversations.filter { it.pinned }
+        FILTER_PINNED -> conversations.filter { it.conversation.pinned }
         else -> conversations
     }
     val loading = !firstLoadDone && conversations.isEmpty()
@@ -165,10 +166,10 @@ fun ChatsScreen(onNavigate: (String) -> Unit) {
                     modifier = Modifier.fillMaxWidth().weight(1f),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(rows, key = { it.id }) { entity ->
+                    items(rows, key = { it.conversation.id }) { row ->
                         GsListItem(
-                            title = gsConversationTitle(entity.title),
-                            subtitle = previewLine(entity),
+                            title = gsConversationTitle(row.conversation.title),
+                            subtitle = previewLine(row),
                             leading = {
                                 Surface(
                                     shape = CircleShape,
@@ -187,7 +188,7 @@ fun ChatsScreen(onNavigate: (String) -> Unit) {
                             },
                             trailing = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    if (entity.pinned) {
+                                    if (row.conversation.pinned) {
                                         Icon(
                                             GsIcons.Star,
                                             contentDescription = "Pinned",
@@ -196,7 +197,7 @@ fun ChatsScreen(onNavigate: (String) -> Unit) {
                                         )
                                     }
                                     IconButton(
-                                        onClick = { actionTarget = entity },
+                                        onClick = { actionTarget = row.conversation },
                                         modifier = Modifier.size(30.dp)
                                     ) {
                                         Icon(
@@ -208,7 +209,7 @@ fun ChatsScreen(onNavigate: (String) -> Unit) {
                                     }
                                 }
                             },
-                            onClick = { onNavigate(GsRoutes.chat(entity.id)) }
+                            onClick = { onNavigate(GsRoutes.chat(row.conversation.id)) }
                         )
                     }
                 }
@@ -263,16 +264,32 @@ private fun RowScope.QuickLink(label: String, icon: ImageVector, onClick: () -> 
 
 // rememberDeviceOffline lives in ui.components (shared with the chat surface).
 
-private fun conversationsFlow(): Flow<List<ConversationEntity>> =
-    runCatching { ServiceLocator.chat.activeConversations() }.getOrElse { flowOf(emptyList()) }
+private fun conversationsPreviewFlow(): Flow<List<ConversationPreviewRow>> =
+    runCatching { ServiceLocator.db.conversationDao().observeActiveWithPreview() }
+        .getOrElse { flowOf(emptyList()) }
 
 // --- filters -----------------------------------------------------------------
 
 private const val FILTER_ALL = "All"
 private const val FILTER_PINNED = "Pinned"
 
-private fun previewLine(entity: ConversationEntity): String =
-    "Last message · ${relativeTime(entity.updatedAt)}"
+/**
+ * The row subtitle: the REAL last message when the conversation has turns
+ * (one line, clipped, then the relative time — the benchmark list shape),
+ * and the honest relative time alone when it has none. The old row printed
+ * "Last message · 5m ago" for every chat, which was a preview label glued
+ * to a timestamp and never any message text at all.
+ */
+private fun previewLine(row: ConversationPreviewRow): String {
+    val message = row.lastMessage?.trim()?.replace('\n', ' ')?.trim()
+    return when {
+        !message.isNullOrBlank() -> {
+            val clipped = if (message.length > 80) message.take(80) + "…" else message
+            "$clipped · ${relativeTime(row.conversation.updatedAt)}"
+        }
+        else -> relativeTime(row.conversation.updatedAt)
+    }
+}
 
 private fun relativeTime(iso: String): String = runCatching {
     val timestamp = OffsetDateTime.parse(iso)

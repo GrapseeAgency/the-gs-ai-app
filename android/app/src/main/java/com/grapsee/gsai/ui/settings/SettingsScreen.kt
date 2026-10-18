@@ -81,18 +81,21 @@ import org.json.JSONObject
 import com.grapsee.gsai.data.local.ModelStore
 
 private val themeOptions = listOf("Light", "Dark", "System")
-private val aiLanguageOptions = listOf("EN", "中文", "हिन्दी", "العربية")
 
 /**
  * DESIGN 3 IDENTITY settings. The nine bordered cards are gone: two flat
  * grouped containers (16dp radius, surfaceContainer fill, no border, no
- * shadow) under micro-labels — PREFERENCES (Appearance, Chat, AI, Language,
- * Accessibility) and SYSTEM (Privacy, Security, Notifications, About).
+ * shadow) under micro-labels — PREFERENCES (Appearance, AI, Language,
+ * Accessibility) and SYSTEM (Privacy, Notifications, About).
  * Rows: min 56dp, 16dp inner padding, the 40dp/12dp row glyph container,
  * 16sp/500 titles over 14sp supporting lines, hairline separators indented
  * to the row text, trailing chevron. In-place expansion is unchanged
  * (expandedId + BackHandler), animated via animateContentSize unless the
  * user asked the system to stand still.
+ *
+ * The 0.77.7 honesty sweep: the Chat and Security groups are gone — every
+ * switch in them persisted but was read by nothing. A group that expands to
+ * nothing teaches the user the settings are decoration, so it left too.
  */
 @Composable
 fun SettingsScreen(
@@ -229,43 +232,12 @@ fun SettingsScreen(
                 }
                 GroupSeparator()
                 ExpandRow(
-                    id = "chat",
-                    icon = GsIcons.MessageCircle,
-                    title = "Chat",
-                    expandedId = expandedId,
-                    onToggle = { expandedId = if (expandedId == "chat") null else "chat" }
-                ) {
-                    SwitchRow(
-                        title = "Auto-title chats",
-                        subtitle = "Name conversations from their first message",
-                        checked = SettingsStore.autoTitleChats,
-                        onCheckedChange = { SettingsStore.updateAutoTitleChats(it) }
-                    )
-                    SwitchRow(
-                        title = "Send on double-tap",
-                        checked = SettingsStore.sendDoubleTap,
-                        onCheckedChange = { SettingsStore.updateSendDoubleTap(it) }
-                    )
-                }
-                GroupSeparator()
-                ExpandRow(
                     id = "ai",
                     icon = GsIcons.Cpu,
                     title = "AI",
                     expandedId = expandedId,
                     onToggle = { expandedId = if (expandedId == "ai") null else "ai" }
                 ) {
-                    SwitchRow(
-                        title = "Memory",
-                        subtitle = "Remember details across chats",
-                        checked = SettingsStore.memory,
-                        onCheckedChange = { SettingsStore.updateMemory(it) }
-                    )
-                    SwitchRow(
-                        title = "Personalisation",
-                        checked = SettingsStore.personalisation,
-                        onCheckedChange = { SettingsStore.updatePersonalisation(it) }
-                    )
                     // Commit 1(b) of the mobile wiring. One row in the existing AI
                     // section, using the existing SwitchRow: no new screen, no new
                     // card, no new token. Default OFF, and the subtitle says what it
@@ -292,9 +264,9 @@ fun SettingsScreen(
                     )
                     // "Reasoning effort" (Low/Medium/High) deleted: it was a
                     // parameter dial wired to nothing — no send path, model or
-                    // prompt ever read it. SettingsStore keeps its keys (other
-                    // code may own migration); the UI simply no longer presents
-                    // a control that does nothing.
+                    // prompt ever read it. Same for the Memory and
+                    // Personalisation rows that sat above it. SettingsStore no
+                    // longer carries their keys at all.
                 }
                 GroupSeparator()
                 ExpandRow(
@@ -305,13 +277,17 @@ fun SettingsScreen(
                     onToggle = { expandedId = if (expandedId == "language") null else "language" }
                 ) {
                     ValueRow(title = "App language", value = "English (UK)")
-                    Text(
-                        text = "AI language",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    // Voice language shows the language the on-device recogniser
+                    // ACTUALLY uses — it follows the device locale, so the row
+                    // reports the truth instead of a hardcoded claim. (The old
+                    // "AI language" chip row is gone: nothing on the wire read
+                    // that choice — the translate path follows the device
+                    // language too, not a setting.)
+                    ValueRow(
+                        title = "Voice language",
+                        value = java.util.Locale.getDefault().displayLanguage
+                            .ifBlank { "English" }
                     )
-                    ChipRow(options = aiLanguageOptions, selected = SettingsStore.aiLanguage) { SettingsStore.updateAiLanguage(it) }
-                    ValueRow(title = "Voice language", value = "English (UK)")
                 }
                 GroupSeparator()
                 ExpandRow(
@@ -401,12 +377,6 @@ fun SettingsScreen(
                         leading = GsIcons.Download,
                         onClick = { exportData.launch("gs-ai-export.json") }
                     )
-                    SwitchRow(
-                        title = "Training preferences",
-                        subtitle = "Improve models with your chats",
-                        checked = SettingsStore.trainingOptIn,
-                        onCheckedChange = { SettingsStore.updateTrainingOptIn(it) }
-                    )
                     ActionRow(
                         title = "Clear local data",
                         subtitle = "Remove cached chats and files on this device",
@@ -440,29 +410,6 @@ fun SettingsScreen(
                     ) {
                         Text("Delete account")
                     }
-                }
-                GroupSeparator()
-                ExpandRow(
-                    id = "security",
-                    icon = GsIcons.Lock,
-                    title = "Security",
-                    expandedId = expandedId,
-                    onToggle = { expandedId = if (expandedId == "security") null else "security" }
-                ) {
-                    SwitchRow(
-                        title = "App passcode",
-                        checked = SettingsStore.appPasscode,
-                        onCheckedChange = { SettingsStore.updateAppPasscode(it) }
-                    )
-                    SwitchRow(
-                        title = "Biometric unlock",
-                        checked = SettingsStore.biometricUnlock,
-                        onCheckedChange = { SettingsStore.updateBiometricUnlock(it) }
-                    )
-                    // The fake "Two-factor: On" / "Trusted devices: 2" rows are
-                    // gone — nothing on the device backs them, and a security
-                    // value the app invented is worse than no row at all. Only
-                    // the genuinely wired toggles above remain.
                 }
                 GroupSeparator()
                 ExpandRow(

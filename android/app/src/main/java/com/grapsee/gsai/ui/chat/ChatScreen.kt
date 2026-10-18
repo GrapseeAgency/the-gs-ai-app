@@ -682,6 +682,17 @@ fun ChatScreen(
         if (draft.isBlank()) draft = attachStore.loadPersistedText(id) ?: ""
     }
 
+    // A brand-new chat has no id to load history by, but its composer draft is
+    // just as real: without this arm, anything typed before the first send
+    // vanished on rotate / background / process death — the unsent-message
+    // amnesia no native AI app has. The store parks the unsaved draft under
+    // its own stable slot (AttachmentStore.UNSAVED_KEY), cleared on send.
+    LaunchedEffect(conversationId) {
+        if (conversationId == null && draft.isBlank()) {
+            draft = attachStore.loadPersistedText(null) ?: ""
+        }
+    }
+
     // Transcript rebuild (re-attach / adopted-id reconciliation): triggered by
     // the stream observer below when this composition's transcript does not yet
     // reflect the live stream. Rebuilt OFF-list and swapped once — no empty frame

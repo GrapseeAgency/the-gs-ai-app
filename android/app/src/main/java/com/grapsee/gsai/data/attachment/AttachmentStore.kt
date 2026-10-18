@@ -189,7 +189,6 @@ class AttachmentStore(
 
     /** Persisted text half of the draft entry (legacy plain-text tolerant). */
     fun loadPersistedText(conversationId: String?): String? {
-        if (conversationId == null) return null
         val raw = runCatching { prefs.getString(draftKey(conversationId), null) }.getOrNull()
             ?: return null
         val parsed = decodeEntry(raw) ?: return raw // legacy plain text
@@ -197,13 +196,18 @@ class AttachmentStore(
     }
 
     /**
-     * Write the full draft entry {text, attachments} for a conversation. Called
-     * at dispose (leave-time snapshot) and whenever the live drafts change once
-     * the screen has finished loading — never speculatively, so a half-loaded
-     * screen can never clobber a saved draft.
+     * Write the full draft entry {text, attachments} for a conversation.
+     * Called at dispose (leave-time snapshot) and whenever the live drafts
+     * change once the screen has finished loading — never speculatively, so
+     * a half-loaded screen can never clobber a saved draft.
+     *
+     * A NULL conversation id (a brand-new chat with no server id yet) is a
+     * REAL draft, not a nothing: it parks under [UNSAVED_KEY] so an unsent
+     * message survives a rotate, a background and even a process death.
+     * Silently dropping it — the old behaviour — lost the user's typing the
+     * moment they left the screen, which no native app does.
      */
     fun persistSnapshot(conversationId: String?, text: String) {
-        if (conversationId == null) return
         val attachments = _drafts.value
             .filter { it.phase == AttachmentPhase.Ready || it.phase == AttachmentPhase.Failed }
         synchronized(draftLock) {
@@ -224,7 +228,6 @@ class AttachmentStore(
 
     /** Draft entry is gone the moment a send lands (text + attachments). */
     fun clearPersistedDraft(conversationId: String?) {
-        if (conversationId == null) return
         synchronized(draftLock) {
             runCatching { prefs.edit().remove(draftKey(conversationId)).apply() }
         }
@@ -234,10 +237,10 @@ class AttachmentStore(
      * §5 draft persistence: staged (ready-or-failed) attachments persist with
      * the draft; restore rehydrates READY entries only, and only when their
      * staged copy still exists — a missing file is dropped honestly, never
-     * resurrected as a fake chip.
+     * resurrected as a fake chip. The null conversation (new chat) restores
+     * from [UNSAVED_KEY], the same slot the composer parks to.
      */
     private fun restorePersisted(conversationId: String?): List<AttachmentDraft> {
-        if (conversationId == null) return emptyList()
         val raw = runCatching { prefs.getString(draftKey(conversationId), null) }.getOrNull()
             ?: return emptyList()
         val entry = decodeEntry(raw) ?: return emptyList()
@@ -262,7 +265,14 @@ class AttachmentStore(
         }.getOrNull()
     }
 
-    private fun draftKey(conversationId: String) = "draft_$conversationId"
+    /**
+     * The draft prefs key for a conversation. NULL maps to [UNSAVED_KEY] —
+     * a brand-new chat's draft is as real as a saved chat's, so it gets its
+     * own stable slot. Server ids are UUIDs; the double underscore cannot
+     * collide with one.
+     */
+    private fun draftKey(conversationId: String?) =
+        "draft_${conversationId ?: UNSAVED_KEY}"
 
     // --- the real pipeline ------------------------------------------------------
 
@@ -464,5 +474,12 @@ class AttachmentStore(
         private const val STAGING_ROOT = "attachments"
         /** The chat drafts prefs file — attachments extend it, key space shared. */
         const val DRAFTS_PREFS = "gs_chat_drafts"
+        /**
+         * Draft slot for a brand-new chat (no server id yet). Every unsent
+         * conversation parks here, so the composer's text and staged files
+         * survive a rotate, a background and a process death. Doubly
+         * underscored so it can never collide with a server UUID.
+         */
+        const val UNSAVED_KEY = "__unsaved__"
     }
 }

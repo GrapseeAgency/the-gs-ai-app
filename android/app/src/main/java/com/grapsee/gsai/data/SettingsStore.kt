@@ -12,10 +12,14 @@ import androidx.compose.runtime.setValue
  * (observable from any composable, readable anywhere) and writes through to
  * SharedPreferences the moment it changes, so nothing forgets between
  * launches. init() hydrates from disk once, from GSApplication, before any
- * UI reads the store. Preference persistence is local-first: switches whose
- * subsystems arrive later (push, passcode, memory) already remember their
- * declared value — the same client-held preference shape the benchmark apps
- * use until their server half is reachable.
+ * UI reads the store.
+ *
+ * HONESTY CONTRACT: a row exists here only if some runtime code path reads
+ * it. The 0.77.7 sweep deleted nine fields (auto-title, double-tap send,
+ * memory, personalisation, reasoning effort, training opt-in, passcode,
+ * biometric unlock, AI language) whose toggles persisted but were read by
+ * nothing — a switch that does nothing is worse than no switch. Remaining
+ * keys are live; prefer-local and push-notifications have real consumers.
  */
 object SettingsStore {
     private const val PREFS = "gs_settings"
@@ -24,11 +28,7 @@ object SettingsStore {
     // Appearance
     var themeMode by mutableStateOf("System"); private set
     var reduceAnimations by mutableStateOf(false); private set
-    // Chat
-    var autoTitleChats by mutableStateOf(true); private set
-    var sendDoubleTap by mutableStateOf(false); private set
     // AI
-    var memory by mutableStateOf(true); private set
     /**
      * Commit 1(b) of the mobile wiring: prefer the on-device engine over the
      * provider when a model is installed.
@@ -40,17 +40,8 @@ object SettingsStore {
      * ONLY while this is true; with it off, routing is exactly as it was.
      */
     var preferLocal by mutableStateOf(false); private set
-    var personalisation by mutableStateOf(true); private set
-    var reasoningEffort by mutableStateOf("Medium"); private set
-    // Privacy
-    var trainingOptIn by mutableStateOf(false); private set
-    // Security
-    var appPasscode by mutableStateOf(false); private set
-    var biometricUnlock by mutableStateOf(false); private set
     // Notifications
     var pushNotifications by mutableStateOf(true); private set
-    // Language
-    var aiLanguage by mutableStateOf("EN"); private set
     // Accessibility
     var fontScale by mutableStateOf(1.0f); private set
     var highContrast by mutableStateOf(false); private set
@@ -70,19 +61,10 @@ object SettingsStore {
         // closes, every single time".
         themeMode = p.string(K.themeMode, themeMode)
         reduceAnimations = p.bool(K.reduceAnimations, reduceAnimations)
-        autoTitleChats = p.bool(K.autoTitleChats, autoTitleChats)
-        sendDoubleTap = p.bool(K.sendDoubleTap, sendDoubleTap)
-        memory = p.bool(K.memory, memory)
-        personalisation = p.bool(K.personalisation, personalisation)
         // false is the field's own value, so an unset key means OFF. Turning
         // local AI on without asking is the worse failure.
         preferLocal = p.bool(K.preferLocal, preferLocal)
-        reasoningEffort = p.string(K.reasoningEffort, reasoningEffort)
-        trainingOptIn = p.bool(K.trainingOptIn, trainingOptIn)
-        appPasscode = p.bool(K.appPasscode, appPasscode)
-        biometricUnlock = p.bool(K.biometricUnlock, biometricUnlock)
         pushNotifications = p.bool(K.pushNotifications, pushNotifications)
-        aiLanguage = p.string(K.aiLanguage, aiLanguage)
         fontScale = p.flt(K.fontScale, fontScale)
         highContrast = p.bool(K.highContrast, highContrast)
         reduceMotion = p.bool(K.reduceMotion, reduceMotion)
@@ -102,17 +84,8 @@ object SettingsStore {
     private object K {
         const val themeMode = "settings.themeMode"
         const val reduceAnimations = "settings.reduceAnimations"
-        const val autoTitleChats = "settings.autoTitleChats"
-        const val sendDoubleTap = "settings.sendDoubleTap"
-        const val memory = "settings.memory"
-        const val personalisation = "settings.personalisation"
         const val preferLocal = "settings.preferLocal"
-        const val reasoningEffort = "settings.reasoningEffort"
-        const val trainingOptIn = "settings.trainingOptIn"
-        const val appPasscode = "settings.appPasscode"
-        const val biometricUnlock = "settings.biometricUnlock"
         const val pushNotifications = "settings.pushNotifications"
-        const val aiLanguage = "settings.aiLanguage"
         const val fontScale = "settings.fontScale"
         const val highContrast = "settings.highContrast"
         const val reduceMotion = "settings.reduceMotion"
@@ -157,25 +130,11 @@ object SettingsStore {
     // Appearance
     fun updateThemeMode(v: String) { themeMode = v; put(K.themeMode, v) }
     fun updateReduceAnimations(v: Boolean) { reduceAnimations = v; put(K.reduceAnimations, v) }
-    // Chat
-    fun updateAutoTitleChats(v: Boolean) { autoTitleChats = v; put(K.autoTitleChats, v) }
-    fun updateSendDoubleTap(v: Boolean) { sendDoubleTap = v; put(K.sendDoubleTap, v) }
-    // AI
-    fun updateMemory(v: Boolean) { memory = v; put(K.memory, v) }
-    fun updatePersonalisation(v: Boolean) { personalisation = v; put(K.personalisation, v) }
 
     /** Commit 1(b). See the field for why the default is off. */
     fun updatePreferLocal(v: Boolean) { preferLocal = v; put(K.preferLocal, v) }
-    fun updateReasoningEffort(v: String) { reasoningEffort = v; put(K.reasoningEffort, v) }
-    // Privacy
-    fun updateTrainingOptIn(v: Boolean) { trainingOptIn = v; put(K.trainingOptIn, v) }
-    // Security
-    fun updateAppPasscode(v: Boolean) { appPasscode = v; put(K.appPasscode, v) }
-    fun updateBiometricUnlock(v: Boolean) { biometricUnlock = v; put(K.biometricUnlock, v) }
     // Notifications
     fun updatePushNotifications(v: Boolean) { pushNotifications = v; put(K.pushNotifications, v) }
-    // Language
-    fun updateAiLanguage(v: String) { aiLanguage = v; put(K.aiLanguage, v) }
     // Accessibility
     /** Live stage during a slider drag: memory only, no disk write per frame.
      *  The commit lands once in [updateFontScale] on release. */
