@@ -1,8 +1,33 @@
 Here are all the generated files.
 
-## Latest release: v0.77.1
+## Latest release: v0.77.2
 
     file    GS-AI-App.apk
+    size    64356239 bytes
+    sha256  10cb33e35e6d2808ed7b9d6e3aa7db719997b643588b8d1caea09b050a34b7c2
+
+### v0.77.2 — the orb is an orb
+
+v0.77.1 put the activity orb in the composer's send slot but rendered it with
+the 20dp preset scaled up — at 34dp that preset is fifteen fat blobs in a
+circle, which reads as a broken spinner. Both presets were rasterised at the
+shipped size and compared: INLINE scaled up falls apart, STANDARD (44-segment
+ribbon, 11-ring globe, 41-node web) scaled down keeps its structure. The send
+slot now draws STANDARD at 34dp.
+
+The `Thinking…` line above the composer is gone too. With the orb in the slot
+it was a third status for one fact, and the word collided with the
+`Thinking ▾` mode chip inside the composer. The orb carries the phase; tap it
+to stop the turn.
+
+`ThinkingOrb` gained `renderScale` to draw a preset's authored geometry at any
+physical size, centring the authored space instead of cropping it.
+
+`versionCode 91` installs over 90 without uninstalling.
+
+## Previous release: v0.77.1
+
+    file    GS-AI-App.apk (superseded)
     size    64356235 bytes
     sha256  8904fd1ddf6f7d67564c3d37c48fbbfcbe93441607afd257f24a3b4e58e9b9f3
 
@@ -30,7 +55,7 @@ The static three-dot indicator is gone with it. The word stays (`Thinking…`,
 
 `versionCode 90` installs over 89 without uninstalling.
 
-## Previous release: v0.77.0
+## Older release: v0.77.0
 
     file    GS-AI-App.apk (superseded)
     size    64356235 bytes
