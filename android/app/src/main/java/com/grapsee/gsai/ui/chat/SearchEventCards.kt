@@ -436,6 +436,9 @@ private fun engineDisplayName(id: String): String = when (id) {
     "gutenberg" -> "Gutenberg"
     "arxiv" -> "arXiv"
     "crossref" -> "Crossref"
+    // Opt-in server engines: only appear when the deployment has a key for them.
+    "brave" -> "Brave"
+    "treg" -> "WebAccess"
     else -> id
 }
 

@@ -632,7 +632,17 @@ export const braveWebSearch: EngineAdapter = {
       if (res.status === 429) return []
       if (!res.ok) throw new Error(`brave http ${res.status}`)
       const json = (await res.json()) as {
-        web?: { results?: { url?: unknown; title?: unknown; description?: unknown; age?: unknown }[] }
+        web?: {
+          results?: {
+            url?: unknown
+            title?: unknown
+            description?: unknown
+            /** ISO 8601 publication date when Brave knows it. */
+            page_age?: unknown
+            /** Human relative age ("3 days ago") — only a fallback. */
+            age?: unknown
+          }[]
+        }
       }
       const rows = Array.isArray(json?.web?.results) ? json.web!.results : []
       const out: RawResult[] = []
@@ -647,7 +657,12 @@ export const braveWebSearch: EngineAdapter = {
           title,
           snippet: stripTags(typeof row?.description === 'string' ? row.description : '').slice(0, 300),
           domain: safeHost(rawUrl),
-          publishedDate: parseDate(typeof row?.age === 'string' ? row.age : null),
+          // page_age is ISO and feeds recency scoring; age ("3 days ago") is not
+          // parseable, so it is only a fallback for feeds that omit page_age.
+          publishedDate: parseDate(
+            (typeof row?.page_age === 'string' ? row.page_age : null) ??
+              (typeof row?.age === 'string' ? row.age : null)
+          ),
           rank: out.length + 1,
           engine: 'brave',
         })
