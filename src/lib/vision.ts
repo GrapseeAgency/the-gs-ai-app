@@ -49,6 +49,48 @@ export const VISION_JPEG_QUALITY = 90
 export const VISION_HISTORY_IMAGE_TURNS = 2
 export const VISION_MAX_IMAGES_PER_REQUEST = 6
 
+/**
+ * Slots held back for the history images when a previous image turn exists.
+ *
+ * Detail crops are the last thing that should spend the budget: a crop makes
+ * the CURRENT photo more legible, but dropping the history images breaks
+ * "what about the other one?" — a failure the grounding harness already
+ * records ("follow-up retention"). Two slots is one image from each of the
+ * two turns VISION_HISTORY_IMAGE_TURNS admits.
+ */
+export const VISION_HISTORY_IMAGE_RESERVE = 2
+
+/**
+ * How many of the current turn's images may spend a second slot on a detail
+ * crop.
+ *
+ * Pure on purpose: this is the one place the request-level image budget is
+ * decided, so it can be asserted without a database, a provider or a file.
+ * Invariants it must never break:
+ *   * `currentImageCount + allowance + reserve <= VISION_MAX_IMAGES_PER_REQUEST`;
+ *   * a full frame is never dropped in favour of a crop.
+ */
+export function historyImageReserve(
+  currentImageCount: number,
+  hasHistoryImages: boolean
+): number {
+  if (!hasHistoryImages) return 0
+  const frames = Math.min(Math.max(0, Math.floor(currentImageCount)), VISION_MAX_IMAGES_PER_REQUEST)
+  // The reserve cannot exceed what is left after the frames — otherwise the
+  // three terms sum past the cap (5 frames + 2 reserved = 7 of 6).
+  return Math.min(VISION_HISTORY_IMAGE_RESERVE, VISION_MAX_IMAGES_PER_REQUEST - frames)
+}
+
+export function detailCropAllowance(
+  currentImageCount: number,
+  hasHistoryImages: boolean
+): number {
+  const frames = Math.min(Math.max(0, Math.floor(currentImageCount)), VISION_MAX_IMAGES_PER_REQUEST)
+  const reserve = historyImageReserve(currentImageCount, hasHistoryImages)
+  // Never more crops than images: one image cannot use two.
+  return Math.min(frames, Math.max(0, VISION_MAX_IMAGES_PER_REQUEST - frames - reserve))
+}
+
 /** Formats sharp may hand to the provider after normalization. */
 const DECODABLE_SOURCE_FORMATS = new Set(['jpeg', 'png', 'webp', 'gif', 'heif'])
 
@@ -134,9 +176,8 @@ const DETAIL_WINDOW_SIDES = [48, 64, 96, 128, 192]
  * cells contain gradient; a table edge is a thin line diluted across its cell.
  * Concretely, per cell we take the MEAN gradient (not the sum), so a 1 px
  * high-contrast edge inside a cell scores ~contrast/width while text strokes
- * score several times higher, then we pick the window with the highest mean.
- * Among windows scoring within 85% of the best we take the LARGEST, so the
- * crop holds the whole plate rather than a single glyph.
+ * score several times higher, then we pick the densest window and GROW it
+ * while the strip being added is itself dense (see the growth notes below).
  */
 export async function planDetailRegion(bytes: Buffer): Promise<DetailRegion | null> {
   let meta: sharp.Metadata

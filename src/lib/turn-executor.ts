@@ -108,6 +108,7 @@ import {
   visionFailureMessage,
   isProviderImageRejection,
   VISION_HISTORY_IMAGE_TURNS,
+  detailCropAllowance,
   VISION_MAX_IMAGES_PER_REQUEST,
   VISION_DETAIL_CROP_NOTE,
   type PreparedVisionImage,
@@ -660,11 +661,25 @@ export async function prepareTurn(
   )
 
   if (imageAttachments.length > 0) {
-    for (const att of imageAttachments) {
-      // withDetail: the CURRENT turn's images get a native-resolution crop of
-      // their densest region (see VISION_DETAIL_* in vision.ts) — that is what
-      // makes small printed text legible to the model instead of mush.
-      const result = await prepareVisionImage(att, { withDetail: true })
+    // HARD CAP, and it is not theoretical: MAX_ATTACHMENTS_PER_MESSAGE lets six
+    // images through and a detail crop doubles each one, so the old loop could
+    // put TWELVE images in a request whose own contract says six. The provider
+    // either rejects that or takes seconds longer — the exact opposite of the
+    // reason the crop exists.
+    //
+    // Policy, in priority order:
+    //   1. every image the user actually sent keeps its full frame — context is
+    //      never traded away;
+    //   2. history image slots are reserved when a previous image turn exists,
+    //      so follow-ups still see the earlier photo;
+    //   3. whatever is left buys detail crops, for the first images in order.
+    const currentImages = imageAttachments.slice(0, VISION_MAX_IMAGES_PER_REQUEST)
+    const detailAllowance = detailCropAllowance(currentImages.length, recentImageTurnIds.length > 0)
+    for (let i = 0; i < currentImages.length; i++) {
+      // withDetail for the first `detailAllowance` images: a native-resolution
+      // crop of the densest region (see VISION_DETAIL_* in vision.ts) — that is
+      // what makes small printed text legible to the model instead of mush.
+      const result = await prepareVisionImage(currentImages[i], { withDetail: i < detailAllowance })
       if (result.ok) {
         prep.visionPrepared.push(result.image)
         if (result.detail) prep.visionPrepared.push(result.detail)
@@ -930,7 +945,11 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
           depth: params.depth,
           emit: emit ?? NOOP_EMIT,
           deadlineAt,
-          ledgerKey: prep.runId ?? requestId,
+          // prep.requestId, not a bare `requestId`: the legacy inline path runs
+          // without a runId, and `prep.runId ?? requestId` was a ReferenceError
+          // there (the identifier does not exist in this scope) — a deep search
+          // would have died before its first query.
+          ledgerKey: prep.runId ?? prep.requestId,
           isStopped: prep.runId
             ? () => {
                 // stop condition: user cancelled the run → synthesize now
@@ -1158,7 +1177,13 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
         notes.length > 0 ? `${textPayload}\n\n(${notes.join(' ')})` : textPayload
 
       const selectedTurnIds = new Set(prep.recentImageTurnIds)
-      let imageBudget = VISION_MAX_IMAGES_PER_REQUEST - prep.visionPrepared.length
+      // Clamped: with detail crops the prepared list can reach the cap, and a
+      // negative budget is meaningless (it made the history branch below look
+      // like it had room in logs while it silently skipped every image).
+      let imageBudget = Math.max(
+        0,
+        VISION_MAX_IMAGES_PER_REQUEST - prep.visionPrepared.length
+      )
 
       const visionContext: VisionChatMessage[] = [
         { role: 'system', content: `${systemPrompt}\n\n${VISION_GROUNDING_PROMPT}` },

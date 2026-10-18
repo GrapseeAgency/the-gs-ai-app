@@ -167,14 +167,53 @@ function normalizeUrlForDedupe(raw: string): string {
   }
 }
 
+/**
+ * Relevance tokeniser — SCRIPT-AWARE.
+ *
+ * The old implementation was `replace(/[^a-z0-9\s]/g, ' ')`, which turned
+ * every non-Latin title into an EMPTY token set. Measured consequences:
+ *
+ *   * a Bengali query ("নাইটকপ ৫০০") tokenised to [] — `termOverlap` returned
+ *     0 for every result, so ranking lost its main relevance signal (+2 x
+ *     overlap) and fell back to recency and engine position;
+ *   * `titleWords(title)` was empty too, so syndication detection never grouped
+ *     two Bengali reports of the same story;
+ *   * worse, a LATIN query against Bengali-language results produced five
+ *     titles sharing zero tokens — `isPoisonedSerp` called that a decoy SERP
+ *     and DISCARDED the whole engine response.
+ *
+ * Bengali, Hindi, Arabic, Russian, Greek and Thai all hit this. So: split on
+ * Unicode letters/numbers, and for scripts that do not space-delimit words
+ * (CJK) use character bigrams, which is the unit that actually matches.
+ */
+const CJK_RE = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af]/
+const LATIN_RE = /[a-z0-9]/
+
+function tokensOf(text: string, minLen: number): Set<string> {
+  const out = new Set<string>()
+  // \p{M} is not optional: Bengali, Hindi and Arabic vowel signs are COMBINING
+  // MARKS, not letters. Without it "খেলার" shatters into "খ ল র", every piece
+  // falls under the length floor, and the title tokenises to nothing — the
+  // exact failure this rewrite exists to remove.
+  const cleaned = text.toLowerCase().replace(/[^\p{L}\p{M}\p{N}\s]/gu, ' ')
+  for (const w of cleaned.split(/\s+/)) {
+    if (w.length === 0) continue
+    if (CJK_RE.test(w)) {
+      // No word boundaries to split on: bigrams are the matching unit.
+      for (let i = 0; i + 1 < w.length; i++) out.add(w.slice(i, i + 2))
+      continue
+    }
+    // Latin words need 4+ characters to be meaningful (drops "the", "for");
+    // Bengali/Hindi/Arabic words are often 2-3 characters and still carry the
+    // whole meaning, so the floor is script-dependent.
+    const floor = LATIN_RE.test(w) ? Math.max(minLen, 4) : minLen
+    if (w.length >= floor) out.add(w)
+  }
+  return out
+}
+
 function titleWords(title: string): Set<string> {
-  return new Set(
-    title
-      .toLowerCase()
-      .replace(/[^a-z0-9\s]/g, ' ')
-      .split(/\s+/)
-      .filter((w) => w.length > 3)
-  )
+  return tokensOf(title, 2)
 }
 
 function termOverlap(query: string, title: string): number {
@@ -203,19 +242,23 @@ const SERP_STOPWORDS = new Set([
 ])
 
 function serpWords(text: string): Set<string> {
-  return new Set(
-    text
-      .toLowerCase()
-      .replace(/[^a-z0-9\s]/g, ' ')
-      .split(/\s+/)
-      .filter((w) => w.length >= 2 && !SERP_STOPWORDS.has(w))
-  )
+  const out = new Set<string>()
+  for (const w of tokensOf(text, 2)) if (!SERP_STOPWORDS.has(w)) out.add(w)
+  return out
 }
 
 function serpSharedWords(query: string, title: string): number {
   const qw = serpWords(query)
   if (qw.size === 0) return 1 // guard cannot judge — never discard
   const tw = serpWords(title)
+  if (tw.size === 0) return 1 // guard cannot judge — never discard
+  // CROSS-SCRIPT IS TRANSLATION, NOT POISON. A Latin query ("dhaka news")
+  // against Bengali-language results shares no tokens BY CONSTRUCTION; the old
+  // ASCII tokeniser saw exactly that and discarded the entire engine response.
+  // If one side is Latin and the other is not, there is nothing to compare.
+  const qLatin = [...qw].some((w) => LATIN_RE.test(w))
+  const tLatin = [...tw].some((w) => LATIN_RE.test(w))
+  if (qLatin !== tLatin) return 1
   let shared = 0
   for (const w of qw) if (tw.has(w)) shared += 1
   return shared
@@ -284,6 +327,31 @@ function isNonArticleAssetUrl(url: string): boolean {
   return NON_ARTICLE_ASSET_RES.some((re) => re.test(url))
 }
 
+/**
+ * Race an engine against a timeout WITHOUT leaking the timer.
+ *
+ * `Promise.race([work, new Promise(reject after 9s)])` leaves the losing timer
+ * armed: every settled search keeps a 9-second timer alive, so a deep turn
+ * (3 rounds x 3 queries x ~6 engines) parks ~50 timers on the event loop after
+ * the answer is already streaming. Clearing on settle is one line and removes
+ * the whole class.
+ */
+function withEngineTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('engine timeout')), ms)
+    work.then(
+      (value) => {
+        clearTimeout(timer)
+        resolve(value)
+      },
+      (error) => {
+        clearTimeout(timer)
+        reject(error)
+      }
+    )
+  })
+}
+
 export async function runMetaSearch(input: MetaSearchInput): Promise<MetaSearchOutcome> {
   const isNews =
     input.intent === 'broad_news' ||
@@ -314,14 +382,7 @@ export async function runMetaSearch(input: MetaSearchInput): Promise<MetaSearchO
       }
       taskMeta.push({ engineId, query })
       tasks.push(
-        Promise.race([
-          adapter.run(eq),
-          new Promise<RawResult[]>((_, reject) =>
-            setTimeout(() => reject(new Error('engine timeout')), input.engineTimeoutMs ?? 9_000)
-          ),
-        ]).catch((e: unknown) => {
-          throw e
-        })
+        withEngineTimeout(adapter.run(eq), input.engineTimeoutMs ?? 9_000)
       )
     }
   }
