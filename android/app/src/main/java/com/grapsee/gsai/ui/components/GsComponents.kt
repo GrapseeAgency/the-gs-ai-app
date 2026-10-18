@@ -58,7 +58,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.composed
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -708,12 +707,15 @@ fun GsScreenScaffold(
  * Recipe: fillMaxWidth (own the full track) → wrapContentWidth (let the
  * measured content be smaller and center it) → widthIn (cap the content).
  */
-fun Modifier.gsContentWidth(): Modifier = composed {
+fun Modifier.gsContentWidth(): Modifier =
+    // perf-smooth-5: was `composed {}` around three STATIC modifiers and no
+    // state whatsoever — a nested composition allocated per call site to build
+    // fillMaxWidth().wrapContentWidth().widthIn(). Nothing here is composable,
+    // so nothing here needs a composition.
     this
         .fillMaxWidth()
         .wrapContentWidth(Alignment.CenterHorizontally)
         .widthIn(max = GsLayout.contentMaxWidth)
-}
 
 // --- edge states -------------------------------------------------------------
 

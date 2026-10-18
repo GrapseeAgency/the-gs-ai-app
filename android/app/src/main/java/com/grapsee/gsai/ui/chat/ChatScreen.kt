@@ -88,7 +88,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -385,7 +385,7 @@ fun ChatScreen(
     // staging and real multipart uploads. Process-scoped, so in-flight uploads
     // and the live draft list survive rotation.
     val attachStore = remember { ServiceLocator.attachments }
-    val attachDrafts by attachStore.drafts.collectAsState()
+    val attachDrafts by attachStore.drafts.collectAsStateWithLifecycle()
     // Translate: the source turn rides in the sheet key; the answer streams in live.
     var translationSource by remember { mutableStateOf<String?>(null) }
     var translationText by remember { mutableStateOf("") }
@@ -401,7 +401,7 @@ fun ChatScreen(
     // effects; everything screen-wide derives from the phase (coarse — it flips
     // twice per stream), so ~30 Hz text flushes still recompose exactly one bubble.
     val chatStream = ServiceLocator.chatStream
-    val streamStateRaw = chatStream.state.collectAsState()
+    val streamStateRaw = chatStream.state.collectAsStateWithLifecycle()
     val isStreaming by remember {
         derivedStateOf { streamStateRaw.value?.phase == ChatStreamController.Phase.Streaming }
     }
@@ -1287,14 +1287,14 @@ fun ChatScreen(
                                 // A failed stream with nothing committed: the
                                 // empty bubble is already gone, so the honest
                                 // system status stands alone, Regenerate attached.
-                                Box(Modifier.messageAppear()) {
+                                Box(Modifier.messageAppear(message.id)) {
                                     FailedTurnNotice(
                                         hasPartial = false,
                                         onRegenerate = { regenerate(message.id) }
                                     )
                                 }
                             } else if (message.role == "user") {
-                                Box(Modifier.messageAppear()) {
+                                Box(Modifier.messageAppear(message.id)) {
                                     UserMessage(
                                         message = message,
                                         isEditing = editingId == message.id,
@@ -1312,7 +1312,7 @@ fun ChatScreen(
                                     )
                                 }
                             } else {
-                                Box(Modifier.messageAppear()) {
+                                Box(Modifier.messageAppear(message.id)) {
                                     AssistantMessage(
                                         message = message,
                                         isSpeaking = speakingMessageId == message.id,

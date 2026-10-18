@@ -8,7 +8,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.TweenSpec
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.composed
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -17,6 +17,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.data.SettingsStore
+import java.util.Collections
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * DESIGN PHASE 2 motion spec — the operator's values, applied app-wide.
@@ -66,25 +68,61 @@ public object GsEase {
  * (ease-out). Static (no offset, full alpha) under reduce-motion. Apply once
  * to a message row's root modifier. [delayMs] staggers entrances (drawer
  * suggestions, list items) via the top-level staggerDelay(index) in theme/Motion.kt.
+ *
+ * ---------------------------------------------------------------------------
+ * perf-smooth-5 (cause 3): THIS USED TO BE `Modifier.composed {}`, AND IT
+ * REPLAYED ON EVERY SCROLL.
+ *
+ * Two separate costs, both in the chat transcript — the screen the operator
+ * keeps calling laggy:
+ *
+ *   1. `composed {}` allocates a NESTED COMPOSITION per call site. This
+ *      modifier is applied to every message row, so a 50-message transcript
+ *      carried 50 extra compositions that existed only to hold one boolean.
+ *
+ *   2. `remember { appeared }` dies with the row when LazyColumn disposes it
+ *      outside the viewport. Scroll a message off-screen and back and the
+ *      fade-in ran again — from alpha 0 — on every re-entry. Flinging through
+ *      a long history replayed the entrance animation on whatever landed in
+ *      the viewport, which reads as stutter because it IS one: each replay
+ *      forces a fresh graphics-layer alpha ramp.
+ *
+ * The animation stays exactly as designed for a message that is genuinely NEW,
+ * and becomes a no-op for one already seen. "Seen" is a process-wide identity
+ * set keyed by message id, so it survives viewport disposal, recomposition and
+ * re-navigation, and is bounded by the messages the user actually scrolled to.
+ *
+ * [id] is REQUIRED for that: a call site with no stable id has nothing to key
+ * the once-only decision on.
  */
-public fun Modifier.messageAppear(delayMs: Int = 0): Modifier = composed {
-    if (SettingsStore.reduceAnimations || SettingsStore.reduceMotion) {
-        this
-    } else {
-        var appeared by remember { mutableStateOf(false) }
-        LaunchedEffect(Unit) {
-            if (delayMs > 0) kotlinx.coroutines.delay(delayMs.toLong())
-            appeared = true
-        }
-        val progress by animateFloatAsState(
-            targetValue = if (appeared) 1f else 0f,
-            animationSpec = tween(GsEase.MESSAGE_SEND_MS, easing = EaseOut),
-            label = "messageAppear",
-        )
-        this.graphicsLayer {
-            alpha = progress
-            // The GraphicsLayerScope is a Density: 8dp → px in place.
-            translationY = (1f - progress) * 8.dp.toPx()
-        }
+private val appearedOnce: MutableSet<String> =
+    Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
+
+@Composable
+public fun Modifier.messageAppear(id: String, delayMs: Int = 0): Modifier {
+    if (SettingsStore.reduceAnimations || SettingsStore.reduceMotion) return this
+
+    // A read, not a composition side effect: the insert happens in the effect
+    // below, so a discarded composition never marks a message as seen.
+    val isFirstAppearance = remember(id) { !appearedOnce.contains(id) }
+    if (!isFirstAppearance) return this
+
+    var appeared by remember(id) { mutableStateOf(false) }
+    LaunchedEffect(id) {
+        appearedOnce.add(id)
+        if (delayMs > 0) kotlinx.coroutines.delay(delayMs.toLong())
+        appeared = true
+    }
+    val progress by animateFloatAsState(
+        targetValue = if (appeared) 1f else 0f,
+        animationSpec = tween(GsEase.MESSAGE_SEND_MS, easing = EaseOut),
+        label = "messageAppear",
+    )
+    // Read inside graphicsLayer: the ramp runs in the draw phase, so it never
+    // recomposes the row it decorates.
+    return this.graphicsLayer {
+        alpha = progress
+        // The GraphicsLayerScope is a Density: 8dp → px in place.
+        translationY = (1f - progress) * 8.dp.toPx()
     }
 }
