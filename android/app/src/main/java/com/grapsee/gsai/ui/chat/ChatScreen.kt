@@ -167,7 +167,9 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.clickable
 import com.grapsee.gsai.ui.theme.kineticPress
 import com.grapsee.gsai.ui.chat.content.BlocksContent
+import com.grapsee.gsai.ui.orbs.OrbSize
 import com.grapsee.gsai.ui.orbs.OrbState
+import com.grapsee.gsai.ui.orbs.ThinkingOrb
 import com.grapsee.gsai.ui.orbs.orbStateForChatStream
 import com.grapsee.gsai.ui.theme.GsTheme
 import com.grapsee.gsai.ui.theme.gsHaptic
@@ -1311,6 +1313,26 @@ fun ChatScreen(
                                         onCopy = copyText
                                     )
                                 }
+                            } else if (
+                                // NOTHING TO READ YET — draw nothing.
+                                //
+                                // Before the first token an assistant turn has
+                                // no text, no trace and no sources, so all it
+                                // painted was the avatar, the "GS" label and a
+                                // bare streaming caret. On a real screen that
+                                // reads as a SECOND, empty input bar parked at
+                                // the top of the transcript: a monogram, a name
+                                // and a cursor. It carries no information the
+                                // orb in the composer does not already carry,
+                                // so the row waits for its first token.
+                                message.isStreaming &&
+                                    message.content.isBlank() &&
+                                    message.traceItems.isEmpty() &&
+                                    message.sources.isEmpty() &&
+                                    liveOrbState == OrbState.BREATHING
+                            ) {
+                                // Intentionally empty: the composer's orb is
+                                // the status for this window.
                             } else {
                                 Box(Modifier.messageAppear(message.id)) {
                                     AssistantMessage(
@@ -1373,14 +1395,15 @@ fun ChatScreen(
             liveOrbState?.let { orbState ->
                 val showLabel = streamStateRaw.value?.effectiveMode == "thinking" ||
                     (orbState != OrbState.BREATHING && orbState != OrbState.COMPOSING)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    ThinkingDots()
-                    if (showLabel) {
-                        Spacer(Modifier.width(8.dp))
+                // The live orb now sits in the composer's send slot (it took
+                // the stop square's place), so this line carries ONLY the word
+                // for the phase. The three-dot indicator that used to lead it
+                // was a second, abstract status for the same fact.
+                if (showLabel) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center
+                    ) {
                         Text(
                             text = orbState.label,
                             style = MaterialTheme.typography.labelMedium,
@@ -1410,6 +1433,9 @@ fun ChatScreen(
                 // sheet keeps its own honest Voice option as the fallback path.
                 onMic = onNavigateVoice,
                 isStreaming = isStreaming,
+                // The honest phase, already derived from the real stream state
+                // at the screen scope — the orb in the send slot renders it.
+                orbState = liveOrbState,
                 onStop = {
                     // Cancelling finalizes in the controller: the cancelled
                     // repository job persists the partial (NonCancellable)
@@ -1667,6 +1693,10 @@ private fun ComposerRow(
     isStreaming: Boolean,
     onStop: () -> Unit,
     enterToSend: Boolean,
+    // The live activity state for the send slot while a turn runs. The slot
+    // renders the orb instead of a stop glyph: the thing that is happening is
+    // the control, and tapping it stops the turn.
+    orbState: OrbState? = null,
     // PHASE 5: the live attachment drafts — chips row above the field,
     // recomposition stays scoped to the row (the transcript never reacts).
     drafts: List<AttachmentDraft> = emptyList(),
@@ -1768,7 +1798,7 @@ private fun ComposerRow(
                     }
                 }
                 if (isStreaming) {
-                    StopGeneratingControl(onStop = onStop)
+                    OrbStopControl(state = orbState ?: OrbState.BREATHING, onStop = onStop)
                 } else {
                     GsSendButton(enabled = canSend) { onSend(draftText().trim()) }
                 }
@@ -1886,19 +1916,23 @@ private fun GsSendButton(enabled: Boolean, onSend: () -> Unit) {
     }
 }
 
-/** Stop control living in the composer's send slot — the streaming-active
- *  affordance, semantically "Stop generating". Ink circle, same slot as send:
- *  the accent is the shape of the action, not a hue. */
+/** The streaming-active affordance, living in the composer's send slot.
+ *
+ *  It used to be a white disc with a stop square — a second, unrelated symbol
+ *  next to the orb that was already animating above the composer. Now the
+ *  slot renders the REAL activity orb for the turn's actual phase (breathing
+ *  before the first token, ribbon while composing, globe while searching),
+ *  and the orb itself is the stop target: the thing that is happening is the
+ *  thing you press. Tap target stays 36dp; the orb keeps its tuned INLINE
+ *  geometry (20dp) so its dot counts and speeds are the designed ones.
+ */
 @Composable
-private fun StopGeneratingControl(onStop: () -> Unit) {
-    val colors = GsTheme.colors
+private fun OrbStopControl(state: OrbState, onStop: () -> Unit) {
     Box(
         modifier = Modifier
             .padding(end = 4.dp, bottom = 2.dp)
             .size(36.dp)
-            .kineticPress()
             .clip(CircleShape)
-            .background(colors.textPrimary)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -1908,11 +1942,10 @@ private fun StopGeneratingControl(onStop: () -> Unit) {
             .semantics { contentDescription = "Stop generating" },
         contentAlignment = Alignment.Center
     ) {
-        Icon(
-            GsIcons.Square,
-            contentDescription = null,
-            tint = colors.appBackground,
-            modifier = Modifier.size(12.dp)
+        ThinkingOrb(
+            state = state,
+            size = OrbSize.INLINE,
+            contentDescription = state.label
         )
     }
 }
@@ -2288,23 +2321,10 @@ private fun BubbleAction(icon: ImageVector, label: String, onClick: () -> Unit) 
 }
 
 /**
- * design-3-b thinking affordance: three static 4dp dots, onSurfaceVariant,
- * 4dp apart. Deliberately NOT animated — the honest activity wording stays in
- * the label beside the dots, and no looping motion exists on this surface.
+ * (design-3-b's three static dots lived here. They are gone: the composer's
+ * send slot now renders the real activity orb for the turn's actual phase, so
+ * a second abstract three-dot indicator was saying the same thing twice.)
  */
-@Composable
-private fun ThinkingDots() {
-    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        repeat(3) {
-            Box(
-                modifier = Modifier
-                    .size(4.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.onSurfaceVariant)
-            )
-        }
-    }
-}
 
 // --- workspace empty state ---------------------------------------------------
 
