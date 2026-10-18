@@ -104,16 +104,39 @@ export const VISION_DETAIL_MAX_EDGE = 2048
 export const VISION_DETAIL_CROP_NOTE =
   'Detail crop of the same image at native resolution (same photo, zoomed).'
 
-/** Cells in the density map. 48x48 is enough to find a label, cheap to compute. */
-const DETAIL_GRID = 48
+/**
+ * Analysis grid for the detail planner. 384 cells over the long edge keeps a
+ * 2-3 mm label (≈80 px in a 12 MP photo) at ~8 cells tall — enough for its
+ * strokes to register as gradient, while staying cheap (147k samples).
+ */
+const DETAIL_GRID = 384
+
+/** Candidate window sides, in cells (as a fraction of the grid). */
+const DETAIL_WINDOW_SIDES = [48, 64, 96, 128, 192]
 
 /**
  * Where the detail is, in the SOURCE image's own pixel space (no rotation
  * applied — the caller crops in that same space, then orients the crop).
  *
  * Returns null when the image is not being meaningfully downscaled, or when
- * the dense region covers too much / too little of the frame to be a crop
- * worth sending.
+ * the dense region covers too much of the frame to be a crop worth sending.
+ *
+ * ALGORITHM — edge DENSITY over sliding windows, not total energy.
+ * The first version accumulated gradient energy per 48x48 cell and took the
+ * box covering 85% of the total. Measured on a synthetic 4032x3024 "cluttered
+ * desk with a small Bengali label", that returned 81% OF THE FRAME: a few long
+ * structural edges (table edge, box edges) carry more raw energy than every
+ * glyph in the image combined, so the box stretched across everything and the
+ * crop arrived at the model at 1.0x — a duplicate of the full frame, i.e. the
+ * feature silently did nothing on exactly the case it exists for.
+ *
+ * Density inverts that: a glyph plate is a small window where a large share of
+ * cells contain gradient; a table edge is a thin line diluted across its cell.
+ * Concretely, per cell we take the MEAN gradient (not the sum), so a 1 px
+ * high-contrast edge inside a cell scores ~contrast/width while text strokes
+ * score several times higher, then we pick the window with the highest mean.
+ * Among windows scoring within 85% of the best we take the LARGEST, so the
+ * crop holds the whole plate rather than a single glyph.
  */
 export async function planDetailRegion(bytes: Buffer): Promise<DetailRegion | null> {
   let meta: sharp.Metadata
@@ -135,72 +158,144 @@ export async function planDetailRegion(bytes: Buffer): Promise<DetailRegion | nu
   }
   if (raw.length < DETAIL_GRID * DETAIL_GRID) return null
 
-  // Local gradient magnitude: |dx| + |dy|. Text edges light this up; sky and
-  // flat packaging do not.
-  const energy = new Float64Array(DETAIL_GRID * DETAIL_GRID)
-  let total = 0
+  // Local gradient magnitude |dx| + |dy| at analysis resolution.
+  const grad = new Float64Array(DETAIL_GRID * DETAIL_GRID)
   for (let y = 1; y < DETAIL_GRID; y++) {
     for (let x = 1; x < DETAIL_GRID; x++) {
       const i = y * DETAIL_GRID + x
-      const e = Math.abs(raw[i] - raw[i - 1]) + Math.abs(raw[i] - raw[i - DETAIL_GRID])
-      energy[i] = e
-      total += e
+      grad[i] = Math.abs(raw[i] - raw[i - 1]) + Math.abs(raw[i] - raw[i - DETAIL_GRID])
     }
   }
-  if (total <= 0) return null
 
-  // Bounding box of the cells that carry the bulk of the detail energy.
-  //
-  // NOT a fixed top-N: in a photo that is mostly flat packaging, most cells
-  // have ZERO energy, and a top-20% cut would drag the box across the whole
-  // frame (the zeros sort arbitrarily among themselves). Walking the sorted
-  // cells until 85% of the total energy is covered keeps the box on the text.
-  const order = Array.from({ length: DETAIL_GRID * DETAIL_GRID }, (_, i) => i).sort(
-    (a, b) => energy[b] - energy[a]
-  )
-  const target = total * 0.85
-  let acc = 0
-  let x0 = DETAIL_GRID
-  let y0 = DETAIL_GRID
-  let x1 = -1
-  let y1 = -1
-  for (let k = 0; k < order.length; k++) {
-    const i = order[k]
-    const e = energy[i]
-    if (e <= 0) break
-    const x = i % DETAIL_GRID
-    const y = (i / DETAIL_GRID) | 0
-    if (x < x0) x0 = x
-    if (x > x1) x1 = x
-    if (y < y0) y0 = y
-    if (y > y1) y1 = y
-    acc += e
-    if (acc >= target) break
+  // Integral image → any window mean in O(1). This is what makes a full sweep
+  // over five window sizes affordable inside a request.
+  const S = DETAIL_GRID + 1
+  const integral = new Float64Array(S * S)
+  for (let y = 0; y < DETAIL_GRID; y++) {
+    let rowSum = 0
+    for (let x = 0; x < DETAIL_GRID; x++) {
+      rowSum += grad[y * DETAIL_GRID + x]
+      integral[(y + 1) * S + (x + 1)] = integral[y * S + (x + 1)] + rowSum
+    }
   }
-  if (x1 < x0 || y1 < y0) return null
+  const winSum = (x0: number, y0: number, n: number): number =>
+    integral[(y0 + n) * S + (x0 + n)] -
+    integral[y0 * S + (x0 + n)] -
+    integral[(y0 + n) * S + x0] +
+    integral[y0 * S + x0]
 
-  // Pad the box so the label is not cut at its own edge.
-  const padX = Math.max(2, Math.round((x1 - x0 + 1) * 0.15))
-  const padY = Math.max(2, Math.round((y1 - y0 + 1) * 0.15))
-  const cx0 = Math.max(0, x0 - padX)
-  const cy0 = Math.max(0, y0 - padY)
-  const cx1 = Math.min(DETAIL_GRID - 1, x1 + padX)
-  const cy1 = Math.min(DETAIL_GRID - 1, y1 + padY)
+  // Best window per size (density = mean gradient per cell).
+  type Best = { side: number; x: number; y: number; mean: number }
+  const perSize: Best[] = []
+  for (const side of DETAIL_WINDOW_SIDES) {
+    if (side > DETAIL_GRID) continue
+    const stride = Math.max(2, Math.floor(side / 4))
+    let best: Best = { side, x: 0, y: 0, mean: -1 }
+    for (let y = 0; y + side <= DETAIL_GRID; y += stride) {
+      for (let x = 0; x + side <= DETAIL_GRID; x += stride) {
+        const mean = winSum(x, y, side) / (side * side)
+        if (mean > best.mean) best = { side, x, y, mean }
+      }
+    }
+    if (best.mean > 0) perSize.push(best)
+  }
+  if (perSize.length === 0) return null
 
-  const left = Math.floor((cx0 / DETAIL_GRID) * w)
-  const top = Math.floor((cy0 / DETAIL_GRID) * h)
-  const right = Math.ceil(((cx1 + 1) / DETAIL_GRID) * w)
-  const bottom = Math.ceil(((cy1 + 1) / DETAIL_GRID) * h)
+  const peak = perSize.reduce((a, b) => Math.max(a, b.mean), 0)
+  if (peak <= 0) return null
+
+  // Grow from the densest window instead of picking a fixed size.
+  //
+  // Two rejected variants, both measured on the 4032x3024 synthetic label:
+  //  * "largest window scoring within 85% of the peak" cut a 900 px label in
+  //    half — the peak is a 504 px window sitting on ONE END of it, and no
+  //    window wide enough to hold the whole label comes within 85%;
+  //  * averaging the whole grown box against a fraction of the peak overshot to
+  //    197x45 cells (1963..4032 px): each added strip of flat background only
+  //    dilutes the average gradually, so the box keeps creeping.
+  // So the test is MARGINAL: a strip is accepted when the strip ITSELF is
+  // dense, not when the enlarged average still clears a bar. Growth then stops
+  // exactly at the plate edge, where the strip turns into background.
+  const seed = perSize.reduce((a, b) => (b.mean > a.mean ? b : a))
+  let bx0 = seed.x
+  let by0 = seed.y
+  let bx1 = seed.x + seed.side
+  let by1 = seed.y + seed.side
+  const step = Math.max(2, Math.round(seed.side / 8))
+  const stripFloor = peak * 0.45
+  const maxCells = DETAIL_GRID * DETAIL_GRID * 0.5 // matches the area ceiling below
+
+  const sumOf = (x0: number, y0: number, x1: number, y1: number): number =>
+    integral[y1 * S + x1] - integral[y0 * S + x1] - integral[y1 * S + x0] + integral[y0 * S + x0]
+
+  const grow = (floor: number, maxIter: number): void => {
+    for (let iter = 0; iter < maxIter; iter++) {
+      if ((bx1 - bx0) * (by1 - by0) >= maxCells) return
+      const options: { x0: number; y0: number; x1: number; y1: number; strip: number }[] = []
+      const push = (x0: number, y0: number, x1: number, y1: number, added: number) => {
+        if (added <= 0) return
+        const strip = (sumOf(x0, y0, x1, y1) - sumOf(bx0, by0, bx1, by1)) / added
+        options.push({ x0, y0, x1, y1, strip })
+      }
+      if (bx1 + step <= DETAIL_GRID) push(bx0, by0, bx1 + step, by1, step * (by1 - by0))
+      if (bx0 - step >= 0) push(bx0 - step, by0, bx1, by1, step * (by1 - by0))
+      if (by1 + step <= DETAIL_GRID) push(bx0, by0, bx1, by1 + step, step * (bx1 - bx0))
+      if (by0 - step >= 0) push(bx0, by0 - step, bx1, by1, step * (bx1 - bx0))
+      if (options.length === 0) return
+      const best = options.reduce((a, b) => (b.strip > a.strip ? b : a))
+      if (best.strip < floor) return
+      bx0 = best.x0
+      by0 = best.y0
+      bx1 = best.x1
+      by1 = best.y1
+    }
+  }
+
+  grow(stripFloor, 64)
+  // GRACE PASS. The last glyph of a line is often cut by the plate edge, so the
+  // final strip is part text, part background and scores below the strict
+  // floor — measured: a 617 px line inside a 360 px plate stopped 64 px short,
+  // cropping "500mg" to "500m". Two more steps at a much lower floor recover
+  // the tail without letting the box walk into open background.
+  grow(stripFloor * 0.45, 2)
+
+  const chosen = { x: bx0, y: by0, sideX: bx1 - bx0, sideY: by1 - by0 }
+
+  // Map the window back to source pixels and pad so the label is not cut at
+  // its own edge.
+  const cellX = w / DETAIL_GRID
+  const cellY = h / DETAIL_GRID
+  const padX = Math.max(4, Math.round(chosen.sideX * 0.1))
+  const padY = Math.max(4, Math.round(chosen.sideY * 0.1))
+  const gx0 = Math.max(0, chosen.x - padX)
+  const gy0 = Math.max(0, chosen.y - padY)
+  const gx1 = Math.min(DETAIL_GRID, chosen.x + chosen.sideX + padX)
+  const gy1 = Math.min(DETAIL_GRID, chosen.y + chosen.sideY + padY)
+
+  const left = Math.floor(gx0 * cellX)
+  const top = Math.floor(gy0 * cellY)
+  const right = Math.ceil(gx1 * cellX)
+  const bottom = Math.ceil(gy1 * cellY)
   const width = Math.min(w - left, right - left)
   const height = Math.min(h - top, bottom - top)
   if (width <= 0 || height <= 0) return null
 
   // A label is SMALL relative to a product photo — that is the whole point.
   // The floor is only there to reject sensor noise, so it is on absolute size,
-  // not on area share. The ceiling rejects "the crop is the whole frame".
+  // not on area share.
   if (width < 128 || height < 128) return null
+
+  // The ceiling is a USEFULNESS test, not a tidiness one: the crop is resized to
+  // the same 2048 px as the full frame, so its value is the ZOOM it buys.
+  // Measured failures of weaker gates: a 39.8%-of-frame crop of a full-page
+  // document arrived at 1.0x (a duplicate of the frame, one extra image slot
+  // spent for nothing) and so did a 14%-of-frame horizontal band on a gradient
+  // sky. Area share alone cannot see that — a wide thin crop is small in area
+  // and still gains nothing — so the gate is on the LONG-EDGE ratio, which is
+  // exactly the resize factor.
   const ratio = (width * height) / (w * h)
-  if (ratio > 0.9) return null
+  if (ratio > 0.5) return null
+  if (Math.max(width, height) > Math.max(w, h) / 1.25) return null
 
   return { left, top, width, height }
 }
