@@ -1392,26 +1392,18 @@ fun ChatScreen(
             // "thinking" — a Flash turn shows the bare dots (neutral, no
             // label). Search/Working states keep their honest labels in every
             // mode: those are real pipeline phases, not mode statements.
-            liveOrbState?.let { orbState ->
-                val showLabel = streamStateRaw.value?.effectiveMode == "thinking" ||
-                    (orbState != OrbState.BREATHING && orbState != OrbState.COMPOSING)
-                // The live orb now sits in the composer's send slot (it took
-                // the stop square's place), so this line carries ONLY the word
-                // for the phase. The three-dot indicator that used to lead it
-                // was a second, abstract status for the same fact.
-                if (showLabel) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        Text(
-                            text = orbState.label,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
+            // NO STATUS LINE HERE ANY MORE.
+            //
+            // There used to be a centred "Thinking…" / "Composing…" /
+            // "Searching…" row sitting directly above the composer, next to a
+            // three-dot indicator, while the send slot showed a generic stop
+            // square. Three signals for one fact, and the two words collided
+            // with the "Thinking ▾" mode chip INSIDE the composer — same word,
+            // two meanings, one above the other.
+            //
+            // The orb in the send slot is the status now: it is the real
+            // phase, animated, in the place the thumb already is. TalkBack
+            // still gets the phase from the orb's own contentDescription.
             ComposerRow(
                 draftText = { draft },
                 onDraftChange = { draft = it },
@@ -1944,7 +1936,14 @@ private fun OrbStopControl(state: OrbState, onStop: () -> Unit) {
     ) {
         ThinkingOrb(
             state = state,
-            size = OrbSize.INLINE,
+            // STANDARD, not INLINE. Both presets were rasterised at this exact
+            // size and compared: INLINE scaled UP to 34dp is fifteen fat blobs
+            // that read as a broken spinner, while STANDARD scaled DOWN keeps
+            // its 44-segment ribbon / 11-ring globe and reads as an orb. The
+            // two presets are separate designs, and at 34dp the denser one is
+            // the one that survives.
+            size = OrbSize.STANDARD,
+            renderScale = 0.53f,
             contentDescription = state.label
         )
     }
