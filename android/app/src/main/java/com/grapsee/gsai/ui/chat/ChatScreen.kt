@@ -123,6 +123,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withLink
@@ -366,15 +367,28 @@ fun ChatScreen(
     // nullable String (null is simply not stored and restores the nav arg).
     var activeConversationId by rememberSaveable { mutableStateOf(conversationId) }
     val messages = remember { mutableStateListOf<ChatUiMessage>() }
-    var draft by remember { mutableStateOf("") }
+    // The composer text is surface state like the conversation id and the
+    // title, so it saves the same way: rotation (or a process death without
+    // ON_STOP) must not eat a half-typed next question. ON_STOP + dispose
+    // snapshots additionally park it per conversation, so a backgrounded
+    // thread comes back to exactly the draft the reader left.
+    var draft by rememberSaveable { mutableStateOf("") }
+    // The message parked by the queue affordance while the current turn runs.
+    // Remembered-saveable for the same reason as the draft: it is a REAL
+    // pending message, and losing it to a rotation would be silent.
+    var queued by rememberSaveable { mutableStateOf("") }
+    // The parked message mid-flight to the turn that just finished (null =
+    // nothing in flight). Kept next to its source so the collector below can
+    // write it; the flush effect lives after dispatch, which owns the send.
+    var queuedFlush by rememberSaveable { mutableStateOf<String?>(null) }
     // Fresh workspace reads "GS" — the product's quiet identity mark, not a
     // page name. The first exchange re-titles the thread from the prompt (and
     // existing conversations load their stored title below).
     var conversationTitle by rememberSaveable { mutableStateOf("GS") }
     var editingId by rememberSaveable { mutableStateOf<String?>(null) }
-    var editingDraft by remember { mutableStateOf("") }
+    var editingDraft by rememberSaveable { mutableStateOf("") }
     var searchOpen by rememberSaveable { mutableStateOf(false) }
-    var searchQuery by remember { mutableStateOf("") }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
     var searchActiveIndex by remember { mutableStateOf(0) }
     val clipboard = LocalClipboardManager.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -877,9 +891,27 @@ fun ChatScreen(
                 }
                 state.phase == ChatStreamController.Phase.Done && state.error != null ->
                     reportStreamFailure(state)
-                state.phase == ChatStreamController.Phase.Done ||
-                        state.phase == ChatStreamController.Phase.Cancelled ->
+                state.phase == ChatStreamController.Phase.Done || state.phase == ChatStreamController.Phase.Cancelled -> {
+                    if (state.phase == ChatStreamController.Phase.Done && state.error == null) {
+                        // A parked message goes on its own the moment the reply
+                        // lands clean. Attachments ride along only while the
+                        // composer still holds the staged ones — if the user
+                        // changed them after parking, the honest move is to
+                        // hand the text back instead of sending it with the
+                        // wrong files. The SEND itself is deferred one step:
+                        // the controller's terminal publish runs BEFORE its
+                        // finally clears the job, so isStreaming still reads
+                        // true inside this collector and dispatch would drop
+                        // the flush on the floor.
+                        val pending = queued
+                        if (pending.isNotBlank()) {
+                            val attachStill = attachDrafts.toList()
+                            queued = ""
+                            if (attachStill.isEmpty()) queuedFlush = pending else draft = pending
+                        }
+                    }
                     commitStreamResult(state)
+                }
             }
         }
     }
@@ -945,6 +977,24 @@ fun ChatScreen(
         // The send consumed the drafts: ready staged copies persist on disk
         // (they were uploaded), never-uploaded leftovers are cleaned up (§4).
         attachStore.clear()
+    }
+
+    // The parked message waiting for the controller to go idle (null = nothing
+    // parked). Deferred by one step on purpose — see the collector's Done
+    // branch for why the send cannot happen inside the collector itself.
+    LaunchedEffect(queuedFlush) {
+        val pending = queuedFlush ?: return@LaunchedEffect
+        // Bounded wait for the controller to go idle (its finally runs right
+        // after the terminal publish, so this is typically one tick). If it
+        // somehow never idles, the text goes back to the composer — a queue
+        // must never swallow a message the user wrote.
+        var waited = 0
+        while (chatStream.isStreaming && waited < 100) {
+            kotlinx.coroutines.delay(10)
+            waited++
+        }
+        queuedFlush = null
+        if (chatStream.isStreaming) draft = pending else dispatch(pending, true)
     }
 
     // PHASE 2 Home: the inline composer dispatches straight into a new chat —
@@ -1191,11 +1241,20 @@ fun ChatScreen(
             GsOfflineBanner(visible = offline)
 
             AnimatedVisibility(visible = searchOpen, enter = fadeIn(), exit = fadeOut()) {
+                // Opening find-in-chat must land the caret IN the field — the
+                // keyboard appearing on open is what a native caller expects,
+                // not a second tap on the row itself.
+                val searchFocus = remember { FocusRequester() }
+                LaunchedEffect(searchOpen) {
+                    if (searchOpen) runCatching { searchFocus.requestFocus() }
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(
                         value = searchQuery,
                         onValueChange = { searchQuery = it },
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .focusRequester(searchFocus),
                         singleLine = true,
                         placeholder = { Text("Search in chat") },
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
@@ -1447,7 +1506,26 @@ fun ChatScreen(
                     // through the observer — same contract as before.
                     chatStream.cancelAndFinalize()
                 },
-                enterToSend = SettingsStore.enterToSend
+                // A next message drafted while this turn runs can be parked
+                // and it goes by itself the moment the reply lands. Survives
+                // rotation (rememberSaveable); a stop hands it back to the
+                // composer rather than sending it against the user's intent.
+                queuedText = { queued },
+                onQueue = {
+                    queued = draft
+                    draft = ""
+                },
+                onUnqueue = {
+                    val pending = queued
+                    queued = ""
+                    draft = when {
+                        pending.isBlank() -> draft
+                        draft.isBlank() -> pending
+                        // Never clobber newer typing: the parked text comes
+                        // back first, the new text follows below it.
+                        else -> "$pending\n\n$draft"
+                    }
+                }
             )
 
             SnackbarHost(hostState = snackbarHostState)
@@ -1696,7 +1774,11 @@ private fun ComposerRow(
     onMic: (() -> Unit)?,
     isStreaming: Boolean,
     onStop: () -> Unit,
-    enterToSend: Boolean,
+    // The message parked by the queue affordance while the current turn runs
+    // ("" = nothing queued). It is a real pending message, owned by the screen.
+    queuedText: () -> String,
+    onQueue: () -> Unit,
+    onUnqueue: () -> Unit,
     // The live activity state for the send slot while a turn runs. The slot
     // renders the orb instead of a stop glyph: the thing that is happening is
     // the control, and tapping it stops the turn.
@@ -1717,7 +1799,17 @@ private fun ComposerRow(
             onRemove = onRemoveAttachment,
             onRetry = onRetryAttachment
         )
+        // A queued message is a REAL pending message: parking it must never
+        // look like the text vanished. One quiet line while the turn runs,
+        // with an X that hands the draft straight back to the composer.
+        if (queuedText().isNotBlank() && isStreaming) {
+            QueuedDraftRow(text = queuedText(), onCancel = onUnqueue)
+        }
         val canSend = draftText().isNotBlank() || drafts.isNotEmpty()
+        // Queue-send is streaming-only and text-only: attachments still in
+        // flight cannot ride a queue (their upload state is real), so with
+        // staged drafts the queue affordance honestly stays away.
+        val canQueue = isStreaming && draftText().isNotBlank() && drafts.isEmpty()
         // uiverse Cobp dangerous-dolphin-47, materialized WITHOUT its
         // gradient: the one-pill composer as a calm bordered container — a
         // clean 1dp hairline (outlineVariant) wrapped on a 28dp pill.
@@ -1765,20 +1857,30 @@ private fun ComposerRow(
                         }
                     }
                 }
-                BasicTextField(
-                    value = draftText(),
-                    onValueChange = onDraftChange,
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(vertical = 12.dp),
-                    enabled = !isStreaming,
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(
-                        color = MaterialTheme.colorScheme.onSurface
-                    ),
-                    cursorBrush = SolidColor(MaterialTheme.colorScheme.onSurface),
-                    keyboardOptions = KeyboardOptions(imeAction = if (enterToSend) ImeAction.Send else ImeAction.Default),
-                    keyboardActions = KeyboardActions(onSend = { if (canSend) onSend(draftText().trim()) }),
-                    maxLines = 6,
+    // The field is LIVE during a turn. It used to be `enabled = !isStreaming`,
+    // and the effect was exactly opposite to native: while the AI was
+    // answering, the composer died — you could not write the next question or
+    // task. Every native AI app keeps the composer editable while an answer
+    // streams (a drafted next turn can queue; see the queue-send affordance).
+    // The send slot still shows the stop orb while a turn runs, so the field
+    // being live can never fire a second concurrent stream by accident.
+    // Enter is a NEWLINE, never a send (there is a dedicated send button), so
+    // multi-line messages type the way a phone expects. Sentence
+    // auto-capitalisation is what every native composer does.
+    BasicTextField(
+        value = draftText(),
+        onValueChange = onDraftChange,
+        modifier = Modifier
+            .weight(1f)
+            .padding(vertical = 12.dp),
+        textStyle = MaterialTheme.typography.bodyLarge.copy(
+            color = MaterialTheme.colorScheme.onSurface
+        ),
+        cursorBrush = SolidColor(MaterialTheme.colorScheme.onSurface),
+        keyboardOptions = KeyboardOptions(
+            capitalization = KeyboardCapitalization.Sentences
+        ),
+        maxLines = 6,
                     decorationBox = { inner ->
                         Box {
                             if (draftText().isEmpty()) {
@@ -1800,6 +1902,14 @@ private fun ComposerRow(
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                }
+                // While a turn runs the slot belongs to the stop orb — but a
+                // drafted next message must still be able to GO. The queue
+                // arrow sits left of the orb: it parks the draft and sends it
+                // the moment the reply lands. Both actions stay reachable:
+                // nothing is replaced, the field is simply never locked again.
+                if (canQueue) {
+                    GsQueueSendButton(onQueue = onQueue)
                 }
                 if (isStreaming) {
                     OrbStopControl(state = orbState ?: OrbState.BREATHING, onStop = onStop)
@@ -1917,6 +2027,116 @@ private fun GsSendButton(enabled: Boolean, onSend: () -> Unit) {
             tint = if (enabled) colors.appBackground else colors.textSecondary,
             modifier = Modifier.size(20.dp)
         )
+    }
+}
+
+/**
+ * The queue affordance: the send arrow with a small clock badge, shown while a
+ * turn runs and a next message is drafted (left of the stop orb). The arrow is
+ * the same shape as [GsSendButton] — same verb, later timing — and the clock
+ * badge is what distinguishes "this goes when the reply finishes" from "this
+ * goes now". Text-only by construction (the queue carries no attachments).
+ */
+@Composable
+private fun GsQueueSendButton(onQueue: () -> Unit) {
+    val colors = GsTheme.colors
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val reduced = SettingsStore.reduceAnimations || SettingsStore.reduceMotion
+    val pressSpec: AnimationSpec<Float> = chatPressSpec(reduced, pressed)
+    val press by animateFloatAsState(
+        targetValue = if (pressed) 1f else 0f,
+        animationSpec = pressSpec,
+        label = "queuePress"
+    )
+    Box(
+        modifier = Modifier
+            .padding(end = 4.dp, bottom = 2.dp)
+            .size(36.dp)
+            .graphicsLayer {
+                val scale = 1f - 0.04f * press
+                scaleX = scale
+                scaleY = scale
+                translationY = press * 1.dp.toPx()
+            }
+            .clip(CircleShape)
+            .background(colors.textPrimary)
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                role = Role.Button,
+                onClickLabel = "Send when the reply finishes"
+            ) { onQueue() }
+            .semantics { contentDescription = "Send when the reply finishes" },
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            GsIcons.ArrowUp,
+            contentDescription = null,
+            tint = colors.appBackground,
+            modifier = Modifier.size(20.dp)
+        )
+        // The "later" badge — the one pixel of difference from a live send.
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .size(14.dp)
+                .clip(CircleShape)
+                .background(colors.appBackground),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                GsIcons.Clock,
+                contentDescription = null,
+                tint = colors.textPrimary,
+                modifier = Modifier.size(10.dp)
+            )
+        }
+    }
+}
+
+/**
+ * The queued-message line above the composer: what is parked, that it goes
+ * when the reply lands, and an X that hands the text straight back. A parked
+ * message must never look like it vanished — this is the honest receipt.
+ */
+@Composable
+private fun QueuedDraftRow(text: String, onCancel: () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 6.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 10.dp, end = 2.dp, top = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                GsIcons.Clock,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(14.dp)
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = "Queued — sends when the reply finishes",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            IconButton(onClick = onCancel, modifier = Modifier.size(28.dp)) {
+                Icon(
+                    GsIcons.X,
+                    contentDescription = "Cancel queued message",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+        }
     }
 }
 

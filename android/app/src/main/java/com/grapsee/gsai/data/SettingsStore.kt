@@ -25,7 +25,6 @@ object SettingsStore {
     var themeMode by mutableStateOf("System"); private set
     var reduceAnimations by mutableStateOf(false); private set
     // Chat
-    var enterToSend by mutableStateOf(true); private set
     var autoTitleChats by mutableStateOf(true); private set
     var sendDoubleTap by mutableStateOf(false); private set
     // AI
@@ -74,7 +73,6 @@ object SettingsStore {
         // closes, every single time".
         themeMode = p.string(K.themeMode, themeMode)
         reduceAnimations = p.bool(K.reduceAnimations, reduceAnimations)
-        enterToSend = p.bool(K.enterToSend, enterToSend)
         autoTitleChats = p.bool(K.autoTitleChats, autoTitleChats)
         sendDoubleTap = p.bool(K.sendDoubleTap, sendDoubleTap)
         memory = p.bool(K.memory, memory)
@@ -110,7 +108,6 @@ object SettingsStore {
     private object K {
         const val themeMode = "settings.themeMode"
         const val reduceAnimations = "settings.reduceAnimations"
-        const val enterToSend = "settings.enterToSend"
         const val autoTitleChats = "settings.autoTitleChats"
         const val sendDoubleTap = "settings.sendDoubleTap"
         const val memory = "settings.memory"
@@ -170,7 +167,6 @@ object SettingsStore {
     fun updateThemeMode(v: String) { themeMode = v; put(K.themeMode, v) }
     fun updateReduceAnimations(v: Boolean) { reduceAnimations = v; put(K.reduceAnimations, v) }
     // Chat
-    fun updateEnterToSend(v: Boolean) { enterToSend = v; put(K.enterToSend, v) }
     fun updateAutoTitleChats(v: Boolean) { autoTitleChats = v; put(K.autoTitleChats, v) }
     fun updateSendDoubleTap(v: Boolean) { sendDoubleTap = v; put(K.sendDoubleTap, v) }
     // AI

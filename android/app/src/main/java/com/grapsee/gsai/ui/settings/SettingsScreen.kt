@@ -223,11 +223,6 @@ fun SettingsScreen(
                     onToggle = { expandedId = if (expandedId == "chat") null else "chat" }
                 ) {
                     SwitchRow(
-                        title = "Enter to send",
-                        checked = SettingsStore.enterToSend,
-                        onCheckedChange = { SettingsStore.updateEnterToSend(it) }
-                    )
-                    SwitchRow(
                         title = "Auto-title chats",
                         subtitle = "Name conversations from their first message",
                         checked = SettingsStore.autoTitleChats,
