@@ -17,7 +17,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -50,7 +50,7 @@ fun ArchivedChatsScreen(onBack: () -> Unit) {
     val archivedFlow = remember {
         runCatching { ServiceLocator.chat.archivedConversations() }.getOrElse { flowOf(emptyList()) }
     }
-    val archived by archivedFlow.collectAsState(initial = emptyList())
+    val archived by archivedFlow.collectAsStateWithLifecycle(initialValue = emptyList())
     var actionTarget by remember { mutableStateOf<ConversationEntity?>(null) }
 
     LaunchedEffect(Unit) {

@@ -15,7 +15,7 @@ import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -102,7 +102,7 @@ fun GsNavHost(modifier: Modifier = Modifier) {
     // once and navigate with a route the drawer already uses. Dropped silently
     // when the session gate is still at Auth — no signed-out navigation. The
     // New-chat shortcut resets the workspace instead of stacking a new one.
-    val shortcutRoute by ShortcutBus.route.collectAsState()
+    val shortcutRoute by ShortcutBus.route.collectAsStateWithLifecycle()
     LaunchedEffect(shortcutRoute) {
         val route = shortcutRoute ?: return@LaunchedEffect
         ShortcutBus.consume()

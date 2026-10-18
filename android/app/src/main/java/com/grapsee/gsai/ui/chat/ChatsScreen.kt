@@ -24,7 +24,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -71,7 +71,7 @@ import com.grapsee.gsai.ui.icons.GsIcons
 @Composable
 fun ChatsScreen(onNavigate: (String) -> Unit) {
     val conversationList = remember { conversationsFlow() }
-    val conversations by conversationList.collectAsState(initial = emptyList())
+    val conversations by conversationList.collectAsStateWithLifecycle(initialValue = emptyList())
     val offline by rememberDeviceOffline()
     val scope = rememberCoroutineScope()
     val view = LocalView.current

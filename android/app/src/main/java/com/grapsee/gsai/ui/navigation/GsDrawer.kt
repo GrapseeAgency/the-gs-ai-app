@@ -30,7 +30,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -112,7 +112,7 @@ fun GsDrawerContent(
     val storedEmail = AccountStore.email(context)
     val recents by remember {
         runCatching { ServiceLocator.chat.activeConversations() }.getOrElse { flowOf(emptyList()) }
-    }.collectAsState(initial = emptyList())
+    }.collectAsStateWithLifecycle(initialValue = emptyList())
 
     var actionTarget by remember { mutableStateOf<ConversationEntity?>(null) }
     var accountSheetOpen by remember { mutableStateOf(false) }

@@ -145,6 +145,20 @@ fun ThinkingOrb(
         }
         for (di in 0 until buffer.dotCount) {
             val i = buffer.drawOrder[di]
+            // perf-smooth-5: CULL WHAT CANNOT BE SEEN BEFORE BUILDING IT.
+            //
+            // The engine emits the full point cloud every frame, including the
+            // dots the depth/size curve has already faded to nothing. A dot at
+            // alpha <= 0.004 or a sub-pixel radius contributes no pixels but
+            // still costs a drawCircle command, three divisions, a round and an
+            // Offset construction — per dot, per frame, at up to 120Hz. The
+            // globe and rubik modes emit several hundred dots, most of them on
+            // the far hemisphere. Skipping them is free: the result is
+            // pixel-identical because they drew nothing.
+            val alpha = buffer.pAlpha[i]
+            if (alpha <= 0.004) continue
+            val radius = (buffer.pr[i] * density).toFloat()
+            if (radius < 0.05f) continue
             val w = buffer.pWhite[i].coerceIn(0.0, 1.0)
             val gray = (if (dark) 1 - w else w)
             val g = (gray * 255.0).roundToInt().coerceIn(0, 255)
@@ -153,9 +167,9 @@ fun ThinkingOrb(
                     red = g / 255f,
                     green = g / 255f,
                     blue = g / 255f,
-                    alpha = buffer.pAlpha[i].coerceIn(0.0, 1.0).toFloat()
+                    alpha = alpha.coerceIn(0.0, 1.0).toFloat()
                 ),
-                radius = (buffer.pr[i] * density).toFloat(),
+                radius = radius,
                 center = Offset(
                     (buffer.px[i] * density).toFloat(),
                     (buffer.py[i] * density).toFloat()
