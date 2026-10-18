@@ -188,6 +188,18 @@ jobs:
           echo "  dex count: $(unzip -l "$APK" | grep -c 'classes.*\.dex')"
           echo "gates ok"
 
+      # A DISPATCHED RUN SHOULD PRODUCE SOMETHING THE OPERATOR CAN INSTALL.
+      # Before this step only a tag push published an APK, so a manual run that
+      # went green left the artifact on the runner and nowhere else — which is
+      # how "the build is green" and "there is nothing to install" coexisted.
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gs-ai-release-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
+          retention-days: 30
+          if-no-files-found: error
+
       - name: Attach to release
         if: startsWith(github.ref, 'refs/tags/')
         working-directory: android
