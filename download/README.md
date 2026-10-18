@@ -1,8 +1,54 @@
 Here are all the generated files.
 
-## Latest release: v0.71.3
+## Latest release: v0.77.0
 
     file    GS-AI-App.apk
+    size    64356235 bytes
+    sha256  9afc99c16f0e1f97fc10e7417a5ffe29598b5900d6cb465b70e60578f3af8385
+
+### v0.77.0 — the first APK that is actually a RELEASE build
+
+Every APK before this one was a debug build. `android-release.yml` ran
+`:app:assembleDebug` and uploaded `app-debug.apk` under the name GS-AI-App.apk,
+so what you installed carried `android:debuggable="true"`. On Android that
+means ART never AOT-compiles anything (interpreted + JIT, every process start,
+forever), Compose keeps its debug runtime checks, CheckJNI is on, and R8 never
+runs. That is why none of the previous smoothness work was felt: the code was
+fine, the build was throwing it away.
+
+Verify it yourself — `aapt2 dump badging GS-AI-App.apk | grep debuggable`
+prints nothing on this APK, and it did on every one before it.
+
+| | v0.76.0 (debug) | v0.77.0 (release) |
+|---|---|---|
+| dex files | 18 | **1** |
+| classes.dex | 39 MB | **5.3 MB** |
+| APK | 80 MB | **62 MB** |
+| debuggable | true | **false** |
+| `assets/dexopt/baseline.prof` | absent | **present** |
+
+Also in this build:
+
+1. **Local inference no longer runs on the main thread.** `GsNative.chat()` is a
+   blocking JNI call that runs llama.cpp to completion. It was reached on
+   `Dispatchers.Main.immediate`, so an on-device turn froze the UI for the whole
+   generation. Now on a dedicated thread at `THREAD_PRIORITY_BACKGROUND`, so the
+   inference pool yields to RenderThread whenever a frame is due.
+2. **The message fade-in no longer replays on every scroll.** `messageAppear`
+   was `Modifier.composed {}` per row, and its `remember` died with the row, so
+   scrolling back through history re-animated whatever entered the viewport.
+3. **Transcript images are cached.** They had no cache at all and were
+   re-downloaded and re-decoded every time a row re-entered the viewport, on the
+   fling path, behind an 8-second timeout.
+4. **Lifecycle-aware state collection** at all six collection sites, and the
+   thinking orb no longer builds draw calls for dots it has already faded out.
+
+If anything crashes, send the stack trace: obfuscation is deliberately off, so
+class and method names are readable.
+
+## Previous release: v0.71.3
+
+    file    GS-AI-App.apk (superseded)
     size    84104873 bytes
     sha256  07ecf81df4fdd351b8686cbc82a9196d63d4aab1c9cce7d9e488cab6eed279ac
 
