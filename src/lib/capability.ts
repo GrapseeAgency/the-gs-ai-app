@@ -125,6 +125,16 @@ const WEATHER_RE =
   /\bweather\b|\bforecast\b|\btemperature\b|\brain(?:ing|fall)?\s+(?:today|tomorrow|now|right\s+now|in\b)|\bis\s+it\s+(?:raining|sunny|snowing|hot|cold)\s*(?:there|today|now|outside)?\b/i
 
 /**
+ * Bengali weather vocabulary — the forcing half of the same rule. `\b` is
+ * ASCII-only, so the boundaries are explicit Unicode-aware lookarounds (the
+ * same lesson as the Bengali tokenizer: a naive \b never fires).
+ */
+const BN_WEATHER_RE = new RegExp(
+  String.raw`(?<![\p{L}\p{M}\d])(?:আবহাওয়া|আবহাওয়ার|আবহাওয়ায়|আবহাওয়াজ|আবহাওয়াটা|আবহাওয়াটির|তাপমাত্রা|তাপমাত্রার|তাপমাত্রাটা|বৃষ্টি|বরফ|পূর্বাভাস|পূর্বানুমান)(?![\p{L}\p{M}\d])`,
+  'iu'
+)
+
+/**
  * Baseline C26 (audit [9] class) — BARE, anchorless weather register questions.
  * "what's the weather?" has NO location to retrieve against: the forced search
  * burned 8 sources on worldwide stories and the answer still had to ask
@@ -142,7 +152,73 @@ const WEATHER_BARE_RES: RegExp[] = [
 
 /** Deterministic: a bare anchorless weather register question — never grounds. */
 export function isBareWeatherRegister(text: string): boolean {
-  return WEATHER_BARE_RES.some((re) => re.test(text.trim()))
+  return WEATHER_BARE_RES.some((re) => re.test(text.trim())) || isBareWeatherRegisterBn(text)
+}
+
+// ---------------------------------------------------------------------------
+// Bengali bare-weather veto — the C26 rule in Bengali structure.
+//
+// The English veto is a shape: [fillers] [time words] weather-word
+// [question tail] — and crucially NOTHING ELSE, because anything else is a
+// location/place word, and a place IS the anchor. "আজকের আবহাওয়া কেমন?"
+// (today's weather?) has no place → CHAT. "ঢাকায় আবহাওয়া কেমন?" has ঢাকায়
+// → WEB. Token-based rather than one giant regex because Bengali questions
+// freely swap time-first/head-first order and glue words without spaces
+// ("আবহাওয়াকেমন?").
+// ---------------------------------------------------------------------------
+
+const BN_TIME_WORDS = new Set([
+  'আজ', 'আজকে', 'আজকার', 'আজকের', 'গতকাল', 'এখন', 'এখনের', 'এখানে',
+  'সকালে', 'বিকেলে', 'রাতে', 'ভোরে',
+])
+const BN_FILLERS = new Set(['ওকে', 'আচ্ছা', 'তাহলে', 'তো', 'হ্যালো', 'হাই', 'শুনি', 'দেখি'])
+const BN_WEATHER_HEADS = new Set([
+  'আবহাওয়া', 'আবহাওয়ার', 'আবহাওয়ায়', 'আবহাওয়াজ', 'আবহাওয়াটা', 'আবহাওয়াটির',
+  'তাপমাত্রা', 'তাপমাত্রার', 'তাপমাত্রাটা',
+  'বৃষ্টি', 'বরফ', 'পূর্বাভাস', 'পূর্বানুমান',
+])
+/** Question tail/politeness — everything allowed AFTER the weather head. */
+const BN_TAILS = new Set([
+  'কেমন', 'কি', 'কেমনা', 'আছে', 'আচ্ছে', 'হচ্ছে', 'হবে', 'থাকবে', 'দিচ্ছে',
+  'ভালো', 'খারাপ', 'কিনা', 'না', 'রে', 'বস', 'ভাই', 'আপু', 'টা', 'টি',
+])
+
+function isBareWeatherRegisterBn(text: string): boolean {
+  const tokens = text
+    .trim()
+    .replace(/[?.!।،,]+/g, ' ')
+    .split(/\s+/)
+    .filter((t) => t.length > 0)
+  if (tokens.length === 0) return false
+  let i = 0
+  while (i < tokens.length && (BN_TIME_WORDS.has(tokens[i]) || BN_FILLERS.has(tokens[i]))) i++
+  if (i >= tokens.length) return false // no weather head at all — not this veto's business
+  const head = tokens[i]
+  if (!BN_WEATHER_HEADS.has(head)) {
+    // Glued single token ("আবহাওয়াকেমন?") — strip the head, the rest must
+    // be pure question tail.
+    if (tokens.length !== 1) return false
+    for (const h of BN_WEATHER_HEADS) {
+      if (!head.startsWith(h)) continue
+      const rest = head.slice(h.length)
+      return rest.length === 0 || BN_TAILS.has(rest)
+    }
+    return false
+  }
+  // After the head only question tails may follow — plus at most ONE extra
+  // time/filler word in ANY position ("আবহাওয়া কেমন আজকে?" /
+  // "এখন আবহাওয়া কেমন?"). Anything else is a place → anchored.
+  var timeTail = 0
+  for (let j = i + 1; j < tokens.length; j++) {
+    const t = tokens[j]
+    if (BN_TAILS.has(t)) continue
+    if (timeTail < 1 && (BN_TIME_WORDS.has(t) || BN_FILLERS.has(t))) {
+      timeTail++
+      continue
+    }
+    return false
+  }
+  return true
 }
 
 /**
@@ -332,10 +408,11 @@ export function decideCapability(input: CapabilityInput): CapabilityDecision {
   }
 
   // 4) WEATHER — forced freshness retrieval with a day window. A BARE,
-  // anchorless register question ("what's the weather?") is NOT a grounding
-  // request (baseline C26: no location → worldwide story pile → still asks
-  // "which location?") — those stay CHAT; anchored weather turns search.
-  if (text.length > 0 && WEATHER_RE.test(text) && !isBareWeatherRegister(text)) {
+  // anchorless register question ("what's the weather?" / "আজকের আবহাওয়া
+  // কেমন?") is NOT a grounding request (baseline C26: no location →
+  // worldwide story pile → still asks "which location?") — those stay CHAT;
+  // anchored weather turns search (English + Bengali).
+  if (text.length > 0 && (WEATHER_RE.test(text) || BN_WEATHER_RE.test(text)) && !isBareWeatherRegister(text)) {
     return base({
       capability: 'WEB',
       trigger: 'weather',
