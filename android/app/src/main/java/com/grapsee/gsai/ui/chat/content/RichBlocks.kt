@@ -205,12 +205,33 @@ private fun BlockView(
         is Block.BulletList -> BulletListBlock(block, selectable = !isStreaming, citationUrls = citationUrls)
         is Block.OrderedList -> OrderedListBlock(block, selectable = !isStreaming, citationUrls = citationUrls)
         is Block.BlockQuote -> BlockQuoteView(block, selectable = !isStreaming, citationUrls = citationUrls)
-        is Block.CodeBlock -> CodeBlockCard(
-            language = block.language,
-            code = block.code,
-            open = block.open || isStreaming,
-            onCopyCode = onCopyCode
-        )
+        is Block.CodeBlock -> {
+            // A plain fence may secretly be a picture: ASCII bar art or a
+            // text data table. When it parses, offer the native views beside
+            // the raw code instead of showing monospace "art".
+            val visual = remember(block.code) {
+                if (block.open || isStreaming) null
+                else {
+                    val lang = block.language?.lowercase()
+                    if (lang.isNullOrEmpty() || lang in setOf("text", "txt", "plain", "ascii", "art")) visualFromAscii(block.code)
+                    else null
+                }
+            }
+            if (visual != null) {
+                SmartFenceBlock(
+                    visual = visual,
+                    code = block,
+                    onCopyCode = onCopyCode
+                )
+            } else {
+                CodeBlockCard(
+                    language = block.language,
+                    code = block.code,
+                    open = block.open || isStreaming,
+                    onCopyCode = onCopyCode
+                )
+            }
+        }
         is Block.TableBlock -> TableBlockView(block, selectable = !isStreaming, citationUrls = citationUrls)
         is Block.Divider -> DividerBlock()
         is Block.MathBlock -> MathBlockView(block)
@@ -520,6 +541,28 @@ private fun TableBlockView(block: Block.TableBlock, selectable: Boolean, citatio
     val headers = remember(block.headers, theme) { block.headers.map { spansToAnnotatedString(it, theme) } }
     val rows = remember(block.rows, theme) { block.rows.map { row -> row.map { spansToAnnotatedString(it, theme) } } }
     val columns = maxOf(headers.size, block.aligns.size, 1)
+
+    // A markdown table with a readable numeric column can also be a chart —
+    // one tap, no waiting on the model to re-emit anything.
+    val chart = remember(block) { chartFromTableBlock(block) }
+    var showChart by remember(block) { mutableStateOf(false) }
+
+    if (chart != null) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(bottom = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            FenceTab("Table", !showChart) { showChart = false }
+            FenceTab("Chart", showChart) { showChart = true }
+        }
+    }
+    if (showChart && chart != null) {
+        WidgetView(Widget.Chart(chart))
+        return
+    }
 
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
         val minCell = 96.dp
@@ -1029,4 +1072,72 @@ private fun ToolResultBlockView(block: Block.ToolResultBlock) {
             }
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Smart fence — a plain code block that parses as a chart and/or a data table
+// gets native views beside the raw code. Default: the richest parse; the user
+// can always fall back to the exact bytes the model wrote.
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun SmartFenceBlock(
+    visual: AsciiVisual,
+    code: Block.CodeBlock,
+    onCopyCode: (String) -> Unit
+) {
+    var mode by remember(code.code) {
+        mutableStateOf(
+            when {
+                visual.chart != null -> "chart"
+                visual.table != null -> "table"
+                else -> "code"
+            }
+        )
+    }
+    Column {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(bottom = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (visual.chart != null) {
+                FenceTab("Chart", mode == "chart") { mode = "chart" }
+            }
+            if (visual.table != null) {
+                FenceTab("Table", mode == "table") { mode = "table" }
+            }
+            FenceTab("Code", mode == "code") { mode = "code" }
+        }
+        when (mode) {
+            "chart" -> visual.chart?.let { WidgetView(Widget.Chart(it)) }
+            "table" -> visual.table?.let { WidgetView(Widget.Table(it)) }
+            else -> CodeBlockCard(
+                language = code.language,
+                code = code.code,
+                open = false,
+                onCopyCode = onCopyCode
+            )
+        }
+    }
+}
+
+@Composable
+private fun FenceTab(label: String, selected: Boolean, onClick: () -> Unit) {
+    val accent = MaterialTheme.colorScheme.primary
+    Text(
+        text = label,
+        style = MaterialTheme.typography.labelMedium,
+        color = if (selected) accent else MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(
+                if (selected) accent.copy(alpha = 0.12f)
+                else MaterialTheme.colorScheme.surfaceContainerHigh
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 5.dp)
+    )
 }

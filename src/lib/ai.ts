@@ -73,7 +73,13 @@ Available kinds:
 - progress: {"title":"...","items":[{"label":"...","percent":0-100}]}
 - timeline: {"title":"...","entries":[{"date":"...","title":"...","detail":"..."}]}
 
-Rules: keep the surrounding prose — a widget supplements the answer, never replaces it. A widget may only show data your answer already states; never put new claims inside a widget. Prefer 1-3 widgets per answer and only when they genuinely help. If you are unsure the JSON is valid, write prose instead.`
+When the user asks for a chart, graph, plot, diagram, table or any visual ("make a chart", "visualise this", "surprise me visually"), you MUST answer with at least one widget. You CAN create visualizations in this chat — never say you cannot, never answer a visual request with prose only.
+- If the answer states the data, chart exactly that.
+- If the user asks for a visual with no data in play (e.g. "surprise me"), build an illustrative dataset yourself, keep it plausible and small, and say plainly in the prose that the numbers are illustrative, not measured.
+
+Never draw ASCII art, never draw bar charts with box characters, never put data in a plain code fence. Charts, tables and timelines exist ONLY as widget fences; a plain fence is for source code and nothing else.
+
+Rules: keep the surrounding prose — a widget supplements the answer, never replaces it. Prefer 1-3 widgets per answer and only when they genuinely help. If you are unsure the JSON is valid, write prose instead.`
 
 /**
  * PHASE 7 vision grounding, REWRITTEN by the operator's 2026-10-14 directive

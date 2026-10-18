@@ -70,6 +70,8 @@ data class ChartWidget(
     val type: String = "line", // line | area | bar | pie
     val title: String = "",
     val unit: String = "",
+    /** Bar/pie category names; empty falls back to the x-index labels. */
+    val labels: List<String> = emptyList(),
     val series: List<ChartSeries> = emptyList()
 )
 
@@ -274,6 +276,16 @@ fun WidgetBlockView(block: Block.WidgetBlock, streaming: Boolean) {
         WidgetFallback(block)
         return
     }
+    WidgetView(widget)
+}
+
+/**
+ * Render an already-validated widget — the ASCII/markdown-table conversion
+ * paths (AsciiVisual.kt) reuse the same views so a plain-fence chart and a
+ * GENUI chart are visually indistinguishable.
+ */
+@Composable
+fun WidgetView(widget: Widget) {
     when (widget) {
         is Widget.Chart -> ChartWidgetView(widget.w)
         is Widget.Stat -> StatWidgetView(widget.w)
@@ -375,7 +387,10 @@ private fun BarChart(w: ChartWidget) {
     val progress by animateFloatAsState(if (animate) 1f else 0f, tween(700), label = "chart")
     val colors = w.series.indices.map { seriesColor(it) }
     val gridColor = GsTheme.colors.divider
-    val labels = w.series.first().data.map { it.getOrElse(0) { 0f }.toInt().toString() }
+    val labels = remember(w.series, w.labels) {
+        if (w.labels.size >= w.series.first().data.size) w.labels
+        else w.series.first().data.map { it.getOrElse(0) { 0f }.toInt().toString() }
+    }
     val maxV = w.series.flatMap { s -> s.data.map { it.getOrElse(1) { 0f } } }.maxOrNull()?.takeIf { it > 0f } ?: 1f
     Canvas(Modifier.fillMaxWidth().height(180.dp).padding(top = 8.dp)) {
         val groups = labels.size.coerceAtLeast(1)
