@@ -136,6 +136,8 @@ const ENGINE_LABELS: Record<string, string> = {
   gutenberg: 'Gutenberg',
   arxiv: 'arXiv',
   crossref: 'Crossref',
+  // Only ever present when TREG_TOKEN is configured (see lib/search/engines.ts).
+  treg: 'WebAccess',
 }
 
 type ClarifyChoices = { question: string; options: { id: string; label: string }[] }
