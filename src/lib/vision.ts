@@ -66,11 +66,159 @@ export type PreparedVisionImage = {
   dataUrl: string
   width: number
   height: number
+  /**
+   * `full` = the whole frame, bounded to VISION_MAX_EDGE.
+   * `detail` = a native-resolution crop of the densest region of the SAME
+   * frame, sent after it and labelled in the message.
+   */
+  role: 'full' | 'detail'
 }
 
+export type DetailRegion = { left: number; top: number; width: number; height: number }
+
 export type PrepareResult =
-  | { ok: true; image: PreparedVisionImage }
+  | { ok: true; image: PreparedVisionImage; detail: PreparedVisionImage | null }
   | { ok: false; failure: VisionImageFailure }
+
+/**
+ * HARD-PICTURE POLICY (operator 2026-10-18): "general to hard" images.
+ *
+ * The full frame is bounded to 2048 px for token economy. A 12 MP phone photo
+ * of a product box is therefore delivered at roughly a quarter of its linear
+ * resolution, and a label that was perfectly legible in the capture becomes a
+ * few dozen pixels of Bengali/Arabic/CJK — the model then guesses, confidently
+ * and wrongly ("নাপ্রক্স" for "নাইটকপ").
+ *
+ * So when the stored image is much larger than the provider copy, we also send
+ * ONE crop of the densest region at native resolution. Text is the highest
+ * frequency content in a photo, so the energy map lands on the label, the
+ * document, the sign — exactly the part that was destroyed by downscaling.
+ *
+ * The full frame still travels FIRST, so context is never lost, and the crop is
+ * labelled in the message so the model reads it as a detail of the same image
+ * rather than as a second picture. Cost: ~1 extra image per hard picture, only
+ * when there is real detail to recover.
+ */
+export const VISION_DETAIL_MIN_SOURCE_EDGE = 2600
+export const VISION_DETAIL_MAX_EDGE = 2048
+export const VISION_DETAIL_CROP_NOTE =
+  'Detail crop of the same image at native resolution (same photo, zoomed).'
+
+/** Cells in the density map. 48x48 is enough to find a label, cheap to compute. */
+const DETAIL_GRID = 48
+
+/**
+ * Where the detail is, in the SOURCE image's own pixel space (no rotation
+ * applied — the caller crops in that same space, then orients the crop).
+ *
+ * Returns null when the image is not being meaningfully downscaled, or when
+ * the dense region covers too much / too little of the frame to be a crop
+ * worth sending.
+ */
+export async function planDetailRegion(bytes: Buffer): Promise<DetailRegion | null> {
+  let meta: sharp.Metadata
+  try {
+    meta = await sharp(bytes).metadata()
+  } catch {
+    return null
+  }
+  const w = meta.width ?? 0
+  const h = meta.height ?? 0
+  if (w <= 0 || h <= 0) return null
+  if (Math.max(w, h) < VISION_DETAIL_MIN_SOURCE_EDGE) return null
+
+  let raw: Buffer
+  try {
+    raw = await sharp(bytes).greyscale().resize(DETAIL_GRID, DETAIL_GRID, { fit: 'fill' }).raw().toBuffer()
+  } catch {
+    return null
+  }
+  if (raw.length < DETAIL_GRID * DETAIL_GRID) return null
+
+  // Local gradient magnitude: |dx| + |dy|. Text edges light this up; sky and
+  // flat packaging do not.
+  const energy = new Float64Array(DETAIL_GRID * DETAIL_GRID)
+  let total = 0
+  for (let y = 1; y < DETAIL_GRID; y++) {
+    for (let x = 1; x < DETAIL_GRID; x++) {
+      const i = y * DETAIL_GRID + x
+      const e = Math.abs(raw[i] - raw[i - 1]) + Math.abs(raw[i] - raw[i - DETAIL_GRID])
+      energy[i] = e
+      total += e
+    }
+  }
+  if (total <= 0) return null
+
+  // Bounding box of the cells that carry the bulk of the detail energy.
+  //
+  // NOT a fixed top-N: in a photo that is mostly flat packaging, most cells
+  // have ZERO energy, and a top-20% cut would drag the box across the whole
+  // frame (the zeros sort arbitrarily among themselves). Walking the sorted
+  // cells until 85% of the total energy is covered keeps the box on the text.
+  const order = Array.from({ length: DETAIL_GRID * DETAIL_GRID }, (_, i) => i).sort(
+    (a, b) => energy[b] - energy[a]
+  )
+  const target = total * 0.85
+  let acc = 0
+  let x0 = DETAIL_GRID
+  let y0 = DETAIL_GRID
+  let x1 = -1
+  let y1 = -1
+  for (let k = 0; k < order.length; k++) {
+    const i = order[k]
+    const e = energy[i]
+    if (e <= 0) break
+    const x = i % DETAIL_GRID
+    const y = (i / DETAIL_GRID) | 0
+    if (x < x0) x0 = x
+    if (x > x1) x1 = x
+    if (y < y0) y0 = y
+    if (y > y1) y1 = y
+    acc += e
+    if (acc >= target) break
+  }
+  if (x1 < x0 || y1 < y0) return null
+
+  // Pad the box so the label is not cut at its own edge.
+  const padX = Math.max(2, Math.round((x1 - x0 + 1) * 0.15))
+  const padY = Math.max(2, Math.round((y1 - y0 + 1) * 0.15))
+  const cx0 = Math.max(0, x0 - padX)
+  const cy0 = Math.max(0, y0 - padY)
+  const cx1 = Math.min(DETAIL_GRID - 1, x1 + padX)
+  const cy1 = Math.min(DETAIL_GRID - 1, y1 + padY)
+
+  const left = Math.floor((cx0 / DETAIL_GRID) * w)
+  const top = Math.floor((cy0 / DETAIL_GRID) * h)
+  const right = Math.ceil(((cx1 + 1) / DETAIL_GRID) * w)
+  const bottom = Math.ceil(((cy1 + 1) / DETAIL_GRID) * h)
+  const width = Math.min(w - left, right - left)
+  const height = Math.min(h - top, bottom - top)
+  if (width <= 0 || height <= 0) return null
+
+  // A label is SMALL relative to a product photo — that is the whole point.
+  // The floor is only there to reject sensor noise, so it is on absolute size,
+  // not on area share. The ceiling rejects "the crop is the whole frame".
+  if (width < 128 || height < 128) return null
+  const ratio = (width * height) / (w * h)
+  if (ratio > 0.9) return null
+
+  return { left, top, width, height }
+}
+
+/** Crop in the source's own pixel space, THEN orient — sharp's pipeline
+ *  applies rotate before extract, which would invalidate these coordinates. */
+async function buildDetailImage(bytes: Buffer, region: DetailRegion): Promise<Buffer | null> {
+  try {
+    const cropped = await sharp(bytes).extract(region).toBuffer()
+    return await sharp(cropped)
+      .rotate()
+      .resize({ width: VISION_DETAIL_MAX_EDGE, height: VISION_DETAIL_MAX_EDGE, fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: VISION_JPEG_QUALITY })
+      .toBuffer()
+  } catch {
+    return null
+  }
+}
 
 /** One honest, user-facing sentence per failure class — no storage paths, no jargon. */
 export function visionFailureMessage(f: VisionImageFailure): string {
@@ -91,7 +239,10 @@ export function visionFailureMessage(f: VisionImageFailure): string {
  * GIF/HEIC/HEIF are transcoded to JPEG (animated GIF → first frame) because
  * the provider rejects GIF natively (400/1210) and HEIC support varies.
  */
-export async function prepareVisionImage(att: Attachment): Promise<PrepareResult> {
+export async function prepareVisionImage(
+  att: Attachment,
+  opts: { withDetail?: boolean } = {}
+): Promise<PrepareResult> {
   const base = { attachmentId: att.id, displayName: att.displayName }
 
   let bytes: Buffer
@@ -120,6 +271,27 @@ export async function prepareVisionImage(att: Attachment): Promise<PrepareResult
       .jpeg({ quality: VISION_JPEG_QUALITY })
       .toBuffer()
     const outMeta = await sharp(normalized).metadata()
+
+    // Detail crop — best effort, never fatal. If anything about it fails the
+    // turn proceeds exactly as before, with the full frame only.
+    let detail: PreparedVisionImage | null = null
+    if (opts.withDetail) {
+      const region = await planDetailRegion(bytes)
+      if (region) {
+        const detailBytes = await buildDetailImage(bytes, region)
+        if (detailBytes) {
+          const detailMeta = await sharp(detailBytes).metadata()
+          detail = {
+            attachmentId: att.id,
+            dataUrl: `data:image/jpeg;base64,${detailBytes.toString('base64')}`,
+            width: detailMeta.width ?? 0,
+            height: detailMeta.height ?? 0,
+            role: 'detail',
+          }
+        }
+      }
+    }
+
     return {
       ok: true,
       image: {
@@ -127,7 +299,9 @@ export async function prepareVisionImage(att: Attachment): Promise<PrepareResult
         dataUrl: `data:image/jpeg;base64,${normalized.toString('base64')}`,
         width: outMeta.width ?? 0,
         height: outMeta.height ?? 0,
+        role: 'full',
       },
+      detail,
     }
   } catch {
     // Decoded metadata but re-encode failed — treat as corrupt, honestly.

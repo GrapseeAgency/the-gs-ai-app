@@ -109,6 +109,7 @@ import {
   isProviderImageRejection,
   VISION_HISTORY_IMAGE_TURNS,
   VISION_MAX_IMAGES_PER_REQUEST,
+  VISION_DETAIL_CROP_NOTE,
   type PreparedVisionImage,
   type VisionImageFailure,
 } from '@/lib/vision'
@@ -660,9 +661,16 @@ export async function prepareTurn(
 
   if (imageAttachments.length > 0) {
     for (const att of imageAttachments) {
-      const result = await prepareVisionImage(att)
-      if (result.ok) prep.visionPrepared.push(result.image)
-      else prep.visionFailures.push(result.failure)
+      // withDetail: the CURRENT turn's images get a native-resolution crop of
+      // their densest region (see VISION_DETAIL_* in vision.ts) — that is what
+      // makes small printed text legible to the model instead of mush.
+      const result = await prepareVisionImage(att, { withDetail: true })
+      if (result.ok) {
+        prep.visionPrepared.push(result.image)
+        if (result.detail) prep.visionPrepared.push(result.detail)
+      } else {
+        prep.visionFailures.push(result.failure)
+      }
     }
     if (prep.visionPrepared.length === 0) {
       prep.allImagesFailed = true
@@ -1183,7 +1191,16 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
           ? [{ type: 'text' as const, text: `${presentEvidence.join('\n\n')}\n\n${TOOL_RESULT_END_MARKER}` }]
           : []),
         { type: 'text', text: finalText },
-        ...prep.visionPrepared.map((p) => ({ type: 'image_url' as const, image_url: { url: p.dataUrl } })),
+        // Full frame first, then its detail crop labelled as the same photo —
+        // never as a second image the user sent.
+        ...prep.visionPrepared.flatMap((p): VisionContentPart[] =>
+          p.role === 'detail'
+            ? [
+                { type: 'text', text: VISION_DETAIL_CROP_NOTE },
+                { type: 'image_url', image_url: { url: p.dataUrl } },
+              ]
+            : [{ type: 'image_url', image_url: { url: p.dataUrl } }]
+        ),
       ]
       visionContext.push({ role: 'user', content: visionUserParts })
       const reuseSources = turn.kind === 'reuse' ? turn.sources : []
