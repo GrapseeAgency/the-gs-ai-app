@@ -144,7 +144,7 @@ Lite, Wikipedia, the scholarly/book APIs):
 
 | Env | Effect |
 |---|---|
-| `SEARXNG_URL` | Adds the self-hosted SearXNG instance, first in every general set. |
+| `SEARXNG_URL` | Adds the self-hosted SearXNG instance, first in every general set. Ready-made deployment in `deploy/searxng/` — no API key. |
 | `BRAVE_API_KEY` | Adds the Brave Search API (free tier: 2,000 queries/month), before treg in every general/news set. |
 | `TREG_TOKEN` | Adds treg WebAccess (`POST https://treg.to/call/treg.web.search`), last in every general/news set. |
 | `TREG_MAX_COST` | Per-call ceiling sent as `X-Treg-Route-Max-Cost` (default `0.02` USD). |
@@ -197,3 +197,48 @@ decoy pages) and therefore ranks ahead of treg. Its adapter is **single-flight**
 the free tier allows 1 request/second while the aggregator fans out up to three
 queries, so a second concurrent call resolves empty immediately instead of
 burning a 429, and a 429 is returned as empty rather than thrown.
+
+### The free path: self-hosted SearXNG (no key, runs on your own box)
+
+A key is the *convenient* answer, not the only one. `deploy/searxng/` is a
+one-container SearXNG that speaks the same JSON API the `searxng` adapter
+already expects:
+
+```bash
+cd deploy/searxng && docker compose up -d
+# in the app's environment:
+SEARXNG_URL=http://127.0.0.1:8888
+```
+
+Measured on 2026-10-18 against a real container (`searxng/searxng:latest`) from
+the same datacenter IP that could not reach anything key-less above:
+
+| Query | Through the app's adapter | First results |
+|---|---|---|
+| `নাইটকপ ৫০০` (Bengali) | 8 rows in 1256 ms | Nytkof Syrup, Beacon Product List … |
+| `best budget laptop 2026` | 8 rows in 1926 ms | PCMag, RTINGS, Tom's Guide … |
+| `दिल्ली मौसम` (Hindi) | 8 rows in 1439 ms | AccuWeather, IMD, Aaj Tak … |
+
+First in every general engine set, so it is tried before Bing HTML, and an
+unset `SEARXNG_URL` removes it byte-for-byte. Two honest caveats:
+
+* inside the container only **one** upstream answered — `google cse`. `brave`
+  and `duckduckgo` are logged as unresponsive (captcha) in the container log,
+  i.e. self-hosting removes the *public instance's* quota problem but not the
+  upstream gating. Treat it as one engine with a nicer API, not as many engines.
+* `language=` is derived from the query's script (`searxLanguage()` in
+  `src/lib/search/tokens.ts`), because SearXNG **filters** by language rather
+  than falling back. Measured on the same query: `language=en` → **0 results**,
+  `language=all` → **0 results**, no language → **0 results**, `language=bn` →
+  **20 results**. The hardcoded `en` this replaces would have made the
+  recommended engine return nothing for the app's first language.
+
+### Why browser-use is not the answer here
+
+`browser-use` (118k stars, Python, drives a real Chromium through an LLM) is
+often suggested as "free web search", but it is a different category of tool:
+it *needs* an LLM API key of its own, takes seconds per task, is
+non-deterministic, and returns prose rather than a list of URLs to cite. It is
+built for "log in and book this ticket" tasks, not for the 300-millisecond
+structured lookups a chat turn makes three of at once. SearXNG plus the
+key-less set covers the use case at a fraction of the cost and complexity.

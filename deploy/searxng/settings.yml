@@ -1,0 +1,29 @@
+# SearXNG settings for gsai.
+#
+# The ONLY non-default line that matters is `formats` — SearXNG ships with
+# html-only output, so `/search?format=json` returns 403 until `json` is listed.
+# That is the #1 reason "self-hosted SearXNG returns nothing" in bug reports.
+use_default_settings: true
+
+general:
+  instance_name: "gsai search"
+
+search:
+  safe_search: 1
+  autocomplete: ""
+  # html for humans, json for src/lib/search/engines.ts
+  formats:
+    - html
+    - json
+
+server:
+  # No rate limiter: the only client is the app on localhost. Leaving it on
+  # makes SearXNG answer 429 to the app's own burst of three parallel queries.
+  limiter: false
+  public_instance: false
+  image_proxy: false
+  secret_key: "change-me-this-only-guards-csrf"
+  method: "GET"
+
+ui:
+  static_use_hash: true

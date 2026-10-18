@@ -72,3 +72,89 @@ export function overlapRatio(queryTokens: Set<string>, titleTokens: Set<string>)
   for (const w of queryTokens) if (titleTokens.has(w)) hits += 1
   return hits / queryTokens.size
 }
+
+// ---------------------------------------------------------------------------
+// SCRIPT -> LANGUAGE CODE
+//
+// SearXNG does not fall back when the language does not match: it FILTERS. So
+// the hardcoded `language: 'en'` in the searxng adapter was not a harmless
+// default, it was a result killer. Measured against a real container
+// (2026-10-18, searxng/searxng:latest, single upstream engine available):
+//
+//   q = "নাইটকপ ৫০০"   language=en -> 0 results
+//                      language=all -> 0 results
+//                      (no language) -> 0 results
+//                      language=bn  -> 20 results
+//
+// The app's first language returned nothing from the one engine being
+// recommended as the free replacement. Hence: derive the code from the query.
+// ---------------------------------------------------------------------------
+
+export type Script = 'latin' | 'bengali' | 'devanagari' | 'arabic' | 'cyrillic' | 'han' | 'other'
+
+const SCRIPT_RANGES: { script: Script; re: RegExp }[] = [
+  { script: 'bengali', re: /[\u0980-\u09ff]/ },
+  { script: 'devanagari', re: /[\u0900-\u097f]/ },
+  { script: 'arabic', re: /[\u0600-\u06ff\u0750-\u077f]/ },
+  { script: 'cyrillic', re: /[\u0400-\u04ff]/ },
+  { script: 'han', re: /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af]/ },
+]
+
+/**
+ * The script most of the LETTERS in `text` are written in. Punctuation, digits
+ * and whitespace are ignored, so "নাইটকপ 500" is Bengali rather than "mixed".
+ */
+export function dominantScript(text: string): Script {
+  if (!text) return 'other'
+  const counts = new Map<Script, number>()
+  let total = 0
+  for (const ch of text) {
+    if (!/\p{L}/u.test(ch)) continue
+    let hit: Script = 'latin'
+    if (!LATIN_RE.test(ch.toLowerCase())) {
+      hit = SCRIPT_RANGES.find((r) => r.re.test(ch))?.script ?? 'other'
+    }
+    counts.set(hit, (counts.get(hit) ?? 0) + 1)
+    total += 1
+  }
+  let best: Script = 'other'
+  let bestN = 0
+  for (const [s, n] of counts) if (n > bestN) { best = s; bestN = n }
+  if (total === 0) return 'other'
+  // MIXED QUERIES. "iPhone দাম" is 6 Latin letters and 2 Bengali ones (the
+  // vowel sign is a mark, not a letter), so a pure majority vote says English —
+  // and SearXNG would then filter out the Bengali shops the user is asking
+  // about. A non-Latin script holding >= 20% of the letters wins: the user is
+  // writing in that language and merely quoting a brand name in Latin. 20% not
+  // 30% because Bengali words are short — 30% missed this exact case.
+  if (best === 'latin') {
+    for (const [s, n] of counts) {
+      if (s !== 'latin' && s !== 'other' && n / total >= 0.2) return s
+    }
+  }
+  return best
+}
+
+/**
+ * SearXNG `language=` value for a query. 'all' is deliberately NOT used as the
+ * fallback: measured, `all` returns zero for Bengali while `bn` returns 20.
+ * Unknown scripts get 'all' only because there is nothing better to send.
+ */
+export function searxLanguage(text: string): string {
+  switch (dominantScript(text)) {
+    case 'bengali':
+      return 'bn'
+    case 'devanagari':
+      return 'hi'
+    case 'arabic':
+      return 'ar'
+    case 'cyrillic':
+      return 'ru'
+    case 'han':
+      return 'zh-CN'
+    case 'latin':
+      return 'en'
+    default:
+      return 'all'
+  }
+}

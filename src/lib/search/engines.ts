@@ -18,7 +18,7 @@
  */
 
 import type { RawResult, SearchEngineId, TimeRange } from './types'
-import { crossScript, tokensOf } from './tokens'
+import { crossScript, searxLanguage, tokensOf } from './tokens'
 
 const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'
@@ -401,8 +401,11 @@ export const searxng: EngineAdapter = {
       q: q.query,
       format: 'json',
       safesearch: '1',
-      language: 'en',
-      time_range: q.timeRange === 'none' ? '' : q.timeRange,
+      // NOT hardcoded to 'en': SearXNG FILTERS by language instead of falling
+      // back, and a Bengali query with language=en returned 0 results against a
+      // real container while language=bn returned 20. See searxLanguage().
+      language: searxLanguage(q.query),
+      ...(q.timeRange === 'none' ? {} : { time_range: q.timeRange }),
     })
     const json = JSON.parse(
       await fetchText(`${base.replace(/\/$/, '')}/search?${params.toString()}`, 'application/json')
