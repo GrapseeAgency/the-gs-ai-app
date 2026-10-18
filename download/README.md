@@ -1,8 +1,38 @@
 Here are all the generated files.
 
-## Latest release: v0.77.0
+## Latest release: v0.77.1
 
     file    GS-AI-App.apk
+    size    64356235 bytes
+    sha256  8904fd1ddf6f7d67564c3d37c48fbbfcbe93441607afd257f24a3b4e58e9b9f3
+
+### v0.77.1 — one composer, one status
+
+Two things on screen were announcing "a turn is running" in shapes that meant
+something else.
+
+**The empty reply looked like an input field.** Before the first token an
+assistant turn has no text, so all it painted was the `GS` monogram, the `GS`
+label and a blinking streaming caret underneath — a circle, a name and a
+cursor, which on a phone is indistinguishable from a text field parked at the
+top of the transcript. That row now waits for its first token.
+
+**The stop button is now the orb.** The send slot showed a white disc with a
+stop square while a separate orb animated above the composer: two symbols for
+one fact, one of them generic. The slot now renders the activity orb for the
+turn's real phase — breathing ring before the first token, ribbon while
+composing, globe while searching — and the orb is the stop target. Tap the
+thing that is happening to stop it. 36dp touch target, INLINE geometry, so the
+dot counts and speeds are the designed ones.
+
+The static three-dot indicator is gone with it. The word stays (`Thinking…`,
+`Searching…`) because that is the honest part.
+
+`versionCode 90` installs over 89 without uninstalling.
+
+## Previous release: v0.77.0
+
+    file    GS-AI-App.apk (superseded)
     size    64356235 bytes
     sha256  9afc99c16f0e1f97fc10e7417a5ffe29598b5900d6cb465b70e60578f3af8385
 
@@ -46,7 +76,7 @@ Also in this build:
 If anything crashes, send the stack trace: obfuscation is deliberately off, so
 class and method names are readable.
 
-## Previous release: v0.71.3
+## Older release: v0.71.3
 
     file    GS-AI-App.apk (superseded)
     size    84104873 bytes
