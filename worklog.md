@@ -5148,3 +5148,23 @@ Work Log:
 Stage Summary:
 - AGP compiles src/main/baseline-prof.txt via compileReleaseArtProfile (task verified present in run-14 log) — release CI build at tag embeds it; ProfileInstaller drives it on install.
 - Release URL appended below after tag build.
+
+---
+Task ID: PERF-SMOOTH-5
+Agent: main
+Task: Operator: "find any sorta slower and laggy stuff on the codebase and directly fix... make sure app is seamless smooth as hell."
+
+Work Log:
+- CAUSE 0 — THE SHIPPED APK WAS A DEBUG BUILD. android-release.yml ran `:app:assembleDebug` and uploaded app-debug.apk as GS-AI-App.apk. Parsed the binary manifest of download/GS-AI-App.apk to confirm: versionName 0.73.3, application debuggable=true, 18 dex files (classes.dex 39 MB), no assets/dexopt/baseline.prof. debuggable=true means ART never AOT-compiles (interpreted + JIT every process start), Compose keeps its debug runtime checks, CheckJNI on, R8 never runs. This is why every previous round of hot-path tuning (which was real and correct) produced no felt improvement: the build was discarding it. Fixed in 65c2df0 — release isMinifyEnabled=true + isShrinkResources=true + isDebuggable=false, real keep rules (JNI surface, Room, Hilt, kotlinx.serialization, line numbers), workflow builds assembleRelease, and two new artifact gates assert (a) the APK is NOT debuggable and (b) assets/dexopt/baseline.prof is actually inside it — the v0.76.0 profile was committed but never verified to be packaged.
+  Measured, same sources, this machine: dex 18 -> 1, classes.dex 39 MB -> 5.3 MB, APK 80 MB -> 44 MB, debuggable true -> false, baseline.prof absent -> present.
+- CAUSE 0b — LOCAL INFERENCE RAN ON THE MAIN THREAD. ChatStreamController's scope is Dispatchers.Main.immediate, and GsNative.chat() is a blocking JNI call that runs llama.cpp to completion (no streaming). On-device turns froze the UI thread for the whole generation — ANR-class, not jank. Fixed in 12543ee: dedicated single-thread "gs-inference" dispatcher + THREAD_PRIORITY_BACKGROUND (workers inherit the nice value, so the pool yields to RenderThread).
+- CAUSE 3 — messageAppear was Modifier.composed{} on EVERY row, and its remember died with the row, so the fade-in replayed on every scroll re-entry. Rewritten as a @Composable factory with a process-wide seen-set keyed by message id (b47c1d1). gsContentWidth() lost its pointless composed{} too.
+- CAUSE 4 — zero lifecycle-aware collection: 6 collectAsState -> collectAsStateWithLifecycle (6a4478d).
+- CAUSE 5 — transcript images had NO cache and re-downloaded on every scroll re-entry (produceState keyed on URL inside a LazyColumn row). 24 MB LruCache + two-pass decode capped at 1080px (1ced5a4). Also confined the empty-state draft read, hoisted a per-call DateTimeFormatter.
+- ThinkingOrb: cull dots at alpha <= 0.004 or sub-pixel radius before building the draw call (6a4478d).
+- CI: the release pipeline was also dead on its own — the pinned android-native artifact run (37161154981) expired, so staging failed in 8s. stage_release_so.sh no longer trusts the pin: it falls back to the newest successful android-native run with a complete libgs_ffi set (8d15169). Dispatched runs now also upload the APK as an artifact (previously a green manual run published nothing installable).
+
+Stage Summary:
+- Verified locally: :app:compileReleaseKotlin and :app:assembleRelease both green; GsNative native methods survive R8 with names intact (dexdump); BASE_URL and MainActivity present in dex.
+- Verified in CI (run 39081464635): assembleRelease + all gates green, badging versionCode=89/versionName=0.77.0, dex count 1, cert b1ffd75d…, not-debuggable gate passed, baseline.prof gate passed.
+- NOT verified: on-device runtime under R8. Keep rules cover every reflection surface found by grep (none: no Class.forName / getDeclaredMethod in app code), Room/Hilt/serialization ship consumer rules, lintVitalRelease passed. If anything crashes at runtime it will be a keep-rule miss and will name the class in the stack trace (obfuscation is off on purpose).
