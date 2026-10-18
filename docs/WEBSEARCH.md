@@ -154,3 +154,18 @@ guards bound it: `X-Treg-Route-Waterfall: 0` stops at the first miss instead of
 walking the whole vendor chain, and the cost ceiling above. Its adapter timeout
 is 3 s; because `runMetaSearch` waits for its slowest engine, that is also the
 worst-case latency it can add to a turn.
+
+Enabling treg is one env var and a restart — no code change:
+
+```bash
+# .env (or the deployment's environment)
+TREG_TOKEN=<token from https://treg.to/web-access>
+# optional: lower the per-call ceiling (USD, sent as a string)
+TREG_MAX_COST=0.005
+```
+
+Verify it took without spending anything: `ENGINE_REGISTRY.treg` is defined
+only when `TREG_TOKEN` is set, and `enginesForIntent()` appends `treg` **last**
+in the general/news sets, so the free engines still answer first and the trace
+shows `WebAccess` only when a routed call actually returned rows. Unset the
+variable and the engine set reverts byte-for-byte to the key-less default.
