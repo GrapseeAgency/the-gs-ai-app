@@ -45,7 +45,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imeNestedScroll
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -1245,12 +1244,17 @@ fun ChatScreen(
                 } else {
                     LazyColumn(
                         state = listState,
-                        // imeNestedScroll: dragging the transcript hands the
-                        // gesture to the IME — the keyboard tracks the finger
-                        // downward exactly like the platform chat apps.
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .imeNestedScroll(),
+                        // NO imeNestedScroll().
+                        //
+                        // It was here to let a downward drag "hand the gesture
+                        // to the IME". What it actually did: the composer keeps
+                        // focus after a turn, and the IME nested-scroll
+                        // connection treats an UPWARD scroll as "bring the
+                        // keyboard back" — so reading back through the
+                        // transcript popped the keyboard up on every drag. The
+                        // hide-on-drag below already gives the reading-first
+                        // behaviour, with none of that.
+                        modifier = Modifier.fillMaxSize(),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         itemsIndexed(
