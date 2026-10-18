@@ -62,10 +62,11 @@ sealed class LiveUpdateState {
 /**
  * GS LiveUpdate — the app's self-update engine ("Kotlin live changing" mode).
  *
- * Every time the Home canvas appears, [syncFrom] quietly fetches a version
- * manifest from GitHub. When a newer versionCode is published, a subtle
- * LiveUpdate pill surfaces on the canvas: one tap downloads the new APK from
- * the same GitHub URL and fires the system installer.
+ * Every time the app comes to the foreground, [syncFrom] quietly fetches a
+ * version manifest from GitHub (MainActivity's ON_START observer; 10-minute
+ * throttle inside). When a newer versionCode is published, a LiveUpdate pill
+ * surfaces on the Chats hub: one tap downloads the new APK from the same
+ * GitHub URL and fires the system installer.
  *
  * Download hardening (the part that makes it feel native):
  *  - **Byte-range resume.** A dropped connection resumes from the exact byte

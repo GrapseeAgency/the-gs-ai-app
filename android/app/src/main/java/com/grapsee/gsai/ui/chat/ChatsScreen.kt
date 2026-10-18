@@ -1,5 +1,6 @@
 package com.grapsee.gsai.ui.chat
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -8,10 +9,12 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -39,6 +42,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.data.local.ConversationEntity
 import com.grapsee.gsai.data.local.ConversationPreviewRow
+import com.grapsee.gsai.data.liveupdate.LiveUpdateState
+import com.grapsee.gsai.data.liveupdate.LiveUpdater
 import com.grapsee.gsai.di.ServiceLocator
 import com.grapsee.gsai.ui.components.ConversationActionsSheet
 import com.grapsee.gsai.ui.components.GsCard
@@ -73,6 +78,8 @@ import com.grapsee.gsai.ui.icons.GsIcons
 fun ChatsScreen(onNavigate: (String) -> Unit) {
     val conversationList = remember { conversationsPreviewFlow() }
     val conversations by conversationList.collectAsStateWithLifecycle(initialValue = emptyList())
+    // GS LiveUpdate state — the pill below is its only UI surface.
+    val liveUpdate by LiveUpdater.state.collectAsStateWithLifecycle()
     val offline by rememberDeviceOffline()
     val scope = rememberCoroutineScope()
     val view = LocalView.current
@@ -127,6 +134,29 @@ fun ChatsScreen(onNavigate: (String) -> Unit) {
             verticalArrangement = Arrangement.spacedBy(GsMotion.spaceM)
         ) {
             GsOfflineBanner(visible = offline)
+
+            // GS LiveUpdate pill — the one-tap install surface for the update
+            // check that runs on foreground (MainActivity ON_START). Before
+            // 0.77.8 the updater was fully built but never called and never
+            // shown, while the About screen claimed "Automatic via GS
+            // LiveUpdate" — a claim with nothing behind it. Idle renders
+            // nothing at all, which is the state for 99% of users.
+            when (val update = liveUpdate) {
+                is LiveUpdateState.Available -> UpdatePill(
+                    text = "GS ${update.versionName} is ready · tap to update",
+                    onClick = { LiveUpdater.beginInstallFlow() }
+                )
+                is LiveUpdateState.Downloading -> UpdatePill(
+                    text = "Updating… ${update.percent}%",
+                    onClick = {}
+                )
+                is LiveUpdateState.Ready -> UpdatePill(text = "Starting installer…", onClick = {})
+                is LiveUpdateState.Failed -> UpdatePill(
+                    text = "Update didn't finish · tap to retry",
+                    onClick = { LiveUpdater.beginInstallFlow() }
+                )
+                is LiveUpdateState.Idle -> Unit
+            }
 
             // Archive only: the one quick link with a real destination behind
             // it. Folders and Shared led to hardcoded fake screens and are
@@ -241,6 +271,35 @@ fun ChatsScreen(onNavigate: (String) -> Unit) {
                 scope.launch { runCatching { ServiceLocator.chat.rename(target.id, name) } }
             }
         )
+    }
+}
+
+@Composable
+private fun UpdatePill(text: String, onClick: () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = GsMotion.spaceM, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
+        ) {
+            Icon(
+                GsIcons.Download,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(18.dp)
+            )
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
     }
 }
 

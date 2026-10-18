@@ -78,6 +78,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import com.grapsee.gsai.data.local.ModelCatalog
 import com.grapsee.gsai.data.local.ModelStore
 
 private val themeOptions = listOf("Light", "Dark", "System")
@@ -113,6 +114,7 @@ fun SettingsScreen(
     // Privacy flows (UI-local)
     var showClearData by remember { mutableStateOf(false) }
     var showDeleteAccount by remember { mutableStateOf(false) }
+    var showDeleteModel by remember { mutableStateOf(false) }
 
     // Reply notifications: the switch is the CONSENT surface for the runtime
     // POST_NOTIFICATIONS prompt (API 33+). Turning the switch ON asks; a
@@ -262,6 +264,23 @@ fun SettingsScreen(
                             }
                         }
                     )
+                    // Installed-model management. The download dialog's final
+                    // screen promises "You can delete it any time in Settings" —
+                    // this row is that promise made true: before it existed,
+                    // ModelStore.removeInstalled() had no UI caller and the
+                    // 1.1 GB could never be freed from inside the app.
+                    val installedPath = ModelStore.installedPath
+                    if (installedPath != null) {
+                        ActionRow(
+                            title = "Delete on-device model",
+                            subtitle = runCatching {
+                                "${installedModelLabel()} · " +
+                                    "${fmtFileSize(java.io.File(installedPath).length())} on this device"
+                            }.getOrElse { "Free the space used by the on-device model" },
+                            leading = GsIcons.Trash2,
+                            onClick = { showDeleteModel = true }
+                        )
+                    }
                     // "Reasoning effort" (Low/Medium/High) deleted: it was a
                     // parameter dial wired to nothing — no send path, model or
                     // prompt ever read it. Same for the Memory and
@@ -444,9 +463,15 @@ fun SettingsScreen(
                 ) {
                     ValueRow(title = "Version", value = BuildConfig.VERSION_NAME)
                     ValueRow(title = "Build", value = BuildConfig.VERSION_CODE.toString())
-                    // True on Android: LiveUpdater (data/liveupdate) checks the
-                    // GitHub-hosted manifest and self-updates the installed APK.
-                    ValueRow(title = "Updates", value = "Automatic via GS LiveUpdate")
+                    // TRUE since 0.77.8, and precise about what "automatic"
+                    // means: the manifest check runs on every foreground
+                    // (MainActivity ON_START → LiveUpdater.syncFrom), and the
+                    // install is one tap on the Chats hub pill — Android never
+                    // allows a silent APK swap, so the row does not claim one.
+                    ValueRow(
+                        title = "Updates",
+                        value = "Automatic checks · install on tap"
+                    )
                 }
             }
         }
@@ -511,6 +536,60 @@ fun SettingsScreen(
             }
         )
     }
+
+    if (showDeleteModel) {
+        val view = LocalView.current
+        AlertDialog(
+            onDismissRequest = { showDeleteModel = false },
+            title = { Text("Delete on-device model?") },
+            text = {
+                Text(
+                    "The model file is removed from this device and answers go back to " +
+                        "the network. You can download it again at any time. " +
+                        "\"Prefer on-device AI\" turns off with it."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        view.gsHaptic(HapticFeedbackConstants.LONG_PRESS)
+                        runCatching { ModelStore.removeInstalled() }
+                        // A preference for an engine that no longer exists is a
+                        // lie the switch would tell on its next read.
+                        SettingsStore.updatePreferLocal(false)
+                        showDeleteModel = false
+                    },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteModel = false }) { Text("Keep") }
+            }
+        )
+    }
+}
+
+/** Same shape as the consent dialog's formatter, kept local to this file. */
+private fun fmtFileSize(bytes: Long): String = when {
+    bytes >= 1_000_000_000L -> String.format("%.1f GB", bytes / 1e9)
+    bytes >= 1_000_000L -> String.format("%.0f MB", bytes / 1e6)
+    bytes >= 1_000L -> String.format("%.0f KB", bytes / 1e3)
+    else -> "$bytes B"
+}
+
+/**
+ * The installed model's display name, resolved across the whole catalog
+ * (tier entries AND the quant sweep — a sweep file is not reachable through
+ * modelFor(tier), and falling back to the raw id would show the user
+ * "qwen2.5-0.5b-instruct-q4_0").
+ */
+private fun installedModelLabel(): String {
+    val id = ModelStore.installedModelId ?: return "On-device model"
+    val catalog = listOf(ModelCatalog.MODEL_1_5B, ModelCatalog.MODEL_0_5B) +
+        ModelCatalog.QUANT_SWEEP
+    return catalog.firstOrNull { it.id == id }?.displayName ?: id
 }
 
 /**

@@ -51,7 +51,15 @@ private data class ChatHit(
     val moment: String
 )
 
-private val searchFilters = listOf("This week", "Model", "Has files")
+/**
+ * The filters that are REAL. "Model" was deleted in the 0.77.8 sweep: it
+ * rendered a chip, toggled its selected state and re-ran the search — and
+ * nothing in [searchChats] read it, so it filtered nothing. A chip that
+ * pretends to filter is a chip that lies. "Has files" is implemented for
+ * real (messages whose attachments column is non-empty); "This week" always
+ * was.
+ */
+private val searchFilters = listOf("This week", "Has files")
 
 /**
  * Chat-scoped search over the on-device store — real hits from Room (titles +
@@ -134,7 +142,11 @@ fun ChatSearchScreen(
                 searched && hits.isEmpty() -> GsEmptyState(
                     icon = GsIcons.SearchX,
                     title = "No matches",
-                    message = "Nothing matched \"$term\". Try a shorter word or different phrasing."
+                    message = if (activeFilter != null) {
+                        "Nothing matched \"$term\" with the \"$activeFilter\" filter on. Try another filter or a shorter word."
+                    } else {
+                        "Nothing matched \"$term\". Try a shorter word or different phrasing."
+                    }
                 )
                 else -> {
                     GsSectionHeader("Results")
@@ -175,24 +187,32 @@ fun ChatSearchScreen(
 
 /** Room-backed search; any store hiccup quietly reads as "no matches".
  *  ASCII word queries ride the FTS full-text index; CJK/symbol input falls
- *  back to the LIKE path, where the simple tokenizer can't follow. */
+ *  back to the LIKE path, where the simple tokenizer can't follow.
+ *  "Has files" keeps only message hits whose turn actually carried
+ *  attachments — and drops title hits, because a title never has a file. */
 private suspend fun searchChats(term: String, filter: String?): List<ChatHit> {
     return runCatching {
         val db = ServiceLocator.db
         val withinWeek = filter == "This week"
+        val filesOnly = filter == "Has files"
         val match = ftsMatchQuery(term)
-        val titleHits = (
-            if (match != null) db.conversationDao().searchByTitleFts(match)
-            else db.conversationDao().searchByTitle(term)
-            )
-            .filter { !withinWeek || recentInstant(it.updatedAt) }
-            .map { convo ->
-                ChatHit(convo.id, convo.title, "Chat title match", relativeMoment(convo.updatedAt))
-            }
+        val titleHits = if (filesOnly) {
+            emptyList()
+        } else {
+            (
+                if (match != null) db.conversationDao().searchByTitleFts(match)
+                else db.conversationDao().searchByTitle(term)
+                )
+                .filter { !withinWeek || recentInstant(it.updatedAt) }
+                .map { convo ->
+                    ChatHit(convo.id, convo.title, "Chat title match", relativeMoment(convo.updatedAt))
+                }
+        }
         val messageHits = (
             if (match != null) db.messageDao().searchContentFts(match)
             else db.messageDao().searchContent(term)
             )
+            .filter { !filesOnly || hasFiles(it.attachments) }
             .filter { !withinWeek || recentInstant(it.createdAt) }
             .mapNotNull { message ->
                 val convo = db.conversationDao().getById(message.conversationId) ?: return@mapNotNull null
@@ -205,6 +225,16 @@ private suspend fun searchChats(term: String, filter: String?): List<ChatHit> {
             }
         (titleHits + messageHits).distinctBy { it.conversationId }.take(24)
     }.getOrElse { emptyList() }
+}
+
+/**
+ * Whether a message's attachments column holds any file. "[]" is the column
+ * default and "none" is what pre-attachment rows read back as, so both count
+ * as empty rather than a file named none.
+ */
+private fun hasFiles(attachmentsJson: String): Boolean {
+    val t = attachmentsJson.trim()
+    return t.isNotEmpty() && t != "[]" && t != "none"
 }
 
 private fun recentInstant(iso: String): Boolean = runCatching {

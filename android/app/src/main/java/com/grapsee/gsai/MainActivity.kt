@@ -17,6 +17,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.grapsee.gsai.data.SettingsStore
+import com.grapsee.gsai.data.liveupdate.LiveUpdater
 import com.grapsee.gsai.data.notifications.AppForeground
 import com.grapsee.gsai.ui.settings.OnDeviceModelConsentDialog
 import com.grapsee.gsai.ui.navigation.GsNavHost
@@ -48,7 +49,14 @@ class MainActivity : ComponentActivity() {
         // must never fire while the user is already looking at the reply.
         lifecycle.addObserver(LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_START -> AppForeground.inForeground = true
+                Lifecycle.Event.ON_START -> {
+                    AppForeground.inForeground = true
+                    // GS LiveUpdate: the manifest check that makes the About
+                    // screen's "Automatic via GS LiveUpdate" row TRUE. It is
+                    // throttled to 10 minutes inside the updater and silent on
+                    // every failure — offline users never see it do anything.
+                    runCatching { LiveUpdater.syncFrom(this) }
+                }
                 Lifecycle.Event.ON_STOP -> AppForeground.inForeground = false
                 else -> Unit
             }

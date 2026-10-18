@@ -42,10 +42,15 @@ import com.grapsee.gsai.ui.icons.GsIcons
 
 /**
  * Archive shelf — live from the Room cache (every archived chat, not a demo
- * subset) with restore + delete affordances per row.
+ * subset) with restore + delete affordances per row. Tapping a row opens the
+ * conversation, same as the inbox (it used to be `onClick = {}` — a row that
+ * looked tappable and did nothing).
  */
 @Composable
-fun ArchivedChatsScreen(onBack: () -> Unit) {
+fun ArchivedChatsScreen(
+    onBack: () -> Unit,
+    onOpenConversation: (String) -> Unit = {}
+) {
     val scope = rememberCoroutineScope()
     val archivedFlow = remember {
         runCatching { ServiceLocator.chat.archivedConversations() }.getOrElse { flowOf(emptyList()) }
@@ -127,7 +132,7 @@ fun ArchivedChatsScreen(onBack: () -> Unit) {
                                     }
                                 }
                             },
-                            onClick = {}
+                            onClick = { onOpenConversation(entity.id) }
                         )
                     }
                 }
