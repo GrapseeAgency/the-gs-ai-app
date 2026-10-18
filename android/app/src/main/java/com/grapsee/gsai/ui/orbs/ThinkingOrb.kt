@@ -134,7 +134,12 @@ fun ThinkingOrb(
             }
     ) {
         val contentPx = presetPx * density
-        val pad = ((this.size.width - contentPx) / 2f).coerceAtLeast(0f)
+        // NEGATIVE when scaling a preset DOWN (authored space is larger than
+        // the canvas). Clamping this at 0 would leave the drawing anchored to
+        // the top-left and the scale pivot outside the canvas — the orb would
+        // be cropped and off-centre. The offset is exactly what centres the
+        // authored space, in both directions.
+        val pad = (this.size.width - contentPx) / 2f
         translate(pad, pad) {
             scale(scaleFactor, scaleFactor, pivot = Offset(contentPx / 2f, contentPx / 2f)) {
                 OrbEngine.render(presetPx.toDouble(), tState.doubleValue, resolved, buffer)
