@@ -133,6 +133,7 @@ import com.grapsee.gsai.data.chat.ClarifyOption
 import com.grapsee.gsai.data.chat.ClarifyPrompt
 import com.grapsee.gsai.data.chat.EngineRoundRow
 import com.grapsee.gsai.data.chat.ResearchPhaseNote
+import com.grapsee.gsai.data.chat.ResearchLedgerView
 import com.grapsee.gsai.data.chat.SearchTraceItem
 import com.grapsee.gsai.data.chat.SourceCard
 import com.grapsee.gsai.data.chat.decodeClarifyPrompt
@@ -216,7 +217,11 @@ private data class ChatUiMessage(
      *  the received events do; a reload re-derives nothing (honest empty). */
     val engineRows: List<EngineRoundRow> = emptyList(),
     val researchNotes: List<ResearchPhaseNote> = emptyList(),
-    val usedCitations: List<Int> = emptyList()
+    val usedCitations: List<Int> = emptyList(),
+    /** PHASE 5: the deep-research branch table (`ledger` events) — same
+     *  IN-MEMORY ONLY discipline: null for quick/linear turns, gone after a
+     *  reload (the source cards + summary stay — never a fabricated table). */
+    val ledgerView: ResearchLedgerView? = null
 )
 
 /**
@@ -806,7 +811,10 @@ fun ChatScreen(
                 // only — a reload honestly shows just the summary + sources).
                 engineRows = state.engineRows,
                 researchNotes = state.researchPhaseNotes,
-                usedCitations = state.usedCitations
+                usedCitations = state.usedCitations,
+                // PHASE 5: the branch table commits with the turn too — the
+                // live ledger snapshot, in-memory only, same honesty rule.
+                ledgerView = state.ledgerView
             )
             view.announceForAccessibility(announcement)
         }
@@ -2037,6 +2045,7 @@ private fun AssistantMessage(
     val liveEngineRows by remember(live) { derivedStateOf { live?.value?.engineRows } }
     val liveResearchNotes by remember(live) { derivedStateOf { live?.value?.researchPhaseNotes } }
     val liveUsedCitations by remember(live) { derivedStateOf { live?.value?.usedCitations } }
+    val liveLedgerView by remember(live) { derivedStateOf { live?.value?.ledgerView } }
     val turnSources = if (message.isStreaming) liveSources.orEmpty() else message.sources
     val turnClarify = if (message.isStreaming) null else message.clarify
     val turnTraceItems = liveTraceItems ?: message.traceItems
@@ -2045,6 +2054,9 @@ private fun AssistantMessage(
     val turnEngineRows = liveEngineRows ?: message.engineRows
     val turnResearchNotes = liveResearchNotes ?: message.researchNotes
     val turnUsedCitations = liveUsedCitations ?: message.usedCitations
+    // PHASE 5: the branch table rides the same seam (memory-only; a reload
+    // derives nothing — honest null).
+    val turnLedgerView = if (message.isStreaming) liveLedgerView else message.ledgerView
     // Reload-time collapsed summary: the trace detail is memory-only, so a
     // reloaded turn honestly derives its one-liner from what persisted.
     val turnTraceSummary = message.traceSummary
@@ -2076,7 +2088,7 @@ private fun AssistantMessage(
             // happened; plain turns show nothing here.
             if (message.isStreaming) {
                 if (turnTraceItems.isNotEmpty() || turnEngineRows.isNotEmpty() ||
-                    turnResearchNotes.isNotEmpty()
+                    turnResearchNotes.isNotEmpty() || turnLedgerView != null
                 ) {
                     SearchTraceCard(
                         items = turnTraceItems,
@@ -2085,7 +2097,8 @@ private fun AssistantMessage(
                         defaultExpanded = true,
                         engineRows = turnEngineRows,
                         researchNotes = turnResearchNotes,
-                        usedCitations = turnUsedCitations
+                        usedCitations = turnUsedCitations,
+                        ledgerView = turnLedgerView
                     )
                     Spacer(Modifier.height(8.dp))
                 }
@@ -2099,11 +2112,13 @@ private fun AssistantMessage(
                         // after done, exactly while it is still in memory.
                         expandable = turnTraceItems.isNotEmpty() ||
                             turnEngineRows.isNotEmpty() ||
-                            turnResearchNotes.isNotEmpty(),
+                            turnResearchNotes.isNotEmpty() ||
+                            turnLedgerView != null,
                         defaultExpanded = false,
                         engineRows = turnEngineRows,
                         researchNotes = turnResearchNotes,
-                        usedCitations = turnUsedCitations
+                        usedCitations = turnUsedCitations,
+                        ledgerView = turnLedgerView
                     )
                     Spacer(Modifier.height(8.dp))
                 }

@@ -57,6 +57,8 @@ import com.grapsee.gsai.data.chat.ClarifyPrompt
 import com.grapsee.gsai.data.chat.EngineOutcome
 import com.grapsee.gsai.data.chat.EngineRoundRow
 import com.grapsee.gsai.data.chat.ResearchPhaseNote
+import com.grapsee.gsai.data.chat.ResearchBranchRow
+import com.grapsee.gsai.data.chat.ResearchLedgerView
 import com.grapsee.gsai.data.chat.SearchTraceItem
 import com.grapsee.gsai.data.chat.SourceCard
 import com.grapsee.gsai.ui.components.GsChip
@@ -109,6 +111,12 @@ import com.grapsee.gsai.ui.icons.GsIcons
  * per-engine outcomes, sources found/read/failed, syndicated groups and
  * citations used. All of it is memory-only detail: it exists exactly as long
  * as the received events do.
+ *
+ * PHASE 5 (ledger events): [ledgerView] carries the deep-research branch
+ * table — one row per branch (query, status, sources read) plus gap queries,
+ * subagent counts and preserved contradictions — rendered in the same
+ * "Research details" section. Null on quick/linear turns, so nothing changes
+ * for turns that never ran branches.
  */
 @Composable
 fun SearchTraceCard(
@@ -118,10 +126,11 @@ fun SearchTraceCard(
     defaultExpanded: Boolean,
     engineRows: List<EngineRoundRow> = emptyList(),
     researchNotes: List<ResearchPhaseNote> = emptyList(),
-    usedCitations: List<Int> = emptyList()
+    usedCitations: List<Int> = emptyList(),
+    ledgerView: ResearchLedgerView? = null
 ) {
     if (items.isEmpty() && summary.isNullOrBlank() &&
-        engineRows.isEmpty() && researchNotes.isEmpty()
+        engineRows.isEmpty() && researchNotes.isEmpty() && ledgerView == null
     ) {
         return
     }
@@ -170,7 +179,7 @@ fun SearchTraceCard(
                     )
                 }
             }
-            val hasResearchDetail = engineRows.isNotEmpty() || researchNotes.isNotEmpty()
+            val hasResearchDetail = engineRows.isNotEmpty() || researchNotes.isNotEmpty() || ledgerView != null
             if (items.isNotEmpty() || hasResearchDetail) {
                 AnimatedVisibility(
                     visible = expanded,
@@ -199,6 +208,7 @@ fun SearchTraceCard(
                                 engineRows = engineRows,
                                 researchNotes = researchNotes,
                                 usedCitations = usedCitations,
+                                ledgerView = ledgerView,
                                 expanded = detailsExpanded,
                                 onToggle = { detailsExpanded = !detailsExpanded },
                                 reduceMotion = reduceMotion
@@ -307,11 +317,62 @@ private fun EngineLine(round: Int, outcome: EngineOutcome, showRound: Boolean) {
 }
 
 /**
+ * PHASE 5 — one deep-research branch row: the branch's sub-question, its live
+ * status (– running, ✓ done, ✕ failed) and the real source/read counts when
+ * the completion event carried them. Gap branches collected through async
+ * subagents carry the marker honestly; a failed branch shows the wire's
+ * short error. Same monochrome discipline as [EngineLine] — nothing here is
+ * synthesized from silence.
+ */
+@Composable
+private fun BranchLine(branch: ResearchBranchRow) {
+    val glyph = when (branch.status) {
+        "done" -> "✓"
+        "failed" -> "✕"
+        else -> "–"
+    }
+    val failed = branch.status == "failed"
+    val color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+    val counts = buildList {
+        branch.sources?.let { add("$it sources") }
+        branch.retrieved?.let { add("$it read") }
+    }
+    val detail = buildString {
+        append(branch.query)
+        if (counts.isNotEmpty()) append(" · " + counts.joinToString(" · "))
+        if (branch.via != null) append(" · via ${branch.via}")
+        if (failed) append(branch.error?.let { ", ${it.take(SHORT_ERROR_CHARS)}" } ?: "")
+    }
+    Row(verticalAlignment = Alignment.Top) {
+        Text(
+            text = glyph,
+            style = MaterialTheme.typography.labelMedium,
+            color = color
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = detail,
+            style = MaterialTheme.typography.bodySmall,
+            color = color,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+/**
  * The expandable "Research details" audit trail (protocol v2 §20) — queries
  * run, per-engine outcomes, sources found/read/failed, syndicated groups,
  * citations used, and the completion timings when the wire carried them.
  * EVERY line is composed from received events only; an aggregate the events
  * never delivered simply does not render.
+ *
+ * PHASE 5: [ledgerView] adds the deep-research branch table — planned
+ * branch count, one line per branch (query, live status, sources/read, the
+ * subagent marker when applicable), the gap queries spawned, subagent totals
+ * and the preserved-contradiction count. A null [ledgerView] renders none
+ * of it — quick/linear turns look exactly as before.
  */
 @Composable
 private fun ResearchDetailsSection(
@@ -319,6 +380,7 @@ private fun ResearchDetailsSection(
     engineRows: List<EngineRoundRow>,
     researchNotes: List<ResearchPhaseNote>,
     usedCitations: List<Int>,
+    ledgerView: ResearchLedgerView?,
     expanded: Boolean,
     onToggle: () -> Unit,
     reduceMotion: Boolean
@@ -368,6 +430,29 @@ private fun ResearchDetailsSection(
                 val queriesRun = completed?.queries
                     ?: items.count { it.kind == SearchTraceItem.Kind.Query }
                 if (queriesRun > 0) DetailLine("Queries run: $queriesRun")
+                // PHASE 5: the deep-research branch table — the question ran
+                // as parallel branches; each row is a real branch lifecycle.
+                ledgerView?.let { ledger ->
+                    ledger.plannedBranches?.let { DetailLine("Branches planned: $it") }
+                    ledger.branches.forEach { branch -> BranchLine(branch) }
+                    ledger.gapQueries.forEach { q -> DetailLine("Gap query: $q") }
+                    ledger.subagentsLaunched?.let {
+                        if (it > 0) DetailLine("Subagents dispatched: $it")
+                    }
+                    ledger.contradictions?.let {
+                        if (it > 0) DetailLine("Contradictions preserved: $it")
+                    }
+                    if (ledger.stoppedByUser) {
+                        DetailLine("Stopped by user — synthesized with what existed")
+                    }
+                    ledger.finalClaims?.let { claims ->
+                        DetailLine(
+                            "Ledger: $claims ${if (claims == 1) "claim" else "claims"}" +
+                                " · ${ledger.finalBranches ?: ledger.branches.size} branches" +
+                                " · ${ledger.finalOpenGaps ?: 0} open ${if (ledger.finalOpenGaps == 1) "gap" else "gaps"}"
+                        )
+                    }
+                }
                 // Per-engine outcomes — the same honest rows, listed for the audit.
                 engineRows.forEach { row ->
                     row.engines.forEach { outcome ->

@@ -142,8 +142,31 @@ export type SearchPlan = {
   reuseEvidence?: boolean
 }
 
-/** 8.2 §28 — `research` joins the wire event names (protocol v2). */
-export type SearchEventName = 'search' | 'source' | 'clarify' | 'status' | 'research'
+/**
+ * 8.2 §28 — `research` joins the wire event names (protocol v2).
+ * PHASE 5 — `ledger` joins the wire event names: deep-research branch
+ * progress (branch started/completed/failed, gap spawns, contradiction
+ * counts). The SSE transport forwards event names generically, so this
+ * entry is what put the whole branching event stream on the wire — before
+ * it, every `emit('ledger', …)` was a type error and never shipped.
+ */
+export type SearchEventName = 'search' | 'source' | 'clarify' | 'status' | 'research' | 'ledger'
+
+/**
+ * PHASE 5 — the `ledger` payload contract (discriminated on `type`), emitted
+ * by runBranchingResearch. Clients render what arrives and ignore what they
+ * do not model — the union is the documentation, not a runtime guard.
+ */
+export type LedgerEvent =
+  | { type: 'ledger_started'; question: string; branches: number }
+  | { type: 'branch_started'; branchId: string; query: string }
+  | { type: 'branch_completed'; branchId: string; query: string; sources: number; retrieved: number; ok: boolean; via?: 'subagent' }
+  | { type: 'branch_failed'; branchId: string; query: string; error: string }
+  | { type: 'gaps_open'; gaps: string[]; queries: string[] }
+  | { type: 'subagents_launched'; count: number }
+  | { type: 'contradictions'; count: number; note: string }
+  | { type: 'ledger_final'; claims: number; contradictions: number; openGaps: number; branches: number }
+  | { type: 'stopped_by_user'; note: string }
 
 /**
  * Event emitter seam — the SSE route implements this; tests capture events.

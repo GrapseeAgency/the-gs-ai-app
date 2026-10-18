@@ -1,4 +1,4 @@
-# GS Search Event Protocol — PHASE 8.2 (v2, FROZEN)
+# GS Search Event Protocol — PHASE 8.2 (v2, FROZEN) + PHASE 5 addendum (`ledger`)
 
 Canonical contract for the search/research event stream. Superset of v1: every
 v1 event remains byte-compatible; new events are additive and old clients
@@ -6,6 +6,11 @@ ignore unknown event names. One line per event on the SSE wire:
 `data: {"event":"<name>","data":"<payload>"}` where payload is a STRING — for
 search/source/clarify/research events the payload is a JSON-encoded object
 (double-encoded), exactly like `done`.
+
+PHASE 5 addendum: deep-research turns (ledger-driven branching) also emit
+`ledger` events — the branch lifecycle the "Research details" audit trail
+renders. Additive like everything else: old clients skip the event name, the
+transport forwards it with no whitelist.
 
 ## Base events (unchanged from v1)
 - `status` — payload string: `searching` | `working` | `composing` | `search_failed`
@@ -47,6 +52,27 @@ authority values (v2): `primary` | `academic` | `reputable` | `reference` | `dis
 
 ## `clarify` event (unchanged)
 `{"question":"What kind of news would you like today?","options":[...]}`
+
+## `ledger` event (PHASE 5 — deep-research branch progress, additive)
+Emitted only by deep turns on the ledger-driven branching path. The question
+is decomposed into parallel branches; this is their lifecycle. `branchId` is
+the server-side upsert key — clients key their branch rows on it.
+`{"type":"ledger_started","question":"...","branches":3}`                                   — wave-1 decomposition
+`{"type":"branch_started","branchId":"br-1","query":"..."}`                                 — a branch began
+`{"type":"branch_completed","branchId":"br-2","query":"...","sources":7,"retrieved":3,"ok":true}`   — optional `"via":"subagent"` when collected from an async subagent
+`{"type":"branch_failed","branchId":"br-3","query":"...","error":"..."}`                    — branch error, bounded server-side
+`{"type":"gaps_open","gaps":["..."],"queries":["..."]}`                                     — gap round: what the ledger lacks + queries spawned
+`{"type":"subagents_launched","count":2}`                                                   — gap branches dispatched async (supervisor keeps working)
+`{"type":"contradictions","count":1,"note":"..."}`                                          — conflicting claims preserved (the answer must show both sides)
+`{"type":"ledger_final","claims":26,"contradictions":0,"openGaps":3,"branches":6}`          — terminal ledger totals
+`{"type":"stopped_by_user","note":"stop honored — synthesizing with what exists"}`         — mid-run user stop
+
+Rendering contract: branch rows live in the "Research details" audit trail
+(upsert by branchId; never duplicated; counts arrive on completion), gap
+queries and contradiction counts render as detail lines, and the terminal
+`ledger_final` totals win over any earlier value. Ledger events earn NO
+search-trace rows. Memory-only like all research detail — nothing persists,
+a reload shows the sources + summary only.
 
 ## Spec-name mapping (§28 → wire)
 research.started→research:started · search.query→search:query · search.engine→search:engines ·

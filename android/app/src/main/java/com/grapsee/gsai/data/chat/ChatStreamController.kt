@@ -124,6 +124,10 @@ class ChatStreamController(private val chat: ChatRepository) {
         val researchPhaseNotes: List<ResearchPhaseNote> = emptyList(),
         /** PHASE 8.2: citations the answer actually used (`research completed`). */
         val usedCitations: List<Int> = emptyList(),
+        /** PHASE 5: the live deep-research ledger snapshot (`ledger` events) —
+         *  branch rows, gap queries, preserved contradictions. Null when this
+         *  turn emitted no ledger events (quick/linear turns). */
+        val ledgerView: ResearchLedgerView? = null,
         /** FLASH-MODE BUG 1: the wire's resolved effective mode for THIS turn
          *  ("flash"|"thinking"; null = no mode event yet — pre-v0.70 backend).
          *  Drives the honest indicator: the "Thinking…" label renders ONLY
@@ -231,6 +235,13 @@ class ChatStreamController(private val chat: ChatRepository) {
                     onResearch = { payload ->
                         parseResearchEventPayload(payload)?.let { event ->
                             publishIfMine(token) { search.applyResearch(it, event) }
+                        }
+                    },
+                    // PHASE 5: deep-research branch progress — the ledger fold
+                    // upserts branch rows by the server's branchId.
+                    onLedger = { payload ->
+                        parseLedgerEventPayload(payload)?.let { event ->
+                            publishIfMine(token) { search.applyLedger(it, event) }
                         }
                     },
                     onClarify = { payload ->
@@ -376,6 +387,13 @@ class ChatStreamController(private val chat: ChatRepository) {
  * `search completed` already earned. Research round summaries and the
  * completion note carry NO trace rows — they live in the expandable
  * "Research details" audit trail ([ChatStreamController.StreamState.researchPhaseNotes]).
+ *
+ * PHASE 5 decisions: `ledger` events fold into
+ * [ChatStreamController.StreamState.ledgerView] only — branch rows are
+ * upserted by the server's branchId (never duplicated, fields survive), gap
+ * queries are distinct-listed, subagent counts sum across rounds, and the
+ * terminal `ledger_final` counts win over any earlier value. Ledger events
+ * carry NO trace rows: the branch table renders in the same audit trail.
  */
 private class SearchStreamAccumulator {
 
@@ -684,6 +702,114 @@ private class SearchStreamAccumulator {
             researchPhaseNotes = state.researchPhaseNotes +
                 ResearchPhaseNote.Cancelled(by = event.by)
         )
+        }
+    }
+
+    // Block body (same reason as [applyResearch]).
+    fun applyLedger(
+        state: ChatStreamController.StreamState,
+        event: LedgerEvent
+    ): ChatStreamController.StreamState {
+        val view = state.ledgerView ?: ResearchLedgerView()
+        return when (event) {
+            is LedgerEvent.Started -> state.copy(
+                ledgerView = view.copy(plannedBranches = event.branches)
+            )
+            is LedgerEvent.BranchStarted -> state.copy(
+                ledgerView = view.copy(
+                    branches = upsertBranch(view.branches, event.branchId, event.query.orEmpty(), "running")
+                )
+            )
+            is LedgerEvent.BranchCompleted -> {
+                // A pre-branch_started completed event (event loss) still
+                // opens its row — the row is honest either way.
+                val existing = view.branches.firstOrNull { it.branchId == event.branchId }
+                state.copy(
+                    ledgerView = view.copy(
+                        branches = upsertBranch(
+                            view.branches,
+                            event.branchId,
+                            event.query ?: existing?.query.orEmpty(),
+                            if (event.ok) "done" else "failed"
+                        ).map { row ->
+                            if (row.branchId == event.branchId) {
+                                row.copy(
+                                    sources = event.sources,
+                                    retrieved = event.retrieved,
+                                    via = event.via
+                                )
+                            } else {
+                                row
+                            }
+                        }
+                    )
+                )
+            }
+            is LedgerEvent.BranchFailed -> {
+                val existing = view.branches.firstOrNull { it.branchId == event.branchId }
+                state.copy(
+                    ledgerView = view.copy(
+                        branches = upsertBranch(
+                            view.branches,
+                            event.branchId,
+                            event.query ?: existing?.query.orEmpty(),
+                            "failed"
+                        ).map { row ->
+                            if (row.branchId == event.branchId) row.copy(error = event.error) else row
+                        }
+                    )
+                )
+            }
+            is LedgerEvent.GapsOpen -> state.copy(
+                ledgerView = view.copy(
+                    gapQueries = (view.gapQueries + event.queries).distinct()
+                )
+            )
+            is LedgerEvent.SubagentsLaunched -> state.copy(
+                // Each event is a distinct launch batch — the audit trail
+                // shows the TOTAL dispatched across gap rounds.
+                ledgerView = view.copy(
+                    subagentsLaunched = (view.subagentsLaunched ?: 0) + event.count
+                )
+            )
+            is LedgerEvent.Contradictions -> state.copy(
+                ledgerView = view.copy(contradictions = event.count)
+            )
+            is LedgerEvent.Final -> state.copy(
+                ledgerView = view.copy(
+                    finalClaims = event.claims,
+                    finalOpenGaps = event.openGaps,
+                    finalBranches = event.branches,
+                    // The terminal count is the authoritative one for the row
+                    // the earlier `contradictions` event already showed.
+                    contradictions = event.contradictions
+                )
+            )
+            is LedgerEvent.StoppedByUser -> state.copy(
+                ledgerView = view.copy(stoppedByUser = true)
+            )
+        }
+    }
+
+    /**
+     * Upsert one branch row by [branchId] — the same id arrives on
+     * `branch_started` and later on completion/failure; a row is never
+     * duplicated and its other fields survive the update.
+     */
+    private fun upsertBranch(
+        rows: List<ResearchBranchRow>,
+        branchId: String,
+        query: String,
+        status: String
+    ): List<ResearchBranchRow> {
+        val index = rows.indexOfFirst { it.branchId == branchId }
+        if (index < 0) return rows + ResearchBranchRow(branchId = branchId, query = query, status = status)
+        return rows.mapIndexed { i, row ->
+            if (i == index) {
+                row.copy(query = query.ifBlank { row.query }, status = status)
+            } else {
+                row
+            }
         }
     }
 

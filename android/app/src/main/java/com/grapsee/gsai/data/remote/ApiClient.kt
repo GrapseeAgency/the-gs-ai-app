@@ -202,8 +202,10 @@ class ApiClient(
      * `research` event name is routed the same way to [onResearchEvent]. The
      * v2 `search`/`source` payload subtypes (`engines` / `read` / `evidence`)
      * need no walker change — they arrive on the existing event names and are
-     * the stream layer's parsing job. All new callbacks default to no-op so
-     * every existing call site keeps its exact meaning.
+     * the stream layer's parsing job. PHASE 5 (additive): `ledger` events
+     * (deep-research branch progress) route to [onLedgerEvent] the same way.
+     * All new callbacks default to no-op so every existing call site keeps
+     * its exact meaning.
      */
     suspend fun sendMessageStream(
         conversationId: String,
@@ -222,6 +224,9 @@ class ApiClient(
         onSourceEvent: (String) -> Unit = {},
         onClarifyEvent: (String) -> Unit = {},
         onResearchEvent: (String) -> Unit = {},
+        /** PHASE 5: deep-research branch progress (`ledger` events) — same
+         *  double-encoded payload shape, same empty-payload tolerance. */
+        onLedgerEvent: (String) -> Unit = {},
         /** REASONING TRACE: raw {"delta":"..."} frames from thinking-enabled
          *  stream turns. Forwarded untouched; empty payload ignored. */
         onReasoningEvent: (String) -> Unit = {}
@@ -362,6 +367,9 @@ class ApiClient(
                     // PHASE 8.2: research-level events (§research) — same double-encoded
                     // payload shape, same empty-payload tolerance.
                     "research" -> if (!event.data.isNullOrBlank()) onResearchEvent(event.data)
+                    // PHASE 5: deep-research branch progress (§ledger) — unknown to
+                    // pre-ledger parsers, which skip it silently (same contract).
+                    "ledger" -> if (!event.data.isNullOrBlank()) onLedgerEvent(event.data)
                     // REASONING TRACE — unknown to pre-reasoning parsers, which
                     // skip it silently (when-without-else contract).
                     "reasoning" -> if (!event.data.isNullOrBlank()) onReasoningEvent(event.data)

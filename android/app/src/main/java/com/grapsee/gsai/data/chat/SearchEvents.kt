@@ -32,6 +32,11 @@ import kotlinx.serialization.json.longOrNull
  *    [decodeClarifyPrompt]) so a reloaded thread re-renders source cards,
  *    citation chips and clarify quick-choices exactly as the live turn did.
  *
+ * PHASE 5 adds the `ledger` family: [LedgerEvent] + [ResearchBranchRow] /
+ * [ResearchLedgerView] + [parseLedgerEventPayload] — deep-research branch
+ * progress (branch started/completed/failed, gap spawns, preserved
+ * contradictions) rendered in the same "Research details" audit trail.
+ *
  * HONESTY CONTRACT (binding, from the protocol): every trace line and every
  * source card here originates from ONE received event or the persisted done
  * message. Nothing in this file synthesizes steps, timers or progress.
@@ -276,6 +281,93 @@ sealed interface ResearchEvent {
     data class Cancelled(val by: String?) : ResearchEvent
 }
 
+/**
+ * PHASE 5 — `ledger` event variants: deep-research branch progress from the
+ * ledger-driven branching search (runBranchingResearch). One deep turn runs
+ * the question as parallel branches, each branch reading its own sources;
+ * these events carry that lifecycle so the "Research details" audit trail
+ * can show what each branch did instead of hiding it.
+ *
+ * Same contract as every other wire family: the payload is a JSON-encoded
+ * STRING (double-encoded) and [parseLedgerEventPayload] degrades unknown
+ * types / malformed JSON to null — silence, never a crash.
+ */
+sealed interface LedgerEvent {
+    /** Wave 1 decomposition — how many branches the question split into. */
+    data class Started(val question: String?, val branches: Int?) : LedgerEvent
+
+    /** A branch began running (query + server-side branch id). */
+    data class BranchStarted(val branchId: String, val query: String?) : LedgerEvent
+
+    /** A branch finished — source counts and whether it succeeded. */
+    data class BranchCompleted(
+        val branchId: String,
+        val query: String?,
+        val sources: Int,
+        val retrieved: Int,
+        val ok: Boolean,
+        /** "subagent" when collected from an async subagent task. */
+        val via: String?
+    ) : LedgerEvent
+
+    /** A branch failed — its error, carried verbatim (bounded server-side). */
+    data class BranchFailed(val branchId: String, val query: String?, val error: String?) : LedgerEvent
+
+    /** Gap round: what the ledger still lacks and the queries spawned for it. */
+    data class GapsOpen(val gaps: List<String>, val queries: List<String>) : LedgerEvent
+
+    /** Async subagents launched for the gap round (supervisor keeps working). */
+    data class SubagentsLaunched(val count: Int) : LedgerEvent
+
+    /** Contradicting claims were preserved (the answer must show both sides). */
+    data class Contradictions(val count: Int, val note: String?) : LedgerEvent
+
+    /** Terminal ledger totals — claims, open gaps, total branches. */
+    data class Final(
+        val claims: Int,
+        val contradictions: Int,
+        val openGaps: Int,
+        val branches: Int
+    ) : LedgerEvent
+
+    /** The user's stop was honored mid-run — synthesis used what existed. */
+    data class StoppedByUser(val note: String?) : LedgerEvent
+}
+
+/**
+ * PHASE 5 — one live branch row, upserted by [branchId] as events arrive.
+ * [status] is the fold of the event types: "running" → "done" | "failed".
+ */
+@Immutable
+data class ResearchBranchRow(
+    val branchId: String,
+    val query: String,
+    val status: String,
+    val sources: Int? = null,
+    val retrieved: Int? = null,
+    val via: String? = null,
+    val error: String? = null
+)
+
+/**
+ * PHASE 5 — the whole live ledger snapshot (null = this turn emitted no
+ * `ledger` events, i.e. a quick/linear turn). Folded from received events
+ * only; a branch row appears when the wire says a branch started, and
+ * nothing here is synthesized.
+ */
+@Immutable
+data class ResearchLedgerView(
+    val plannedBranches: Int? = null,
+    val branches: List<ResearchBranchRow> = emptyList(),
+    val gapQueries: List<String> = emptyList(),
+    val subagentsLaunched: Int? = null,
+    val contradictions: Int? = null,
+    val stoppedByUser: Boolean = false,
+    val finalClaims: Int? = null,
+    val finalOpenGaps: Int? = null,
+    val finalBranches: Int? = null
+)
+
 // ---------------------------------------------------------------------------
 // Tolerant payload parsers (SSE payloads + persisted message JSON)
 // ---------------------------------------------------------------------------
@@ -455,6 +547,56 @@ private fun JsonObject.researchTimings(): ResearchTimings? {
         )
     }.getOrNull()
 }
+
+/**
+ * PHASE 5: parse a `ledger` event payload. Same tolerance as every other
+ * wire parser — an unknown `type` or malformed JSON → null; unknown fields
+ * are ignored. A payload missing its branchId (the upsert key) is dropped:
+ * without it there is no row to update.
+ */
+fun parseLedgerEventPayload(payload: String): LedgerEvent? = runCatching {
+    val obj = GsApiJson.parseToJsonElement(payload).jsonObject
+    when (obj.string("type")) {
+        "ledger_started" -> LedgerEvent.Started(
+            question = obj.string("question"),
+            branches = obj.int("branches")
+        )
+        "branch_started" -> LedgerEvent.BranchStarted(
+            branchId = obj.string("branchId") ?: return@runCatching null,
+            query = obj.string("query")
+        )
+        "branch_completed" -> LedgerEvent.BranchCompleted(
+            branchId = obj.string("branchId") ?: return@runCatching null,
+            query = obj.string("query"),
+            sources = obj.int("sources") ?: 0,
+            retrieved = obj.int("retrieved") ?: 0,
+            ok = obj.bool("ok") ?: false,
+            via = obj.string("via")
+        )
+        "branch_failed" -> LedgerEvent.BranchFailed(
+            branchId = obj.string("branchId") ?: return@runCatching null,
+            query = obj.string("query"),
+            error = obj.string("error")
+        )
+        "gaps_open" -> LedgerEvent.GapsOpen(
+            gaps = obj.strings("gaps"),
+            queries = obj.strings("queries")
+        )
+        "subagents_launched" -> LedgerEvent.SubagentsLaunched(count = obj.int("count") ?: 0)
+        "contradictions" -> LedgerEvent.Contradictions(
+            count = obj.int("count") ?: 0,
+            note = obj.string("note")
+        )
+        "ledger_final" -> LedgerEvent.Final(
+            claims = obj.int("claims") ?: 0,
+            contradictions = obj.int("contradictions") ?: 0,
+            openGaps = obj.int("openGaps") ?: 0,
+            branches = obj.int("branches") ?: 0
+        )
+        "stopped_by_user" -> LedgerEvent.StoppedByUser(note = obj.string("note"))
+        else -> null
+    }
+}.getOrNull()
 
 /**
  * Parse the clarify payload — the same JSON travels twice: live on the

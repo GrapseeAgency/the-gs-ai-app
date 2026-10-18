@@ -71,6 +71,16 @@ const localHandlers: Record<string, LocalHandler> = {
         snippet: s.snippet,
         status: s.status,
         query: s.query,
+        // Aggregator-assigned facts (§8.2 §3) — class, authority tier, the
+        // REAL engine and rank. Dropping them here used to make the
+        // supervisor fabricate `engine: 'subagent'` + `searchRank: 0` for
+        // every gap-branch source, losing which engine actually found the
+        // page and how it ranked.
+        sourceType: s.sourceType,
+        authority: s.authority,
+        engine: s.engine,
+        searchRank: s.searchRank,
+        publishedDate: s.publishedDate,
         // trimmed extract — enough for claim extraction without bloating
         // the task result row (the supervisor ledger re-claims from it)
         ...(s.pageExtract ? { extract: s.pageExtract.slice(0, 4_000) } : {}),

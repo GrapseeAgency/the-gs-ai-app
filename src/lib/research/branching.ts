@@ -20,7 +20,16 @@
  */
 
 import { runResearch, RESEARCH_BUDGET, type ResearchOutcome } from '../search/research'
-import type { ResearchSource, SearchEventEmitter, SearchIntent, TimeRange } from '../search/types'
+import type {
+  Authority,
+  LedgerEvent,
+  ResearchSource,
+  SearchEngineId,
+  SearchEventEmitter,
+  SearchIntent,
+  SourceType,
+  TimeRange,
+} from '../search/types'
 import { NOOP_EMIT } from '../search/types'
 import { launchSubagent, waitForSubagent } from '@/lib/subagents'
 import {
@@ -58,6 +67,11 @@ const MAX_FIRST_WAVE_BRANCHES = 3
 const MAX_GAP_BRANCHES = 2
 const BRANCH_CONCURRENCY = 2
 
+/** Typed branch-progress channel — the payload contract is [LedgerEvent]. */
+function ledgerEmitter(emit: SearchEventEmitter): (event: LedgerEvent) => void {
+  return (event) => emit('ledger', event)
+}
+
 async function runBranch(
   branchId: string,
   query: string,
@@ -66,9 +80,10 @@ async function runBranch(
   ledger: ResearchLedger,
   emit: SearchEventEmitter
 ): Promise<ResearchOutcome> {
+  const emitLedger = ledgerEmitter(emit)
   const branch = ledger.branches.find((b) => b.id === branchId)
   if (branch) branch.status = 'running'
-  emit('ledger', { type: 'branch_started', branchId, query })
+  emitLedger({ type: 'branch_started', branchId, query })
   try {
     const outcome = await runResearch({
       queries: [query],
@@ -89,7 +104,7 @@ async function runBranch(
   } catch (e) {
     // Branch failures do not kill sibling branches.
     if (branch) branch.status = 'failed'
-    emit('ledger', { type: 'branch_failed', branchId, query, error: String(e instanceof Error ? e.message : e).slice(0, 120) })
+    emitLedger({ type: 'branch_failed', branchId, query, error: String(e instanceof Error ? e.message : e).slice(0, 120) })
     return {
       ok: false,
       sources: [],
@@ -105,6 +120,7 @@ async function runBranch(
 
 export async function runBranchingResearch(input: BranchingInput): Promise<ResearchOutcome & { ledger: ResearchLedger }> {
   const emit = input.emit ?? NOOP_EMIT
+  const emitLedger = ledgerEmitter(emit)
   const startedAt = Date.now()
   const hardDeadline = Math.min(input.deadlineAt, startedAt + RESEARCH_BUDGET[input.depth].wallClockMs)
   const budget = RESEARCH_BUDGET[input.depth]
@@ -117,7 +133,7 @@ export async function runBranchingResearch(input: BranchingInput): Promise<Resea
     new Set([...decomposeQuestion(question), ...input.queries.slice(0, 2)])
   ).slice(0, MAX_FIRST_WAVE_BRANCHES)
 
-  emit('ledger', { type: 'ledger_started', question: question.slice(0, 100), branches: seedQueries.length })
+  emitLedger({ type: 'ledger_started', question: question.slice(0, 100), branches: seedQueries.length })
 
   const allSources: ResearchSource[] = []
   const allQueries: string[] = []
@@ -163,7 +179,7 @@ export async function runBranchingResearch(input: BranchingInput): Promise<Resea
             ledger.claims.push(...claims)
           }
         }
-        emit('ledger', {
+        emitLedger({
           type: 'branch_completed',
           branchId: next.id,
           query: next.q.slice(0, 80),
@@ -185,7 +201,7 @@ export async function runBranchingResearch(input: BranchingInput): Promise<Resea
   const maxGapRounds = input.depth === 'deep' ? 2 : 1
   while (gapRound < maxGapRounds && Date.now() < hardDeadline) {
     if (input.isStopped?.()) {
-      emit('ledger', { type: 'stopped_by_user', note: 'stop honored — synthesizing with what exists' })
+      emitLedger({ type: 'stopped_by_user', note: 'stop honored — synthesizing with what exists' })
       break
     }
     const gaps = detectGaps(
@@ -211,7 +227,7 @@ export async function runBranchingResearch(input: BranchingInput): Promise<Resea
       if (q.length >= 3) gapQueries.push(q)
     }
     if (gapQueries.length === 0) break
-    emit('ledger', { type: 'gaps_open', gaps: fresh.map((g) => g.description), queries: gapQueries })
+    emitLedger({ type: 'gaps_open', gaps: fresh.map((g) => g.description), queries: gapQueries })
     gapRound++
 
     // PHASE 6 — ASYNC SUBAGENT DISPATCH: gap branches are LAUNCHED and the
@@ -229,7 +245,7 @@ export async function runBranchingResearch(input: BranchingInput): Promise<Resea
       })
       launched.push({ taskId, branchId })
     }
-    emit('ledger', { type: 'subagents_launched', count: launched.length })
+    emitLedger({ type: 'subagents_launched', count: launched.length })
 
     // supervisor work DURING the branches: pre-consolidation pass
     const preClaims = ledger.claims.slice(0, 24)
@@ -249,6 +265,11 @@ export async function runBranchingResearch(input: BranchingInput): Promise<Resea
           status: string
           query: string
           extract?: string
+          sourceType?: SourceType
+          authority?: Authority
+          engine?: SearchEngineId
+          searchRank?: number
+          publishedDate?: string | null
         }[]
         queriesRun?: string[]
       }
@@ -267,12 +288,18 @@ export async function runBranchingResearch(input: BranchingInput): Promise<Resea
           url: s.url,
           domain: s.domain,
           snippet: s.snippet,
-          publishedDate: null,
+          publishedDate: s.publishedDate ?? null,
           retrievedAt: new Date().toISOString(),
           query: s.query,
-          engine: 'subagent',
-          searchRank: null,
+          // The aggregator's own class/tier/engine/rank, carried through the
+          // subagent boundary — a pre-v? gap-branch source used to arrive
+          // with `engine: 'subagent'` (not even a valid SearchEngineId) and
+          // `searchRank: 0`, a fabricated provenance for a real page.
+          engine: s.engine ?? 'duckduckgo-lite',
+          searchRank: s.searchRank ?? i + 1,
           status: s.status === 'retrieved' ? 'retrieved' : (s.status as ResearchSource['status']),
+          sourceType: s.sourceType ?? 'general',
+          authority: s.authority ?? 'discovery',
           ...(s.extract ? { pageExtract: s.extract } : {}),
         })
       }
@@ -282,7 +309,7 @@ export async function runBranchingResearch(input: BranchingInput): Promise<Resea
           ledger.claims.push(...claimsFromExtract(s.extract, s.url, queryTerms))
         }
       }
-      emit('ledger', {
+      emitLedger({
         type: 'branch_completed',
         branchId,
         query: (result.queriesRun?.[0] ?? '').slice(0, 80),
@@ -298,7 +325,7 @@ export async function runBranchingResearch(input: BranchingInput): Promise<Resea
   // ---- CONTRADICTIONS — never silently invalidated ------------------------
   ledger.contradictions = detectContradictions(ledger.claims)
   if (ledger.contradictions.length > 0) {
-    emit('ledger', {
+    emitLedger({
       type: 'contradictions',
       count: ledger.contradictions.length,
       note: 'conflicting evidence preserved explicitly — the answer must present both sides with citations',
@@ -306,7 +333,7 @@ export async function runBranchingResearch(input: BranchingInput): Promise<Resea
   }
   ledger.claims = ledger.claims.slice(0, 40)
   await saveLedger(ledger)
-  emit('ledger', {
+  emitLedger({
     type: 'ledger_final',
     claims: ledger.claims.length,
     contradictions: ledger.contradictions.length,
