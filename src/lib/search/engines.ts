@@ -578,6 +578,81 @@ export const crossref: EngineAdapter = {
   },
 }
 
+/**
+ * treg WebAccess — one token in front of a chain of search vendors
+ * (https://treg.to/web-access, POST /call/treg.web.search).
+ *
+ * OPT-IN BY CONSTRUCTION. Without TREG_TOKEN this adapter is neither
+ * registered nor selected, so an unconfigured deployment behaves exactly as
+ * before: no extra request, no extra latency, no surprise bill.
+ *
+ * Two hard bounds on a routed call:
+ *   X-Treg-Route-Waterfall: 0  → stop at the first miss instead of walking the
+ *                                whole chain (a miss can be billed at every
+ *                                vendor tried before it);
+ *   X-Treg-Route-Max-Cost      → ceiling for one call (default 2 cents).
+ *
+ * Timeout is 3s, deliberately below the aggregator's engine budget: a routed
+ * search that has not answered by then will not improve this turn, and the
+ * free engines have already reported. The aggregator waits for its slowest
+ * engine, so this number is also the WORST-CASE added latency.
+ *
+ * Rows are PROVIDER-NATIVE (treg relays, it does not normalise), so every
+ * field is read defensively across the names its children use.
+ */
+export const tregWebSearch: EngineAdapter = {
+  id: 'treg',
+  kind: 'general',
+  run: async (q) => {
+    const token = process.env.TREG_TOKEN
+    if (!token) throw new Error('treg not configured')
+    const res = await fetch('https://treg.to/call/treg.web.search', {
+      method: 'POST',
+      headers: {
+        'X-Treg-Token': token,
+        'content-type': 'application/json',
+        accept: 'application/json',
+        'X-Treg-Route-Waterfall': '0',
+        'X-Treg-Route-Max-Cost': process.env.TREG_MAX_COST || '0.02',
+      },
+      body: JSON.stringify({ q: q.query, limit: Math.min(q.limit, 10) }),
+      signal: AbortSignal.timeout(3_000),
+    })
+    if (!res.ok) throw new Error(`treg http ${res.status}`)
+    const json = (await res.json()) as { output?: { results?: unknown } }
+    const rows = Array.isArray(json?.output?.results) ? (json.output.results as unknown[]) : []
+    const str = (row: Record<string, unknown>, keys: string[]): string => {
+      for (const k of keys) {
+        const v = row[k]
+        if (typeof v === 'string' && v.trim().length > 0) return v.trim()
+      }
+      return ''
+    }
+    const out: RawResult[] = []
+    for (const raw of rows) {
+      if (!raw || typeof raw !== 'object') continue
+      const row = raw as Record<string, unknown>
+      const url = str(row, ['url', 'link', 'href', 'source_url'])
+      if (!url || !/^https?:\/\//i.test(url)) continue
+      const title = str(row, ['title', 'name', 'headline'])
+      if (!title) continue
+      out.push({
+        url,
+        title,
+        snippet: str(row, ['snippet', 'description', 'content', 'text', 'summary']).slice(0, 300),
+        domain: safeHost(url),
+        publishedDate: parseDate(
+          str(row, ['published_date', 'publishedDate', 'date', 'published_at']) || null
+        ),
+        rank: out.length + 1,
+        engine: 'treg',
+      })
+      if (out.length >= q.limit) break
+    }
+    return out
+  },
+}
+
 export const ENGINE_REGISTRY: Partial<Record<SearchEngineId, EngineAdapter>> = {
   'bing-news-rss': bingNewsRss,
   'google-news-rss': googleNewsRss,
@@ -590,6 +665,9 @@ export const ENGINE_REGISTRY: Partial<Record<SearchEngineId, EngineAdapter>> = {
   gutenberg,
   arxiv,
   crossref,
+  // Conditional by design: an engine that costs money per call never joins a
+  // search the operator did not configure it for.
+  ...(process.env.TREG_TOKEN ? { treg: tregWebSearch } : {}),
 }
 
 /**
@@ -616,6 +694,9 @@ export function enginesForIntent(
   sourceHint?: string
 ): SearchEngineId[] {
   const searx = process.env.SEARXNG_URL ? (['searxng'] as SearchEngineId[]) : []
+  // treg is paid-per-success; it only exists when the operator configured a
+  // token, and it is always LAST so it loses every tie-break to a free engine.
+  const treg = process.env.TREG_TOKEN ? (['treg'] as SearchEngineId[]) : []
   // 8.2 §11/§23 — "official sources only": first-party-friendly engines only;
   // no aggregator/news engines, no third-party provider search.
   if (officialOnly) {
@@ -628,9 +709,9 @@ export function enginesForIntent(
       return [...searx, 'wikipedia', 'bing-web', 'duckduckgo-lite']
     }
     if (NEWS_HINT_DOMAINS.some((d) => hint === d || hint.endsWith(`.${d}`))) {
-      return [...searx, 'bing-news-rss', 'google-news-rss', 'duckduckgo-lite', 'z-ai']
+      return [...searx, 'bing-news-rss', 'google-news-rss', 'duckduckgo-lite', 'z-ai', ...treg]
     }
-    return [...searx, 'bing-web', 'duckduckgo-lite', 'z-ai']
+    return [...searx, 'bing-web', 'duckduckgo-lite', 'z-ai', ...treg]
   }
   if (intent === 'academic') {
     return [...searx, 'arxiv', 'crossref', 'wikipedia', 'bing-web', 'duckduckgo-lite']
@@ -645,15 +726,15 @@ export function enginesForIntent(
     // scholarly index answers LITERATURE questions, not religious-history
     // facts, so it stays reserved for the academic intent. z-ai promoted:
     // its index surfaces tradition-aware answers (Islamic sites etc.).
-    return [...searx, 'z-ai', 'wikipedia', 'bing-web', 'duckduckgo-lite']
+    return [...searx, 'z-ai', 'wikipedia', 'bing-web', 'duckduckgo-lite', ...treg]
   }
   if (isNews) {
     return officialOnly
       ? [...searx, 'bing-web', 'duckduckgo-lite']
-      : [...searx, 'bing-news-rss', 'google-news-rss', 'duckduckgo-lite', 'z-ai']
+      : [...searx, 'bing-news-rss', 'google-news-rss', 'duckduckgo-lite', 'z-ai', ...treg]
   }
   if (intent === 'factual' || intent === 'research' || intent === 'comparison') {
-    return [...searx, 'bing-web', 'duckduckgo-lite', 'wikipedia', 'bing-news-rss', 'z-ai']
+    return [...searx, 'bing-web', 'duckduckgo-lite', 'wikipedia', 'bing-news-rss', 'z-ai', ...treg]
   }
-  return [...searx, 'bing-web', 'duckduckgo-lite', 'z-ai']
+  return [...searx, 'bing-web', 'duckduckgo-lite', 'z-ai', ...treg]
 }

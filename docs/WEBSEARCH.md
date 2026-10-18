@@ -133,3 +133,24 @@ evidence) + E2E predicates covering §17 scenarios against the live server and
 the public phone origin. Upstream 429 throttling can transiently fail
 individual predicates (documented Phase-7 flake source); every predicate is
 expected to pass across runs.
+
+## Engine configuration
+
+Every engine in `src/lib/search/engines.ts` is selected by intent
+(`enginesForIntent`) and fanned out in parallel by `runMetaSearch`. Two are
+optional, and both are **absent unless configured** — an unconfigured
+deployment runs exactly the key-less set (Bing/Google News RSS, DuckDuckGo
+Lite, Wikipedia, the scholarly/book APIs):
+
+| Env | Effect |
+|---|---|
+| `SEARXNG_URL` | Adds the self-hosted SearXNG instance, first in every general set. |
+| `TREG_TOKEN` | Adds treg WebAccess (`POST https://treg.to/call/treg.web.search`), last in every general/news set. |
+| `TREG_MAX_COST` | Per-call ceiling sent as `X-Treg-Route-Max-Cost` (default `0.02` USD). |
+
+treg is **paid per successful call** — its own catalog says so ("NOT free:
+misses are billed too"), despite the marketing page's `$0` headline. Two
+guards bound it: `X-Treg-Route-Waterfall: 0` stops at the first miss instead of
+walking the whole vendor chain, and the cost ceiling above. Its adapter timeout
+is 3 s; because `runMetaSearch` waits for its slowest engine, that is also the
+worst-case latency it can add to a turn.

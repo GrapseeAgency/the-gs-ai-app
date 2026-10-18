@@ -17,6 +17,9 @@ export type SearchEngineId =
   | 'duckduckgo-lite'
   | 'wikipedia'
   | 'searxng'
+  // OPT-IN: treg WebAccess (one token in front of a vendor chain). Present in
+  // the registry only when TREG_TOKEN is set — see engines.ts.
+  | 'treg'
   // PHASE 8.2 — books & scholarly (lawful/no-key APIs only, 8.2 §10)
   | 'openlibrary'
   | 'gutenberg'
