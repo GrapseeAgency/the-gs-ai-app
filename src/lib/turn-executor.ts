@@ -40,6 +40,7 @@ import {
   type VisionContentPart,
 } from '@/lib/ai'
 import { decideCapability, validTimeZone } from '@/lib/capability'
+import { mapWithConcurrency } from '@/lib/concurrency'
 import { classifyErrorType, writeTurnTrace } from '@/lib/trace'
 import { getBackendRevision } from '@/lib/revision'
 import {
@@ -284,7 +285,7 @@ export type TurnResult = {
 
 // ---------------------------------------------------------------------------
 // PREPARE — request validation + user-message persistence + context build
-// (verbatim move of the messages-route pre-work)
+// (verbatim move of the messages-route preflight)
 // ---------------------------------------------------------------------------
 
 export async function prepareTurn(
@@ -675,11 +676,13 @@ export async function prepareTurn(
     //   3. whatever is left buys detail crops, for the first images in order.
     const currentImages = imageAttachments.slice(0, VISION_MAX_IMAGES_PER_REQUEST)
     const detailAllowance = detailCropAllowance(currentImages.length, recentImageTurnIds.length > 0)
-    for (let i = 0; i < currentImages.length; i++) {
-      // withDetail for the first `detailAllowance` images: a native-resolution
-      // crop of the densest region (see VISION_DETAIL_* in vision.ts) — that is
-      // what makes small printed text legible to the model instead of mush.
-      const result = await prepareVisionImage(currentImages[i], { withDetail: i < detailAllowance })
+    // withDetail for the first `detailAllowance` images: a native-resolution
+    // crop of the densest region (see VISION_DETAIL_* in vision.ts) — that is
+    // what makes small printed text legible to the model instead of mush.
+    const prepared = await mapWithConcurrency(currentImages, 2, (att, i) =>
+      prepareVisionImage(att, { withDetail: i < detailAllowance })
+    )
+    for (const result of prepared) {
       if (result.ok) {
         prep.visionPrepared.push(result.image)
         if (result.detail) prep.visionPrepared.push(result.detail)
