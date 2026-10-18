@@ -29,6 +29,7 @@ import { orCompleteChat, orStreamChat } from '@/lib/openrouter'
 import { planRoute } from '@/lib/router'
 import {
   SYSTEM_PROMPT,
+  WIDGET_PROMPT,
   VISION_GROUNDING_PROMPT,
   VISION_OCR_FALLBACK_PREFIX,
   streamChat,
@@ -369,8 +370,8 @@ export async function prepareTurn(
   }
 
   const baseSystemPrompt = conversation.assistant?.instructions
-    ? `${conversation.assistant.instructions}\n\n(Platform persona base: ${SYSTEM_PROMPT})`
-    : SYSTEM_PROMPT
+    ? `${conversation.assistant.instructions}\n\n(Platform persona base: ${SYSTEM_PROMPT})\n\n${WIDGET_PROMPT}`
+    : `${SYSTEM_PROMPT}\n\n${WIDGET_PROMPT}`
 
   const recentDesc = await db.message.findMany({
     where: { conversationId: id, id: { not: userMessage.id } },

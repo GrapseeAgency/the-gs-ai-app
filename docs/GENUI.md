@@ -1,6 +1,9 @@
 # GENUI — Rendering Interactive Things Inside the Chat
 
-Status: proposal (researched 2026-10-18). Nothing implemented yet.
+Status: **Phase 0 + Phase 1 implemented** (2026-10-18, Android-first per operator
+directive — the web client is a raw test page and is deliberately untouched).
+Wire format, prompt contract, parser and six native Compose renderers are in.
+Artifacts (sandboxed HTML) remain future work.
 
 ## What the user asked for
 
@@ -46,7 +49,20 @@ Two paradigms, and the trade is explicit:
 Phase 1 gets us 80% of the "wow" with 10% of the risk; artifacts are the
 escape hatch for "everything else", added once the plumbing exists.
 
-### The wire format (Phase 0 — no SSE change needed)
+## Implementation (Phase 0 + 1, Android-first)
+
+| Piece | Where | Notes |
+|---|---|---|
+| Prompt contract | `src/lib/ai.ts` `WIDGET_PROMPT`, appended in `turn-executor.ts` | fence kind + strict JSON + worked rules; 3-widget cap per answer |
+| Block type + fence routing | `ContentBlocks.kt` `Block.WidgetBlock` | widget languages: chart/stat/table/compare/progress/timeline, case-insensitive; open fence mid-stream → skeleton, never raw JSON |
+| Payload validation | `WidgetBlocks.kt` `parseWidget()` | kotlinx.serialization, caps (200 points/series, 8 series, 100 rows, 8 stat cards, 64 KB), returns null on ANY failure → renderer degrades to a code block |
+| Renderers | `WidgetBlocks.kt` `WidgetBlockView` | line/area/bar/pie on Canvas, stat cards, sortable table, compare columns, animated progress, timeline; skeleton via `skeletonSurface`; theme colors only (no new deps) |
+| Dispatch | `RichBlocks.kt` `BlockView` | one line: `is Block.WidgetBlock -> WidgetBlockView(...)` |
+
+Tests: `WidgetBlocksTest` (15) + `ContentBlocksTest` regression (22), all green;
+`:app:compileReleaseKotlin` green; `src/` tsc 34 errors, unchanged.
+
+### The wire format (as shipped)
 
 The model emits a fenced block whose language is the widget type; the body is
 JSON. It rides the existing text stream — no new event types, no new protocol.

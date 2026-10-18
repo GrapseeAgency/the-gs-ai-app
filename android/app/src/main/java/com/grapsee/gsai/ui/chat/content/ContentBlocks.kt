@@ -82,6 +82,20 @@ sealed interface Block {
 
     /** Fenced mermaid source — diagram parsing/rendering happens on finalize only. */
     data class MermaidBlock(val source: String, override val sourceStart: Int) : Block
+
+    /**
+     * Fenced widget payload (GENUI): ```chart / ```stat / ```table / ```compare /
+     * ```progress / ```timeline with a JSON body. JSON parsing happens at render
+     * time only (like mermaid), so a malformed payload degrades to a code block
+     * and a mid-stream one renders as a skeleton — the raw JSON never scrolls by.
+     */
+    data class WidgetBlock(
+        val kind: String,
+        val json: String,
+        val open: Boolean,
+        override val sourceStart: Int
+    ) : Block
+
     data class ImageBlock(val url: String, val alt: String, override val sourceStart: Int) : Block
     data class CollapsibleBlock(
         val summary: String,
@@ -310,7 +324,21 @@ private fun parseFence(lines: List<Line>, start: Int): Pair<Block, Int> {
         body.append(lines[i].text)
         i++
     }
-    // Unterminated trailing fence — mid-stream: render what arrived as open code.
+    // Unterminated trailing fence — mid-stream. Widget fences become an OPEN
+    // widget block so the UI shows a skeleton instead of scrolling raw JSON;
+    // everything else renders what arrived as open code.
+    val lang = language?.lowercase()
+    if (lang != null && lang in WIDGET_LANGUAGES) {
+        return Pair(
+            Block.WidgetBlock(
+                kind = lang,
+                json = body.toString().trimEnd('\n'),
+                open = true,
+                sourceStart = lines[start].offset
+            ),
+            lines.size
+        )
+    }
     return Pair(
         Block.CodeBlock(
             language = language,
@@ -322,14 +350,21 @@ private fun parseFence(lines: List<Line>, start: Int): Pair<Block, Int> {
     )
 }
 
-/** A closed fence in the mermaid language is a first-class diagram block; an
- *  open one stays plain code so the stream never lays out a diagram mid-flight. */
-private fun fenceToBlock(language: String?, code: String, open: Boolean, offset: Int): Block =
-    if (language.equals("mermaid", ignoreCase = true) && !open) {
-        Block.MermaidBlock(code, offset)
-    } else {
-        Block.CodeBlock(language, code, open, offset)
+/** Fence languages that carry a GENUI widget payload (JSON body). */
+val WIDGET_LANGUAGES = setOf("chart", "stat", "table", "compare", "progress", "timeline")
+
+/** A closed fence in the mermaid language is a first-class diagram block;
+ *  a widget-language fence is a first-class widget block (JSON parsed at render
+ *  time, so a malformed payload degrades to a code block); anything else, and
+ *  any open fence, stays plain code. */
+private fun fenceToBlock(language: String?, code: String, open: Boolean, offset: Int): Block {
+    val lang = language?.lowercase()
+    return when {
+        language.equals("mermaid", ignoreCase = true) && !open -> Block.MermaidBlock(code, offset)
+        lang != null && lang in WIDGET_LANGUAGES -> Block.WidgetBlock(lang, code, open, offset)
+        else -> Block.CodeBlock(language, code, open, offset)
     }
+}
 
 private fun parseMathBlock(lines: List<Line>, start: Int, blocks: MutableList<Block>): Int {
     val first = lines[start].text.trimStart()
@@ -642,6 +677,7 @@ private fun Block.withShiftedSource(delta: Int): Block = when (this) {
     is Block.Divider -> copy(sourceStart = sourceStart + delta)
     is Block.MathBlock -> copy(sourceStart = sourceStart + delta)
     is Block.MermaidBlock -> copy(sourceStart = sourceStart + delta)
+    is Block.WidgetBlock -> copy(sourceStart = sourceStart + delta)
     is Block.ImageBlock -> copy(sourceStart = sourceStart + delta)
     is Block.CollapsibleBlock -> copy(
         sourceStart = sourceStart + delta,

@@ -49,6 +49,33 @@ export type VisionChatMessage = {
 export const SYSTEM_PROMPT = `You are GS. Answer the user's actual request. Use the tools the application provides and do not invent tool results. Cite sources when you use retrieved evidence. Match the user's language and register. Never use emoji anywhere in your replies. Write plain prose: prefer commas, colons and parentheses over em dashes.`
 
 /**
+ * GENUI widget contract (docs/GENUI.md). The provider has no tool-calling, so
+ * interactive rendering is prompt-driven: the model embeds widget fences in the
+ * markdown stream and the clients render them natively (chart/stat/table/
+ * compare/progress/timeline). Hard rules keep this safe:
+ *
+ *  - a widget SUPPLEMENTS the prose around it, never replaces it;
+ *  - the body is strict JSON, double-quoted, no comments, no trailing commas;
+ *  - a widget only ever contains data the answer already established — it is a
+ *    visualisation of said facts, never a place for new claims;
+ *  - at most 3 widgets per answer, only when genuinely useful.
+ *
+ * Invalid payloads degrade to code blocks on the client, so a malformed widget
+ * costs one ugly block, not the answer.
+ */
+export const WIDGET_PROMPT = `When an answer contains numbers, comparisons, trends or steps, show them as interactive widgets embedded in your reply. A widget is a fenced code block whose language is the widget kind and whose body is strict JSON (double quotes, no comments, no trailing commas).
+
+Available kinds:
+- chart: {"type":"line"|"area"|"bar"|"pie","title":"...","unit":"...","series":[{"name":"...","data":[[x,y],...]}]}  (for pie, one series per slice with a single point)
+- stat: {"title":"...","cards":[{"label":"...","value":"...","unit":"...","delta":"...","direction":"up"|"down"|"flat"}]}
+- table: {"title":"...","columns":["..."],"rows":[["...","..."]],"sortable":true}
+- compare: {"title":"...","left":{"title":"...","items":["..."]},"right":{"title":"...","items":["..."]}}
+- progress: {"title":"...","items":[{"label":"...","percent":0-100}]}
+- timeline: {"title":"...","entries":[{"date":"...","title":"...","detail":"..."}]}
+
+Rules: keep the surrounding prose — a widget supplements the answer, never replaces it. A widget may only show data your answer already states; never put new claims inside a widget. Prefer 1-3 widgets per answer and only when they genuinely help. If you are unsure the JSON is valid, write prose instead.`
+
+/**
  * PHASE 7 vision grounding, REWRITTEN by the operator's 2026-10-14 directive
  * (TASK 3). The old rule 2 literally taught the model to hedge ("mark it as
  * such ('appears to be', 'resembles')") — with a flash model that instruction

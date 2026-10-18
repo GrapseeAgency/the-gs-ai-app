@@ -226,6 +226,7 @@ private fun BlockView(
         is Block.Divider -> DividerBlock()
         is Block.MathBlock -> MathBlockView(block)
         is Block.MermaidBlock -> MermaidBlockView(block, streaming = isStreaming, onCopyCode = onCopyCode)
+        is Block.WidgetBlock -> WidgetBlockView(block, streaming = isStreaming)
         is Block.ImageBlock -> ImageBlockView(block)
         is Block.CollapsibleBlock -> CollapsibleBlockView(block, citationUrls)
         is Block.CitationsBlock -> CitationsBlockView(block)
