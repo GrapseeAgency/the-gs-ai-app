@@ -17,6 +17,9 @@ export type SearchEngineId =
   | 'duckduckgo-lite'
   | 'wikipedia'
   | 'searxng'
+  // OPT-IN: Brave Search API — free tier (2k/month) behind a key, official
+  // JSON, no scraping. Present only when BRAVE_API_KEY is set — see engines.ts.
+  | 'brave'
   // OPT-IN: treg WebAccess (one token in front of a vendor chain). Present in
   // the registry only when TREG_TOKEN is set — see engines.ts.
   | 'treg'

@@ -579,6 +579,88 @@ export const crossref: EngineAdapter = {
 }
 
 /**
+ * Brave Search API — a real index behind a free key
+ * (https://api.search.brave.com/res/v1/web/search).
+ *
+ * WHY THIS ONE AND NOT MORE SCRAPERS: measured live 2026-10-18 from a
+ * datacenter IP, every key-less general SERP except Bing's HTML page is gated —
+ * DuckDuckGo Lite answers 202 + a JS challenge (0/5 runs), Mojeek 403, Ecosia
+ * 403, Brave's own HTML 429, public SearXNG instances a captcha page. Bing's
+ * `format=rss` endpoint answers 200 but served DECOY results ("nightkop 500mg"
+ * → cyberpunk wallpapers), which the poison guard would throw away anyway.
+ * A structured, licensed JSON API is the only free general-web source that is
+ * neither gated nor a decoy, so it is the one worth wiring.
+ *
+ * OPT-IN BY CONSTRUCTION, same contract as treg: without BRAVE_API_KEY this
+ * adapter is not registered and not selected.
+ *
+ * FREE TIER IS 1 REQUEST/SECOND. The aggregator fans out up to three queries in
+ * parallel, so a naive adapter would spend two of its three calls on 429s.
+ * SINGLE-FLIGHT instead: while one Brave call is in flight the others resolve
+ * empty immediately. The primary query gets the index; the paraphrases do not
+ * queue behind it and add no latency. A 429 is also returned as empty rather
+ * than thrown — throttling on a free tier is expected, not a search failure.
+ */
+let braveInFlight = false
+
+export const braveWebSearch: EngineAdapter = {
+  id: 'brave',
+  kind: 'general',
+  run: async (q) => {
+    const key = process.env.BRAVE_API_KEY
+    if (!key) throw new Error('brave not configured')
+    if (braveInFlight) return []
+    braveInFlight = true
+    try {
+      const limit = Math.min(Math.max(1, Math.floor(q.limit) || 1), 20)
+      const url =
+        'https://api.search.brave.com/res/v1/web/search' +
+        `?q=${encodeURIComponent(q.query)}` +
+        `&count=${limit}` +
+        (q.region && /^[A-Za-z]{2}$/.test(q.region) ? `&country=${q.region.toUpperCase()}` : '&country=US') +
+        '&search_lang=en&safesearch=moderate&text_decorations=false'
+      const res = await fetch(url, {
+        headers: {
+          Accept: 'application/json',
+          // No explicit Accept-Encoding: undici negotiates and decompresses for
+          // us; setting it by hand hands back raw gzip bytes.
+          'X-Subscription-Token': key,
+        },
+        signal: AbortSignal.timeout(4_000),
+      })
+      // 429 = free-tier throttle; empty, not failed. Everything else is real.
+      if (res.status === 429) return []
+      if (!res.ok) throw new Error(`brave http ${res.status}`)
+      const json = (await res.json()) as {
+        web?: { results?: { url?: unknown; title?: unknown; description?: unknown; age?: unknown }[] }
+      }
+      const rows = Array.isArray(json?.web?.results) ? json.web!.results : []
+      const out: RawResult[] = []
+      for (const row of rows) {
+        const rawUrl = typeof row?.url === 'string' ? row.url.trim() : ''
+        if (!/^https?:\/\//i.test(rawUrl)) continue
+        // Brave returns titles/descriptions with <strong> highlight tags.
+        const title = stripTags(typeof row?.title === 'string' ? row.title : '')
+        if (!title) continue
+        out.push({
+          url: rawUrl,
+          title,
+          snippet: stripTags(typeof row?.description === 'string' ? row.description : '').slice(0, 300),
+          domain: safeHost(rawUrl),
+          publishedDate: parseDate(typeof row?.age === 'string' ? row.age : null),
+          rank: out.length + 1,
+          engine: 'brave',
+        })
+        if (out.length >= limit) break
+      }
+      return out
+    } finally {
+      braveInFlight = false
+    }
+  },
+}
+
+/**
  * treg WebAccess — one token in front of a chain of search vendors
  * (https://treg.to/web-access, POST /call/treg.web.search).
  *
@@ -673,6 +755,8 @@ export const ENGINE_REGISTRY: Partial<Record<SearchEngineId, EngineAdapter>> = {
   // Conditional by design: an engine that costs money per call never joins a
   // search the operator did not configure it for.
   ...(process.env.TREG_TOKEN ? { treg: tregWebSearch } : {}),
+  // Free-but-keyed, so it also never joins a search it was not configured for.
+  ...(process.env.BRAVE_API_KEY ? { brave: braveWebSearch } : {}),
 }
 
 /**
@@ -699,6 +783,10 @@ export function enginesForIntent(
   sourceHint?: string
 ): SearchEngineId[] {
   const searx = process.env.SEARXNG_URL ? (['searxng'] as SearchEngineId[]) : []
+  // Both are keyed. Brave is free-tier and answers from a real index, so it
+  // outranks treg (paid per successful call); both stay last so they never
+  // displace a key-less engine that already answered.
+  const brave = process.env.BRAVE_API_KEY ? (['brave'] as SearchEngineId[]) : []
   // treg is paid-per-success; it only exists when the operator configured a
   // token, and it is always LAST so it loses every tie-break to a free engine.
   const treg = process.env.TREG_TOKEN ? (['treg'] as SearchEngineId[]) : []
@@ -714,9 +802,9 @@ export function enginesForIntent(
       return [...searx, 'wikipedia', 'bing-web', 'duckduckgo-lite']
     }
     if (NEWS_HINT_DOMAINS.some((d) => hint === d || hint.endsWith(`.${d}`))) {
-      return [...searx, 'bing-news-rss', 'google-news-rss', 'duckduckgo-lite', 'z-ai', ...treg]
+      return [...searx, 'bing-news-rss', 'google-news-rss', 'duckduckgo-lite', 'z-ai', ...brave, ...treg]
     }
-    return [...searx, 'bing-web', 'duckduckgo-lite', 'z-ai', ...treg]
+    return [...searx, 'bing-web', 'duckduckgo-lite', 'z-ai', ...brave, ...treg]
   }
   if (intent === 'academic') {
     return [...searx, 'arxiv', 'crossref', 'wikipedia', 'bing-web', 'duckduckgo-lite']
@@ -731,15 +819,15 @@ export function enginesForIntent(
     // scholarly index answers LITERATURE questions, not religious-history
     // facts, so it stays reserved for the academic intent. z-ai promoted:
     // its index surfaces tradition-aware answers (Islamic sites etc.).
-    return [...searx, 'z-ai', 'wikipedia', 'bing-web', 'duckduckgo-lite', ...treg]
+    return [...searx, 'z-ai', 'wikipedia', 'bing-web', 'duckduckgo-lite', ...brave, ...treg]
   }
   if (isNews) {
     return officialOnly
       ? [...searx, 'bing-web', 'duckduckgo-lite']
-      : [...searx, 'bing-news-rss', 'google-news-rss', 'duckduckgo-lite', 'z-ai', ...treg]
+      : [...searx, 'bing-news-rss', 'google-news-rss', 'duckduckgo-lite', 'z-ai', ...brave, ...treg]
   }
   if (intent === 'factual' || intent === 'research' || intent === 'comparison') {
-    return [...searx, 'bing-web', 'duckduckgo-lite', 'wikipedia', 'bing-news-rss', 'z-ai', ...treg]
+    return [...searx, 'bing-web', 'duckduckgo-lite', 'wikipedia', 'bing-news-rss', 'z-ai', ...brave, ...treg]
   }
-  return [...searx, 'bing-web', 'duckduckgo-lite', 'z-ai', ...treg]
+  return [...searx, 'bing-web', 'duckduckgo-lite', 'z-ai', ...brave, ...treg]
 }

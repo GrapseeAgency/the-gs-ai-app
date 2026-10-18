@@ -145,6 +145,7 @@ Lite, Wikipedia, the scholarly/book APIs):
 | Env | Effect |
 |---|---|
 | `SEARXNG_URL` | Adds the self-hosted SearXNG instance, first in every general set. |
+| `BRAVE_API_KEY` | Adds the Brave Search API (free tier: 2,000 queries/month), before treg in every general/news set. |
 | `TREG_TOKEN` | Adds treg WebAccess (`POST https://treg.to/call/treg.web.search`), last in every general/news set. |
 | `TREG_MAX_COST` | Per-call ceiling sent as `X-Treg-Route-Max-Cost` (default `0.02` USD). |
 
@@ -169,3 +170,30 @@ only when `TREG_TOKEN` is set, and `enginesForIntent()` appends `treg` **last**
 in the general/news sets, so the free engines still answer first and the trace
 shows `WebAccess` only when a routed call actually returned rows. Unset the
 variable and the engine set reverts byte-for-byte to the key-less default.
+
+### Why a keyed engine at all
+
+Measured live on 2026-10-18 from a datacenter IP, the key-less general SERPs
+are almost entirely gated:
+
+| Endpoint | Result |
+|---|---|
+| `www.bing.com/search` (HTML) | **works**, 5/5 runs, correct results |
+| `www.bing.com/search?format=rss` | 200, but served a DECOY SERP (`nightkop 500mg` → cyberpunk wallpapers) |
+| `lite.duckduckgo.com` / `html.duckduckgo.com` | 202 + JS challenge, 0/5 runs |
+| `duckduckgo.com` → `links.duckduckgo.com/d.js` (vqd flow) | 202 + JS challenge |
+| `www.mojeek.com` | 403 |
+| `www.ecosia.org` | 403 |
+| `search.brave.com` (HTML) | 429 |
+| public SearXNG instances (searx.be, search.inetol.net, …) | captcha / security-check page |
+
+So the key-less stack is really **Bing HTML + Wikipedia + the two news RSS
+feeds**. `duckduckgo-lite` is not broken code — it is a gated endpoint that
+returns zero rows, which the aggregator records honestly as `empty` and never
+counts as served. That is the gap `BRAVE_API_KEY` and `TREG_TOKEN` close.
+
+Brave is the cheaper of the two (free tier, official JSON, no scraping, no
+decoy pages) and therefore ranks ahead of treg. Its adapter is **single-flight**:
+the free tier allows 1 request/second while the aggregator fans out up to three
+queries, so a second concurrent call resolves empty immediately instead of
+burning a 429, and a 429 is returned as empty rather than thrown.

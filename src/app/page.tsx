@@ -138,6 +138,8 @@ const ENGINE_LABELS: Record<string, string> = {
   crossref: 'Crossref',
   // Only ever present when TREG_TOKEN is configured (see lib/search/engines.ts).
   treg: 'WebAccess',
+  // Only ever present when BRAVE_API_KEY is configured.
+  brave: 'Brave',
 }
 
 type ClarifyChoices = { question: string; options: { id: string; label: string }[] }
