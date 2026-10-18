@@ -1,6 +1,25 @@
 Here are all the generated files.
 
-## Latest release: v0.77.2
+## Latest release: v0.77.3
+
+    file    GS-AI-App.apk
+    size    64356239 bytes
+    sha256  2d5ac003bc1339dbf9e059e33d952b288d93041aa69a3eb6a500ea3922303cbe
+
+### v0.77.3 — quiet scrolling, and hard pictures get their pixels back
+
+Scrolling up no longer opens the keyboard: `imeNestedScroll()` on the
+transcript treated an upward drag as "bring the IME back" while the composer
+held focus. Removed; the hide-on-drag stays.
+
+Images whose longest edge is >= 2600 px now also send ONE native-resolution
+crop of their densest region (local gradient map) after the full frame, so
+small printed text — labels, documents, signs — survives instead of arriving
+as mush at 2048 px. Best effort: any failure degrades to the full frame only.
+
+`versionCode 92` installs over 91 without uninstalling.
+
+## Previous release: v0.77.2
 
     file    GS-AI-App.apk
     size    64356239 bytes
@@ -25,7 +44,7 @@ physical size, centring the authored space instead of cropping it.
 
 `versionCode 91` installs over 90 without uninstalling.
 
-## Previous release: v0.77.1
+## Older release: v0.77.1
 
     file    GS-AI-App.apk (superseded)
     size    64356235 bytes
