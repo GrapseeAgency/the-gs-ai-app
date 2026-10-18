@@ -43,7 +43,7 @@ set -euo pipefail
 # Same shape as the `enable_sd_diffusion` trap in this repository, where `== true`
 # against an empty input on push is false and silently disabled the flag. Both are
 # the same mistake: a default written in one place and relied on from another.
-DEFAULT_SO_RUN=37161154981
+DEFAULT_SO_RUN=37208719169
 # TRIMMED, because a YAML-folded argument arrives with a leading space.
 # Run 37207647049 got the right run id and still failed:
 #     staging libgs_ffi.so from android-native run  37161154981
@@ -61,6 +61,55 @@ GH_TOKEN="${GH_TOKEN:?GH_TOKEN must be set}"
 
 ABIS="armeabi-v7a arm64-v8a x86 x86_64"
 STAGED=0
+
+# THE PINNED RUN WILL EXPIRE, AND THEN THE RELEASE DIES FOR NO REASON.
+#
+# Artifacts have a retention window. 37161154981 was the default here, it had
+# all four libgs_ffi-<abi> artifacts when v0.76.0 was built, and by the next
+# dispatch it returned total_count 0 -- so the release job failed in eight
+# seconds inside this script with "no libgs_ffi-armeabi-v7a artifact", which
+# reads like a missing build rather than an expired one.
+#
+# A pinned run id is a timestamp, not a version. So: try the pin, and if it has
+# no complete set, walk the newest successful android-native runs and use the
+# first one that does. The pin stays as the fast path; the walk is the
+# insurance. Both are printed, so the log always says which run was used.
+artifacts_ok() {
+  curl -fsSL -H "Authorization: Bearer $GH_TOKEN" \
+    "$API/repos/$REPO/actions/runs/$1/artifacts?per_page=100" \
+  | python3 -c '
+import json, sys
+want = {"libgs_ffi-" + a for a in sys.argv[1].split()}
+try:
+    arts = json.load(sys.stdin).get("artifacts", [])
+except Exception:
+    sys.exit(1)
+have = {a["name"] for a in arts if not a.get("expired")}
+sys.exit(0 if want <= have else 1)
+' "$ABIS"
+}
+
+if ! artifacts_ok "$SO_RUN"; then
+  echo "::warning::android-native run $SO_RUN has no complete libgs_ffi artifact set (expired?)"
+  RECENT=$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" \
+      "$API/repos/$REPO/actions/workflows/android-native.yml/runs?per_page=40&status=success" \
+    | python3 -c 'import json,sys
+for r in json.load(sys.stdin).get("workflow_runs", []):
+    print(r["id"])')
+  FOUND=""
+  for R in $RECENT; do
+    [ "$R" = "$SO_RUN" ] && continue
+    if artifacts_ok "$R"; then FOUND="$R"; break; fi
+  done
+  if [ -z "$FOUND" ]; then
+    echo "::error::no android-native run in the last 40 successes has all four" >&2
+    echo "::error::libgs_ffi-<abi> artifacts. Re-run android-native.yml on" >&2
+    echo "::error::native-runtime, then re-dispatch this workflow." >&2
+    exit 1
+  fi
+  SO_RUN="$FOUND"
+  echo "::notice::falling back to android-native run $SO_RUN"
+fi
 
 echo "staging libgs_ffi.so from android-native run $SO_RUN"
 

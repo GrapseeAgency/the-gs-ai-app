@@ -13,12 +13,12 @@ on:
     # WHICH android-native RUN SUPPLIES THE NATIVE LIBRARY. See
     # .github/scripts/stage_release_so.sh for why this is needed at all: this
     # workflow previously shipped APKs with no native library in them whatsoever.
-    # 37161154981 is a run in which all four ABIs built green.
+    # 37208719169 is a run in which all four ABIs built green.
     inputs:
       so_run_id:
         description: 'android-native run id to take libgs_ffi-<abi> from'
         required: false
-        default: '37161154981'
+        default: '37208719169'
         type: string
 
 permissions:
@@ -50,7 +50,7 @@ jobs:
         # `inputs` is EMPTY on a tag push -- workflow_dispatch defaults do not
         # apply there -- so the fallback is repeated here as well as inside the
         # script. Run 37207411446 failed on exactly this: stage_release_so.sh ""
-        run: bash .github/scripts/stage_release_so.sh "${{ inputs.so_run_id || '37161154981' }}"
+        run: bash .github/scripts/stage_release_so.sh "${{ inputs.so_run_id || '37208719169' }}"
 
 
       - name: Unit tests + assemble
