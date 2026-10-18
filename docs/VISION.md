@@ -64,8 +64,13 @@ For every claimed image attachment, in order:
 1. **Retrieve** the stored bytes from the private uploads root (path-escape guard inherited from Phase 5). Missing file → honest failure, no crash, no path leak.
 2. **Decode with the real decoder** (sharp). This is the security boundary: the client-declared MIME type is irrelevant here — only what sharp actually decodes counts. Undecodable → `corrupt_image`.
 3. **Format check** on the decoder-derived format (`jpeg|png|webp|gif|heif`); anything else → `unsupported_format`.
-4. **Normalize** (bounded, real transformation): EXIF-rotate → longest edge ≤ **1568 px** (`withoutEnlargement`) → **JPEG q85**. GIF (incl. animated → first frame) and HEIC/HEIF are transcoded here because the provider rejects GIF natively and HEIC support varies.
+4. **Normalize** (bounded, real transformation): EXIF-rotate → longest edge ≤ **2048 px** (`VISION_MAX_EDGE`, `withoutEnlargement`) → **JPEG q90** (`VISION_JPEG_QUALITY`). GIF (incl. animated → first frame) and HEIC/HEIF are transcoded here because the provider rejects GIF natively and HEIC support varies.
 5. **Encode** as `data:image/jpeg;base64,…` — the exact representation the SDK itself uses for local files.
+6. **Detail crop (hard images).** When the source is ≥ `VISION_DETAIL_MIN_SOURCE_EDGE` (2600 px) on its long edge, a second image of the *densest region* is sent at native resolution, preceded by `VISION_DETAIL_CROP_NOTE`. That is the difference between "নাইটকপ" and "নাপ্রক্স": the full frame is downscaled to 2048 px, where a 2-3 mm label is ~40 px of smeared strokes; the crop is resized to the same 2048 px from a region a fifth of the frame, so the label arrives 5-7x larger.
+
+   The planner (`planDetailRegion`) is **edge density over sliding windows** on a 384-cell grid with an integral image (48 ms on 12 MP): mean gradient per cell (not summed, so a thin structural edge cannot outvote a glyph plate), seeded at the densest of five window sizes, then grown while the added *strip itself* stays dense. It returns `null` — no crop at all — when the crop would not buy ≥ 1.25x zoom (a full-page document, a gradient sky), because a duplicate of the frame costs an image slot and model attention for nothing.
+
+   **This is a pixel-level guarantee, not an accuracy claim.** It guarantees the text is *present and large enough* in what the model receives; whether the model then reads it correctly is measured only by §11.
 
 Bounded memory: sequential per-image processing, normalization output ≤ ~1568 px JPEG (a few hundred KB), source buffers released after encoding. No full-size copies retained.
 
@@ -108,6 +113,42 @@ Client-declared MIME never trusted (upload-time magic-byte sniff from Phase 5 **
 
 Device: unchanged Phase 5 thumbnails/staging (no full-res decode for preview, upload off the UI thread). Server: normalization bounds provider payload and image-token cost; sequential processing bounds peak memory; streaming preserved end-to-end (`stream: true` → SSE deltas → existing rich-content rendering; probe D1). The transcript is not blocked while the image is analysed — the WORKING orb communicates the wait.
 
-## 10. Deliberately not built (STOP condition)
+## 11. What is actually measured (and what is not)
+
+There is **no accuracy percentage** for this pipeline, and none should be quoted.
+
+The only measured evidence in the repo is `scripts/vision-grounding-eval.ts`, an
+11-case A/B harness on grounding behaviour (does it invent an identification,
+does it accept a misleading clue, does it keep multi-image order, does it retain
+an image across a follow-up). Its last recorded runs:
+
+| variant | pass | fail | note |
+|---|---|---|---|
+| `results-old.json` (pre-grounding prompt) | 9/11 | 1 FAIL (asserted an identification with no uncertainty), 1 REVIEW (neither invented nor declined) | |
+| `results-new.json` (grounding prompt) | 9/11 | 2 FAIL (multi-image order, follow-up without re-upload) | fixed A and H, broke J and K |
+
+Two things follow, both uncomfortable and both true:
+
+1. **11 cases cannot support a 99% claim.** 9/11 is 82%, on a hand-authored
+   suite, and the failures are structural (order, history retention) rather than
+   random. 99% would need hundreds of images, per-script coverage (Bengali,
+   Arabic, Devanagari, Chinese), adversarial crops, and a fixed pass predicate.
+2. **The harness has not been re-run since the detail crop landed**, and cannot
+   be from this environment: it needs `bun`, a provider key, and the `uploads/`
+   tree. So today's accuracy is *unmeasured*, not *good*.
+
+What IS deterministic and therefore verifiable without a model is the crop
+planner. It is checked on six scenes (Bengali label bottom-right of a 12 MP
+cluttered desk, tiny label top-left, full-page document, gradient sky, an 800 px
+image, a portrait shot with the label on the bottom edge) with truth boxes taken
+from the **actual text pixels** — the text layer is rendered on transparency and
+its alpha channel scanned — not from hand-guessed coordinates. All six pass; the
+same scene degraded with sensor noise, 0.8 px blur and JPEG q68 also passes.
+
+To get a real number, run `bun scripts/vision-grounding-eval.ts new` against a
+key and add the failing cases to the suite. Until that exists, the honest
+statement is: *the pixels are right; the reading is unmeasured.*
+
+## 12. Deliberately not built (STOP condition)
 
 PDF/document intelligence (still the honest "contents not readable" note — real vision now covers images only), OCR as a product feature (the model reads text in images natively; no separate OCR pipeline exists or is simulated), Research, web search, image generation, tool execution, agent workflows, auth on uploads/files (pre-existing app-wide gap), attachment GC.
