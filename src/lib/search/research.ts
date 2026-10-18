@@ -127,14 +127,27 @@ async function retrieveOne(
   return res
 }
 
-/** Bounded window around the query terms inside a long extract. */
-function evidenceWindow(extract: string, query: string, windowChars = 1_800): string {
+/**
+ * Bounded window around the query terms inside a long extract.
+ * Exported for the window-selection harness: it is pure, and the difference
+ * between "head of the article" and "the paragraph that answers" is invisible
+ * from the outside until a user reads a wrong answer.
+ */
+export function evidenceWindow(extract: string, query: string, windowChars = 1_800): string {
   if (extract.length <= windowChars) return extract
   const head = extract.slice(0, windowChars)
-  const words = query.toLowerCase().match(/[a-z0-9]{4,}/g) ?? []
+  // Unicode-aware, and it has to be: the old /[a-z0-9]{4,}/ returned NOTHING for
+  // a Bengali query, so bestHits stayed 0 and every long Bengali article was
+  // sent as its first 1800 characters — the nav bar and the lede, never the
+  // paragraph that answers the question.
+  const words = query.toLowerCase().match(/[\p{L}\p{M}\p{N}]{4,}/gu) ?? []
   let bestIdx = -1
   let bestHits = 0
-  for (let i = 0; i < Math.min(extract.length - 200, 12_000); i += 600) {
+  // The scan used to stop at 12 000 characters while the extractor admits up to
+  // 60 000, so four fifths of a long article was unreachable by design. The
+  // sweep is 100 slices of 900 chars at the cap — the bound bought nothing.
+  const scanLimit = Math.max(0, extract.length - 900)
+  for (let i = 0; i <= scanLimit; i += 600) {
     const chunk = extract.slice(i, i + 900).toLowerCase()
     const hits = words.reduce((n, w) => n + (chunk.includes(w) ? 1 : 0), 0)
     if (hits > bestHits) {
