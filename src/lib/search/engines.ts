@@ -606,6 +606,11 @@ export const tregWebSearch: EngineAdapter = {
   run: async (q) => {
     const token = process.env.TREG_TOKEN
     if (!token) throw new Error('treg not configured')
+    // One number decides both what we ASK for and how many rows we KEEP, so the
+    // request and the loop can never disagree (and a caller passing limit=50
+    // cannot end up merging 50 paid rows into a pool the free engines filled
+    // with ten).
+    const limit = Math.min(Math.max(1, Math.floor(q.limit) || 1), 10)
     const res = await fetch('https://treg.to/call/treg.web.search', {
       method: 'POST',
       headers: {
@@ -615,7 +620,7 @@ export const tregWebSearch: EngineAdapter = {
         'X-Treg-Route-Waterfall': '0',
         'X-Treg-Route-Max-Cost': process.env.TREG_MAX_COST || '0.02',
       },
-      body: JSON.stringify({ q: q.query, limit: Math.min(q.limit, 10) }),
+      body: JSON.stringify({ q: q.query, limit }),
       signal: AbortSignal.timeout(3_000),
     })
     if (!res.ok) throw new Error(`treg http ${res.status}`)
@@ -647,7 +652,7 @@ export const tregWebSearch: EngineAdapter = {
         rank: out.length + 1,
         engine: 'treg',
       })
-      if (out.length >= q.limit) break
+      if (out.length >= limit) break
     }
     return out
   },
