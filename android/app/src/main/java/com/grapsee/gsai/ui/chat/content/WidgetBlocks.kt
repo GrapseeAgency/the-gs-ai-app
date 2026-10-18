@@ -19,7 +19,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -35,6 +37,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -67,7 +71,7 @@ data class ChartSeries(val name: String = "", val data: List<List<Float>> = empt
 
 @Serializable
 data class ChartWidget(
-    val type: String = "line", // line | area | bar | pie
+    val type: String = "line", // line | area | stackedArea | bar | hbar | stacked | pie | donut | scatter | bubble | histogram | funnel | radar
     val title: String = "",
     val unit: String = "",
     /** Bar/pie category names; empty falls back to the x-index labels. */
@@ -127,9 +131,15 @@ sealed interface Widget {
     data class Compare(val w: CompareWidget) : Widget { override val title get() = w.title }
     data class Progress(val w: ProgressWidget) : Widget { override val title get() = w.title }
     data class Timeline(val w: TimelineWidget) : Widget { override val title get() = w.title }
+    data class Gauge(val w: GaugeWidget) : Widget { override val title get() = w.title }
+    data class Quiz(val w: QuizWidget) : Widget { override val title get() = w.title }
+    data class Form(val w: FormWidget) : Widget { override val title get() = w.title }
+    data class Carousel(val w: CarouselWidget) : Widget { override val title get() = w.title }
+    data class Cards(val w: CardsWidget) : Widget { override val title get() = w.title }
+    data class Followups(val w: FollowupsWidget) : Widget { override val title get() = w.title }
 }
 
-private val widgetJson = Json { ignoreUnknownKeys = true }
+internal val widgetJson = Json { ignoreUnknownKeys = true }
 
 /**
  * Parse + validate a widget payload. Returns null when anything is off — the
@@ -145,7 +155,7 @@ fun parseWidget(kind: String, json: String): Widget? {
                     it.copy(data = it.data.take(MAX_POINTS_PER_SERIES))
                 }.filter { it.data.size >= 2 }
                 if (series.isEmpty()) null
-                else if (w.type in setOf("line", "area", "bar", "pie")) Widget.Chart(w.copy(series = series))
+                else if (w.type in setOf("line", "area", "stackedArea", "bar", "hbar", "stacked", "pie", "donut", "scatter", "bubble", "histogram", "funnel", "radar")) Widget.Chart(w.copy(series = series))
                 else null
             }
             "stat" -> widgetJson.decodeFromString<StatWidget>(json).let { w ->
@@ -171,6 +181,32 @@ fun parseWidget(kind: String, json: String): Widget? {
                 val items = w.items.take(MAX_PROGRESS_ITEMS).map { it.copy(percent = it.percent.coerceIn(0f, 100f)) }
                 if (items.isEmpty()) null else Widget.Progress(w.copy(items = items))
             }
+            "gauge" -> widgetJson.decodeFromString<GaugeWidget>(json).let { w ->
+                val items = w.items.take(6).map { it.copy(value = it.value.coerceAtLeast(0f), max = it.max.coerceAtLeast(1f)) }
+                if (items.isEmpty()) null else Widget.Gauge(w.copy(items = items))
+            }
+            "quiz" -> widgetJson.decodeFromString<QuizWidget>(json).let { w ->
+                val qs = w.questions.take(10).map { q ->
+                    q.copy(options = q.options.take(6), answer = q.answer.coerceIn(0, q.options.lastIndex.coerceAtLeast(0)))
+                }.filter { it.q.isNotBlank() && it.options.isNotEmpty() }
+                if (qs.isEmpty()) null else Widget.Quiz(w.copy(questions = qs))
+            }
+            "form" -> widgetJson.decodeFromString<FormWidget>(json).let { w ->
+                val fs = w.fields.take(12).filter { it.label.isNotBlank() }
+                if (fs.isEmpty()) null else Widget.Form(w.copy(fields = fs))
+            }
+            "carousel" -> widgetJson.decodeFromString<CarouselWidget>(json).let { w ->
+                val items = w.items.take(20).filter { it.image.startsWith("https://") }
+                if (items.isEmpty()) null else Widget.Carousel(w.copy(items = items))
+            }
+            "cards" -> widgetJson.decodeFromString<CardsWidget>(json).let { w ->
+                val cards = w.cards.take(8).filter { it.title.isNotBlank() }
+                if (cards.isEmpty()) null else Widget.Cards(w.copy(cards = cards))
+            }
+            "followups" -> widgetJson.decodeFromString<FollowupsWidget>(json).let { w ->
+                val prompts = w.prompts.take(12).filter { it.isNotBlank() }
+                if (prompts.isEmpty()) null else Widget.Followups(w.copy(prompts = prompts))
+            }
             "timeline" -> widgetJson.decodeFromString<TimelineWidget>(json).let { w ->
                 val entries = w.entries.take(MAX_TIMELINE_ENTRIES)
                 if (entries.isEmpty()) null else Widget.Timeline(w.copy(entries = entries))
@@ -190,7 +226,7 @@ private val widgetShape = RoundedCornerShape(14.dp)
 
 /** Series palette: theme-accented first, then fixed hues that read on both themes. */
 @Composable
-private fun seriesColor(i: Int): Color {
+internal fun seriesColor(i: Int): Color {
     val c = GsTheme.colors
     return when (i % 5) {
         0 -> c.accent
@@ -202,7 +238,7 @@ private fun seriesColor(i: Int): Color {
 }
 
 @Composable
-private fun WidgetCardShell(title: String, tag: String, content: @Composable () -> Unit) {
+internal fun WidgetCardShell(title: String, tag: String, action: (@Composable () -> Unit)? = null, content: @Composable () -> Unit) {
     val c = GsTheme.colors
     Column(
         Modifier
@@ -224,6 +260,9 @@ private fun WidgetCardShell(title: String, tag: String, content: @Composable () 
                 )
             } else {
                 Box(Modifier.weight(1f))
+            }
+            if (action != null) {
+                Box(Modifier.padding(end = 8.dp)) { action() }
             }
             Text(
                 tag.uppercase(),
@@ -266,7 +305,7 @@ private fun WidgetFallback(block: Block.WidgetBlock) {
 }
 
 @Composable
-fun WidgetBlockView(block: Block.WidgetBlock, streaming: Boolean) {
+fun WidgetBlockView(block: Block.WidgetBlock, streaming: Boolean, onSendPrompt: ((String) -> Unit)? = null) {
     if (block.open && streaming) {
         WidgetSkeleton(block.kind)
         return
@@ -276,7 +315,7 @@ fun WidgetBlockView(block: Block.WidgetBlock, streaming: Boolean) {
         WidgetFallback(block)
         return
     }
-    WidgetView(widget)
+    WidgetView(widget, onSendPrompt)
 }
 
 /**
@@ -285,7 +324,7 @@ fun WidgetBlockView(block: Block.WidgetBlock, streaming: Boolean) {
  * GENUI chart are visually indistinguishable.
  */
 @Composable
-fun WidgetView(widget: Widget) {
+fun WidgetView(widget: Widget, onSendPrompt: ((String) -> Unit)? = null) {
     when (widget) {
         is Widget.Chart -> ChartWidgetView(widget.w)
         is Widget.Stat -> StatWidgetView(widget.w)
@@ -293,6 +332,12 @@ fun WidgetView(widget: Widget) {
         is Widget.Compare -> CompareWidgetView(widget.w)
         is Widget.Progress -> ProgressWidgetView(widget.w)
         is Widget.Timeline -> TimelineWidgetView(widget.w)
+        is Widget.Gauge -> GaugeWidgetView(widget.w)
+        is Widget.Quiz -> QuizWidgetView(widget.w)
+        is Widget.Form -> FormWidgetView(widget.w, onSendPrompt)
+        is Widget.Carousel -> CarouselWidgetView(widget.w)
+        is Widget.Cards -> CardsWidgetView(widget.w, onSendPrompt)
+        is Widget.Followups -> FollowupsWidgetView(widget.w, onSendPrompt)
     }
 }
 
@@ -302,11 +347,19 @@ fun WidgetView(widget: Widget) {
 private fun ChartWidgetView(w: ChartWidget) {
     WidgetCardShell(w.title.ifEmpty { "Chart" }, "chart") {
         when (w.type) {
-            "bar" -> BarChart(w)
+            "bar", "histogram" -> BarChart(w)
             "pie" -> PieChart(w)
+            "donut" -> DonutChart(w)
+            "hbar" -> HBarChart(w)
+            "stacked" -> StackedBarChart(w)
+            "stackedArea" -> StackedAreaChart(w)
+            "scatter" -> ScatterChart(w, bubble = false)
+            "bubble" -> ScatterChart(w, bubble = true)
+            "funnel" -> FunnelChart(w)
+            "radar" -> RadarChart(w)
             else -> LineChart(w, filled = w.type == "area")
         }
-        if (w.series.size > 1 && w.type != "pie") {
+        if (w.series.size > 1 && w.type !in setOf("pie", "donut", "funnel", "radar", "hbar")) {
             Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 w.series.forEachIndexed { i, s ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -495,9 +548,18 @@ private fun StatWidgetView(w: StatWidget) {
 private fun TableWidgetView(w: TableWidget) {
     var sortCol by remember { mutableIntStateOf(-1) }
     var asc by remember { mutableStateOf(true) }
-    val rows = remember(w.rows, sortCol, asc) {
-        if (sortCol < 0) w.rows
-        else w.rows.sortedWith { a, b ->
+    var query by remember { mutableStateOf("") }
+    var expanded by remember { mutableStateOf(false) }
+    val clipboard = LocalClipboardManager.current
+    val c = GsTheme.colors
+
+    val filtered = remember(w.rows, query) {
+        if (query.isBlank()) w.rows
+        else w.rows.filter { row -> row.any { it.contains(query, ignoreCase = true) } }
+    }
+    val rows = remember(filtered, sortCol, asc) {
+        if (sortCol < 0) filtered
+        else filtered.sortedWith { a, b ->
             val va = a.getOrNull(sortCol) ?: ""
             val vb = b.getOrNull(sortCol) ?: ""
             val na = va.toFloatOrNull(); val nb = vb.toFloatOrNull()
@@ -505,7 +567,42 @@ private fun TableWidgetView(w: TableWidget) {
             if (asc) cmp else -cmp
         }
     }
-    WidgetCardShell(w.title.ifEmpty { "Table" }, "table") {
+    val visible = remember(rows, expanded) { if (expanded) rows else rows.take(8) }
+    val csv = remember(w.columns, w.rows) {
+        buildString {
+            appendLine(w.columns.joinToString(",") { "\"${it.replace("\"", "\"\"")}\"" })
+            w.rows.forEach { row ->
+                appendLine(row.joinToString(",") { "\"${it.replace("\"", "\"\"")}\"" })
+            }
+        }
+    }
+
+    WidgetCardShell(
+        title = w.title.ifEmpty { "Table" },
+        tag = "table",
+        action = {
+            Text(
+                "Copy",
+                style = MaterialTheme.typography.labelSmall,
+                color = c.accent,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(99.dp))
+                    .background(c.raisedSurface)
+                    .clickable { clipboard.setText(AnnotatedString(csv)) }
+                    .padding(horizontal = 8.dp, vertical = 3.dp)
+            )
+        }
+    ) {
+        if (w.rows.size > 5) {
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                placeholder = { Text("Filter…", style = MaterialTheme.typography.bodySmall) },
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+            )
+        }
         Column(Modifier.horizontalScroll(rememberScrollState()).padding(top = 8.dp)) {
             Row {
                 w.columns.forEachIndexed { ci, col ->
@@ -524,7 +621,7 @@ private fun TableWidgetView(w: TableWidget) {
                 }
             }
             Box(Modifier.fillMaxWidth().height(1.dp).background(GsTheme.colors.divider))
-            rows.forEach { row ->
+            visible.forEach { row ->
                 Row {
                     w.columns.indices.forEach { ci ->
                         Text(
@@ -538,6 +635,19 @@ private fun TableWidgetView(w: TableWidget) {
                     }
                 }
                 Box(Modifier.fillMaxWidth().height(1.dp).background(GsTheme.colors.divider.copy(alpha = 0.4f)))
+            }
+            if (rows.isEmpty()) {
+                Text(
+                    "No matching rows",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = GsTheme.colors.textTertiary,
+                    modifier = Modifier.padding(vertical = 10.dp)
+                )
+            }
+            if (rows.size > 8) {
+                TextButton(onClick = { expanded = !expanded }, modifier = Modifier.padding(top = 2.dp)) {
+                    Text(if (expanded) "Show less" else "Show all (${rows.size})")
+                }
             }
         }
     }

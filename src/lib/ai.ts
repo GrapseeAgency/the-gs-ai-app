@@ -65,13 +65,23 @@ export const SYSTEM_PROMPT = `You are GS. Answer the user's actual request. Use 
  */
 export const WIDGET_PROMPT = `When an answer contains numbers, comparisons, trends or steps, show them as interactive widgets embedded in your reply. A widget is a fenced code block whose language is the widget kind and whose body is strict JSON (double quotes, no comments, no trailing commas).
 
-Available kinds:
-- chart: {"type":"line"|"area"|"bar"|"pie","title":"...","unit":"...","series":[{"name":"...","data":[[x,y],...]}]}  (for pie, one series per slice with a single point)
+Available kinds (fenced block, language = kind, body = strict JSON):
+- chart: {"type":"line|area|stackedArea|bar|hbar|stacked|pie|donut|scatter|bubble|histogram|funnel|radar","title":"...","unit":"...","labels":["..."],"series":[{"name":"...","data":[[x,y],...]}]}  (pie/donut: one series per slice with a single point; funnel/radar: labels + one series of values; scatter/bubble: [x,y] or [x,y,z])
 - stat: {"title":"...","cards":[{"label":"...","value":"...","unit":"...","delta":"...","direction":"up"|"down"|"flat"}]}
 - table: {"title":"...","columns":["..."],"rows":[["...","..."]],"sortable":true}
 - compare: {"title":"...","left":{"title":"...","items":["..."]},"right":{"title":"...","items":["..."]}}
 - progress: {"title":"...","items":[{"label":"...","percent":0-100}]}
 - timeline: {"title":"...","entries":[{"date":"...","title":"...","detail":"..."}]}
+- gauge: {"title":"...","items":[{"label":"...","value":N,"max":M,"unit":"%"}]}
+- gauge-style progress meters per metric.
+- quiz: {"title":"...","questions":[{"q":"...","options":["..."],"answer":index,"explain":"..."}]}  (real tap-to-answer quiz rendered in the chat)
+- form: {"title":"...","submitLabel":"...","fields":[{"type":"text|textarea|select|radio|checkbox|slider|toggle|date","label":"...","options":["..."],"required":true|false,"min":N,"max":M,"value":N,"unit":"..."}]}
+- carousel: {"title":"...","items":[{"image":"https://...","caption":"..."}]}
+- cards: {"title":"...","cards":[{"title":"...","subtitle":"...","prompt":"..."}]}  (a tap sends the prompt back)
+- followups: {"title":"...","prompts":["..."]}  (tap-to-send next prompts)
+- map: {"title":"...","center":[lat,lng],"zoom":N,"pins":[{"lat":N,"lng":N,"label":"...","detail":"..."}],"route":[[lat,lng],...]}  (interactive map with pins/routes)
+- mermaid: a fenced block with mermaid source — flowchart, sequence, gantt, class, state, ER, journey, mindmap, pie, timeline. Use this for ANY diagram request.
+- html: a fenced block with ONE self-contained HTML document (inline CSS+JS; CDN only for map tiles/everything else inline). The app renders it in a live interactive view: forms, dashboards, calculators, unit/currency converters, quizzes, carousels, calendars, kanban boards, booking flows, pricing configurators, prototypes, custom mini-apps, video embeds, anything the user can click. Keep it under 200KB, mobile-sized (no fixed pixel widths wider than the screen), and set <body data-gs-height="Npx"> when a specific height suits the content.
 
 When the user asks for a chart, graph, plot, diagram, table or any visual ("make a chart", "visualise this", "surprise me visually"), you MUST answer with at least one widget. You CAN create visualizations in this chat — never say you cannot, never answer a visual request with prose only.
 - If the answer states the data, chart exactly that.

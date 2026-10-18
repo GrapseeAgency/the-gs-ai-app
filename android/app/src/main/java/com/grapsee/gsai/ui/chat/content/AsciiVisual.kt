@@ -25,6 +25,12 @@ private val DATE_LINE = Regex(
 )
 private val LABEL_VALUE = Regex("^(.{2,40}?)\\s*[:\\-–—]\\s*(-?[\\d.,]+)\\s*([A-Za-z%°$/]+)?\\s*$")
 
+/** "Battery: 78/100", "Score: 8.5/10" — a fraction the gauge can render. */
+private val GAUGE_LINE = Regex("^(.{2,40}?)\\s*[:\\-–—]?\\s*(-?[\\d.,]+)\\s*/\\s*(-?[\\d.,]+)\\s*$")
+
+/** "3, 5" / "3 5" — a bare coordinate pair for a scatter plot. */
+private val XY_PAIR = Regex("^(-?[\\d.]+)[,\\s]+(-?[\\d.]+)\\s*$")
+
 /** Recognise a value that may carry a unit ("63mg", "82.1", "1,204"). */
 internal fun parseNumber(raw: String): Float? {
     val m = NUM.find(raw) ?: return null
@@ -60,7 +66,9 @@ fun visualFromAscii(code: String): Widget? {
 
     barChartFrom(lines)?.let { return it }
     timelineFrom(lines)?.let { return it }
+    gaugeFrom(lines)?.let { return it }
     progressFrom(lines)?.let { return it }
+    scatterFrom(lines)?.let { return it }
     statCardsFrom(lines)?.let { return it }
     gridFrom(lines)?.let { return it } // pie / bar / table, richest first
     return null
@@ -76,9 +84,11 @@ private fun barChartFrom(lines: List<String>): Widget? {
         if (before.isEmpty()) null else before to value
     }
     if (candidates.size < 3) return null
+    // Long category names read better as horizontal bars than vertical ones.
+    val longLabels = candidates.count { it.first.length > 8 } * 2 >= candidates.size
     return Widget.Chart(
         ChartWidget(
-            type = "bar",
+            type = if (longLabels) "hbar" else "bar",
             title = captionOf(lines),
             series = listOf(ChartSeries(name = "", data = candidates.mapIndexed { i, (_, v) -> listOf(i.toFloat(), v) })),
             labels = candidates.map { it.first }
@@ -110,6 +120,39 @@ private fun progressFrom(lines: List<String>): Widget? {
     }
     if (items.size < 2) return null
     return Widget.Progress(ProgressWidget(title = captionOf(lines), items = items))
+}
+
+/** Fraction lines ("Battery: 78/100", "Score: 8.5/10") become gauges. */
+private fun gaugeFrom(lines: List<String>): Widget? {
+    val items = lines.mapNotNull { raw ->
+        val line = raw.trim()
+        if (line.contains('|') || splitRow(line).size > 1) return@mapNotNull null
+        val m = GAUGE_LINE.matchEntire(line) ?: return@mapNotNull null
+        val label = m.groupValues[1].trim().trim('|', '-', ' ', '·', '>').trim()
+        val value = parseNumber(m.groupValues[2]) ?: return@mapNotNull null
+        val max = parseNumber(m.groupValues[3]) ?: return@mapNotNull null
+        if (label.isEmpty() || max <= 0f) null else GaugeItem(label = label.take(40), value = value, max = max)
+    }
+    if (items.size < 2) return null
+    return Widget.Gauge(GaugeWidget(title = captionOf(lines), items = items))
+}
+
+/** Bare coordinate pairs ("3, 5") become a scatter plot. */
+private fun scatterFrom(lines: List<String>): Widget? {
+    val pts = lines.mapNotNull { raw ->
+        val m = XY_PAIR.matchEntire(raw.trim()) ?: return@mapNotNull null
+        val x = m.groupValues[1].toFloatOrNull() ?: return@mapNotNull null
+        val y = m.groupValues[2].toFloatOrNull() ?: return@mapNotNull null
+        listOf(x, y)
+    }
+    if (pts.size < 4) return null
+    return Widget.Chart(
+        ChartWidget(
+            type = "scatter",
+            title = captionOf(lines),
+            series = listOf(ChartSeries(name = "Points", data = pts))
+        )
+    )
 }
 
 /** One or two "label — value unit" lines become stat cards. */

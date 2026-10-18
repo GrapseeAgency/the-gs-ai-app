@@ -170,6 +170,7 @@ class ParserStreamingBenchmark {
         is Block.Divider -> copy(sourceStart = sourceStart + delta)
         is Block.MathBlock -> copy(sourceStart = sourceStart + delta)
         is Block.MermaidBlock -> copy(sourceStart = sourceStart + delta)
+        is Block.HtmlBlock -> copy(sourceStart = sourceStart + delta)
         is Block.WidgetBlock -> copy(sourceStart = sourceStart + delta)
         is Block.ImageBlock -> copy(sourceStart = sourceStart + delta)
         is Block.CollapsibleBlock -> copy(sourceStart = sourceStart + delta)

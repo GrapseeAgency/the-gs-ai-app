@@ -476,7 +476,9 @@ fun MermaidBlockView(block: Block.MermaidBlock, streaming: Boolean, onCopyCode: 
     }
     val chart = remember(block.source) { parseMermaid(block.source) }
     when (chart) {
-        is MermaidChart.Unsupported -> MermaidFallback(chart.reason, block.source, onCopyCode)
+        is MermaidChart.Unsupported ->
+            if (isKnownMermaidType(block.source)) MermaidWebBlockView(block)
+            else MermaidFallback(chart.reason, block.source, onCopyCode)
         is MermaidChart.Flowchart -> {
             val layout = remember(chart) { layoutFlowchart(chart) }
             MermaidCard(title = "Mermaid · Flowchart", source = block.source, onCopyCode = onCopyCode, description = layout.description) {
@@ -950,3 +952,21 @@ private fun MermaidViewerDialog(title: String, description: String, onDismiss: (
         }
     }
 }
+
+
+/**
+ * True when the source declares a mermaid diagram type the native renderer
+ * doesn't lay out but the bundled mermaid.js harness does (gantt, class,
+ * state, ER, journey, mindmap, pie, timeline, git, sankey, …).
+ */
+private fun isKnownMermaidType(source: String): Boolean {
+    val head = source.trim().lines().firstOrNull()?.trim().orEmpty()
+    return KNOWN_MERMAID_HEADS.any { head.startsWith(it) }
+}
+
+private val KNOWN_MERMAID_HEADS = listOf(
+    "classDiagram", "stateDiagram", "stateDiagram-v2", "erDiagram", "journey", "gantt",
+    "mindmap", "pie", "timeline", "gitGraph", "quadrantChart", "xychart-beta", "xychart",
+    "block-beta", "sankey-beta", "sankey", "packet-beta", "architecture-beta",
+    "kanban", "requirementDiagram", "C4Context", "flowchart-elk"
+)

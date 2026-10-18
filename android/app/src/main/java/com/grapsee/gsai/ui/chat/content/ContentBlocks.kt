@@ -84,6 +84,23 @@ sealed interface Block {
     data class MermaidBlock(val source: String, override val sourceStart: Int) : Block
 
     /**
+     * Fenced interactive document (0.78.0 "interactive chat"):
+     *   ```html / ```web / ```app / ```ui …  → mode "html": a self-contained
+     *   HTML+JS document the app renders in a sandboxed WebView — forms,
+     *   sliders, dropdowns, dashboards, carousels, quizzes, calculators,
+     *   kanban boards, calendars, custom mini-apps, video embeds.
+     *   ```map …                              → mode "map": a JSON pin/route
+     *   payload rendered natively onto an interactive Leaflet map.
+     * [open] = the closing fence hasn't arrived yet (mid-stream → skeleton).
+     */
+    data class HtmlBlock(
+        val mode: String,
+        val code: String,
+        val open: Boolean,
+        override val sourceStart: Int
+    ) : Block
+
+    /**
      * Fenced widget payload (GENUI): ```chart / ```stat / ```table / ```compare /
      * ```progress / ```timeline with a JSON body. JSON parsing happens at render
      * time only (like mermaid), so a malformed payload degrades to a code block
@@ -351,16 +368,29 @@ private fun parseFence(lines: List<Line>, start: Int): Pair<Block, Int> {
 }
 
 /** Fence languages that carry a GENUI widget payload (JSON body). */
-val WIDGET_LANGUAGES = setOf("chart", "stat", "table", "compare", "progress", "timeline")
+val WIDGET_LANGUAGES = setOf(
+    "chart", "stat", "table", "compare", "progress", "timeline",
+    "gauge", "quiz", "form", "carousel", "cards", "followups"
+)
+
+/**
+ * Fence languages that carry an interactive HTML document (rendered in the
+ * sandboxed WebView harness, HtmlBlockView.kt). Anything the native widget
+ * set can't express — real controls, layouts, mini-apps — lives here.
+ */
+val HTML_LANGUAGES = setOf("html", "htm", "web", "webapp", "app", "ui", "page", "site", "interactive", "miniapp")
 
 /** A closed fence in the mermaid language is a first-class diagram block;
  *  a widget-language fence is a first-class widget block (JSON parsed at render
- *  time, so a malformed payload degrades to a code block); anything else, and
+ *  time, so a malformed payload degrades to a code block); an html-language
+ *  fence is a first-class interactive document (WebView); anything else, and
  *  any open fence, stays plain code. */
 private fun fenceToBlock(language: String?, code: String, open: Boolean, offset: Int): Block {
     val lang = language?.lowercase()
     return when {
         language.equals("mermaid", ignoreCase = true) && !open -> Block.MermaidBlock(code, offset)
+        lang != null && lang in HTML_LANGUAGES -> Block.HtmlBlock("html", code, open, offset)
+        lang == "map" -> Block.HtmlBlock("map", code, open, offset)
         lang != null && lang in WIDGET_LANGUAGES -> Block.WidgetBlock(lang, code, open, offset)
         else -> Block.CodeBlock(language, code, open, offset)
     }
@@ -677,6 +707,7 @@ private fun Block.withShiftedSource(delta: Int): Block = when (this) {
     is Block.Divider -> copy(sourceStart = sourceStart + delta)
     is Block.MathBlock -> copy(sourceStart = sourceStart + delta)
     is Block.MermaidBlock -> copy(sourceStart = sourceStart + delta)
+    is Block.HtmlBlock -> copy(sourceStart = sourceStart + delta)
     is Block.WidgetBlock -> copy(sourceStart = sourceStart + delta)
     is Block.ImageBlock -> copy(sourceStart = sourceStart + delta)
     is Block.CollapsibleBlock -> copy(

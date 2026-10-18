@@ -218,6 +218,7 @@ private fun summarize(blocks: List<Block>): FixtureSummary {
             is Block.Divider -> "Divider"
             is Block.MathBlock -> "MathBlock"
             is Block.MermaidBlock -> "MermaidBlock"
+            is Block.HtmlBlock -> "HtmlBlock"
             is Block.WidgetBlock -> "WidgetBlock:${block.kind}"
             is Block.ImageBlock -> "ImageBlock"
             is Block.CollapsibleBlock -> "Collapsible"

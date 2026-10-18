@@ -100,7 +100,8 @@ class WidgetBlocksTest {
     @Test
     fun `chart with too few points or unknown type degrades to null`() {
         assertNull(parseWidget("chart", """{"type":"line","series":[{"name":"a","data":[[1,2]]}]}"""))
-        assertNull(parseWidget("chart", """{"type":"scatter","series":[{"name":"a","data":[[1,2],[2,3]]}]}"""))
+        // scatter is a valid type now; use a genuinely unknown type for the null path.
+        assertNull(parseWidget("chart", """{"type":"sparkline","series":[{"name":"a","data":[[1,2],[2,3]]}]}"""))
         assertNull(parseWidget("chart", """{"series":[]}"""))
     }
 
@@ -148,5 +149,73 @@ class WidgetBlocksTest {
     fun `unknown json keys are ignored, older clients survive newer payloads`() {
         val w = parseWidget("stat", """{"title":"t","cards":[{"label":"L","value":"1","futureField":{"nested":true}}]}""")
         assertTrue(w is Widget.Stat)
+    }
+
+    // --- all chart types ------------------------------------------------------
+
+    @Test
+    fun `all thirteen chart types parse with at least one valid series`() {
+        val types = listOf(
+            "line", "area", "stackedArea", "bar", "hbar", "stacked",
+            "pie", "donut", "scatter", "bubble", "histogram", "funnel", "radar"
+        )
+        for (type in types) {
+            val json = """{"type":"$type","labels":["A","B"],"series":[{"name":"s","data":[[0,3],[1,7],[2,5]]}]}"""
+            val w = parseWidget("chart", json)
+            assertTrue("chart type '$type' should parse", w is Widget.Chart)
+            assertEquals(type, (w as Widget.Chart).w.type)
+        }
+    }
+
+    // --- interactive widgets --------------------------------------------------
+
+    @Test
+    fun `gauge parses fractions`() {
+        val w = parseWidget(
+            "gauge",
+            """{"title":"Health","items":[{"label":"Battery","value":78,"max":100,"unit":"%"}]}"""
+        ) as Widget.Gauge
+        assertEquals(1, w.w.items.size)
+        assertEquals(78f, w.w.items[0].value)
+        assertEquals(100f, w.w.items[0].max)
+    }
+
+    @Test
+    fun `quiz parses questions with options and answer index`() {
+        val w = parseWidget(
+            "quiz",
+            """{"title":"T","questions":[{"q":"1+1?","options":["1","2","3"],"answer":1,"explain":"two"}]}"""
+        ) as Widget.Quiz
+        assertEquals(1, w.w.questions.size)
+        assertEquals(1, w.w.questions[0].answer)
+        assertEquals("two", w.w.questions[0].explain)
+    }
+
+    @Test
+    fun `form parses fields of every control type`() {
+        val fields = listOf("text", "textarea", "select", "radio", "checkbox", "slider", "toggle", "date")
+            .mapIndexed { i, t -> """{"type":"$t","label":"F$i","required":${i % 2 == 0}}""" }
+            .joinToString(",")
+        val w = parseWidget("form", """{"title":"Signup","submitLabel":"Go","fields":[$fields]}""") as Widget.Form
+        assertEquals(8, w.w.fields.size)
+        assertEquals("Go", w.w.submitLabel)
+    }
+
+    @Test
+    fun `carousel keeps only https images`() {
+        val w = parseWidget(
+            "carousel",
+            """{"title":"Pics","items":[{"image":"https://example.com/a.png","caption":"A"},{"image":"http://insecure/x.png","caption":"B"}]}"""
+        ) as Widget.Carousel
+        // the insecure (http) item is dropped by the parser
+        assertEquals(1, w.w.items.size)
+    }
+
+    @Test
+    fun `cards and followups parse tap-to-send prompts`() {
+        val c = parseWidget("cards", """{"title":"T","cards":[{"title":"X","subtitle":"s","prompt":"do x"}]}""") as Widget.Cards
+        assertEquals("do x", c.w.cards[0].prompt)
+        val f = parseWidget("followups", """{"title":"T","prompts":["next","more"]}""") as Widget.Followups
+        assertEquals(listOf("next", "more"), f.w.prompts)
     }
 }

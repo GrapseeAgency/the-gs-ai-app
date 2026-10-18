@@ -180,4 +180,37 @@ class AsciiVisualTest {
         """.trimIndent()
         assertNull(visualFromAscii(code))
     }
+
+    @Test
+    fun `fraction lines become a gauge`() {
+        val code = """
+            Battery
+            Battery: 78/100
+            Signal: 64/100
+        """.trimIndent()
+        val visual = visualFromAscii(code)
+        assertTrue("fraction lines must become a gauge", visual is Widget.Gauge)
+        val w = (visual as Widget.Gauge).w
+        assertEquals(2, w.items.size)
+        assertEquals(78f, w.items[0].value)
+        assertEquals(100f, w.items[0].max)
+        assertEquals(64f, w.items[1].value)
+    }
+
+    @Test
+    fun `coordinate pairs become a scatter chart`() {
+        val code = """
+            Samples
+            3, 5
+            1, 2
+            4, 8
+            6, 1
+            2, 3
+        """.trimIndent()
+        val visual = visualFromAscii(code)
+        assertTrue("coordinate pairs must become a scatter chart", visual is Widget.Chart)
+        val w = (visual as Widget.Chart).w
+        assertEquals("scatter", w.type)
+        assertEquals(5, w.series.single().data.size)
+    }
 }

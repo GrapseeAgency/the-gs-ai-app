@@ -140,7 +140,13 @@ fun BlocksContent(
      * marker without a matching source renders as the plain literal text it
      * always was (honest fallback, no dead taps).
      */
-    citationUrls: Map<Int, String> = emptyMap()
+    citationUrls: Map<Int, String> = emptyMap(),
+    /**
+     * 0.78.0: "send this prompt" wiring for interactive widgets (action
+     * cards, follow-up chips, form results). Null renders those as inert
+     * cards instead of dead taps.
+     */
+    onSendPrompt: ((String) -> Unit)? = null
 ) {
     val cache = remember { StreamBlockCache() }
     val blocks = remember(content, isStreaming) { cache.update(content, isStreaming) }
@@ -163,7 +169,8 @@ fun BlocksContent(
                         isLast = index == blocks.lastIndex,
                         isStreaming = isStreaming,
                         onCopyCode = onCopyCode,
-                        citationUrls = citationUrls
+                        citationUrls = citationUrls,
+                        onSendPrompt = onSendPrompt
                     )
                 }
             }
@@ -197,7 +204,8 @@ private fun BlockView(
     isLast: Boolean,
     isStreaming: Boolean,
     onCopyCode: (String) -> Unit,
-    citationUrls: Map<Int, String>
+    citationUrls: Map<Int, String>,
+    onSendPrompt: ((String) -> Unit)? = null
 ) {
     when (block) {
         is Block.Paragraph -> ParagraphBlock(block, showCaret = isStreaming && isLast, selectable = !isStreaming, citationUrls = citationUrls)
@@ -219,7 +227,7 @@ private fun BlockView(
                 }
             }
             if (visual != null) {
-                WidgetView(visual)
+                WidgetView(visual, onSendPrompt)
             } else {
                 CodeBlockCard(
                     language = block.language,
@@ -233,7 +241,8 @@ private fun BlockView(
         is Block.Divider -> DividerBlock()
         is Block.MathBlock -> MathBlockView(block)
         is Block.MermaidBlock -> MermaidBlockView(block, streaming = isStreaming, onCopyCode = onCopyCode)
-        is Block.WidgetBlock -> WidgetBlockView(block, streaming = isStreaming)
+        is Block.HtmlBlock -> HtmlBlockView(block, streaming = isStreaming)
+        is Block.WidgetBlock -> WidgetBlockView(block, streaming = isStreaming, onSendPrompt = onSendPrompt)
         is Block.ImageBlock -> ImageBlockView(block)
         is Block.CollapsibleBlock -> CollapsibleBlockView(block, citationUrls)
         is Block.CitationsBlock -> CitationsBlockView(block)
@@ -708,7 +717,7 @@ private fun MathBlockView(block: Block.MathBlock) {
 // Image
 // ---------------------------------------------------------------------------
 
-private sealed interface ImageState {
+internal sealed interface ImageState {
     data object Loading : ImageState
     data class Ready(val bitmap: ImageBitmap) : ImageState
     data object Failed : ImageState
@@ -727,7 +736,7 @@ private sealed interface ImageState {
  * 24 MB is the same budget ThumbLoader already uses for attachments, so the two
  * image paths cannot together exceed ~48 MB of bitmap heap.
  */
-private val imageCache = object : android.util.LruCache<String, ImageBitmap>(24 * 1024 * 1024) {
+internal val imageCache = object : android.util.LruCache<String, ImageBitmap>(24 * 1024 * 1024) {
     override fun sizeOf(key: String, value: ImageBitmap): Int = value.width * value.height * 4
 }
 
@@ -735,7 +744,7 @@ private val imageCache = object : android.util.LruCache<String, ImageBitmap>(24 
  *  are 4000px+; decoding one into RGB_565 costs ~24 MB for a 360dp slot. */
 private const val IMAGE_MAX_EDGE = 1080
 
-private suspend fun fetchBitmap(url: String): ImageBitmap? {
+internal suspend fun fetchBitmap(url: String): ImageBitmap? {
     imageCache.get(url)?.let { return it }
     return withContext(Dispatchers.IO) {
         runCatching {

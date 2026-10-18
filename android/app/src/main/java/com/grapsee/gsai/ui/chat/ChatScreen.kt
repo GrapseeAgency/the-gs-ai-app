@@ -1452,7 +1452,8 @@ fun ChatScreen(
                                         // quick-choices. A picked chip is sent as an
                                         // ordinary user message through dispatch.
                                         onOpenSource = openSource,
-                                        onClarifyOption = { option -> dispatch(option.label, echoUser = true) }
+                                        onClarifyOption = { option -> dispatch(option.label, echoUser = true) },
+                                        onSendPrompt = { text -> dispatch(text, echoUser = true) }
                                     )
                                 }
                             }
@@ -1973,13 +1974,15 @@ private fun LiveStreamText(
     fallback: String,
     isStreaming: Boolean,
     onCopyCode: (String) -> Unit,
-    citationUrls: Map<Int, String>
+    citationUrls: Map<Int, String>,
+    onSendPrompt: ((String) -> Unit)? = null
 ) {
     BlocksContent(
         content = live?.value?.streamText ?: fallback,
         isStreaming = isStreaming,
         onCopyCode = onCopyCode,
-        citationUrls = citationUrls
+        citationUrls = citationUrls,
+        onSendPrompt = onSendPrompt
     )
 }
 
@@ -2270,7 +2273,10 @@ private fun AssistantMessage(
     onTranslate: () -> Unit = {},
     // PHASE 8.1: open a real source URL (ACTION_VIEW) + send a clarify pick.
     onOpenSource: (String) -> Unit = {},
-    onClarifyOption: (ClarifyOption) -> Unit = {}
+    onClarifyOption: (ClarifyOption) -> Unit = {},
+    // 0.78.0: interactive widgets (cards/followups/form) send prompts back
+    // through the same dispatch path as clarify chips.
+    onSendPrompt: (String) -> Unit = {}
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     val haptics = LocalHapticFeedback.current
@@ -2408,7 +2414,8 @@ private fun AssistantMessage(
                     onCopyCode = onCopy,
                     // PHASE 8.1: citation markers [N] become tappable chips
                     // when N is one of THIS turn's real sources.
-                    citationUrls = citationUrls
+                    citationUrls = citationUrls,
+                    onSendPrompt = onSendPrompt
                 )
             }
             // PHASE 8.1: the turn's real sources — live while streaming (as
