@@ -206,9 +206,10 @@ private fun BlockView(
         is Block.OrderedList -> OrderedListBlock(block, selectable = !isStreaming, citationUrls = citationUrls)
         is Block.BlockQuote -> BlockQuoteView(block, selectable = !isStreaming, citationUrls = citationUrls)
         is Block.CodeBlock -> {
-            // A plain fence may secretly be a picture: ASCII bar art or a
-            // text data table. When it parses, offer the native views beside
-            // the raw code instead of showing monospace "art".
+            // A plain fence may secretly be a picture: ASCII bars, a data
+            // grid, a dated log, percentages. When it parses as one of those
+            // it renders as the native widget directly — no tabs, no
+            // placeholder, nothing for the user to configure.
             val visual = remember(block.code) {
                 if (block.open || isStreaming) null
                 else {
@@ -218,11 +219,7 @@ private fun BlockView(
                 }
             }
             if (visual != null) {
-                SmartFenceBlock(
-                    visual = visual,
-                    code = block,
-                    onCopyCode = onCopyCode
-                )
+                WidgetView(visual)
             } else {
                 CodeBlockCard(
                     language = block.language,
@@ -1075,54 +1072,11 @@ private fun ToolResultBlockView(block: Block.ToolResultBlock) {
 }
 
 // ---------------------------------------------------------------------------
-// Smart fence — a plain code block that parses as a chart and/or a data table
-// gets native views beside the raw code. Default: the richest parse; the user
-// can always fall back to the exact bytes the model wrote.
 // ---------------------------------------------------------------------------
-
-@Composable
-private fun SmartFenceBlock(
-    visual: AsciiVisual,
-    code: Block.CodeBlock,
-    onCopyCode: (String) -> Unit
-) {
-    var mode by remember(code.code) {
-        mutableStateOf(
-            when {
-                visual.chart != null -> "chart"
-                visual.table != null -> "table"
-                else -> "code"
-            }
-        )
-    }
-    Column {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(bottom = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            if (visual.chart != null) {
-                FenceTab("Chart", mode == "chart") { mode = "chart" }
-            }
-            if (visual.table != null) {
-                FenceTab("Table", mode == "table") { mode = "table" }
-            }
-            FenceTab("Code", mode == "code") { mode = "code" }
-        }
-        when (mode) {
-            "chart" -> visual.chart?.let { WidgetView(Widget.Chart(it)) }
-            "table" -> visual.table?.let { WidgetView(Widget.Table(it)) }
-            else -> CodeBlockCard(
-                language = code.language,
-                code = code.code,
-                open = false,
-                onCopyCode = onCopyCode
-            )
-        }
-    }
-}
+// Chart toggle for a markdown table — the table itself is the default view;
+// the chart is an affordance that exists only when a numeric column makes
+// one possible. No tabs, no forced views.
+// ---------------------------------------------------------------------------
 
 @Composable
 private fun FenceTab(label: String, selected: Boolean, onClick: () -> Unit) {
