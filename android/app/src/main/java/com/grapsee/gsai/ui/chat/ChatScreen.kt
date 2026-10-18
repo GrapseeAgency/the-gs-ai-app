@@ -2371,15 +2371,24 @@ private fun WorkspaceEmptyState(
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             modifier = Modifier.semantics { heading() }
         )
-        if (draftText().isBlank()) {
-            Spacer(Modifier.height(8.dp))
-            if (onNewChat != null) {
-                NewChatButton(onClick = onNewChat)
-            }
-            Spacer(Modifier.height(16.dp))
-            EmptyCapabilityCard()
-        }
+        // perf-smooth-5: the draft read is confined to its own composable.
+        // It used to sit directly in WorkspaceEmptyState's body, so every
+        // keystroke on a fresh chat recomposed the monogram, the greeting and
+        // the capability card along with it — the entire empty screen, per
+        // character. The read now invalidates only the block that depends on it.
+        EmptyStateActions(draftText = draftText, onNewChat = onNewChat)
     }
+}
+
+@Composable
+private fun EmptyStateActions(draftText: () -> String, onNewChat: (() -> Unit)?) {
+    if (!draftText().isBlank()) return
+    Spacer(Modifier.height(8.dp))
+    if (onNewChat != null) {
+        NewChatButton(onClick = onNewChat)
+    }
+    Spacer(Modifier.height(16.dp))
+    EmptyCapabilityCard()
 }
 
 /**

@@ -610,8 +610,14 @@ private fun faviconDomainOrNull(domain: String): String? {
 }
 
 /** "2026-02-19" → "19 Feb 2026"; unparseable input stays verbatim (honest). */
+// perf-smooth-5: the formatter was rebuilt per call (ofPattern compiles a new
+// DateTimeFormatter each time) and dateLabel runs per source card per
+// composition, so a research turn with 20 sources recompiled it 20 times on
+// every recomposition of the trace. It is immutable — hoist it.
+private val DATE_LABEL_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM yyyy")
+
 private fun dateLabel(raw: String): String = runCatching {
-    LocalDate.parse(raw.take(10)).format(DateTimeFormatter.ofPattern("d MMM yyyy"))
+    LocalDate.parse(raw.take(10)).format(DATE_LABEL_FORMAT)
 }.getOrDefault(raw)
 
 // ---------------------------------------------------------------------------

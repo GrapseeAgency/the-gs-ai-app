@@ -684,27 +684,69 @@ private sealed interface ImageState {
     data object Failed : ImageState
 }
 
-private suspend fun fetchBitmap(url: String): ImageBitmap? = withContext(Dispatchers.IO) {
-    runCatching {
-        val connection = URL(url).openConnection() as HttpsURLConnection
-        connection.connectTimeout = 8_000
-        connection.readTimeout = 8_000
-        connection.instanceFollowRedirects = true
-        connection.inputStream.use { stream ->
-            val options = BitmapFactory.Options().apply { inPreferredConfig = android.graphics.Bitmap.Config.RGB_565 }
-            BitmapFactory.decodeStream(stream, null, options)
-        }
-    }.getOrNull()?.asImageBitmap()
+/**
+ * perf-smooth-5: decoded images, cached process-wide.
+ *
+ * fetchBitmap used to have NO cache of any kind, and it is driven by
+ * produceState(key1 = block.url) inside a LazyColumn row. Scroll an image out
+ * of the viewport and back and the row was disposed, recomposed, and the image
+ * RE-DOWNLOADED over the network and re-decoded — on the scroll path, in the
+ * middle of a fling. That is the worst possible place to put an 8-second
+ * timeout.
+ *
+ * 24 MB is the same budget ThumbLoader already uses for attachments, so the two
+ * image paths cannot together exceed ~48 MB of bitmap heap.
+ */
+private val imageCache = object : android.util.LruCache<String, ImageBitmap>(24 * 1024 * 1024) {
+    override fun sizeOf(key: String, value: ImageBitmap): Int = value.width * value.height * 4
+}
+
+/** Longest edge a transcript image is decoded to. Full-resolution phone photos
+ *  are 4000px+; decoding one into RGB_565 costs ~24 MB for a 360dp slot. */
+private const val IMAGE_MAX_EDGE = 1080
+
+private suspend fun fetchBitmap(url: String): ImageBitmap? {
+    imageCache.get(url)?.let { return it }
+    return withContext(Dispatchers.IO) {
+        runCatching {
+            val connection = URL(url).openConnection() as HttpsURLConnection
+            connection.connectTimeout = 8_000
+            connection.readTimeout = 8_000
+            connection.instanceFollowRedirects = true
+            // One read of the stream, two decodes from the bytes: bounds first so
+            // inSampleSize is chosen before any pixels are allocated. The old
+            // single-pass decodeStream could not do this — a stream cannot be
+            // rewound — and always allocated the full bitmap.
+            val bytes = connection.inputStream.use { it.readBytes() }
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+            var sample = 1
+            while (bounds.outWidth / (sample * 2) >= IMAGE_MAX_EDGE &&
+                bounds.outHeight / (sample * 2) >= IMAGE_MAX_EDGE
+            ) {
+                sample *= 2
+            }
+            val options = BitmapFactory.Options().apply {
+                inSampleSize = sample
+                inPreferredConfig = android.graphics.Bitmap.Config.RGB_565
+            }
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
+        }.getOrNull()?.asImageBitmap()
+    }?.also { imageCache.put(url, it) }
 }
 
 @Composable
 private fun ImageBlockView(block: Block.ImageBlock) {
     val secure = block.url.startsWith("https://")
-    val state by produceState<ImageState>(initialValue = ImageState.Loading, key1 = block.url) {
+    // Seeded from the cache so a re-entered row paints the real image on its
+    // FIRST frame instead of flashing the loading surface and then swapping.
+    val state by produceState<ImageState>(
+        initialValue = imageCache.get(block.url)?.let { ImageState.Ready(it) } ?: ImageState.Loading,
+        key1 = block.url
+    ) {
         if (!secure) {
             value = ImageState.Failed
         } else {
-            value = ImageState.Loading
             val bitmap = fetchBitmap(block.url)
             value = if (bitmap != null) ImageState.Ready(bitmap) else ImageState.Failed
         }
