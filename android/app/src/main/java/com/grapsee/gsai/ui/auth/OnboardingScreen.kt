@@ -23,6 +23,8 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -64,6 +66,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -200,7 +203,12 @@ fun OnboardingScreen(onFinished: () -> Unit) {
                     name = displayName,
                     onNameChange = { displayName = it },
                     accentIndex = accentIndex,
-                    onAccentChange = { accentIndex = it }
+                    onAccentChange = { accentIndex = it },
+                    onContinue = {
+                        if (canContinue) {
+                            if (stepIndex < OnboardingStep.entries.lastIndex) stepIndex++ else onFinished()
+                        }
+                    }
                 )
                 OnboardingStep.Ready -> ReadyStep(name = displayName)
             }
@@ -649,7 +657,8 @@ private fun PersonalisationStep(
     name: String,
     onNameChange: (String) -> Unit,
     accentIndex: Int,
-    onAccentChange: (Int) -> Unit
+    onAccentChange: (Int) -> Unit,
+    onContinue: () -> Unit
 ) {
     StepColumn {
         StepHeading(
@@ -669,7 +678,11 @@ private fun PersonalisationStep(
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("What should GS call you?") },
                 placeholder = { Text("e.g. Alex") },
-                singleLine = true
+                singleLine = true,
+                // Done on the keyboard action continues the flow — the action
+                // key on a singleLine field otherwise does nothing at all.
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { onContinue() })
             )
         }
         Spacer(Modifier.height(GsMotion.spaceS))

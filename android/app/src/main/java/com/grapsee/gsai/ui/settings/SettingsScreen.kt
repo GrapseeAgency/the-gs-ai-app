@@ -62,11 +62,14 @@ import com.grapsee.gsai.ui.components.gsContentWidth
 import com.grapsee.gsai.BuildConfig
 import com.grapsee.gsai.CrashReporter
 import com.grapsee.gsai.data.SettingsStore
+import com.grapsee.gsai.data.notifications.ReplyNotifier
 import com.grapsee.gsai.di.ServiceLocator
 import com.grapsee.gsai.ui.icons.GsIcons
 import com.grapsee.gsai.ui.theme.GsMotion
 import com.grapsee.gsai.ui.theme.kineticPress
 import com.grapsee.gsai.ui.theme.gsHaptic
+import android.Manifest
+import android.os.Build
 import androidx.activity.compose.BackHandler
 import java.time.OffsetDateTime
 import kotlinx.coroutines.Dispatchers
@@ -107,6 +110,16 @@ fun SettingsScreen(
     // Privacy flows (UI-local)
     var showClearData by remember { mutableStateOf(false) }
     var showDeleteAccount by remember { mutableStateOf(false) }
+
+    // Reply notifications: the switch is the CONSENT surface for the runtime
+    // POST_NOTIFICATIONS prompt (API 33+). Turning the switch ON asks; a
+    // refused prompt leaves the switch OFF — never a toggle that lies about
+    // what the system will actually deliver.
+    val notificationPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        SettingsStore.updatePushNotifications(granted)
+    }
 
     // An expanded section is an in-screen overlay state: BACK folds it first
     // and only pops the screen once every section is closed.
@@ -460,24 +473,18 @@ fun SettingsScreen(
                     onToggle = { expandedId = if (expandedId == "notifications") null else "notifications" }
                 ) {
                     SwitchRow(
-                        title = "Push notifications",
+                        title = "Reply notifications",
+                        subtitle = "One notice when a reply finishes while GS is in the background",
                         checked = SettingsStore.pushNotifications,
-                        onCheckedChange = { SettingsStore.updatePushNotifications(it) }
-                    )
-                    SwitchRow(
-                        title = "Sounds",
-                        checked = SettingsStore.sounds,
-                        onCheckedChange = { SettingsStore.updateSounds(it) }
-                    )
-                    SwitchRow(
-                        title = "AI task alerts",
-                        checked = SettingsStore.taskAlerts,
-                        onCheckedChange = { SettingsStore.updateTaskAlerts(it) }
-                    )
-                    SwitchRow(
-                        title = "Email digest",
-                        checked = SettingsStore.emailDigest,
-                        onCheckedChange = { SettingsStore.updateEmailDigest(it) }
+                        onCheckedChange = { want ->
+                            if (!want) {
+                                SettingsStore.updatePushNotifications(false)
+                            } else if (ReplyNotifier.hasPermission(context)) {
+                                SettingsStore.updatePushNotifications(true)
+                            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            }
+                        }
                     )
                 }
                 GroupSeparator()

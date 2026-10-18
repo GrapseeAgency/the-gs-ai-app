@@ -6,6 +6,10 @@
          normal-level, auto-granted, no prompt. Without it ConnectivityManager
          calls throw SecurityException on device. -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- The finished-reply notification (API 33+ asks at runtime — consent is
+         collected by the Reply notifications switch in Settings, never
+         unprompted). Harmless no-op below API 33. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- Voice press-and-hold on the hero orb (SpeechRecognizer). -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />

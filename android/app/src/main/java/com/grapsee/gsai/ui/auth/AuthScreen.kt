@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -58,7 +59,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -404,7 +411,9 @@ private fun SignInStep(
             onValueChange = onPasswordChange,
             label = "Password",
             isPassword = true,
-            supporting = if (showErrors && password.isBlank()) "Enter your password" else null
+            supporting = if (showErrors && password.isBlank()) "Enter your password" else null,
+            imeAction = ImeAction.Done,
+            onDone = onSignIn
         )
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -509,7 +518,9 @@ private fun SignUpStep(
             onValueChange = onPasswordChange,
             label = "Password",
             isPassword = true,
-            supporting = if (showErrors && password.isBlank()) "Enter a password" else null
+            supporting = if (showErrors && password.isBlank()) "Enter a password" else null,
+            imeAction = ImeAction.Done,
+            onDone = onCreateAccount
         )
         Spacer(Modifier.height(GsMotion.spaceS))
         Row(
@@ -664,7 +675,9 @@ private fun ResetPasswordStep(
             onValueChange = onEmailChange,
             label = "Email",
             keyboardType = KeyboardType.Email,
-            supporting = if (showErrors && email.isBlank()) "Enter your email" else null
+            supporting = if (showErrors && email.isBlank()) "Enter your email" else null,
+            imeAction = ImeAction.Done,
+            onDone = onSend
         )
         Spacer(Modifier.height(GsMotion.spaceM))
         Button(onClick = onSend, modifier = Modifier.fillMaxWidth()) {
@@ -707,7 +720,13 @@ private fun AuthTextField(
     modifier: Modifier = Modifier,
     keyboardType: KeyboardType = KeyboardType.Text,
     isPassword: Boolean = false,
-    supporting: String? = null
+    supporting: String? = null,
+    // The keyboard's action key. NEXT (default) auto-advances focus to the
+    // next field — the platform behaviour, free. DONE is the submit verb on
+    // the last field of a form and fires [onDone]; without it the action key
+    // on a singleLine field used to do NOTHING at all.
+    imeAction: ImeAction = ImeAction.Next,
+    onDone: (() -> Unit)? = null
 ) {
     var showPassword by remember { mutableStateOf(false) }
     val supportingText: (@Composable () -> Unit)? = if (supporting != null) {
@@ -727,7 +746,8 @@ private fun AuthTextField(
         modifier = modifier.fillMaxWidth(),
         label = { Text(label) },
         singleLine = true,
-        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+        keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = imeAction),
+        keyboardActions = KeyboardActions(onDone = { onDone?.invoke() }),
         visualTransformation = if (isPassword && !showPassword) {
             PasswordVisualTransformation()
         } else {
@@ -763,29 +783,56 @@ private fun SixCodeRow(codes: SnapshotStateList<String>) {
         horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
     ) {
         repeat(6) { index ->
+            // A zero-width space sits in every EMPTY box as a deletion bridge:
+            // soft keyboards send a backspace on an empty field as a TEXT
+            // CHANGE (there is no character to delete, so no KeyEvent arrives),
+            // which is why a naive empty-box handler never fires on a phone.
+            // Deleting the bridge means "backspace on an empty box" — the one
+            // signal every soft keyboard is willing to give.
+            val bridge = codes[index].isEmpty()
             OutlinedTextField(
-                value = codes[index],
+                value = if (bridge) "\u200B" else codes[index],
                 onValueChange = { raw ->
                     val digits = raw.filter { it.isDigit() }
-                    if (digits.length > 1) {
-                        var cursor = index
-                        for (digit in digits) {
-                            if (cursor > 5) break
-                            codes[cursor] = digit.toString()
-                            cursor++
+                    when {
+                        digits.length > 1 -> {
+                            var cursor = index
+                            for (digit in digits) {
+                                if (cursor > 5) break
+                                codes[cursor] = digit.toString()
+                                cursor++
+                            }
+                            focusRequesters[(cursor - 1).coerceIn(0, 5)].requestFocus()
                         }
-                        focusRequesters[(cursor - 1).coerceIn(0, 5)].requestFocus()
-                    } else {
-                        codes[index] = digits
-                        if (digits.isNotEmpty() && index < 5) {
-                            focusRequesters[index + 1].requestFocus()
+                        digits.isNotEmpty() -> {
+                            codes[index] = digits
+                            if (index < 5) focusRequesters[index + 1].requestFocus()
                         }
+                        // The bridge was deleted on an empty box = backspace.
+                        bridge && index > 0 -> {
+                            codes[index - 1] = ""
+                            focusRequesters[index - 1].requestFocus()
+                        }
+                        else -> codes[index] = ""
                     }
                 },
                 modifier = Modifier
                     .weight(1f)
                     .aspectRatio(1f)
-                    .focusRequester(focusRequesters[index]),
+                    .focusRequester(focusRequesters[index])
+                    // Hardware keyboards DO deliver a real KeyEvent; the bridge
+                    // above covers soft keyboards. Consumed here so it cannot
+                    // double-fire through the text change.
+                    .onPreviewKeyEvent { event ->
+                        if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                        if (event.key != Key.Backspace && event.key != Key.Delete) {
+                            return@onPreviewKeyEvent false
+                        }
+                        if (codes[index].isNotEmpty() || index == 0) return@onPreviewKeyEvent false
+                        codes[index - 1] = ""
+                        focusRequesters[index - 1].requestFocus()
+                        true
+                    },
                 textStyle = MaterialTheme.typography.titleLarge.copy(textAlign = TextAlign.Center),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                 singleLine = true,

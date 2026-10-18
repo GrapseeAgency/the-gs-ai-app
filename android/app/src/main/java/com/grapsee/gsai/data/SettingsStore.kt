@@ -49,9 +49,6 @@ object SettingsStore {
     var biometricUnlock by mutableStateOf(false); private set
     // Notifications
     var pushNotifications by mutableStateOf(true); private set
-    var sounds by mutableStateOf(true); private set
-    var taskAlerts by mutableStateOf(true); private set
-    var emailDigest by mutableStateOf(false); private set
     // Language
     var aiLanguage by mutableStateOf("EN"); private set
     // Accessibility
@@ -85,9 +82,6 @@ object SettingsStore {
         appPasscode = p.bool(K.appPasscode, appPasscode)
         biometricUnlock = p.bool(K.biometricUnlock, biometricUnlock)
         pushNotifications = p.bool(K.pushNotifications, pushNotifications)
-        sounds = p.bool(K.sounds, sounds)
-        taskAlerts = p.bool(K.taskAlerts, taskAlerts)
-        emailDigest = p.bool(K.emailDigest, emailDigest)
         aiLanguage = p.string(K.aiLanguage, aiLanguage)
         fontScale = p.flt(K.fontScale, fontScale)
         highContrast = p.bool(K.highContrast, highContrast)
@@ -118,9 +112,6 @@ object SettingsStore {
         const val appPasscode = "settings.appPasscode"
         const val biometricUnlock = "settings.biometricUnlock"
         const val pushNotifications = "settings.pushNotifications"
-        const val sounds = "settings.sounds"
-        const val taskAlerts = "settings.taskAlerts"
-        const val emailDigest = "settings.emailDigest"
         const val aiLanguage = "settings.aiLanguage"
         const val fontScale = "settings.fontScale"
         const val highContrast = "settings.highContrast"
@@ -183,9 +174,6 @@ object SettingsStore {
     fun updateBiometricUnlock(v: Boolean) { biometricUnlock = v; put(K.biometricUnlock, v) }
     // Notifications
     fun updatePushNotifications(v: Boolean) { pushNotifications = v; put(K.pushNotifications, v) }
-    fun updateSounds(v: Boolean) { sounds = v; put(K.sounds, v) }
-    fun updateTaskAlerts(v: Boolean) { taskAlerts = v; put(K.taskAlerts, v) }
-    fun updateEmailDigest(v: Boolean) { emailDigest = v; put(K.emailDigest, v) }
     // Language
     fun updateAiLanguage(v: String) { aiLanguage = v; put(K.aiLanguage, v) }
     // Accessibility

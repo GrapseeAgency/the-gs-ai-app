@@ -13,6 +13,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import android.view.HapticFeedbackConstants
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -104,11 +107,21 @@ fun ConversationActionsSheet(
             onDismissRequest = { renameOpen = false },
             title = { Text("Rename chat") },
             text = {
+                // Done on the keyboard action submits the rename — it used to
+                // do nothing, forcing a second tap on the dialog button.
+                val commit: () -> Unit = {
+                    if (renameDraft.isNotBlank()) {
+                        renameOpen = false
+                        onRename(renameDraft.trim())
+                    }
+                }
                 OutlinedTextField(
                     value = renameDraft,
                     onValueChange = { renameDraft = it },
                     singleLine = true,
-                    label = { Text("Chat name") }
+                    label = { Text("Chat name") },
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { commit() })
                 )
             },
             confirmButton = {

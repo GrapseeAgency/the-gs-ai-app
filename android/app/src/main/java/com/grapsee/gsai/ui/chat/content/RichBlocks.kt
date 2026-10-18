@@ -144,39 +144,28 @@ fun BlocksContent(
 ) {
     val cache = remember { StreamBlockCache() }
     val blocks = remember(content, isStreaming) { cache.update(content, isStreaming) }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        // A STREAMING BUBBLE WITH NO CONTENT YET USED TO RENDER ABSOLUTELY
-        // NOTHING.
-        //
-        // The kinetic caret rides the last line of a live paragraph, so it only
-        // exists when there is a paragraph to attach it to. An empty assistant
-        // bubble parses to ZERO blocks, the forEach below emits nothing, and the
-        // Column is empty -- so during the entire local generation the user was
-        // looking at a blank bubble with no caret, no dots, no sign that anything
-        // was happening.
-        //
-        // That is worst on the on-device path, and it is why it went unnoticed:
-        // the NETWORK path emits a delta almost immediately, so its bubble has
-        // text within a frame or two and the caret appears on its own. The local
-        // engine does not stream at all -- GsNative.chat returns one finished
-        // String -- so its bubble stays empty for the whole generation, which is
-        // exactly the "nothing happens for twenty seconds" shape.
-        //
-        // So: an empty streaming bubble renders the caret alone. It is the
-        // smallest honest signal available -- "working" with no fabricated
-        // content -- and it costs one branch.
-        if (isStreaming && blocks.isEmpty()) {
-            StreamingCaret()
-        }
-        blocks.forEachIndexed { index, block ->
-            key(streamBlockKey(block, index)) {
-                BlockView(
-                    block = block,
-                    isLast = index == blocks.lastIndex,
-                    isStreaming = isStreaming,
-                    onCopyCode = onCopyCode,
-                    citationUrls = citationUrls
-                )
+    // The answer text is SELECTABLE — every native AI app lets you drag a
+    // selection across part of a reply (the whole-answer copy lives in the
+    // action row, but "copy just this sentence" is a different verb and was
+    // impossible). SelectionContainer only governs Text children, so citation
+    // chips, the code-block copy button, mermaid and widget cards keep their
+    // own taps untouched. Selection state is disposable by design: it lives
+    // exactly as long as this composition.
+    SelectionContainer {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (isStreaming && blocks.isEmpty()) {
+                StreamingCaret()
+            }
+            blocks.forEachIndexed { index, block ->
+                key(streamBlockKey(block, index)) {
+                    BlockView(
+                        block = block,
+                        isLast = index == blocks.lastIndex,
+                        isStreaming = isStreaming,
+                        onCopyCode = onCopyCode,
+                        citationUrls = citationUrls
+                    )
+                }
             }
         }
     }

@@ -14,7 +14,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.grapsee.gsai.data.SettingsStore
+import com.grapsee.gsai.data.notifications.AppForeground
 import com.grapsee.gsai.ui.settings.OnDeviceModelConsentDialog
 import com.grapsee.gsai.ui.navigation.GsNavHost
 import com.grapsee.gsai.ui.theme.TheGsAiTheme
@@ -41,6 +44,15 @@ class MainActivity : ComponentActivity() {
         setTheme(if (forcedDark) R.style.Theme_TheGsAiApp_Dark else R.style.Theme_TheGsAiApp_Light)
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // The app's single foreground truth: the finished-reply notification
+        // must never fire while the user is already looking at the reply.
+        lifecycle.addObserver(LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_START -> AppForeground.inForeground = true
+                Lifecycle.Event.ON_STOP -> AppForeground.inForeground = false
+                else -> Unit
+            }
+        })
         // Cold start via a home-screen quick action: publish before composing.
         ShortcutBus.publish(intent)
         setContent {

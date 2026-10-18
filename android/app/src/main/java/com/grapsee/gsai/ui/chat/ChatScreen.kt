@@ -144,6 +144,7 @@ import com.grapsee.gsai.di.ServiceLocator
 import androidx.activity.compose.BackHandler
 import com.grapsee.gsai.ui.components.GsOfflineBanner
 import com.grapsee.gsai.data.SettingsStore
+import com.grapsee.gsai.data.notifications.ReplyNotifier
 import com.grapsee.gsai.data.tts.TtsFocus
 import com.grapsee.gsai.ui.components.GsInputBar
 import com.grapsee.gsai.ui.components.gsContentWidth
@@ -908,6 +909,18 @@ fun ChatScreen(
                             val attachStill = attachDrafts.toList()
                             queued = ""
                             if (attachStill.isEmpty()) queuedFlush = pending else draft = pending
+                        }
+                        // The reply is finished. If the user is in ANOTHER app
+                        // right now, say so — the stream is app-scoped and has
+                        // been running while they were away. The notifier
+                        // re-checks foreground/permission/setting itself; this
+                        // call is the signal, nothing more.
+                        if (SettingsStore.pushNotifications && state.streamText.isNotBlank()) {
+                            ReplyNotifier.postReplyReady(
+                                context,
+                                state.conversationId,
+                                state.streamText
+                            )
                         }
                     }
                     commitStreamResult(state)
