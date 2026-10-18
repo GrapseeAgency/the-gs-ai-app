@@ -147,6 +147,26 @@ const EXPLICIT_PATTERNS: RegExp[] = [
   /\bfrom\s+the\s+(web|internet)\b/i,
   /\bon\s+the\s+(web|internet)\b/i,
   /\bonline\s+(search|sources?)\b/i,
+  // -------------------------------------------------------------------------
+  // BENGALI. Every pattern above is English, so a Bengali user could not issue
+  // a search COMMAND in their own language: "সার্চ করো" (search) fell through
+  // to the LLM planner, which is allowed to say no, and to the recency
+  // heuristic, which does not fire either. The deterministic guarantee this
+  // file exists for — an explicit directive is a command, never a suggestion —
+  // simply did not exist for the app's first language.
+  //
+  // Kept deliberately narrow: a search VERB must follow the search noun, so
+  // "সার্চ ইঞ্জিন কী?" (what is a search engine — a topic) stays chat.
+  //
+  // NO \b ANYWHERE. JavaScript's word boundary is ASCII-only even with the u
+  // flag, so /\bখবর\b/ is FALSE for "আজকের খবর" and /\bকর\b/ is false for
+  // "সার্চ করো" — a Bengali pattern written with \b is a pattern that never
+  // fires. The end anchor is (?![\p{L}\p{M}]) instead.
+  // -------------------------------------------------------------------------
+  /(সার্চ|খোঁজ|অনুসন্ধান)\s*(কর|করো|করে|করুন|করেন|দে|দাও|দিন)(?![\p{L}\p{M}])/u,
+  /(খুঁজে|খোঁজো|খুঁজো|খুঁজুন|খোঁজ)\s*(দে|দাও|দিন|দেখ|দেখো|দেখুন|বের\s*কর|বের\s*করো)(?![\p{L}\p{M}])/u,
+  /(গুগলে|গুগল\s*করে|ইন্টারনেটে|অনলাইনে)\s*(খুঁজে|খোঁজো|খুঁজো|খুঁজুন|খোঁজ|সার্চ|দেখ|দেখো|দেখুন)(?![\p{L}\p{M}])/u,
+  /(ওয়েবে|ওয়েব\s*সার্চ|ইন্টারনেট\s*থেকে)\s*(খুঁজে|খোঁজো|খুঁজো|খোঁজ|সার্চ|দেখ)(?![\p{L}\p{M}])/u,
 ]
 
 /**
@@ -176,6 +196,17 @@ const RECENCY_PATTERNS: RegExp[] = [
   /\bjust\s+(announced|released|launched)\b/i,
   /\bas\s+of\s+(now|today|this\s+week)\b/i,
   /\b(2025|2026|2027)\b/,
+  // Bengali recency vocabulary. These only SURFACE a signal (they do not force
+  // retrieval — see decideCapability step 10), so the risk is a redundant
+  // search hint, not a wrong search. Note what is deliberately absent: weather
+  // is NOT added here. The bare-weather veto that stops "what's the weather?"
+  // from piling up worldwide stories is English-only, so a Bengali weather word
+  // in the forcing list would resurrect exactly the failure it prevents.
+  // The gap allows "আজকের সোনার দাম" (today's GOLD price) — the noun rarely
+  // follows the time word directly — but stops at a sentence break (। ! ?) so
+  // it cannot reach into the next sentence.
+  /(আজকের|আজকে|আজ)[^।!?\n]{0,24}(খবর|সংবাদ|হেডলাইন|আবহাওয়া|তাপমাত্রা|দাম|রেট|ফলাফল|স্কোর|ম্যাচ)/u,
+  /(সর্বশেষ|সাম্প্রতিক|এখনকার|বর্তমান|আপডেট)[^।!?\n]{0,24}(খবর|সংবাদ|তথ্য|দাম|সংস্করণ|খেলা|ফলাফল)/u,
 ]
 
 export type WebSearchGate = {
@@ -256,6 +287,29 @@ export function extractSearchQuery(userText: string, trigger: 'explicit' | 'rece
       work = next
     }
     if (work.length >= 3 && work.length < q.length) q = work
+    // BENGALI SCAFFOLDING. Every strip above is English and is a no-op here, so
+    // "সার্চ করো নাইটকপ ৫০০" would reach the engine verbatim and the command
+    // words would compete with the topic for relevance.
+    //
+    // Two details that are not cosmetic: alternatives are ordered LONGEST FIRST
+    // (JS alternation is leftmost-first, so "কর" would otherwise match inside
+    // "করো" and leave a dangling "ো"), and each verb is followed by [\p{M}]*
+    // because the rest of a Bengali verb can be combining marks.
+    const bnStripped = work
+      .replace(
+        /^\s*(?:একটু\s+)?(?:সার্চ|খোঁজ|অনুসন্ধান)\s*(?:করুন|করেন|করো|করে|কর|দাও|দিন|দে)[\p{M}]*\s*/u,
+        ''
+      )
+      .replace(
+        /^\s*(?:গুগলে|গুগল\s*করে|ইন্টারনেটে|অনলাইনে|ওয়েবে|ওয়েব\s*সার্চ)\s*(?:খুঁজে|খোঁজো|খুঁজো|খুঁজুন|খোঁজ|সার্চ|দেখুন|দেখো|দেখ)[\p{M}]*(?:\s*(?:করুন|করেন|করো|করে|কর|দেখুন|দেখো|দেখ))?[\p{M}]*\s*/u,
+        ''
+      )
+      .replace(
+        /^\s*(?:খুঁজে|খোঁজো|খুঁজো|খুঁজুন)\s*(?:দেখুন|দেখো|দেখ|দাও|দিন|দে)[\p{M}]*\s*/u,
+        ''
+      )
+      .trim()
+    if (bnStripped.length >= 3 && bnStripped.length < q.length) q = bnStripped
   } else {
     // PHASE 8.1 — recency turns used to send the raw message as the query,
     // so "would you like to see today's news" hit the provider verbatim and
@@ -295,6 +349,9 @@ export function extractSearchQuery(userText: string, trigger: 'explicit' | 'rece
     if (stripped.length >= 3) q = stripped
     else if (work.length >= 3) q = work
   }
+  // Bengali request tails ("…বলো", "…বলুন", "…দেখাও") — same scaffolding class
+  // as the English tail strip above, applied to both branches.
+  q = q.replace(/\s*(?:বলো|বলুন|দেখাও|দেখান|জানাও|জানান)\s*$/u, '').trim()
   q = q.replace(/^["']|["'.!?…]+$/g, '').trim()
   return q.slice(0, SEARCH_MAX_QUERY_CHARS)
 }
