@@ -295,6 +295,27 @@ check('repairJson rejects garbage', repairJson('hello world') === null)
   check('an empty chart fence is removed, prose survives', r.text.includes('Here is the chart') && !r.text.includes('"series"'))
 }
 
+
+// 24. Sub-type fences (```kanban, ```loan, ```gallery) are their parent kind
+// with the type injected — the same class of bug as ```funnel.
+{
+  const kanban = '```kanban\n{"columns":[{"title":"Todo","items":[]}]}\n```'
+  const f = extractWidgetFences(kanban)[0]
+  check('kanban fence becomes an app widget', f?.kind === 'app', JSON.stringify(f))
+  check('kanban type is injected', f?.json.includes('"type":"kanban"') === true, f?.json)
+
+  const loan = '```loan\n{"fields":[{"key":"p","label":"P","value":1}],"outputs":[{"label":"o","expr":"p"}]}\n```'
+  const g = extractWidgetFences(loan)[0]
+  check('loan fence becomes a calc widget', g?.kind === 'calc' && g.json.includes('"type":"loan"'))
+
+  const code = '```code\n{ "a": 1 }\n```'
+  check('```code is never a widget', extractWidgetFences(code).length === 0)
+
+  const explicit = '```kanban\n{"type":"calendar","items":[]}\n```'
+  const h = extractWidgetFences(explicit)[0]
+  check('an explicit type wins', h?.json.includes('"type":"calendar"') === true && !h.json.includes('kanban'))
+}
+
 console.log(`\n${passed} passed, ${failures.length} failed`)
 if (failures.length) {
   for (const f of failures) console.log(`  - ${f}`)

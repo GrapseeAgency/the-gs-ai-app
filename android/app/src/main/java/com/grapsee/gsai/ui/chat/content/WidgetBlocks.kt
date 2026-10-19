@@ -35,7 +35,9 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -44,9 +46,14 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.grapsee.gsai.ui.theme.GsTheme
 import com.grapsee.gsai.ui.theme.skeletonSurface
 import kotlinx.serialization.KSerializer
@@ -531,7 +538,26 @@ private val FAMILY_SLOTS = mapOf(
     "calc" to 9, "app" to 4
 )
 
-internal fun widgetTone(tag: String): CardTone = when (tag.lowercase()) {
+/**
+ * The FAMILY a tag belongs to.
+ *
+ * `media`, `calc` and `app` views pass their SUB-TYPE as the tag ("pdf",
+ * "loan", "kanban") so each one gets its own hue — but the tone table only
+ * knew the kind names, so every calculator, every media card and every app
+ * surface silently fell through to Plain and lost its tint. Resolving the
+ * family first keeps the per-type identity AND the intended surface.
+ */
+internal fun widgetFamily(tag: String): String {
+    val key = tag.lowercase()
+    return when {
+        key in APP_TYPES -> "app"
+        key in CALC_TYPES -> "calc"
+        key in MEDIA_TYPES -> "media"
+        else -> key
+    }
+}
+
+internal fun widgetTone(tag: String): CardTone = when (widgetFamily(tag)) {
     "chart", "app", "calc", "form", "quiz", "carousel", "cards", "media" -> CardTone.Tinted
     "stat", "gauge" -> CardTone.Hero
     "progress", "timeline", "followups", "actions", "voice", "panel", "compare" -> CardTone.Outline
@@ -827,7 +853,11 @@ private fun LineChart(w: ChartWidget, filled: Boolean) {
         val minX = xs.minOrNull() ?: 0f
         val maxX = xs.maxOrNull() ?: 1f
         val minY = minOf(0f, ys.minOrNull() ?: 0f)
-        val maxY = ys.maxOrNull() ?: 1f
+        // Snap the ceiling to a round step, otherwise the four gridlines are
+        // labelled 0 / 61 / 122 / 183 and the chart reads as a debug overlay.
+        val rawMaxY = ys.maxOrNull() ?: 1f
+        val step = niceStep(((rawMaxY - minY) / 3f).takeIf { it > 0f } ?: 1f)
+        val maxY = minY + step * 3f
         LineGeom(
             minX = minX,
             minY = minY,
@@ -839,19 +869,31 @@ private fun LineChart(w: ChartWidget, filled: Boolean) {
     val minY = geom.minY
     val spanX = geom.spanX
     val spanY = geom.spanY
+    val measurer = rememberTextMeasurer()
+    val axisStyle = TextStyle(fontSize = 9.sp, color = GsTheme.colors.textTertiary)
     Canvas(Modifier.fillMaxWidth().height(180.dp).padding(top = 8.dp)) {
-        val padL = 0f; val padB = 0f
-        val cw = size.width - padL; val ch = size.height - padB
+        val padL = 34.dp.toPx(); val padT = 8.dp.toPx()
+        val cw = (size.width - padL).coerceAtLeast(1f)
+        val ch = (size.height - padT).coerceAtLeast(1f)
+        val base = padT + ch
         repeat(4) { g ->
-            val y = ch * g / 3f
-            drawLine(gridColor, Offset(0f, y), Offset(cw, y), strokeWidth = 1f)
+            val y = padT + ch * g / 3f
+            drawLine(gridColor, Offset(padL, y), Offset(size.width, y), strokeWidth = 1f)
+            val laid = measurer.measure(axisLabel(minY + spanY * (1f - g / 3f), w.unit), axisStyle)
+            drawText(
+                laid,
+                topLeft = Offset(
+                    (padL - laid.size.width - 6.dp.toPx()).coerceAtLeast(0f),
+                    y - laid.size.height / 2f
+                )
+            )
         }
         w.series.forEachIndexed { si, s ->
             val col = colors[si]
             val pts = s.data.map {
                 Offset(
                     padL + cw * ((it.getOrElse(0) { 0f } - minX) / spanX),
-                    ch * (1f - ((it.getOrElse(1) { 0f } - minY) / spanY))
+                    padT + ch * (1f - ((it.getOrElse(1) { 0f } - minY) / spanY))
                 )
             }
             if (pts.size < 2) return@forEachIndexed
@@ -872,8 +914,8 @@ private fun LineChart(w: ChartWidget, filled: Boolean) {
             if (filled) {
                 val fillPath = Path().apply {
                     addPath(path)
-                    lineTo(endX, ch)
-                    lineTo(pts.first().x, ch)
+                    lineTo(endX, base)
+                    lineTo(pts.first().x, base)
                     close()
                 }
                 drawPath(fillPath, col.copy(alpha = 0.15f))
@@ -882,6 +924,59 @@ private fun LineChart(w: ChartWidget, filled: Boolean) {
             if (progress >= 1f) pts.forEach { drawCircle(col, radius = 3.dp.toPx(), center = it) }
         }
     }
+    // X labels in equal cells, so they line up with the points above them.
+    val xLabels = remember(w.series, w.labels) {
+        val count = w.series.maxOfOrNull { it.data.size } ?: 0
+        if (w.labels.size >= count && count > 0) w.labels.take(count)
+        else List(count) { w.series.firstOrNull()?.data?.getOrNull(it)?.getOrNull(0)?.toInt()?.toString() ?: "" }
+    }
+    if (xLabels.isNotEmpty()) {
+        Row(Modifier.fillMaxWidth().padding(top = 4.dp, start = 34.dp)) {
+            xLabels.take(8).forEach { label ->
+                Text(
+                    label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = GsTheme.colors.textTertiary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * The axis ceiling: a "nice" number, not the raw maximum.
+ *
+ * Gridlines at 0/33/66/100% of 187 read as a debug overlay; gridlines at
+ * 0/50/100/150 read as a chart. The step is rounded to 1/2/5×10^n so the labels
+ * are always short, and the top line is step×3 so all four lines are round.
+ */
+private fun niceStep(raw: Float): Float {
+    if (raw <= 0f) return 1f
+    val exp = kotlin.math.floor(kotlin.math.log10(raw.toDouble())).toInt()
+    val base = Math.pow(10.0, exp.toDouble()).toFloat()
+    val n = raw / base
+    val mult = when {
+        n <= 1f -> 1f
+        n <= 2f -> 2f
+        n <= 5f -> 5f
+        else -> 10f
+    }
+    return mult * base
+}
+
+/** 1234 -> "1.2K", 0.5 -> "0.5", 100 -> "100" (+ the widget's unit). */
+private fun axisLabel(value: Float, unit: String): String {
+    val n = when {
+        value >= 1_000_000f -> String.format(java.util.Locale.US, "%.1fM", value / 1_000_000f)
+        value >= 1_000f -> String.format(java.util.Locale.US, "%.1fK", value / 1_000f)
+        value == value.toInt().toFloat() -> value.toInt().toString()
+        else -> String.format(java.util.Locale.US, "%.1f", value)
+    }
+    return n + unit
 }
 
 @Composable
@@ -889,37 +984,87 @@ private fun BarChart(w: ChartWidget) {
     var animate by remember { mutableStateOf(false) }
     LaunchedEffect(w) { animate = true }
     val progress by animateFloatAsState(if (animate) 1f else 0f, tween(700), label = "chart")
+    val c = GsTheme.colors
     val colors = w.series.indices.map { seriesColor(it) }
-    val gridColor = GsTheme.colors.divider
+    val gridColor = c.divider
     val labels = remember(w.series, w.labels) {
-        if (w.labels.size >= w.series.first().data.size) w.labels
-        else w.series.first().data.map { it.getOrElse(0) { 0f }.toInt().toString() }
+        val first = w.series.firstOrNull()?.data.orEmpty()
+        if (w.labels.size >= first.size) w.labels
+        else first.map { it.getOrElse(0) { 0f }.toInt().toString() }
     }
     val maxV = remember(w.series) {
         w.series.flatMap { s -> s.data.map { it.getOrElse(1) { 0f } } }.maxOrNull()?.takeIf { it > 0f } ?: 1f
     }
-    Canvas(Modifier.fillMaxWidth().height(180.dp).padding(top = 8.dp)) {
+    val axisMax = remember(maxV) { niceStep(maxV / 3f) * 3f }
+    val measurer = rememberTextMeasurer()
+    val axisStyle = TextStyle(fontSize = 9.sp, color = c.textTertiary)
+    val valueStyle = TextStyle(fontSize = 10.sp, color = c.textSecondary, fontWeight = FontWeight.SemiBold)
+    // Value labels only when they cannot collide: one series, at most eight bars.
+    val showValues = w.series.size == 1 && labels.size <= 8
+
+    Canvas(Modifier.fillMaxWidth().height(190.dp).padding(top = 8.dp)) {
+        val gutter = 34.dp.toPx()
+        val top = 16.dp.toPx()
+        val plotW = (size.width - gutter).coerceAtLeast(1f)
+        val plotH = (size.height - top).coerceAtLeast(1f)
         val groups = labels.size.coerceAtLeast(1)
         val seriesCount = w.series.size.coerceAtLeast(1)
-        val cw = size.width; val ch = size.height
+
         repeat(4) { g ->
-            val y = ch * g / 3f
-            drawLine(gridColor, Offset(0f, y), Offset(cw, y), strokeWidth = 1f)
+            val y = top + plotH * g / 3f
+            drawLine(gridColor, Offset(gutter, y), Offset(size.width, y), strokeWidth = 1f)
+            val laid = measurer.measure(axisLabel(axisMax * (1f - g / 3f), w.unit), axisStyle)
+            drawText(
+                laid,
+                topLeft = Offset(
+                    (gutter - laid.size.width - 6.dp.toPx()).coerceAtLeast(0f),
+                    y - laid.size.height / 2f
+                )
+            )
         }
-        val groupW = cw / groups
-        val barW = (groupW * 0.7f) / seriesCount
+
+        val groupW = plotW / groups
+        val barW = (groupW * 0.62f) / seriesCount
+        val radius = CornerRadius(4.dp.toPx(), 4.dp.toPx())
         w.series.forEachIndexed { si, s ->
             s.data.forEachIndexed { gi, point ->
                 val v = point.getOrElse(1) { 0f }.coerceAtLeast(0f)
-                val h = ch * (v / maxV) * progress
-                val x = gi * groupW + groupW * 0.15f + si * barW
-                drawRect(colors[si], topLeft = Offset(x, ch - h), size = androidx.compose.ui.geometry.Size(barW * 0.9f, h))
+                val h = plotH * (v / axisMax) * progress
+                if (h <= 0.5f) return@forEachIndexed
+                val x = gutter + gi * groupW + groupW * 0.19f + si * barW
+                val width = barW * 0.92f
+                drawRoundRect(
+                    colors[si % colors.size],
+                    topLeft = Offset(x, top + plotH - h),
+                    size = Size(width, h),
+                    cornerRadius = radius
+                )
+                if (showValues) {
+                    val laid = measurer.measure(axisLabel(v, w.unit), valueStyle)
+                    drawText(
+                        laid,
+                        topLeft = Offset(
+                            x + (width - laid.size.width) / 2f,
+                            (top + plotH - h - laid.size.height - 2.dp.toPx()).coerceAtLeast(0f)
+                        )
+                    )
+                }
             }
         }
     }
-    Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-        labels.take(8).forEach {
-            Text(it, style = MaterialTheme.typography.labelSmall, color = GsTheme.colors.textTertiary)
+    // Labels sit in equal cells under the plot, so they line up with the bars
+    // instead of being spread edge to edge.
+    Row(Modifier.fillMaxWidth().padding(top = 4.dp, start = 34.dp)) {
+        labels.take(8).forEach { label ->
+            Text(
+                label,
+                style = MaterialTheme.typography.labelSmall,
+                color = c.textTertiary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.weight(1f)
+            )
         }
     }
 }

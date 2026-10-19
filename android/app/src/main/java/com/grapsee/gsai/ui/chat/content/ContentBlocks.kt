@@ -420,8 +420,21 @@ val CHART_LANGUAGE_ALIASES = setOf(
     "heatmap", "correlation", "treemap", "waterfall", "candlestick", "gantt", "chord"
 )
 
-/** Every fence language that opens a widget block (kinds + chart aliases). */
-val WIDGET_FENCE_LANGUAGES: Set<String> = WIDGET_LANGUAGES + CHART_LANGUAGE_ALIASES
+/**
+ * `app`, `calc` and `media` SUB-TYPES used as the fence language: ```kanban,
+ * ```loan, ```pdf, ```gallery. Models write these exactly the way they write
+ * ```funnel — the fence names the shape and the payload carries the content.
+ * Mapping them to their parent kind (with the type injected) is the difference
+ * between a rendered board and a wall of JSON.
+ */
+val APP_LANGUAGE_ALIASES: Set<String> = APP_TYPES
+val CALC_LANGUAGE_ALIASES: Set<String> = CALC_TYPES
+val MEDIA_LANGUAGE_ALIASES: Set<String> = MEDIA_TYPES - "code" // ```code is source, never a widget
+
+/** Every fence language that opens a widget block (kinds + aliases). */
+val WIDGET_FENCE_LANGUAGES: Set<String> =
+    WIDGET_LANGUAGES + CHART_LANGUAGE_ALIASES + APP_LANGUAGE_ALIASES +
+        CALC_LANGUAGE_ALIASES + MEDIA_LANGUAGE_ALIASES
 
 /**
  * Canonical widget kind for a fence language, or null when the language is not
@@ -435,8 +448,26 @@ fun widgetKindOf(language: String?): String? {
     return when {
         lang in WIDGET_LANGUAGES -> lang
         lang in CHART_LANGUAGE_ALIASES -> "chart"
+        // Media first: "search" is a media result list AND an app filter panel,
+        // and the result list is what a ```search fence almost always holds.
+        lang in MEDIA_LANGUAGE_ALIASES -> "media"
+        lang in APP_LANGUAGE_ALIASES -> "app"
+        lang in CALC_LANGUAGE_ALIASES -> "calc"
         else -> null
     }
+}
+
+/**
+ * Inject the sub-type implied by the fence into a payload that has none.
+ * An explicit `type` always wins — the model may name it more precisely than
+ * the fence did.
+ */
+internal fun injectWidgetType(json: String, alias: String, kind: String): String {
+    if (json.contains("\"type\"")) return json
+    val type = if (kind == "chart") canonicalChartType(alias) else alias.lowercase()
+    val brace = json.indexOf('{')
+    if (brace < 0) return json
+    return json.substring(0, brace + 1) + "\"type\":\"" + type + "\"," + json.substring(brace + 1)
 }
 
 /** `stackedarea` → `stackedArea`; every other alias is already canonical. */
@@ -488,7 +519,7 @@ private fun fenceToBlock(language: String?, code: String, open: Boolean, offset:
         kind != null && isJson ->
             Block.WidgetBlock(
                 kind = kind,
-                json = if (kind == "chart" && lang != "chart") injectChartType(code, lang!!) else code,
+                json = if (lang != null && lang != kind) injectWidgetType(code, lang, kind) else code,
                 open = open,
                 sourceStart = offset
             )

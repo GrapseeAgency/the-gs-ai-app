@@ -164,10 +164,26 @@ export const CHART_ALIASES = CHART_TYPES.map((t) => t.toLowerCase())
  * Canonical widget kind for a fence language, or null when it is not a widget.
  * Chart aliases collapse to 'chart'. Mirrors widgetKindOf() on the clients.
  */
+/**
+ * Sub-types models use as the fence language itself: ```kanban, ```loan,
+ * ```gallery, ```pdf. Same behaviour as the chart aliases — the fence names the
+ * shape, the payload carries the content — and the same failure if unhandled:
+ * the block reaches the client as source code.
+ */
+const APP_ALIASES = APP_TYPES as readonly string[]
+const CALC_ALIASES = CALC_TYPES as readonly string[]
+/** ```code is source code, never a media widget. */
+const MEDIA_ALIASES = (MEDIA_TYPES as readonly string[]).filter((t) => t !== 'code')
+
 export function widgetKindOf(language: string): WidgetKind | null {
   const lang = language.toLowerCase()
   if (isWidgetKind(lang)) return lang
   if (CHART_ALIASES.includes(lang)) return 'chart'
+  // Media first: "search" is both a media result list and an app filter panel,
+  // and a ```search fence almost always holds results.
+  if (MEDIA_ALIASES.includes(lang)) return 'media'
+  if (APP_ALIASES.includes(lang)) return 'app'
+  if (CALC_ALIASES.includes(lang)) return 'calc'
   return null
 }
 
@@ -183,6 +199,15 @@ export function injectChartType(json: string, alias: string): string {
   const brace = json.indexOf('{')
   if (brace < 0) return json
   return `${json.slice(0, brace + 1)}"type":"${canonicalChartType(alias)}",${json.slice(brace + 1)}`
+}
+
+/** Same, for a sub-type fence: ```kanban -> kind "app", type "kanban". */
+export function injectWidgetType(json: string, alias: string, kind: WidgetKind): string {
+  if (/"type"\s*:/.test(json)) return json
+  const brace = json.indexOf('{')
+  if (brace < 0) return json
+  const type = kind === 'chart' ? canonicalChartType(alias) : alias.toLowerCase()
+  return `${json.slice(0, brace + 1)}"type":"${type}",${json.slice(brace + 1)}`
 }
 
 export function isChartType(value: unknown): value is (typeof CHART_TYPES)[number] {

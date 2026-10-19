@@ -328,3 +328,32 @@ calc type, app type and form field in the catalogue is named in the prompt, that
 every kind has a sample payload which validates, and that the art-direction and
 theme-token contracts are present. A capability the prompt never names is a
 capability the model will never use, however good the renderer is.
+
+## 14. Sub-types as fence languages, and charts that read as charts (v0.81.11)
+
+The ```funnel bug had siblings. Models name the *shape* in the fence for every
+family, not just charts:
+
+| Fence | Kind | Injected type |
+| --- | --- | --- |
+| ```kanban, ```booking, ```calendar | `app` | the fence itself |
+| ```loan, ```mortgage, ```tax | `calc` | the fence itself |
+| ```gallery, ```pdf, ```search | `media` | the fence itself |
+
+All of them used to fall through to `Block.CodeBlock`. The mapping lives in one
+place per client (`widgetKindOf` + `injectWidgetType`) and the backend
+normalises before persistence, so the stored answer only carries canonical
+fences. Two deliberate exceptions: ```code stays source code (a JS object
+literal starts with `{`), and `search` resolves to `media` because a ```search
+fence holds results, not a filter panel.
+
+The same work exposed a tone bug: `media`/`calc`/`app` views pass their
+**sub-type** as the card tag, so `widgetTone` never matched the family and every
+calculator, board and PDF preview silently fell back to the plain surface. The
+tone table now resolves the family first (`widgetFamily`), keeping the per-type
+hue and the intended surface.
+
+Charts also got their axes: `niceStep` snaps the ceiling to a 1/2/5×10^n step so
+the four gridlines read 0/50/100/150 instead of 0/61/122/183, the bar chart
+labels each bar and the axis, and the line chart gained the same gutter and
+x-labels. A chart without a scale is a picture; with one it is a chart.

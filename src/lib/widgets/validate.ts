@@ -16,6 +16,7 @@ import {
   FORM_FIELD_TYPES,
   LIMITS,
   MEDIA_TYPES,
+  injectWidgetType,
   isChartType,
   isWidgetKind,
   injectChartType,
@@ -56,8 +57,8 @@ export function extractWidgetFences(text: string): WidgetFence[] {
     if (!kind) continue
     const start = m.index ?? 0
     const body = m[2].trim()
-    const json = kind === 'chart' && language.toLowerCase() !== 'chart'
-      ? injectChartType(body, language)
+    const json = language.toLowerCase() !== kind
+      ? injectWidgetType(body, language, kind)
       : body
     out.push({ kind, json, start, end: start + m[0].length })
   }
