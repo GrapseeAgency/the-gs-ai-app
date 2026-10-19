@@ -370,9 +370,16 @@ export async function prepareTurn(
     })
   }
 
+  // The model's memory has a cutoff; the app has a clock. Without this line a
+  // request like "chart the last six months" is answered from the training
+  // year, and every date in the chart is wrong — the single most common way a
+  // correct-looking answer is silently incorrect.
+  const clock = buildTimeEvidence(args.timezone ?? null).meta
+  const runtimeContext = `\n\nCONTEXT\n- Today is ${clock.localIso.slice(0, 10)} in ${clock.timezone} (local time ${clock.localIso.slice(11, 16)}).\n- Resolve every relative date (\"last 6 months\", \"this quarter\", \"next Friday\") from this clock, never from memory.\n- If a widget needs dates, use these dates.`
+
   const baseSystemPrompt = conversation.assistant?.instructions
-    ? `${conversation.assistant.instructions}\n\n(Platform persona base: ${SYSTEM_PROMPT})\n\n${WIDGET_PROMPT}`
-    : `${SYSTEM_PROMPT}\n\n${WIDGET_PROMPT}`
+    ? `${conversation.assistant.instructions}\n\n(Platform persona base: ${SYSTEM_PROMPT})\n\n${WIDGET_PROMPT}${runtimeContext}`
+    : `${SYSTEM_PROMPT}\n\n${WIDGET_PROMPT}${runtimeContext}`
 
   const recentDesc = await db.message.findMany({
     where: { conversationId: id, id: { not: userMessage.id } },

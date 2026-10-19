@@ -5168,3 +5168,17 @@ Stage Summary:
 - Verified locally: :app:compileReleaseKotlin and :app:assembleRelease both green; GsNative native methods survive R8 with names intact (dexdump); BASE_URL and MainActivity present in dex.
 - Verified in CI (run 39081464635): assembleRelease + all gates green, badging versionCode=89/versionName=0.77.0, dex count 1, cert b1ffd75d…, not-debuggable gate passed, baseline.prof gate passed.
 - NOT verified: on-device runtime under R8. Keep rules cover every reflection surface found by grep (none: no Class.forName / getDeclaredMethod in app code), Room/Hilt/serialization ship consumer rules, lintVitalRelease passed. If anything crashes at runtime it will be a keep-rule miss and will name the class in the stack trace (obfuscation is off on purpose).
+
+---
+Task ID: release-0.81.12
+Agent: main
+Task: Continue the GenUI line non-stop: finish the clock wire contract, ship 0.81.10 + 0.81.11 (never published) + the clock/table work as one signed release.
+
+Work Log:
+- CLOCK: prepareTurn anchors relative dates to `body.timezone` (header fallback `x-client-timezone`, null = UTC). Android now sends `TimeZone.getDefault().id` on every turn — the default parameter means both call sites (chat + translation scratch) carry it, and explicitNulls=false keeps the field off the wire when null, so old servers never see a new key. Wire contract locked by SendMessageRequestTest (2 tests).
+- TABLE: numeric columns right-align when most non-blank cells match one quantity shape (sign/currency + digits + optional unit). One "n/a" no longer demotes the column; numbers down a column can be compared.
+- FORM: submit flow confirmed end-to-end — fill → Submit → summary the user reads → "Send as message" → dispatch(text, echoUser = true). The widget never fires a prompt the user did not see.
+- TESTS: Android 210/210 green (was 206), backend widget compiler 52/52 green. :app:assembleRelease on target :app: only (whole-project build still dies on the pre-existing :ocr-fallback empty applicationId — untouched, out of scope).
+- RELEASE GATES: versionCode 113 / versionName 0.81.12, package com.grapsee.gsai, launchable MainActivity, NOT debuggable, native-code ×4 with libgs_ffi.so in all four ABIs, single dex, 65,633,341 bytes, cert SHA-256 b1ffd75d…8b1a483 (gs-live.keystore).
+- Note: commits 0eb28b5 (0.81.10) and 5912f9c (0.81.11) were never pushed, tagged or released; their content ships inside this APK and is covered by the v0.81.12 tag.
+- Backend deploy remains the operator's step: the live server still runs an older build, so the clock + rulebook reach devices only after it is deployed.

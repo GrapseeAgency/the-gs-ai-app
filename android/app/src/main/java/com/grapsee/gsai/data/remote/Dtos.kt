@@ -124,7 +124,12 @@ data class SendMessageRequest(
     val attachments: List<String>? = null,
     /** FLASH MODE (Phase 3): 'flash' | 'thinking' | 'auto'. Null (absent on
      *  the wire) = the backend's default, which is now 'flash'. */
-    val mode: String? = null
+    val mode: String? = null,
+    /** CLOCK (GenUI): the device IANA zone, e.g. "Asia/Dhaka". The backend
+     *  resolves relative dates ("last 6 months", "next Friday") against THIS
+     *  clock instead of guessing UTC — a chart labelled from the wrong month
+     *  is worse than no chart. Null omits the field (old servers ignore it). */
+    val timezone: String? = null
 )
 
 /**

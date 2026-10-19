@@ -125,3 +125,28 @@ class WidgetFamilyToneTest {
         assertEquals(CardTone.Tinted, widgetTone("chart"))
     }
 }
+
+/**
+ * Numeric-column detection for tables.
+ *
+ * The contract tells the model that the renderer right-aligns numbers. It did
+ * not, so every price column was ragged. Detection is deliberately tolerant of
+ * currency, signs, thousands separators and short units, and deliberately
+ * strict about anything that starts with a letter ("Q1" is a label).
+ */
+class NumericColumnTest {
+
+    @Test
+    fun `plain and formatted numbers are numeric`() {
+        listOf("120", "-3.5", "$1,200", "12%", "1.2 km", "+8", "0.04").forEach {
+            assertTrue("$it should be numeric", NUMERIC_CELL.matches(it))
+        }
+    }
+
+    @Test
+    fun `labels and words are not numeric`() {
+        listOf("Q1", "Revenue", "N/A", "", "12 units sold", "Apple").forEach {
+            assertTrue("$it should not be numeric", !NUMERIC_CELL.matches(it))
+        }
+    }
+}

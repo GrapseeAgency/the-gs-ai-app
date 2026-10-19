@@ -357,3 +357,27 @@ Charts also got their axes: `niceStep` snaps the ceiling to a 1/2/5×10^n step s
 the four gridlines read 0/50/100/150 instead of 0/61/122/183, the bar chart
 labels each bar and the axis, and the line chart gained the same gutter and
 x-labels. A chart without a scale is a picture; with one it is a chart.
+
+## 15. The clock travels on the wire (v0.81.12)
+
+`prepareTurn` now anchors every relative date to the device clock:
+
+```
+body.timezone = TimeZone.getDefault().id   // "Asia/Dhaka", on every turn
+→ CONTEXT: Today is 2026-10-20 in Asia/Dhaka (local time 01:39).
+   Resolve every relative date … from this clock, never from memory.
+```
+
+The backend reads `body.timezone`, falling back to the `x-client-timezone`
+header; null means UTC. The Android default parameter is the device zone, so
+the translation scratch conversation carries it too, and `explicitNulls=false`
+keeps the field off the wire entirely when it is null — old servers never see
+a new key. The wire contract is locked by `SendMessageRequestTest`.
+
+Two smaller things landed here as well. The table widget right-aligns a column
+when most of its non-blank cells match one quantity shape (sign/currency +
+digits + optional unit) — one `n/a` no longer breaks the column, and numbers
+down a column can finally be compared. And the form widget's submit flow is
+confirmed end to end: fill → Submit → a summary the user reads → "Send as
+message" → `dispatch(text, echoUser = true)` — the widget does not fire a
+prompt the user never saw.

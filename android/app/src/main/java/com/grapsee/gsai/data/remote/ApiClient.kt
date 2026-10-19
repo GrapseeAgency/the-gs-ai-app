@@ -19,6 +19,7 @@ import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import java.security.cert.CertificateException
+import java.util.TimeZone
 import javax.net.ssl.SSLException
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.CancellationException
@@ -229,7 +230,13 @@ class ApiClient(
         onLedgerEvent: (String) -> Unit = {},
         /** REASONING TRACE: raw {"delta":"..."} frames from thinking-enabled
          *  stream turns. Forwarded untouched; empty payload ignored. */
-        onReasoningEvent: (String) -> Unit = {}
+        onReasoningEvent: (String) -> Unit = {},
+        /** CLOCK (GenUI): the device IANA zone (e.g. "Asia/Dhaka") used by the
+         *  backend to anchor relative dates in widgets. Defaults to THIS
+         *  DEVICE's zone, so every turn — including the translation scratch
+         *  conversation — carries a real clock without any call site knowing
+         *  about it. Pass null explicitly only in tests that pin the zone. */
+        timezone: String? = TimeZone.getDefault().id
     ) {
         // THE POST IS INSIDE THE GUARD TOO, AND IT IS WHERE THE CUT ACTUALLY
         // SURFACES.
@@ -270,7 +277,8 @@ class ApiClient(
                         content = content,
                         stream = true,
                         attachments = attachments?.ifEmpty { null },
-                        mode = mode
+                        mode = mode,
+                        timezone = timezone
                     )
                 )
             }

@@ -1132,6 +1132,9 @@ private fun PieChart(w: ChartWidget) {
     }
 }
 
+/** A cell that is a quantity: optional sign/currency, digits, optional unit. */
+internal val NUMERIC_CELL = Regex("""^[^\p{L}]{0,3}[-+]?\d[\d.,]*\s*(?:%|[a-zA-Z]{1,3})?$""")
+
 // --- stat cards -------------------------------------------------------------
 
 @Composable
@@ -1242,6 +1245,15 @@ private fun TableWidgetView(w: TableWidget) {
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
             )
         }
+        // A number that is not right-aligned cannot be compared down a column,
+        // and the contract promises the renderer does it. The column is numeric
+        // when most of its non-empty cells are, so one "n/a" does not break it.
+        val numericCols = remember(w.columns, w.rows) {
+            w.columns.indices.map { ci ->
+                val cells = w.rows.mapNotNull { it.getOrNull(ci) }.filter { it.isNotBlank() }
+                cells.isNotEmpty() && cells.count { NUMERIC_CELL.matches(it.trim()) } * 2 > cells.size
+            }
+        }
         Column(Modifier.horizontalScroll(rememberScrollState()).padding(top = 8.dp)) {
             Row {
                 w.columns.forEachIndexed { ci, col ->
@@ -1250,6 +1262,7 @@ private fun TableWidgetView(w: TableWidget) {
                         style = MaterialTheme.typography.labelSmall,
                         color = GsTheme.colors.textTertiary,
                         fontWeight = FontWeight.SemiBold,
+                        textAlign = if (numericCols[ci]) TextAlign.End else TextAlign.Start,
                         modifier = Modifier
                             .width(140.dp)
                             .then(if (w.sortable) Modifier.clickable {
@@ -1269,6 +1282,7 @@ private fun TableWidgetView(w: TableWidget) {
                             color = GsTheme.colors.textPrimary,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
+                            textAlign = if (numericCols[ci]) TextAlign.End else TextAlign.Start,
                             modifier = Modifier.width(140.dp).padding(vertical = 7.dp)
                         )
                     }
