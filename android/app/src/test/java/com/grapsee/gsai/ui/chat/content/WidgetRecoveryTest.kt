@@ -165,4 +165,97 @@ class WidgetRecoveryTest {
         val honest = "I don't have the revenue figures for last quarter, so I can't chart them."
         assertEquals(honest, WidgetRecovery.stripFalseRefusal(honest))
     }
+
+    @Test
+    fun `the exact sentence captured from the live backend is stripped`() {
+        // Verbatim from the deployed API probe, 2026-10-19.
+        val live = "I'd be happy to show you a bar chart comparing Q1-Q4 revenue for " +
+            "three products. However, I don't have the ability to generate or display " +
+            "visual charts directly."
+        val cleaned = WidgetRecovery.stripFalseRefusal(live)
+        assertTrue(
+            "false claim survived: $cleaned",
+            !cleaned.contains("don't have the ability", ignoreCase = true)
+        )
+        assertTrue("legitimate opening was lost: $cleaned", cleaned.contains("I'd be happy"))
+    }
+
+    // -----------------------------------------------------------------------
+    // End-to-end: recovery output must survive the REAL renderer gate, not
+    // just look right in a unit assertion.
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun `recovered chart survives parseWidget - the actual renderer gate`() {
+        val block = WidgetRecovery.recover(refusal, "Show me a bar chart", sectorAnswer)!!
+        val parsed = parseWidget(block.kind, block.json)
+        assertNotNull("parseWidget rejected the recovered payload", parsed)
+        assertTrue("expected a Chart, got $parsed", parsed is Widget.Chart)
+        val chart = (parsed as Widget.Chart).w
+        assertEquals("bar", chart.type)
+        assertEquals(5, chart.labels.size)
+        assertEquals(5, chart.series.first().data.size)
+        assertTrue(chart.series.first().data.all { it.size == 2 })
+    }
+
+    @Test
+    fun `recovered table survives parseWidget`() {
+        val block = WidgetRecovery.recover("- Alpha: 40\n- Beta: 25", "put it in a table", "")!!
+        val parsed = parseWidget(block.kind, block.json)
+        assertTrue(parsed is Widget.Table)
+        assertEquals(2, (parsed as Widget.Table).w.rows.size)
+    }
+
+    @Test
+    fun `recovered block never collides with a parsed block key`() {
+        // RichBlocks keys siblings by sourceStart. 0 was the original bug:
+        // the recovered widget duplicated the first paragraph's key.
+        val cleaned = WidgetRecovery.stripFalseRefusal(refusal)
+        val parsed = parseBlocks(cleaned)
+        val recovered = WidgetRecovery.recover(refusal, "Show me a bar chart", sectorAnswer)!!
+        val keys = (parsed + recovered).map { it.sourceStart }
+        assertEquals("duplicate composition key: $keys", keys.size, keys.distinct().size)
+        assertTrue(parsed.isNotEmpty())
+        assertTrue(recovered.sourceStart != 0)
+    }
+
+    @Test
+    fun `pie recovery survives the renderer gate`() {
+        val block = WidgetRecovery.recover(
+            "- Alpha: 40\n- Beta: 25\n- Gamma: 35",
+            "make a pie chart",
+            ""
+        )!!
+        val parsed = parseWidget(block.kind, block.json)
+        assertTrue("pie was rejected by parseWidget", parsed is Widget.Chart)
+        assertEquals(3, (parsed as Widget.Chart).w.series.size)
+    }
+
+    @Test
+    fun `a single multi-point pie series is expanded to slices`() {
+        val w = ChartWidget(
+            type = "pie",
+            labels = listOf("Alpha", "Beta", "Gamma"),
+            series = listOf(
+                ChartSeries(
+                    name = "value",
+                    data = listOf(listOf(0f, 40f), listOf(1f, 25f), listOf(2f, 35f))
+                )
+            )
+        )
+        val slices = pieSlices(w)
+        assertEquals(listOf("Alpha", "Beta", "Gamma"), slices.map { it.first })
+        assertEquals(3, slices.size)
+    }
+
+    @Test
+    fun `recovery is not triggered when a real widget fence is present`() {
+        val withWidget = "```chart\n{\"type\":\"bar\",\"labels\":[\"a\",\"b\"],\"series\":[{\"name\":\"v\",\"data\":[[0,1],[1,2]]}]}\n```"
+        assertTrue(WidgetRecovery.hasWidgetFence(withWidget))
+        // The caller (BlocksContent) skips recovery on this flag; prove the flag
+        // is what actually gates it, not a lucky parse.
+        val skipped = if (WidgetRecovery.hasWidgetFence(withWidget)) null
+        else WidgetRecovery.recover(withWidget, "show me a chart", sectorAnswer)
+        assertNull(skipped)
+    }
 }

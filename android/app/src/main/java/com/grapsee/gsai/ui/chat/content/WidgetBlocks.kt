@@ -172,9 +172,13 @@ fun parseWidget(kind: String, json: String): Widget? {
     return try {
         when (kind) {
             "chart" -> widgetJson.decodeFromString<ChartWidget>(json).let { w ->
+                // Pie/donut are documented as ONE SERIES PER SLICE with a
+                // single point — requiring two points silently rejected every
+                // correctly-shaped pie and rendered it as a code block.
+                val minPoints = if (w.type == "pie" || w.type == "donut") 1 else 2
                 val series = w.series.take(MAX_CHART_SERIES).map {
                     it.copy(data = it.data.take(MAX_POINTS_PER_SERIES))
-                }.filter { it.data.size >= 2 }
+                }.filter { it.data.size >= minPoints }
                 if (series.isEmpty()) null
                 else if (w.type in CHART_TYPES) Widget.Chart(w.copy(series = series))
                 else null
@@ -598,6 +602,32 @@ private fun BarChart(w: ChartWidget) {
     }
 }
 
+/**
+ * Pie and donut accept BOTH documented-ish shapes:
+ *
+ *  1. one series per slice, each with a single point (`name` = slice label) —
+ *     the shape the prompt documents;
+ *  2. one series carrying one point per label, with `labels` naming them —
+ *     what most models actually emit.
+ *
+ * Shape 1 used to be rejected outright by `parseWidget`'s two-point minimum,
+ * and shape 2 rendered as a single slice because the renderer only read
+ * `series`. Both are real, so normalise here instead of guessing upstream.
+ */
+internal fun pieSlices(w: ChartWidget): List<Pair<String, Float>> {
+    val single = w.series.singleOrNull()
+    if (single != null && single.data.size > 1) {
+        val names = if (w.labels.size >= single.data.size) w.labels
+        else single.data.indices.map { "Slice ${it + 1}" }
+        return names.take(single.data.size).mapIndexed { i, label ->
+            label to single.data[i].getOrElse(1) { 0f }
+        }.filter { it.second > 0f }
+    }
+    return w.series.map { s ->
+        s.name to (s.data.firstOrNull()?.getOrElse(1) { 0f } ?: 0f)
+    }.filter { it.second > 0f }
+}
+
 @Composable
 private fun PieChart(w: ChartWidget) {
     var animate by remember { mutableStateOf(false) }
@@ -605,9 +635,7 @@ private fun PieChart(w: ChartWidget) {
     val progress by animateFloatAsState(if (animate) 1f else 0f, tween(700), label = "chart")
     val colors = w.series.indices.map { seriesColor(it) }
     // pie uses series[*].data[0] as (labelIndex, value); or name + single value
-    val slices = remember(w.series) {
-        w.series.map { s -> s.name to (s.data.firstOrNull()?.getOrElse(1) { 0f } ?: 0f) }.filter { it.second > 0f }
-    }
+    val slices = remember(w.series, w.labels) { pieSlices(w) }
     val total = slices.sumOf { it.second.toDouble() }.toFloat().takeIf { it > 0f } ?: 1f
     Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Canvas(Modifier.size(140.dp)) {

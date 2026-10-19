@@ -106,12 +106,12 @@ internal object WidgetRecovery {
         Regex("""(?i)\bAs an? (?:text-based|language) (?:AI|model)[^.!?]*[.!?]"""),
         Regex(
             """(?i)\bI (?:can't|cannot|can not|don't|do not) (?:have the ability to )?""" +
-                renderVerbs + """ (?:any )?(?:visual|interactive )?""" +
+                renderVerbs + """ (?:any )?(?:visual |interactive )?""" +
                 """(?:charts?|graphs?|visuali[sz]ations?|tables?)[^.!?]*[.!?]"""
         ),
         Regex(
             """(?i)\bI(?:'m| am) unable to """ + renderVerbs + """ (?:any )?""" +
-                """(?:visual|interactive )?(?:charts?|graphs?|visuali[sz]ations?)[^.!?]*[.!?]"""
+                """(?:visual |interactive )?(?:charts?|graphs?|visuali[sz]ations?)[^.!?]*[.!?]"""
         )
     )
 
@@ -328,7 +328,10 @@ internal object WidgetRecovery {
             kind = "chart",
             json = widgetJson.encodeToString(widget),
             open = true,
-            sourceStart = 0
+            // Composition keys come from sourceStart (RichBlocks.streamBlockKey).
+            // A recovered block has no source offset; 0 would collide with the
+            // first paragraph and duplicate the key inside the same Column.
+            sourceStart = RECOVERED_OFFSET
         )
     }
 
@@ -342,7 +345,13 @@ internal object WidgetRecovery {
             kind = "table",
             json = widgetJson.encodeToString(widget),
             open = true,
-            sourceStart = 0
+            sourceStart = RECOVERED_OFFSET
         )
     }
+
+    /**
+     * Never a real document offset: recovered blocks are appended after the
+     * parsed ones, and their key must not collide with a parsed block at 0.
+     */
+    private const val RECOVERED_OFFSET = Int.MAX_VALUE
 }

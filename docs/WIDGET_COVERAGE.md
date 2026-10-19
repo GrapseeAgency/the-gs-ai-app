@@ -229,7 +229,7 @@ hidden:
 
 ---
 
-## Model independence (v0.81.3)
+## Model independence (v0.81.4)
 
 Rendering must not depend on the model knowing it is talking to this client.
 A flash or text-only model answers "show me a bar chart" with prose —
@@ -253,5 +253,7 @@ was already shipped.
 - never invents a number: with fewer than two labelled values it renders
   nothing rather than drawing an empty chart.
 
-12 unit tests (`WidgetRecoveryTest`) cover the exact on-device failure,
-including the sector-list → bar-chart case.
+19 unit tests (`WidgetRecoveryTest`) cover the exact on-device failure,
+including the sector-list → bar-chart case, and assert the recovered block
+survives `parseWidget` — the real renderer gate — with a composition key that
+cannot collide with a parsed block.
