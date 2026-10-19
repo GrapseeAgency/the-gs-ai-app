@@ -127,7 +127,7 @@ jobs:
       - name: Capture crash evidence
         if: always()
         run: |
-          RUN_DIR="$(ls -dt docs/perf/runs/*/ | head -1)"
+          RUN_DIR="$(ls -dt docs/perf/runs/*/ | sed -n '1p')"
           adb logcat -d -b crash > "$RUN_DIR/logcat-crash.txt" 2>/dev/null || true
           adb logcat -d 2>/dev/null | grep -E "FATAL EXCEPTION|AndroidRuntime|Process: com.grapsee.gsai|Force finishing activity" | tail -100 > "$RUN_DIR/logcat-fatal.txt" 2>/dev/null || true
           adb shell dumpsys dropbox --print 2>/dev/null | grep -A40 "com.grapsee.gsai" | tail -120 > "$RUN_DIR/dropbox.txt" 2>/dev/null || true
@@ -137,7 +137,7 @@ jobs:
 
       - name: Collect results
         run: |
-          RUN_DIR="$(ls -dt docs/perf/runs/*/ | head -1)"
+          RUN_DIR="$(ls -dt docs/perf/runs/*/ | sed -n '1p')"
           echo "RUN_DIR=$RUN_DIR" >> "$GITHUB_ENV"
           mkdir -p "docs/perf/emulator-runs/run-${{ github.run_number }}"
           for f in table.txt summary.md results.tsv device.txt checker.log commands.log logcat-fatal.txt logcat-crash.txt dropbox.txt process-state.txt; do

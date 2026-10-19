@@ -89,7 +89,7 @@ jobs:
 
       - name: Show generated profile
         run: |
-          find android/app/src -name "*baseline*" -type f | head -10
+          find android/app/src -name "*baseline*" -type f | sed -n '1,10p'
           for f in $(find android/app/src -name "*.txt" -path "*aseline*" -type f); do
             echo "--- $f ($(wc -l < "$f") rules) ---"
             head -20 "$f"
