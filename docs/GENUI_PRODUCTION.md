@@ -429,3 +429,22 @@ distinguish "absent" from "default", so absence must be read off the raw JSON
 object — and a number in a `List<T>` field throws during decode, which the
 `catch` in `parseWidget` turns into a silent null. Both traps are now pinned by
 tests on both sides, and the probe reports **25 routed, 0 not**.
+
+## 18. The natural-language canary (v0.81.15)
+
+`scripts/live-natural-probe.ts` asks twelve requests the way users actually ask
+them — "Gantt chart for a 6-week launch plan", never naming a fence. Against the
+currently deployed server, five of twelve rendered. That is the **deployment
+gap talking, not a client bug**: the old build carries no `WIDGET_PROMPT` and no
+rulebook, so the model answers in prose. The probe is a canary for the deploy —
+the same row that reads `fences=[none]` today turns into a widget the day the
+server ships.
+
+One real client bug did surface. Asked for a Gantt chart, the live model wrote
+mermaid's gantt *syntax* (`title … dateFormat … section …`) inside the ```gantt
+fence. The compiler validated it as a chart payload, answered "invalid JSON",
+and **stripped the fence** — destroying a diagram the client could have drawn.
+Both sides now apply one rule: a widget fence that is not a JSON object is not
+a widget. `extractWidgetFences` skips non-`{` bodies, and `fenceToBlock` routes
+a non-JSON ```gantt (and any ```mindmap) to the mermaid renderer. The natural
+probe is run the same way as the fence probe: `npx tsc … && node …`.

@@ -57,6 +57,12 @@ export function extractWidgetFences(text: string): WidgetFence[] {
     if (!kind) continue
     const start = m.index ?? 0
     const body = m[2].trim()
+    // A widget payload is a JSON OBJECT. A ```gantt fence holding mermaid's
+    // gantt syntax (dateFormat/section lines — the model does this constantly)
+    // is NOT a widget: validating it would report "invalid JSON" and STRIP the
+    // fence, destroying a diagram the client could have rendered. Leave it in
+    // the text, untouched, for the client's diagram renderer.
+    if (!body.startsWith('{')) continue
     const json = language.toLowerCase() !== kind
       ? injectWidgetType(body, language, kind)
       : body

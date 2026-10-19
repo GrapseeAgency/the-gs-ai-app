@@ -5208,3 +5208,13 @@ Work Log:
 - gantt fence with `entries` (a schedule, not a series) — compiler retries as timeline and rewrites the fence; Android's chart branch falls through to TimelineWidget on the same condition (hasEntries guard).
 - mindmap fence holding mermaid syntax — routes to the mermaid diagram renderer instead of source code.
 - Round 3: 25 routed, 0 not. Backend 64/64 (block 25 grew six assertions), Android 215/215.
+
+---
+Task ID: genui-natural-probe-0.81.15
+Agent: main
+Task: Third probe: natural-language requests (users never name a fence). Fix what it catches; read the rest as the deploy canary.
+
+Work Log:
+- NEW scripts/live-natural-probe.ts: 12 user-voice requests. 5/12 rendered against the CURRENT live server — the other seven are `fences=[none]` prose answers, which is the OLD build answering (no WIDGET_PROMPT, no rulebook on that server). Documented as the deploy canary, not a client defect: the same rows turn into widgets the day the server ships.
+- REAL BUG caught: asked for a Gantt chart, the live model wrote mermaid's gantt syntax inside ```gantt. The compiler called it "invalid JSON" and STRIPPED the fence — destroying a diagram the client could render. One rule now on both sides: a widget fence that is not a JSON object is not a widget. extractWidgetFences skips non-`{` bodies; fenceToBlock routes non-JSON ```gantt and any ```mindmap to the mermaid renderer.
+- Tests: backend 66/66, Android 218/218. versionName 0.81.15, versionCode 116. Gates re-verified on the APK.

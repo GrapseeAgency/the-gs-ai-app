@@ -126,6 +126,31 @@ class SubtypeFenceTest {
         assertNotNull(parseWidget("media", json))
     }
 
+    // The natural-language probe watched the live model put MERMAID's gantt
+    // syntax (dateFormat/section lines) inside a ```gantt fence. That is a
+    // diagram, not a chart payload — it must reach the diagram renderer.
+    @Test
+    fun `mermaid syntax in a gantt fence is a diagram, not a widget`() {
+        val blocks = parseBlocks(
+            "Here is the plan.\n\n```gantt\ntitle Launch\ndateFormat  YYYY-MM-DD\nsection Planning\nResearch :a1, 2024-06-03, 7d\n```\n"
+        )
+        val diagrams = blocks.filterIsInstance<Block.MermaidBlock>()
+        assertEquals("expected exactly one diagram, got $blocks", 1, diagrams.size)
+    }
+
+    @Test
+    fun `mermaid syntax in a mindmap fence is a diagram`() {
+        val block = parseBlocks("```mindmap\nroot((Launch))\n  pre-launch\n  launch\n```").single()
+        assertTrue("expected a mermaid diagram, got $block", block is Block.MermaidBlock)
+    }
+
+    @Test
+    fun `a json gantt payload is still a widget`() {
+        val w = widgetOf("```gantt\n{\"title\":\"S\",\"series\":[{\"name\":\"s\",\"data\":[[0,1],[1,2],[2,3]]}]}\n```")
+        assertEquals("chart", w.kind)
+        assertNotNull(parseWidget(w.kind, w.json))
+    }
+
     @Test
     fun `an explicit type wins over the fence`() {
         val w = widgetOf("```kanban\n{\"type\":\"calendar\",\"items\":[]}\n```")

@@ -358,6 +358,14 @@ check('repairJson rejects garbage', repairJson('hello world') === null)
   const cg = compileWidgets({ reply: gantt, userPrompt: 'a project schedule' })
   check('a schedule in a gantt fence becomes a timeline', cg.widgets === 1 && cg.errors.length === 0, cg.errors.join(','))
   check('the retry rewrites the fence to timeline', cg.text.startsWith('```timeline'), cg.text.slice(0, 30))
+
+  // …and a ```gantt fence holding MERMAID's gantt syntax (the natural-language
+  // probe watched the live model do exactly this) is a diagram, not a widget:
+  // it must survive untouched — stripping it destroyed a renderable chart.
+  const mermaidGantt = 'Here is the plan.\n\n```gantt\ntitle Product Launch Plan\ndateFormat  YYYY-MM-DD\nsection Planning\nMarket Research :a1, 2024-06-03, 7d\n```\n\nDone.'
+  const cm = compileWidgets({ reply: mermaidGantt, userPrompt: 'gantt chart for a launch plan' })
+  check('mermaid gantt syntax survives the compiler', cm.text.includes('```gantt\n') && cm.text.includes('Market Research'), cm.text.slice(0, 120))
+  check('mermaid gantt is not an error', cm.errors.length === 0, cm.errors.join(','))
 }
 
 console.log(`\n${passed} passed, ${failures.length} failed`)
