@@ -231,7 +231,22 @@ sealed interface Widget {
     data class App(val w: AppWidget) : Widget { override val title get() = w.title }
 }
 
-internal val widgetJson = Json { ignoreUnknownKeys = true }
+/**
+ * Decoder tuned for what models actually write, not for what the spec allows.
+ *
+ * Strict kotlinx JSON rejects a trailing comma, a `// note` or an unquoted key,
+ * and every one of those turned a perfectly good widget into a code block. The
+ * backend repairs payloads before persisting, but the client also renders
+ * transcripts written by older builds and payloads that arrive mid-stream, so
+ * it has to be forgiving on its own.
+ */
+@OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+internal val widgetJson = Json {
+    ignoreUnknownKeys = true
+    isLenient = true
+    allowTrailingComma = true
+    allowComments = true
+}
 
 /**
  * Parse + validate a widget payload. Returns null when anything is off — the

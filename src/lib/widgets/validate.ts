@@ -131,6 +131,49 @@ export function extractBareWidget(text: string): WidgetFence | null {
  * comments, a stray "Here is the JSON:" prefix, or a single missing brace.
  * Returns null when the text is not recoverable.
  */
+/**
+ * Remove `//` and slash-star comments WITHOUT touching string contents.
+ *
+ * The naive regex version deleted everything after `//` on a line — including
+ * the `//` in `https://…`. Every payload carrying a URL (media, carousel,
+ * links, citations, images) therefore failed to parse, was reported as
+ * "invalid JSON", and the whole widget was dropped. A comment stripper has to
+ * know whether it is inside a string; there is no regex that does.
+ */
+function stripJsonComments(input: string): string {
+  let out = ''
+  let inString = false
+  let escaped = false
+  for (let i = 0; i < input.length; i++) {
+    const ch = input[i]
+    if (inString) {
+      out += ch
+      if (escaped) escaped = false
+      else if (ch === '\\') escaped = true
+      else if (ch === '"') inString = false
+      continue
+    }
+    if (ch === '"') {
+      inString = true
+      out += ch
+      continue
+    }
+    if (ch === '/' && input[i + 1] === '/') {
+      while (i < input.length && input[i] !== '\n') i++
+      out += '\n'
+      continue
+    }
+    if (ch === '/' && input[i + 1] === '*') {
+      i += 2
+      while (i < input.length && !(input[i] === '*' && input[i + 1] === '/')) i++
+      i++
+      continue
+    }
+    out += ch
+  }
+  return out
+}
+
 export function repairJson(raw: string): string | null {
   let s = raw.trim()
   if (!s) return null
@@ -141,11 +184,9 @@ export function repairJson(raw: string): string | null {
   const lastBrace = s.lastIndexOf('}')
   if (lastBrace >= 0) s = s.slice(0, lastBrace + 1)
 
-  s = s
+  s = stripJsonComments(s)
     .replace(/[\u201c\u201d]/g, '"')
     .replace(/[\u2018\u2019]/g, "'")
-    .replace(/\/\/[^\n\r]*/g, '')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/,\s*([}\]])/g, '$1')
 
   try {
@@ -303,8 +344,22 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
     // label as x) and [{"x":0,"y":12}]. Only the first used to survive, so the
     // other three were silently DROPPED as invalid — a correct answer thrown
     // away by our own validator.
+    // Models also put the data at the top level instead of in a series:
+    //   {"type":"bar","labels":["Q1","Q2"],"values":[120,180]}
+    //   {"type":"line","data":[[0,1],[1,2]]}
+    // Both are unambiguous, and both used to be rejected as "chart needs at
+    // least one series" — a correct answer discarded by the validator.
+    let rawSeries = asArray(p.series)
+    if (rawSeries.length === 0) {
+      const flat = asArray(p.values).length > 0 ? asArray(p.values) : asArray(p.data)
+      if (flat.length > 0) {
+        rawSeries = [{ name: asString(p.name, 'Value'), data: flat }]
+        repaired = true
+      }
+    }
+
     const labelHints: string[] = []
-    const series = asArray(p.series)
+    const series = rawSeries
       .map((s) => {
         const row = isObj(s) ? s : {}
         const data = normalisePoints(asArray(row.data), labelHints)
@@ -534,7 +589,13 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
       type = 'image'
       repaired = true
     }
-    const items = asArray(p.items)
+    // {"type":"image","url":"https://…"} — a single item, not wrapped in items.
+    const rawItems = asArray(p.items).length > 0
+      ? asArray(p.items)
+      : asString(p.url)
+        ? [{ url: p.url, thumb: p.thumb, title: p.title, caption: p.caption }]
+        : []
+    const items = rawItems
       .map((i) => {
         const o = isObj(i) ? i : {}
         return {

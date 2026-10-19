@@ -77,6 +77,11 @@ export const MEDIA_TYPES = [
   'product',
   'listing',
   'doc',
+  // The clients render these two as well (WidgetsMedia.kt). Leaving them out of
+  // the catalogue meant a ```media payload with type "pdf" was rewritten to
+  // "image" by the validator — a correct answer turned into a broken one.
+  'document',
+  'pdf',
 ] as const
 
 export const CALC_TYPES = [

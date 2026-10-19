@@ -461,7 +461,13 @@ internal fun injectChartType(json: String, alias: String): String {
  * sandboxed WebView harness, HtmlBlockView.kt). Anything the native widget
  * set can't express — real controls, layouts, mini-apps — lives here.
  */
-val HTML_LANGUAGES = setOf("html", "htm", "web", "webapp", "app", "ui", "page", "site", "interactive", "miniapp")
+val HTML_LANGUAGES = setOf(
+    "html", "htm", "web", "webapp", "app", "ui", "page", "site", "interactive", "miniapp",
+    // Claude's visualizer accepts SVG as well as HTML; models reach for it for
+    // diagrams, logos and small illustrations. An ```svg fence is wrapped into
+    // the same sandboxed document instead of being shown as source.
+    "svg"
+)
 
 /** A closed fence in the mermaid language is a first-class diagram block;
  *  a widget-language fence is a first-class widget block (JSON parsed at render
@@ -486,7 +492,8 @@ private fun fenceToBlock(language: String?, code: String, open: Boolean, offset:
                 open = open,
                 sourceStart = offset
             )
-        lang != null && lang in HTML_LANGUAGES -> Block.HtmlBlock("html", code, open, offset)
+        lang != null && lang in HTML_LANGUAGES ->
+            Block.HtmlBlock(if (lang == "svg") "svg" else "html", code, open, offset)
         else -> Block.CodeBlock(language, code, open, offset)
     }
 }

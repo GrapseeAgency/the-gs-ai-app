@@ -271,3 +271,60 @@ explicitly, because "nearly fits" is how answers end up looking generic.
 
 Verified by `WidgetStyleTest` (7 cases: hex parsing, alpha, invalid input,
 unknown variant, styled payload still parses).
+
+## 11. The theme reaches inside model-authored documents (v0.81.10)
+
+A ```html block used to receive exactly two colours — text and accent — and a
+transparent background. Everything else (surfaces, hairlines, the twelve data
+hues, the type scale) the model had to invent, so every bespoke view came out
+with its own greys and looked pasted onto the app. That is the same failure as
+"every widget is the same grey card", just in the other direction.
+
+The harness now injects the live theme as CSS custom properties before the
+document loads:
+
+```
+--gs-text  --gs-text-2  --gs-text-3
+--gs-surface  --gs-raised  --gs-border
+--gs-accent  --gs-hue-1 … --gs-hue-12
+--gs-radius  --gs-space  --gs-font
+```
+
+plus `color-scheme: light|dark`, so form controls, scrollbars and default text
+already match the app. The contract in the prompt says to read them and never
+hardcode `#fff`/`#000`; the rulebook is the same one the native widgets use, so
+a ```html card and a native card are the same design system.
+
+**`svg` is now a first-class fence.** Claude's visualizer accepts SVG or HTML;
+models reach for SVG for diagrams, icons and small illustrations, and we showed
+it as source code. An ```svg block is wrapped into the same sandboxed document
+(and the height bridge already measured `<svg>` bounds).
+
+## 12. Three bugs found by testing the prompt against the catalogue
+
+Writing the drift guard (below) surfaced failures that no prompt change could
+have fixed, because they were in our own validation:
+
+1. **`repairJson` deleted every URL.** It stripped `//` to remove comments with
+   a regex, which also removed the `//` in `https://…`. Every media, carousel,
+   link, citation and image payload therefore failed as "invalid JSON" and was
+   dropped. Comment stripping is now a string-aware scanner — there is no regex
+   that can tell a comment from a URL.
+2. **`media` lost `document` and `pdf`.** The clients render both; the catalogue
+   did not list them, so the validator rewrote the type to `image`.
+3. **Top-level data was rejected.** `{"type":"bar","labels":[…],"values":[…]}` and
+   `{"type":"image","url":"…"}` are unambiguous, common, and were refused. Both
+   now normalise into the documented shape.
+
+The client got the same treatment: `widgetJson` is lenient (trailing commas,
+comments, unquoted keys). The backend repairs payloads before persisting, but
+the client also renders older transcripts and mid-stream payloads, so it cannot
+depend on that.
+
+## 13. The drift guard
+
+`npm run test:widgets` now asserts that **every** kind, chart type, media type,
+calc type, app type and form field in the catalogue is named in the prompt, that
+every kind has a sample payload which validates, and that the art-direction and
+theme-token contracts are present. A capability the prompt never names is a
+capability the model will never use, however good the renderer is.

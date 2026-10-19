@@ -7,6 +7,8 @@
 import { compileWidgets } from '../src/lib/widgets/compile'
 import { validateWidget, extractWidgetFences, repairJson, validationErrors } from '../src/lib/widgets/validate'
 import { toolCallToFence } from '../src/lib/widgets/tools'
+import { WIDGET_PROMPT } from '../src/lib/widgets/prompt'
+import { WIDGET_KINDS, CHART_TYPES, MEDIA_TYPES, CALC_TYPES, APP_TYPES, FORM_FIELD_TYPES, OTHER_RENDER_KINDS } from '../src/lib/widgets/catalog'
 
 declare const process: { exit(code: number): never }
 
@@ -191,6 +193,106 @@ check('repairJson rejects garbage', repairJson('hello world') === null)
   const prose = 'The config is { "a": 1 } and that is all.'
   const r2 = compileWidgets({ reply: prose, userPrompt: 'chart' })
   check('prose with braces is untouched', r2.widgets === 0 && r2.text === prose)
+}
+
+
+// 19. The contract the model reads must mention everything the clients render.
+// A kind the prompt never names is a kind the model will never emit, no matter
+// how well the renderer works — this is the drift guard between catalogue and
+// prompt, and it runs on every test pass.
+{
+  const missing = (label: string, values: readonly string[]) => {
+    const absent = values.filter((v) => !WIDGET_PROMPT.includes(v))
+    check(`${label}: all ${values.length} named in the prompt`, absent.length === 0, absent.join(','))
+  }
+  missing('kinds', WIDGET_KINDS)
+  missing('chart types', CHART_TYPES)
+  missing('media types', MEDIA_TYPES)
+  missing('calc types', CALC_TYPES)
+  missing('app types', APP_TYPES)
+  missing('form fields', FORM_FIELD_TYPES)
+  missing('other renderers', OTHER_RENDER_KINDS)
+
+  check('prompt declares the svg fence', /^- svg:/m.test(WIDGET_PROMPT))
+  check('prompt names the theme tokens', WIDGET_PROMPT.includes('--gs-surface') && WIDGET_PROMPT.includes('--gs-hue-1'))
+  check('prompt carries the art-direction keys', WIDGET_PROMPT.includes('"accent"') && WIDGET_PROMPT.includes('"variant"'))
+  check('prompt forbids emoji', /emoji/i.test(WIDGET_PROMPT))
+}
+
+// 20. A kind must not appear in the catalogue without a validator, otherwise a
+// malformed payload of that kind reaches the client and renders nothing.
+{
+  const payloads: Record<string, string> = {
+    chart: '{"type":"bar","series":[{"name":"v","data":[1,2]}]}',
+    stat: '{"cards":[{"label":"Revenue","value":"120"}]}',
+    table: '{"columns":["a"],"rows":[["1"]]}',
+    compare: '{"left":{"items":["a"]},"right":{"items":["b"]}}',
+    progress: '{"items":[{"label":"a","percent":40}]}',
+    timeline: '{"entries":[{"date":"2026-01-01","title":"a"}]}',
+    gauge: '{"items":[{"label":"a","value":4,"max":10}]}',
+    quiz: '{"questions":[{"q":"a?","options":["x","y"],"answer":1}]}',
+    form: '{"fields":[{"type":"text","label":"Name"}]}',
+    carousel: '{"items":[{"image":"https://x.test/a.jpg"}]}',
+    cards: '{"cards":[{"title":"a"}]}',
+    followups: '{"prompts":["a"]}',
+    media: '{"type":"image","items":[{"url":"https://x.test/a.jpg"}]}',
+    actions: '{"buttons":[{"label":"a","value":"b"}]}',
+    panel: '{"title":"a","body":"b"}',
+    voice: '{"prompt":"a"}',
+    calc: '{"fields":[{"key":"p","label":"P","value":1}],"outputs":[{"label":"o","expr":"p*2"}]}',
+    app: '{"type":"tasks","items":[{"title":"a"}]}',
+  }
+  const noValidator: string[] = []
+  const rejected: string[] = []
+  for (const kind of WIDGET_KINDS) {
+    const json = payloads[kind]
+    if (!json) { noValidator.push(kind); continue }
+    const r = validateWidget(kind, json)
+    if (!r.ok) rejected.push(`${kind}:${validationErrors(r).join('|')}`)
+  }
+  check('every kind has a sample payload', noValidator.length === 0, noValidator.join(','))
+  check('every sample payload validates', rejected.length === 0, rejected.join(';'))
+}
+
+
+// 21. Comment stripping must not eat the // inside a URL. The regex version did,
+// which made every media/carousel/link payload fail as "invalid JSON".
+{
+  const url = '{"items":[{"url":"https://cdn.test/a.jpg","thumb":"http://x.test/b.png"}]}'
+  const repaired = repairJson(url)
+  check('repairJson keeps https://', repaired !== null && repaired.includes('https://cdn.test/a.jpg'), String(repaired))
+  check('repairJson keeps http://', repaired !== null && repaired.includes('http://x.test/b.png'))
+  check('media with urls validates', validateWidget('media', url).ok)
+
+  const commented = '{\n  "columns": ["a"], // the only column\n  "rows": [["1"]] /* one row */\n}'
+  const r = repairJson(commented)
+  check('real comments are still stripped', r !== null && !r.includes('//') && !r.includes('/*'), String(r))
+
+  const trailing = '{"cards":[{"label":"a","value":"1"},],"title":"x",}'
+  check('trailing commas are still repaired', validateWidget('stat', trailing).ok)
+}
+
+
+// 22. Data placed at the top level instead of inside a series is still a chart.
+{
+  const values = '{"type":"bar","labels":["Q1","Q2","Q3"],"values":[120,180,150]}'
+  const r = validateWidget('chart', values)
+  check('top-level values become a series', r.ok && (r as any).widget.series[0].data.length === 3)
+
+  const pairs = '{"type":"line","data":[[0,12],[1,18]]}'
+  const r2 = validateWidget('chart', pairs)
+  check('top-level pairs become a series', r2.ok && (r2 as any).widget.series[0].data.length === 2)
+
+  const single = '{"type":"image","url":"https://cdn.test/a.jpg","caption":"A"}'
+  const r3 = validateWidget('media', single)
+  check('top-level url becomes an item', r3.ok && (r3 as any).widget.items[0].url === 'https://cdn.test/a.jpg')
+}
+
+// 23. A chart that is still unusable must not take the prose down with it.
+{
+  const broken = 'Here is the chart.\n\n```chart\n{"type":"bar","series":[]}\n```\n\nThat is all.'
+  const r = compileWidgets({ reply: broken, userPrompt: 'bar chart of revenue' })
+  check('an empty chart fence is removed, prose survives', r.text.includes('Here is the chart') && !r.text.includes('"series"'))
 }
 
 console.log(`\n${passed} passed, ${failures.length} failed`)

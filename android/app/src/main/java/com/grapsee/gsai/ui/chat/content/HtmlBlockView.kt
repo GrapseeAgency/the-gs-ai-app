@@ -30,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -99,19 +100,82 @@ private fun injectBridge(doc: String): String =
         doc + "<script>$BRIDGE_SCRIPT</script>"
     }
 
+/**
+ * The palette a model-authored document is allowed to use.
+ *
+ * A ```html block used to receive exactly two colours (text and accent) and a
+ * transparent background, so every bespoke view invented its own greys — which
+ * is why they looked pasted on. Claude's visualizer solves this by handing the
+ * model a token set; this is the same idea. Every value is emitted as a CSS
+ * custom property, so a document writes `var(--gs-text-2)` instead of guessing
+ * a hex, and it follows light/dark automatically.
+ */
+internal data class DocTokens(
+    val text: String,
+    val textSecondary: String,
+    val textTertiary: String,
+    val surface: String,
+    val raised: String,
+    val border: String,
+    val accent: String,
+    val dark: Boolean,
+) {
+    companion object {
+        /** Used by tests and by callers that only know the two base colours. */
+        fun of(text: String, accent: String) = DocTokens(
+            text = text,
+            textSecondary = "#5B6472",
+            textTertiary = "#8A93A0",
+            surface = "#F7F7F5",
+            raised = "#EFEFEC",
+            border = "#E5E5E1",
+            accent = accent,
+            dark = false,
+        )
+    }
+}
+
+/** The live theme, as document tokens. */
+@Composable
+internal fun rememberDocTokens(): DocTokens {
+    val c = GsTheme.colors
+    val dark = c.appBackground.luminance() < 0.4f
+    return remember(c, dark) {
+        DocTokens(
+            text = hex6(c.textPrimary),
+            textSecondary = hex6(c.textSecondary),
+            textTertiary = hex6(c.textTertiary),
+            surface = hex6(c.surface),
+            raised = hex6(c.raisedSurface),
+            border = hex6(c.divider),
+            accent = hex6(c.accent),
+            dark = dark,
+        )
+    }
+}
+
 /** CSS applied to model-authored HTML so it reads inside the chat bubble. */
-private fun htmlCss(textHex: String, accentHex: String): String = """
+private fun htmlCss(t: DocTokens): String {
+    val hues = (0 until 12).joinToString("") { i -> "--gs-hue-${i + 1}:${hex6(WidgetPalette.at(i))};" }
+    return """
 <style>
+:root{color-scheme:${if (t.dark) "dark" else "light"};
+--gs-text:${t.text};--gs-text-2:${t.textSecondary};--gs-text-3:${t.textTertiary};
+--gs-surface:${t.surface};--gs-raised:${t.raised};--gs-border:${t.border};
+--gs-accent:${t.accent};$hues
+--gs-radius:14px;--gs-space:8px;--gs-font:Roboto,system-ui,-apple-system,sans-serif}
 html,body{margin:0;padding:0;background:transparent}
-body{padding:10px 12px;color:$textHex;font-family:Roboto,system-ui,-apple-system,sans-serif;font-size:15px;line-height:1.55;-webkit-text-size-adjust:100%}
+body{padding:10px 12px;color:var(--gs-text);font-family:var(--gs-font);font-size:15px;line-height:1.55;-webkit-text-size-adjust:100%}
 *{box-sizing:border-box;max-width:100%}
 img,video,canvas,svg,table{max-width:100%;height:auto}
 iframe{max-width:100%;border:0}
-a{color:$accentHex}
+a{color:var(--gs-accent)}
 h1,h2,h3{margin:.4em 0}
 pre,code{white-space:pre-wrap;word-break:break-word}
+input,select,textarea,button{font-family:inherit;font-size:inherit}
 </style>
 """.trimIndent()
+}
 
 @Composable
 fun HtmlBlockView(block: Block.HtmlBlock, streaming: Boolean) {
@@ -119,13 +183,11 @@ fun HtmlBlockView(block: Block.HtmlBlock, streaming: Boolean) {
         HarnessSkeleton(block.mode)
         return
     }
-    val c = GsTheme.colors
-    val textHex = remember(c.textPrimary) { hex6(c.textPrimary) }
-    val accentHex = remember(c.accent) { hex6(c.accent) }
+    val tokens = rememberDocTokens()
     val context = LocalContext.current
-    val doc by produceState<String?>(null, block.mode, block.code, textHex, accentHex) {
+    val doc by produceState<String?>(null, block.mode, block.code, tokens) {
         value = if (block.code.length > MAX_DOC_CHARS) null
-        else withContext(Dispatchers.IO) { buildDocument(block.mode, block.code, textHex, accentHex) }
+        else withContext(Dispatchers.IO) { buildDocument(block.mode, block.code, tokens) }
     }
     val built = doc
     if (built == null) {
@@ -133,7 +195,7 @@ fun HtmlBlockView(block: Block.HtmlBlock, streaming: Boolean) {
         CodeBlockCard(language = block.mode, code = block.code, open = false, onCopyCode = {})
         return
     }
-    HarnessCard(tag = if (block.mode == "map") "MAP" else "HTML") {
+    HarnessCard(tag = when (block.mode) { "map" -> "MAP"; "svg" -> "SVG"; else -> "HTML" }) {
         HarnessWebView(doc = built, fileBase = block.mode == "map")
     }
 }
@@ -227,20 +289,23 @@ private fun HarnessSkeleton(mode: String) {
 // ---------------------------------------------------------------------------
 
 /** Returns the full HTML document, or null when the payload is unusable. */
-internal fun buildDocument(mode: String, code: String, textHex: String, accentHex: String): String? {
+internal fun buildDocument(mode: String, code: String, textHex: String, accentHex: String): String? =
+    buildDocument(mode, code, DocTokens.of(textHex, accentHex))
+
+internal fun buildDocument(mode: String, code: String, tokens: DocTokens): String? {
     if (code.isBlank()) return null
     return when (mode) {
-        "html" -> buildHtmlDoc(code, textHex, accentHex)
-        "map" -> buildMapDoc(code, textHex, accentHex)
-        "mermaid" -> buildMermaidDoc(code, textHex, accentHex)
-        "player" -> buildPlayerDoc(code, textHex, accentHex)
-        "sandbox" -> buildSandboxDoc(code, textHex, accentHex)
+        "html", "svg" -> buildHtmlDoc(code, tokens)
+        "map" -> buildMapDoc(code, tokens.text, tokens.accent)
+        "mermaid" -> buildMermaidDoc(code, tokens.text, tokens.accent)
+        "player" -> buildPlayerDoc(code, tokens.text, tokens.accent)
+        "sandbox" -> buildSandboxDoc(code, tokens.text, tokens.accent)
         else -> null
     }
 }
 
-private fun buildHtmlDoc(code: String, textHex: String, accentHex: String): String {
-    val css = htmlCss(textHex, accentHex)
+private fun buildHtmlDoc(code: String, t: DocTokens): String {
+    val css = htmlCss(t)
     val csp = ("<meta http-equiv=\"Content-Security-Policy\" content=\"" +
         "default-src https: data: blob: 'unsafe-inline' 'unsafe-eval'; " +
         "img-src https: data: blob:; frame-src https: data: blob:; media-src https: data: blob:;\">")
