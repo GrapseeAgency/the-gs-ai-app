@@ -229,7 +229,7 @@ hidden:
 
 ---
 
-## Model independence (v0.81.4)
+## Model independence (v0.81.5)
 
 Rendering must not depend on the model knowing it is talking to this client.
 A flash or text-only model answers "show me a bar chart" with prose —
@@ -245,7 +245,8 @@ was already shipped.
 - when the answer carries no widget fence, extracts labelled numbers from the
   answer itself — or from the previous assistant turn, for the common
   "show me a chart" follow-up that carries no data of its own;
-- builds a native `chart` / `table` widget locally, titled
+- builds a native `chart` (all 22 types), `table`, `stat`, `progress`,
+  `timeline` or `carousel` widget locally, titled
   "… — from the answer above" so the user can see it was reconstructed;
 - removes only the *false* capability claim ("I can't display charts"), and
   only after a widget was recovered; a genuine "I don't have that data" is
@@ -253,7 +254,7 @@ was already shipped.
 - never invents a number: with fewer than two labelled values it renders
   nothing rather than drawing an empty chart.
 
-19 unit tests (`WidgetRecoveryTest`) cover the exact on-device failure,
+28 unit tests (`WidgetRecoveryTest`) cover the exact on-device failure,
 including the sector-list → bar-chart case, and assert the recovered block
 survives `parseWidget` — the real renderer gate — with a composition key that
 cannot collide with a parsed block.

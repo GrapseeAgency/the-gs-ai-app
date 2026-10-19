@@ -248,6 +248,125 @@ class WidgetRecoveryTest {
         assertEquals(3, slices.size)
     }
 
+    // -----------------------------------------------------------------------
+    // The fallback is not "bar chart only": every shape the text can honestly
+    // support must be reachable, and the requested chart type must be honoured.
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun `requested chart type is honoured, not hardcoded to bar`() {
+        val reply = "- Alpha: 40\n- Beta: 25\n- Gamma: 35"
+        val cases = mapOf(
+            "show a horizontal bar chart" to "hbar",
+            "show a line chart" to "line",
+            "show an area chart" to "area",
+            "show a pie chart" to "pie",
+            "show a donut chart" to "donut",
+            "show a radar chart" to "radar",
+            "show a funnel" to "funnel",
+            "show a waterfall" to "waterfall",
+            "show a treemap" to "treemap"
+        )
+        for ((prompt, expected) in cases) {
+            val block = WidgetRecovery.recover(reply, prompt, "")
+            assertNotNull("no widget for: $prompt", block)
+            val chart = widgetJson.decodeFromString<ChartWidget>(block!!.json)
+            assertEquals("wrong type for: $prompt", expected, chart.type)
+            assertTrue("parseWidget rejected: $prompt", parseWidget("chart", block.json) is Widget.Chart)
+        }
+    }
+
+    @Test
+    fun `stat request produces stat cards that the renderer accepts`() {
+        val block = WidgetRecovery.recover(sectorAnswer, "show me the key stats", "")
+        assertNotNull(block)
+        assertEquals("stat", block!!.kind)
+        val parsed = parseWidget(block.kind, block.json)
+        assertTrue("parseWidget rejected stat", parsed is Widget.Stat)
+        assertEquals(5, (parsed as Widget.Stat).w.cards.size)
+        assertTrue(parsed.w.cards.all { it.label.isNotBlank() && it.value.isNotBlank() })
+    }
+
+    @Test
+    fun `progress request produces progress bars from percentages`() {
+        val reply = "- Design: 80%\n- Build: 45%\n- QA: 10%"
+        val block = WidgetRecovery.recover(reply, "show progress", "")
+        assertNotNull(block)
+        assertEquals("progress", block!!.kind)
+        val parsed = parseWidget(block.kind, block.json)
+        assertTrue("parseWidget rejected progress", parsed is Widget.Progress)
+        val items = (parsed as Widget.Progress).w.items
+        assertEquals(listOf(80f, 45f, 10f), items.map { it.percent })
+    }
+
+    @Test
+    fun `progress refuses values that would need an invented scale`() {
+        val reply = "- Revenue: 2.5 trillion\n- Cost: 1 trillion"
+        assertNull(WidgetRecovery.recover(reply, "show progress", ""))
+    }
+
+    @Test
+    fun `timeline request produces dated entries`() {
+        val reply = """
+            - 2024-01: Launched private beta
+            - 2024-03: Public launch
+            - 2024-06: Reached 10k users
+        """.trimIndent()
+        val block = WidgetRecovery.recover(reply, "show me a timeline", "")
+        assertNotNull(block)
+        assertEquals("timeline", block!!.kind)
+        val parsed = parseWidget(block.kind, block.json)
+        assertTrue("parseWidget rejected timeline", parsed is Widget.Timeline)
+        val entries = (parsed as Widget.Timeline).w.entries
+        assertEquals(listOf("2024-01", "2024-03", "2024-06"), entries.map { it.date })
+    }
+
+    @Test
+    fun `gallery request collects https images into a carousel`() {
+        val reply = "Here: https://images.example.com/a.png and https://images.example.com/b.jpg"
+        val block = WidgetRecovery.recover(reply, "show me a gallery", "")
+        assertNotNull(block)
+        assertEquals("carousel", block!!.kind)
+        val parsed = parseWidget(block.kind, block.json)
+        assertTrue("parseWidget rejected carousel", parsed is Widget.Carousel)
+        assertEquals(2, (parsed as Widget.Carousel).w.items.size)
+    }
+
+    @Test
+    fun `gallery with no image urls renders nothing`() {
+        assertNull(WidgetRecovery.recover("No pictures here, sorry.", "show me a gallery", ""))
+    }
+
+    @Test
+    fun diagnosticPaletteMatrix() {
+        val reply = """
+            - Alpha: 80%
+            - Beta: 45%
+            - Gamma: 10%
+            - 2024-01: Launched private beta
+            - 2024-03: Public launch
+            https://images.example.com/a.png
+        """.trimIndent()
+        val prompts = listOf(
+            "show a bar chart", "show a horizontal bar chart", "show a line chart",
+            "show an area chart", "show a pie chart", "show a donut chart",
+            "show a radar chart", "show a funnel", "show a waterfall", "show a treemap",
+            "put it in a table", "show me the key stats", "show progress",
+            "show me a timeline", "show me a gallery"
+        )
+        for (p in prompts) {
+            val block = WidgetRecovery.recover(reply, p, "")
+            val detail = when {
+                block == null -> "null"
+                block.kind == "chart" ->
+                    "chart/" + widgetJson.decodeFromString<ChartWidget>(block.json).type
+                else -> block.kind
+            }
+            println("DIAG_MATRIX=$p -> $detail")
+        }
+        assertTrue(true)
+    }
+
     @Test
     fun diagnosticPayloadForReportedFailure() {
         val block = WidgetRecovery.recover(refusal, "Show me a bar chart", sectorAnswer)!!

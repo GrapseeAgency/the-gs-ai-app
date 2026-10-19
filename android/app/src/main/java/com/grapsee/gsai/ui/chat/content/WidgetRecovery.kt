@@ -10,40 +10,65 @@ import kotlinx.serialization.encodeToString
  * Widget rendering must not depend on the model remembering a prompt. A flash
  * or text-only model routinely answers "show me a bar chart" with prose:
  * *"I'm unable to create or display visualizations like bar charts."* The
- * client can render charts perfectly well — what it lacked was data.
+ * client can render the whole palette perfectly well — what it lacked was data.
  *
- * This layer reads the numbers the answer ALREADY stated (or the turn before
- * it) and builds the widget locally, so the user gets the visual even when the
- * model refuses to emit one. It is the difference between "our app can render"
- * and "our app renders", regardless of which model is behind the API.
+ * This layer reads what the answer ALREADY stated (or the turn before it) and
+ * builds the widget locally, so the user gets the visual even when the model
+ * refuses. It is the difference between "our app can render" and "our app
+ * renders", regardless of which model is behind the API.
+ *
+ * SCOPE — this is a fallback, not the product. When the model emits a widget
+ * fence, nothing here runs. The full 150-item palette is still driven by the
+ * model; recovery only covers shapes that can be derived from prose WITHOUT
+ * inventing structure: charts, tables, stat cards, progress, timelines and
+ * image galleries. Forms, quizzes, maps, kanban boards and custom HTML need a
+ * schema the text does not contain, so they are never fabricated here.
  *
  * HONESTY RULES (non-negotiable)
  * ------------------------------
  *  - never invent a number: every value is parsed from text already shown;
- *  - never hide that this was reconstructed — the title says "from the answer
+ *  - never hide that this was reconstructed — titles say "from the answer
  *    above";
- *  - bail out silently when fewer than two labelled values exist, rather than
- *    drawing a chart out of nothing;
+ *  - bail out silently when there is not enough data, rather than drawing an
+ *    empty widget;
  *  - the only prose ever removed is a *false* capability claim ("I can't
  *    display charts"), and only when a widget was successfully recovered.
  */
 internal sealed interface VisualAsk {
     data class Chart(val type: String) : VisualAsk
     object Table : VisualAsk
+    object Stat : VisualAsk
+    object Progress : VisualAsk
+    object Timeline : VisualAsk
+    object Gallery : VisualAsk
 }
 
 internal object WidgetRecovery {
 
     private const val MAX_POINTS = 8
+    private const val MAX_GALLERY = 12
+
+    /**
+     * Never a real document offset: recovered blocks are appended after the
+     * parsed ones, and RichBlocks keys siblings by sourceStart, so 0 would
+     * collide with the first paragraph and duplicate a composition key.
+     */
+    private const val RECOVERED_OFFSET = Int.MAX_VALUE
 
     /** One extracted value. [display] keeps the human-facing unit ("2.5 trillion"). */
-    private data class Point(val label: String, val value: Float, val display: String)
+    private data class Point(
+        val label: String,
+        val value: Float,
+        val display: String,
+        val percent: Boolean = false
+    )
 
     private data class Raw(
         val section: String,
         val label: String,
         val value: Float,
-        val display: String
+        val display: String,
+        val percent: Boolean
     )
 
     // Order matters: the most specific phrase wins ("horizontal bar" before
@@ -51,6 +76,7 @@ internal object WidgetRecovery {
     private val chartTypes = listOf(
         "horizontal bar" to "hbar",
         "stacked bar" to "stacked",
+        "stacked area" to "stackedArea",
         "bar chart" to "bar",
         "bar graph" to "bar",
         "column chart" to "bar",
@@ -86,6 +112,21 @@ internal object WidgetRecovery {
             """(?:[A-Z]{3}\s*)?[$€£¥₹]?\s*(-?\d{1,3}(?:,\d{3})+(?:\.\d+)?|-?\d+(?:\.\d+)?)""" +
             """(?:\s*[-–]\s*(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?))?""" +
             """\s*(%|percent|trillion|billion|million|thousand|tn|bn|mn|k|m|b|t)?""",
+        RegexOption.IGNORE_CASE
+    )
+
+    /** Dates a timeline can anchor on: 2024, 2024-03, 15 Jan 2024, Jan 2024, Q1 2024. */
+    private val dateish = Regex(
+        """^(?:(?:19|20)\d{2}(?:[-/]\d{1,2}){0,2}""" +
+            """|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2},?\s+(?:19|20)\d{2}""" +
+            """|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(?:19|20)\d{2}""" +
+            """|\d{1,2}\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(?:19|20)\d{2}""" +
+            """|q[1-4]\s+(?:19|20)\d{2})$""",
+        RegexOption.IGNORE_CASE
+    )
+
+    private val imageUrl = Regex(
+        """https://[^\s)\]"'<>]+?\.(?:png|jpe?g|webp|gif)(?:\?[^\s)\]"'<>]*)?""",
         RegexOption.IGNORE_CASE
     )
 
@@ -129,6 +170,24 @@ internal object WidgetRecovery {
         }
         chartTypes.firstOrNull { p.contains(it.first) }?.let { return VisualAsk.Chart(it.second) }
         if (p.contains("table") || p.contains("spreadsheet")) return VisualAsk.Table
+        if (p.contains("timeline") || p.contains("roadmap") || p.contains("milestone") ||
+            p.contains("history of") || p.contains("chronolog")
+        ) {
+            return VisualAsk.Timeline
+        }
+        if (p.contains("progress") || p.contains("completion") || p.contains("percent complete")) {
+            return VisualAsk.Progress
+        }
+        if (p.contains("gallery") || p.contains("photos") || p.contains("images") ||
+            p.contains("pictures")
+        ) {
+            return VisualAsk.Gallery
+        }
+        if (p.contains("stat") || p.contains("kpi") || p.contains("metric") ||
+            p.contains("key numbers") || p.contains("at a glance")
+        ) {
+            return VisualAsk.Stat
+        }
         return null
     }
 
@@ -139,12 +198,21 @@ internal object WidgetRecovery {
      */
     fun recover(reply: String, prompt: String, prior: String): Block.WidgetBlock? {
         val ask = askOf(prompt) ?: return null
-        val fromReply = extract(reply)
-        val chosen = if (fromReply.points.size >= 2) fromReply else extract(prior)
-        if (chosen.points.size < 2) return null
         return when (ask) {
-            is VisualAsk.Chart -> chartBlock(chosen.points, ask.type, chosen.seriesName)
-            VisualAsk.Table -> tableBlock(chosen.points)
+            VisualAsk.Gallery -> galleryBlock(reply, prior)
+            VisualAsk.Timeline -> timelineBlock(reply, prior)
+            else -> {
+                val fromReply = extract(reply)
+                val chosen = if (fromReply.points.size >= 2) fromReply else extract(prior)
+                if (chosen.points.size < 2) return null
+                when (ask) {
+                    is VisualAsk.Chart -> chartBlock(chosen.points, ask.type, chosen.seriesName)
+                    VisualAsk.Table -> tableBlock(chosen.points)
+                    VisualAsk.Stat -> statBlock(chosen.points, chosen.seriesName)
+                    VisualAsk.Progress -> progressBlock(chosen.points, chosen.seriesName)
+                    else -> null
+                }
+            }
         }
     }
 
@@ -180,8 +248,8 @@ internal object WidgetRecovery {
 
         // A repeated metric label ("Market Cap") under distinct section
         // headings ("Telecommunications", "Semiconductors") means the SECTIONS
-        // are the categories and the metric is the series — the screenshot
-        // case. Otherwise the labels themselves are the categories.
+        // are the categories and the metric is the series. Otherwise the labels
+        // themselves are the categories.
         val counts = rows.groupingBy { it.label.lowercase() }.eachCount()
         val dominant = counts.entries.maxByOrNull { it.value }
         val useSection = dominant != null && dominant.value >= 2 &&
@@ -191,9 +259,9 @@ internal object WidgetRecovery {
         val points = if (useSection) {
             rows.filter {
                 it.label.equals(dominant!!.key, ignoreCase = true) && it.section.isNotBlank()
-            }.map { Point(it.section, it.value, it.display) }
+            }.map { Point(it.section, it.value, it.display, it.percent) }
         } else {
-            rows.map { Point(it.label, it.value, it.display) }
+            rows.map { Point(it.label, it.value, it.display, it.percent) }
         }
 
         val seen = HashSet<String>()
@@ -243,7 +311,7 @@ internal object WidgetRecovery {
             if (!hasLetter(label) || label.length < 2) return null
             for (cell in cells.drop(1)) {
                 val v = parseNumber(cell) ?: continue
-                return Raw(section, label, v.first, v.second)
+                return Raw(section, label, v.first, v.second, v.third)
             }
             return null
         }
@@ -255,11 +323,11 @@ internal object WidgetRecovery {
         if (label.endsWith("?") || label.endsWith("!") || label.contains("http")) return null
         val rest = body.substring(m.range.last + 1).trim()
         val v = parseNumber(rest) ?: return null
-        return Raw(section, label, v.first, v.second)
+        return Raw(section, label, v.first, v.second, v.third)
     }
 
-    /** Returns (normalised value, human display) or null. */
-    private fun parseNumber(text: String): Pair<Float, String>? {
+    /** Returns (normalised value, human display, isPercent) or null. */
+    private fun parseNumber(text: String): Triple<Float, String, Boolean>? {
         val m = numberAtStart.find(text.trim()) ?: return null
         val low = m.groupValues[1].replace(",", "").toFloatOrNull() ?: return null
         val high = m.groupValues[2].replace(",", "").toFloatOrNull()
@@ -275,7 +343,7 @@ internal object WidgetRecovery {
         }
         val value = raw * factor
         if (!value.isFinite()) return null
-        return value to display(raw, unit)
+        return Triple(value, display(raw, unit), unit == "%" || unit == "percent")
     }
 
     private fun display(raw: Float, unit: String): String {
@@ -296,6 +364,47 @@ internal object WidgetRecovery {
             .trim()
 
     private fun hasLetter(s: String): Boolean = s.any { it.isLetter() }
+
+    // -----------------------------------------------------------------------
+    // Timeline + gallery read text, not numbers
+    // -----------------------------------------------------------------------
+
+    private fun timelineEntries(text: String): List<TimelineEntry> {
+        if (text.isBlank()) return emptyList()
+        val out = ArrayList<TimelineEntry>()
+        for (rawLine in text.lineSequence()) {
+            val line = cleanLabel(rawLine.trim().replace(bulletPrefix, ""))
+            if (line.isEmpty() || line.startsWith("```")) continue
+            val m = separator.find(line) ?: continue
+            val date = line.substring(0, m.range.first).trim()
+            val title = line.substring(m.range.last + 1).trim()
+            if (!dateish.matches(date) || title.length < 2) continue
+            out += TimelineEntry(date = date, title = title.take(90))
+            if (out.size >= 10) break
+        }
+        return out
+    }
+
+    private fun galleryBlock(reply: String, prior: String): Block.WidgetBlock? {
+        val urls = LinkedHashSet<String>()
+        for (text in listOf(reply, prior)) {
+            imageUrl.findAll(text).forEach { urls += it.value.trimEnd('.', ',', ')') }
+            if (urls.size >= MAX_GALLERY) break
+        }
+        if (urls.isEmpty()) return null
+        val widget = CarouselWidget(
+            title = "Images from the answer above",
+            items = urls.take(MAX_GALLERY).map { CarouselItem(image = it, caption = "") }
+        )
+        return widgetBlock("carousel", widgetJson.encodeToString(widget))
+    }
+
+    private fun timelineBlock(reply: String, prior: String): Block.WidgetBlock? {
+        val entries = timelineEntries(reply).ifEmpty { timelineEntries(prior) }
+        if (entries.size < 2) return null
+        val widget = TimelineWidget(title = "Timeline — from the answer above", entries = entries)
+        return widgetBlock("timeline", widgetJson.encodeToString(widget))
+    }
 
     // -----------------------------------------------------------------------
     // Block construction
@@ -324,15 +433,7 @@ internal object WidgetRecovery {
             labels = points.map { it.label },
             series = series
         )
-        return Block.WidgetBlock(
-            kind = "chart",
-            json = widgetJson.encodeToString(widget),
-            open = true,
-            // Composition keys come from sourceStart (RichBlocks.streamBlockKey).
-            // A recovered block has no source offset; 0 would collide with the
-            // first paragraph and duplicate the key inside the same Column.
-            sourceStart = RECOVERED_OFFSET
-        )
+        return widgetBlock("chart", widgetJson.encodeToString(widget))
     }
 
     private fun tableBlock(points: List<Point>): Block.WidgetBlock {
@@ -341,17 +442,33 @@ internal object WidgetRecovery {
             columns = listOf("Item", "Value"),
             rows = points.map { listOf(it.label, it.display) }
         )
-        return Block.WidgetBlock(
-            kind = "table",
-            json = widgetJson.encodeToString(widget),
-            open = true,
-            sourceStart = RECOVERED_OFFSET
-        )
+        return widgetBlock("table", widgetJson.encodeToString(widget))
     }
 
-    /**
-     * Never a real document offset: recovered blocks are appended after the
-     * parsed ones, and their key must not collide with a parsed block at 0.
-     */
-    private const val RECOVERED_OFFSET = Int.MAX_VALUE
+    private fun statBlock(points: List<Point>, seriesName: String): Block.WidgetBlock {
+        val widget = StatWidget(
+            title = if (seriesName == "Value") "At a glance" else "$seriesName — at a glance",
+            cards = points.take(6).map { StatCardData(label = it.label, value = it.display) }
+        )
+        return widgetBlock("stat", widgetJson.encodeToString(widget))
+    }
+
+    private fun progressBlock(points: List<Point>, seriesName: String): Block.WidgetBlock? {
+        // Percent-suffixed values are unambiguous. A set of plain numbers that
+        // all sit in 0..100 is the other honest reading; anything else would
+        // require inventing a scale, so bail out.
+        val percentPoints = points.filter { it.percent }
+        val chosen = if (percentPoints.size >= 2) percentPoints
+        else points.filter { it.value in 0f..100f }.takeIf { it.size == points.size } ?: emptyList()
+        if (chosen.size < 2) return null
+        val widget = ProgressWidget(
+            title = if (seriesName == "Value") "Progress — from the answer above"
+            else "$seriesName — from the answer above",
+            items = chosen.map { ProgressItem(label = it.label, percent = it.value.coerceIn(0f, 100f)) }
+        )
+        return widgetBlock("progress", widgetJson.encodeToString(widget))
+    }
+
+    private fun widgetBlock(kind: String, json: String): Block.WidgetBlock =
+        Block.WidgetBlock(kind = kind, json = json, open = true, sourceStart = RECOVERED_OFFSET)
 }
