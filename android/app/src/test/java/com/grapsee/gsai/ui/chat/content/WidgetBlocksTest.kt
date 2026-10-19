@@ -218,4 +218,34 @@ class WidgetBlocksTest {
         val f = parseWidget("followups", """{"title":"T","prompts":["next","more"]}""") as Widget.Followups
         assertEquals(listOf("next", "more"), f.w.prompts)
     }
+
+    /**
+     * Contract lock: the fence-routing set and the parser must never drift.
+     * Every language that `fenceToBlock` treats as a widget must have a parser
+     * branch that accepts a minimal valid payload — otherwise the model emits a
+     * widget the app silently drops to a code block.
+     */
+    @Test
+    fun `every routed widget kind has a parser branch`() {
+        val minimal = mapOf(
+            "chart" to """{"type":"line","series":[{"name":"a","data":[[1,2],[2,3]]}]}""",
+            "stat" to """{"cards":[{"label":"L","value":"1"}]}""",
+            "table" to """{"columns":["a"],"rows":[["1"]]}""",
+            "compare" to """{"left":{"title":"A","items":["x"]},"right":{"title":"B","items":["y"]}}""",
+            "progress" to """{"items":[{"label":"a","percent":50}]}""",
+            "timeline" to """{"entries":[{"date":"2026","title":"Launch"}]}""",
+            "gauge" to """{"items":[{"label":"a","value":5,"max":10}]}""",
+            "quiz" to """{"questions":[{"q":"?","options":["a","b"],"answer":0}]}""",
+            "form" to """{"fields":[{"type":"text","label":"Name"}]}""",
+            "carousel" to """{"items":[{"image":"https://example.com/a.png"}]}""",
+            "cards" to """{"cards":[{"title":"X","prompt":"do"}]}""",
+            "followups" to """{"prompts":["next"]}"""
+        )
+        // The routing set is exactly the parser set — no orphan language, no
+        // parser branch reachable only by a hand-written call.
+        assertEquals(minimal.keys, WIDGET_LANGUAGES)
+        for ((kind, json) in minimal) {
+            assertNotNull("kind '$kind' is routed but not parsed", parseWidget(kind, json))
+        }
+    }
 }
