@@ -264,7 +264,8 @@ fun parseWidget(kind: String, json: String): Widget? {
     if (json.isBlank() || json.length > MAX_WIDGET_BYTES) return null
     return try {
         when (kind) {
-            "chart" -> widgetJson.decodeFromString<ChartWidget>(json).let { w ->
+            "chart" -> {
+                val w = widgetJson.decodeFromString<ChartWidget>(json)
                 // Pie/donut are documented as ONE SERIES PER SLICE with a
                 // single point — requiring two points silently rejected every
                 // correctly-shaped pie and rendered it as a code block.
@@ -272,9 +273,19 @@ fun parseWidget(kind: String, json: String): Widget? {
                 val series = w.series.take(MAX_CHART_SERIES).map {
                     it.copy(data = it.data.take(MAX_POINTS_PER_SERIES))
                 }.filter { it.data.size >= minPoints }
-                if (series.isEmpty()) null
-                else if (w.type in CHART_TYPES) Widget.Chart(w.copy(series = series))
-                else null
+                when {
+                    series.isNotEmpty() && w.type in CHART_TYPES -> Widget.Chart(w.copy(series = series))
+                    // A ```gantt fence whose payload is a schedule of dated
+                    // entries, not a series: a chart with no series is nothing,
+                    // but a timeline is exactly what the model meant (the probe
+                    // caught the live payload). Fall through before giving up.
+                    series.isEmpty() && hasEntries(json) ->
+                        widgetJson.decodeFromString<TimelineWidget>(json).let { t ->
+                            val entries = t.entries.take(MAX_TIMELINE_ENTRIES)
+                            if (entries.isEmpty()) null else Widget.Timeline(t.copy(entries = entries))
+                        }
+                    else -> null
+                }
             }
             "stat" -> widgetJson.decodeFromString<StatWidget>(json).let { w ->
                 val cards = w.cards.take(MAX_STAT_CARDS)
@@ -336,21 +347,23 @@ fun parseWidget(kind: String, json: String): Widget? {
                     ?.contentOrNull
                     ?.lowercase()
                 widgetJson.decodeFromString<MediaWidget>(json).let { w ->
+                    // A ```search fence names the list `results` — same items.
+                    val allItems = w.items.ifEmpty { w.results }
                     val raw = statedType
-                        ?: if (w.pages.any { it.text.isNotBlank() }) "pdf" else "image"
+                        ?: if (w.pages.bodies.any { it.text.isNotBlank() } || w.pages.count > 0) "pdf" else "image"
                     val type = if (raw == "document" || raw == "pdf") "doc" else raw
                     if (type !in MEDIA_TYPES) null
                     else if (type == "code") {
                         if (w.code.isBlank()) null else Widget.Media(w.copy(type = type))
                     } else if (type == "doc") {
-                        val items = w.items.take(3).filter { it.url.startsWith("https://") }
-                        // The live model answers a ```pdf request with a page body
-                        // and no URLs at all — that IS the document.
-                        val pages = w.pages.filter { it.text.isNotBlank() }
-                        if (items.isEmpty() && pages.isEmpty()) null
-                        else Widget.Media(w.copy(type = type, items = items, pages = pages))
+                        val items = allItems.take(3).filter { it.url.startsWith("https://") }
+                        // The live model answers a ```pdf request with pages
+                        // (bodies or a count) and no URLs at all — that IS the
+                        // document.
+                        if (items.isEmpty() && w.pages.bodies.none { it.text.isNotBlank() } && w.pages.count <= 0) null
+                        else Widget.Media(w.copy(type = type, items = items))
                     } else {
-                        val items = w.items.take(20).filter { it.url.isNotBlank() || it.title.isNotBlank() }
+                        val items = allItems.take(20).filter { it.url.isNotBlank() || it.title.isNotBlank() }
                         if (items.isEmpty()) null else Widget.Media(w.copy(type = type, items = items))
                     }
                 }
@@ -410,8 +423,7 @@ fun parseWidget(kind: String, json: String): Widget? {
             "timeline" -> widgetJson.decodeFromString<TimelineWidget>(json).let { w ->
                 val entries = w.entries.take(MAX_TIMELINE_ENTRIES)
                 if (entries.isEmpty()) null else Widget.Timeline(w.copy(entries = entries))
-            }
-            else -> null
+            }            else -> null
         }
     } catch (_: Throwable) {
         null // malformed JSON / wrong types -> degrade to a code block
@@ -428,6 +440,14 @@ fun parseWidget(kind: String, json: String): Widget? {
  * discriminator and then CONFIRMED by the real validator, so prose that merely
  * contains braces can never be promoted.
  */
+/** A payload that carries dated `entries` but no series: a schedule, not a chart. */
+private fun hasEntries(json: String): Boolean =
+    try {
+        (widgetJson.parseToJsonElement(json) as? JsonObject)?.containsKey("entries") == true
+    } catch (_: Throwable) {
+        false
+    }
+
 fun inferWidgetKind(json: String): String? {
     val obj = try {
         widgetJson.parseToJsonElement(json) as? JsonObject

@@ -105,7 +105,15 @@ export function compileWidgets(input: CompileInput): CompileResult {
   const errors: string[] = []
 
   for (const fence of fences) {
-    const result = validateWidget(fence.kind, fence.json)
+    let result = validateWidget(fence.kind, fence.json)
+    // A ```gantt fence whose payload is a SCHEDULE ({"entries":[{date,title}]})
+    // and not a chart series: a gantt chart with no series is nothing, but a
+    // timeline of dated entries is exactly what the model meant. Retry once as
+    // a timeline before dropping the fence. The probe caught this live.
+    if (!result.ok && fence.kind === 'chart' && /"entries"\s*:/.test(fence.json)) {
+      const asTimeline = validateWidget('timeline', fence.json)
+      if (asTimeline.ok) result = asTimeline
+    }
     if (result.ok) {
       valid.push({
         start: fence.start,

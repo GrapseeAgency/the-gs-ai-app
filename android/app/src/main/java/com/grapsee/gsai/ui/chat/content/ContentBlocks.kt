@@ -510,7 +510,10 @@ private fun fenceToBlock(language: String?, code: String, open: Boolean, offset:
     val kind = widgetKindOf(lang)
     val isJson = code.trimStart().startsWith("{")
     return when {
-        language.equals("mermaid", ignoreCase = true) && !open -> Block.MermaidBlock(code, offset)
+        // A mind map in a ```mindmap fence is mermaid syntax — the live model
+        // sends exactly that. Rendering it as source code wastes the fence.
+        (language.equals("mermaid", ignoreCase = true) ||
+            language.equals("mindmap", ignoreCase = true)) && !open -> Block.MermaidBlock(code, offset)
         lang == "map" -> Block.HtmlBlock("map", code, open, offset)
         // Widget fences are JSON. A JSON-looking fence in a widget language wins
         // over the html fallback, so ```app can be either a widget payload or a

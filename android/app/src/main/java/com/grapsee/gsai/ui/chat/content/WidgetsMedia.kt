@@ -50,7 +50,16 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.ui.theme.GsTheme
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonDecoder
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 // --- models -----------------------------------------------------------------
 
@@ -80,21 +89,60 @@ data class DocPage(
     val text: String = ""
 )
 
+/**
+ * A document's pages as the model actually sends them: an ARRAY of page bodies
+ * ({"pages":[{"page":1,"text":…}]}) or a NUMBER ({"pages":3}) — the live probe
+ * watched both. Decoding a number into List<DocPage> would throw and take the
+ * whole widget down, so this is a union deserialiser.
+ */
+@Serializable
+data class DocPages(
+    val bodies: List<DocPage> = emptyList(),
+    val count: Int = 0
+)
+
+internal object DocPagesSerializer : KSerializer<DocPages> {
+    private val listSerializer = ListSerializer(DocPage.serializer())
+    override val descriptor: SerialDescriptor = listSerializer.descriptor
+
+    override fun deserialize(decoder: Decoder): DocPages {
+        val jsonDecoder = decoder as? JsonDecoder
+            ?: return DocPages(listSerializer.deserialize(decoder))
+        return when (val el = jsonDecoder.decodeJsonElement()) {
+            is JsonArray -> DocPages(
+                bodies = el.mapNotNull { e ->
+                    (e as? JsonObject)?.let {
+                        jsonDecoder.json.decodeFromJsonElement(DocPage.serializer(), it)
+                    }
+                }
+            )
+            is JsonPrimitive -> DocPages(count = el.content.trim().takeWhile { it.isDigit() }.toIntOrNull() ?: 0)
+            else -> DocPages()
+        }
+    }
+
+    override fun serialize(encoder: Encoder, value: DocPages) {
+        listSerializer.serialize(encoder, value.bodies)
+    }
+}
+
 @Serializable
 data class MediaWidget(
     /** image | gallery | video | audio | code | file | link | citation | search | entity | product | listing */
     val type: String = "image",
     val title: String = "",
     val items: List<MediaItem> = emptyList(),
+    /** A ```search fence names the same list `results` (the live server does). */
+    val results: List<MediaItem> = emptyList(),
     /** code type: the source body. */
     val code: String = "",
     /** code type: fence language, shown as a tag. */
     val language: String = "",
     /** code type: optional caption under the block. */
     val text: String = "",
-    /** document/pdf type: the page bodies. The live model emits exactly this
-     *  shape ({"title":…,"pages":[{"page":1,"text":…}]}) with no item URLs. */
-    val pages: List<DocPage> = emptyList()
+    /** document/pdf type: the pages — bodies and/or a page count. */
+    @Serializable(with = DocPagesSerializer::class)
+    val pages: DocPages = DocPages()
 )
 
 // --- helpers ----------------------------------------------------------------
@@ -329,11 +377,11 @@ private fun AudioList(items: List<MediaItem>) {
 // --- documents --------------------------------------------------------------
 
 @Composable
-private fun DocList(items: List<MediaItem>, pages: List<DocPage>) {
+private fun DocList(items: List<MediaItem>, pages: DocPages) {
     val c = GsTheme.colors
-    val body = pages.filter { it.text.isNotBlank() }
+    val body = pages.bodies.filter { it.text.isNotBlank() }
     val docs = items.filter { it.url.isNotBlank() }
-    if (body.isEmpty() && docs.isEmpty()) {
+    if (body.isEmpty() && docs.isEmpty() && pages.count <= 0) {
         Text("No document", style = MaterialTheme.typography.bodySmall, color = c.textTertiary, modifier = Modifier.padding(top = 8.dp))
         return
     }
@@ -364,6 +412,24 @@ private fun DocList(items: List<MediaItem>, pages: List<DocPage>) {
                 style = MaterialTheme.typography.labelSmall,
                 color = c.textTertiary
             )
+        }
+        // The other live shape: {"title":…,"pages":3} — a count, no bodies.
+        // An honest stub beats an empty card.
+        if (body.isEmpty() && pages.count > 0) {
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(c.raisedSurface).padding(12.dp)) {
+                Text(
+                    "Document",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = c.textTertiary,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    "${pages.count} pages",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = c.textPrimary,
+                    modifier = Modifier.padding(top = 6.dp)
+                )
+            }
         }
         docs.take(3).forEach { item ->
             DocumentPreviewView(

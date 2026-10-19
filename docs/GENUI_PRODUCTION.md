@@ -410,3 +410,22 @@ The fix treats a page body as the document itself:
 Verified end to end: the saved live bytes compile to one `media` widget with
 zero errors, assertions 25 in the backend suite lock it, and the Android side
 has the same payload pinned in `SubtypeFenceTest`.
+
+## 17. Twenty-five live prompts, zero dropped (v0.81.14)
+
+The probe grew from routing-only to a two-gate check (fence routed AND the
+compiler keeps the widget) over 25 prompts across every family, and it caught
+three more live shapes:
+
+| Live shape | Was | Now |
+| --- | --- | --- |
+| `{"title":…,"pages":3}` | `List<DocPage>` decode threw — whole widget lost | `DocPages` union deserialiser: array → bodies, number → count |
+| ````search` with `results` (not `items`) | `media needs items` | `results` is read as the item list |
+| ````gantt` with `entries` (a schedule) | `chart needs at least one series` | retried as a `timeline` widget, fence rewritten |
+| ````mindmap` with mermaid syntax | rendered as source code | routes to the mermaid diagram renderer |
+
+The `pages` count case is the instructive one: Kotlin data classes cannot
+distinguish "absent" from "default", so absence must be read off the raw JSON
+object — and a number in a `List<T>` field throws during decode, which the
+`catch` in `parseWidget` turns into a silent null. Both traps are now pinned by
+tests on both sides, and the probe reports **25 routed, 0 not**.

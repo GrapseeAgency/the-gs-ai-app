@@ -586,29 +586,40 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
 
   media: (p) => {
     let repaired = false
-    // {"title":…,"pages":[{"page":1,"text":…}]} — a document body. The live
-    // model emits exactly this for a ```pdf request: no items, no urls, the
-    // pages ARE the document. Rejecting it shipped nothing at all.
+    // Two live shapes for a document body, both seen in the probe:
+    //   {"title":…,"pages":[{"page":1,"text":…}]} — the pages themselves
+    //   {"title":…,"pages":3}                      — a page COUNT only
     const pages = asArray(p.pages)
       .map((x) => (x && typeof x === 'object' ? (x as Record<string, unknown>) : {}))
       .map((o) => ({ page: asNumber(o.page) ?? 0, text: asString(o.text) }))
       .filter((x) => x.text.trim().length > 0)
       .slice(0, 20)
+    const pageCount =
+      typeof p.pages === 'number' && Number.isFinite(p.pages)
+        ? Math.min(Math.max(Math.round(p.pages), 0), 999)
+        : pages.length > 0
+          ? pages.length
+          : 0
     const stated = asString(p.type, '')
     let type = (MEDIA_TYPES as readonly string[]).includes(stated)
       ? stated
       : // A typeless payload that carries pages IS a document; typeless with
         // anything else stays an image, the historical default.
-        stated === '' && pages.length > 0
+        stated === '' && (pages.length > 0 || pageCount > 0)
         ? 'pdf'
         : 'image'
     if (!(MEDIA_TYPES as readonly string[]).includes(stated)) repaired = true
     // {"type":"image","url":"https://…"} — a single item, not wrapped in items.
-    const rawItems = asArray(p.items).length > 0
-      ? asArray(p.items)
-      : asString(p.url)
-        ? [{ url: p.url, thumb: p.thumb, title: p.title, caption: p.caption }]
-        : []
+    // A ```search fence carries `results` for the same list — the probe watched
+    // the live server send it, and the validator called it empty.
+    let rawItems = asArray(p.items)
+    if (rawItems.length === 0 && asArray(p.results).length > 0) {
+      rawItems = asArray(p.results)
+      repaired = true
+    }
+    if (rawItems.length === 0 && asString(p.url)) {
+      rawItems = [{ url: p.url, thumb: p.thumb, title: p.title, caption: p.caption }]
+    }
     const items = rawItems
       .map((i) => {
         const o = isObj(i) ? i : {}
@@ -631,9 +642,9 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
       .slice(0, 20)
     const code = asString(p.code)
     const text = asString(p.text)
-    const ok = items.length > 0 || code.length > 0 || text.length > 0 || pages.length > 0
+    const ok = items.length > 0 || code.length > 0 || text.length > 0 || pages.length > 0 || pageCount > 0
     return {
-      widget: { type, title: asString(p.title), items, code, language: asString(p.language), text, pages },
+      widget: { type, title: asString(p.title), items, code, language: asString(p.language), text, pages, pageCount },
       errors: ok ? [] : ['media needs items, code or text'],
       repaired,
     }

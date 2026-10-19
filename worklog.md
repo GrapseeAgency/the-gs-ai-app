@@ -5195,3 +5195,16 @@ Work Log:
 - FIX (Android): MediaWidget.pages: List<DocPage>; parseWidget reads the stated type off the RAW JSON object (the data class default fills "image", so absence is invisible on the model — that trap cost one red test run); a doc with pages parses; DocList renders pages first with page numbers and a "+N more pages" note. SubtypeFenceTest pins the same payload.
 - NOTE: live server normalises ```loan → ```calc with type mortgage preserved, so the fence→kind mapping on the server side is already deployed; the pdf rejection was client-side (compiler) AND must-have been client-side on Android.
 - Still unverified: on-device render of a page body (unit tests cover parse only).
+
+---
+Task ID: genui-probe-round2-0.81.14
+Agent: main
+Task: Second live-probe round: two gates (routed AND compiled) over 25 widget prompts; fix everything it drops.
+
+Work Log:
+- Probe round 2 (scripts/live-widget-probe.ts): 25 prompts across every family, each reply checked for fence routing AND compiler retention. Round 1: 16/25. Caught three shapes + one count variant.
+- {"pages":3} — a NUMBER in a List<DocPage> field: decode THREW, parseWidget's catch turned it into a silent null. Fixed with a DocPages union deserialiser (array→bodies, number→count); counts render an honest "N pages" stub.
+- search fence with `results` not `items` — accepted as the item list on both sides.
+- gantt fence with `entries` (a schedule, not a series) — compiler retries as timeline and rewrites the fence; Android's chart branch falls through to TimelineWidget on the same condition (hasEntries guard).
+- mindmap fence holding mermaid syntax — routes to the mermaid diagram renderer instead of source code.
+- Round 3: 25 routed, 0 not. Backend 64/64 (block 25 grew six assertions), Android 215/215.

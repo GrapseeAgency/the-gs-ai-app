@@ -338,6 +338,26 @@ check('repairJson rejects garbage', repairJson('hello world') === null)
   const bare = '{"title":"Memo","pages":[{"page":1,"text":"Page one body."}]}'
   check('a bare pages payload is a document', validateWidget(inferWidgetKind(bare) ?? '', bare).ok)
   check('bare pages become a pdf widget', (inferWidgetKind(bare) ?? '') === 'media')
+
+  // The SECOND live shape, seen the same day: "pages":3 — a count, no bodies.
+  const counted = '```pdf\n{"title":"Lease agreement","pages":3}\n```'
+  const rc = validateWidget('media', extractWidgetFences(counted)[0]!.json)
+  check('a page COUNT validates as a document', rc.ok && (rc as any).widget.pageCount === 3, rc.ok ? '' : 'rejected')
+  check('a counted document stays pdf', rc.ok && (rc as any).widget.type === 'pdf')
+
+  // A ```search fence carries `results`, not `items` — the probe watched the
+  // live server send it and the validator call the payload empty.
+  const results = '```search\n{"results":[{"title":"Eiffel Tower","url":"https://en.wikipedia.org/wiki/Eiffel","domain":"en.wikipedia.org","snippet":"330 m tall."}]}\n```'
+  const rr = validateWidget('media', extractWidgetFences(results)[0]!.json)
+  check('search results are items', rr.ok && (rr as any).widget.items.length === 1 && (rr as any).widget.items[0].domain === 'en.wikipedia.org', rr.ok ? '' : 'rejected')
+  check('search results keep the search type', rr.ok && (rr as any).widget.type === 'search')
+
+  // A ```gantt fence whose payload is a schedule, not a series: it must retry
+  // as a timeline instead of vanishing (probe 2026-10-20).
+  const gantt = '```gantt\n{"title":"Project Schedule","entries":[{"date":"2026-10-20","title":"Task 1","detail":"Research"},{"date":"2026-10-27","title":"Task 2","detail":"Development"}]}\n```'
+  const cg = compileWidgets({ reply: gantt, userPrompt: 'a project schedule' })
+  check('a schedule in a gantt fence becomes a timeline', cg.widgets === 1 && cg.errors.length === 0, cg.errors.join(','))
+  check('the retry rewrites the fence to timeline', cg.text.startsWith('```timeline'), cg.text.slice(0, 30))
 }
 
 console.log(`\n${passed} passed, ${failures.length} failed`)

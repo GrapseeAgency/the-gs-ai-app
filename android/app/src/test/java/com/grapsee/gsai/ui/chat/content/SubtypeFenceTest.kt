@@ -73,9 +73,50 @@ class SubtypeFenceTest {
         assertNotNull("the live pdf payload must parse", parsed)
         val media = (parsed as Widget.Media).w
         assertEquals("doc", media.type)
-        assertEquals(2, media.pages.size)
-        assertEquals(1, media.pages[0].page)
-        assertTrue(media.pages[1].text.contains("RENT"))
+        assertEquals(2, media.pages.bodies.size)
+        assertEquals(1, media.pages.bodies[0].page)
+        assertTrue(media.pages.bodies[1].text.contains("RENT"))
+    }
+
+    // The second live shape, caught the same day: "pages":3 — a count.
+    @Test
+    fun `a live pdf page count parses as a document`() {
+        val w = widgetOf("```pdf\n{\"title\":\"Lease agreement\",\"pages\":3}\n```")
+        val parsed = parseWidget(w.kind, w.json)
+        assertNotNull("a page count must parse", parsed)
+        val media = (parsed as Widget.Media).w
+        assertEquals("doc", media.type)
+        assertEquals(3, media.pages.count)
+    }
+
+    // A ```search fence carries `results`, not `items`.
+    @Test
+    fun `a search fence results list parses`() {
+        val w = widgetOf(
+            "```search\n{\"results\":[{\"title\":\"Eiffel\",\"url\":\"https://en.wikipedia.org/wiki/Eiffel\",\"domain\":\"en.wikipedia.org\",\"snippet\":\"330 m\"}]}\n```"
+        )
+        assertEquals("media", w.kind)
+        val parsed = parseWidget(w.kind, w.json)
+        assertNotNull("search results must parse", parsed)
+        val media = (parsed as Widget.Media).w
+        assertEquals("search", media.type)
+        assertEquals(1, media.items.size)
+        assertEquals("en.wikipedia.org", media.items[0].domain)
+    }
+
+    // A ```gantt fence whose payload is a schedule, not a series.
+    @Test
+    fun `a schedule in a gantt fence becomes a timeline`() {
+        val w = widgetOf(
+            "```gantt\n{\"title\":\"Project Schedule\",\"entries\":[" +
+                "{\"date\":\"2026-10-20\",\"title\":\"Task 1\",\"detail\":\"Research\"}," +
+                "{\"date\":\"2026-10-27\",\"title\":\"Task 2\",\"detail\":\"Development\"}]}\n```"
+        )
+        assertEquals("chart", w.kind)
+        val parsed = parseWidget(w.kind, w.json)
+        assertNotNull("the schedule payload must parse", parsed)
+        assertTrue("expected a timeline, got $parsed", parsed is Widget.Timeline)
+        assertEquals(2, (parsed as Widget.Timeline).w.entries.size)
     }
 
     @Test
