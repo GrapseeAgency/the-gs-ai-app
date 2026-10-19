@@ -179,8 +179,8 @@ jobs:
           # --- walk the real paths (taps are best-effort; missing UI = skip) ---
           adb shell am start -n com.grapsee.gsai/.MainActivity || true
           sleep 6
-          W=$(adb shell wm size | tr -d '\r' | grep -o '[0-9]*' | tail -1)
-          H=$(adb shell wm size | tr -d '\r' | grep -o '[0-9]*' | tail -1)
+          W=$({ adb shell wm size | tr -d '\r' | grep -o '[0-9]*' || true; } | tail -1)
+          H=$({ adb shell wm size | tr -d '\r' | grep -o '[0-9]*' || true; } | tail -1)
           [ "$W" -gt 0 ] || W=1080
           [ "$H" -gt 0 ] || H=2400
           CX=$((W/2))
