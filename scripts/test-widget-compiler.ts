@@ -151,6 +151,48 @@ check('repairJson rejects garbage', repairJson('hello world') === null)
   check('stackedarea → stackedArea', r.text.includes('"type":"stackedArea"'), r.path)
 }
 
+
+// 16. Real payload shapes from the live server: flat, string-label, object.
+{
+  const flat = '```chart\n{"type":"funnel","labels":["Visit","Cart"],"series":[{"name":"Users","data":[12000,5400]}]}\n```'
+  const r = compileWidgets({ reply: flat, userPrompt: 'funnel chart' })
+  check('flat numeric data survives', r.widgets === 1, r.errors.join('|'))
+}
+
+{
+  const labelled =
+    '```chart\n{"type":"bar","labels":["Q1","Q2"],"series":[{"name":"Revenue","data":[["Q1",120],["Q2",180]]}]}\n```'
+  const r = compileWidgets({ reply: labelled, userPrompt: 'bar chart' })
+  check('string-label data survives', r.widgets === 1, r.errors.join('|'))
+}
+
+{
+  const objects =
+    '```chart\n{"type":"line","series":[{"name":"v","data":[{"x":0,"y":12},{"x":1,"y":18}]}]}\n```'
+  const r = compileWidgets({ reply: objects, userPrompt: 'line chart' })
+  check('object point data survives', r.widgets === 1, r.errors.join('|'))
+}
+
+// 17. A bare payload with no fence at all becomes a real widget.
+{
+  const reply = '{"type":"bar","title":"Revenue","labels":["Q1","Q2"],"series":[{"name":"R","data":[120,180]}]}'
+  const r = compileWidgets({ reply, userPrompt: 'bar chart' })
+  check('bare payload is fenced', r.widgets === 1 && r.text.startsWith('```chart'), r.path)
+  const outsideFences = r.text.replace(/```[\s\S]*?```/g, '')
+  check('bare payload is not left as prose', !outsideFences.includes('"series"'), outsideFences.slice(0, 60))
+}
+
+// 18. A ```json block holding a widget is promoted, prose with braces is not.
+{
+  const fenced = '```json\n{"type":"bar","series":[{"name":"R","data":[120,180]}]}\n```'
+  const r = compileWidgets({ reply: fenced, userPrompt: 'chart' })
+  check('json fence holding a widget is promoted', r.widgets === 1 && r.text.includes('```chart'), r.path)
+
+  const prose = 'The config is { "a": 1 } and that is all.'
+  const r2 = compileWidgets({ reply: prose, userPrompt: 'chart' })
+  check('prose with braces is untouched', r2.widgets === 0 && r2.text === prose)
+}
+
 console.log(`\n${passed} passed, ${failures.length} failed`)
 if (failures.length) {
   for (const f of failures) console.log(`  - ${f}`)

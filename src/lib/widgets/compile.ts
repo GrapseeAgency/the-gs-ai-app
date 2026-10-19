@@ -26,7 +26,7 @@ import {
   isChartType,
   type WidgetKind,
 } from './catalog'
-import { extractWidgetFences, validateWidget, validationErrors } from './validate'
+import { extractBareWidget, extractWidgetFences, validateWidget, validationErrors } from './validate'
 
 export interface CompileInput {
   reply: string
@@ -92,6 +92,13 @@ export function requestedChartType(prompt: string): (typeof CHART_TYPES)[number]
 export function compileWidgets(input: CompileInput): CompileResult {
   const { reply, userPrompt, priorText = '' } = input
   const fences = extractWidgetFences(reply)
+  // No fenced widget? The payload may still be there, unfenced or inside a
+  // ```json block — the model does this constantly. Promote it to a canonical
+  // fence instead of shipping raw JSON to the user as body text.
+  if (fences.length === 0) {
+    const bare = extractBareWidget(reply)
+    if (bare) fences.push(bare)
+  }
 
   const valid: Array<{ start: number; end: number; replacement: string; repaired: boolean }> = []
   const invalid: Array<{ start: number; end: number }> = []

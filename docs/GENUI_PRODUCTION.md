@@ -194,3 +194,36 @@ five-slice pie that looked like a single-colour disc. Both now key off
 
 Verified by `WidgetPaletteTest` (12 distinct hues, stable cycle, 12 distinct
 family hues, four distinct tones) and `ChartFenceRoutingTest` (9 routing cases).
+
+## 9. What the live server actually sends (v0.81.8)
+
+Probing the deployed backend with three prompts produced three payloads, and
+**two of the three failed on the client**. This is the part that no amount of
+prompt engineering would have caught, because the model was behaving sensibly —
+our decoder was not.
+
+| Probe | Server output | Before |
+| --- | --- | --- |
+| "bar chart of quarterly revenue" | ```` ```chart ```` + `data: [[0,120],[1,180]]` | rendered |
+| "funnel chart of checkout" | ```` ```funnel ```` + `data: [12000,5400,2100,1600]` | code block + fake sample chart |
+| "Bar chart: Revenue Q1 120…" | **no fence at all**, `data: [["Q1",120],…]` | raw JSON as body text |
+
+Three fixes, all at the boundary rather than in the renderers:
+
+1. **`PointListSerializer`** accepts `[x,y]`, flat `[v,…]`, `["label", v]` and
+   `{"x":…,"y":…}`, normalising everything to `[x, y]` at decode time. Before,
+   only the first shape decoded; the other three made `parseWidget` return null.
+2. **`promoteBarePayload()`** turns a paragraph or ```json block that is exactly
+   one valid widget payload into a real widget block. Conservative by
+   construction: one JSON object, inferred kind, must pass the same validator a
+   fenced payload passes, and an unterminated payload stays text while streaming.
+3. **`inferWidgetKind()`** reads the payload's own discriminator (`series`,
+   `columns`+`rows`, `cards`, `entries`, …) and confirms it with the validator,
+   so prose containing braces can never be promoted.
+
+The backend got the same two behaviours (`normalisePoints`, `extractBareWidget`)
+because it owns the text before persistence — a client-only fix would leave the
+stored transcript full of JSON.
+
+Verified: `PayloadShapeTest` (9 cases) on Android, compiler assertions 16–18 on
+the backend.

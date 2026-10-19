@@ -64,6 +64,68 @@ export function extractWidgetFences(text: string): WidgetFence[] {
   return out
 }
 
+/** A fenced block whose body is plausibly a bare widget payload. */const JSON_FENCE = /^```(json|jsonc|widget|genui|data)[ \t]*\r?\n([\s\S]*?)^```[ \t]*$/gm
+
+/**
+ * The widget kind a BARE payload describes, or null when it is not a widget.
+ *
+ * The model sometimes answers with no fence at all (or a ```json one). Left
+ * alone, that JSON reaches the client as body text. Kind is inferred from the
+ * payload's own discriminator and then CONFIRMED by the real validator, so
+ * prose containing braces is never promoted. Mirrors inferWidgetKind() on the
+ * clients.
+ */
+export function inferWidgetKind(json: string): WidgetKind | null {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(json)
+  } catch {
+    return null
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null
+  const obj = parsed as Record<string, unknown>
+  const has = (k: string) => k in obj
+  const candidates: WidgetKind[] = []
+  if (has('series')) candidates.push('chart')
+  if (has('columns') && has('rows')) candidates.push('table')
+  if (has('cards')) candidates.push('stat')
+  if (has('entries')) candidates.push('timeline')
+  if (has('questions')) candidates.push('quiz')
+  if (has('fields')) candidates.push('form')
+  if (has('prompts')) candidates.push('followups')
+  if (has('buttons')) candidates.push('actions')
+  if (has('items')) candidates.push('progress', 'gauge', 'carousel', 'app', 'media')
+  if (has('steps') || has('groups')) candidates.push('app')
+  for (const kind of candidates) {
+    if (validateWidget(kind, json).ok) return kind
+  }
+  return null
+}
+
+/**
+ * A widget payload that arrived without a usable fence: either the whole reply
+ * is one JSON object, or a ```json block holds one. Returns offsets so the
+ * compiler can replace it with a canonical fence.
+ */
+export function extractBareWidget(text: string): WidgetFence | null {
+  const whole = text.trim()
+  if (whole.startsWith('{') && whole.endsWith('}')) {
+    const kind = inferWidgetKind(whole)
+    if (kind) {
+      const start = text.indexOf(whole)
+      return { kind, json: whole, start, end: start + whole.length }
+    }
+  }
+  for (const m of text.matchAll(JSON_FENCE)) {
+    const body = m[2].trim()
+    const kind = inferWidgetKind(body)
+    if (!kind) continue
+    const start = m.index ?? 0
+    return { kind, json: body, start, end: start + m[0].length }
+  }
+  return null
+}
+
 /**
  * Repairs the failures models actually produce: smart quotes, trailing commas,
  * comments, a stray "Here is the JSON:" prefix, or a single missing brace.
@@ -177,6 +239,41 @@ export function validationErrors(result: ValidationResult): string[] {
   return (result as { ok: false; kind: string; errors: string[] }).errors
 }
 
+/**
+ * Point normalisation for every shape a real model emits:
+ *
+ *   [[0, 12], [1, 18]]      documented pair
+ *   [12, 18]                flat values, x implied by index
+ *   [["Q1", 12], ["Q2", 18]] string label as x  (labels are harvested)
+ *   [{ "x": 0, "y": 12 }]   object form
+ *
+ * Only the first used to pass, so the other three were dropped as invalid —
+ * our own validator threw away correct answers.
+ */
+function normalisePoints(raw: unknown[], labelHints: string[]): number[][] {
+  const out: number[][] = []
+  raw.forEach((item, index) => {
+    if (typeof item === 'number' && Number.isFinite(item)) {
+      out.push([index, item])
+      return
+    }
+    if (Array.isArray(item)) {
+      const first = item[0]
+      if (typeof first === 'string' && first.trim()) labelHints.push(first.trim())
+      const nums = item.map(asNumber).filter((n): n is number => n !== null)
+      if (nums.length >= 2) out.push([nums[0], nums[1]])
+      else if (nums.length === 1) out.push([index, nums[0]])
+      return
+    }
+    if (isObj(item)) {
+      const y = asNumber(item.y) ?? asNumber(item.value)
+      if (y === null) return
+      out.push([asNumber(item.x) ?? index, y])
+    }
+  })
+  return out.slice(0, LIMITS.maxPointsPerSeries)
+}
+
 const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
   chart: (p) => {
     const errors: string[] = []
@@ -189,21 +286,23 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
     const pieLike = type === 'pie' || type === 'donut'
     const minPoints = pieLike ? 1 : 2
 
+    // Models send [[x,y]] (documented), [12,18] (flat), [["Q1",120]] (string
+    // label as x) and [{"x":0,"y":12}]. Only the first used to survive, so the
+    // other three were silently DROPPED as invalid — a correct answer thrown
+    // away by our own validator.
+    const labelHints: string[] = []
     const series = asArray(p.series)
       .map((s) => {
         const row = isObj(s) ? s : {}
-        const data = asArray(row.data)
-          .map((pt) => asArray(pt).map(asNumber))
-          .filter((pt): pt is number[] => pt.length >= 2 && pt.every((n) => n !== null))
-          .map((pt) => pt.map((n) => n as number))
-          .slice(0, LIMITS.maxPointsPerSeries)
+        const data = normalisePoints(asArray(row.data), labelHints)
         return { name: asString(row.name, 'Series'), data }
       })
       .filter((s) => s.data.length >= minPoints)
       .slice(0, LIMITS.maxChartSeries)
 
     if (series.length === 0) errors.push('chart needs at least one series with enough points')
-    const labels = asArray(p.labels).map((l) => asString(l)).filter(Boolean)
+    const declared = asArray(p.labels).map((l) => asString(l)).filter(Boolean)
+    const labels = declared.length > 0 ? declared : labelHints
 
     return {
       widget: { type, title: asString(p.title), unit: asString(p.unit), labels, series },

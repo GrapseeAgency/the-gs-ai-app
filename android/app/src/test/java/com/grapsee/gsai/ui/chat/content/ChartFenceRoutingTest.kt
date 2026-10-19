@@ -2,6 +2,7 @@ package com.grapsee.gsai.ui.chat.content
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -141,5 +142,94 @@ class WidgetPaletteTest {
     fun `an unknown tag still gets a stable hue`() {
         assertEquals(widgetHue("brandnew"), widgetHue("brandnew"))
         assertEquals(widgetHue("brandnew"), widgetHue("BrandNew"))
+    }
+}
+
+/**
+ * Payload SHAPES, taken verbatim from the live server.
+ *
+ * The documented shape is `[[x, y], …]`. The server actually sends flat values
+ * (`[12000, 5400]`) and string labels (`[["Q1", 120]]`), and sometimes the
+ * payload with no fence at all. Every one of those failed before: kotlinx could
+ * not decode the series, `parseWidget` returned null, and the transcript showed
+ * the raw JSON as body text.
+ */
+class PayloadShapeTest {
+
+    private fun chart(json: String, kind: String = "chart"): Widget.Chart? =
+        parseWidget(kind, json) as? Widget.Chart
+
+    @Test
+    fun `flat numeric data decodes with the index as x`() {
+        val w = chart("""{"type":"funnel","series":[{"name":"Users","data":[12000,5400,2100,1600]}]}""")
+        assertNotNull(w)
+        val pts = w!!.w.series.first().data
+        assertEquals(4, pts.size)
+        assertEquals(0f, pts[0][0])
+        assertEquals(12000f, pts[0][1])
+        assertEquals(3f, pts[3][0])
+        assertEquals(1600f, pts[3][1])
+    }
+
+    @Test
+    fun `string labels decode and keep their values`() {
+        val w = chart("""{"type":"bar","series":[{"name":"Revenue","data":[["Q1",120],["Q2",180]]}]}""")
+        assertNotNull(w)
+        val pts = w!!.w.series.first().data
+        assertEquals(2, pts.size)
+        assertEquals(120f, pts[0][1])
+        assertEquals(180f, pts[1][1])
+    }
+
+    @Test
+    fun `object points decode`() {
+        val w = chart("""{"type":"line","series":[{"name":"v","data":[{"x":0,"y":12},{"x":1,"y":18}]}]}""")
+        assertNotNull(w)
+        assertEquals(18f, w!!.w.series.first().data[1][1])
+    }
+
+    @Test
+    fun `the documented pair shape still decodes`() {
+        val w = chart("""{"type":"line","series":[{"name":"v","data":[[0,1],[1,2]]}]}""")
+        assertNotNull(w)
+        assertEquals(2, w!!.w.series.first().data.size)
+    }
+
+    @Test
+    fun `a bare payload becomes a widget instead of body text`() {
+        val reply = """{"type":"bar","title":"Revenue","series":[{"name":"R","data":[120,180]}]}"""
+        val block = parseBlocks(reply).single()
+        assertTrue("expected a widget, got $block", block is Block.WidgetBlock)
+        val w = block as Block.WidgetBlock
+        assertEquals("chart", w.kind)
+        assertNotNull(parseWidget(w.kind, w.json))
+    }
+
+    @Test
+    fun `a json code block holding a widget is promoted`() {
+        val reply = "```json\n{\"type\":\"bar\",\"series\":[{\"name\":\"R\",\"data\":[120,180]}]}\n```"
+        val block = parseBlocks(reply).single()
+        assertTrue("expected a widget, got $block", block is Block.WidgetBlock)
+    }
+
+    @Test
+    fun `prose containing braces is never promoted`() {
+        val reply = "The config is { \"a\": 1 } and that is all."
+        val block = parseBlocks(reply).single()
+        assertTrue("prose must stay prose, got $block", block is Block.Paragraph)
+    }
+
+    @Test
+    fun `an unterminated payload stays text while it streams`() {
+        val block = parseBlocks("""{"type":"bar","series":[{"name":"R","data":[120,""").single()
+        assertTrue("mid-stream payload must not render yet, got $block", block is Block.Paragraph)
+    }
+
+    @Test
+    fun `a bare payload keeps its own source offset`() {
+        val reply = "Intro paragraph.\n\n{\"type\":\"bar\",\"series\":[{\"name\":\"R\",\"data\":[1,2]}]}"
+        val blocks = parseBlocks(reply)
+        assertEquals(2, blocks.size)
+        assertEquals(18, blocks[1].sourceStart)
     }
 }

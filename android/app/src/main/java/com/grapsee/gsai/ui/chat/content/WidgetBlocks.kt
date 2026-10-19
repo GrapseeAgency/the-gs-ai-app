@@ -47,8 +47,20 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.ui.theme.GsTheme
 import com.grapsee.gsai.ui.theme.skeletonSurface
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonDecoder
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.floatOrNull
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.serializer
 
 // ---------------------------------------------------------------------------
 // GENUI widgets — model-emitted JSON rendered natively (see docs/GENUI.md).
@@ -84,8 +96,61 @@ internal val CHART_TYPES = setOf(
     "candlestick", "gantt", "chord"
 )
 
+/**
+ * Point decoding that accepts every shape a real model emits.
+ *
+ * The documented shape is `[[x, y], …]`, but the live server sends all three
+ * of these, and each one used to fail kotlinx decoding outright — the whole
+ * payload became `null` and the transcript showed raw JSON:
+ *
+ *   [12000, 5400, 2100]        flat values, x implied by index
+ *   [["Q1", 120], ["Q2", 180]] string label as x
+ *   [[0, 120], [1, 180]]       the documented pair
+ *   [{"x": 0, "y": 120}]       object form
+ *
+ * Normalising at decode time is the only place this can be fixed once: every
+ * chart renderer downstream keeps reading `[x, y]` and none of them changed.
+ */
+internal object PointListSerializer : KSerializer<List<List<Float>>> {
+    private val delegate = ListSerializer(ListSerializer(Float.serializer()))
+    override val descriptor: SerialDescriptor = delegate.descriptor
+
+    override fun deserialize(decoder: Decoder): List<List<Float>> {
+        val input = decoder as? JsonDecoder ?: return delegate.deserialize(decoder)
+        val array = input.decodeJsonElement() as? JsonArray ?: return emptyList()
+        return array.mapIndexedNotNull { index, item -> point(item, index) }
+    }
+
+    override fun serialize(encoder: Encoder, value: List<List<Float>>) {
+        delegate.serialize(encoder, value)
+    }
+
+    private fun point(item: JsonElement, index: Int): List<Float>? = when (item) {
+        is JsonPrimitive -> item.floatOrNull?.let { listOf(index.toFloat(), it) }
+        is JsonArray -> {
+            val numbers = item.mapNotNull { (it as? JsonPrimitive)?.floatOrNull }
+            when {
+                numbers.size >= 2 -> listOf(numbers[0], numbers[1])
+                numbers.size == 1 -> listOf(index.toFloat(), numbers[0])
+                else -> null
+            }
+        }
+        is JsonObject -> {
+            val y = (item["y"] as? JsonPrimitive)?.floatOrNull
+                ?: (item["value"] as? JsonPrimitive)?.floatOrNull
+            if (y == null) null
+            else listOf((item["x"] as? JsonPrimitive)?.floatOrNull ?: index.toFloat(), y)
+        }
+        else -> null
+    }
+}
+
 @Serializable
-data class ChartSeries(val name: String = "", val data: List<List<Float>> = emptyList())
+data class ChartSeries(
+    val name: String = "",
+    @Serializable(with = PointListSerializer::class)
+    val data: List<List<Float>> = emptyList()
+)
 
 @Serializable
 data class ChartWidget(
@@ -312,10 +377,43 @@ fun parseWidget(kind: String, json: String): Widget? {
     }
 }
 
+/**
+ * The widget kind a BARE payload describes, or null when it is not a widget.
+ *
+ * The live server sometimes streams the payload with no fence at all — just
+ * `{"type":"bar","series":[…]}`, or the same thing inside a ```json block.
+ * Without this, the transcript showed that JSON as body text: the exact "why is
+ * it printing code at me" failure. Kind is inferred from the payload's own
+ * discriminator and then CONFIRMED by the real validator, so prose that merely
+ * contains braces can never be promoted.
+ */
+fun inferWidgetKind(json: String): String? {
+    val obj = try {
+        widgetJson.parseToJsonElement(json) as? JsonObject
+    } catch (_: Throwable) {
+        null
+    } ?: return null
+    val keys = obj.keys
+    val candidates = buildList {
+        if ("series" in keys) add("chart")
+        if ("columns" in keys && "rows" in keys) add("table")
+        if ("cards" in keys) add("stat")
+        if ("entries" in keys) add("timeline")
+        if ("questions" in keys) add("quiz")
+        if ("fields" in keys) add("form")
+        if ("prompts" in keys) add("followups")
+        if ("buttons" in keys) add("actions")
+        if ("items" in keys) {
+            add("progress"); add("gauge"); add("carousel"); add("app"); add("media")
+        }
+        if ("steps" in keys || "groups" in keys) add("app")
+    }
+    return candidates.firstOrNull { parseWidget(it, json) != null }
+}
+
 // ---------------------------------------------------------------------------
 // Rendering
 // ---------------------------------------------------------------------------
-
 private val widgetShape = RoundedCornerShape(14.dp)
 
 /**

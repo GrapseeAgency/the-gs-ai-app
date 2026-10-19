@@ -154,11 +154,42 @@ private data class Line(val text: String, val offset: Int)
 fun parseBlocks(content: String, metadata: RichMetadata? = null): List<Block> {
     val normalized = content.replace("\r\n", "\n")
     val lines = toLines(normalized)
-    val blocks = parseCore(lines)
+    val blocks = parseCore(lines).map { promoteBarePayload(it) }
     val toolBlocks = metadata?.toolResults?.map { Block.ToolResultBlock(it, 0) } ?: emptyList()
     val citations = metadata?.citations.orEmpty()
     val citationBlock = if (citations.isEmpty()) emptyList() else listOf(Block.CitationsBlock(citations, 0))
     return toolBlocks + blocks + citationBlock
+}
+
+/** Languages whose body is plausibly a bare widget payload. */
+private val JSONISH_LANGUAGES = setOf("json", "jsonc", "widget", "genui", "data")
+
+/**
+ * Promote a BARE widget payload to a real widget block.
+ *
+ * The live server sometimes streams the payload with no fence at all, or wraps
+ * it in ```json. Either way the old parser made it a Paragraph/CodeBlock, so
+ * the user's answer was a wall of JSON instead of a chart — the "he's not
+ * understanding what he is doing" complaint, literally on screen.
+ *
+ * Deliberately conservative: the block must be EXACTLY one JSON object, must
+ * infer to a known widget kind, and must pass the same validator a fenced
+ * payload passes. Prose that happens to contain braces is untouched, and a
+ * still-streaming (unterminated) payload stays text until it closes.
+ */
+private fun promoteBarePayload(block: Block): Block {
+    val candidate = when (block) {
+        is Block.Paragraph ->
+            if (block.spans.size == 1) (block.spans.first() as? InlineSpan.TextSpan)?.text else null
+        is Block.CodeBlock ->
+            if (block.language == null || block.language.lowercase() in JSONISH_LANGUAGES) block.code else null
+        else -> null
+    } ?: return block
+    val trimmed = candidate.trim()
+    if (trimmed.length < 2 || trimmed.length > 64 * 1024) return block
+    if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) return block
+    val kind = inferWidgetKind(trimmed) ?: return block
+    return Block.WidgetBlock(kind = kind, json = trimmed, open = false, sourceStart = block.sourceStart)
 }
 
 private fun toLines(text: String): List<Line> {
