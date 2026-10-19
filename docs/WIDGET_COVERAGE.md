@@ -226,3 +226,32 @@ hidden:
   languages are editable and copyable, and the card says so.
 - PDF previews are capped at 15 MB and rasterized page by page on device.
 
+
+---
+
+## Model independence (v0.81.3)
+
+Rendering must not depend on the model knowing it is talking to this client.
+A flash or text-only model answers "show me a bar chart" with prose —
+*"I'm unable to create or display visualizations like bar charts"* — and the
+old pipeline rendered that refusal verbatim, even though every renderer below
+was already shipped.
+
+`WidgetRecovery` (`ui/chat/content/WidgetRecovery.kt`) closes that gap:
+
+- detects a visual request in the user's turn (`chart`, `bar chart`, `pie`,
+  `plot`, `table`, …); diagram requests (`flowchart`, `mindmap`) are never
+  hijacked into data charts;
+- when the answer carries no widget fence, extracts labelled numbers from the
+  answer itself — or from the previous assistant turn, for the common
+  "show me a chart" follow-up that carries no data of its own;
+- builds a native `chart` / `table` widget locally, titled
+  "… — from the answer above" so the user can see it was reconstructed;
+- removes only the *false* capability claim ("I can't display charts"), and
+  only after a widget was recovered; a genuine "I don't have that data" is
+  left untouched;
+- never invents a number: with fewer than two labelled values it renders
+  nothing rather than drawing an empty chart.
+
+12 unit tests (`WidgetRecoveryTest`) cover the exact on-device failure,
+including the sector-list → bar-chart case.

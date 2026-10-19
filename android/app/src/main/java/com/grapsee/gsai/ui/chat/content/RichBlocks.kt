@@ -146,10 +146,31 @@ fun BlocksContent(
      * cards, follow-up chips, form results). Null renders those as inert
      * cards instead of dead taps.
      */
-    onSendPrompt: ((String) -> Unit)? = null
+    onSendPrompt: ((String) -> Unit)? = null,
+    /**
+     * 0.81.3 widget recovery. The turn's user prompt and the previous
+     * assistant turn. When the model answers a "show me a chart" request with
+     * prose (a text-only model literally cannot know it is talking to an app
+     * that renders), [WidgetRecovery] rebuilds the visual from numbers the
+     * answer already stated. Empty strings disable recovery.
+     */
+    userPrompt: String = "",
+    priorContext: String = ""
 ) {
     val cache = remember { StreamBlockCache() }
-    val blocks = remember(content, isStreaming) { cache.update(content, isStreaming) }
+    // Recovery must be decided BEFORE parsing, because a successful recovery
+    // also removes the model's false "I can't render" sentence from the prose.
+    val recovered = remember(content, isStreaming, userPrompt, priorContext) {
+        if (isStreaming || userPrompt.isBlank() || WidgetRecovery.hasWidgetFence(content)) null
+        else WidgetRecovery.recover(content, userPrompt, priorContext)
+    }
+    val shown = remember(content, recovered) {
+        if (recovered == null) content else WidgetRecovery.stripFalseRefusal(content)
+    }
+    val parsed = remember(shown, isStreaming) { cache.update(shown, isStreaming) }
+    val blocks = remember(parsed, recovered) {
+        if (recovered == null) parsed else parsed + recovered
+    }
     // The answer text is SELECTABLE — every native AI app lets you drag a
     // selection across part of a reply (the whole-answer copy lives in the
     // action row, but "copy just this sentence" is a different verb and was

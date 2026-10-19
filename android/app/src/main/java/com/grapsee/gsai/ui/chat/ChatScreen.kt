@@ -1431,6 +1431,21 @@ fun ChatScreen(
                                 // Intentionally empty: the composer's orb is
                                 // the status for this window.
                             } else {
+                                // 0.81.3: the prompt that asked for this answer,
+                                // plus the turn before it. Widget recovery needs
+                                // both: "show me a bar chart" often carries no
+                                // data of its own, and the numbers live in the
+                                // previous answer.
+                                val turnUserPrompt = remember(message.id, index) {
+                                    messages.subList(0, index)
+                                        .lastOrNull { it.role == "user" }
+                                        ?.content.orEmpty()
+                                }
+                                val turnPriorAssistant = remember(message.id, index) {
+                                    messages.subList(0, index)
+                                        .lastOrNull { it.role == "assistant" }
+                                        ?.content.orEmpty()
+                                }
                                 Box(Modifier.messageAppear(message.id)) {
                                     AssistantMessage(
                                         message = message,
@@ -1456,7 +1471,9 @@ fun ChatScreen(
                                         onOpenSource = openSource,
                                         onClarifyOption = { option -> dispatch(option.label, echoUser = true) },
                                         onSendPrompt = { text -> dispatch(text, echoUser = true) },
-                                        onNavigateVoice = onNavigateVoice
+                                        onNavigateVoice = onNavigateVoice,
+                                        userPrompt = turnUserPrompt,
+                                        priorContext = turnPriorAssistant
                                     )
                                 }
                             }
@@ -1979,7 +1996,9 @@ private fun LiveStreamText(
     onCopyCode: (String) -> Unit,
     citationUrls: Map<Int, String>,
     onSendPrompt: ((String) -> Unit)? = null,
-    onNavigateVoice: (() -> Unit)? = null
+    onNavigateVoice: (() -> Unit)? = null,
+    userPrompt: String = "",
+    priorContext: String = ""
 ) {
     CompositionLocalProvider(LocalVoiceLauncher provides onNavigateVoice) {
         BlocksContent(
@@ -1987,7 +2006,9 @@ private fun LiveStreamText(
             isStreaming = isStreaming,
             onCopyCode = onCopyCode,
             citationUrls = citationUrls,
-            onSendPrompt = onSendPrompt
+            onSendPrompt = onSendPrompt,
+            userPrompt = userPrompt,
+            priorContext = priorContext
         )
     }
 }
@@ -2285,7 +2306,12 @@ private fun AssistantMessage(
     onSendPrompt: (String) -> Unit = {},
     // 0.80.0: the `voice` widget opens the real voice screen. Null (no route
     // wired) makes the card state that honestly instead of faking a session.
-    onNavigateVoice: (() -> Unit)? = null
+    onNavigateVoice: (() -> Unit)? = null,
+    // 0.81.3: the turn's own user prompt + the assistant turn before it, used
+    // by WidgetRecovery to rebuild a visual when the model answered a
+    // "show me a chart" request with prose.
+    userPrompt: String = "",
+    priorContext: String = ""
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     val haptics = LocalHapticFeedback.current
@@ -2425,7 +2451,9 @@ private fun AssistantMessage(
                     // when N is one of THIS turn's real sources.
                     citationUrls = citationUrls,
                     onSendPrompt = onSendPrompt,
-                    onNavigateVoice = onNavigateVoice
+                    onNavigateVoice = onNavigateVoice,
+                    userPrompt = userPrompt,
+                    priorContext = priorContext
                 )
             }
             // PHASE 8.1: the turn's real sources — live while streaming (as
