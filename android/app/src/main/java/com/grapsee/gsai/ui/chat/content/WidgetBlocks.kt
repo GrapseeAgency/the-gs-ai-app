@@ -483,6 +483,8 @@ private fun ChartWidgetView(w: ChartWidget) {
     }
 }
 
+private data class LineGeom(val minX: Float, val minY: Float, val spanX: Float, val spanY: Float)
+
 @Composable
 private fun LineChart(w: ChartWidget, filled: Boolean) {
     var animate by remember { mutableStateOf(false) }
@@ -490,15 +492,27 @@ private fun LineChart(w: ChartWidget, filled: Boolean) {
     val progress by animateFloatAsState(if (animate) 1f else 0f, tween(700), label = "chart")
     val colors = w.series.indices.map { seriesColor(it) }
     val gridColor = GsTheme.colors.divider
-    val flat = w.series.flatMap { it.data }
-    val xs = flat.map { it.getOrElse(0) { 0f } }
-    val ys = flat.map { it.getOrElse(1) { 0f } }
-    val minX = xs.minOrNull() ?: 0f
-    val maxX = xs.maxOrNull() ?: 1f
-    val minY = minOf(0f, ys.minOrNull() ?: 0f)
-    val maxY = ys.maxOrNull() ?: 1f
-    val spanX = (maxX - minX).takeIf { it > 0f } ?: 1f
-    val spanY = (maxY - minY).takeIf { it > 0f } ?: 1f
+    // Memoised: the draw-in animates over ~42 frames, and re-flattening every
+    // point on each frame is what made large charts stutter.
+    val geom = remember(w.series) {
+        val flat = w.series.flatMap { it.data }
+        val xs = flat.map { it.getOrElse(0) { 0f } }
+        val ys = flat.map { it.getOrElse(1) { 0f } }
+        val minX = xs.minOrNull() ?: 0f
+        val maxX = xs.maxOrNull() ?: 1f
+        val minY = minOf(0f, ys.minOrNull() ?: 0f)
+        val maxY = ys.maxOrNull() ?: 1f
+        LineGeom(
+            minX = minX,
+            minY = minY,
+            spanX = (maxX - minX).takeIf { it > 0f } ?: 1f,
+            spanY = (maxY - minY).takeIf { it > 0f } ?: 1f
+        )
+    }
+    val minX = geom.minX
+    val minY = geom.minY
+    val spanX = geom.spanX
+    val spanY = geom.spanY
     Canvas(Modifier.fillMaxWidth().height(180.dp).padding(top = 8.dp)) {
         val padL = 0f; val padB = 0f
         val cw = size.width - padL; val ch = size.height - padB
@@ -516,18 +530,23 @@ private fun LineChart(w: ChartWidget, filled: Boolean) {
             }
             if (pts.size < 2) return@forEachIndexed
             val visible = (pts.size * progress).toInt().coerceAtLeast(1)
+            // Draw only fully-arrived points; the partial segment is appended
+            // next. Taking visible+1 here overshot and then jumped back, which
+            // showed as the line doubling over itself during the draw-in.
+            val drawn = pts.take(visible)
             val path = Path()
-            pts.take(visible + 1).forEachIndexed { i, p -> if (i == 0) path.moveTo(p.x, p.y) else path.lineTo(p.x, p.y) }
-            // partial segment between visible and next point for a smooth draw-in
+            drawn.forEachIndexed { i, p -> if (i == 0) path.moveTo(p.x, p.y) else path.lineTo(p.x, p.y) }
+            var endX = drawn.last().x
             if (visible < pts.size) {
                 val frac = pts.size * progress - visible
                 val a = pts[visible - 1]; val b = pts[visible]
-                path.lineTo(a.x + (b.x - a.x) * frac, a.y + (b.y - a.y) * frac)
+                endX = a.x + (b.x - a.x) * frac
+                path.lineTo(endX, a.y + (b.y - a.y) * frac)
             }
             if (filled) {
                 val fillPath = Path().apply {
                     addPath(path)
-                    pts.take(visible + 1).lastOrNull()?.let { lineTo(it.x, ch) }
+                    lineTo(endX, ch)
                     lineTo(pts.first().x, ch)
                     close()
                 }
@@ -550,7 +569,9 @@ private fun BarChart(w: ChartWidget) {
         if (w.labels.size >= w.series.first().data.size) w.labels
         else w.series.first().data.map { it.getOrElse(0) { 0f }.toInt().toString() }
     }
-    val maxV = w.series.flatMap { s -> s.data.map { it.getOrElse(1) { 0f } } }.maxOrNull()?.takeIf { it > 0f } ?: 1f
+    val maxV = remember(w.series) {
+        w.series.flatMap { s -> s.data.map { it.getOrElse(1) { 0f } } }.maxOrNull()?.takeIf { it > 0f } ?: 1f
+    }
     Canvas(Modifier.fillMaxWidth().height(180.dp).padding(top = 8.dp)) {
         val groups = labels.size.coerceAtLeast(1)
         val seriesCount = w.series.size.coerceAtLeast(1)
@@ -584,7 +605,9 @@ private fun PieChart(w: ChartWidget) {
     val progress by animateFloatAsState(if (animate) 1f else 0f, tween(700), label = "chart")
     val colors = w.series.indices.map { seriesColor(it) }
     // pie uses series[*].data[0] as (labelIndex, value); or name + single value
-    val slices = w.series.map { s -> s.name to (s.data.firstOrNull()?.getOrElse(1) { 0f } ?: 0f) }.filter { it.second > 0f }
+    val slices = remember(w.series) {
+        w.series.map { s -> s.name to (s.data.firstOrNull()?.getOrElse(1) { 0f } ?: 0f) }.filter { it.second > 0f }
+    }
     val total = slices.sumOf { it.second.toDouble() }.toFloat().takeIf { it > 0f } ?: 1f
     Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Canvas(Modifier.size(140.dp)) {
