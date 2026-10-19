@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -68,6 +69,68 @@ data class PanelWidget(
     /** Non-blank shows a "More info" button that reveals this text in a popover. */
     val popover: String = ""
 )
+
+@Serializable
+data class VoiceWidget(
+    val title: String = "",
+    /** Optional prompt the mic session starts from. */
+    val prompt: String = "",
+    /** Short line under the button. */
+    val hint: String = ""
+)
+
+/**
+ * Voice entry provided by the host screen. Null means the build has no voice
+ * route wired — the card then says so instead of pretending to listen.
+ */
+val LocalVoiceLauncher = androidx.compose.runtime.staticCompositionLocalOf<(() -> Unit)?> { null }
+
+// --- voice ------------------------------------------------------------------
+
+@Composable
+fun VoiceWidgetView(w: VoiceWidget, onSendPrompt: ((String) -> Unit)? = null) {
+    val c = GsTheme.colors
+    val launch = LocalVoiceLauncher.current
+    WidgetCardShell(w.title, "voice") {
+        Column(
+            Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Box(
+                Modifier
+                    .size(66.dp)
+                    .clip(androidx.compose.foundation.shape.CircleShape)
+                    .background(if (launch != null) c.accent else c.raisedSurface)
+                    .clickable(enabled = launch != null) { launch?.invoke() },
+                contentAlignment = Alignment.Center
+            ) {
+                androidx.compose.material3.Icon(
+                    imageVector = com.grapsee.gsai.ui.icons.GsIcons.Mic,
+                    contentDescription = "Start voice",
+                    tint = if (launch != null) c.onAccent else c.textTertiary,
+                    modifier = Modifier.size(28.dp)
+                )
+            }
+            Text(
+                if (launch != null) "Tap to talk" else "Voice unavailable on this build",
+                style = MaterialTheme.typography.bodyMedium,
+                color = c.textPrimary,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+            Text(
+                w.hint.ifBlank { "Speak naturally — the transcript lands in the composer." },
+                style = MaterialTheme.typography.labelSmall,
+                color = c.textTertiary,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+            if (launch == null && w.prompt.isNotBlank() && onSendPrompt != null) {
+                TextButton(onClick = { onSendPrompt(w.prompt) }) {
+                    Text("Ask by text instead", style = MaterialTheme.typography.labelMedium)
+                }
+            }
+        }
+    }
+}
 
 // --- actions ----------------------------------------------------------------
 

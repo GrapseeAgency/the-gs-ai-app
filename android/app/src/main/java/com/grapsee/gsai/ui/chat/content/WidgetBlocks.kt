@@ -69,7 +69,8 @@ private const val MAX_COMPARE_ITEMS = 12
 /** Media sub-types the `media` kind renders (see WidgetsMedia.kt). */
 internal val MEDIA_TYPES = setOf(
     "image", "gallery", "video", "audio", "code",
-    "file", "link", "citation", "search", "entity", "product", "listing"
+    "file", "link", "citation", "search", "entity", "product", "listing",
+    "doc", "document", "pdf"
 )
 
 /** Chart sub-types the `chart` kind renders (see WidgetsExtra.kt / WidgetsCharts2.kt). */
@@ -154,6 +155,7 @@ sealed interface Widget {
     data class Media(val w: MediaWidget) : Widget { override val title get() = w.title }
     data class Actions(val w: ActionsWidget) : Widget { override val title get() = w.title }
     data class Panel(val w: PanelWidget) : Widget { override val title get() = w.title }
+    data class Voice(val w: VoiceWidget) : Widget { override val title get() = w.title }
 }
 
 internal val widgetJson = Json { ignoreUnknownKeys = true }
@@ -225,10 +227,14 @@ fun parseWidget(kind: String, json: String): Widget? {
                 if (prompts.isEmpty()) null else Widget.Followups(w.copy(prompts = prompts))
             }
             "media" -> widgetJson.decodeFromString<MediaWidget>(json).let { w ->
-                val type = w.type.lowercase()
+                val raw = w.type.lowercase()
+                val type = if (raw == "document" || raw == "pdf") "doc" else raw
                 if (type !in MEDIA_TYPES) null
                 else if (type == "code") {
                     if (w.code.isBlank()) null else Widget.Media(w.copy(type = type))
+                } else if (type == "doc") {
+                    val items = w.items.take(3).filter { it.url.startsWith("https://") }
+                    if (items.isEmpty()) null else Widget.Media(w.copy(type = type, items = items))
                 } else {
                     val items = w.items.take(20).filter { it.url.isNotBlank() || it.title.isNotBlank() }
                     if (items.isEmpty()) null else Widget.Media(w.copy(type = type, items = items))
@@ -241,6 +247,10 @@ fun parseWidget(kind: String, json: String): Widget? {
             "panel" -> widgetJson.decodeFromString<PanelWidget>(json).let { w ->
                 if (w.summary.isBlank() && w.body.isBlank() && w.title.isBlank() && w.popover.isBlank()) null
                 else Widget.Panel(w.copy(badges = w.badges.take(8)))
+            }
+            "voice" -> widgetJson.decodeFromString<VoiceWidget>(json).let { w ->
+                if (w.title.isBlank() && w.prompt.isBlank() && w.hint.isBlank()) null
+                else Widget.Voice(w)
             }
             "timeline" -> widgetJson.decodeFromString<TimelineWidget>(json).let { w ->
                 val entries = w.entries.take(MAX_TIMELINE_ENTRIES)
@@ -376,6 +386,7 @@ fun WidgetView(widget: Widget, onSendPrompt: ((String) -> Unit)? = null) {
         is Widget.Media -> MediaWidgetView(widget.w, onSendPrompt)
         is Widget.Actions -> ActionsWidgetView(widget.w, onSendPrompt)
         is Widget.Panel -> PanelWidgetView(widget.w)
+        is Widget.Voice -> VoiceWidgetView(widget.w, onSendPrompt)
     }
 }
 

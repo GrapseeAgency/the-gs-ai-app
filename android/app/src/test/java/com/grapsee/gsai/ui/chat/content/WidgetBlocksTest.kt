@@ -235,12 +235,16 @@ class WidgetBlocksTest {
             "search" to """{"type":"search","items":[{"url":"https://x","title":"X","snippet":"s"}]}""",
             "entity" to """{"type":"entity","items":[{"title":"X"}]}""",
             "product" to """{"type":"product","items":[{"title":"X","price":"9.99"}]}""",
-            "listing" to """{"type":"listing","items":[{"title":"X","meta":"m"}]}"""
+            "listing" to """{"type":"listing","items":[{"title":"X","meta":"m"}]}""",
+            "doc" to """{"type":"doc","items":[{"url":"https://x/a.pdf","title":"a.pdf"}]}""",
+            "document" to """{"type":"document","items":[{"url":"https://x/b.pdf","title":"b.pdf"}]}""",
+            "pdf" to """{"type":"pdf","items":[{"url":"https://x/c.pdf","title":"c.pdf"}]}"""
         )
         assertEquals(MEDIA_TYPES, payloads.keys)
         for ((type, json) in payloads) {
             val w = parseWidget("media", json) as Widget.Media
-            assertEquals(type, w.w.type)
+            // document/pdf are aliases normalized to the single `doc` renderer.
+            assertEquals(if (type == "document" || type == "pdf") "doc" else type, w.w.type)
         }
     }
 
@@ -287,7 +291,8 @@ class WidgetBlocksTest {
             "followups" to """{"prompts":["next"]}""",
             "media" to """{"type":"image","items":[{"url":"https://example.com/a.png","title":"A"}]}""",
             "actions" to """{"buttons":[{"label":"Go","kind":"prompt","value":"go"}]}""",
-            "panel" to """{"title":"T","summary":"s","body":"b"}"""
+            "panel" to """{"title":"T","summary":"s","body":"b"}""",
+            "voice" to """{"title":"Talk","prompt":"hello"}"""
         )
         // The routing set is exactly the parser set — no orphan language, no
         // parser branch reachable only by a hand-written call.
@@ -295,5 +300,47 @@ class WidgetBlocksTest {
         for ((kind, json) in minimal) {
             assertNotNull("kind '$kind' is routed but not parsed", parseWidget(kind, json))
         }
+    }
+
+    @Test
+    fun `voice widget parses and rejects an empty payload`() {
+        val v = parseWidget("voice", """{"title":"Talk","prompt":"weather","hint":"Speak"}""") as Widget.Voice
+        assertEquals("Talk", v.w.title)
+        assertEquals("weather", v.w.prompt)
+        assertNull(parseWidget("voice", """{}"""))
+    }
+
+    @Test
+    fun `media doc requires an https url and normalizes document and pdf`() {
+        val doc = parseWidget(
+            "media",
+            """{"type":"document","items":[{"url":"https://example.com/a.pdf","title":"A","mime":"application/pdf"}]}"""
+        ) as Widget.Media
+        assertEquals("doc", doc.w.type)
+        assertEquals("application/pdf", doc.w.items[0].mime)
+
+        val pdf = parseWidget(
+            "media",
+            """{"type":"pdf","items":[{"url":"https://example.com/b.pdf","title":"B"}]}"""
+        ) as Widget.Media
+        assertEquals("doc", pdf.w.type)
+
+        // A document without a fetchable https link would render nothing.
+        assertNull(parseWidget("media", """{"type":"doc","items":[{"title":"local"}]}"""))
+    }
+
+    @Test
+    fun `media video and audio keep the direct stream url`() {
+        val video = parseWidget(
+            "media",
+            """{"type":"video","items":[{"url":"https://cdn.example.com/a.mp4","thumb":"https://cdn.example.com/a.jpg","title":"A"}]}"""
+        ) as Widget.Media
+        assertEquals("https://cdn.example.com/a.mp4", video.w.items[0].url)
+
+        val audio = parseWidget(
+            "media",
+            """{"type":"audio","items":[{"url":"https://cdn.example.com/a.mp3","title":"B"}]}"""
+        ) as Widget.Media
+        assertEquals("https://cdn.example.com/a.mp3", audio.w.items[0].url)
     }
 }

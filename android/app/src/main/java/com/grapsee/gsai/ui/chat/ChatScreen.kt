@@ -84,6 +84,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
@@ -169,6 +170,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.clickable
 import com.grapsee.gsai.ui.theme.kineticPress
 import com.grapsee.gsai.ui.chat.content.BlocksContent
+import com.grapsee.gsai.ui.chat.content.LocalVoiceLauncher
 import com.grapsee.gsai.ui.orbs.OrbSize
 import com.grapsee.gsai.ui.orbs.OrbState
 import com.grapsee.gsai.ui.orbs.ThinkingOrb
@@ -1453,7 +1455,8 @@ fun ChatScreen(
                                         // ordinary user message through dispatch.
                                         onOpenSource = openSource,
                                         onClarifyOption = { option -> dispatch(option.label, echoUser = true) },
-                                        onSendPrompt = { text -> dispatch(text, echoUser = true) }
+                                        onSendPrompt = { text -> dispatch(text, echoUser = true) },
+                                        onNavigateVoice = onNavigateVoice
                                     )
                                 }
                             }
@@ -1975,15 +1978,18 @@ private fun LiveStreamText(
     isStreaming: Boolean,
     onCopyCode: (String) -> Unit,
     citationUrls: Map<Int, String>,
-    onSendPrompt: ((String) -> Unit)? = null
+    onSendPrompt: ((String) -> Unit)? = null,
+    onNavigateVoice: (() -> Unit)? = null
 ) {
-    BlocksContent(
-        content = live?.value?.streamText ?: fallback,
-        isStreaming = isStreaming,
-        onCopyCode = onCopyCode,
-        citationUrls = citationUrls,
-        onSendPrompt = onSendPrompt
-    )
+    CompositionLocalProvider(LocalVoiceLauncher provides onNavigateVoice) {
+        BlocksContent(
+            content = live?.value?.streamText ?: fallback,
+            isStreaming = isStreaming,
+            onCopyCode = onCopyCode,
+            citationUrls = citationUrls,
+            onSendPrompt = onSendPrompt
+        )
+    }
 }
 
 /**
@@ -2276,7 +2282,10 @@ private fun AssistantMessage(
     onClarifyOption: (ClarifyOption) -> Unit = {},
     // 0.78.0: interactive widgets (cards/followups/form) send prompts back
     // through the same dispatch path as clarify chips.
-    onSendPrompt: (String) -> Unit = {}
+    onSendPrompt: (String) -> Unit = {},
+    // 0.80.0: the `voice` widget opens the real voice screen. Null (no route
+    // wired) makes the card state that honestly instead of faking a session.
+    onNavigateVoice: (() -> Unit)? = null
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     val haptics = LocalHapticFeedback.current
@@ -2415,7 +2424,8 @@ private fun AssistantMessage(
                     // PHASE 8.1: citation markers [N] become tappable chips
                     // when N is one of THIS turn's real sources.
                     citationUrls = citationUrls,
-                    onSendPrompt = onSendPrompt
+                    onSendPrompt = onSendPrompt,
+                    onNavigateVoice = onNavigateVoice
                 )
             }
             // PHASE 8.1: the turn's real sources — live while streaming (as

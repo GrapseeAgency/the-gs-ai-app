@@ -32,7 +32,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -65,7 +68,9 @@ data class MediaItem(
     val snippet: String = "",
     val price: String = "",
     val badge: String = "",
-    val rating: String = ""
+    val rating: String = "",
+    /** doc type: optional MIME hint ("application/pdf", "text/markdown", …). */
+    val mime: String = ""
 )
 
 @Serializable
@@ -157,6 +162,7 @@ fun MediaWidgetView(w: MediaWidget, onSendPrompt: ((String) -> Unit)? = null) {
             "entity" -> EntityList(w.items, onSendPrompt)
             "product" -> ProductList(w.items, onSendPrompt)
             "listing" -> ListingList(w.items, onSendPrompt)
+            "doc", "document", "pdf" -> DocList(w.items)
             else -> Text(
                 "Unsupported media type",
                 style = MaterialTheme.typography.bodySmall,
@@ -233,8 +239,12 @@ private fun Gallery(items: List<MediaItem>) {
 private fun VideoList(items: List<MediaItem>) {
     val c = GsTheme.colors
     val uri = LocalUriHandler.current
+    val inline = items.firstOrNull { it.url.startsWith("https://") }
     Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        items.take(10).forEach { item ->
+        if (inline != null) {
+            MediaPlayerView("video", inline.url, inline.title, inline.thumb)
+        }
+        items.drop(if (inline != null) 1 else 0).take(9).forEach { item ->
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(c.raisedSurface)
                     .clickable { openUrl(uri, item.url) }.padding(8.dp),
@@ -274,8 +284,12 @@ private fun VideoList(items: List<MediaItem>) {
 private fun AudioList(items: List<MediaItem>) {
     val c = GsTheme.colors
     val uri = LocalUriHandler.current
+    val inline = items.firstOrNull { it.url.startsWith("https://") }
     Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        items.take(10).forEach { item ->
+        if (inline != null) {
+            MediaPlayerView("audio", inline.url, inline.title)
+        }
+        items.drop(if (inline != null) 1 else 0).take(9).forEach { item ->
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(c.raisedSurface)
                     .clickable { openUrl(uri, item.url) }.padding(horizontal = 10.dp, vertical = 9.dp),
@@ -302,11 +316,34 @@ private fun AudioList(items: List<MediaItem>) {
     }
 }
 
+// --- documents --------------------------------------------------------------
+
+@Composable
+private fun DocList(items: List<MediaItem>) {
+    val c = GsTheme.colors
+    val docs = items.filter { it.url.isNotBlank() }
+    if (docs.isEmpty()) {
+        Text("No document", style = MaterialTheme.typography.bodySmall, color = c.textTertiary, modifier = Modifier.padding(top = 8.dp))
+        return
+    }
+    Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        docs.take(3).forEach { item ->
+            DocumentPreviewView(
+                url = item.url,
+                title = item.title,
+                meta = listOf(item.meta, item.subtitle).filter { it.isNotBlank() }.joinToString(" · "),
+                mime = item.mime
+            )
+        }
+    }
+}
+
 // --- code -------------------------------------------------------------------
 
 @Composable
 private fun CodeCard(w: MediaWidget) {
     val c = GsTheme.colors
+    var editing by remember(w.code) { mutableStateOf(false) }
     if (w.code.isBlank()) {
         Text("No code", style = MaterialTheme.typography.bodySmall, color = c.textTertiary, modifier = Modifier.padding(top = 8.dp))
         return
@@ -319,18 +356,31 @@ private fun CodeCard(w: MediaWidget) {
                 color = c.textTertiary,
                 fontFamily = FontFamily.Monospace
             )
-            CopyButton(w.code)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = { editing = !editing }) {
+                    Text(
+                        if (editing) "Preview" else "Edit & run",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = c.accent
+                    )
+                }
+                CopyButton(w.code)
+            }
         }
-        Box(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(c.raisedSurface)
-                .padding(10.dp)
-        ) {
-            Text(
-                w.code.take(4000),
-                style = MaterialTheme.typography.bodySmall,
-                color = c.textPrimary,
-                fontFamily = FontFamily.Monospace
-            )
+        if (editing) {
+            CodeSandboxView(w.code, w.language.ifBlank { "javascript" }, w.title)
+        } else {
+            Box(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(c.raisedSurface)
+                    .padding(10.dp)
+            ) {
+                Text(
+                    w.code.take(4000),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = c.textPrimary,
+                    fontFamily = FontFamily.Monospace
+                )
+            }
         }
         if (w.text.isNotBlank()) {
             Text(w.text, style = MaterialTheme.typography.labelSmall, color = c.textSecondary, modifier = Modifier.padding(top = 6.dp))

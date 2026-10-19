@@ -4,11 +4,11 @@ Route legend:
 
 - **native** — first-class Compose renderer (chart / control / media / panel / actions)
 - **mermaid** — first-class Mermaid diagram renderer
-- **map** — Leaflet map renderer
+- **map** — Leaflet map renderer (pins, live routing, clustering, comparison)
 - **html** — sandboxed WebView mini-app (model-generated, CSP-locked)
 - **partial** — works, with the stated caveat
 
-Status: `done` = shipped in v0.79.0 · `partial` = works with a caveat · `planned` = not built yet.
+Status: `done` = shipped in v0.80.0 · `partial` = works with a caveat · `planned` = not built yet.
 
 ---
 
@@ -89,13 +89,13 @@ Status: `done` = shipped in v0.79.0 · `partial` = works with a caveat · `plann
 | 61 | Interactive pin maps | `map` pins | done |
 | 62 | Multi-location maps | `map` pins | done |
 | 63 | Route maps | `map` route | done |
-| 64 | Driving directions | `map` route | partial — polyline, no turn-by-turn |
-| 65 | Walking routes | `map` route | partial — polyline, no profile |
-| 66 | Cycling routes | `map` route | partial — polyline, no profile |
-| 67 | Multi-stop itineraries | `map` route | partial — waypoints as polyline |
-| 68 | Grouped map locations | `map` pins | partial — no clustering |
-| 69 | Place-detail carousels | `map` + `carousel` | partial — two widgets, not fused |
-| 70 | Map-based comparisons | `html` / two maps | partial — not a dedicated layout |
+| 64 | Driving directions | `map` mode=driving + stops | done — live OSRM route + turn-by-turn steps |
+| 65 | Walking routes | `map` mode=walking + stops | done — routed-foot profile |
+| 66 | Cycling routes | `map` mode=cycling + stops | done — routed-bike profile |
+| 67 | Multi-stop itineraries | `map` stops[] | done — ordered waypoints, per-leg steps |
+| 68 | Grouped map locations | `map` cluster=true | done — counted cluster bubbles, tap to expand |
+| 69 | Place-detail carousels | `map` cards=true | done — map + fused place carousel |
+| 70 | Map-based comparisons | `map` compare[] | done — 2–4 panels side by side |
 
 ## Diagrams and structured visuals (20)
 
@@ -129,14 +129,14 @@ Status: `done` = shipped in v0.79.0 · `partial` = works with a caveat · `plann
 | 91 | Single images | `media` type=image | done |
 | 92 | Image galleries | `media` type=gallery | done |
 | 93 | Image carousels | `carousel` / `media` gallery | done |
-| 94 | Video embeds | `media` type=video | partial — opens externally, no inline player |
-| 95 | Video previews | `media` type=video (thumb) | done |
-| 96 | Audio experiences | `media` type=audio | partial — opens externally |
-| 97 | Voice conversations | app voice mode (native) | partial — chat voice path, not a widget |
-| 98 | Interactive code previews | `media` type=code | partial — highlighted + copy, no execution |
-| 99 | Editable code blocks | `html` / `media` code | partial — copy only, no inline editor |
+| 94 | Video embeds | `media` type=video | done — inline `<video>` player in the sandboxed WebView |
+| 95 | Video previews | `media` type=video (poster) | done |
+| 96 | Audio experiences | `media` type=audio | done — inline `<audio>` player |
+| 97 | Voice conversations | `voice` widget → app voice mode | done — mic card opens the real SpeechRecognizer screen |
+| 98 | Interactive code previews | `media` type=code → sandbox | done — JS runs with captured console, HTML previews in a sandboxed iframe |
+| 99 | Editable code blocks | `media` type=code → sandbox | done — inline editor, Run, Copy |
 | 100 | Rich-text writing blocks | `html` (contenteditable) | done |
-| 101 | Document previews | `media` type=file | partial — opens externally |
+| 101 | Document previews | `media` type=doc | done — PDF page-by-page (PdfRenderer), inline image and text |
 | 102 | File cards | `media` type=file | done |
 | 103 | Linked resources | `media` type=link | done |
 | 104 | Entity cards | `media` type=entity | done |
@@ -209,12 +209,18 @@ native widgets where that is simpler and more robust.
 
 | Status | Count |
 |--------|-------|
-| done (native / mermaid / map / html) | 138 |
-| partial (stated caveat) | 13 |
+| done (native / mermaid / map / html) | 151 |
+| partial (stated caveat) | 0 |
 | planned | 0 |
 
-Partials are honest limits of the current build: video/audio open externally,
-map routing has no turn-by-turn/profiles/clustering, place-detail carousels and
-map comparisons are composed rather than fused, voice is the app's existing
-voice path rather than a widget, and code blocks copy but do not execute. Every
-one still renders and is usable; none is a silent drop.
+Every item on the list now has a working route. The remaining limits are
+platform facts, not missing widgets, and each is stated in-product rather than
+hidden:
+
+- Map routing calls the public OSRM demo servers; without a network connection
+  the map falls back to the `route` polyline and the static `steps` list.
+- Code execution is JavaScript/HTML only, inside the sandboxed WebView with
+  `default-src 'none'` — no network, no file access, no storage. Other
+  languages are editable and copyable, and the card says so.
+- PDF previews are capped at 15 MB and rasterized page by page on device.
+

@@ -371,7 +371,7 @@ private fun parseFence(lines: List<Line>, start: Int): Pair<Block, Int> {
 val WIDGET_LANGUAGES = setOf(
     "chart", "stat", "table", "compare", "progress", "timeline",
     "gauge", "quiz", "form", "carousel", "cards", "followups",
-    "media", "actions", "panel"
+    "media", "actions", "panel", "voice"
 )
 
 /**
