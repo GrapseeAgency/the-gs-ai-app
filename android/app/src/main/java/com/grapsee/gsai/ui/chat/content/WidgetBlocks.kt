@@ -156,6 +156,8 @@ sealed interface Widget {
     data class Actions(val w: ActionsWidget) : Widget { override val title get() = w.title }
     data class Panel(val w: PanelWidget) : Widget { override val title get() = w.title }
     data class Voice(val w: VoiceWidget) : Widget { override val title get() = w.title }
+    data class Calc(val w: CalcWidget) : Widget { override val title get() = w.title }
+    data class App(val w: AppWidget) : Widget { override val title get() = w.title }
 }
 
 internal val widgetJson = Json { ignoreUnknownKeys = true }
@@ -251,6 +253,46 @@ fun parseWidget(kind: String, json: String): Widget? {
             "voice" -> widgetJson.decodeFromString<VoiceWidget>(json).let { w ->
                 if (w.title.isBlank() && w.prompt.isBlank() && w.hint.isBlank()) null
                 else Widget.Voice(w)
+            }
+            "calc" -> widgetJson.decodeFromString<CalcWidget>(json).let { w ->
+                val fields = w.fields.take(10).filter { it.key.isNotBlank() }
+                val outputs = w.outputs.take(8).filter { it.expr.isNotBlank() }
+                if (w.type.lowercase() !in CALC_TYPES || fields.isEmpty() || outputs.isEmpty()) null
+                else Widget.Calc(
+                    w.copy(
+                        type = w.type.lowercase(),
+                        fields = fields.map { f -> f.copy(choices = f.choices.take(5)) },
+                        outputs = outputs
+                    )
+                )
+            }
+            "app" -> widgetJson.decodeFromString<AppWidget>(json).let { w ->
+                val type = w.type.lowercase()
+                val steps = w.steps.take(10)
+                val columns = w.columns.take(6)
+                val items = w.items.take(40)
+                val groups = w.groups.take(6)
+                val rows = w.rows.take(30)
+                val hasBody = when (type) {
+                    "wizard", "onboarding", "decision" -> steps.any { it.title.isNotBlank() || it.body.isNotBlank() }
+                    "kanban" -> columns.any { it.items.isNotEmpty() }
+                    "sheet" -> rows.size >= 2
+                    "config", "configurator" -> groups.any { it.options.isNotEmpty() }
+                    "booking", "schedule" -> items.isNotEmpty() || w.slots.isNotEmpty()
+                    else -> items.isNotEmpty() || columns.isNotEmpty()
+                }
+                if (type !in APP_TYPES || !hasBody) null
+                else Widget.App(
+                    w.copy(
+                        type = type,
+                        steps = steps,
+                        columns = columns,
+                        items = items,
+                        groups = groups,
+                        rows = rows,
+                        slots = w.slots.take(16)
+                    )
+                )
             }
             "timeline" -> widgetJson.decodeFromString<TimelineWidget>(json).let { w ->
                 val entries = w.entries.take(MAX_TIMELINE_ENTRIES)
@@ -387,6 +429,8 @@ fun WidgetView(widget: Widget, onSendPrompt: ((String) -> Unit)? = null) {
         is Widget.Actions -> ActionsWidgetView(widget.w, onSendPrompt)
         is Widget.Panel -> PanelWidgetView(widget.w)
         is Widget.Voice -> VoiceWidgetView(widget.w, onSendPrompt)
+        is Widget.Calc -> CalcWidgetView(widget.w, onSendPrompt)
+        is Widget.App -> AppWidgetView(widget.w, onSendPrompt)
     }
 }
 

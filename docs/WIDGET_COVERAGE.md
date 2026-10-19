@@ -64,9 +64,9 @@ Status: `done` = shipped in v0.80.0 · `partial` = works with a caveat · `plann
 | 41 | Waterfall charts | `chart` waterfall | done |
 | 42 | Funnel charts | `chart` funnel | done |
 | 43 | Gauge charts | `gauge` | done |
-| 44 | Sankey diagrams | mermaid `sankey-beta` / `html` | done |
-| 45 | Chord diagrams | `html` (d3 chord) | done |
-| 46 | Network graphs | mermaid / `html` | done |
+| 44 | Sankey diagrams | mermaid `sankey-beta` | done |
+| 45 | Chord diagrams | `html` (d3 chord) | partial — no native chord renderer |
+| 46 | Network graphs | mermaid flowchart / `html` | done |
 | 47 | Geographical data visualizations | `map` | done |
 | 48 | Statistical plots | `chart` boxplot / histogram | done |
 | 49 | Correlation matrices | `chart` correlation | done |
@@ -80,7 +80,7 @@ Status: `done` = shipped in v0.80.0 · `partial` = works with a caveat · `plann
 | 57 | Comparison tables | `compare` | done |
 | 58 | Filterable data views | `table` live filter field | done |
 | 59 | Sortable data views | `table` click-to-sort columns | done |
-| 60 | Dashboard layouts | `html` / stacked widgets | done |
+| 60 | Dashboard layouts | `app` type=dashboard | done |
 
 ## Maps and location (10)
 
@@ -118,7 +118,7 @@ Status: `done` = shipped in v0.80.0 · `partial` = works with a caveat · `plann
 | 85 | UML diagrams | mermaid class/sequence | done |
 | 86 | Data-flow diagrams | mermaid `flowchart` | done |
 | 87 | Swimlane diagrams | mermaid `flowchart` / `sequenceDiagram` | done |
-| 88 | Wireframes | `html` | done |
+| 88 | Wireframes | `html` (SVG wireframe) | done |
 | 89 | Concept maps | mermaid `mindmap` | done |
 | 90 | Tree diagrams | mermaid `flowchart` | done |
 
@@ -152,26 +152,26 @@ self-contained document; the app renders it in the CSP-locked WebView).
 
 | # | Item | Route | Status |
 |---|------|-------|--------|
-| 109 | Unit converters | `html` | done |
-| 110 | Currency converters | `html` | done |
-| 111 | Financial calculators | `html` | done |
-| 112 | Loan calculators | `html` | done |
-| 113 | Mortgage calculators | `html` | done |
-| 114 | Pricing calculators | `html` | done |
-| 115 | Tax estimators | `html` | done |
-| 116 | Budget planners | `html` | done |
-| 117 | Investment scenario calculators | `html` | done |
-| 118 | Probability calculators | `html` | done |
-| 119 | Statistical calculators | `html` | done |
-| 120 | Scientific calculators | `html` | done |
-| 121 | Date and time calculators | `html` | done |
+| 109 | Unit converters | `calc` type=unit | done |
+| 110 | Currency converters | `calc` type=currency | done |
+| 111 | Financial calculators | `calc` type=finance | done |
+| 112 | Loan calculators | `calc` type=loan | done |
+| 113 | Mortgage calculators | `calc` type=mortgage | done |
+| 114 | Pricing calculators | `calc` type=pricing | done |
+| 115 | Tax estimators | `calc` type=tax | done |
+| 116 | Budget planners | `calc` type=budget | done |
+| 117 | Investment scenario calculators | `calc` type=investment | done |
+| 118 | Probability calculators | `calc` type=probability | done |
+| 119 | Statistical calculators | `calc` type=statistics | done |
+| 120 | Scientific calculators | `calc` type=scientific | done |
+| 121 | Date and time calculators | `calc` type=datetime | done |
 | 122 | Interactive quizzes | `quiz` (native) | done |
 | 123 | Knowledge tests | `quiz` (native) | done |
-| 124 | Decision-support tools | `html` | done |
-| 125 | Scenario comparison tools | `html` | done |
-| 126 | What-if simulators | `html` | done |
-| 127 | Parameter-driven visualizations | `html` + `chart` | done |
-| 128 | Interactive educational demonstrations | `html` | done |
+| 124 | Decision-support tools | `app` type=decision | done |
+| 125 | Scenario comparison tools | `app` type=scenario | done |
+| 126 | What-if simulators | `calc` (live sliders) | done |
+| 127 | Parameter-driven visualizations | `calc` + `chart` | done |
+| 128 | Interactive educational demonstrations | `html` (interactive demo) | done |
 
 ## Application-style experiences (22)
 
@@ -180,28 +180,28 @@ native widgets where that is simpler and more robust.
 
 | # | Item | Route | Status |
 |---|------|-------|--------|
-| 129 | Multi-step wizards | `html` | done |
-| 130 | Onboarding flows | `html` | done |
-| 131 | Configuration panels | `html` / `form` | done |
-| 132 | Search interfaces | `html` | done |
-| 133 | Filter panels | `html` | done |
-| 134 | Product configurators | `html` | done |
-| 135 | Booking interfaces | `html` | done |
-| 136 | Scheduling interfaces | `html` | done |
-| 137 | Task-management interfaces | `html` | done |
-| 138 | Kanban boards | `html` | done |
-| 139 | Calendar views | `html` | done |
-| 140 | Spreadsheet-style interfaces | `html` | done |
-| 141 | Form-based workflows | `form` / `html` | done |
-| 142 | Analytics explorers | `html` | done |
-| 143 | Interactive reports | `html` + `chart` | done |
-| 144 | File-analysis interfaces | `html` | done |
-| 145 | Connected-app interfaces | `html` | done |
-| 146 | Custom mini-apps | `html` | done |
-| 147 | Stateful interactive tools | `html` | done |
-| 148 | Responsive dashboard interfaces | `html` | done |
-| 149 | Interactive prototypes | `html` | done |
-| 150 | Custom HTML/JavaScript application experiences | `html` | done |
+| 129 | Multi-step wizards | `app` type=wizard | done |
+| 130 | Onboarding flows | `app` type=onboarding | done |
+| 131 | Configuration panels | `app` type=config / `form` | done |
+| 132 | Search interfaces | `app` type=search | done |
+| 133 | Filter panels | `app` type=filter | done |
+| 134 | Product configurators | `app` type=configurator | done |
+| 135 | Booking interfaces | `app` type=booking | done |
+| 136 | Scheduling interfaces | `app` type=schedule | done |
+| 137 | Task-management interfaces | `app` type=tasks | done |
+| 138 | Kanban boards | `app` type=kanban | done |
+| 139 | Calendar views | `app` type=calendar | done |
+| 140 | Spreadsheet-style interfaces | `app` type=sheet | done |
+| 141 | Form-based workflows | `form` / `app` type=wizard | done |
+| 142 | Analytics explorers | `app` type=analytics | done |
+| 143 | Interactive reports | `app` type=report | done |
+| 144 | File-analysis interfaces | `app` type=files | done |
+| 145 | Connected-app interfaces | `app` type=connected | done |
+| 146 | Custom mini-apps | `html` (custom mini-app) | done |
+| 147 | Stateful interactive tools | `app` / `calc` (stateful) | done |
+| 148 | Responsive dashboard interfaces | `app` type=dashboard | done |
+| 149 | Interactive prototypes | `html` (prototype) | done |
+| 150 | Custom HTML/JavaScript application experiences | `html` (custom app) | done |
 
 ---
 
@@ -209,11 +209,13 @@ native widgets where that is simpler and more robust.
 
 | Status | Count |
 |--------|-------|
-| done (native / mermaid / map / html) | 151 |
-| partial (stated caveat) | 0 |
+| done (native renderer / mermaid / map / html) | 149 |
+| partial (stated caveat) | 1 |
 | planned | 0 |
+| **total** | **150** |
 
-Every item on the list now has a working route. The remaining limits are
+149 of 150 items have a dedicated route. The one partial is the chord
+diagram, which has no native renderer (it needs a custom d3 document). The remaining limits are
 platform facts, not missing widgets, and each is stated in-product rather than
 hidden:
 

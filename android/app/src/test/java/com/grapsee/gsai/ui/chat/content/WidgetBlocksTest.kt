@@ -292,7 +292,9 @@ class WidgetBlocksTest {
             "media" to """{"type":"image","items":[{"url":"https://example.com/a.png","title":"A"}]}""",
             "actions" to """{"buttons":[{"label":"Go","kind":"prompt","value":"go"}]}""",
             "panel" to """{"title":"T","summary":"s","body":"b"}""",
-            "voice" to """{"title":"Talk","prompt":"hello"}"""
+            "voice" to """{"title":"Talk","prompt":"hello"}""",
+            "calc" to """{"type":"loan","fields":[{"key":"p","label":"Principal","value":1000,"min":0,"max":5000}],"outputs":[{"label":"Pay","expr":"p*2","format":"money","primary":true}]}""",
+            "app" to """{"type":"tasks","items":[{"title":"Do it"}]}"""
         )
         // The routing set is exactly the parser set — no orphan language, no
         // parser branch reachable only by a hand-written call.
@@ -342,5 +344,99 @@ class WidgetBlocksTest {
             """{"type":"audio","items":[{"url":"https://cdn.example.com/a.mp3","title":"B"}]}"""
         ) as Widget.Media
         assertEquals("https://cdn.example.com/a.mp3", audio.w.items[0].url)
+    }
+
+    // --- calculators ---------------------------------------------------------
+
+    @Test
+    fun `calculator expressions honour precedence and functions`() {
+        val vars = mapOf("p" to 250000.0, "r" to 0.005, "n" to 360.0)
+        assertEquals(7.0, CalcExpr.eval("1+2*3", vars)!!, 1e-9)
+        assertEquals(9.0, CalcExpr.eval("(1+2)*3", vars)!!, 1e-9)
+        assertEquals(8.0, CalcExpr.eval("2^3", vars)!!, 1e-9)
+        assertEquals(512.0, CalcExpr.eval("2^3^2", vars)!!, 1e-9) // right-associative
+        assertEquals(3.0, CalcExpr.eval("sqrt(9)", vars)!!, 1e-9)
+        assertEquals(5.0, CalcExpr.eval("max(2, 5, 3)", vars)!!, 1e-9)
+        assertEquals(-4.0, CalcExpr.eval("-p/p*4", vars)!!, 1e-9)
+        assertEquals(1.0, CalcExpr.eval("sin(pi/2)", vars)!!, 1e-9)
+
+        // The real thing: a 30-year amortising payment.
+        val payment = CalcExpr.eval("p*r*pow(1+r,n)/(pow(1+r,n)-1)", vars)!!
+        assertEquals(1498.88, payment, 0.05)
+        assertNull(CalcExpr.eval("1/0", vars))
+        assertNull(CalcExpr.eval("nonsense(", vars))
+    }
+
+    @Test
+    fun `calculator formatting is locale-stable and unit aware`() {
+        assertEquals("1,234.50", formatCalc(1234.5, "money", ""))
+        assertEquals("12.50%", formatCalc(0.125, "percent", ""))
+        assertEquals("1,235", formatCalc(1234.5, "integer", ""))
+        assertEquals("1.2K", formatCalc(1234.0, "compact", ""))
+        assertEquals("42 km", formatCalc(42.0, "number", "km"))
+        assertEquals("—", formatCalc(Double.NaN, "number", ""))
+    }
+
+    @Test
+    fun `calculator widget parses every listed type`() {
+        for (type in CALC_TYPES) {
+            val json = """{"type":"$type","fields":[{"key":"x","label":"X","value":5,"min":0,"max":10}],"outputs":[{"label":"Y","expr":"x*2","primary":true}]}"""
+            val w = parseWidget("calc", json)
+            assertTrue("calc type '$type' should parse", w is Widget.Calc)
+            assertEquals(type, (w as Widget.Calc).w.type)
+        }
+        // Unknown type, no fields, or no outputs must degrade rather than render blank.
+        assertNull(parseWidget("calc", """{"type":"astrology","fields":[{"key":"x"}],"outputs":[{"expr":"x"}]}"""))
+        assertNull(parseWidget("calc", """{"type":"loan","fields":[],"outputs":[{"expr":"x"}]}"""))
+        assertNull(parseWidget("calc", """{"type":"loan","fields":[{"key":"x"}],"outputs":[]}"""))
+    }
+
+    // --- app surfaces --------------------------------------------------------
+
+    @Test
+    fun `app widget parses every supported layout`() {
+        val payloads = mapOf(
+            "wizard" to """{"steps":[{"title":"One","body":"b"}]}""",
+            "onboarding" to """{"steps":[{"title":"Welcome","body":"hi"}]}""",
+            "kanban" to """{"columns":[{"title":"Todo","items":[{"title":"A"}]}]}""",
+            "calendar" to """{"month":"2026-10","items":[{"title":"E","date":"2026-10-05"}]}""",
+            "sheet" to """{"rows":[["A","B"],["1","2"]]}""",
+            "tasks" to """{"items":[{"title":"A"}]}""",
+            "dashboard" to """{"items":[{"title":"MRR","meta":"$12k","badge":"+8%"}]}""",
+            "config" to """{"groups":[{"title":"Plan","options":[{"label":"Pro","price":20}]}]}""",
+            "configurator" to """{"groups":[{"title":"Size","options":[{"label":"L","price":5}]}]}""",
+            "booking" to """{"items":[{"title":"Mon 20"}],"slots":["09:00"]}""",
+            "schedule" to """{"items":[{"title":"Tue 21"}],"slots":["10:00"]}""",
+            "search" to """{"items":[{"title":"Result"}]}""",
+            "filter" to """{"columns":[{"title":"Tag","items":[{"title":"news"}]}],"items":[{"title":"A","badge":"news"}]}""",
+            "analytics" to """{"items":[{"title":"Sessions","meta":"1,204"}]}""",
+            "report" to """{"items":[{"title":"Churn","meta":"2.1%"}]}""",
+            "files" to """{"items":[{"title":"a.pdf"}]}""",
+            "connected" to """{"items":[{"title":"Drive"}]}""",
+            "decision" to """{"steps":[{"title":"Criteria","body":"pick"}]}""",
+            "scenario" to """{"items":[{"title":"Base","meta":"$10k"}]}"""
+        )
+        assertEquals(APP_TYPES, payloads.keys)
+        for ((type, json) in payloads) {
+            val w = parseWidget("app", json.replaceFirst("{", "{\"type\":\"$type\","))
+            assertTrue("app type '$type' should parse", w is Widget.App)
+            assertEquals(type, (w as Widget.App).w.type)
+        }
+        // A layout with nothing to render is a silent blank card — reject it.
+        assertNull(parseWidget("app", """{"type":"kanban","columns":[]}"""))
+        assertNull(parseWidget("app", """{"type":"sheet","rows":[["only-header"]]}"""))
+        assertNull(parseWidget("app", """{"type":"nonsense","items":[{"title":"A"}]}"""))
+    }
+
+    @Test
+    fun `app and calc fences route to widgets while html still routes to the webview`() {
+        val appJson = parseBlocks("```app\n{\"type\":\"tasks\",\"items\":[{\"title\":\"A\"}]}\n```").single()
+        assertTrue(appJson is Block.WidgetBlock)
+
+        val appHtml = parseBlocks("```app\n<html><body>hi</body></html>\n```").single()
+        assertTrue(appHtml is Block.HtmlBlock)
+
+        val calc = parseBlocks("```calc\n{\"type\":\"loan\",\"fields\":[{\"key\":\"x\"}],\"outputs\":[{\"expr\":\"x\"}]}\n```").single()
+        assertTrue(calc is Block.WidgetBlock)
     }
 }

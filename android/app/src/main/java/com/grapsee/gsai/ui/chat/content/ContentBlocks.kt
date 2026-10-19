@@ -371,7 +371,7 @@ private fun parseFence(lines: List<Line>, start: Int): Pair<Block, Int> {
 val WIDGET_LANGUAGES = setOf(
     "chart", "stat", "table", "compare", "progress", "timeline",
     "gauge", "quiz", "form", "carousel", "cards", "followups",
-    "media", "actions", "panel", "voice"
+    "media", "actions", "panel", "voice", "calc", "app"
 )
 
 /**
@@ -390,9 +390,13 @@ private fun fenceToBlock(language: String?, code: String, open: Boolean, offset:
     val lang = language?.lowercase()
     return when {
         language.equals("mermaid", ignoreCase = true) && !open -> Block.MermaidBlock(code, offset)
-        lang != null && lang in HTML_LANGUAGES -> Block.HtmlBlock("html", code, open, offset)
         lang == "map" -> Block.HtmlBlock("map", code, open, offset)
-        lang != null && lang in WIDGET_LANGUAGES -> Block.WidgetBlock(lang, code, open, offset)
+        // Widget fences are JSON. A JSON-looking fence in a widget language wins
+        // over the html fallback, so ```app can be either a widget payload or a
+        // full document without ambiguity.
+        lang != null && lang in WIDGET_LANGUAGES && code.trimStart().startsWith("{") ->
+            Block.WidgetBlock(lang, code, open, offset)
+        lang != null && lang in HTML_LANGUAGES -> Block.HtmlBlock("html", code, open, offset)
         else -> Block.CodeBlock(language, code, open, offset)
     }
 }
