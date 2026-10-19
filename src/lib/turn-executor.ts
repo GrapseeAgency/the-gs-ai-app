@@ -44,6 +44,7 @@ import { decideCapability, validTimeZone } from '@/lib/capability'
 import { mapWithConcurrency } from '@/lib/concurrency'
 import { classifyErrorType, writeTurnTrace } from '@/lib/trace'
 import { getBackendRevision } from '@/lib/revision'
+import { ensureWidgets } from '@/lib/widgets/compile'
 import {
   recordResearchContext,
   getResearchContexts,
@@ -1820,7 +1821,22 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
       full = await synthesize(modelMessages)
     }
 
-    const finalText = sanitizeAgainstPersisted(normalizeCitationBrackets(full), turn, historySources)
+    const baseText = sanitizeAgainstPersisted(normalizeCitationBrackets(full), turn, historySources)
+    // GENUI production pipeline: validate every widget fence, repair the
+    // malformed ones, and — only when the user asked for a visual and the
+    // answer already states the numbers — build the widget deterministically.
+    // This runs before persistence, so every client (Android, iOS, web) gets
+    // the same renderable content regardless of model compliance.
+    const priorAssistant =
+      [...history].reverse().find((m) => m.role.toLowerCase() === 'assistant')?.content ?? ''
+    const compiled = ensureWidgets(baseText, { userPrompt: content, priorText: priorAssistant })
+    if (compiled.errors.length > 0 || compiled.path !== 'none') {
+      console.log(
+        `GS-GENUI conv=${id} path=${compiled.path} widgets=${compiled.widgets}` +
+          (compiled.errors.length ? ` errors=${compiled.errors.join(' | ')}` : '')
+      )
+    }
+    const finalText = compiled.text
     const saved = await createAssistantMessage({
       conversationId: id,
       role: 'assistant',
