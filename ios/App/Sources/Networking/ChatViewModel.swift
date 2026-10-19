@@ -877,10 +877,12 @@ final class ChatViewModel: ObservableObject {
             // turns. Tolerant: a malformed frame is dropped, never breaks the
             // turn. The start date is the first reasoning delta; the end date
             // freezes at the first ANSWER delta (set in the delta path).
+            // `delta` is optional on the wire model, so unwrap it before the
+            // non-optional use — a frame without a delta is dropped, not fatal.
             if let payload = try? JSONDecoder().decode(ReasoningEventPayload.self, from: Data(data.utf8)),
-               !payload.delta.isEmpty {
+               let delta = payload.delta, !delta.isEmpty {
                 if reasoningStart == nil { reasoningStart = Date() }
-                reasoningText = (reasoningText ?? "") + payload.delta
+                reasoningText = (reasoningText ?? "") + delta
             }
         default:
             break
