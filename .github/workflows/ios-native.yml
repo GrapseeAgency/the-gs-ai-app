@@ -2466,12 +2466,46 @@ jobs:
           xcrun simctl list devices available | grep -F "$UDID" || true
           set -euo pipefail
 
+          # BOUNDED. `xcodebuild test` has no wall clock of its own: on run
+          # 39336667752 this line sat in this step for 50+ minutes with
+          # nothing in the log while the job's default ceiling is six hours.
+          # A test that never returns must fail LOUDLY and SOON, not hold the
+          # gate open. Two bounds, both real:
+          #   -test-timeouts-enabled  XCTest itself kills an overrunning test
+          #                           and names it (default allowance 180s).
+          #   the loop below          kills xcodebuild if it stalls outside a
+          #                           test (simulator boot, runner handshake).
+          # The step still runs to COMPLETION (no YAML timeout-minutes), so the
+          # log upload and the per-test evidence below still happen on failure.
+          BUDGET_S="${GS_TEST_BUDGET_S:-2700}"
           xcodebuild test \
             -project GSApp.xcodeproj \
             -scheme GSApp \
             -destination "id=$UDID" \
+            -test-timeouts-enabled YES \
+            -default-test-execution-time-allowance 180 \
+            -maximum-test-execution-time-allowance 900 \
             CODE_SIGNING_ALLOWED=NO \
-            2>&1 | tee test-simulator.log
+            > test-simulator.log 2>&1 &
+          XCODE_PID=$!
+          STARTED=$SECONDS
+          while kill -0 "$XCODE_PID" 2>/dev/null; do
+            if [ $((SECONDS - STARTED)) -ge "$BUDGET_S" ]; then
+              echo "::error::xcodebuild test exceeded ${BUDGET_S}s -- terminating it"
+              kill -TERM "$XCODE_PID" 2>/dev/null || true
+              sleep 10
+              kill -KILL "$XCODE_PID" 2>/dev/null || true
+              break
+            fi
+            sleep 10
+          done
+          set +e
+          wait "$XCODE_PID"
+          XCODE_RC=$?
+          set -e
+          echo "xcodebuild exit=$XCODE_RC (budget ${BUDGET_S}s)"
+          echo "=== last 40 log lines ==="
+          tail -n 40 test-simulator.log || true
 
           # A zero exit is not the evidence. xcodebuild has returned 0 from runs
           # that executed nothing, so the log is read for the per-test lines and
@@ -2483,6 +2517,17 @@ jobs:
           FAILED=$(grep -ac "Test Case .* failed" test-simulator.log || true)
           SKIPPED=$(grep -ac "Test Case .* skipped" test-simulator.log || true)
           echo "passed=$PASSED failed=$FAILED skipped=$SKIPPED"
+          # THE EXIT CODE IS PART OF THE EVIDENCE. This step used to judge only
+          # the per-test lines, so a run that PASSED a few tests and then died
+          # (killed budget, simulator crash, runner disconnect) still read as
+          # green with partial coverage. Nonzero exit is a failure, whatever
+          # the counts say.
+          if [ "$XCODE_RC" -ne 0 ]; then
+            echo "::error::xcodebuild test exited $XCODE_RC; the counts above are"
+            echo "::error::only what ran before it stopped. Partial coverage is not a"
+            echo "::error::pass."
+            exit 1
+          fi
           if [ "$FAILED" -ne 0 ]; then
             echo "::error::$FAILED test(s) failed"
             exit 1
