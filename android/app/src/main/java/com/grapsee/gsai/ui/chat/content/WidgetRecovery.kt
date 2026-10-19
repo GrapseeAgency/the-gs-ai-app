@@ -133,9 +133,16 @@ internal object WidgetRecovery {
         RegexOption.IGNORE_CASE
     )
 
+    /**
+     * Built from the ONE canonical language set (ContentBlocks.WIDGET_FENCE_LANGUAGES)
+     * so recovery can never fire on a transcript that already contains a widget —
+     * including chart sub-type fences like ```funnel, which used to slip past
+     * this guard and get a fake sample chart stacked on top of a real payload.
+     */
     private val widgetFence = Regex(
-        """(?m)^\s*```(?:chart|stat|table|compare|progress|timeline|gauge|quiz|form|""" +
-            """carousel|cards|followups|media|actions|panel|voice|calc|app)\b"""
+        """(?m)^\s*```(?:""" +
+            WIDGET_FENCE_LANGUAGES.sortedByDescending { it.length }.joinToString("|") +
+            """)\b"""
     )
 
     /** "create", "create or display", "generate, render and show" — all one verb phrase. */
@@ -200,6 +207,11 @@ internal object WidgetRecovery {
      * fallback for the very common "show me a chart" follow-up with no data.
      */
     fun recover(reply: String, prompt: String, prior: String): Block.WidgetBlock? {
+        // Defence in depth: never stack a synthesised widget on a transcript
+        // that already carries one. The caller checks this too, but relying on
+        // the caller is how a good ```funnel payload ended up with a fake
+        // "Item 1…4" sample drawn underneath it.
+        if (hasWidgetFence(reply)) return null
         val ask = askOf(prompt) ?: return null
         return when (ask) {
             VisualAsk.Gallery -> galleryBlock(reply, prior)

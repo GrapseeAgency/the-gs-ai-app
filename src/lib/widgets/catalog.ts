@@ -147,6 +147,39 @@ export function isWidgetKind(value: string): value is WidgetKind {
   return (WIDGET_KINDS as readonly string[]).includes(value)
 }
 
+/**
+ * Chart SUB-TYPES models use as the fence language itself: ```funnel, ```gantt,
+ * ```heatmap … with the type implied by the fence. They are chart widgets, not
+ * unknown languages — treating them as unknown made the compiler report "no
+ * widget" and append a deterministic fallback on top of a valid payload.
+ */
+export const CHART_ALIASES = CHART_TYPES.map((t) => t.toLowerCase())
+
+/**
+ * Canonical widget kind for a fence language, or null when it is not a widget.
+ * Chart aliases collapse to 'chart'. Mirrors widgetKindOf() on the clients.
+ */
+export function widgetKindOf(language: string): WidgetKind | null {
+  const lang = language.toLowerCase()
+  if (isWidgetKind(lang)) return lang
+  if (CHART_ALIASES.includes(lang)) return 'chart'
+  return null
+}
+
+/** `stackedarea` -> `stackedArea`; every other alias is already canonical. */
+export function canonicalChartType(alias: string): string {
+  const hit = CHART_TYPES.find((t) => t.toLowerCase() === alias.toLowerCase())
+  return hit ?? alias
+}
+
+/** Inject the type implied by the fence when the payload does not name one. */
+export function injectChartType(json: string, alias: string): string {
+  if (/"type"\s*:/.test(json)) return json
+  const brace = json.indexOf('{')
+  if (brace < 0) return json
+  return `${json.slice(0, brace + 1)}"type":"${canonicalChartType(alias)}",${json.slice(brace + 1)}`
+}
+
 export function isChartType(value: unknown): value is (typeof CHART_TYPES)[number] {
   return typeof value === 'string' && (CHART_TYPES as readonly string[]).includes(value)
 }

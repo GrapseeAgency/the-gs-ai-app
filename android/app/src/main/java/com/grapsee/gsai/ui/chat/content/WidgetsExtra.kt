@@ -140,8 +140,10 @@ internal fun DonutChart(w: ChartWidget) {
     var animate by remember { mutableStateOf(false) }
     LaunchedEffect(w) { animate = true }
     val progress by animateFloatAsState(if (animate) 1f else 0f, tween(700), label = "donut")
-    val colors = w.series.indices.map { seriesColor(it) }
     val slices = remember(w.series, w.labels) { pieSlices(w) }
+    // Keyed off slices, not series — see PieChart: the common shape is one
+    // series holding one point per slice, which collapsed to a single colour.
+    val colors = slices.indices.map { seriesColor(it) }
     val total = slices.sumOf { it.second.toDouble() }.toFloat().takeIf { it > 0f } ?: 1f
     Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(contentAlignment = Alignment.Center) {

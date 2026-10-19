@@ -121,6 +121,36 @@ function check(name: string, condition: boolean, detail = '') {
 // 12. repairJson returns null on garbage.
 check('repairJson rejects garbage', repairJson('hello world') === null)
 
+// 13. Chart sub-type fences are chart widgets, not unknown languages.
+{
+  const reply =
+    'Here is the funnel.\n\n```funnel\n' +
+    JSON.stringify({
+      title: 'Checkout',
+      labels: ['Visit', 'Cart', 'Pay'],
+      series: [{ name: 'Users', data: [[0, 1200], [1, 540], [2, 210]] }],
+    }) +
+    '\n```'
+  const r = compileWidgets({ reply, userPrompt: 'show me a funnel chart' })
+  check('funnel fence compiles as a chart', r.widgets === 1 && r.path === 'model', r.path)
+  check('funnel fence normalises to ```chart', r.text.includes('```chart') && !r.text.includes('```funnel'))
+  check('funnel type is injected', r.text.includes('"type":"funnel"'))
+}
+
+// 14. An explicit type in the payload beats the fence hint.
+{
+  const reply = '```line\n{"type":"bar","title":"T","series":[{"name":"a","data":[[0,1],[1,2]]}]}\n```'
+  const r = compileWidgets({ reply, userPrompt: 'chart' })
+  check('payload type wins over fence alias', r.widgets === 1 && r.text.includes('"type":"bar"'))
+}
+
+// 15. stackedarea canonicalises.
+{
+  const reply = '```stackedarea\n{"title":"T","series":[{"name":"a","data":[[0,1],[1,2]]}]}\n```'
+  const r = compileWidgets({ reply, userPrompt: 'chart' })
+  check('stackedarea → stackedArea', r.text.includes('"type":"stackedArea"'), r.path)
+}
+
 console.log(`\n${passed} passed, ${failures.length} failed`)
 if (failures.length) {
   for (const f of failures) console.log(`  - ${f}`)

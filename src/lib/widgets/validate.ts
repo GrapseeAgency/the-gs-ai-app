@@ -18,6 +18,8 @@ import {
   MEDIA_TYPES,
   isChartType,
   isWidgetKind,
+  injectChartType,
+  widgetKindOf,
   type WidgetKind,
 } from './catalog'
 
@@ -45,10 +47,19 @@ const FENCE = /^```([a-zA-Z][\w-]*)[ \t]*\r?\n([\s\S]*?)^```[ \t]*$/gm
 export function extractWidgetFences(text: string): WidgetFence[] {
   const out: WidgetFence[] = []
   for (const m of text.matchAll(FENCE)) {
-    const kind = m[1]
-    if (!isWidgetKind(kind)) continue
+    const language = m[1]
+    // A chart sub-type fence (```funnel, ```gantt …) is a chart widget with the
+    // type implied by the fence. Normalising here means the persisted answer
+    // only ever carries the canonical ```chart form, and the client never sees
+    // a payload it would render as a code block.
+    const kind = widgetKindOf(language)
+    if (!kind) continue
     const start = m.index ?? 0
-    out.push({ kind, json: m[2].trim(), start, end: start + m[0].length })
+    const body = m[2].trim()
+    const json = kind === 'chart' && language.toLowerCase() !== 'chart'
+      ? injectChartType(body, language)
+      : body
+    out.push({ kind, json, start, end: start + m[0].length })
   }
   return out
 }

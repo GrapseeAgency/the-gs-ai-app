@@ -344,11 +344,11 @@ private fun parseFence(lines: List<Line>, start: Int): Pair<Block, Int> {
     // Unterminated trailing fence — mid-stream. Widget fences become an OPEN
     // widget block so the UI shows a skeleton instead of scrolling raw JSON;
     // everything else renders what arrived as open code.
-    val lang = language?.lowercase()
-    if (lang != null && lang in WIDGET_LANGUAGES) {
+    val openKind = widgetKindOf(language)
+    if (openKind != null) {
         return Pair(
             Block.WidgetBlock(
-                kind = lang,
+                kind = openKind,
                 json = body.toString().trimEnd('\n'),
                 open = true,
                 sourceStart = lines[start].offset
@@ -375,6 +375,57 @@ val WIDGET_LANGUAGES = setOf(
 )
 
 /**
+ * Chart SUB-TYPES that models use as the fence language itself:
+ * ```funnel / ```gantt / ```heatmap … with a chart payload whose `type` is
+ * implied by the fence. These are real (models write them constantly) and they
+ * are chart widgets, not code blocks — before this alias set existed the JSON
+ * fell through to Block.CodeBlock, the transcript showed raw JSON, and the
+ * client's recovery path then drew a SAMPLE chart ("Item 1…4") on top of a
+ * perfectly good payload. Same widget, same renderer, no data loss.
+ */
+val CHART_LANGUAGE_ALIASES = setOf(
+    "line", "area", "stackedarea", "bar", "hbar", "stacked", "pie", "donut",
+    "scatter", "bubble", "histogram", "funnel", "radar", "grouped", "boxplot",
+    "heatmap", "correlation", "treemap", "waterfall", "candlestick", "gantt", "chord"
+)
+
+/** Every fence language that opens a widget block (kinds + chart aliases). */
+val WIDGET_FENCE_LANGUAGES: Set<String> = WIDGET_LANGUAGES + CHART_LANGUAGE_ALIASES
+
+/**
+ * Canonical widget kind for a fence language, or null when the language is not
+ * a widget at all. Chart aliases collapse to "chart"; everything else is its
+ * own kind. This is the single place the mapping lives — the stream parser,
+ * the closed-fence router and the recovery guard all read it, so they can
+ * never disagree about what counts as a widget.
+ */
+fun widgetKindOf(language: String?): String? {
+    val lang = language?.lowercase() ?: return null
+    return when {
+        lang in WIDGET_LANGUAGES -> lang
+        lang in CHART_LANGUAGE_ALIASES -> "chart"
+        else -> null
+    }
+}
+
+/** `stackedarea` → `stackedArea`; every other alias is already canonical. */
+internal fun canonicalChartType(alias: String): String =
+    if (alias.equals("stackedarea", ignoreCase = true)) "stackedArea" else alias
+
+/**
+ * Inject the chart type implied by the fence into a payload that has none.
+ * A payload that already names its own `type` is left untouched — the model's
+ * explicit type beats the fence hint.
+ */
+internal fun injectChartType(json: String, alias: String): String {
+    if (json.contains("\"type\"")) return json
+    val brace = json.indexOf('{')
+    if (brace < 0) return json
+    val type = canonicalChartType(alias)
+    return json.substring(0, brace + 1) + "\"type\":\"" + type + "\"," + json.substring(brace + 1)
+}
+
+/**
  * Fence languages that carry an interactive HTML document (rendered in the
  * sandboxed WebView harness, HtmlBlockView.kt). Anything the native widget
  * set can't express — real controls, layouts, mini-apps — lives here.
@@ -388,14 +439,22 @@ val HTML_LANGUAGES = setOf("html", "htm", "web", "webapp", "app", "ui", "page", 
  *  any open fence, stays plain code. */
 private fun fenceToBlock(language: String?, code: String, open: Boolean, offset: Int): Block {
     val lang = language?.lowercase()
+    val kind = widgetKindOf(lang)
+    val isJson = code.trimStart().startsWith("{")
     return when {
         language.equals("mermaid", ignoreCase = true) && !open -> Block.MermaidBlock(code, offset)
         lang == "map" -> Block.HtmlBlock("map", code, open, offset)
         // Widget fences are JSON. A JSON-looking fence in a widget language wins
         // over the html fallback, so ```app can be either a widget payload or a
-        // full document without ambiguity.
-        lang != null && lang in WIDGET_LANGUAGES && code.trimStart().startsWith("{") ->
-            Block.WidgetBlock(lang, code, open, offset)
+        // full document without ambiguity. Chart sub-type fences (```funnel,
+        // ```gantt …) route here too, with the implied type injected.
+        kind != null && isJson ->
+            Block.WidgetBlock(
+                kind = kind,
+                json = if (kind == "chart" && lang != "chart") injectChartType(code, lang!!) else code,
+                open = open,
+                sourceStart = offset
+            )
         lang != null && lang in HTML_LANGUAGES -> Block.HtmlBlock("html", code, open, offset)
         else -> Block.CodeBlock(language, code, open, offset)
     }

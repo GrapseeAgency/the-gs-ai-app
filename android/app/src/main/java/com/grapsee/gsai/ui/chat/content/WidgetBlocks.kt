@@ -4,6 +4,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -33,9 +34,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
@@ -315,57 +318,179 @@ fun parseWidget(kind: String, json: String): Widget? {
 
 private val widgetShape = RoundedCornerShape(14.dp)
 
-/** Series palette: theme-accented first, then fixed hues that read on both themes. */
-@Composable
-internal fun seriesColor(i: Int): Color {
-    val c = GsTheme.colors
-    return when (i % 5) {
-        0 -> c.accent
-        1 -> c.success
-        2 -> c.warning
-        3 -> c.link
-        else -> c.toolExecution
-    }
+/**
+ * Twelve curated data hues, fixed rather than theme roles.
+ *
+ * The old palette cycled five semantic tokens (accent/success/warning/link/
+ * toolExecution) — so a two-series chart, a five-slice pie and a progress list
+ * all came out looking like the same chart, and every card on the screen shared
+ * one background. A fixed data palette keeps a series identifiable across
+ * light/dark and across widgets, which is what every production GENUI surface
+ * (OpenAI's Open-JSON-UI, Google A2UI, Vercel AI SDK) does: colour is DATA,
+ * carried by the payload, not by the container.
+ */
+internal object WidgetPalette {
+    private val hues = listOf(
+        0xFF4C6FFF, // 0 azure
+        0xFF0CA678, // 1 jade
+        0xFFF08C00, // 2 amber
+        0xFFE8590C, // 3 tangerine
+        0xFF9C36B5, // 4 orchid
+        0xFF1098AD, // 5 teal
+        0xFFD6336C, // 6 rose
+        0xFF6741D9, // 7 violet
+        0xFF66A80F, // 8 olive
+        0xFFE03131, // 9 crimson
+        0xFF0B7285, // 10 deep teal
+        0xFF5F3DC4  // 11 indigo
+    )
+
+    fun at(i: Int): Color = Color(hues[((i % hues.size) + hues.size) % hues.size])
+
+    /** True when the canvas is dark — hues get lifted so they stay legible. */
+    @Composable
+    fun onDarkCanvas(): Boolean = GsTheme.colors.appBackground.luminance() < 0.4f
+
+    /** Lift a hue on dark canvases: same identity, readable weight. */
+    fun legible(color: Color, dark: Boolean): Color =
+        if (!dark) color else Color(
+            red = color.red + (1f - color.red) * 0.30f,
+            green = color.green + (1f - color.green) * 0.30f,
+            blue = color.blue + (1f - color.blue) * 0.30f,
+            alpha = color.alpha
+        )
 }
 
+/** Series colour, index-stable and genuinely varied (12 hues, not 5). */
 @Composable
-internal fun WidgetCardShell(title: String, tag: String, action: (@Composable () -> Unit)? = null, content: @Composable () -> Unit) {
+internal fun seriesColor(i: Int): Color =
+    WidgetPalette.legible(WidgetPalette.at(i), WidgetPalette.onDarkCanvas())
+
+/**
+ * Surface treatment. Four tones instead of one flat card, so a chart, a KPI
+ * row, a progress list and a table never read as the same object.
+ */
+internal enum class CardTone {
+    /** Solid elevated surface — dense content (tables, cards, media). */
+    Plain,
+
+    /** Hue wash from the top + hairline — data visualisations. */
+    Tinted,
+
+    /** Stronger hue wash — hero numbers (stat, gauge). */
+    Hero,
+
+    /** No fill, hairline border — lists and quiet controls. */
+    Outline
+}
+
+/**
+ * Stable hue per widget family. Same kind → same identity, different kinds →
+ * different identity, with no per-call-site bookkeeping: the shell derives it
+ * from the tag, so all ~40 existing widget views gained a face at once.
+ */
+internal fun widgetHue(tag: String): Color {
+    val key = tag.lowercase()
+    val slot = FAMILY_SLOTS[key]
+    return if (slot != null) WidgetPalette.at(slot) else WidgetPalette.at(key.hashCode())
+}
+
+private val FAMILY_SLOTS = mapOf(
+    "chart" to 0, "stat" to 1, "gauge" to 2, "compare" to 3,
+    "progress" to 4, "timeline" to 5, "table" to 6, "quiz" to 7,
+    "form" to 8, "carousel" to 9, "cards" to 10, "followups" to 11,
+    "media" to 3, "actions" to 2, "panel" to 1, "voice" to 8,
+    "calc" to 9, "app" to 4
+)
+
+internal fun widgetTone(tag: String): CardTone = when (tag.lowercase()) {
+    "chart", "app", "calc", "form", "quiz", "carousel", "cards", "media" -> CardTone.Tinted
+    "stat", "gauge" -> CardTone.Hero
+    "progress", "timeline", "followups", "actions", "voice", "panel", "compare" -> CardTone.Outline
+    else -> CardTone.Plain
+}
+
+/**
+ * The one card surface. [hue] and [tone] default from [tag], so a view only
+ * passes them when it wants a specific identity (charts key off their type,
+ * compare keys off its two sides).
+ */
+@Composable
+internal fun WidgetCardShell(
+    title: String,
+    tag: String,
+    action: (@Composable () -> Unit)? = null,
+    hue: Color = widgetHue(tag),
+    tone: CardTone = widgetTone(tag),
+    content: @Composable () -> Unit
+) {
     val c = GsTheme.colors
+    val dark = WidgetPalette.onDarkCanvas()
+    val accent = WidgetPalette.legible(hue, dark)
+    val base = c.elevatedSurface
+    val clear = Color.Transparent
+    val fill: Brush = when (tone) {
+        CardTone.Plain -> Brush.verticalGradient(listOf(base, base))
+        CardTone.Outline -> Brush.verticalGradient(listOf(clear, clear))
+        CardTone.Tinted -> Brush.verticalGradient(
+            listOf(accent.copy(alpha = if (dark) 0.16f else 0.10f), base, base)
+        )
+        CardTone.Hero -> Brush.verticalGradient(
+            listOf(accent.copy(alpha = if (dark) 0.26f else 0.18f), base, base)
+        )
+    }
+    val edge = when (tone) {
+        CardTone.Outline -> c.divider
+        CardTone.Plain -> c.border.copy(alpha = 0.55f)
+        else -> accent.copy(alpha = if (dark) 0.32f else 0.22f)
+    }
     Column(
         Modifier
             .fillMaxWidth()
             .clip(widgetShape)
-            .background(c.elevatedSurface)
-            .padding(horizontal = 14.dp, vertical = 12.dp)
+            .background(fill)
+            .border(1.dp, edge, widgetShape)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (title.isNotEmpty()) {
-                Text(
-                    title,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = c.textPrimary,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
-            } else {
-                Box(Modifier.weight(1f))
-            }
-            if (action != null) {
-                Box(Modifier.padding(end = 8.dp)) { action() }
-            }
-            Text(
-                tag.uppercase(),
-                style = MaterialTheme.typography.labelSmall,
-                color = c.textTertiary,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(99.dp))
-                    .background(c.raisedSurface)
-                    .padding(horizontal = 8.dp, vertical = 2.dp)
+        // Two-pixel hue hairline: the cheapest way to give every family a face
+        // without touching a single chart renderer.
+        if (tone == CardTone.Tinted || tone == CardTone.Hero) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(2.dp)
+                    .background(Brush.horizontalGradient(listOf(accent, accent.copy(alpha = 0.10f))))
             )
         }
-        content()
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (title.isNotEmpty()) {
+                    Text(
+                        title,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = c.textPrimary,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                } else {
+                    Box(Modifier.weight(1f))
+                }
+                if (action != null) {
+                    Box(Modifier.padding(end = 8.dp)) { action() }
+                }
+                Text(
+                    tag.uppercase(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = accent,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(99.dp))
+                        .background(accent.copy(alpha = if (dark) 0.20f else 0.12f))
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                )
+            }
+            content()
+        }
     }
 }
 
@@ -440,9 +565,31 @@ fun WidgetView(widget: Widget, onSendPrompt: ((String) -> Unit)? = null) {
 
 // --- chart ------------------------------------------------------------------
 
+/**
+ * Each chart SUB-TYPE gets its own hue, so a transcript with a bar chart, a
+ * funnel and a heatmap reads as three different objects instead of three
+ * copies of one grey card. Data series still use the shared 12-hue palette —
+ * the identity is on the container, the meaning stays in the data.
+ */
+private val CHART_HUE_SLOTS = mapOf(
+    "bar" to 0, "hbar" to 0, "grouped" to 0, "stacked" to 0,
+    "line" to 1, "histogram" to 2, "boxplot" to 2,
+    "funnel" to 3, "pie" to 4, "donut" to 4,
+    "area" to 5, "stackedArea" to 5, "gantt" to 5,
+    "scatter" to 6, "bubble" to 6,
+    "radar" to 7, "chord" to 7,
+    "waterfall" to 8, "heatmap" to 9, "correlation" to 9,
+    "treemap" to 10, "candlestick" to 11
+)
+
 @Composable
 private fun ChartWidgetView(w: ChartWidget) {
-    WidgetCardShell(w.title.ifEmpty { "Chart" }, "chart") {
+    WidgetCardShell(
+        w.title.ifEmpty { "Chart" },
+        "chart",
+        hue = WidgetPalette.at(CHART_HUE_SLOTS[w.type] ?: 0),
+        tone = CardTone.Tinted
+    ) {
         when (w.type) {
             "bar", "histogram" -> BarChart(w)
             "pie" -> PieChart(w)
@@ -633,9 +780,12 @@ private fun PieChart(w: ChartWidget) {
     var animate by remember { mutableStateOf(false) }
     LaunchedEffect(w) { animate = true }
     val progress by animateFloatAsState(if (animate) 1f else 0f, tween(700), label = "chart")
-    val colors = w.series.indices.map { seriesColor(it) }
     // pie uses series[*].data[0] as (labelIndex, value); or name + single value
     val slices = remember(w.series, w.labels) { pieSlices(w) }
+    // Colours key off SLICES, not series: the common shape is ONE series with
+    // one point per slice, so keying off `series.indices` gave every slice the
+    // same colour — a five-slice pie that looked like a single-colour disc.
+    val colors = slices.indices.map { seriesColor(it) }
     val total = slices.sumOf { it.second.toDouble() }.toFloat().takeIf { it > 0f } ?: 1f
     Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Canvas(Modifier.size(140.dp)) {
@@ -666,19 +816,31 @@ private fun PieChart(w: ChartWidget) {
 
 @Composable
 private fun StatWidgetView(w: StatWidget) {
+    val c = GsTheme.colors
+    val dark = WidgetPalette.onDarkCanvas()
     WidgetCardShell(w.title.ifEmpty { "Stats" }, "stat") {
-        Row(Modifier.horizontalScroll(rememberScrollState()).padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            w.cards.forEach { card ->
-                val c = GsTheme.colors
+        Row(
+            Modifier.horizontalScroll(rememberScrollState()).padding(top = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            w.cards.forEachIndexed { i, card ->
+                // One hue per card: a KPI row should look like a row of
+                // different numbers, not four identical grey boxes.
+                val accent = WidgetPalette.legible(WidgetPalette.at(i), dark)
                 Column(
                     Modifier
                         .clip(RoundedCornerShape(12.dp))
-                        .background(c.surface)
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(accent.copy(alpha = if (dark) 0.22f else 0.14f), c.surface)
+                            )
+                        )
+                        .border(1.dp, accent.copy(alpha = if (dark) 0.34f else 0.22f), RoundedCornerShape(12.dp))
                         .padding(horizontal = 14.dp, vertical = 10.dp)
                         .width(130.dp)
                 ) {
                     Row(verticalAlignment = Alignment.Bottom) {
-                        Text(card.value, style = MaterialTheme.typography.titleLarge, color = c.textPrimary, fontWeight = FontWeight.Bold)
+                        Text(card.value, style = MaterialTheme.typography.titleLarge, color = accent, fontWeight = FontWeight.Bold)
                         if (card.unit.isNotEmpty()) {
                             Text(card.unit, style = MaterialTheme.typography.labelMedium, color = c.textSecondary, modifier = Modifier.padding(start = 3.dp, bottom = 2.dp))
                         }
@@ -814,21 +976,30 @@ private fun TableWidgetView(w: TableWidget) {
 
 @Composable
 private fun CompareWidgetView(w: CompareWidget) {
+    val c = GsTheme.colors
+    val dark = WidgetPalette.onDarkCanvas()
+    // Two opposing hues — the whole point of a comparison is that the sides are
+    // distinguishable at a glance, not that they share a card colour.
+    val hues = listOf(
+        WidgetPalette.legible(WidgetPalette.at(1), dark),
+        WidgetPalette.legible(WidgetPalette.at(3), dark)
+    )
     WidgetCardShell(w.title.ifEmpty { "Compare" }, "compare") {
         Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            listOf(w.left, w.right).forEach { side ->
-                val c = GsTheme.colors
+            listOf(w.left, w.right).forEachIndexed { i, side ->
+                val accent = hues[i]
                 Column(
                     Modifier
                         .weight(1f)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(c.surface)
+                        .background(accent.copy(alpha = if (dark) 0.14f else 0.08f))
+                        .border(1.dp, accent.copy(alpha = if (dark) 0.28f else 0.18f), RoundedCornerShape(12.dp))
                         .padding(12.dp)
                 ) {
-                    Text(side.title, style = MaterialTheme.typography.labelLarge, color = c.textPrimary, fontWeight = FontWeight.SemiBold)
+                    Text(side.title, style = MaterialTheme.typography.labelLarge, color = accent, fontWeight = FontWeight.SemiBold)
                     side.items.forEach { item ->
                         Row(Modifier.padding(top = 6.dp)) {
-                            Text("•", color = c.accent, modifier = Modifier.padding(end = 6.dp))
+                            Text("•", color = accent, modifier = Modifier.padding(end = 6.dp))
                             Text(item, style = MaterialTheme.typography.bodySmall, color = c.textSecondary)
                         }
                     }

@@ -146,3 +146,51 @@ the model, and the model can be swapped without touching the renderers.
 
 That is the whole difference between "we asked the model nicely" and
 "the model cannot ship something we cannot render".
+
+## 7. Fence routing: one canonical language set (v0.81.7)
+
+Models do not only emit ```chart. They emit the **sub-type as the fence
+language** — ```funnel, ```gantt, ```heatmap, ```stackedarea — with the type
+implied by the fence. That is a valid, common shape, and both clients used to
+treat it as an unknown language:
+
+1. the fence fell through to `Block.CodeBlock`, so the transcript showed raw JSON;
+2. the recovery pass then saw "no widget" and drew a *sample* chart
+   ("Item 1…4") **underneath a payload that was already correct**.
+
+The fix is a single mapping, not a per-site patch:
+
+| Layer | Symbol | Behaviour |
+| --- | --- | --- |
+| Android | `ContentBlocks.widgetKindOf()` | alias → `chart`, kind → itself, else `null` |
+| Android | `injectChartType()` | adds `"type"` when the payload omits it; an explicit type always wins |
+| Android | `WidgetRecovery.widgetFence` | built **from** `WIDGET_FENCE_LANGUAGES`, so it cannot drift |
+| Backend | `catalog.widgetKindOf()` / `injectChartType()` | same mapping; the persisted answer is rewritten to canonical ```chart |
+| Backend | `validate.extractWidgetFences()` | normalises alias fences before validation |
+
+`stackedarea` → `stackedArea` is the only case where the alias is not already
+the canonical spelling.
+
+## 8. Visual identity is derived, not requested (v0.81.7)
+
+The prompt cannot make 150 widget kinds look different — the renderer has to.
+Three derivations, all stable and all in the client:
+
+- **Palette.** `WidgetPalette` holds 12 fixed data hues instead of cycling five
+  theme roles (`accent/success/warning/link/toolExecution`). Colour is data;
+  a series keeps its identity across light/dark and across widgets.
+- **Card tone.** `widgetTone(tag)` picks one of four surfaces — `Plain` (dense
+  content), `Tinted` (charts), `Hero` (KPI/gauge), `Outline` (lists). Every
+  existing view inherits it from its tag, with no per-call-site bookkeeping.
+- **Card hue.** `widgetHue(tag)` gives each family its own hue, and charts
+  further key off their **sub-type** (`CHART_HUE_SLOTS`), so a bar chart, a
+  funnel and a heatmap in one answer read as three different objects.
+
+One real rendering bug fell out of this work: pie and donut keyed slice colours
+off `series.indices`. The common payload is **one** series holding one point per
+slice, so `colors.size == 1` and every slice was painted the same colour — a
+five-slice pie that looked like a single-colour disc. Both now key off
+`slices.indices`.
+
+Verified by `WidgetPaletteTest` (12 distinct hues, stable cycle, 12 distinct
+family hues, four distinct tones) and `ChartFenceRoutingTest` (9 routing cases).
