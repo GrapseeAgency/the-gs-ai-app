@@ -158,7 +158,7 @@ class WidgetBlocksTest {
         val types = listOf(
             "line", "area", "stackedArea", "bar", "hbar", "stacked", "grouped",
             "pie", "donut", "scatter", "bubble", "histogram", "boxplot", "heatmap",
-            "correlation", "treemap", "waterfall", "candlestick", "gantt", "funnel", "radar"
+            "correlation", "treemap", "waterfall", "candlestick", "gantt", "funnel", "radar", "chord"
         )
         assertEquals(CHART_TYPES, types.toSet())
         for (type in types) {

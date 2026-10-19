@@ -65,7 +65,7 @@ Status: `done` = shipped in v0.80.0 · `partial` = works with a caveat · `plann
 | 42 | Funnel charts | `chart` funnel | done |
 | 43 | Gauge charts | `gauge` | done |
 | 44 | Sankey diagrams | mermaid `sankey-beta` | done |
-| 45 | Chord diagrams | `html` (d3 chord) | partial — no native chord renderer |
+| 45 | Chord diagrams | `chart` type=chord | done |
 | 46 | Network graphs | mermaid flowchart / `html` | done |
 | 47 | Geographical data visualizations | `map` | done |
 | 48 | Statistical plots | `chart` boxplot / histogram | done |
@@ -209,13 +209,13 @@ native widgets where that is simpler and more robust.
 
 | Status | Count |
 |--------|-------|
-| done (native renderer / mermaid / map / html) | 149 |
-| partial (stated caveat) | 1 |
+| done (native renderer / mermaid / map / html) | 150 |
+| partial (stated caveat) | 0 |
 | planned | 0 |
 | **total** | **150** |
 
-149 of 150 items have a dedicated route. The one partial is the chord
-diagram, which has no native renderer (it needs a custom d3 document). The remaining limits are
+All 150 items have a dedicated route. Nothing is left on the html
+fallback except the categories that are custom HTML by definition. The remaining limits are
 platform facts, not missing widgets, and each is stated in-product rather than
 hidden:
 

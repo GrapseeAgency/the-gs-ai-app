@@ -36,11 +36,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.ui.theme.GsTheme
 import kotlin.math.ceil
+import kotlin.math.cos
 import kotlin.math.floor
+import kotlin.math.sin
 
 // --- shared ------------------------------------------------------------------
 
@@ -390,6 +393,122 @@ internal fun GanttChart(w: ChartWidget) {
                     )
                     Spacer(Modifier.weight(rest))
                 }
+            }
+        }
+    }
+}
+
+// --- chord diagram -----------------------------------------------------------
+
+/**
+ * Chord diagram. `labels` are the nodes; each series is a source node and its
+ * points are `[targetIndex, flow]`. Arcs are sized by each node's total flow and
+ * ribbons connect the two ends of every flow.
+ */
+@Composable
+internal fun ChordChart(w: ChartWidget) {
+    val c = GsTheme.colors
+    val nodes = w.labels.take(10)
+    if (nodes.size < 2) {
+        Text("Chord needs at least two labels", style = MaterialTheme.typography.bodySmall, color = c.textTertiary)
+        return
+    }
+    val flows = ArrayList<Triple<Int, Int, Float>>()
+    w.series.take(nodes.size).forEachIndexed { si, s ->
+        s.data.forEach { p ->
+            val target = p.getOrNull(0)?.toInt() ?: return@forEach
+            val value = p.getOrNull(1) ?: 0f
+            if (target in nodes.indices && target != si && value > 0f) {
+                flows += Triple(si, target, value)
+            }
+        }
+    }
+    if (flows.isEmpty()) {
+        Text("No flows to draw", style = MaterialTheme.typography.bodySmall, color = c.textTertiary)
+        return
+    }
+    val colors = nodes.indices.map { seriesColor(it) }
+    val totals = FloatArray(nodes.size)
+    flows.forEach { (a, b, v) ->
+        totals[a] += v
+        totals[b] += v
+    }
+
+    Box(Modifier.fillMaxWidth().height(240.dp), contentAlignment = Alignment.Center) {
+        Canvas(Modifier.fillMaxWidth().height(240.dp)) {
+            val center = Offset(size.width / 2f, size.height / 2f)
+            val radius = minOf(size.width, size.height) / 2f * 0.78f
+            val gap = 0.05f
+            val total = totals.sum().takeIf { it > 0f } ?: return@Canvas
+            val free = (2f * Math.PI.toFloat()) - gap * nodes.size
+            val start = -Math.PI.toFloat() / 2f
+            val nodeStart = FloatArray(nodes.size)
+            val nodeSweep = FloatArray(nodes.size)
+            var cursor = start
+            nodes.indices.forEach { i ->
+                nodeStart[i] = cursor
+                nodeSweep[i] = free * (totals[i] / total)
+                cursor += nodeSweep[i] + gap
+            }
+
+            fun point(angle: Float): Offset =
+                Offset(center.x + radius * cos(angle), center.y + radius * sin(angle))
+
+            // Outer arcs.
+            nodes.indices.forEach { i ->
+                drawArc(
+                    color = colors[i],
+                    startAngle = Math.toDegrees(nodeStart[i].toDouble()).toFloat(),
+                    sweepAngle = Math.toDegrees(nodeSweep[i].toDouble()).toFloat(),
+                    useCenter = false,
+                    topLeft = Offset(center.x - radius, center.y - radius),
+                    size = Size(radius * 2f, radius * 2f),
+                    style = Stroke(width = 7f)
+                )
+            }
+
+            // Ribbons, allocated in flow order on both ends.
+            val cursorA = nodeStart.copyOf()
+            val cursorB = nodeStart.copyOf()
+            flows.forEach { (a, b, v) ->
+                val wa = nodeSweep[a] * (v / totals[a].coerceAtLeast(1e-6f))
+                val wb = nodeSweep[b] * (v / totals[b].coerceAtLeast(1e-6f))
+                val a0 = cursorA[a]
+                val a1 = a0 + wa
+                val b0 = cursorB[b]
+                val b1 = b0 + wb
+                cursorA[a] = a1
+                cursorB[b] = b1
+
+                val path = androidx.compose.ui.graphics.Path().apply {
+                    val p0 = point(a0)
+                    moveTo(p0.x, p0.y)
+                    cubicTo(center.x, center.y, center.x, center.y, point(b0).x, point(b0).y)
+                    // Short arc along the target node.
+                    val steps = 4
+                    for (s in 1..steps) {
+                        val p = point(b0 + (b1 - b0) * s / steps)
+                        lineTo(p.x, p.y)
+                    }
+                    cubicTo(center.x, center.y, center.x, center.y, point(a1).x, point(a1).y)
+                    close()
+                }
+                drawPath(path, color = colors[a].copy(alpha = 0.34f))
+            }
+        }
+    }
+
+    Column(Modifier.padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        nodes.forEachIndexed { i, label ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.width(8.dp).height(8.dp).clip(RoundedCornerShape(2.dp)).background(colors[i]))
+                Text(
+                    "  $label",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = c.textSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
     }

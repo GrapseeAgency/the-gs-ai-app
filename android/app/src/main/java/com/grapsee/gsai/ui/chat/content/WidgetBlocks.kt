@@ -78,7 +78,7 @@ internal val CHART_TYPES = setOf(
     "line", "area", "stackedArea", "bar", "hbar", "stacked", "pie", "donut",
     "scatter", "bubble", "histogram", "funnel", "radar",
     "grouped", "boxplot", "heatmap", "correlation", "treemap", "waterfall",
-    "candlestick", "gantt"
+    "candlestick", "gantt", "chord"
 )
 
 @Serializable
@@ -458,10 +458,11 @@ private fun ChartWidgetView(w: ChartWidget) {
             "waterfall" -> WaterfallChart(w)
             "candlestick" -> CandlestickChart(w)
             "gantt" -> GanttChart(w)
+            "chord" -> ChordChart(w)
             else -> LineChart(w, filled = w.type == "area")
         }
         if (w.series.size > 1 && w.type !in setOf(
-                "pie", "donut", "funnel", "radar", "hbar",
+                "pie", "donut", "funnel", "radar", "hbar", "chord",
                 "heatmap", "correlation", "treemap", "waterfall", "candlestick", "gantt"
             )
         ) {
