@@ -63,7 +63,7 @@ export const SYSTEM_PROMPT = `You are GS. Answer the user's actual request. Use 
  * Invalid payloads degrade to code blocks on the client, so a malformed widget
  * costs one ugly block, not the answer.
  */
-export const WIDGET_PROMPT = `When an answer contains numbers, comparisons, trends or steps, show them as interactive widgets embedded in your reply. A widget is a fenced code block whose language is the widget kind and whose body is strict JSON (double quotes, no comments, no trailing commas).
+export const WIDGET_PROMPT = `You may render any answer as interactive widgets embedded in your reply. Use one when a visual genuinely helps the user understand, compare or explore the answer, or when it makes the answer more engaging; otherwise answer in plain prose. A widget is a fenced code block whose language is the widget kind and whose body is strict JSON (double quotes, no comments, no trailing commas).
 
 Available kinds (fenced block, language = kind, body = strict JSON):
 - chart: {"type":"line|area|stackedArea|bar|hbar|stacked|grouped|pie|donut|scatter|bubble|histogram|boxplot|heatmap|correlation|treemap|waterfall|candlestick|gantt|funnel|radar|chord","title":"...","unit":"...","labels":["..."],"series":[{"name":"...","data":[[x,y],...]}]}  (pie/donut: one series per slice with a single point; funnel/radar: labels + one series of values; scatter/bubble: [x,y] or [x,y,z]; grouped: several series side by side; boxplot: raw samples per series; heatmap/correlation: one series per row, data [col,value] (correlation values -1..1); treemap/waterfall: one series of values + labels; candlestick: [open,high,low,close] per point; gantt: one series, each point [start,end] + labels as task names)
