@@ -96,6 +96,7 @@ export function inferWidgetKind(json: string): WidgetKind | null {
   if (has('prompts')) candidates.push('followups')
   if (has('buttons')) candidates.push('actions')
   if (has('items')) candidates.push('progress', 'gauge', 'carousel', 'app', 'media')
+  if (has('pages')) candidates.push('media')
   if (has('steps') || has('groups')) candidates.push('app')
   for (const kind of candidates) {
     if (validateWidget(kind, json).ok) return kind
@@ -585,11 +586,23 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
 
   media: (p) => {
     let repaired = false
-    let type = asString(p.type, 'image')
-    if (!(MEDIA_TYPES as readonly string[]).includes(type)) {
-      type = 'image'
-      repaired = true
-    }
+    // {"title":…,"pages":[{"page":1,"text":…}]} — a document body. The live
+    // model emits exactly this for a ```pdf request: no items, no urls, the
+    // pages ARE the document. Rejecting it shipped nothing at all.
+    const pages = asArray(p.pages)
+      .map((x) => (x && typeof x === 'object' ? (x as Record<string, unknown>) : {}))
+      .map((o) => ({ page: asNumber(o.page) ?? 0, text: asString(o.text) }))
+      .filter((x) => x.text.trim().length > 0)
+      .slice(0, 20)
+    const stated = asString(p.type, '')
+    let type = (MEDIA_TYPES as readonly string[]).includes(stated)
+      ? stated
+      : // A typeless payload that carries pages IS a document; typeless with
+        // anything else stays an image, the historical default.
+        stated === '' && pages.length > 0
+        ? 'pdf'
+        : 'image'
+    if (!(MEDIA_TYPES as readonly string[]).includes(stated)) repaired = true
     // {"type":"image","url":"https://…"} — a single item, not wrapped in items.
     const rawItems = asArray(p.items).length > 0
       ? asArray(p.items)
@@ -618,9 +631,9 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
       .slice(0, 20)
     const code = asString(p.code)
     const text = asString(p.text)
-    const ok = items.length > 0 || code.length > 0 || text.length > 0
+    const ok = items.length > 0 || code.length > 0 || text.length > 0 || pages.length > 0
     return {
-      widget: { type, title: asString(p.title), items, code, language: asString(p.language), text },
+      widget: { type, title: asString(p.title), items, code, language: asString(p.language), text, pages },
       errors: ok ? [] : ['media needs items, code or text'],
       repaired,
     }

@@ -57,6 +57,34 @@ class SubtypeFenceTest {
         assertTrue(w.json.contains("\"type\":\"pdf\""))
     }
 
+    // THE LIVE PDF PAYLOAD (probe 2026-10-20): the server answers a ```pdf
+    // request with {"title":…,"pages":[{"page":1,"text":…}]} — no type, no
+    // item URLs. The parser used to drop it ("No document").
+    @Test
+    fun `a live pdf page body parses as a document`() {
+        val w = widgetOf(
+            "```pdf\n{\"title\":\"Lease agreement\",\"pages\":[" +
+                "{\"page\":1,\"text\":\"LEASE AGREEMENT between the parties.\"}," +
+                "{\"page\":2,\"text\":\"RENT is due on the first day.\"}]}\n```"
+        )
+        assertEquals("media", w.kind)
+        assertTrue(w.json.contains("\"type\":\"pdf\""))
+        val parsed = parseWidget(w.kind, w.json)
+        assertNotNull("the live pdf payload must parse", parsed)
+        val media = (parsed as Widget.Media).w
+        assertEquals("doc", media.type)
+        assertEquals(2, media.pages.size)
+        assertEquals(1, media.pages[0].page)
+        assertTrue(media.pages[1].text.contains("RENT"))
+    }
+
+    @Test
+    fun `a bare pages payload is promoted to a document`() {
+        val json = "{\"title\":\"Memo\",\"pages\":[{\"page\":1,\"text\":\"Page one body.\"}]}"
+        assertEquals("media", inferWidgetKind(json))
+        assertNotNull(parseWidget("media", json))
+    }
+
     @Test
     fun `an explicit type wins over the fence`() {
         val w = widgetOf("```kanban\n{\"type\":\"calendar\",\"items\":[]}\n```")

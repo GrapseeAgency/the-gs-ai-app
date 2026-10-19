@@ -5,7 +5,7 @@
  *   node /tmp/wt/scripts/test-widget-compiler.js
  */
 import { compileWidgets } from '../src/lib/widgets/compile'
-import { validateWidget, extractWidgetFences, repairJson, validationErrors } from '../src/lib/widgets/validate'
+import { validateWidget, extractWidgetFences, repairJson, validationErrors, inferWidgetKind } from '../src/lib/widgets/validate'
 import { toolCallToFence } from '../src/lib/widgets/tools'
 import { WIDGET_PROMPT } from '../src/lib/widgets/prompt'
 import { WIDGET_KINDS, CHART_TYPES, MEDIA_TYPES, CALC_TYPES, APP_TYPES, FORM_FIELD_TYPES, OTHER_RENDER_KINDS } from '../src/lib/widgets/catalog'
@@ -314,6 +314,30 @@ check('repairJson rejects garbage', repairJson('hello world') === null)
   const explicit = '```kanban\n{"type":"calendar","items":[]}\n```'
   const h = extractWidgetFences(explicit)[0]
   check('an explicit type wins', h?.json.includes('"type":"calendar"') === true && !h.json.includes('kanban'))
+}
+
+// 25. THE LIVE PDF PAYLOAD (probe 2026-10-20). The server sends
+// {"title":…,"pages":[{"page":1,"text":…}]} with no type and no items. The
+// validator used to answer "media needs items, code or text" and the widget
+// shipped as nothing. Verified against the real bytes from the live server.
+{
+  const live = '```pdf\n' +
+    '{"title":"Lease agreement","pages":[{"page":1,"text":"LEASE AGREEMENT between the parties."},' +
+    '{"page":2,"text":"RENT is due on the first day of each month."},' +
+    '{"page":3,"text":"EXHIBIT A property condition report."}]}\n```'
+  const f = extractWidgetFences(live)[0]
+  check('live pdf fence is a media widget', f?.kind === 'media', JSON.stringify(f))
+  const r = validateWidget('media', f!.json)
+  check('live pdf pages validate', r.ok && (r as any).widget.pages.length === 3, r.ok ? '' : JSON.stringify((r as any).errors))
+  check('live pdf type is pdf', r.ok && (r as any).widget.type === 'pdf')
+  const c = compileWidgets({ reply: live, userPrompt: 'a pdf preview' })
+  check('live pdf survives the compiler', c.widgets === 1 && c.errors.length === 0, c.errors.join(','))
+
+  // The same payload through the fence the clients see after normalisation,
+  // and the bare (unfenced) promotion path.
+  const bare = '{"title":"Memo","pages":[{"page":1,"text":"Page one body."}]}'
+  check('a bare pages payload is a document', validateWidget(inferWidgetKind(bare) ?? '', bare).ok)
+  check('bare pages become a pdf widget', (inferWidgetKind(bare) ?? '') === 'media')
 }
 
 console.log(`\n${passed} passed, ${failures.length} failed`)

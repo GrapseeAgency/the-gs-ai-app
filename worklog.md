@@ -5182,3 +5182,16 @@ Work Log:
 - RELEASE GATES: versionCode 113 / versionName 0.81.12, package com.grapsee.gsai, launchable MainActivity, NOT debuggable, native-code ×4 with libgs_ffi.so in all four ABIs, single dex, 65,633,341 bytes, cert SHA-256 b1ffd75d…8b1a483 (gs-live.keystore).
 - Note: commits 0eb28b5 (0.81.10) and 5912f9c (0.81.11) were never pushed, tagged or released; their content ships inside this APK and is covered by the v0.81.12 tag.
 - Backend deploy remains the operator's step: the live server still runs an older build, so the clock + rulebook reach devices only after it is deployed.
+
+---
+Task ID: genui-live-pdf-0.81.13
+Agent: main
+Task: Probe the live server for real widget payloads; fix whatever the shipped clients would drop.
+
+Work Log:
+- NEW scripts/live-widget-probe.ts (npm run probe:widgets): asks the live server for ten widgets by fence name, streams the SSE deltas, and checks each reply routes to a widget kind. 10/10 routed.
+- CAUGHT: the ```pdf reply is {"title":…,"pages":[{"page":1,"text":…}]} — and every layer answered "media needs items, code or text". The compiler dropped the fence; Android's DocList printed "No document" into the void. A live user asking for a document preview got raw JSON.
+- FIX (backend validate.ts): pages:[{page,text}] validates; typeless pages payload becomes pdf (not the image default); inferWidgetKind offers media for a pages key. Assertion block 25 pins the real live bytes: 58/58 green.
+- FIX (Android): MediaWidget.pages: List<DocPage>; parseWidget reads the stated type off the RAW JSON object (the data class default fills "image", so absence is invisible on the model — that trap cost one red test run); a doc with pages parses; DocList renders pages first with page numbers and a "+N more pages" note. SubtypeFenceTest pins the same payload.
+- NOTE: live server normalises ```loan → ```calc with type mortgage preserved, so the fence→kind mapping on the server side is already deployed; the pdf rejection was client-side (compiler) AND must-have been client-side on Android.
+- Still unverified: on-device render of a page body (unit tests cover parse only).

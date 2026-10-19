@@ -73,6 +73,13 @@ data class MediaItem(
     val mime: String = ""
 )
 
+/** One page of a document body (```pdf / ```document). */
+@Serializable
+data class DocPage(
+    val page: Int = 0,
+    val text: String = ""
+)
+
 @Serializable
 data class MediaWidget(
     /** image | gallery | video | audio | code | file | link | citation | search | entity | product | listing */
@@ -84,7 +91,10 @@ data class MediaWidget(
     /** code type: fence language, shown as a tag. */
     val language: String = "",
     /** code type: optional caption under the block. */
-    val text: String = ""
+    val text: String = "",
+    /** document/pdf type: the page bodies. The live model emits exactly this
+     *  shape ({"title":…,"pages":[{"page":1,"text":…}]}) with no item URLs. */
+    val pages: List<DocPage> = emptyList()
 )
 
 // --- helpers ----------------------------------------------------------------
@@ -162,7 +172,7 @@ fun MediaWidgetView(w: MediaWidget, onSendPrompt: ((String) -> Unit)? = null) {
             "entity" -> EntityList(w.items, onSendPrompt)
             "product" -> ProductList(w.items, onSendPrompt)
             "listing" -> ListingList(w.items, onSendPrompt)
-            "doc", "document", "pdf" -> DocList(w.items)
+            "doc", "document", "pdf" -> DocList(w.items, w.pages)
             else -> Text(
                 "Unsupported media type",
                 style = MaterialTheme.typography.bodySmall,
@@ -319,14 +329,42 @@ private fun AudioList(items: List<MediaItem>) {
 // --- documents --------------------------------------------------------------
 
 @Composable
-private fun DocList(items: List<MediaItem>) {
+private fun DocList(items: List<MediaItem>, pages: List<DocPage>) {
     val c = GsTheme.colors
+    val body = pages.filter { it.text.isNotBlank() }
     val docs = items.filter { it.url.isNotBlank() }
-    if (docs.isEmpty()) {
+    if (body.isEmpty() && docs.isEmpty()) {
         Text("No document", style = MaterialTheme.typography.bodySmall, color = c.textTertiary, modifier = Modifier.padding(top = 8.dp))
         return
     }
     Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        // A page body is the document itself — the live model answers a
+        // ```pdf request with {"title":…,"pages":[{"page":1,"text":…}]} and
+        // nothing else, so this is the primary path, not a fallback.
+        body.take(3).forEachIndexed { i, p ->
+            val n = if (p.page > 0) p.page else i + 1
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(c.raisedSurface).padding(12.dp)) {
+                Text(
+                    "Page $n",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = c.textTertiary,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    p.text.take(4000),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = c.textPrimary,
+                    modifier = Modifier.padding(top = 6.dp)
+                )
+            }
+        }
+        if (body.size > 3) {
+            Text(
+                "+${body.size - 3} more pages",
+                style = MaterialTheme.typography.labelSmall,
+                color = c.textTertiary
+            )
+        }
         docs.take(3).forEach { item ->
             DocumentPreviewView(
                 url = item.url,

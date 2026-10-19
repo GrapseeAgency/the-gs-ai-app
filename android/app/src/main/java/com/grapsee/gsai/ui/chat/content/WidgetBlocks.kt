@@ -325,18 +325,34 @@ fun parseWidget(kind: String, json: String): Widget? {
                 val prompts = w.prompts.take(12).filter { it.isNotBlank() }
                 if (prompts.isEmpty()) null else Widget.Followups(w.copy(prompts = prompts))
             }
-            "media" -> widgetJson.decodeFromString<MediaWidget>(json).let { w ->
-                val raw = w.type.lowercase()
-                val type = if (raw == "document" || raw == "pdf") "doc" else raw
-                if (type !in MEDIA_TYPES) null
-                else if (type == "code") {
-                    if (w.code.isBlank()) null else Widget.Media(w.copy(type = type))
-                } else if (type == "doc") {
-                    val items = w.items.take(3).filter { it.url.startsWith("https://") }
-                    if (items.isEmpty()) null else Widget.Media(w.copy(type = type, items = items))
-                } else {
-                    val items = w.items.take(20).filter { it.url.isNotBlank() || it.title.isNotBlank() }
-                    if (items.isEmpty()) null else Widget.Media(w.copy(type = type, items = items))
+            "media" -> {
+                // A payload with pages and no type at all is a document — the
+                // fence (or bare promotion) said so, the payload just omitted
+                // it. The data class default fills "image", so absence has to
+                // be read off the raw JSON object, never off the decoded model.
+                val statedType = (widgetJson.parseToJsonElement(json) as? JsonObject)
+                    ?.get("type")
+                    ?.let { it as? JsonPrimitive }
+                    ?.contentOrNull
+                    ?.lowercase()
+                widgetJson.decodeFromString<MediaWidget>(json).let { w ->
+                    val raw = statedType
+                        ?: if (w.pages.any { it.text.isNotBlank() }) "pdf" else "image"
+                    val type = if (raw == "document" || raw == "pdf") "doc" else raw
+                    if (type !in MEDIA_TYPES) null
+                    else if (type == "code") {
+                        if (w.code.isBlank()) null else Widget.Media(w.copy(type = type))
+                    } else if (type == "doc") {
+                        val items = w.items.take(3).filter { it.url.startsWith("https://") }
+                        // The live model answers a ```pdf request with a page body
+                        // and no URLs at all — that IS the document.
+                        val pages = w.pages.filter { it.text.isNotBlank() }
+                        if (items.isEmpty() && pages.isEmpty()) null
+                        else Widget.Media(w.copy(type = type, items = items, pages = pages))
+                    } else {
+                        val items = w.items.take(20).filter { it.url.isNotBlank() || it.title.isNotBlank() }
+                        if (items.isEmpty()) null else Widget.Media(w.copy(type = type, items = items))
+                    }
                 }
             }
             "actions" -> widgetJson.decodeFromString<ActionsWidget>(json).let { w ->
@@ -431,6 +447,7 @@ fun inferWidgetKind(json: String): String? {
         if ("items" in keys) {
             add("progress"); add("gauge"); add("carousel"); add("app"); add("media")
         }
+        if ("pages" in keys) add("media")
         if ("steps" in keys || "groups" in keys) add("app")
     }
     return candidates.firstOrNull { parseWidget(it, json) != null }

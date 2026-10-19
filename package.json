@@ -15,7 +15,8 @@
     "eval:graders": "bun scripts/test-eval-graders.ts",
     "eval:run": "bun scripts/run-eval-suite.ts --origin http://localhost:3000 --delay 12000 --merge-baseline tests/baseline-v1.json",
     "eval:run:ci": "bun scripts/run-eval-suite.ts --strict --github-annotations --jsonl eval-run.jsonl",
-    "test:widgets": "tsc scripts/test-widget-compiler.ts --outDir /tmp/wt --module commonjs --target es2020 --moduleResolution node --esModuleInterop --skipLibCheck && node /tmp/wt/scripts/test-widget-compiler.js"
+    "test:widgets": "tsc scripts/test-widget-compiler.ts --outDir /tmp/wt --module commonjs --target es2020 --moduleResolution node --esModuleInterop --skipLibCheck && node /tmp/wt/scripts/test-widget-compiler.js",
+    "probe:widgets": "tsc scripts/live-widget-probe.ts --outDir /tmp/wp --module commonjs --target es2020 --moduleResolution node --esModuleInterop --skipLibCheck --lib es2020,dom && node /tmp/wp/live-widget-probe.js"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

@@ -381,3 +381,32 @@ down a column can finally be compared. And the form widget's submit flow is
 confirmed end to end: fill → Submit → a summary the user reads → "Send as
 message" → `dispatch(text, echoUser = true)` — the widget does not fire a
 prompt the user never saw.
+
+## 16. The live PDF payload, and the probe that caught it (v0.81.13)
+
+`scripts/live-widget-probe.ts` asks the live server for ten widgets by fence
+name and routes the raw reply through the current rules. Ten out of ten came
+back fenced — but the ```pdf reply was **rejected**: the server answers a
+document request with
+
+```json
+{"title":"Lease agreement","pages":[{"page":1,"text":"LEASE AGREEMENT …"}]}
+```
+
+and every layer answered `media needs items, code or text`. A page body has no
+item URLs, so the widget shipped as **nothing**. The clients were equally
+empty: `DocList` filtered on `it.url.isNotBlank()` and printed "No document"
+into the void.
+
+The fix treats a page body as the document itself:
+
+- `validate.ts` — `pages:[{page,text}]` validates; a typeless payload that
+  carries pages becomes `pdf`, not `image`; `inferWidgetKind` offers `media`
+  for a bare `pages` key.
+- Android — `MediaWidget.pages: List<DocPage>`; a `doc` with pages parses;
+  `DocList` renders pages first (page number, body, `+N more pages`) and URL
+  documents after; a blank type plus pages means `pdf`.
+
+Verified end to end: the saved live bytes compile to one `media` widget with
+zero errors, assertions 25 in the backend suite lock it, and the Android side
+has the same payload pinned in `SubtypeFenceTest`.
