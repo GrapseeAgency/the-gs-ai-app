@@ -257,7 +257,9 @@ accepts two optional keys:
 { "type": "bar", "accent": "#E8590C", "variant": "hero", ... }
 ```
 
-`accent` is any `#RRGGBB`; `variant` is `plain | tinted | hero | outline`. On
+`accent` is any `#RRGGBB`; `variant` is
+`plain | tinted | hero | outline | editorial | inset` (the last two arrived in
+v0.81.17 — see §20). On
 Android they travel through `LocalWidgetStyle` (a `staticCompositionLocalOf`),
 so all ~40 widget views honour them without a parameter threaded through 18
 data classes. `seriesColor(0)` also follows the accent, otherwise the card
@@ -269,8 +271,8 @@ an animated explainer — the model emits a fenced `html` block and writes it
 itself; it runs in the existing sandboxed WebView. The prompt says this
 explicitly, because "nearly fits" is how answers end up looking generic.
 
-Verified by `WidgetStyleTest` (7 cases: hex parsing, alpha, invalid input,
-unknown variant, styled payload still parses).
+Verified by `WidgetStyleTest` (8 cases: hex parsing, alpha, invalid input,
+unknown and structural variants, styled payload still parses).
 
 ## 11. The theme reaches inside model-authored documents (v0.81.10)
 
@@ -466,3 +468,41 @@ finds new shapes) dropped two payloads:
 
 Both shapes are pinned in the suites (backend block 26, Android
 `SubtypeFenceTest`) and the probe was re-run to confirm the round.
+
+## 20. Art direction is enforced, not requested (v0.81.17)
+
+The v0.81.9 rulebook asked the model to vary the accent. A model can ignore a
+rulebook, and a weak one does: the live transcript showed reply after reply of
+the same tinted card. Two changes close that gap on the server and in the
+renderer, so variety no longer depends on the model remembering.
+
+**The compiler assigns a face.** `src/lib/widgets/art-direct.ts` runs inside
+`compileWidgets` for every accepted fence (and the deterministic fallback). It
+preserves a model-supplied `accent`/`variant`, otherwise derives them from the
+block's own text: a subject lexicon maps money, risk, health, growth and the
+like to three palette hues; the role picks the surface; the block above breaks
+ties. No two adjacent blocks can share an accent or a surface, and a derived
+accent is not reused from the previous turn. It is deterministic — the same
+reply compiles to the same colours — so tests, caches and replays are stable.
+
+**Two surfaces are structural, not tints.** `editorial` is not a card at all:
+transparent, square, a 2dp accent rule on the left, no tag pill. `inset` puts
+the content in a recessed panel inside the card. With the existing four, a
+reply can read as a figure, a KPI, a form and a table instead of four versions
+of one rectangle. Both are in `SURFACES`, the validator, the prompt and the
+Android `CardTone`; an older client that does not know them falls back to its
+family tone while still honouring the accent.
+
+**The tool schemas carry the same keys.** `render_chart`, `render_table`,
+`render_stat` and `render_widget` now require `accent` and `variant` (strict
+mode requires every declared property), so a future tool-calling provider does
+not silently drop the design.
+
+Guaranteed: once this backend is deployed, every fence carries a valid accent
+and surface, and adjacent blocks differ. Not guaranteed: that the live server
+runs this build — §5 still applies, and the prompt plus this pass ship together.
+The Android renderer changed in the same pass; it was reviewed statically here
+(no Android SDK on this workstation), and the Android CI workflow is the
+compile proof. The backend is verified by `npm run test:widgets`: 90 checks,
+including nineteen new art-direction and tool-style regressions (71 before this
+pass).

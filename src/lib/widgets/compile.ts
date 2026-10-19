@@ -27,6 +27,7 @@ import {
   type WidgetKind,
 } from './catalog'
 import { extractBareWidget, extractWidgetFences, validateWidget, validationErrors } from './validate'
+import { directWidgetArt, type ArtDirection } from './art-direct'
 
 export interface CompileInput {
   reply: string
@@ -103,6 +104,9 @@ export function compileWidgets(input: CompileInput): CompileResult {
   const valid: Array<{ start: number; end: number; replacement: string; repaired: boolean }> = []
   const invalid: Array<{ start: number; end: number }> = []
   const errors: string[] = []
+  // Tracks the block above so two adjacent widgets never share a face. The
+  // model's explicit accent/variant wins; this only breaks ties.
+  const directions: ArtDirection[] = []
 
   for (const fence of fences) {
     let result = validateWidget(fence.kind, fence.json)
@@ -115,10 +119,31 @@ export function compileWidgets(input: CompileInput): CompileResult {
       if (asTimeline.ok) result = asTimeline
     }
     if (result.ok) {
+      const payload = JSON.parse(result.json) as Record<string, unknown>
+      const direction = directWidgetArt({
+        kind: result.kind,
+        payload,
+        prior: directions.length > 0 ? directions[directions.length - 1] : null,
+        seen: directions,
+        priorText,
+      })
+      directions.push(direction)
+      const styled = JSON.stringify({
+        ...payload,
+        accent: direction.accent,
+        variant: direction.variant,
+      })
       valid.push({
         start: fence.start,
         end: fence.end,
-        replacement: fenceBlock(result.kind, result.json),
+        // Re-serialise with the guaranteed face. The style keys are validated
+        // upstream, so this is the one place that decides what the client sees.
+        // A payload already hugging the 64KB cap keeps its renderer default
+        // rather than overflow the client's own limit by forty bytes.
+        replacement: fenceBlock(
+          result.kind,
+          styled.length <= LIMITS.maxWidgetBytes ? styled : result.json
+        ),
         repaired: result.repaired,
       })
     } else {
@@ -153,9 +178,11 @@ export function compileWidgets(input: CompileInput): CompileResult {
   }
 
   const widget = buildChart(points, chartType)
+  const direction = directWidgetArt({ kind: 'chart', payload: widget, priorText })
+  const styled = { ...widget, accent: direction.accent, variant: direction.variant }
   const body = strip(reply, invalid).trimEnd()
   return {
-    text: `${body}${body ? '\n\n' : ''}${fenceBlock('chart', JSON.stringify(widget))}`,
+    text: `${body}${body ? '\n\n' : ''}${fenceBlock('chart', JSON.stringify(styled))}`,
     widgets: 1,
     path: 'fallback',
     errors,

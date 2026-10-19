@@ -132,8 +132,11 @@ class WidgetPaletteTest {
         assertEquals(CardTone.Tinted, widgetTone("chart"))
         assertEquals(CardTone.Hero, widgetTone("stat"))
         assertEquals(CardTone.Hero, widgetTone("gauge"))
+        assertEquals(CardTone.Inset, widgetTone("form"))
+        assertEquals(CardTone.Inset, widgetTone("app"))
+        assertEquals(CardTone.Editorial, widgetTone("timeline"))
+        assertEquals(CardTone.Editorial, widgetTone("panel"))
         assertEquals(CardTone.Outline, widgetTone("progress"))
-        assertEquals(CardTone.Outline, widgetTone("timeline"))
         assertEquals(CardTone.Plain, widgetTone("table"))
         assertNotEquals(widgetTone("chart"), widgetTone("stat"))
     }
@@ -280,6 +283,12 @@ class WidgetStyleTest {
     @Test
     fun `an unknown variant is ignored`() {
         assertNull(widgetStyleOf("""{"variant":"sparkly"}"""))
+    }
+
+    @Test
+    fun `the structural surfaces are read off the payload`() {
+        assertEquals(CardTone.Editorial, widgetStyleOf("""{"variant":"editorial"}""")?.tone)
+        assertEquals(CardTone.Inset, widgetStyleOf("""{"variant":"inset"}""")?.tone)
     }
 
     @Test

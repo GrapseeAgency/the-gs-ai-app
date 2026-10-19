@@ -14,6 +14,7 @@
  */
 
 import { APP_TYPES, CALC_TYPES, CHART_TYPES, MEDIA_TYPES } from './catalog'
+import { DATA_HUES, SURFACES } from '../design/rulebook'
 
 export interface JsonSchema {
   type: 'object'
@@ -27,6 +28,26 @@ export interface ToolDefinition {
   description: string
   input_schema: JsonSchema
 }
+
+/**
+ * Style keys shared by every render tool. In strict mode every property must
+ * be required, so these are not optional: a tool-calling provider must state
+ * the face, exactly like the prompt asks a fenced-block provider to.
+ */
+const STYLE_PROPERTIES = {
+  accent: {
+    type: 'string',
+    enum: [...DATA_HUES],
+    description: 'The hue for this block. Pick the one that fits the subject; never repeat the block above.',
+  },
+  variant: {
+    type: 'string',
+    enum: [...SURFACES],
+    description: 'The surface: hero KPI, tinted chart, editorial figure, inset form, outline list, plain table.',
+  },
+} as const
+
+const STYLE_REQUIRED = ['accent', 'variant'] as const
 
 const CHART_TOOL: ToolDefinition = {
   name: 'render_chart',
@@ -55,8 +76,9 @@ const CHART_TOOL: ToolDefinition = {
           additionalProperties: false,
         },
       },
+      ...STYLE_PROPERTIES,
     },
-    required: ['type', 'title', 'labels', 'series'],
+    required: ['type', 'title', 'labels', 'series', ...STYLE_REQUIRED],
     additionalProperties: false,
   },
 }
@@ -72,8 +94,9 @@ const TABLE_TOOL: ToolDefinition = {
       columns: { type: 'array', items: { type: 'string' } },
       rows: { type: 'array', items: { type: 'array', items: { type: 'string' } } },
       sortable: { type: 'boolean' },
+      ...STYLE_PROPERTIES,
     },
-    required: ['title', 'columns', 'rows'],
+    required: ['title', 'columns', 'rows', ...STYLE_REQUIRED],
     additionalProperties: false,
   },
 }
@@ -100,8 +123,9 @@ const STAT_TOOL: ToolDefinition = {
           additionalProperties: false,
         },
       },
+      ...STYLE_PROPERTIES,
     },
-    required: ['title', 'cards'],
+    required: ['title', 'cards', ...STYLE_REQUIRED],
     additionalProperties: false,
   },
 }
@@ -139,8 +163,9 @@ const WIDGET_TOOL: ToolDefinition = {
         type: 'string',
         enum: ['', ...MEDIA_TYPES, ...CALC_TYPES, ...APP_TYPES],
       },
+      ...STYLE_PROPERTIES,
     },
-    required: ['kind', 'payload'],
+    required: ['kind', 'payload', ...STYLE_REQUIRED],
     additionalProperties: false,
   },
 }
@@ -196,7 +221,13 @@ export function toolCallToFence(name: string, input: Record<string, unknown>): s
   if (!kind) return null
   const payload =
     name === 'render_widget' && typeof input.payload === 'object' && input.payload !== null
-      ? (input.payload as Record<string, unknown>)
+      ? {
+          ...(input.payload as Record<string, unknown>),
+          // Style is top-level on every tool; the client reads it inside the
+          // rendered payload, so fold it in on the way to the fence.
+          ...(typeof input.accent === 'string' ? { accent: input.accent } : {}),
+          ...(typeof input.variant === 'string' ? { variant: input.variant } : {}),
+        }
       : input
   return '```' + kind + '\n' + JSON.stringify(payload) + '\n```'
 }

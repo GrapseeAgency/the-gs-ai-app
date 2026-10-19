@@ -8,6 +8,8 @@ import { compileWidgets } from '../src/lib/widgets/compile'
 import { validateWidget, extractWidgetFences, repairJson, validationErrors, inferWidgetKind } from '../src/lib/widgets/validate'
 import { toolCallToFence } from '../src/lib/widgets/tools'
 import { WIDGET_PROMPT } from '../src/lib/widgets/prompt'
+import { directWidgetArt } from '../src/lib/widgets/art-direct'
+import { SURFACES } from '../src/lib/design/rulebook'
 import { WIDGET_KINDS, CHART_TYPES, MEDIA_TYPES, CALC_TYPES, APP_TYPES, FORM_FIELD_TYPES, OTHER_RENDER_KINDS } from '../src/lib/widgets/catalog'
 
 declare const process: { exit(code: number): never }
@@ -113,6 +115,30 @@ function check(name: string, condition: boolean, detail = '') {
   check('tool call → fence', fence !== null && fence.startsWith('```chart'))
 }
 
+// 10b. A tool call's style keys land inside the rendered payload, including
+// render_widget, where they sit beside `payload` on the wire.
+{
+  const chart = toolCallToFence('render_chart', {
+    type: 'bar',
+    title: 'T',
+    labels: ['a', 'b'],
+    series: [{ name: 'v', data: [[0, 1], [1, 2]] }],
+    accent: '#E03131',
+    variant: 'tinted',
+  })
+  const fromChart = JSON.parse(extractWidgetFences(chart!)[0].json) as Record<string, unknown>
+  check('tool style survives render_chart', fromChart.accent === '#E03131' && fromChart.variant === 'tinted')
+
+  const widget = toolCallToFence('render_widget', {
+    kind: 'stat',
+    payload: { title: 'T', cards: [{ label: 'a', value: '1' }] },
+    accent: '#0CA678',
+    variant: 'hero',
+  })
+  const fromWidget = JSON.parse(extractWidgetFences(widget!)[0].json) as Record<string, unknown>
+  check('tool style folds into render_widget', fromWidget.accent === '#0CA678' && fromWidget.variant === 'hero')
+}
+
 // 11. Bad JSON that cannot be repaired is dropped, not shipped.
 {
   const reply = '```chart\n{not json at all\n```'
@@ -216,6 +242,7 @@ check('repairJson rejects garbage', repairJson('hello world') === null)
   check('prompt declares the svg fence', /^- svg:/m.test(WIDGET_PROMPT))
   check('prompt names the theme tokens', WIDGET_PROMPT.includes('--gs-surface') && WIDGET_PROMPT.includes('--gs-hue-1'))
   check('prompt carries the art-direction keys', WIDGET_PROMPT.includes('"accent"') && WIDGET_PROMPT.includes('"variant"'))
+  check('prompt names every surface', SURFACES.every((surface) => WIDGET_PROMPT.includes(surface)), SURFACES.filter((s) => !WIDGET_PROMPT.includes(s)).join(','))
   check('prompt forbids emoji', /emoji/i.test(WIDGET_PROMPT))
 }
 
@@ -384,6 +411,102 @@ check('repairJson rejects garbage', repairJson('hello world') === null)
   check('the repaired calendar keeps both events', (c.text.match(/Team Meeting|Project Deadline/g) ?? []).length === 2, c.text.slice(0, 200))
   check('repairJson handles truncation', repairJson('{"title":"Memo","pages":[{"page":1') !== null)
   check('repairJson still rejects garbage', repairJson('hello world') === null)
+}
+
+// 27. Art direction is GUARANTEED, not requested. Three widgets the model left
+// unstyled still get three different faces, and no two adjacent blocks share an
+// accent or a surface. This is the "same card background" regression guard.
+{
+  const chart = '```chart\n' + JSON.stringify({
+    type: 'bar',
+    title: 'Revenue by quarter',
+    labels: ['Q1', 'Q2'],
+    series: [{ name: 'Revenue', data: [[0, 120], [1, 180]] }],
+  }) + '\n```'
+  const table = '```table\n' + JSON.stringify({
+    title: 'Costs',
+    columns: ['Item', 'Amount'],
+    rows: [['Hosting', '120']],
+  }) + '\n```'
+  const timeline = '```timeline\n' + JSON.stringify({
+    title: 'Launch plan',
+    entries: [{ date: '2026-11-02', title: 'Ship' }],
+  }) + '\n```'
+  const reply = `Revenue first.\n\n${chart}\n\nThen costs.\n\n${table}\n\nAnd the plan.\n\n${timeline}`
+  const r = compileWidgets({ reply, userPrompt: 'revenue and costs' })
+  const payloads = extractWidgetFences(r.text).map((f) => JSON.parse(f.json) as Record<string, unknown>)
+  check('three unstyled widgets compile', r.widgets === 3 && payloads.length === 3, `${r.widgets} ${r.errors.join(',')}`)
+  check('every widget gets an accent', payloads.every((p) => /^#[0-9a-f]{6}$/.test(String(p.accent))), payloads.map((p) => String(p.accent)).join(','))
+  check('every widget gets a surface', payloads.every((p) => (SURFACES as readonly string[]).includes(String(p.variant))), payloads.map((p) => String(p.variant)).join(','))
+  check('adjacent accents differ', payloads[0].accent !== payloads[1].accent && payloads[1].accent !== payloads[2].accent, payloads.map((p) => String(p.accent)).join(','))
+  check('adjacent surfaces differ', payloads[0].variant !== payloads[1].variant && payloads[1].variant !== payloads[2].variant, payloads.map((p) => String(p.variant)).join(','))
+  check('all three accents are distinct', new Set(payloads.map((p) => p.accent)).size === 3, payloads.map((p) => String(p.accent)).join(','))
+  check('all three surfaces are distinct', new Set(payloads.map((p) => p.variant)).size === 3, payloads.map((p) => String(p.variant)).join(','))
+}
+
+// 28. A deliberate model choice wins — the compiler only breaks a tie it can
+// see, it does not overrule the model's taste.
+{
+  const reply = '```stat\n' + JSON.stringify({
+    title: 'Churn',
+    accent: '#E03131',
+    variant: 'hero',
+    cards: [{ label: 'Churn', value: '4.2%' }],
+  }) + '\n```'
+  const r = compileWidgets({ reply, userPrompt: 'churn' })
+  const payload = JSON.parse(extractWidgetFences(r.text)[0].json) as Record<string, unknown>
+  check('model accent survives', payload.accent === '#e03131', String(payload.accent))
+  check('model surface survives', payload.variant === 'hero', String(payload.variant))
+}
+
+// 29. Determinism: the same reply always compiles to the same colours, so a
+// replay, a cache or a test never sees a different design.
+{
+  const reply = '```chart\n{"type":"bar","title":"Revenue","series":[{"name":"R","data":[[0,1],[1,2]]}]}\n```'
+  const a = compileWidgets({ reply, userPrompt: 'chart' })
+  const b = compileWidgets({ reply, userPrompt: 'chart' })
+  check('art direction is deterministic', a.text === b.text)
+}
+
+// 30. Subject fit: the derived hue reads the content, not a fixed slot.
+{
+  const money = directWidgetArt({ kind: 'chart', payload: { type: 'bar', title: 'Revenue and profit' } })
+  const risk = directWidgetArt({ kind: 'chart', payload: { type: 'bar', title: 'Customer churn and incidents' } })
+  check('money gets a money hue', ['#e8590c', '#f08c00', '#66a80f'].includes(money.accent), money.accent)
+  check('risk gets a risk hue', ['#e03131', '#d6336c', '#e8590c'].includes(risk.accent), risk.accent)
+}
+
+// 31. A new turn does not repeat the previous turn's derived palette.
+{
+  const prior = '```chart\n{"accent":"#E8590C","type":"bar"}\n```\n```chart\n{"accent":"#F08C00","type":"bar"}\n```'
+  const direction = directWidgetArt({ kind: 'chart', payload: { type: 'bar', title: 'Revenue' }, priorText: prior })
+  check('derived accent avoids the previous turn', !['#e8590c', '#f08c00'].includes(direction.accent), direction.accent)
+}
+
+// 32. When the previous turn burnt every hue in the subject family, the
+// fallback widens to the rest of the palette instead of replaying one of them.
+// Three money widgets in one answer can exhaust tangerine/amber/olive alone.
+{
+  const prior = [
+    '```chart\n{"accent":"#E8590C","type":"bar"}\n```',
+    '```chart\n{"accent":"#F08C00","type":"bar"}\n```',
+    '```chart\n{"accent":"#66A80F","type":"bar"}\n```',
+  ].join('\n')
+  const direction = directWidgetArt({ kind: 'chart', payload: { type: 'bar', title: 'Revenue' }, priorText: prior })
+  check(
+    'an exhausted subject family widens the palette',
+    !['#e8590c', '#f08c00', '#66a80f'].includes(direction.accent),
+    direction.accent
+  )
+}
+
+// 33. The validator carries the new surfaces and rejects invented ones, so a
+// typo never reaches a renderer that would silently ignore it.
+{
+  const withEditorial = validateWidget('chart', '{"type":"bar","title":"T","labels":["a","b"],"series":[{"name":"v","data":[[0,1],[1,2]]}],"variant":"editorial"}')
+  check('new surface survives validation', withEditorial.ok && withEditorial.widget.variant === 'editorial')
+  const withGlass = validateWidget('chart', '{"type":"bar","title":"T","labels":["a","b"],"series":[{"name":"v","data":[[0,1],[1,2]]}],"variant":"glass"}')
+  check('unknown surface is dropped', withGlass.ok && withGlass.widget.variant === undefined)
 }
 
 console.log(`\n${passed} passed, ${failures.length} failed`)

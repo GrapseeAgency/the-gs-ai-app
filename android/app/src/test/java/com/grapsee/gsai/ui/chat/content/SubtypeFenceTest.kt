@@ -201,33 +201,33 @@ class SubtypeFenceTest {
  *
  * media/calc/app views pass their sub-type as the tag, so the family table has
  * to resolve it — otherwise every calculator and every board silently lost its
- * tint and looked like a plain table.
+ * surface and looked like a plain table.
  */
 class WidgetFamilyToneTest {
 
     @Test
     fun `app subtypes resolve to the app family`() {
         assertEquals("app", widgetFamily("kanban"))
-        assertEquals(CardTone.Tinted, widgetTone("kanban"))
-        assertEquals(CardTone.Tinted, widgetTone("booking"))
+        assertEquals(CardTone.Inset, widgetTone("kanban"))
+        assertEquals(CardTone.Inset, widgetTone("booking"))
     }
 
     @Test
     fun `calc subtypes resolve to the calc family`() {
         assertEquals("calc", widgetFamily("mortgage"))
-        assertEquals(CardTone.Tinted, widgetTone("mortgage"))
+        assertEquals(CardTone.Inset, widgetTone("mortgage"))
     }
 
     @Test
     fun `media subtypes resolve to the media family`() {
         assertEquals("media", widgetFamily("pdf"))
-        assertEquals(CardTone.Tinted, widgetTone("pdf"))
+        assertEquals(CardTone.Plain, widgetTone("pdf"))
     }
 
     @Test
     fun `plain kinds keep their own tone`() {
         assertEquals(CardTone.Hero, widgetTone("stat"))
-        assertEquals(CardTone.Outline, widgetTone("timeline"))
+        assertEquals(CardTone.Editorial, widgetTone("timeline"))
         assertEquals(CardTone.Plain, widgetTone("table"))
         assertEquals(CardTone.Tinted, widgetTone("chart"))
     }

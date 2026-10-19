@@ -23,6 +23,7 @@ import {
   widgetKindOf,
   type WidgetKind,
 } from './catalog'
+import { SURFACES, type Surface } from '../design/rulebook'
 
 export interface WidgetFence {
   kind: string
@@ -333,7 +334,7 @@ export function validateWidget(kind: string, rawJson: string): ValidationResult 
     styled.accent = accent.startsWith('#') ? accent.toLowerCase() : `#${accent.toLowerCase()}`
   }
   const variant = typeof payload.variant === 'string' ? payload.variant.trim().toLowerCase() : ''
-  if (['plain', 'tinted', 'hero', 'outline'].includes(variant)) styled.variant = variant
+  if ((SURFACES as readonly string[]).includes(variant)) styled.variant = variant as Surface
 
   const json = JSON.stringify(styled)
   if (json.length > LIMITS.maxWidgetBytes) {

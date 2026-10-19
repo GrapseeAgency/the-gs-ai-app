@@ -35,6 +35,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -541,8 +542,9 @@ internal fun seriesColor(i: Int): Color {
 }
 
 /**
- * Surface treatment. Four tones instead of one flat card, so a chart, a KPI
- * row, a progress list and a table never read as the same object.
+ * Surface treatment. Six genuinely different faces, so a chart, a KPI, a form
+ * and a table never read as the same object. Editorial and Inset change the
+ * STRUCTURE — a left rule, an inner panel — not just the tint of one card.
  */
 internal enum class CardTone {
     /** Solid elevated surface — dense content (tables, cards, media). */
@@ -555,7 +557,13 @@ internal enum class CardTone {
     Hero,
 
     /** No fill, hairline border — lists and quiet controls. */
-    Outline
+    Outline,
+
+    /** No card at all: transparent with a 2dp accent rule on the left. */
+    Editorial,
+
+    /** A recessed panel inside the card — forms, quizzes, calculators, apps. */
+    Inset
 }
 
 /**
@@ -597,10 +605,22 @@ internal fun widgetFamily(tag: String): String {
 }
 
 internal fun widgetTone(tag: String): CardTone = when (widgetFamily(tag)) {
-    "chart", "app", "calc", "form", "quiz", "carousel", "cards", "media" -> CardTone.Tinted
+    "chart", "carousel" -> CardTone.Tinted
     "stat", "gauge" -> CardTone.Hero
-    "progress", "timeline", "followups", "actions", "voice", "panel", "compare" -> CardTone.Outline
-    else -> CardTone.Plain
+    "form", "quiz", "calc", "app" -> CardTone.Inset
+    "timeline", "panel" -> CardTone.Editorial
+    "table", "cards", "media" -> CardTone.Plain
+    else -> CardTone.Outline
+}
+
+/** Editorial is square, inset is rounder, everything else keeps the shared 14. */
+private val editorShape = RoundedCornerShape(0.dp)
+private val insetShape = RoundedCornerShape(16.dp)
+private val insetInnerShape = RoundedCornerShape(12.dp)
+private fun toneShape(tone: CardTone): RoundedCornerShape = when (tone) {
+    CardTone.Editorial -> editorShape
+    CardTone.Inset -> insetShape
+    else -> widgetShape
 }
 
 /**
@@ -638,6 +658,8 @@ internal fun widgetStyleOf(json: String): WidgetStyle? {
         "tinted" -> CardTone.Tinted
         "hero" -> CardTone.Hero
         "outline" -> CardTone.Outline
+        "editorial" -> CardTone.Editorial
+        "inset" -> CardTone.Inset
         else -> null
     }
     return if (accent == null && tone == null) null else WidgetStyle(accent, tone)
@@ -666,9 +688,10 @@ internal fun WidgetCardShell(
     val accent = WidgetPalette.legible(chosenHue, dark)
     val base = c.elevatedSurface
     val clear = Color.Transparent
+    val shape = toneShape(chosenTone)
     val fill: Brush = when (chosenTone) {
-        CardTone.Plain -> Brush.verticalGradient(listOf(base, base))
-        CardTone.Outline -> Brush.verticalGradient(listOf(clear, clear))
+        CardTone.Plain, CardTone.Inset -> Brush.verticalGradient(listOf(base, base))
+        CardTone.Outline, CardTone.Editorial -> Brush.verticalGradient(listOf(clear, clear))
         CardTone.Tinted -> Brush.verticalGradient(
             listOf(accent.copy(alpha = if (dark) 0.16f else 0.10f), base, base)
         )
@@ -678,15 +701,26 @@ internal fun WidgetCardShell(
     }
     val edge = when (chosenTone) {
         CardTone.Outline -> c.divider
-        CardTone.Plain -> c.border.copy(alpha = 0.55f)
+        CardTone.Plain, CardTone.Inset -> c.border.copy(alpha = 0.55f)
+        CardTone.Editorial -> clear
         else -> accent.copy(alpha = if (dark) 0.32f else 0.22f)
     }
     Column(
         Modifier
             .fillMaxWidth()
-            .clip(widgetShape)
+            .clip(shape)
             .background(fill)
-            .border(1.dp, edge, widgetShape)
+            // Editorial is not a card: a 2dp hue rule on the left edge IS the
+            // surface, so the block reads as a figure in the answer.
+            .then(
+                if (chosenTone == CardTone.Editorial) {
+                    Modifier.drawBehind {
+                        drawRect(color = accent, size = Size(2.dp.toPx(), size.height))
+                    }
+                } else {
+                    Modifier.border(1.dp, edge, shape)
+                }
+            )
     ) {
         // Two-pixel hue hairline: the cheapest way to give every family a face
         // without touching a single chart renderer.
@@ -720,13 +754,33 @@ internal fun WidgetCardShell(
                     tag.uppercase(),
                     style = MaterialTheme.typography.labelSmall,
                     color = accent,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(99.dp))
-                        .background(accent.copy(alpha = if (dark) 0.20f else 0.12f))
-                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                    modifier = if (chosenTone == CardTone.Editorial) {
+                        // Editorial has no pill: the tag is a quiet caption on
+                        // the rule, not another chip on another card.
+                        Modifier.padding(start = 8.dp)
+                    } else {
+                        Modifier
+                            .clip(RoundedCornerShape(99.dp))
+                            .background(accent.copy(alpha = if (dark) 0.20f else 0.12f))
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                    }
                 )
             }
-            content()
+            // Inset is a card inside a card: the content sits in its own
+            // recessed panel, so a form never reads as a chart with fields.
+            if (chosenTone == CardTone.Inset) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp)
+                        .clip(insetInnerShape)
+                        .background(c.raisedSurface)
+                        .border(1.dp, c.border.copy(alpha = 0.45f), insetInnerShape)
+                        .padding(10.dp)
+                ) { content() }
+            } else {
+                content()
+            }
         }
     }
 }
@@ -822,13 +876,16 @@ private val CHART_HUE_SLOTS = mapOf(
     "treemap" to 10, "candlestick" to 11
 )
 
+/** Charts that read better as a figure than as a filled card. */
+private val EDITORIAL_CHARTS = setOf("line", "area", "stackedArea", "scatter", "bubble", "candlestick")
+
 @Composable
 private fun ChartWidgetView(w: ChartWidget) {
     WidgetCardShell(
         w.title.ifEmpty { "Chart" },
         "chart",
         hue = WidgetPalette.at(CHART_HUE_SLOTS[w.type] ?: 0),
-        tone = CardTone.Tinted
+        tone = if (w.type in EDITORIAL_CHARTS) CardTone.Editorial else CardTone.Tinted
     ) {
         when (w.type) {
             "bar", "histogram" -> BarChart(w)

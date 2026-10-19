@@ -7,7 +7,7 @@
  * be importable from a plain node test.
  */
 
-import { DESIGN_RULEBOOK } from '../design/rulebook'
+import { DESIGN_REMINDER, DESIGN_RULEBOOK, SURFACES } from '../design/rulebook'
 
 export const WIDGET_PROMPT = `${DESIGN_RULEBOOK}
 
@@ -27,8 +27,15 @@ Choose the shape of the answer BEFORE choosing widgets:
 Every widget accepts two optional keys, and using them is the difference
 between "a card" and "designed":
 - "accent":"#hex"      the hue for this block (pick from the data hues above)
-- "variant":"plain|tinted|hero|outline"  the surface (tinted for charts, hero for
-  a KPI, outline for quiet lists, plain for dense tables)
+- "variant":"${SURFACES.join('|')}"  the surface. Pick by role: hero for one KPI,
+  tinted for charts, editorial for line/area charts, timelines and panels,
+  inset for forms/quizzes/calculators/app surfaces, outline for quiet lists,
+  plain for tables and media. Never repeat the surface directly above.
+
+When you omit either key the compiler assigns a role-appropriate default. Your
+explicit choice wins unless it repeats the block above — the compiler only
+breaks that tie, because two identical cards in a row is the one thing the
+reader always sees.
 
 Available kinds (fenced block, language = kind, body = strict JSON):
 - chart: {"type":"line|area|stackedArea|bar|hbar|stacked|grouped|pie|donut|scatter|bubble|histogram|boxplot|heatmap|correlation|treemap|waterfall|candlestick|gantt|funnel|radar|chord","title":"...","unit":"...","labels":["..."],"series":[{"name":"...","data":[[x,y],...]}]}  (pie/donut: one series per slice with a single point; funnel/radar: labels + one series of values; scatter/bubble: [x,y] or [x,y,z]; grouped: several series side by side; boxplot: raw samples per series; heatmap/correlation: one series per row, data [col,value] (correlation values -1..1); treemap/waterfall: one series of values + labels; candlestick: [open,high,low,close] per point; gantt: one series, each point [start,end] + labels as task names)
@@ -106,10 +113,13 @@ PRE-FLIGHT, before you finish the reply
 1. Does every fence body parse as JSON? No trailing comma, no comment, no
    single quotes, no ellipsis, no placeholder like "…".
 2. Is the data in the widget the same data as the prose? If not, fix the prose.
-3. Are there at most three widgets, and do two adjacent ones differ in accent?
+3. Are there at most three widgets, and do two adjacent ones differ in BOTH
+   accent and surface?
 4. Did you answer the question in prose as well, or does the reply open with a
    card and explain nothing? A widget is not an answer by itself.
 
 Never draw ASCII art, never draw bar charts with box characters, never put data in a plain code fence. Charts, tables and timelines exist ONLY as widget fences; a plain fence is for source code and nothing else.
 
-Rules: keep the surrounding prose — a widget supplements the answer, never replaces it. Prefer 1-3 widgets per answer and only when they genuinely help. If you are unsure the JSON is valid, write prose instead.`
+Rules: keep the surrounding prose — a widget supplements the answer, never replaces it. Prefer 1-3 widgets per answer and only when they genuinely help. If you are unsure the JSON is valid, write prose instead.
+
+${DESIGN_REMINDER}`

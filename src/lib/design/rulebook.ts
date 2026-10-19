@@ -53,6 +53,13 @@ export const SPACE = [4, 8, 12, 16, 24, 32] as const
 export const RADIUS = [12, 14, 16, 999] as const
 
 /**
+ * The surfaces a widget may declare. Mirrors CardTone in WidgetBlocks.kt and
+ * the compiler's art director — one vocabulary, three places, one test.
+ */
+export const SURFACES = ['plain', 'tinted', 'hero', 'outline', 'editorial', 'inset'] as const
+export type Surface = (typeof SURFACES)[number]
+
+/**
  * The rulebook the model reads. Kept tight on purpose: a rulebook that is
  * longer than the answer it describes gets ignored.
  */
@@ -66,6 +73,9 @@ COLOUR
 - Accent is a decision, not a default: name it per widget with "accent":"#hex".
   Pick the hue that matches the subject (money tangerine, health jade, risk
   crimson, growth azure) rather than reusing the same one every time.
+- The compiler assigns a subject-fit hue when you omit one, but it only reads
+  the text; you know the intent. Name the accent when it matters, and never
+  let two adjacent widgets share one.
 - Never put a coloured fill behind coloured text of the same hue.
 - Dark mode is a real target: surfaces are rgba(255,255,255,0.06), never pure
   black; text never pure #FFFFFF; hairlines at rgba(255,255,255,0.10).
@@ -76,17 +86,29 @@ TYPE AND SPACE
 - Spacing on the ${SPACE.join('/')}px scale only. Radius ${RADIUS.slice(0, 3).join('/')}px; pills 999.
 - One idea per visual. If it needs a paragraph of explanation, it is two visuals.
 
+SURFACES (the "variant" key, pick by role)
+- hero      one KPI or gauge — a single number that owns the block.
+- tinted    a light accent wash — charts, card grids, media.
+- editorial no card at all: transparent, a 2px accent rule on the left. Line and
+            area charts, timelines, panels. It reads as a figure in an article.
+- inset     a card inside a card — forms, quizzes, calculators, app surfaces.
+- outline   hairline only — progress, compare, follow-ups, quiet controls.
+- plain     one calm solid surface — tables, dense lists, media.
+- Never use the same variant twice in a row. Three tinted cards in one reply is
+  the exact failure this vocabulary exists to prevent.
+
 COMPOSITION
 - A reply is a LAYOUT, not one widget: usually a lead sentence, one hero visual,
   then at most two supporting blocks. Never stack more than three.
 - Never place two blocks of the same kind next to each other. Alternate the
   rhythm: numbers -> chart -> table.
-- Never give two adjacent blocks the same accent. Vary it deliberately.
+- Never give two adjacent blocks the same accent or the same surface. Vary
+  them deliberately.
 - Put prose between blocks. A wall of cards is not an answer.
 
 BANNED
 - Emoji anywhere. ASCII charts, box-drawing bars, "▇▇▇" meters.
-- Three or more accent colours in one answer.
+- More than three accent colours in one answer.
 - A shadow AND a border on the same element.
 - Fixed pixel widths wider than a phone (max 360px content in html).
 - Tables wider than 8 columns, more than 7 bars in a bar chart, more than 5
@@ -106,4 +128,4 @@ WHEN IT IS WRONG
  * Compact reminder appended to the widget contract. The rulebook is long; this
  * is what the model sees on every single turn.
  */
-export const DESIGN_REMINDER = `Art direction is yours: every widget accepts "accent":"#hex" and "variant":"plain|tinted|hero|outline". Use them to make each block look like it belongs to its subject, vary the accent across a reply, and never let two adjacent blocks share one.`
+export const DESIGN_REMINDER = `Art direction is yours: every widget accepts "accent":"#hex" and "variant":"${SURFACES.join('|')}". Use them to make each block look like it belongs to its subject, vary the accent across a reply, and never let two adjacent blocks share an accent or a surface.`
