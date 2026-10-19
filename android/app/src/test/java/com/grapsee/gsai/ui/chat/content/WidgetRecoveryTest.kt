@@ -249,6 +249,19 @@ class WidgetRecoveryTest {
     }
 
     @Test
+    fun diagnosticPayloadForReportedFailure() {
+        val block = WidgetRecovery.recover(refusal, "Show me a bar chart", sectorAnswer)!!
+        val parsed = parseWidget(block.kind, block.json)
+        println("DIAG_KIND=${block.kind}")
+        println("DIAG_JSON=${block.json}")
+        println("DIAG_PARSED=${parsed?.javaClass?.simpleName}")
+        println("DIAG_LABELS=${(parsed as Widget.Chart).w.labels}")
+        println("DIAG_VALUES=${parsed.w.series.first().data}")
+        println("DIAG_CLEANED=${WidgetRecovery.stripFalseRefusal(refusal).replace("\n", " | ")}")
+        assertTrue(parsed is Widget.Chart)
+    }
+
+    @Test
     fun `recovery is not triggered when a real widget fence is present`() {
         val withWidget = "```chart\n{\"type\":\"bar\",\"labels\":[\"a\",\"b\"],\"series\":[{\"name\":\"v\",\"data\":[[0,1],[1,2]]}]}\n```"
         assertTrue(WidgetRecovery.hasWidgetFence(withWidget))
