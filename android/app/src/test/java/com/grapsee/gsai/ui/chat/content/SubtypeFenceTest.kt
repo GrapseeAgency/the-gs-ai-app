@@ -151,6 +151,19 @@ class SubtypeFenceTest {
         assertNotNull(parseWidget(w.kind, w.json))
     }
 
+    // A canonical gantt is ONE RANGE PER SERIES (Task 1 = [0,2]) — one point
+    // per series must be enough (probe 2026-10-20).
+    @Test
+    fun `a one-range-per-series gantt parses`() {
+        val w = widgetOf(
+            "```gantt\n{\"title\":\"Project Schedule\",\"type\":\"gantt\"," +
+                "\"labels\":[\"Week 1\",\"Week 2\",\"Week 3\"]," +
+                "\"series\":[{\"name\":\"Task 1\",\"data\":[[0,2]]},{\"name\":\"Task 2\",\"data\":[[1,3]]}]}\n```"
+        )
+        assertEquals("chart", w.kind)
+        assertNotNull("a range-per-series gantt must parse", parseWidget(w.kind, w.json))
+    }
+
     @Test
     fun `an explicit type wins over the fence`() {
         val w = widgetOf("```kanban\n{\"type\":\"calendar\",\"items\":[]}\n```")

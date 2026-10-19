@@ -5218,3 +5218,13 @@ Work Log:
 - NEW scripts/live-natural-probe.ts: 12 user-voice requests. 5/12 rendered against the CURRENT live server — the other seven are `fences=[none]` prose answers, which is the OLD build answering (no WIDGET_PROMPT, no rulebook on that server). Documented as the deploy canary, not a client defect: the same rows turn into widgets the day the server ships.
 - REAL BUG caught: asked for a Gantt chart, the live model wrote mermaid's gantt syntax inside ```gantt. The compiler called it "invalid JSON" and STRIPPED the fence — destroying a diagram the client could render. One rule now on both sides: a widget fence that is not a JSON object is not a widget. extractWidgetFences skips non-`{` bodies; fenceToBlock routes non-JSON ```gantt and any ```mindmap to the mermaid renderer.
 - Tests: backend 66/66, Android 218/218. versionName 0.81.15, versionCode 116. Gates re-verified on the APK.
+
+---
+Task ID: genui-probe-round4-0.81.16
+Agent: main
+Task: Probe round 4 (the model is non-deterministic — every round finds new shapes). Fix the two it dropped.
+
+Work Log:
+- {"subtitle":"All day]} — the live model closed a string with ]} (missing quote AND brace). repairJson only appended one `}` and gave up. Replaced with closeOpenStructures: string-aware walk that closes an unterminated string BEFORE the structural char that ended it, and closes objects stranded by an early `]`.
+- gantt encoded as ONE RANGE PER SERIES (Task 1 = [0,2]) — canonical gantt shape rejected by the 2-points-per-series rule. gantt joins pie/donut in the one-point club, both sides.
+- Tests: backend 71/71 (block 26), Android 219/219. versionName 0.81.16, versionCode 117. Gates re-verified.

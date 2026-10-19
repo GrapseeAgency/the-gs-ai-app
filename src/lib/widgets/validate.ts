@@ -182,6 +182,68 @@ function stripJsonComments(input: string): string {
   return out
 }
 
+/**
+ * Close what the model left open: an unterminated string (the calendar probe
+ * watched `"All day]}` — a missing quote and brace in one payload) and any
+ * unclosed object/array. Walks with string awareness so a `}` inside a string
+ * never counts, and inserts the closing quote BEFORE the structural character
+ * that terminated the string.
+ */
+function closeOpenStructures(s: string): string | null {
+  let out = ''
+  let inString = false
+  let escaped = false
+  const stack: string[] = []
+  for (const ch of s) {
+    if (inString) {
+      if (!escaped && (ch === ']' || ch === '}' || ch === ',')) {
+        out += '"'
+        inString = false
+      } else {
+        out += ch
+        if (escaped) escaped = false
+        else if (ch === '\\') escaped = true
+        else if (ch === '"') inString = false
+        continue
+      }
+    }
+    if (ch === '"') {
+      inString = true
+      out += ch
+      continue
+    }
+    if (ch === '{' || ch === '[') {
+      stack.push(ch === '{' ? '}' : ']')
+      out += ch
+      continue
+    }
+    if (ch === '}' || ch === ']') {
+      // An array close that arrives while objects are still open ("All day]}
+      // — the model omitted a string close AND a brace): close the objects
+      // first, then the array.
+      const want = ch
+      while (stack.length > 0 && stack[stack.length - 1] !== want) {
+        if (want === ']' && stack[stack.length - 1] === '}') {
+          out += '}'
+          stack.pop()
+        } else break
+      }
+      if (stack.length > 0 && stack[stack.length - 1] === ch) stack.pop()
+      out += ch
+      continue
+    }
+    out += ch
+  }
+  if (inString) out += '"'
+  while (stack.length > 0) out += stack.pop()
+  try {
+    JSON.parse(out)
+    return out
+  } catch {
+    return null
+  }
+}
+
 export function repairJson(raw: string): string | null {
   let s = raw.trim()
   if (!s) return null
@@ -201,18 +263,9 @@ export function repairJson(raw: string): string | null {
     JSON.parse(s)
     return s
   } catch {
-    // One missing closing brace is the single most common truncation.
-    const opens = (s.match(/\{/g) ?? []).length
-    const closes = (s.match(/\}/g) ?? []).length
-    if (opens === closes + 1) {
-      try {
-        JSON.parse(s + '}')
-        return s + '}'
-      } catch {
-        return null
-      }
-    }
-    return null
+    // Truncation and typos are the same failure: something the model opened
+    // was never closed. Close strings first, then structures.
+    return closeOpenStructures(s)
   }
 }
 
@@ -346,7 +399,10 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
       repaired = true
     }
     const pieLike = type === 'pie' || type === 'donut'
-    const minPoints = pieLike ? 1 : 2
+    // A gantt chart is encoded as ONE RANGE PER SERIES — Task 1 is [0,2],
+    // Task 2 is [2,4] (probe 2026-10-20). Demanding two points per series
+    // rejected every canonical gantt payload.
+    const minPoints = pieLike || type === 'gantt' ? 1 : 2
 
     // Models send [[x,y]] (documented), [12,18] (flat), [["Q1",120]] (string
     // label as x) and [{"x":0,"y":12}]. Only the first used to survive, so the

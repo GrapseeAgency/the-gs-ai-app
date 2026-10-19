@@ -268,8 +268,10 @@ fun parseWidget(kind: String, json: String): Widget? {
                 val w = widgetJson.decodeFromString<ChartWidget>(json)
                 // Pie/donut are documented as ONE SERIES PER SLICE with a
                 // single point — requiring two points silently rejected every
-                // correctly-shaped pie and rendered it as a code block.
-                val minPoints = if (w.type == "pie" || w.type == "donut") 1 else 2
+                // correctly-shaped pie and rendered it as a code block. A
+                // gantt is ONE RANGE PER SERIES (Task 1 = [0,2]), the same
+                // deal (probe 2026-10-20).
+                val minPoints = if (w.type == "pie" || w.type == "donut" || w.type == "gantt") 1 else 2
                 val series = w.series.take(MAX_CHART_SERIES).map {
                     it.copy(data = it.data.take(MAX_POINTS_PER_SERIES))
                 }.filter { it.data.size >= minPoints }

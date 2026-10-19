@@ -366,6 +366,24 @@ check('repairJson rejects garbage', repairJson('hello world') === null)
   const cm = compileWidgets({ reply: mermaidGantt, userPrompt: 'gantt chart for a launch plan' })
   check('mermaid gantt syntax survives the compiler', cm.text.includes('```gantt\n') && cm.text.includes('Market Research'), cm.text.slice(0, 120))
   check('mermaid gantt is not an error', cm.errors.length === 0, cm.errors.join(','))
+
+  // …and a gantt payload that encodes ONE RANGE PER SERIES (Task 1 = [0,2])
+  // is canonical gantt: one point per series must be enough.
+  const rangeGantt = '```gantt\n{"title":"Project Schedule","type":"gantt","labels":["Week 1","Week 2","Week 3","Week 4","Week 5","Week 6"],"series":[{"name":"Task 1","data":[[0,2]]},{"name":"Task 2","data":[[2,4]]},{"name":"Task 3","data":[[4,6]]}]}\n```'
+  const cr = compileWidgets({ reply: rangeGantt, userPrompt: 'gantt chart' })
+  check('one range per series is a gantt', cr.widgets === 1 && cr.errors.length === 0, cr.errors.join(','))
+}
+
+// 26. THE TYPO CASE (probe 2026-10-20). The live model sent a calendar payload
+// whose last string never closed: "subtitle":"All day]}. Truncation and typos
+// are one failure to the parser — something was opened and never closed.
+{
+  const typo = '```calendar\n{"title":"Next Week","month":"2025-06-16","items":[{"title":"Team Meeting","date":"2025-06-17","subtitle":"10:00 AM - 11:30 AM"},{"title":"Project Deadline","date":"2025-06-20","subtitle":"All day]}\n```'
+  const c = compileWidgets({ reply: typo, userPrompt: 'next week calendar' })
+  check('an unterminated string is closed', c.widgets === 1 && c.errors.length === 0, c.errors.join(','))
+  check('the repaired calendar keeps both events', (c.text.match(/Team Meeting|Project Deadline/g) ?? []).length === 2, c.text.slice(0, 200))
+  check('repairJson handles truncation', repairJson('{"title":"Memo","pages":[{"page":1') !== null)
+  check('repairJson still rejects garbage', repairJson('hello world') === null)
 }
 
 console.log(`\n${passed} passed, ${failures.length} failed`)

@@ -448,3 +448,21 @@ Both sides now apply one rule: a widget fence that is not a JSON object is not
 a widget. `extractWidgetFences` skips non-`{` bodies, and `fenceToBlock` routes
 a non-JSON ```gantt (and any ```mindmap) to the mermaid renderer. The natural
 probe is run the same way as the fence probe: `npx tsc … && node …`.
+
+## 19. Truncation is one failure, and gantt has one range (v0.81.16)
+
+The next fence-probe run (the model is non-deterministic, so every round
+finds new shapes) dropped two payloads:
+
+- **`"subtitle":"All day]}`** — the live model closed a string with `]}`
+  instead of `"}`. One missing quote **and** one missing brace. The old
+  repair only appended a single `}`; the new `closeOpenStructures` walk is
+  string-aware, closes an unterminated string *before* the structural
+  character that ended it, and closes objects that an early `]` stranded.
+- **A gantt with one range per series** — `Task 1 = [0,2]`, `Task 2 = [2,4]`.
+  That is the canonical gantt encoding, and the two-points-per-series rule
+  rejected every one of them. `gantt` now joins `pie`/`donut` in the
+  one-point club, on both sides.
+
+Both shapes are pinned in the suites (backend block 26, Android
+`SubtypeFenceTest`) and the probe was re-run to confirm the round.
