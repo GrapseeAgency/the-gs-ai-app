@@ -462,17 +462,27 @@ jobs:
         working-directory: android
         run: |
           set -euo pipefail
-          gradle --no-daemon --console=plain --stacktrace :app:testDebugUnitTest
-        continue-on-error: true
+          # THE WRAPPER, NOT THE RUNNER'S GRADLE. This step used to call bare
+          # `gradle` (9.8.x on the image) and carried `continue-on-error: true`.
+          # AGP 8.13 dies during configuration on Gradle 9.6+, so the step
+          # failed in ~40s and the JOB STILL WENT GREEN: no unit test ever ran.
+          # The compile step above generates the pinned 8.13 wrapper in this
+          # same workspace, so use it and let a test failure fail the job.
+          ./gradlew --no-daemon --console=plain --stacktrace :app:testDebugUnitTest
 
       - name: Report
         if: always()
         run: |
           set -euo pipefail
+          RESULTS=app/build/test-results/testDebugUnitTest
+          if [ -d "$RESULTS" ]; then
+            python3 -c "import glob,xml.etree.ElementTree as E; rs=[E.parse(p).getroot() for p in glob.glob('$RESULTS/*.xml')]; t=sum(int(r.get('tests',0)) for r in rs); f=sum(int(r.get('failures',0))+int(r.get('errors',0)) for r in rs); print(f'unit tests: {t} run, {f} failed')" >> "$GITHUB_STEP_SUMMARY" || true
+          else
+            echo "unit tests: no result XML" >> "$GITHUB_STEP_SUMMARY"
+          fi
           {
             echo "### android-app"
             echo "compileDebugKotlin: see the step above"
-            echo "note: no gradle wrapper JAR is committed, so the runner's"
-            echo "      gradle $GRADLE_VERSION is used. Builds are therefore not"
-            echo "      reproducible across machines until a wrapper is added."
+            echo "wrapper: generated per run from the pinned properties"
+            echo "      (8.13); no wrapper JAR is committed by design."
           } >> "$GITHUB_STEP_SUMMARY"
