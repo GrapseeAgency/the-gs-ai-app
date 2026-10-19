@@ -123,13 +123,24 @@ class WidgetRecoveryTest {
     }
 
     @Test
-    fun `never invents numbers - one value is not enough`() {
-        assertNull(WidgetRecovery.recover("Only one figure: 42.", "show me a chart", ""))
+    fun `never invents numbers - one value is not enough for a table`() {
+        assertNull(WidgetRecovery.recover("Only one figure: 42.", "put it in a table", ""))
     }
 
     @Test
-    fun `never invents numbers - empty context is not enough`() {
-        assertNull(WidgetRecovery.recover(refusal, "show me a chart", ""))
+    fun `no data yields a labelled sample, never a claim about user data`() {
+        val block = WidgetRecovery.recover(refusal, "show me a chart", "")
+        assertNotNull("a no-data chart request should still demonstrate the renderer", block)
+        val chart = widgetJson.decodeFromString<ChartWidget>(block!!.json)
+        assertTrue("title must say SAMPLE: ${chart.title}", chart.title.contains("Sample", true))
+        assertEquals("Sample", chart.series.first().name)
+        assertTrue("parseWidget rejected the sample", parseWidget(block.kind, block.json) is Widget.Chart)
+    }
+
+    @Test
+    fun `no data and a non-chart request stays silent`() {
+        assertNull(WidgetRecovery.recover(refusal, "put it in a table", ""))
+        assertNull(WidgetRecovery.recover(refusal, "show progress", ""))
     }
 
     @Test

@@ -26,7 +26,10 @@ import kotlinx.serialization.encodeToString
  *
  * HONESTY RULES (non-negotiable)
  * ------------------------------
- *  - never invent a number: every value is parsed from text already shown;
+ *  - never invent a number for a data visual: every value is parsed from text
+ *    already shown. The one exception is the explicit SAMPLE chart drawn when
+ *    the user asked for a chart and the conversation holds no data at all —
+ *    its title says SAMPLE and its series is called "Sample";
  *  - never hide that this was reconstructed — titles say "from the answer
  *    above";
  *  - bail out silently when there is not enough data, rather than drawing an
@@ -204,7 +207,14 @@ internal object WidgetRecovery {
             else -> {
                 val fromReply = extract(reply)
                 val chosen = if (fromReply.points.size >= 2) fromReply else extract(prior)
-                if (chosen.points.size < 2) return null
+                if (chosen.points.size < 2) {
+                    // No data anywhere. Asking for a chart and getting "I can't
+                    // draw" is the exact failure this layer exists for, so show
+                    // a SAMPLE — unmistakably labelled, never passed off as the
+                    // user's data. Other kinds stay silent: a sample form or map
+                    // would be noise, not a demonstration.
+                    return if (ask is VisualAsk.Chart) sampleChart(ask.type) else null
+                }
                 when (ask) {
                     is VisualAsk.Chart -> chartBlock(chosen.points, ask.type, chosen.seriesName)
                     VisualAsk.Table -> tableBlock(chosen.points)
@@ -409,6 +419,36 @@ internal object WidgetRecovery {
     // -----------------------------------------------------------------------
     // Block construction
     // -----------------------------------------------------------------------
+
+    /**
+     * The no-data case. The user asked for a chart and the answer contains
+     * nothing to chart. The title says SAMPLE and the series is called
+     * "Sample" — this is a renderer demonstration, never a claim about the
+     * user's data.
+     */
+    private fun sampleChart(type: String): Block.WidgetBlock {
+        val labels = listOf("Item 1", "Item 2", "Item 3", "Item 4")
+        val values = listOf(42f, 68f, 55f, 81f)
+        val series = if (type == "pie" || type == "donut") {
+            labels.zip(values).map { (label, value) ->
+                ChartSeries(name = label, data = listOf(listOf(0f, value)))
+            }
+        } else {
+            listOf(
+                ChartSeries(
+                    name = "Sample",
+                    data = values.mapIndexed { i, v -> listOf(i.toFloat(), v) }
+                )
+            )
+        }
+        val widget = ChartWidget(
+            type = type,
+            title = "Sample chart — no data in this conversation",
+            labels = labels,
+            series = series
+        )
+        return widgetBlock("chart", widgetJson.encodeToString(widget))
+    }
 
     private fun chartBlock(points: List<Point>, type: String, seriesName: String): Block.WidgetBlock {
         val title = if (seriesName == "Value") {
