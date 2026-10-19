@@ -227,3 +227,47 @@ stored transcript full of JSON.
 
 Verified: `PayloadShapeTest` (9 cases) on Android, compiler assertions 16–18 on
 the backend.
+
+## 10. Composition, art direction, and a rulebook (v0.81.9)
+
+The thing that separates ChatGPT and Claude from "a template engine" is not a
+secret renderer. It is four ordinary pieces, all of them now present here:
+
+| Piece | ChatGPT / Claude | GS |
+| --- | --- | --- |
+| Component library | supported chart/table/app types | the 150 native widget kinds |
+| Composition | model arranges blocks per answer | model emits any mix of fences, up to 3 per answer |
+| Design system | tokens: type, space, colour, dark mode | `src/lib/design/rulebook.ts` |
+| Renderer | host draws structured output | `WidgetBlocks.kt` / `WebView` for ```html |
+
+**The rulebook is the missing piece that made output look generic.** Claude
+loads design guidelines *before* it draws (its tool description literally says
+"call visualize_read_me once before your first show_widget"). GS had no
+equivalent, so the model had no vocabulary beyond "give me a card": it produced
+the same grey block every time. `DESIGN_RULEBOOK` now defines the 12 data hues,
+the ink scale for light and dark, the type and spacing scales, the composition
+rules (lead visual, at most three blocks, never two of a kind adjacent, never
+two adjacent blocks sharing an accent) and the bans (emoji, ASCII charts, >5
+series, shadow+border, fixed widths).
+
+**Art direction is a payload decision, not a renderer default.** Every widget
+accepts two optional keys:
+
+```json
+{ "type": "bar", "accent": "#E8590C", "variant": "hero", ... }
+```
+
+`accent` is any `#RRGGBB`; `variant` is `plain | tinted | hero | outline`. On
+Android they travel through `LocalWidgetStyle` (a `staticCompositionLocalOf`),
+so all ~40 widget views honour them without a parameter threaded through 18
+data classes. `seriesColor(0)` also follows the accent, otherwise the card
+would be tangerine and its bars azure. The backend carries both keys through
+validation instead of rebuilding the payload without them.
+
+**Bespoke work has an escape hatch.** When no kind fits — a game, a simulation,
+an animated explainer — the model emits a fenced `html` block and writes it
+itself; it runs in the existing sandboxed WebView. The prompt says this
+explicitly, because "nearly fits" is how answers end up looking generic.
+
+Verified by `WidgetStyleTest` (7 cases: hex parsing, alpha, invalid input,
+unknown variant, styled payload still parses).

@@ -15,6 +15,7 @@
  */
 
 import ZAI from 'z-ai-web-dev-sdk'
+import { DESIGN_RULEBOOK } from './design/rulebook'
 
 type ChatRole = 'system' | 'user' | 'assistant'
 
@@ -63,7 +64,26 @@ export const SYSTEM_PROMPT = `You are GS. Answer the user's actual request. Use 
  * Invalid payloads degrade to code blocks on the client, so a malformed widget
  * costs one ugly block, not the answer.
  */
-export const WIDGET_PROMPT = `You may render any answer as interactive widgets embedded in your reply. Use one when a visual genuinely helps the user understand, compare or explore the answer, or when it makes the answer more engaging; otherwise answer in plain prose. A widget is a fenced code block whose language is the widget kind and whose body is strict JSON (double quotes, no comments, no trailing commas).
+export const WIDGET_PROMPT = `${DESIGN_RULEBOOK}
+
+HOW THIS WORKS
+You are not filling in a template. You compose an answer from primitives, and
+you decide the layout, the accent and the surface every time. A widget is a
+fenced block: the fence language is the kind, the body is strict JSON. The app
+renders it natively, inline, in the conversation.
+
+Choose the shape of the answer BEFORE choosing widgets:
+1. What is the user actually going to do with this? Read it, compare it, explore
+   it, change a number, or follow steps?
+2. Pick the smallest set of primitives that serves that.
+3. Give the lead visual an accent that fits the subject, and vary it across the
+   reply. Two adjacent blocks never share an accent or a surface.
+
+Every widget accepts two optional keys, and using them is the difference
+between "a card" and "designed":
+- "accent":"#hex"      the hue for this block (pick from the data hues above)
+- "variant":"plain|tinted|hero|outline"  the surface (tinted for charts, hero for
+  a KPI, outline for quiet lists, plain for dense tables)
 
 Available kinds (fenced block, language = kind, body = strict JSON):
 - chart: {"type":"line|area|stackedArea|bar|hbar|stacked|grouped|pie|donut|scatter|bubble|histogram|boxplot|heatmap|correlation|treemap|waterfall|candlestick|gantt|funnel|radar|chord","title":"...","unit":"...","labels":["..."],"series":[{"name":"...","data":[[x,y],...]}]}  (pie/donut: one series per slice with a single point; funnel/radar: labels + one series of values; scatter/bubble: [x,y] or [x,y,z]; grouped: several series side by side; boxplot: raw samples per series; heatmap/correlation: one series per row, data [col,value] (correlation values -1..1); treemap/waterfall: one series of values + labels; candlestick: [open,high,low,close] per point; gantt: one series, each point [start,end] + labels as task names)
@@ -92,6 +112,15 @@ Available kinds (fenced block, language = kind, body = strict JSON):
 When the user asks for a chart, graph, plot, diagram, table or any visual ("make a chart", "visualise this", "surprise me visually"), you MUST answer with at least one widget. You CAN create visualizations in this chat — never say you cannot, never answer a visual request with prose only. If you catch yourself writing "I'm unable to create or display visualizations", "as a text-based AI", "I don't have the ability to generate charts", or "you could build this in Excel", stop: those sentences are FALSE in this client, which renders every kind above natively. Emit the widget fence instead.
 - If the answer states the data, chart exactly that.
 - If the user asks for a visual with no data in play (e.g. "surprise me"), build an illustrative dataset yourself, keep it plausible and small, and say plainly in the prose that the numbers are illustrative, not measured.
+
+BESPOKE WORK
+The kinds above are the common shapes, not the limit. When the request needs
+something no kind covers — a playable game, a simulation, a custom layout, an
+animated explainer, a bespoke diagram — emit a fenced html block and build it
+yourself with inline CSS and JavaScript. It runs in a live sandbox in the app.
+Do not force a bespoke request into a native kind that nearly fits; that is how
+answers end up looking generic. Follow the rulebook there too: the data hues,
+the type scale, the spacing scale, and the same dark-mode rules.
 
 Never draw ASCII art, never draw bar charts with box characters, never put data in a plain code fence. Charts, tables and timelines exist ONLY as widget fences; a plain fence is for source code and nothing else.
 

@@ -233,3 +233,68 @@ class PayloadShapeTest {
         assertEquals(18, blocks[1].sourceStart)
     }
 }
+
+/**
+ * Art direction belongs to the model, not to the renderer.
+ *
+ * Claude loads a design rulebook before it draws and then chooses its own
+ * colours; ChatGPT composes from components instead of filling a template. The
+ * payload-level equivalent is two optional keys — `accent` and `variant` — that
+ * win over whatever the renderer would have derived. If the parser drops them,
+ * every widget silently reverts to the same default card, which is exactly the
+ * complaint these keys exist to answer.
+ */
+class WidgetStyleTest {
+
+    @Test
+    fun `accent and variant are read off the payload`() {
+        val style = widgetStyleOf("""{"type":"bar","accent":"#E8590C","variant":"hero","series":[]}""")
+        assertNotNull(style)
+        assertEquals(androidx.compose.ui.graphics.Color(0xFFE8590C), style!!.accent)
+        assertEquals(CardTone.Hero, style.tone)
+    }
+
+    @Test
+    fun `a bare six-digit accent is accepted`() {
+        assertEquals(
+            androidx.compose.ui.graphics.Color(0xFF0CA678),
+            widgetStyleOf("""{"accent":"0CA678"}""")?.accent
+        )
+    }
+
+    @Test
+    fun `an eight-digit accent keeps its alpha`() {
+        assertEquals(
+            androidx.compose.ui.graphics.Color(0x800CA678),
+            widgetStyleOf("""{"accent":"#800CA678"}""")?.accent
+        )
+    }
+
+    @Test
+    fun `a non-colour accent is ignored, not guessed`() {
+        assertNull(parseHexColor("red"))
+        assertNull(parseHexColor("#GGGGGG"))
+        assertNull(parseHexColor("#12345"))
+    }
+
+    @Test
+    fun `an unknown variant is ignored`() {
+        assertNull(widgetStyleOf("""{"variant":"sparkly"}"""))
+    }
+
+    @Test
+    fun `no style keys means no override`() {
+        assertNull(widgetStyleOf("""{"type":"bar","series":[]}"""))
+        assertNull(widgetStyleOf("not json"))
+    }
+
+    @Test
+    fun `a styled payload still parses as a chart`() {
+        val w = parseWidget(
+            "chart",
+            """{"type":"bar","accent":"#9C36B5","variant":"tinted","series":[{"name":"v","data":[1,2]}]}"""
+        )
+        assertNotNull(w)
+        assertEquals("bar", (w as Widget.Chart).w.type)
+    }
+}

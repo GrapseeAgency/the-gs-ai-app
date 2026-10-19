@@ -220,14 +220,27 @@ export function validateWidget(kind: string, rawJson: string): ValidationResult 
   const check = CHECKS[kind](payload)
   if (check.errors.length > 0) return { ok: false, kind, errors: check.errors }
 
-  const json = JSON.stringify(check.widget)
+  // Art direction belongs to the model: it may choose an accent and a surface
+  // for THIS widget instead of accepting the renderer's default identity. The
+  // validator carries the two keys through untouched (and rejects anything
+  // that is not a real colour/variant) — dropping them here silently threw
+  // away every deliberate design decision the model made.
+  const styled: Record<string, unknown> = { ...check.widget }
+  const accent = typeof payload.accent === 'string' ? payload.accent.trim() : ''
+  if (/^#?[0-9a-fA-F]{6}$/.test(accent)) {
+    styled.accent = accent.startsWith('#') ? accent.toLowerCase() : `#${accent.toLowerCase()}`
+  }
+  const variant = typeof payload.variant === 'string' ? payload.variant.trim().toLowerCase() : ''
+  if (['plain', 'tinted', 'hero', 'outline'].includes(variant)) styled.variant = variant
+
+  const json = JSON.stringify(styled)
   if (json.length > LIMITS.maxWidgetBytes) {
     return { ok: false, kind, errors: [`payload exceeds ${LIMITS.maxWidgetBytes} bytes`] }
   }
   return {
     ok: true,
     kind,
-    widget: check.widget,
+    widget: styled,
     json,
     repaired: check.repaired || jsonRepaired,
   }

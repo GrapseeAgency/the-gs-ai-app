@@ -24,12 +24,14 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -58,6 +60,7 @@ import kotlinx.serialization.json.JsonDecoder
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.floatOrNull
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
@@ -459,10 +462,22 @@ internal object WidgetPalette {
         )
 }
 
-/** Series colour, index-stable and genuinely varied (12 hues, not 5). */
+/**
+ * Series colour, index-stable and genuinely varied (12 hues, not 5).
+ *
+ * When the model named an accent for this widget, the FIRST series takes it —
+ * otherwise the card would be tangerine and its bars azure, which reads as a
+ * bug rather than a design.
+ */
 @Composable
-internal fun seriesColor(i: Int): Color =
-    WidgetPalette.legible(WidgetPalette.at(i), WidgetPalette.onDarkCanvas())
+internal fun seriesColor(i: Int): Color {
+    val dark = WidgetPalette.onDarkCanvas()
+    val accent = LocalWidgetStyle.current?.accent
+    if (accent != null) {
+        return WidgetPalette.legible(if (i == 0) accent else WidgetPalette.at(i + 1), dark)
+    }
+    return WidgetPalette.legible(WidgetPalette.at(i), dark)
+}
 
 /**
  * Surface treatment. Four tones instead of one flat card, so a chart, a KPI
@@ -509,9 +524,50 @@ internal fun widgetTone(tag: String): CardTone = when (tag.lowercase()) {
 }
 
 /**
+ * Art direction chosen by the MODEL, for one widget.
+ *
+ * The renderer derives a sensible identity from the widget's family, but the
+ * model is the one that knows what the block is about — a churn chart should
+ * be crimson, a savings chart jade. So the payload may carry `accent` and
+ * `variant`, and they win over the derived defaults. Provided through a
+ * CompositionLocal so all ~40 widget views honour it without a single call-site
+ * change (and without threading a parameter through 18 data classes).
+ */
+internal data class WidgetStyle(val accent: Color? = null, val tone: CardTone? = null)
+
+internal val LocalWidgetStyle = staticCompositionLocalOf<WidgetStyle?> { null }
+
+/** `#RRGGBB` or `#AARRGGBB`, or null when it is not a colour. */
+internal fun parseHexColor(raw: String): Color? {
+    val s = raw.trim().removePrefix("#")
+    if (s.length != 6 && s.length != 8) return null
+    val value = s.toLongOrNull(16) ?: return null
+    return if (s.length == 6) Color(0xFF000000L or value) else Color(value)
+}
+
+/** Reads the model's style keys off a raw payload; null when it specified none. */
+internal fun widgetStyleOf(json: String): WidgetStyle? {
+    val obj = try {
+        widgetJson.parseToJsonElement(json) as? JsonObject
+    } catch (_: Throwable) {
+        null
+    } ?: return null
+    val accent = (obj["accent"] as? JsonPrimitive)?.contentOrNull?.let(::parseHexColor)
+    val tone = when ((obj["variant"] as? JsonPrimitive)?.contentOrNull?.lowercase()) {
+        "plain" -> CardTone.Plain
+        "tinted" -> CardTone.Tinted
+        "hero" -> CardTone.Hero
+        "outline" -> CardTone.Outline
+        else -> null
+    }
+    return if (accent == null && tone == null) null else WidgetStyle(accent, tone)
+}
+
+/**
  * The one card surface. [hue] and [tone] default from [tag], so a view only
  * passes them when it wants a specific identity (charts key off their type,
- * compare keys off its two sides).
+ * compare keys off its two sides). A model-supplied [LocalWidgetStyle] always
+ * wins.
  */
 @Composable
 internal fun WidgetCardShell(
@@ -522,12 +578,15 @@ internal fun WidgetCardShell(
     tone: CardTone = widgetTone(tag),
     content: @Composable () -> Unit
 ) {
+    val style = LocalWidgetStyle.current
+    val chosenHue = style?.accent ?: hue
+    val chosenTone = style?.tone ?: tone
     val c = GsTheme.colors
     val dark = WidgetPalette.onDarkCanvas()
-    val accent = WidgetPalette.legible(hue, dark)
+    val accent = WidgetPalette.legible(chosenHue, dark)
     val base = c.elevatedSurface
     val clear = Color.Transparent
-    val fill: Brush = when (tone) {
+    val fill: Brush = when (chosenTone) {
         CardTone.Plain -> Brush.verticalGradient(listOf(base, base))
         CardTone.Outline -> Brush.verticalGradient(listOf(clear, clear))
         CardTone.Tinted -> Brush.verticalGradient(
@@ -537,7 +596,7 @@ internal fun WidgetCardShell(
             listOf(accent.copy(alpha = if (dark) 0.26f else 0.18f), base, base)
         )
     }
-    val edge = when (tone) {
+    val edge = when (chosenTone) {
         CardTone.Outline -> c.divider
         CardTone.Plain -> c.border.copy(alpha = 0.55f)
         else -> accent.copy(alpha = if (dark) 0.32f else 0.22f)
@@ -551,7 +610,7 @@ internal fun WidgetCardShell(
     ) {
         // Two-pixel hue hairline: the cheapest way to give every family a face
         // without touching a single chart renderer.
-        if (tone == CardTone.Tinted || tone == CardTone.Hero) {
+        if (chosenTone == CardTone.Tinted || chosenTone == CardTone.Hero) {
             Box(
                 Modifier
                     .fillMaxWidth()
@@ -629,7 +688,10 @@ fun WidgetBlockView(block: Block.WidgetBlock, streaming: Boolean, onSendPrompt: 
         WidgetFallback(block)
         return
     }
-    WidgetView(widget, onSendPrompt)
+    val style = remember(block.json) { widgetStyleOf(block.json) }
+    CompositionLocalProvider(LocalWidgetStyle provides style) {
+        WidgetView(widget, onSendPrompt)
+    }
 }
 
 /**
