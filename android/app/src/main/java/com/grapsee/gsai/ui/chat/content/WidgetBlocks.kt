@@ -66,6 +66,20 @@ private const val MAX_PROGRESS_ITEMS = 12
 private const val MAX_TIMELINE_ENTRIES = 24
 private const val MAX_COMPARE_ITEMS = 12
 
+/** Media sub-types the `media` kind renders (see WidgetsMedia.kt). */
+internal val MEDIA_TYPES = setOf(
+    "image", "gallery", "video", "audio", "code",
+    "file", "link", "citation", "search", "entity", "product", "listing"
+)
+
+/** Chart sub-types the `chart` kind renders (see WidgetsExtra.kt / WidgetsCharts2.kt). */
+internal val CHART_TYPES = setOf(
+    "line", "area", "stackedArea", "bar", "hbar", "stacked", "pie", "donut",
+    "scatter", "bubble", "histogram", "funnel", "radar",
+    "grouped", "boxplot", "heatmap", "correlation", "treemap", "waterfall",
+    "candlestick", "gantt"
+)
+
 @Serializable
 data class ChartSeries(val name: String = "", val data: List<List<Float>> = emptyList())
 
@@ -137,6 +151,9 @@ sealed interface Widget {
     data class Carousel(val w: CarouselWidget) : Widget { override val title get() = w.title }
     data class Cards(val w: CardsWidget) : Widget { override val title get() = w.title }
     data class Followups(val w: FollowupsWidget) : Widget { override val title get() = w.title }
+    data class Media(val w: MediaWidget) : Widget { override val title get() = w.title }
+    data class Actions(val w: ActionsWidget) : Widget { override val title get() = w.title }
+    data class Panel(val w: PanelWidget) : Widget { override val title get() = w.title }
 }
 
 internal val widgetJson = Json { ignoreUnknownKeys = true }
@@ -155,7 +172,7 @@ fun parseWidget(kind: String, json: String): Widget? {
                     it.copy(data = it.data.take(MAX_POINTS_PER_SERIES))
                 }.filter { it.data.size >= 2 }
                 if (series.isEmpty()) null
-                else if (w.type in setOf("line", "area", "stackedArea", "bar", "hbar", "stacked", "pie", "donut", "scatter", "bubble", "histogram", "funnel", "radar")) Widget.Chart(w.copy(series = series))
+                else if (w.type in CHART_TYPES) Widget.Chart(w.copy(series = series))
                 else null
             }
             "stat" -> widgetJson.decodeFromString<StatWidget>(json).let { w ->
@@ -206,6 +223,24 @@ fun parseWidget(kind: String, json: String): Widget? {
             "followups" -> widgetJson.decodeFromString<FollowupsWidget>(json).let { w ->
                 val prompts = w.prompts.take(12).filter { it.isNotBlank() }
                 if (prompts.isEmpty()) null else Widget.Followups(w.copy(prompts = prompts))
+            }
+            "media" -> widgetJson.decodeFromString<MediaWidget>(json).let { w ->
+                val type = w.type.lowercase()
+                if (type !in MEDIA_TYPES) null
+                else if (type == "code") {
+                    if (w.code.isBlank()) null else Widget.Media(w.copy(type = type))
+                } else {
+                    val items = w.items.take(20).filter { it.url.isNotBlank() || it.title.isNotBlank() }
+                    if (items.isEmpty()) null else Widget.Media(w.copy(type = type, items = items))
+                }
+            }
+            "actions" -> widgetJson.decodeFromString<ActionsWidget>(json).let { w ->
+                val buttons = w.buttons.take(8).filter { it.label.isNotBlank() }
+                if (buttons.isEmpty()) null else Widget.Actions(w.copy(buttons = buttons))
+            }
+            "panel" -> widgetJson.decodeFromString<PanelWidget>(json).let { w ->
+                if (w.summary.isBlank() && w.body.isBlank() && w.title.isBlank() && w.popover.isBlank()) null
+                else Widget.Panel(w.copy(badges = w.badges.take(8)))
             }
             "timeline" -> widgetJson.decodeFromString<TimelineWidget>(json).let { w ->
                 val entries = w.entries.take(MAX_TIMELINE_ENTRIES)
@@ -338,6 +373,9 @@ fun WidgetView(widget: Widget, onSendPrompt: ((String) -> Unit)? = null) {
         is Widget.Carousel -> CarouselWidgetView(widget.w)
         is Widget.Cards -> CardsWidgetView(widget.w, onSendPrompt)
         is Widget.Followups -> FollowupsWidgetView(widget.w, onSendPrompt)
+        is Widget.Media -> MediaWidgetView(widget.w, onSendPrompt)
+        is Widget.Actions -> ActionsWidgetView(widget.w, onSendPrompt)
+        is Widget.Panel -> PanelWidgetView(widget.w)
     }
 }
 
@@ -357,9 +395,21 @@ private fun ChartWidgetView(w: ChartWidget) {
             "bubble" -> ScatterChart(w, bubble = true)
             "funnel" -> FunnelChart(w)
             "radar" -> RadarChart(w)
+            "grouped" -> GroupedBarChart(w)
+            "boxplot" -> BoxPlotChart(w)
+            "heatmap" -> HeatmapChart(w)
+            "correlation" -> HeatmapChart(w, diverging = true)
+            "treemap" -> TreemapChart(w)
+            "waterfall" -> WaterfallChart(w)
+            "candlestick" -> CandlestickChart(w)
+            "gantt" -> GanttChart(w)
             else -> LineChart(w, filled = w.type == "area")
         }
-        if (w.series.size > 1 && w.type !in setOf("pie", "donut", "funnel", "radar", "hbar")) {
+        if (w.series.size > 1 && w.type !in setOf(
+                "pie", "donut", "funnel", "radar", "hbar",
+                "heatmap", "correlation", "treemap", "waterfall", "candlestick", "gantt"
+            )
+        ) {
             Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 w.series.forEachIndexed { i, s ->
                     Row(verticalAlignment = Alignment.CenterVertically) {

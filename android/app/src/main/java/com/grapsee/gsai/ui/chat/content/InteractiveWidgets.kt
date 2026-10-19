@@ -331,6 +331,39 @@ internal fun FormWidgetView(w: FormWidget, onSendPrompt: ((String) -> Unit)?) {
                             }
                         }
                     }
+                    "segmented" -> Column(Modifier.padding(vertical = 6.dp)) {
+                        Text(
+                            if (f.required) "${f.label} *" else f.label,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = c.textSecondary,
+                            modifier = Modifier.padding(bottom = 4.dp)
+                        )
+                        Row(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                                .background(c.surface).padding(3.dp),
+                            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            val current = values[i] ?: f.options.firstOrNull()
+                            f.options.take(5).forEach { opt ->
+                                val selected = current == opt
+                                Box(
+                                    Modifier.weight(1f).clip(RoundedCornerShape(8.dp))
+                                        .background(if (selected) c.accent else Color.Transparent)
+                                        .clickable { values[i] = opt }
+                                        .padding(vertical = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        opt,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = if (selected) c.onAccent else c.textSecondary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                        }
+                    }
                     "slider" -> {
                         val v = sliders[i] ?: f.value
                         val lo = minOf(f.min, f.max)

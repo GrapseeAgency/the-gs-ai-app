@@ -154,11 +154,13 @@ class WidgetBlocksTest {
     // --- all chart types ------------------------------------------------------
 
     @Test
-    fun `all thirteen chart types parse with at least one valid series`() {
+    fun `every chart type parses with at least one valid series`() {
         val types = listOf(
-            "line", "area", "stackedArea", "bar", "hbar", "stacked",
-            "pie", "donut", "scatter", "bubble", "histogram", "funnel", "radar"
+            "line", "area", "stackedArea", "bar", "hbar", "stacked", "grouped",
+            "pie", "donut", "scatter", "bubble", "histogram", "boxplot", "heatmap",
+            "correlation", "treemap", "waterfall", "candlestick", "gantt", "funnel", "radar"
         )
+        assertEquals(CHART_TYPES, types.toSet())
         for (type in types) {
             val json = """{"type":"$type","labels":["A","B"],"series":[{"name":"s","data":[[0,3],[1,7],[2,5]]}]}"""
             val w = parseWidget("chart", json)
@@ -219,6 +221,49 @@ class WidgetBlocksTest {
         assertEquals(listOf("next", "more"), f.w.prompts)
     }
 
+    @Test
+    fun `media covers every listed sub-type`() {
+        val payloads = mapOf(
+            "image" to """{"type":"image","items":[{"url":"https://x/a.png"}]}""",
+            "gallery" to """{"type":"gallery","items":[{"url":"https://x/a.png"}]}""",
+            "video" to """{"type":"video","items":[{"url":"https://x/v.mp4","title":"V"}]}""",
+            "audio" to """{"type":"audio","items":[{"url":"https://x/a.mp3","title":"A"}]}""",
+            "code" to """{"type":"code","code":"fun main(){}","language":"kotlin"}""",
+            "file" to """{"type":"file","items":[{"url":"https://x/a.pdf","title":"a.pdf"}]}""",
+            "link" to """{"type":"link","items":[{"url":"https://x","title":"X"}]}""",
+            "citation" to """{"type":"citation","items":[{"url":"https://x","title":"X"}]}""",
+            "search" to """{"type":"search","items":[{"url":"https://x","title":"X","snippet":"s"}]}""",
+            "entity" to """{"type":"entity","items":[{"title":"X"}]}""",
+            "product" to """{"type":"product","items":[{"title":"X","price":"9.99"}]}""",
+            "listing" to """{"type":"listing","items":[{"title":"X","meta":"m"}]}"""
+        )
+        assertEquals(MEDIA_TYPES, payloads.keys)
+        for ((type, json) in payloads) {
+            val w = parseWidget("media", json) as Widget.Media
+            assertEquals(type, w.w.type)
+        }
+    }
+
+    @Test
+    fun `actions parse prompt copy and open buttons`() {
+        val w = parseWidget(
+            "actions",
+            """{"title":"T","buttons":[{"label":"Ask","kind":"prompt","value":"hi"},{"label":"Copy","kind":"copy","value":"x"},{"label":"Open","kind":"open","value":"https://x"}]}"""
+        ) as Widget.Actions
+        assertEquals(3, w.w.buttons.size)
+        assertEquals("prompt", w.w.buttons[0].kind)
+    }
+
+    @Test
+    fun `panel parses badges and popover`() {
+        val w = parseWidget(
+            "panel",
+            """{"title":"T","summary":"s","body":"b","badges":[{"label":"New","tone":"success"}],"popover":"note"}"""
+        ) as Widget.Panel
+        assertEquals(1, w.w.badges.size)
+        assertEquals("note", w.w.popover)
+    }
+
     /**
      * Contract lock: the fence-routing set and the parser must never drift.
      * Every language that `fenceToBlock` treats as a widget must have a parser
@@ -239,7 +284,10 @@ class WidgetBlocksTest {
             "form" to """{"fields":[{"type":"text","label":"Name"}]}""",
             "carousel" to """{"items":[{"image":"https://example.com/a.png"}]}""",
             "cards" to """{"cards":[{"title":"X","prompt":"do"}]}""",
-            "followups" to """{"prompts":["next"]}"""
+            "followups" to """{"prompts":["next"]}""",
+            "media" to """{"type":"image","items":[{"url":"https://example.com/a.png","title":"A"}]}""",
+            "actions" to """{"buttons":[{"label":"Go","kind":"prompt","value":"go"}]}""",
+            "panel" to """{"title":"T","summary":"s","body":"b"}"""
         )
         // The routing set is exactly the parser set — no orphan language, no
         // parser branch reachable only by a hand-written call.

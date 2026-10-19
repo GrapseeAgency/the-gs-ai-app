@@ -370,7 +370,8 @@ private fun parseFence(lines: List<Line>, start: Int): Pair<Block, Int> {
 /** Fence languages that carry a GENUI widget payload (JSON body). */
 val WIDGET_LANGUAGES = setOf(
     "chart", "stat", "table", "compare", "progress", "timeline",
-    "gauge", "quiz", "form", "carousel", "cards", "followups"
+    "gauge", "quiz", "form", "carousel", "cards", "followups",
+    "media", "actions", "panel"
 )
 
 /**

@@ -66,7 +66,7 @@ export const SYSTEM_PROMPT = `You are GS. Answer the user's actual request. Use 
 export const WIDGET_PROMPT = `When an answer contains numbers, comparisons, trends or steps, show them as interactive widgets embedded in your reply. A widget is a fenced code block whose language is the widget kind and whose body is strict JSON (double quotes, no comments, no trailing commas).
 
 Available kinds (fenced block, language = kind, body = strict JSON):
-- chart: {"type":"line|area|stackedArea|bar|hbar|stacked|pie|donut|scatter|bubble|histogram|funnel|radar","title":"...","unit":"...","labels":["..."],"series":[{"name":"...","data":[[x,y],...]}]}  (pie/donut: one series per slice with a single point; funnel/radar: labels + one series of values; scatter/bubble: [x,y] or [x,y,z])
+- chart: {"type":"line|area|stackedArea|bar|hbar|stacked|grouped|pie|donut|scatter|bubble|histogram|boxplot|heatmap|correlation|treemap|waterfall|candlestick|gantt|funnel|radar","title":"...","unit":"...","labels":["..."],"series":[{"name":"...","data":[[x,y],...]}]}  (pie/donut: one series per slice with a single point; funnel/radar: labels + one series of values; scatter/bubble: [x,y] or [x,y,z]; grouped: several series side by side; boxplot: raw samples per series; heatmap/correlation: one series per row, data [col,value] (correlation values -1..1); treemap/waterfall: one series of values + labels; candlestick: [open,high,low,close] per point; gantt: one series, each point [start,end] + labels as task names)
 - stat: {"title":"...","cards":[{"label":"...","value":"...","unit":"...","delta":"...","direction":"up"|"down"|"flat"}]}
 - table: {"title":"...","columns":["..."],"rows":[["...","..."]],"sortable":true}
 - compare: {"title":"...","left":{"title":"...","items":["..."]},"right":{"title":"...","items":["..."]}}
@@ -75,10 +75,13 @@ Available kinds (fenced block, language = kind, body = strict JSON):
 - gauge: {"title":"...","items":[{"label":"...","value":N,"max":M,"unit":"%"}]}
 - gauge-style progress meters per metric.
 - quiz: {"title":"...","questions":[{"q":"...","options":["..."],"answer":index,"explain":"..."}]}  (real tap-to-answer quiz rendered in the chat)
-- form: {"title":"...","submitLabel":"...","fields":[{"type":"text|textarea|select|radio|checkbox|slider|toggle|date","label":"...","options":["..."],"required":true|false,"min":N,"max":M,"value":N,"unit":"..."}]}
+- form: {"title":"...","submitLabel":"...","fields":[{"type":"text|textarea|select|radio|checkbox|slider|toggle|date|segmented","label":"...","options":["..."],"required":true|false,"min":N,"max":M,"value":N,"unit":"..."}]}
 - carousel: {"title":"...","items":[{"image":"https://...","caption":"..."}]}
 - cards: {"title":"...","cards":[{"title":"...","subtitle":"...","prompt":"..."}]}  (a tap sends the prompt back)
 - followups: {"title":"...","prompts":["..."]}  (tap-to-send next prompts)
+- media: {"type":"image|gallery|video|audio|code|file|link|citation|search|entity|product|listing","title":"...","items":[{"url":"https://...","thumb":"https://...","title":"...","subtitle":"...","caption":"...","meta":"...","prompt":"...","domain":"...","snippet":"...","price":"...","badge":"...","rating":"..."}],"code":"...","language":"...","text":"..."}  (images/galleries load from https; video/audio open on tap; code gets a copy button; product/listing/entity `prompt` sends on tap; citations and search results are tappable)
+- actions: {"title":"...","buttons":[{"label":"...","kind":"prompt|copy|open","value":"...","style":"filled|tonal|text"}]}  (real buttons; prompt sends value, copy copies it, open launches the URL)
+- panel: {"title":"...","summary":"...","body":"...","expanded":true|false,"badges":[{"label":"...","tone":"accent|success|warning|danger"}],"popover":"..."}  (tap the header to expand/collapse; badges are inline chips; non-blank popover adds a "More info" reveal)
 - map: {"title":"...","center":[lat,lng],"zoom":N,"pins":[{"lat":N,"lng":N,"label":"...","detail":"..."}],"route":[[lat,lng],...]}  (interactive map with pins/routes)
 - mermaid: a fenced block with mermaid source — flowchart, sequence, gantt, class, state, ER, journey, mindmap, pie, timeline. Use this for ANY diagram request.
 - html: a fenced block with ONE self-contained HTML document (inline CSS+JS; CDN only for map tiles/everything else inline). The app renders it in a live interactive view: forms, dashboards, calculators, unit/currency converters, quizzes, carousels, calendars, kanban boards, booking flows, pricing configurators, prototypes, custom mini-apps, video embeds, anything the user can click. Keep it under 200KB, mobile-sized (no fixed pixel widths wider than the screen), and set <body data-gs-height="Npx"> when a specific height suits the content.
