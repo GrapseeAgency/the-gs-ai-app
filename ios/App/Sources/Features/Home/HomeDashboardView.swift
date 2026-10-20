@@ -15,6 +15,7 @@ struct HomeDashboardView: View {
                 hero
                 quickActions
                 featureGrid
+                reflectionCard
                 focusCard
                 Button(action: onNewChat) {
                     Label("Generate", systemImage: "wand.and.stars")
@@ -131,6 +132,30 @@ struct HomeDashboardView: View {
             HomeFeatureCard(title: "Create\nwith AI", subtitle: "Turn ideas into something real", icon: "wand.and.stars", colors: [Color(red: 1, green: 0.83, blue: 0.69), Aero.surface], action: onNewChat)
             HomeFeatureCard(title: "Mind\nguide", subtitle: "A calmer place to think", icon: "lightbulb", colors: [Color(red: 1, green: 0.78, blue: 0.69), Aero.background], action: onNewChat)
         }
+    }
+
+    private var reflectionCard: some View {
+        Button(action: onNewChat) {
+            VStack(alignment: .leading, spacing: Aero.Spacing.s) {
+                Label("Today's reflection", systemImage: "lightbulb")
+                    .font(Aero.title())
+                    .foregroundStyle(Aero.text)
+                Text("What are you holding onto that you could gently release?")
+                    .font(Aero.body())
+                    .foregroundStyle(Aero.text)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("Open mind guide  →")
+                    .font(Aero.label())
+                    .foregroundStyle(Aero.accentDeep)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(Aero.Spacing.m)
+            .background(LinearGradient(colors: [Color(red: 1, green: 0.89, blue: 0.82), Color(red: 1, green: 0.78, blue: 0.72)], startPoint: .leading, endPoint: .trailing))
+            .clipShape(RoundedRectangle(cornerRadius: Aero.Radius.card))
+            .overlay(RoundedRectangle(cornerRadius: Aero.Radius.card).stroke(Aero.outline, lineWidth: 1))
+            .aeroCardShadow()
+        }
+        .buttonStyle(KineticPressStyle())
     }
 
     private var focusCard: some View {

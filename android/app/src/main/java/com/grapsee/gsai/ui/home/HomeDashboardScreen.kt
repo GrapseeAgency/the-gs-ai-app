@@ -116,6 +116,8 @@ fun HomeDashboardScreen(
             )
         }
         Spacer(Modifier.height(GsSpacing.l))
+        ReflectionCard(onClick = onNewChat)
+        Spacer(Modifier.height(GsSpacing.l))
         SectionTitle("Today’s focus", "See all", onOpenChats)
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -159,6 +161,27 @@ fun HomeDashboardScreen(
             }
         }
         Spacer(Modifier.height(GsSpacing.l))
+    }
+}
+
+@Composable
+private fun ReflectionCard(onClick: () -> Unit) {
+    Card(onClick = onClick, modifier = Modifier.fillMaxWidth(), shape = GsRadius.cardShape(), colors = CardDefaults.cardColors(containerColor = Color.Transparent), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)) {
+        Box(Modifier.fillMaxWidth().background(Brush.horizontalGradient(listOf(Color(0xFFFFE3D2), Color(0xFFFFC6B7)))).padding(GsSpacing.m)) {
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(shape = CircleShape, color = Color.White.copy(alpha = .65f)) {
+                        Icon(GsIcons.Lightbulb, contentDescription = null, modifier = Modifier.padding(9.dp), tint = GsTheme.colors.accentStrong)
+                    }
+                    Spacer(Modifier.width(GsSpacing.s))
+                    Text("Today's reflection", style = MaterialTheme.typography.titleMedium, color = GsTheme.colors.textPrimary)
+                }
+                Spacer(Modifier.height(GsSpacing.s))
+                Text("What are you holding onto that you could gently release?", style = MaterialTheme.typography.bodyMedium, color = GsTheme.colors.textPrimary)
+                Spacer(Modifier.height(GsSpacing.s))
+                Text("Open mind guide  →", style = MaterialTheme.typography.labelMedium, color = GsTheme.colors.accentStrong, fontWeight = FontWeight.SemiBold)
+            }
+        }
     }
 }
 
