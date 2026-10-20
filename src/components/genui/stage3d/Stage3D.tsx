@@ -73,8 +73,7 @@ export function Stage3D({ title, spec }: { title?: string; spec: StageSpec }) {
       disposed = true
       cleanup?.()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    }, [])
 
   return (
     <div>

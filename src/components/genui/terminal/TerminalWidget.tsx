@@ -26,6 +26,7 @@ const BLOCKED = /\b(fetch|XMLHttpRequest|WebSocket|localStorage|sessionStorage|i
 export function TerminalWidget({ payload }: { payload: TerminalPayload }) {
   const { accent, theme } = useWidgetIdentity()
   const cwd = useRef('/home/guest')
+  const [cwdLabel, setCwdLabel] = useState('/home/guest')
   const fs = useRef<Record<string, string | true>>({
     '/home/guest': true,
     '/home/guest/README.md': '# Guest shell\nThis filesystem lives in your browser tab only.',
@@ -48,7 +49,7 @@ export function TerminalWidget({ payload }: { payload: TerminalPayload }) {
 
   const run = (cmdline: string) => {
     const cmd = cmdline.trim()
-    push({ kind: 'in', text: `${cwd.current} $ ${cmd}` })
+    push({ kind: 'in', text: `${cwdLabel} $ ${cmd}` })
     if (!cmd) return
     setHist((h) => [cmd, ...h].slice(0, 40))
     setHistIdx(-1)
@@ -101,7 +102,10 @@ export function TerminalWidget({ payload }: { payload: TerminalPayload }) {
       }
       case 'cd': {
         const target = path(args[0] ?? '~')
-        if (fs.current[target] === true) cwd.current = target
+        if (fs.current[target] === true) {
+          cwd.current = target
+          setCwdLabel(target)
+        }
         else push({ kind: 'err', text: `cd: no such directory: ${target}` })
         break
       }
@@ -141,7 +145,6 @@ export function TerminalWidget({ payload }: { payload: TerminalPayload }) {
           break
         }
         try {
-          // eslint-disable-next-line no-new-func
           const out = Function('"use strict"; const Math2=Math; return (' + src + ')')()
           push({ kind: 'out', text: typeof out === 'object' ? JSON.stringify(out) : String(out) })
         } catch (e) {
@@ -188,7 +191,7 @@ export function TerminalWidget({ payload }: { payload: TerminalPayload }) {
           </div>
         ))}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#9BA3AF' }}>
-          <span style={{ color: accent, whiteSpace: 'nowrap' }}>{cwd.current} $</span>
+          <span style={{ color: accent, whiteSpace: 'nowrap' }}>{cwdLabel} $</span>
           <input
             ref={inputRef}
             value={input}

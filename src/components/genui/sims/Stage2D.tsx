@@ -40,7 +40,9 @@ export function Stage2D({
     interactive: knobs.interactive !== false,
   }
   const uiRef = useRef({ gravity: K.gravity, speed: K.speed, damping: K.damping })
-  uiRef.current = { gravity: K.gravity, speed: K.speed, damping: K.damping }
+  useEffect(() => {
+    uiRef.current = { gravity: K.gravity, speed: K.speed, damping: K.damping }
+  })
 
   useEffect(() => {
     const canvas = canvasRef.current

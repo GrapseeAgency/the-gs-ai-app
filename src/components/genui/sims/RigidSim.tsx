@@ -9,10 +9,6 @@ interface Box { x: number; y: number; vx: number; vy: number; w: number; h: numb
 export function RigidSim({ payload }: { payload: Record<string, unknown> & { title?: string; gravity: number; damping: number; count: number; size: number; seed: number; interactive: boolean } }) {
   const state = useRef<{ boxes: Box[]; init: boolean; token: object | null }>({ boxes: [], init: false, token: null })
   const n = Math.max(4, Math.min(24, Math.round(payload.count / 3)))
-  const rng = (() => {
-    let a = payload.seed * 7919
-    return () => ((a = (a * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff)
-  })()
   return (
     <Stage2D
       title={payload.title || 'Rigid bodies — stacking & toppling'}
@@ -21,7 +17,10 @@ export function RigidSim({ payload }: { payload: Record<string, unknown> & { tit
       hint="boxes knock each other over"
       onStep={(ctx, w, h, dt, _t, pointer, ui, resetToken) => {
         const s = state.current
+        let rng = () => 0.5
         if (!s.init || s.token !== resetToken) {
+          let a = payload.seed * 7919
+          rng = () => ((a = (a * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff)
           s.init = true
           s.token = resetToken
           s.boxes = Array.from({ length: n }, (_, i) => ({

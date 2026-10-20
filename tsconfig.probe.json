@@ -1,0 +1,19 @@
+{
+  "extends": "/home/user/the-gs-ai-app/tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "/home/user/the-gs-ai-app/dist/probe",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "target": "es2020",
+    "jsx": "react-jsx",
+    "esModuleInterop": true,
+    "skipLibCheck": true
+  },
+  "include": [
+    "/home/user/the-gs-ai-app/src/lib/design/**/*",
+    "/home/user/the-gs-ai-app/src/lib/calc/**/*",
+    "/home/user/the-gs-ai-app/src/components/**/*",
+    "/home/user/the-gs-ai-app/scripts/test-genui-pipeline.ts"
+  ]
+}

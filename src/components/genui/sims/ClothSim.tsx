@@ -21,9 +21,9 @@ export function ClothSim({ payload }: { payload: Record<string, unknown> & { tit
       hint="drag to tear · top row pinned"
       onStep={(ctx, w, h, dt, _t, pointer, ui, resetToken) => {
         const s = state.current
-        if (!s.init || (resetToken as { n?: number }).n !== (s as S & { initTokens?: object }).initTokens) {
+        if (!s.init || (resetToken as { n?: number }).n !== (s as S & { initTokens?: unknown }).initTokens) {
           s.init = true
-          ;(s as S & { initTokens?: object }).initTokens = resetToken
+          ;(s as S & { initTokens?: unknown }).initTokens = resetToken
           s.cols = cols
           s.rows = rows
           s.pts = []

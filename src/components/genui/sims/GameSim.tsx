@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 type Rec<K extends string = string, V = unknown> = Record<K, V>
 import { Stage2D } from './Stage2D'
 import { TYPE } from '../theme/tokens'
@@ -17,7 +17,9 @@ interface Coin { x: number; y: number; taken: boolean }
 export function GameSim({ payload }: { payload: Rec<string, unknown> & { title?: string; size: number; seed: number; count: number; interactive: boolean } }) {
   const { accent, theme } = useWidgetIdentity()
   const [score, setScore] = useState(0)
-  const [best, setBest] = useState(0)
+  const noopSubscribe = () => () => {}
+  const readBest = () => localStorage.getItem('gs.game.best') ?? '0'
+  const best = Number(useSyncExternalStore(noopSubscribe, readBest, () => '0'))
   const keys = useRef<Set<string>>(new Set())
   const state = useRef({ p: { x: 40, y: 40, vx: 0, vy: 0 } as P, coins: [] as Coin[], drift: [] as P[], token: null as object | null, lives: 3 })
   const scoreRef = useRef(0)
@@ -26,7 +28,6 @@ export function GameSim({ payload }: { payload: Rec<string, unknown> & { title?:
     const up = (e: KeyboardEvent) => keys.current.delete(e.key.toLowerCase())
     window.addEventListener('keydown', dn)
     window.addEventListener('keyup', up)
-    setBest(Number(localStorage.getItem('gs.game.best') ?? 0))
     return () => {
       window.removeEventListener('keydown', dn)
       window.removeEventListener('keyup', up)
@@ -36,7 +37,6 @@ export function GameSim({ payload }: { payload: Rec<string, unknown> & { title?:
     scoreRef.current += n
     setScore(scoreRef.current)
     if (scoreRef.current > best) {
-      setBest(scoreRef.current)
       localStorage.setItem('gs.game.best', String(scoreRef.current))
     }
   }

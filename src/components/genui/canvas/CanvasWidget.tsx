@@ -346,9 +346,7 @@ function DiagramSurface({ payload }: { payload: CanvasPayload }) {
 function PolygonSurface({ payload }: { payload: CanvasPayload }) {
   const { accent, theme } = useWidgetIdentity()
   const holder = useRef<HTMLDivElement>(null)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const mapRef = useRef<any>(null)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const polyRef = useRef<any>(null)
   const [pts, setPts] = useState<Array<[number, number]>>([])
   const [mode, setMode] = useState(false)
@@ -359,7 +357,6 @@ function PolygonSurface({ payload }: { payload: CanvasPayload }) {
       const L = (await import('leaflet')).default
       if (cancelled || !holder.current || mapRef.current) return
       const map = L.map(holder.current, { scrollWheelZoom: false, attributionControl: false })
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ;(window as any).__gsL = L
       L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map)
       map.setView([23.8103, 90.4125], 12)

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { ChartPayload } from '../types'
 import { ChartFrame } from './ChartFrame'
 import { alpha, TYPE } from '../theme/tokens'
@@ -15,8 +15,21 @@ export function ForceGraphChartView({ payload, height = 260 }: { payload: ChartP
   const { accent, ramp, theme } = useWidgetIdentity()
   const nodes = (payload.nodes ?? []).map((n) => (typeof n === 'string' ? { id: n, label: n, group: '' } : { id: n.id, label: n.label ?? n.id, group: n.group ?? '' }))
   const edges = ((payload.edges ?? payload.links ?? []) as Array<{ source: string; target: string; weight?: number }>).filter((e) => e?.source && e?.target)
-  const [tick, setTick] = useState(0)
-  const simRef = useRef<Array<{ id: string; label: string; group: string; x: number; y: number; vx: number; vy: number }>>([])
+  type SimNode = { id: string; label: string; group: string; x: number; y: number; vx: number; vy: number }
+  const simRef = useRef<SimNode[]>([])
+  // the rAF sim mutates positions in place; the store subscription is what
+  // re-renders us each frame. Render reads the snapshot, never the ref.
+  const notifyRef = useRef<() => void>(() => {})
+  const sim = useSyncExternalStore(
+    (onStoreChange) => {
+      notifyRef.current = onStoreChange
+      return () => {
+        notifyRef.current = () => {}
+      }
+    },
+    () => simRef.current,
+    () => simRef.current,
+  )
   const dragRef = useRef<string | null>(null)
   const boxRef = useRef<HTMLDivElement>(null)
 
@@ -29,7 +42,7 @@ export function ForceGraphChartView({ payload, height = 260 }: { payload: ChartP
       const a = (i / Math.max(1, nodes.length)) * Math.PI * 2
       return { ...n, x: W / 2 + R * Math.cos(a) * (0.6 + rnd() * 0.4), y: H / 2 + R * Math.sin(a) * (0.6 + rnd() * 0.4), vx: 0, vy: 0 }
     })
-    const pos = new Map(simRef.current.map((n) => [n.id, n]))
+    const pos = new Map(sim.map((n) => [n.id, n]))
     const links = edges.map((e) => ({ a: pos.get(e.source), b: pos.get(e.target), w: e.weight ?? 1 })).filter((l) => l.a && l.b)
     let alphaVal = 1
     let raf = 0
@@ -73,17 +86,16 @@ export function ForceGraphChartView({ payload, height = 260 }: { payload: ChartP
         n.y = Math.max(16, Math.min(H - 16, n.y + n.vy))
       }
       alphaVal *= 0.995
-      setTick((t) => t + 1)
+      notifyRef.current()
       if (alphaVal > 0.02 || dragRef.current) raf = requestAnimationFrame(step)
     }
     raf = requestAnimationFrame(step)
     return () => cancelAnimationFrame(raf)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodes.length, edges.length])
 
   const groups = [...new Set(nodes.map((n) => n.group).filter(Boolean))]
   const colors = ramp(Math.max(1, groups.length || 1))
-  const pos = new Map(simRef.current.map((n) => [n.id, n]))
+  const pos = new Map(sim.map((n) => [n.id, n]))
   const W = 320
   const H = height
   const degree = new Map<string, number>()
@@ -111,14 +123,14 @@ export function ForceGraphChartView({ payload, height = 260 }: { payload: ChartP
           onPointerUp={() => (dragRef.current = null)}
           onPointerLeave={() => (dragRef.current = null)}
         >
-          <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" role="img" aria-label="force graph" data-tick={tick}>
+          <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" role="img" aria-label="force graph" data-tick={sim.length}>
             {edges.map((e, i) => {
               const a = pos.get(e.source)
               const b = pos.get(e.target)
               if (!a || !b) return null
               return <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={theme.border} strokeOpacity={0.6} strokeWidth={Math.min(3, Math.max(0.8, (e.weight ?? 1) * 0.8))} />
             })}
-            {simRef.current.map((n) => {
+            {sim.map((n) => {
               const r = 7 + ((degree.get(n.id) ?? 0) / maxDeg) * 8
               const color = n.group && groups.length ? colors[groups.indexOf(n.group) % colors.length] : accent
               return (
@@ -126,7 +138,7 @@ export function ForceGraphChartView({ payload, height = 260 }: { payload: ChartP
                   onPointerDown={(ev) => {
                     dragRef.current = n.id
                     ;(ev.target as Element).setPointerCapture?.(ev.pointerId)
-                    setTick((t) => t + 1)
+                    notifyRef.current()
                   }}
                 >
                   <circle cx={n.x} cy={n.y} r={r} fill={color} fillOpacity={0.92} stroke={theme.dark ? '#0F1216' : '#fff'} strokeWidth={1.5} />

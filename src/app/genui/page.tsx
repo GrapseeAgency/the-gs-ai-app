@@ -429,8 +429,14 @@ CSS layout editor — flip flex props, code emits live:
 
 Clip timeline with running playhead:
 
-\`\`\`video
-{"title":"Launch film","duration":30,"tracks":[{"name":"Video A","clips":[{"start":0,"dur":8,"label":"Intro"},{"start":10,"dur":12,"label":"Demo"}]},{"name":"Audio","clips":[{"start":0,"dur":20,"label":"Voiceover"}]}],"palette":"ember","accent":"#D6336C","variant":"plain"}
+\`\`\`editor
+{"editor":"video","title":"Launch film","duration":30,"tracks":[{"name":"Video A","clips":[{"start":0,"dur":8,"label":"Intro"},{"start":10,"dur":12,"label":"Demo"}]},{"name":"Audio","clips":[{"start":0,"dur":20,"label":"Voiceover"}]}],"palette":"ember","accent":"#D6336C","variant":"plain"}
+\`\`\`
+
+Audio — waveform + spectrogram + real WebAudio playback, tap notes to retune:
+
+\`\`\`editor
+{"editor":"audio","title":"Chime sequencer","palette":"berry","accent":"#9C36B5","variant":"plain"}
 \`\`\``, 
   },
   {

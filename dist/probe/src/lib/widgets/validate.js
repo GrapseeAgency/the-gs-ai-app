@@ -1,0 +1,1397 @@
+"use strict";
+/**
+ * Validation and repair for model-emitted widgets.
+ *
+ * The model is untrusted input. Every payload is parsed, checked against the
+ * catalogue, normalised (numbers, caps, enums) and only then allowed to reach
+ * a client. A payload that cannot be repaired is dropped, never shipped.
+ *
+ * This is the layer that makes "the model emitted JSON" and "the UI can render
+ * it" two different questions — the second one is answered here.
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.CHART_TYPES = void 0;
+exports.extractWidgetFences = extractWidgetFences;
+exports.inferWidgetKind = inferWidgetKind;
+exports.extractBareWidget = extractBareWidget;
+exports.repairJson = repairJson;
+exports.validateWidget = validateWidget;
+exports.validationErrors = validationErrors;
+const evaluate_1 = require("../calc/evaluate");
+const catalog_1 = require("./catalog");
+Object.defineProperty(exports, "CHART_TYPES", { enumerable: true, get: function () { return catalog_1.CHART_TYPES; } });
+const rulebook_1 = require("../design/rulebook");
+/** ```kind\n{...}\n``` at the start of a line. */
+const FENCE = /^```([a-zA-Z][\w-]*)[ \t]*\r?\n([\s\S]*?)^```[ \t]*$/gm;
+function extractWidgetFences(text) {
+    const out = [];
+    for (const m of text.matchAll(FENCE)) {
+        const language = m[1];
+        // A chart sub-type fence (```funnel, ```gantt …) is a chart widget with the
+        // type implied by the fence. Normalising here means the persisted answer
+        // only ever carries the canonical ```chart form, and the client never sees
+        // a payload it would render as a code block.
+        const kind = (0, catalog_1.widgetKindOf)(language);
+        if (!kind)
+            continue;
+        const start = m.index ?? 0;
+        const body = m[2].trim();
+        // A widget payload is a JSON OBJECT. A ```gantt fence holding mermaid's
+        // gantt syntax (dateFormat/section lines — the model does this constantly)
+        // is NOT a widget: validating it would report "invalid JSON" and STRIP the
+        // fence, destroying a diagram the client could have rendered. Leave it in
+        // the text, untouched, for the client's diagram renderer.
+        if (!body.startsWith('{'))
+            continue;
+        const json = language.toLowerCase() !== kind
+            ? (0, catalog_1.injectWidgetType)(body, language, kind)
+            : body;
+        out.push({ kind, json, start, end: start + m[0].length });
+    }
+    return out;
+}
+/** A fenced block whose body is plausibly a bare widget payload. */ const JSON_FENCE = /^```(json|jsonc|widget|genui|data)[ \t]*\r?\n([\s\S]*?)^```[ \t]*$/gm;
+/**
+ * The widget kind a BARE payload describes, or null when it is not a widget.
+ *
+ * The model sometimes answers with no fence at all (or a ```json one). Left
+ * alone, that JSON reaches the client as body text. Kind is inferred from the
+ * payload's own discriminator and then CONFIRMED by the real validator, so
+ * prose containing braces is never promoted. Mirrors inferWidgetKind() on the
+ * clients.
+ */
+function inferWidgetKind(json) {
+    let parsed;
+    try {
+        parsed = JSON.parse(json);
+    }
+    catch {
+        return null;
+    }
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed))
+        return null;
+    const obj = parsed;
+    const has = (k) => k in obj;
+    const candidates = [];
+    if (has('series'))
+        candidates.push('chart');
+    if (has('columns') && has('rows'))
+        candidates.push('table');
+    if (has('cards'))
+        candidates.push('stat');
+    if (has('entries'))
+        candidates.push('timeline');
+    if (has('questions'))
+        candidates.push('quiz');
+    if (has('fields'))
+        candidates.push('form');
+    if (has('prompts'))
+        candidates.push('followups');
+    if (has('buttons'))
+        candidates.push('actions');
+    if (has('items'))
+        candidates.push('progress', 'gauge', 'carousel', 'app', 'media');
+    if (has('pages'))
+        candidates.push('media');
+    if (has('steps') || has('groups'))
+        candidates.push('app');
+    for (const kind of candidates) {
+        if (validateWidget(kind, json).ok)
+            return kind;
+    }
+    return null;
+}
+/**
+ * A widget payload that arrived without a usable fence: either the whole reply
+ * is one JSON object, or a ```json block holds one. Returns offsets so the
+ * compiler can replace it with a canonical fence.
+ */
+function extractBareWidget(text) {
+    const whole = text.trim();
+    if (whole.startsWith('{') && whole.endsWith('}')) {
+        const kind = inferWidgetKind(whole);
+        if (kind) {
+            const start = text.indexOf(whole);
+            return { kind, json: whole, start, end: start + whole.length };
+        }
+    }
+    for (const m of text.matchAll(JSON_FENCE)) {
+        const body = m[2].trim();
+        const kind = inferWidgetKind(body);
+        if (!kind)
+            continue;
+        const start = m.index ?? 0;
+        return { kind, json: body, start, end: start + m[0].length };
+    }
+    return null;
+}
+/**
+ * Repairs the failures models actually produce: smart quotes, trailing commas,
+ * comments, a stray "Here is the JSON:" prefix, or a single missing brace.
+ * Returns null when the text is not recoverable.
+ */
+/**
+ * Remove `//` and slash-star comments WITHOUT touching string contents.
+ *
+ * The naive regex version deleted everything after `//` on a line — including
+ * the `//` in `https://…`. Every payload carrying a URL (media, carousel,
+ * links, citations, images) therefore failed to parse, was reported as
+ * "invalid JSON", and the whole widget was dropped. A comment stripper has to
+ * know whether it is inside a string; there is no regex that does.
+ */
+function stripJsonComments(input) {
+    let out = '';
+    let inString = false;
+    let escaped = false;
+    for (let i = 0; i < input.length; i++) {
+        const ch = input[i];
+        if (inString) {
+            out += ch;
+            if (escaped)
+                escaped = false;
+            else if (ch === '\\')
+                escaped = true;
+            else if (ch === '"')
+                inString = false;
+            continue;
+        }
+        if (ch === '"') {
+            inString = true;
+            out += ch;
+            continue;
+        }
+        if (ch === '/' && input[i + 1] === '/') {
+            while (i < input.length && input[i] !== '\n')
+                i++;
+            out += '\n';
+            continue;
+        }
+        if (ch === '/' && input[i + 1] === '*') {
+            i += 2;
+            while (i < input.length && !(input[i] === '*' && input[i + 1] === '/'))
+                i++;
+            i++;
+            continue;
+        }
+        out += ch;
+    }
+    return out;
+}
+/**
+ * Close what the model left open: an unterminated string (the calendar probe
+ * watched `"All day]}` — a missing quote and brace in one payload) and any
+ * unclosed object/array. Walks with string awareness so a `}` inside a string
+ * never counts, and inserts the closing quote BEFORE the structural character
+ * that terminated the string.
+ */
+function closeOpenStructures(s) {
+    let out = '';
+    let inString = false;
+    let escaped = false;
+    const stack = [];
+    for (const ch of s) {
+        if (inString) {
+            if (!escaped && (ch === ']' || ch === '}' || ch === ',')) {
+                out += '"';
+                inString = false;
+            }
+            else {
+                out += ch;
+                if (escaped)
+                    escaped = false;
+                else if (ch === '\\')
+                    escaped = true;
+                else if (ch === '"')
+                    inString = false;
+                continue;
+            }
+        }
+        if (ch === '"') {
+            inString = true;
+            out += ch;
+            continue;
+        }
+        if (ch === '{' || ch === '[') {
+            stack.push(ch === '{' ? '}' : ']');
+            out += ch;
+            continue;
+        }
+        if (ch === '}' || ch === ']') {
+            // An array close that arrives while objects are still open ("All day]}
+            // — the model omitted a string close AND a brace): close the objects
+            // first, then the array.
+            const want = ch;
+            while (stack.length > 0 && stack[stack.length - 1] !== want) {
+                if (want === ']' && stack[stack.length - 1] === '}') {
+                    out += '}';
+                    stack.pop();
+                }
+                else
+                    break;
+            }
+            if (stack.length > 0 && stack[stack.length - 1] === ch)
+                stack.pop();
+            out += ch;
+            continue;
+        }
+        out += ch;
+    }
+    if (inString)
+        out += '"';
+    while (stack.length > 0)
+        out += stack.pop();
+    try {
+        JSON.parse(out);
+        return out;
+    }
+    catch {
+        return null;
+    }
+}
+function repairJson(raw) {
+    let s = raw.trim();
+    if (!s)
+        return null;
+    // Strip a prose prefix before the first brace.
+    const firstBrace = s.indexOf('{');
+    if (firstBrace > 0)
+        s = s.slice(firstBrace);
+    const lastBrace = s.lastIndexOf('}');
+    if (lastBrace >= 0)
+        s = s.slice(0, lastBrace + 1);
+    s = stripJsonComments(s)
+        .replace(/[\u201c\u201d]/g, '"')
+        .replace(/[\u2018\u2019]/g, "'")
+        .replace(/,\s*([}\]])/g, '$1');
+    try {
+        JSON.parse(s);
+        return s;
+    }
+    catch {
+        // Truncation and typos are the same failure: something the model opened
+        // was never closed. Close strings first, then structures.
+        return closeOpenStructures(s);
+    }
+}
+// ---------------------------------------------------------------------------
+// Primitive coercions
+// ---------------------------------------------------------------------------
+const isObj = (v) => typeof v === 'object' && v !== null && !Array.isArray(v);
+const asArray = (v) => (Array.isArray(v) ? v : []);
+const asString = (v, fallback = '') => typeof v === 'string' ? v : typeof v === 'number' ? String(v) : fallback;
+const asNumber = (v) => {
+    if (typeof v === 'number' && Number.isFinite(v))
+        return v;
+    if (typeof v === 'string') {
+        const n = Number(v.replace(/[,\s]/g, ''));
+        return Number.isFinite(n) ? n : null;
+    }
+    return null;
+};
+const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
+const isHttps = (v) => /^https:\/\//i.test(v);
+function validateWidget(kind, rawJson) {
+    if (!(0, catalog_1.isWidgetKind)(kind))
+        return { ok: false, kind, errors: [`unknown kind: ${kind}`] };
+    const repairedJson = repairJson(rawJson);
+    if (repairedJson === null)
+        return { ok: false, kind, errors: ['invalid JSON'] };
+    let payload;
+    try {
+        payload = JSON.parse(repairedJson);
+    }
+    catch {
+        return { ok: false, kind, errors: ['invalid JSON'] };
+    }
+    if (!isObj(payload))
+        return { ok: false, kind, errors: ['payload is not an object'] };
+    const jsonRepaired = repairedJson !== rawJson.trim();
+    const check = CHECKS[kind](payload);
+    if (check.errors.length > 0)
+        return { ok: false, kind, errors: check.errors };
+    // Art direction belongs to the model: it may choose an accent and a surface
+    // for THIS widget instead of accepting the renderer's default identity. The
+    // validator carries the two keys through untouched (and rejects anything
+    // that is not a real colour/variant) — dropping them here silently threw
+    // away every deliberate design decision the model made.
+    const styled = { ...check.widget };
+    const accent = typeof payload.accent === 'string' ? payload.accent.trim() : '';
+    if (/^#?[0-9a-fA-F]{6}$/.test(accent)) {
+        styled.accent = accent.startsWith('#') ? accent.toLowerCase() : `#${accent.toLowerCase()}`;
+    }
+    const variant = typeof payload.variant === 'string' ? payload.variant.trim().toLowerCase() : '';
+    if (rulebook_1.SURFACES.includes(variant))
+        styled.variant = variant;
+    // The reply-level palette: one id, every widget in the answer inherits it,
+    // so a reply reads as one designed object. An unknown id is dropped and the
+    // art director picks the subject-fit palette instead.
+    const palette = typeof payload.palette === 'string' ? payload.palette.trim().toLowerCase() : '';
+    if (rulebook_1.PALETTES.some((p) => p.id === palette))
+        styled.palette = palette;
+    const json = JSON.stringify(styled);
+    if (json.length > catalog_1.LIMITS.maxWidgetBytes) {
+        return { ok: false, kind, errors: [`payload exceeds ${catalog_1.LIMITS.maxWidgetBytes} bytes`] };
+    }
+    return {
+        ok: true,
+        kind,
+        widget: styled,
+        json,
+        repaired: check.repaired || jsonRepaired,
+    };
+}
+/** Narrowing-safe accessor: `[]` for valid results. */
+function validationErrors(result) {
+    if (result.ok)
+        return [];
+    return result.errors;
+}
+/**
+ * Point normalisation for every shape a real model emits:
+ *
+ *   [[0, 12], [1, 18]]      documented pair
+ *   [12, 18]                flat values, x implied by index
+ *   [["Q1", 12], ["Q2", 18]] string label as x  (labels are harvested)
+ *   [{ "x": 0, "y": 12 }]   object form
+ *
+ * Only the first used to pass, so the other three were dropped as invalid —
+ * our own validator threw away correct answers.
+ */
+function normalisePoints(raw, labelHints) {
+    const out = [];
+    raw.forEach((item, index) => {
+        if (typeof item === 'number' && Number.isFinite(item)) {
+            out.push([index, item]);
+            return;
+        }
+        if (Array.isArray(item)) {
+            const first = item[0];
+            if (typeof first === 'string' && first.trim())
+                labelHints.push(first.trim());
+            const nums = item.map(asNumber).filter((n) => n !== null);
+            if (nums.length >= 2)
+                out.push([nums[0], nums[1]]);
+            else if (nums.length === 1)
+                out.push([index, nums[0]]);
+            return;
+        }
+        if (isObj(item)) {
+            const y = asNumber(item.y) ?? asNumber(item.value);
+            if (y === null)
+                return;
+            out.push([asNumber(item.x) ?? index, y]);
+        }
+    });
+    return out.slice(0, catalog_1.LIMITS.maxPointsPerSeries);
+}
+/**
+ * v2 chart payload families whose shape is a GRAPH or a composition, not a
+ * series list. Each has its own normaliser below.
+ */
+const GRAPH_PAYLOAD_TYPES = new Set(['sankey', 'network', 'wordcloud', 'sunburst', 'bullet', 'force', 'depth', 'violin', 'contour', 'parallel', 'dendrogram']);
+/** sankey / network / wordcloud / sunburst / bullet payloads. */
+function normaliseGraphChart(type, p, alreadyRepaired) {
+    const errors = [];
+    const repaired = alreadyRepaired;
+    if (type === 'sankey') {
+        const links = asArray(p.links)
+            .map((l) => {
+            const o = isObj(l) ? l : {};
+            const value = asNumber(o.value);
+            return { source: asString(o.source ?? o.from), target: asString(o.target ?? o.to), value: value === null ? 0 : value };
+        })
+            .filter((l) => l.source && l.target && l.value > 0)
+            .slice(0, 60);
+        const declaredNodes = asArray(p.nodes)
+            .map((n) => asString(typeof n === 'string' ? n : isObj(n) ? String(n.id ?? n.name ?? '') : ''))
+            .filter(Boolean);
+        const derived = new Set();
+        for (const l of links) {
+            derived.add(l.source);
+            derived.add(l.target);
+        }
+        const nodes = declaredNodes.length > 0 ? declaredNodes.slice(0, 40) : [...derived];
+        if (links.length === 0)
+            errors.push('sankey needs links with source, target and value');
+        return { widget: { type, title: asString(p.title), unit: asString(p.unit), nodes, links }, errors, repaired };
+    }
+    if (type === 'network') {
+        const nodes = asArray(p.nodes)
+            .map((n) => {
+            if (typeof n === 'string')
+                return { id: n, label: n, group: '' };
+            const o = isObj(n) ? n : {};
+            const id = asString(o.id ?? o.name);
+            return { id, label: asString(o.label, id), group: asString(o.group) };
+        })
+            .filter((n) => n.id)
+            .slice(0, 40);
+        const rawEdges = asArray(p.edges).length > 0 ? asArray(p.edges) : asArray(p.links);
+        const edges = asArray(rawEdges)
+            .map((e) => {
+            const o = isObj(e) ? e : {};
+            const weight = asNumber(o.weight ?? o.value);
+            return { source: asString(o.source ?? o.from), target: asString(o.target ?? o.to), weight: weight === null ? 1 : weight };
+        })
+            .filter((e) => e.source && e.target)
+            .slice(0, 80);
+        const ids = new Set(nodes.map((n) => n.id));
+        const known = edges.filter((e) => ids.has(e.source) && ids.has(e.target));
+        if (nodes.length === 0 || known.length === 0)
+            errors.push('network needs nodes and edges between them');
+        return { widget: { type, title: asString(p.title), nodes, edges: known }, errors, repaired };
+    }
+    if (type === 'wordcloud') {
+        const raw = asArray(p.items).length > 0 ? asArray(p.items) : asArray(p.words);
+        const items = raw
+            .map((w) => {
+            if (typeof w === 'string')
+                return { text: w, weight: 1 };
+            const o = isObj(w) ? w : {};
+            const weight = asNumber(o.weight ?? o.value);
+            return { text: asString(o.text ?? o.word ?? o.label), weight: weight === null ? 1 : Math.max(0, weight) };
+        })
+            .filter((w) => w.text)
+            .slice(0, 60);
+        if (items.length === 0)
+            errors.push('wordcloud needs items with text and weight');
+        return { widget: { type, title: asString(p.title), items }, errors, repaired };
+    }
+    if (type === 'sunburst') {
+        const readNode = (v, depth) => {
+            if (depth > catalog_1.LIMITS.maxTreeDepth)
+                return null;
+            if (typeof v === 'string')
+                return { label: v, value: 0, children: [] };
+            const o = isObj(v) ? v : {};
+            const value = asNumber(o.value);
+            const children = asArray(o.children)
+                .map((c) => readNode(c, depth + 1))
+                .filter((c) => c !== null);
+            const label = asString(o.label ?? o.name);
+            if (!label)
+                return null;
+            return { label, value: value === null ? 0 : value, children };
+        };
+        const root = readNode(p.root ?? p.hierarchy, 0);
+        if (!root || (root.children.length === 0 && root.value === 0))
+            errors.push('sunburst needs a root with children or a value');
+        return { widget: { type, title: asString(p.title), unit: asString(p.unit), root: root ?? { label: '', value: 0, children: [] } }, errors, repaired };
+    }
+    if (type === 'force') {
+        // same shape as network; the renderer adds a force-directed layout
+        const asNetwork = normaliseGraphChart('network', p, alreadyRepaired);
+        if (asNetwork.errors.length === 0) {
+            return { ...asNetwork, widget: { ...asNetwork.widget, type: 'force' } };
+        }
+        return asNetwork;
+    }
+    if (type === 'depth') {
+        const side = (v) => asArray(v)
+            .map((row) => {
+            const pair = asArray(row).map((x) => asNumber(x)).filter((n) => n !== null);
+            return pair.length >= 2 ? [pair[0], pair[1]] : null;
+        })
+            .filter((row) => row !== null)
+            .slice(0, 40);
+        const bids = side(p.bids);
+        const asks = side(p.asks);
+        if (bids.length === 0 && asks.length === 0)
+            errors.push('depth needs bids and asks as [price,size] pairs');
+        return { widget: { type, title: asString(p.title), unit: asString(p.unit), bids, asks }, errors, repaired };
+    }
+    if (type === 'violin') {
+        const series = asArray(p.series)
+            .map((ser) => {
+            const row = isObj(ser) ? ser : {};
+            const samples = asArray(row.data).map((d) => asNumber(Array.isArray(d) ? d[d.length - 1] : d)).filter((n) => n !== null);
+            return { name: asString(row.name, 'Group'), data: samples.slice(0, 400) };
+        })
+            .filter((ser) => ser.data.length >= 3)
+            .slice(0, 8);
+        if (series.length === 0)
+            errors.push('violin needs series with at least 3 samples');
+        return { widget: { type, title: asString(p.title), unit: asString(p.unit), series }, errors, repaired };
+    }
+    if (type === 'contour') {
+        const points = asArray(p.points)
+            .map((pt) => {
+            const nums = asArray(pt).map((x) => asNumber(x)).filter((n) => n !== null);
+            return nums.length >= 3 ? [nums[0], nums[1], nums[2]] : null;
+        })
+            .filter((pt) => pt !== null)
+            .slice(0, 2500);
+        if (points.length < 9)
+            errors.push('contour needs a grid of [x,y,z] points');
+        return { widget: { type, title: asString(p.title), unit: asString(p.unit), points, levels: clamp(asNumber(p.levels) ?? 6, 3, 12) }, errors, repaired };
+    }
+    if (type === 'parallel') {
+        const axes = asArray(p.axes).map((a) => asString(a)).filter(Boolean).slice(0, 10);
+        const series = asArray(p.series)
+            .map((ser) => {
+            const row = isObj(ser) ? ser : {};
+            const values = asArray(row.values).map((v) => asNumber(v) ?? 0);
+            return { name: asString(row.name, 'Row'), values: values.slice(0, 10) };
+        })
+            .filter((ser) => ser.values.length === axes.length && axes.length >= 3)
+            .slice(0, 12);
+        if (axes.length < 3 || series.length === 0)
+            errors.push('parallel needs 3+ axes and series aligned to them');
+        return { widget: { type, title: asString(p.title), axes, series }, errors, repaired };
+    }
+    if (type === 'dendrogram') {
+        const read = (v, depth) => {
+            if (depth > catalog_1.LIMITS.maxTreeDepth)
+                return null;
+            const o = isObj(v) ? v : {};
+            const label = asString(o.label ?? o.name);
+            if (!label)
+                return null;
+            const dist = asNumber(o.distance) ?? 0;
+            return { label, distance: dist, children: asArray(o.children).map((c) => read(c, depth + 1)).filter((c) => c !== null) };
+        };
+        const rawRoots = asArray(p.roots).length > 0 ? asArray(p.roots) : isObj(p.root) ? [p.root] : [];
+        const roots = rawRoots.map((r) => read(r, 0)).filter((r) => r !== null).slice(0, 8);
+        if (!roots.length)
+            errors.push('dendrogram needs a merge tree with labels');
+        return { widget: { type, title: asString(p.title), roots }, errors, repaired };
+    }
+    // bullet
+    const max = asNumber(p.max);
+    const items = asArray(p.items)
+        .map((i) => {
+        const o = isObj(i) ? i : {};
+        const value = asNumber(o.value);
+        const target = asNumber(o.target);
+        const itemMax = asNumber(o.max);
+        const ranges = asArray(o.ranges).map((r) => asNumber(r)).filter((n) => n !== null);
+        return {
+            label: asString(o.label),
+            value: value === null ? 0 : value,
+            target: target === null ? null : target,
+            max: itemMax === null || itemMax <= 0 ? null : itemMax,
+            ranges: ranges.slice(0, 4),
+            unit: asString(o.unit),
+        };
+    })
+        .filter((i) => i.label)
+        .slice(0, 8);
+    if (items.length === 0)
+        errors.push('bullet needs items with label and value');
+    return { widget: { type, title: asString(p.title), unit: asString(p.unit), max: max === null || max <= 0 ? null : max, items }, errors, repaired };
+}
+const CHECKS = {
+    chart: (p) => {
+        const errors = [];
+        let repaired = false;
+        let type = asString(p.type, 'line');
+        if (!(0, catalog_1.isChartType)(type)) {
+            type = 'bar';
+            repaired = true;
+        }
+        // v2 graph / composition charts have their own payload shapes and do not
+        // fit the series model at all.
+        if (GRAPH_PAYLOAD_TYPES.has(type)) {
+            return normaliseGraphChart(type, p, repaired);
+        }
+        const pieLike = type === 'pie' || type === 'donut';
+        // A gantt chart is encoded as ONE RANGE PER SERIES — Task 1 is [0,2],
+        // Task 2 is [2,4] (probe 2026-10-20). Demanding two points per series
+        // rejected every canonical gantt payload.
+        const minPoints = pieLike || type === 'gantt' ? 1 : 2;
+        // Models send [[x,y]] (documented), [12,18] (flat), [["Q1",120]] (string
+        // label as x) and [{"x":0,"y":12}]. Only the first used to survive, so the
+        // other three were silently DROPPED as invalid — a correct answer thrown
+        // away by our own validator.
+        // Models also put the data at the top level instead of in a series:
+        //   {"type":"bar","labels":["Q1","Q2"],"values":[120,180]}
+        //   {"type":"line","data":[[0,1],[1,2]]}
+        // Both are unambiguous, and both used to be rejected as "chart needs at
+        // least one series" — a correct answer discarded by the validator.
+        let rawSeries = asArray(p.series);
+        if (rawSeries.length === 0) {
+            const flat = asArray(p.values).length > 0 ? asArray(p.values) : asArray(p.data);
+            if (flat.length > 0) {
+                rawSeries = [{ name: asString(p.name, 'Value'), data: flat }];
+                repaired = true;
+            }
+        }
+        const labelHints = [];
+        const series = rawSeries
+            .map((s) => {
+            const row = isObj(s) ? s : {};
+            const data = normalisePoints(asArray(row.data), labelHints);
+            return { name: asString(row.name, 'Series'), data };
+        })
+            .filter((s) => s.data.length >= minPoints)
+            .slice(0, catalog_1.LIMITS.maxChartSeries);
+        if (series.length === 0)
+            errors.push('chart needs at least one series with enough points');
+        const declared = asArray(p.labels).map((l) => asString(l)).filter(Boolean);
+        const labels = declared.length > 0 ? declared : labelHints;
+        return {
+            widget: { type, title: asString(p.title), unit: asString(p.unit), labels, series },
+            errors,
+            repaired,
+        };
+    },
+    stat: (p) => {
+        const cards = asArray(p.cards)
+            .map((c) => {
+            const row = isObj(c) ? c : {};
+            return {
+                label: asString(row.label),
+                value: asString(row.value),
+                unit: asString(row.unit),
+                delta: asString(row.delta),
+                direction: asString(row.direction),
+            };
+        })
+            .filter((c) => c.label && c.value)
+            .slice(0, catalog_1.LIMITS.maxCards);
+        return {
+            widget: { title: asString(p.title), cards },
+            errors: cards.length ? [] : ['stat needs at least one card'],
+            repaired: false,
+        };
+    },
+    table: (p) => {
+        const columns = asArray(p.columns)
+            .map((c) => asString(c))
+            .filter(Boolean)
+            .slice(0, catalog_1.LIMITS.maxTableColumns);
+        const rows = asArray(p.rows)
+            .map((r) => asArray(r).map((c) => asString(c)).slice(0, columns.length))
+            .filter((r) => r.length > 0)
+            .slice(0, catalog_1.LIMITS.maxTableRows);
+        const errors = [];
+        if (!columns.length)
+            errors.push('table needs columns');
+        if (!rows.length)
+            errors.push('table needs rows');
+        return {
+            widget: { title: asString(p.title), columns, rows, sortable: p.sortable === true },
+            errors,
+            repaired: false,
+        };
+    },
+    compare: (p) => {
+        const side = (v) => {
+            const o = isObj(v) ? v : {};
+            return {
+                title: asString(o.title),
+                items: asArray(o.items).map((i) => asString(i)).filter(Boolean),
+            };
+        };
+        const left = side(p.left);
+        const right = side(p.right);
+        return {
+            widget: { title: asString(p.title), left, right },
+            errors: left.items.length || right.items.length ? [] : ['compare needs items on a side'],
+            repaired: false,
+        };
+    },
+    progress: (p) => {
+        const items = asArray(p.items)
+            .map((i) => {
+            const o = isObj(i) ? i : {};
+            const percent = asNumber(o.percent);
+            return { label: asString(o.label), percent: percent === null ? 0 : clamp(percent, 0, 100) };
+        })
+            .filter((i) => i.label);
+        return {
+            widget: { title: asString(p.title), items },
+            errors: items.length ? [] : ['progress needs items'],
+            repaired: false,
+        };
+    },
+    timeline: (p) => {
+        const entries = asArray(p.entries)
+            .map((e) => {
+            const o = isObj(e) ? e : {};
+            return { date: asString(o.date), title: asString(o.title), detail: asString(o.detail) };
+        })
+            .filter((e) => e.date && e.title);
+        return {
+            widget: { title: asString(p.title), entries },
+            errors: entries.length ? [] : ['timeline needs dated entries'],
+            repaired: false,
+        };
+    },
+    gauge: (p) => {
+        const items = asArray(p.items)
+            .map((i) => {
+            const o = isObj(i) ? i : {};
+            const value = asNumber(o.value);
+            const max = asNumber(o.max);
+            return {
+                label: asString(o.label),
+                value: value === null ? 0 : Math.max(0, value),
+                max: max === null || max <= 0 ? 100 : max,
+                unit: asString(o.unit),
+            };
+        })
+            .filter((i) => i.label)
+            .slice(0, 6);
+        return {
+            widget: { title: asString(p.title), items },
+            errors: items.length ? [] : ['gauge needs items'],
+            repaired: false,
+        };
+    },
+    quiz: (p) => {
+        const questions = asArray(p.questions)
+            .map((q) => {
+            const o = isObj(q) ? q : {};
+            const options = asArray(o.options).map((x) => asString(x)).filter(Boolean);
+            const answer = asNumber(o.answer);
+            return {
+                q: asString(o.q),
+                options,
+                answer: options.length ? clamp(answer === null ? 0 : answer, 0, options.length - 1) : 0,
+                explain: asString(o.explain),
+            };
+        })
+            .filter((q) => q.q && q.options.length >= 2)
+            .slice(0, catalog_1.LIMITS.maxQuizQuestions);
+        return {
+            widget: { title: asString(p.title), questions },
+            errors: questions.length ? [] : ['quiz needs questions with options'],
+            repaired: false,
+        };
+    },
+    form: (p) => {
+        let repaired = false;
+        const fields = asArray(p.fields)
+            .map((f) => {
+            const o = isObj(f) ? f : {};
+            let type = asString(o.type, 'text');
+            if (!catalog_1.FORM_FIELD_TYPES.includes(type)) {
+                type = 'text';
+                repaired = true;
+            }
+            return {
+                type,
+                label: asString(o.label),
+                options: asArray(o.options).map((x) => asString(x)).filter(Boolean),
+                required: o.required === true,
+                min: asNumber(o.min),
+                max: asNumber(o.max),
+                value: asNumber(o.value),
+                unit: asString(o.unit),
+            };
+        })
+            .filter((f) => f.label)
+            .slice(0, catalog_1.LIMITS.maxFormFields);
+        return {
+            widget: { title: asString(p.title), submitLabel: asString(p.submitLabel), fields },
+            errors: fields.length ? [] : ['form needs labelled fields'],
+            repaired,
+        };
+    },
+    carousel: (p) => {
+        const items = asArray(p.items)
+            .map((i) => {
+            const o = isObj(i) ? i : {};
+            return { image: asString(o.image), caption: asString(o.caption) };
+        })
+            .filter((i) => isHttps(i.image))
+            .slice(0, 20);
+        return {
+            widget: { title: asString(p.title), items },
+            errors: items.length ? [] : ['carousel needs https images'],
+            repaired: false,
+        };
+    },
+    cards: (p) => {
+        const cards = asArray(p.cards)
+            .map((c) => {
+            const o = isObj(c) ? c : {};
+            return {
+                title: asString(o.title),
+                subtitle: asString(o.subtitle),
+                prompt: asString(o.prompt),
+            };
+        })
+            .filter((c) => c.title)
+            .slice(0, catalog_1.LIMITS.maxCards);
+        return {
+            widget: { title: asString(p.title), cards },
+            errors: cards.length ? [] : ['cards need titles'],
+            repaired: false,
+        };
+    },
+    followups: (p) => {
+        const prompts = asArray(p.prompts).map((x) => asString(x)).filter(Boolean).slice(0, 12);
+        return {
+            widget: { title: asString(p.title), prompts },
+            errors: prompts.length ? [] : ['followups need prompts'],
+            repaired: false,
+        };
+    },
+    media: (p) => {
+        let repaired = false;
+        // Two live shapes for a document body, both seen in the probe:
+        //   {"title":…,"pages":[{"page":1,"text":…}]} — the pages themselves
+        //   {"title":…,"pages":3}                      — a page COUNT only
+        const pages = asArray(p.pages)
+            .map((x) => (x && typeof x === 'object' ? x : {}))
+            .map((o) => ({ page: asNumber(o.page) ?? 0, text: asString(o.text) }))
+            .filter((x) => x.text.trim().length > 0)
+            .slice(0, 20);
+        const pageCount = typeof p.pages === 'number' && Number.isFinite(p.pages)
+            ? Math.min(Math.max(Math.round(p.pages), 0), 999)
+            : pages.length > 0
+                ? pages.length
+                : 0;
+        const stated = asString(p.type, '');
+        let type = catalog_1.MEDIA_TYPES.includes(stated)
+            ? stated
+            : // A typeless payload that carries pages IS a document; typeless with
+                // anything else stays an image, the historical default.
+                stated === '' && (pages.length > 0 || pageCount > 0)
+                    ? 'pdf'
+                    : 'image';
+        if (!catalog_1.MEDIA_TYPES.includes(stated))
+            repaired = true;
+        // {"type":"image","url":"https://…"} — a single item, not wrapped in items.
+        // A ```search fence carries `results` for the same list — the probe watched
+        // the live server send it, and the validator called it empty.
+        let rawItems = asArray(p.items);
+        if (rawItems.length === 0 && asArray(p.results).length > 0) {
+            rawItems = asArray(p.results);
+            repaired = true;
+        }
+        if (rawItems.length === 0 && asString(p.url)) {
+            rawItems = [{ url: p.url, thumb: p.thumb, title: p.title, caption: p.caption }];
+        }
+        const items = rawItems
+            .map((i) => {
+            const o = isObj(i) ? i : {};
+            return {
+                url: asString(o.url),
+                thumb: asString(o.thumb),
+                title: asString(o.title),
+                subtitle: asString(o.subtitle),
+                caption: asString(o.caption),
+                meta: asString(o.meta),
+                prompt: asString(o.prompt),
+                domain: asString(o.domain),
+                snippet: asString(o.snippet),
+                price: asString(o.price),
+                badge: asString(o.badge),
+                rating: asString(o.rating),
+                mime: asString(o.mime),
+            };
+        })
+            .slice(0, 20);
+        const code = asString(p.code);
+        const text = asString(p.text);
+        const ok = items.length > 0 || code.length > 0 || text.length > 0 || pages.length > 0 || pageCount > 0;
+        return {
+            widget: { type, title: asString(p.title), items, code, language: asString(p.language), text, pages, pageCount },
+            errors: ok ? [] : ['media needs items, code or text'],
+            repaired,
+        };
+    },
+    actions: (p) => {
+        let repaired = false;
+        const buttons = asArray(p.buttons)
+            .map((b) => {
+            const o = isObj(b) ? b : {};
+            let kind = asString(o.kind, 'prompt');
+            if (!['prompt', 'copy', 'open'].includes(kind)) {
+                kind = 'prompt';
+                repaired = true;
+            }
+            return {
+                label: asString(o.label),
+                kind,
+                value: asString(o.value),
+                style: asString(o.style, 'filled'),
+            };
+        })
+            .filter((b) => b.label && b.value)
+            .slice(0, 6);
+        return {
+            widget: { title: asString(p.title), buttons },
+            errors: buttons.length ? [] : ['actions need labelled buttons'],
+            repaired,
+        };
+    },
+    panel: (p) => {
+        const widget = {
+            title: asString(p.title),
+            summary: asString(p.summary),
+            body: asString(p.body),
+            expanded: p.expanded === true,
+            badges: asArray(p.badges).map((b) => {
+                const o = isObj(b) ? b : {};
+                return { label: asString(o.label), tone: asString(o.tone, 'accent') };
+            }),
+            popover: asString(p.popover),
+        };
+        return {
+            widget,
+            errors: widget.title || widget.body || widget.summary ? [] : ['panel needs content'],
+            repaired: false,
+        };
+    },
+    voice: (p) => {
+        const widget = {
+            title: asString(p.title),
+            prompt: asString(p.prompt),
+            hint: asString(p.hint),
+        };
+        return {
+            widget,
+            errors: widget.prompt || widget.title ? [] : ['voice needs a prompt'],
+            repaired: false,
+        };
+    },
+    calc: (p) => {
+        let repaired = false;
+        let type = asString(p.type, 'finance');
+        if (!catalog_1.CALC_TYPES.includes(type)) {
+            type = 'finance';
+            repaired = true;
+        }
+        const fields = asArray(p.fields)
+            .map((f) => {
+            const o = isObj(f) ? f : {};
+            return {
+                key: asString(o.key),
+                label: asString(o.label),
+                value: asNumber(o.value) ?? 0,
+                unit: asString(o.unit),
+                min: asNumber(o.min),
+                max: asNumber(o.max),
+                step: asNumber(o.step),
+                choices: asArray(o.choices).map((c) => {
+                    const ch = isObj(c) ? c : {};
+                    return { label: asString(ch.label), value: asNumber(ch.value) ?? 0 };
+                }),
+            };
+        })
+            .filter((f) => f.key && f.label);
+        const outputs = asArray(p.outputs)
+            .map((o) => {
+            const row = isObj(o) ? o : {};
+            return {
+                label: asString(row.label),
+                expr: asString(row.expr),
+                unit: asString(row.unit),
+                format: asString(row.format),
+                primary: row.primary === true,
+            };
+        })
+            .filter((o) => o.label && o.expr);
+        const errors = [];
+        if (!fields.length)
+            errors.push('calc needs fields');
+        if (!outputs.length)
+            errors.push('calc needs outputs');
+        return {
+            widget: { type, title: asString(p.title), fields, outputs, note: asString(p.note) },
+            errors,
+            repaired,
+        };
+    },
+    app: (p) => {
+        let repaired = false;
+        let type = asString(p.type, 'wizard');
+        if (!catalog_1.APP_TYPES.includes(type)) {
+            type = 'wizard';
+            repaired = true;
+        }
+        const widget = {
+            type,
+            title: asString(p.title),
+            steps: asArray(p.steps),
+            columns: asArray(p.columns),
+            items: asArray(p.items).slice(0, catalog_1.LIMITS.maxAppItems),
+            groups: asArray(p.groups),
+            rows: asArray(p.rows),
+            slots: asArray(p.slots),
+            month: asString(p.month),
+            submitLabel: asString(p.submitLabel),
+        };
+        const hasBody = widget.steps.length > 0 ||
+            widget.columns.length > 0 ||
+            widget.items.length > 0 ||
+            widget.groups.length > 0 ||
+            widget.rows.length > 0 ||
+            widget.slots.length > 0;
+        return {
+            widget,
+            errors: hasBody ? [] : ['app needs steps, columns, items, groups, rows or slots'],
+            repaired,
+        };
+    },
+    // ------------------------------------------------------------------
+    // v2 — layout, control and study surfaces
+    // ------------------------------------------------------------------
+    tabs: (p) => {
+        const tabs = asArray(p.tabs)
+            .map((t) => {
+            const o = isObj(t) ? t : {};
+            return {
+                label: asString(o.label),
+                body: asString(o.body),
+                items: asArray(o.items).map((i) => asString(i)).filter(Boolean).slice(0, catalog_1.LIMITS.maxAppItems),
+            };
+        })
+            .filter((t) => t.label && (t.body || t.items.length > 0))
+            .slice(0, catalog_1.LIMITS.maxTabs);
+        return {
+            widget: { title: asString(p.title), tabs },
+            errors: tabs.length ? [] : ['tabs need at least one labelled tab'],
+            repaired: false,
+        };
+    },
+    accordion: (p) => {
+        const sections = asArray(p.sections ?? p.items)
+            .map((s) => {
+            const o = isObj(s) ? s : {};
+            return {
+                label: asString(o.label ?? o.title),
+                body: asString(o.body ?? o.detail),
+                expanded: o.expanded === true,
+            };
+        })
+            .filter((s) => s.label && s.body)
+            .slice(0, catalog_1.LIMITS.maxSections);
+        return {
+            widget: { title: asString(p.title), sections },
+            errors: sections.length ? [] : ['accordion needs labelled sections with body text'],
+            repaired: false,
+        };
+    },
+    steps: (p) => {
+        const stepList = asArray(p.steps)
+            .map((s) => {
+            const o = isObj(s) ? s : {};
+            return {
+                title: asString(o.title),
+                body: asString(o.body ?? o.detail),
+                state: ['done', 'current', 'todo'].includes(asString(o.state)) ? asString(o.state) : 'todo',
+            };
+        })
+            .filter((s) => s.title)
+            .slice(0, catalog_1.LIMITS.maxSteps);
+        return {
+            widget: { title: asString(p.title), steps: stepList },
+            errors: stepList.length ? [] : ['steps need titled steps'],
+            repaired: false,
+        };
+    },
+    menu: (p) => {
+        const options = asArray(p.options ?? p.items)
+            .map((o) => {
+            const row = isObj(o) ? o : {};
+            return {
+                label: typeof o === 'string' ? o : asString(row.label),
+                detail: asString(row.detail),
+                prompt: asString(row.prompt ?? row.value),
+            };
+        })
+            .filter((o) => o.label)
+            .slice(0, catalog_1.LIMITS.maxOptions);
+        return {
+            widget: { title: asString(p.title), options },
+            errors: options.length ? [] : ['menu needs options'],
+            repaired: false,
+        };
+    },
+    chips: (p) => {
+        const options = asArray(p.options ?? p.chips)
+            .map((o) => {
+            const row = isObj(o) ? o : {};
+            return {
+                label: typeof o === 'string' ? o : asString(row.label),
+                prompt: asString(row.prompt ?? row.value),
+            };
+        })
+            .filter((o) => o.label)
+            .slice(0, catalog_1.LIMITS.maxOptions);
+        return {
+            widget: { title: asString(p.title), options, multi: p.multi !== false },
+            errors: options.length ? [] : ['chips need options'],
+            repaired: false,
+        };
+    },
+    rating: (p) => {
+        let repaired = false;
+        let style = asString(p.style, 'star');
+        if (!['star', 'heart', 'thumb', 'nps'].includes(style)) {
+            style = 'star';
+            repaired = true;
+        }
+        const widget = {
+            title: asString(p.title),
+            prompt: asString(p.prompt),
+            max: clamp(asNumber(p.max) ?? (style === 'nps' ? 11 : 5), 2, 11),
+            style,
+            labels: asArray(p.labels).map((l) => asString(l)).slice(0, 2),
+        };
+        return {
+            widget,
+            errors: widget.title || widget.prompt ? [] : ['rating needs a title or prompt'],
+            repaired,
+        };
+    },
+    poll: (p) => {
+        const options = asArray(p.options)
+            .map((o) => {
+            const row = isObj(o) ? o : {};
+            return typeof o === 'string' ? { label: o, votes: 0 } : { label: asString(row.label), votes: asNumber(row.votes) ?? 0 };
+        })
+            .filter((o) => o.label)
+            .slice(0, catalog_1.LIMITS.maxOptions);
+        return {
+            widget: { title: asString(p.title), question: asString(p.question), options },
+            errors: options.length >= 2 ? [] : ['poll needs at least two options'],
+            repaired: false,
+        };
+    },
+    diff: (p) => {
+        const before = asString(p.before ?? p.old);
+        const after = asString(p.after ?? p.newText ?? p.updated);
+        const unified = asString(p.unified);
+        const ok = unified.length > 0 || before.length > 0 || after.length > 0;
+        return {
+            widget: { title: asString(p.title), language: asString(p.language), before, after, unified },
+            errors: ok ? [] : ['diff needs before/after or a unified patch'],
+            repaired: false,
+        };
+    },
+    tree: (p) => {
+        const read = (v, depth) => {
+            if (depth > catalog_1.LIMITS.maxTreeDepth)
+                return null;
+            if (typeof v === 'string')
+                return { label: v, detail: '', children: [] };
+            const o = isObj(v) ? v : {};
+            const label = asString(o.label ?? o.name ?? o.title);
+            if (!label)
+                return null;
+            return {
+                label,
+                detail: asString(o.detail ?? o.meta),
+                children: asArray(o.children)
+                    .map((c) => read(c, depth + 1))
+                    .filter((c) => c !== null),
+            };
+        };
+        const rawRoots = asArray(p.roots).length > 0 ? asArray(p.roots) : isObj(p.root) ? [p.root] : asArray(p.nodes);
+        const roots = rawRoots
+            .map((r) => read(r, 0))
+            .filter((r) => r !== null)
+            .slice(0, catalog_1.LIMITS.maxOptions);
+        return {
+            widget: { title: asString(p.title), roots },
+            errors: roots.length ? [] : ['tree needs at least one root node'],
+            repaired: false,
+        };
+    },
+    flashcards: (p) => {
+        const cards = asArray(p.cards)
+            .map((c) => {
+            const o = isObj(c) ? c : {};
+            return { front: asString(o.front ?? o.q ?? o.question), back: asString(o.back ?? o.a ?? o.answer) };
+        })
+            .filter((c) => c.front && c.back)
+            .slice(0, catalog_1.LIMITS.maxFlashcards);
+        return {
+            widget: { title: asString(p.title), cards },
+            errors: cards.length ? [] : ['flashcards need front and back text'],
+            repaired: false,
+        };
+    },
+    checklist: (p) => {
+        const items = asArray(p.items)
+            .map((i) => {
+            const o = isObj(i) ? i : {};
+            return {
+                label: typeof i === 'string' ? i : asString(o.label ?? o.title),
+                detail: asString(o.detail),
+                done: o.done === true,
+            };
+        })
+            .filter((i) => i.label)
+            .slice(0, catalog_1.LIMITS.maxChecklistItems);
+        return {
+            widget: { title: asString(p.title), items },
+            errors: items.length ? [] : ['checklist needs items'],
+            repaired: false,
+        };
+    },
+    // ------------------------------------------------------------------
+    // v3 — simulations, 3D stages, canvases, editors, runtime
+    // ------------------------------------------------------------------
+    sim: (p) => {
+        let repaired = false;
+        let sim = asString(p.sim ?? p.type, 'particles');
+        if (!catalog_1.SIM_TYPES.includes(sim)) {
+            sim = 'particles';
+            repaired = true;
+        }
+        const knob = (key, lo, hi, dflt) => {
+            const v = asNumber(p[key]);
+            return v === null ? dflt : clamp(v, lo, hi);
+        };
+        const widget = {
+            sim,
+            title: asString(p.title),
+            gravity: knob('gravity', -30, 30, 9.8),
+            speed: knob('speed', 0.1, 3, 1),
+            damping: knob('damping', 0, 1, 0.99),
+            size: knob('size', 40, 100, 64),
+            count: Math.round(knob('count', 10, catalog_1.LIMITS.maxSimBodies, 60)),
+            seed: Math.round(knob('seed', 1, 9999, 42)),
+            interactive: p.interactive !== false,
+            note: asString(p.note),
+        };
+        return { widget, errors: [], repaired };
+    },
+    stage3d: (p) => {
+        let repaired = false;
+        let view = asString(p.view ?? p.type ?? p.mode, 'scene');
+        if (!catalog_1.STAGE3D_TYPES.includes(view)) {
+            view = 'scene';
+            repaired = true;
+        }
+        const nodes = asArray(p.nodes)
+            .map((n, i) => {
+            const o = isObj(n) ? n : {};
+            const pick = (k) => asNumber(o[k]) ?? 0;
+            return {
+                id: asString(o.id ?? o.label, `n${i}`),
+                label: asString(o.label ?? o.id, `n${i}`),
+                x: pick('x'),
+                y: pick('y'),
+                z: pick('z'),
+                r: asNumber(o.r) ?? undefined,
+                group: asString(o.group),
+            };
+        })
+            .slice(0, catalog_1.LIMITS.max3dNodes);
+        const bonds = asArray(p.bonds ?? p.links ?? p.edges)
+            .map((b) => {
+            const pair = asArray(b).map((x) => asNumber(x)).filter((n) => n !== null);
+            return pair.length >= 2 ? [Math.round(pair[0]), Math.round(pair[1])] : null;
+        })
+            .filter((b) => b !== null)
+            .filter(([a, b]) => a >= 0 && b >= 0 && a < nodes.length && b < nodes.length)
+            .slice(0, 200);
+        let zExpr = asString(p.z);
+        // surface fields are a whitelisted math expression over x,y. Two gates:
+        // 1. obvious junk chars; 2. the expression must actually EVALUATE under
+        // the shared calc engine (the same one the renderer uses) — so
+        // "fetch(window)" or any non-math identifier is dropped here, in the
+        // validator, not merely at render time.
+        if (zExpr && !/^[\s()+\-*/%^,.a-z0-9]*$/i.test(zExpr)) {
+            zExpr = undefined;
+            repaired = true;
+        }
+        if (zExpr) {
+            try {
+                const probe = (0, evaluate_1.evaluateExpr)(zExpr, { x: 0.5, y: 0.5 });
+                if (!Number.isFinite(probe))
+                    throw new Error('non-finite');
+            }
+            catch {
+                zExpr = undefined;
+                repaired = true;
+            }
+        }
+        const widget = {
+            view,
+            title: asString(p.title),
+            nodes,
+            bonds,
+            ...(zExpr && !repaired ? { z: zExpr } : {}),
+            span: asNumber(p.span) ?? 2,
+            spin: p.spin !== false,
+            note: asString(p.note),
+        };
+        return { widget, errors: [], repaired };
+    },
+    canvas: (p) => {
+        let repaired = false;
+        let surface = asString(p.surface ?? p.type, 'whiteboard');
+        if (!catalog_1.CANVAS_TYPES.includes(surface)) {
+            surface = 'whiteboard';
+            repaired = true;
+        }
+        const nodes = asArray(p.nodes)
+            .map((n, i) => {
+            const o = isObj(n) ? n : {};
+            return {
+                id: i,
+                label: asString(o.label ?? o.title, `Node ${i + 1}`),
+                x: clamp(asNumber(o.x) ?? 0.5, 0, 1),
+                y: clamp(asNumber(o.y) ?? 0.5, 0, 1),
+                group: asString(o.group),
+            };
+        })
+            .slice(0, catalog_1.LIMITS.maxCanvasNodes);
+        const edges = asArray(p.edges ?? p.links)
+            .map((e) => {
+            if (isObj(e)) {
+                const a = asNumber(e.source ?? e.from);
+                const b = asNumber(e.target ?? e.to);
+                return a !== null && b !== null ? [Math.round(a), Math.round(b)] : null;
+            }
+            const pair = asArray(e).map((x) => asNumber(x)).filter((n) => n !== null);
+            return pair.length >= 2 ? [Math.round(pair[0]), Math.round(pair[1])] : null;
+        })
+            .filter((e) => e !== null)
+            .filter(([a, b]) => a >= 0 && b >= 0 && a < nodes.length && b < nodes.length);
+        const widget = { surface, title: asString(p.title), nodes, edges, note: asString(p.note) };
+        return { widget, errors: [], repaired };
+    },
+    editor: (p) => {
+        let repaired = false;
+        let editor = asString(p.editor ?? p.type, 'sheet');
+        if (!catalog_1.EDITOR_TYPES.includes(editor)) {
+            editor = 'sheet';
+            repaired = true;
+        }
+        const widget = {
+            editor,
+            title: asString(p.title),
+            // sheet
+            columns: asArray(p.columns).map((c) => asString(c)).slice(0, 12),
+            cells: isObj(p.cells) ? p.cells : isObj(p.data) ? p.data : {},
+            // nodes / site / pivot
+            nodes: asArray(p.nodes).slice(0, catalog_1.LIMITS.maxCanvasNodes),
+            edges: asArray(p.edges).slice(0, 120),
+            blocks: asArray(p.blocks).slice(0, 20),
+            groups: asArray(p.groups).slice(0, 8),
+            rows: asArray(p.rows).slice(0, 60),
+            // timeline editors
+            tracks: asArray(p.tracks).slice(0, catalog_1.LIMITS.maxTracks),
+            duration: Math.min(600, Math.max(1, asNumber(p.duration) ?? 60)),
+            // css editor
+            layout: isObj(p.layout) ? p.layout : {},
+            note: asString(p.note),
+            submitLabel: asString(p.submitLabel),
+        };
+        return { widget, errors: [], repaired };
+    },
+    terminal: (p) => {
+        const widget = {
+            title: asString(p.title, 'Terminal'),
+            welcome: asString(p.welcome),
+            commands: asArray(p.commands)
+                .map((c) => {
+                const o = isObj(c) ? c : {};
+                return { name: asString(o.name), description: asString(o.description) };
+            })
+                .filter((c) => c.name)
+                .slice(0, 12),
+        };
+        return { widget, errors: [], repaired: false };
+    },
+};

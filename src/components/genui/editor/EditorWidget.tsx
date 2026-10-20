@@ -88,7 +88,6 @@ function evalCell(raw: string, get: (ref: string) => string, seen: Set<string> =
   // only a safe arithmetic expression may remain
   if (!/^[-+*/%().\d\s^]*$/.test(expr)) return null
   try {
-    // eslint-disable-next-line no-new-func
     const out = Function(`"use strict";return (${expr.replace(/\^/g, '**') || '0'})`)()
     return typeof out === 'number' && Number.isFinite(out) ? out : null
   } catch {
@@ -639,7 +638,11 @@ function AudioEditor({ payload }: { payload: EditorPayload }) {
       for (let x = 0; x < W; x++) {
         const v = buffer[Math.floor((x / W) * buffer.length)] ?? 0
         const y = H / 2 - v * (H / 2 - 8)
-        x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
+        if (x === 0) {
+          ctx.moveTo(x, y)
+        } else {
+          ctx.lineTo(x, y)
+        }
       }
       ctx.stroke()
     } else {
