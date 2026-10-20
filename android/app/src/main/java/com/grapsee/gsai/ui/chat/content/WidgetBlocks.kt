@@ -60,6 +60,8 @@ import com.grapsee.gsai.ui.theme.skeletonSurface
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.descriptors.buildClassSerialDescriptor
+import kotlinx.serialization.encoding.encodeStructure
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.Json
@@ -104,7 +106,10 @@ internal val CHART_TYPES = setOf(
     "line", "area", "stackedArea", "bar", "hbar", "stacked", "pie", "donut",
     "scatter", "bubble", "histogram", "funnel", "radar",
     "grouped", "boxplot", "heatmap", "correlation", "treemap", "waterfall",
-    "candlestick", "gantt", "chord"
+    "candlestick", "gantt", "chord", "quadrant", "sankey", "network",
+    "wordcloud", "sunburst", "bullet",
+    // v3 — parity with the web renderer (WidgetsCharts3.kt)
+    "violin", "contour", "parallel", "dendrogram", "force", "depth"
 )
 
 /**
@@ -160,17 +165,168 @@ internal object PointListSerializer : KSerializer<List<List<Float>>> {
 data class ChartSeries(
     val name: String = "",
     @Serializable(with = PointListSerializer::class)
-    val data: List<List<Float>> = emptyList()
+    val data: List<List<Float>> = emptyList(),
+    /** Parallel coordinates: one value per axis, aligned to [ChartWidget.axes]. */
+    val values: List<Float> = emptyList()
+)
+
+/** A graph node: the wire sends "Budget" (bare string) or {"id","label",...}. */
+@Serializable(with = GraphNodeSerializer::class)
+data class GraphNode(
+    val id: String = "",
+    val label: String = "",
+    val group: String = "",
+    val x: Float = 0f,
+    val y: Float = 0f,
+    val z: Float = 0f,
+    val r: Float = 0f
+)
+
+/**
+ * Node decoding that accepts both wire shapes (see PointListSerializer for
+ * the same idea on points): a bare string becomes an unpositioned node whose
+ * id and label are the string.
+ */
+internal object GraphNodeSerializer : KSerializer<GraphNode> {
+    private val stringSer = String.serializer()
+    override val descriptor: SerialDescriptor = buildClassSerialDescriptor("GraphNode") {
+        element("id", stringSer.descriptor)
+        element("label", stringSer.descriptor)
+        element("group", stringSer.descriptor)
+        element("x", Float.serializer().descriptor)
+        element("y", Float.serializer().descriptor)
+        element("z", Float.serializer().descriptor)
+        element("r", Float.serializer().descriptor)
+    }
+
+    override fun deserialize(decoder: Decoder): GraphNode {
+        val input = decoder as? JsonDecoder ?: return GraphNode()
+        return when (val el = input.decodeJsonElement()) {
+            is JsonPrimitive -> {
+                val text = el.contentOrNull ?: ""
+                GraphNode(id = text, label = text)
+            }
+            is JsonObject -> {
+                fun str(vararg keys: String): String {
+                    for (k in keys) {
+                        val v = (el[k] as? JsonPrimitive)?.contentOrNull
+                        if (v != null) return v
+                    }
+                    return ""
+                }
+                fun num(k: String): Float = (el[k] as? JsonPrimitive)?.floatOrNull ?: 0f
+                GraphNode(
+                    id = str("id", "label"),
+                    label = str("label", "id"),
+                    group = str("group"),
+                    x = num("x"),
+                    y = num("y"),
+                    z = num("z"),
+                    r = num("r")
+                )
+            }
+            else -> GraphNode()
+        }
+    }
+
+    override fun serialize(encoder: Encoder, value: GraphNode) {
+        encoder.encodeStructure(descriptor) {
+            encodeStringElement(descriptor, 0, value.id)
+            encodeStringElement(descriptor, 1, value.label)
+            encodeStringElement(descriptor, 2, value.group)
+            encodeFloatElement(descriptor, 3, value.x)
+            encodeFloatElement(descriptor, 4, value.y)
+            encodeFloatElement(descriptor, 5, value.z)
+            encodeFloatElement(descriptor, 6, value.r)
+        }
+    }
+}
+
+/** A graph edge: {"source","target","value"} or the compact [a, b] / [a, b, w]. */
+@Serializable(with = GraphLinkSerializer::class)
+data class GraphLink(val source: String = "", val target: String = "", val value: Float = 1f)
+
+internal object GraphLinkSerializer : KSerializer<GraphLink> {
+    private val stringSer = String.serializer()
+    override val descriptor: SerialDescriptor = buildClassSerialDescriptor("GraphLink") {
+        element("source", stringSer.descriptor)
+        element("target", stringSer.descriptor)
+        element("value", Float.serializer().descriptor)
+    }
+
+    override fun deserialize(decoder: Decoder): GraphLink {
+        val input = decoder as? JsonDecoder ?: return GraphLink()
+        return when (val el = input.decodeJsonElement()) {
+            is JsonObject -> GraphLink(
+                source = (el["source"] as? JsonPrimitive)?.contentOrNull ?: "",
+                target = (el["target"] as? JsonPrimitive)?.contentOrNull ?: "",
+                value = (el["value"] as? JsonPrimitive)?.floatOrNull
+                    ?: (el["weight"] as? JsonPrimitive)?.floatOrNull
+                    ?: 1f
+            )
+            is JsonArray -> {
+                val parts = el.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
+                val nums = el.mapNotNull { (it as? JsonPrimitive)?.floatOrNull }
+                when {
+                    parts.size >= 2 -> GraphLink(parts[0], parts[1], nums.getOrNull(2) ?: 1f)
+                    else -> GraphLink()
+                }
+            }
+            else -> GraphLink()
+        }
+    }
+
+    override fun serialize(encoder: Encoder, value: GraphLink) {
+        encoder.encodeStructure(descriptor) {
+            encodeStringElement(descriptor, 0, value.source)
+            encodeStringElement(descriptor, 1, value.target)
+            encodeFloatElement(descriptor, 2, value.value)
+        }
+    }
+}
+
+/** One weight/measure row — wordcloud rows, bullet rows. */
+@Serializable
+data class ChartItem(
+    val text: String = "",
+    val label: String = "",
+    val weight: Float = 0f,
+    val value: Float = 0f,
+    val target: Float = Float.NaN,
+    val max: Float = 0f,
+    val ranges: List<List<Float>> = emptyList()
+)
+
+/** A tree node — sunburst rings, dendrogram merges (distance = merge height). */
+@Serializable
+data class TreeNodeData(
+    val label: String = "",
+    val value: Float = 0f,
+    val distance: Float = 0f,
+    val children: List<TreeNodeData> = emptyList()
 )
 
 @Serializable
 data class ChartWidget(
-    val type: String = "line", // line | area | stackedArea | bar | hbar | stacked | pie | donut | scatter | bubble | histogram | funnel | radar
+    val type: String = "line",
     val title: String = "",
     val unit: String = "",
     /** Bar/pie category names; empty falls back to the x-index labels. */
     val labels: List<String> = emptyList(),
-    val series: List<ChartSeries> = emptyList()
+    val series: List<ChartSeries> = emptyList(),
+    // v3 structural payloads — defaulted so v1/v2 payloads decode unchanged.
+    val nodes: List<GraphNode> = emptyList(),
+    val links: List<GraphLink> = emptyList(),
+    val edges: List<GraphLink> = emptyList(),
+    val items: List<ChartItem> = emptyList(),
+    val root: TreeNodeData? = null,
+    val axes: List<String> = emptyList(),
+    /** Contour field samples [x, y, z]. */
+    val points: List<List<Float>> = emptyList(),
+    val levels: Int = 0,
+    /** Depth (order book): [price, size] rows per side. */
+    val bids: List<List<Float>> = emptyList(),
+    val asks: List<List<Float>> = emptyList()
 )
 
 @Serializable
@@ -215,6 +371,99 @@ data class TimelineEntry(val date: String, val title: String, val detail: String
 @Serializable
 data class TimelineWidget(val title: String = "", val entries: List<TimelineEntry> = emptyList())
 
+// --- v3 kinds (parity with the web genui library) ----------------------------
+
+internal val SIM_TYPES = setOf("particles", "cloth", "softbody", "fluid", "smoke", "rigid", "terrain", "game")
+internal val STAGE3D_TYPES = setOf("scatter3d", "surface3d", "molecule", "cad", "anatomy", "scene", "vr", "ar")
+internal val CANVAS_TYPES = setOf("whiteboard", "mindmap", "diagram", "polygons")
+internal val EDITOR_TYPES = setOf("sheet", "nodes", "pivot", "site", "css", "video", "audio")
+internal val COLLAB_TYPES = setOf("counter", "vote", "todo", "pointer")
+
+@Serializable
+data class SimWidget(
+    val sim: String = "particles",
+    /** Fence-injected hint (```cloth has no payload field) — see parseWidget. */
+    val type: String? = null,
+    val title: String = "",
+    val gravity: Float = 9.8f,
+    val speed: Float = 1f,
+    val damping: Float = 0.99f,
+    val count: Int = 60,
+    val size: Int = 64,
+    val seed: Int = 42,
+    val interactive: Boolean = true
+)
+
+@Serializable
+data class Stage3DWidget(
+    val view: String = "scene",
+    val type: String? = null,
+    val title: String = "",
+    val nodes: List<GraphNode> = emptyList(),
+    /** Pairs of node indices — molecules/cad/scene bonds. */
+    val bonds: List<List<Int>> = emptyList(),
+    /** surface3d: a CalcExpr math expression over x and y. */
+    val z: String = "",
+    val span: Float = 2f,
+    val spin: Boolean = true
+)
+
+@Serializable
+data class CanvasNode(val label: String = "", val x: Float = 0f, val y: Float = 0f, val group: String = "")
+
+@Serializable
+data class CanvasWidgetData(
+    val surface: String = "whiteboard",
+    val type: String? = null,
+    val title: String = "",
+    val nodes: List<CanvasNode> = emptyList(),
+    val edges: List<List<Int>> = emptyList()
+)
+
+@Serializable
+data class ClipData(val start: Float = 0f, val dur: Float = 4f, val label: String = "")
+
+@Serializable
+data class TrackData(val name: String = "", val clips: List<ClipData> = emptyList())
+
+@Serializable
+data class SiteBlock(val type: String = "text", val text: String = "")
+
+@Serializable
+data class EditorWidgetData(
+    val editor: String = "sheet",
+    val type: String? = null,
+    val title: String = "",
+    val columns: List<String> = emptyList(),
+    val cells: Map<String, String> = emptyMap(),
+    val rows: List<List<String>> = emptyList(),
+    val tracks: List<TrackData> = emptyList(),
+    val duration: Int = 60,
+    val layout: Map<String, JsonElement> = emptyMap(),
+    val blocks: List<SiteBlock> = emptyList()
+)
+
+@Serializable
+data class TerminalCommand(val name: String = "", val description: String = "")
+
+@Serializable
+data class TerminalWidget(
+    val title: String = "Terminal",
+    val welcome: String = "",
+    val commands: List<TerminalCommand> = emptyList()
+)
+
+@Serializable
+data class CollabWidgetData(
+    val surface: String = "counter",
+    val type: String? = null,
+    val room: String = "lobby",
+    val title: String = "",
+    val label: String = "",
+    val items: List<String> = emptyList(),
+    val start: Int = 0
+)
+
 /** A validated widget payload. */
 sealed interface Widget {
     val title: String
@@ -237,6 +486,12 @@ sealed interface Widget {
     data class Voice(val w: VoiceWidget) : Widget { override val title get() = w.title }
     data class Calc(val w: CalcWidget) : Widget { override val title get() = w.title }
     data class App(val w: AppWidget) : Widget { override val title get() = w.title }
+    data class Sim(val w: SimWidget) : Widget { override val title get() = w.title }
+    data class Stage3D(val w: Stage3DWidget) : Widget { override val title get() = w.title }
+    data class Canvas(val w: CanvasWidgetData) : Widget { override val title get() = w.title }
+    data class Editor(val w: EditorWidgetData) : Widget { override val title get() = w.title }
+    data class Terminal(val w: TerminalWidget) : Widget { override val title get() = w.title }
+    data class Collab(val w: CollabWidgetData) : Widget { override val title get() = w.title }
 }
 
 /**
@@ -276,7 +531,41 @@ fun parseWidget(kind: String, json: String): Widget? {
                 val series = w.series.take(MAX_CHART_SERIES).map {
                     it.copy(data = it.data.take(MAX_POINTS_PER_SERIES))
                 }.filter { it.data.size >= minPoints }
+                // v3 structural charts carry their payload OUTSIDE `series` —
+                // nodes/links, items, a root tree, field points, bids/asks,
+                // axes+aligned values. The two-points-per-series rule would
+                // reject every correct payload of those shapes, so each type
+                // gets its own body test (null = not this shape).
+                val structural: ChartWidget? = when (w.type) {
+                    "sankey", "network", "force" ->
+                        if (w.nodes.isNotEmpty() && (w.links.isNotEmpty() || w.edges.isNotEmpty()))
+                            w.copy(nodes = w.nodes.take(60), links = w.links.take(200), edges = w.edges.take(200))
+                        else null
+                    "wordcloud" -> if (w.items.isNotEmpty()) w.copy(items = w.items.take(60)) else null
+                    "sunburst" -> w.root?.let { w.copy(root = clampTreeNode(it, 4)) }
+                    "dendrogram" -> w.root?.let { w.copy(root = clampTreeNode(it, 8)) }
+                    "bullet" -> if (w.items.isNotEmpty()) w.copy(items = w.items.take(12)) else null
+                    "violin" ->
+                        if (w.series.isNotEmpty())
+                            w.copy(series = w.series.take(8).map { s -> s.copy(data = s.data.take(400)) })
+                        else null
+                    "contour" ->
+                        if (w.points.size >= 9)
+                            w.copy(points = w.points.take(2500), levels = if (w.levels in 3..12) w.levels else 6)
+                        else null
+                    "parallel" ->
+                        if (w.axes.size >= 3 && w.series.any { it.values.isNotEmpty() })
+                            w.copy(axes = w.axes.take(10), series = w.series.take(12))
+                        else null
+                    "depth" ->
+                        if (w.bids.isNotEmpty() || w.asks.isNotEmpty())
+                            w.copy(bids = w.bids.take(40), asks = w.asks.take(40))
+                        else null
+                    "quadrant" -> if (w.series.any { it.data.isNotEmpty() }) w else null
+                    else -> null
+                }
                 when {
+                    structural != null && w.type in CHART_TYPES -> Widget.Chart(structural)
                     series.isNotEmpty() && w.type in CHART_TYPES -> Widget.Chart(w.copy(series = series))
                     // A ```gantt fence whose payload is a schedule of dated
                     // entries, not a series: a chart with no series is nothing,
@@ -426,7 +715,74 @@ fun parseWidget(kind: String, json: String): Widget? {
             "timeline" -> widgetJson.decodeFromString<TimelineWidget>(json).let { w ->
                 val entries = w.entries.take(MAX_TIMELINE_ENTRIES)
                 if (entries.isEmpty()) null else Widget.Timeline(w.copy(entries = entries))
-            }            else -> null
+            }
+            // v3 — sims, 3D stages, canvases, editors, terminal, collab.
+            "sim" -> widgetJson.decodeFromString<SimWidget>(json).let { w ->
+                val sim = if (w.sim in SIM_TYPES) w.sim
+                else w.type?.takeIf { it in SIM_TYPES } ?: "particles"
+                Widget.Sim(
+                    w.copy(
+                        sim = sim,
+                        gravity = w.gravity.coerceIn(-30f, 30f),
+                        speed = w.speed.coerceIn(0.1f, 3f),
+                        damping = w.damping.coerceIn(0f, 1f),
+                        count = w.count.coerceIn(1, 120),
+                        size = w.size.coerceIn(20, 120)
+                    )
+                )
+            }
+            "stage3d" -> widgetJson.decodeFromString<Stage3DWidget>(json).let { w ->
+                val view = if (w.view in STAGE3D_TYPES) w.view
+                else w.type?.takeIf { it in STAGE3D_TYPES } ?: "scene"
+                val nodes = w.nodes.take(60)
+                // z must be a real math expression — the same CalcExpr the calc
+                // widgets use is the guard; junk never reaches the renderer.
+                val zExpr = w.z.takeIf { it.isNotBlank() && it.length <= 120 }
+                val zOk = zExpr == null || CalcExpr.eval(zExpr, mapOf("x" to 0.5, "y" to 0.5)) != null
+                val bonds = w.bonds
+                    .filter { it.size >= 2 }
+                    .map { p -> listOf(p[0], p[1]) }
+                    .filter { (a, b) -> a >= 0 && b >= 0 && a < nodes.size && b < nodes.size }
+                    .take(200)
+                if (!zOk) null
+                else Widget.Stage3D(w.copy(view = view, nodes = nodes, bonds = bonds, z = zExpr ?: ""))
+            }
+            "canvas" -> widgetJson.decodeFromString<CanvasWidgetData>(json).let { w ->
+                val surface = if (w.surface in CANVAS_TYPES) w.surface
+                else w.type?.takeIf { it in CANVAS_TYPES } ?: "whiteboard"
+                val nodes = w.nodes.take(40).map { n -> n.copy(x = n.x.coerceIn(0f, 1f), y = n.y.coerceIn(0f, 1f)) }
+                val edges = w.edges
+                    .filter { it.size >= 2 && it[0] >= 0 && it[1] >= 0 && it[0] < nodes.size && it[1] < nodes.size }
+                    .take(120)
+                Widget.Canvas(w.copy(surface = surface, nodes = nodes, edges = edges))
+            }
+            "editor" -> widgetJson.decodeFromString<EditorWidgetData>(json).let { w ->
+                val editor = if (w.editor in EDITOR_TYPES) w.editor
+                else w.type?.takeIf { it in EDITOR_TYPES } ?: "sheet"
+                Widget.Editor(
+                    w.copy(
+                        editor = editor,
+                        columns = w.columns.take(12),
+                        rows = w.rows.take(60).map { r -> r.take(12) },
+                        cells = w.cells.take(200).toMap(),
+                        tracks = w.tracks.take(6),
+                        duration = w.duration.coerceIn(1, 600),
+                        blocks = w.blocks.take(20)
+                    )
+                )
+            }
+            "terminal" -> widgetJson.decodeFromString<TerminalWidget>(json).let { w ->
+                val commands = w.commands.take(12).filter { it.name.isNotBlank() }
+                Widget.Terminal(w.copy(commands = commands))
+            }
+            "collab" -> widgetJson.decodeFromString<CollabWidgetData>(json).let { w ->
+                val surface = if (w.surface in COLLAB_TYPES) w.surface
+                else w.type?.takeIf { it in COLLAB_TYPES } ?: "counter"
+                val room = w.room.lowercase().replace(Regex("[^a-z0-9-]+"), "-")
+                    .trim('-').take(48).ifEmpty { "lobby" }
+                Widget.Collab(w.copy(surface = surface, room = room, items = w.items.filter { it.isNotBlank() }.take(12)))
+            }
+            else -> null
         }
     } catch (_: Throwable) {
         null // malformed JSON / wrong types -> degrade to a code block
@@ -443,6 +799,11 @@ fun parseWidget(kind: String, json: String): Widget? {
  * discriminator and then CONFIRMED by the real validator, so prose that merely
  * contains braces can never be promoted.
  */
+/** Depth + width clamp for tree payloads (sunburst/dendrogram). */
+private fun clampTreeNode(node: TreeNodeData, maxDepth: Int, depth: Int = 1): TreeNodeData =
+    if (depth >= maxDepth) node.copy(children = emptyList())
+    else node.copy(children = node.children.take(8).map { clampTreeNode(it, maxDepth, depth + 1) })
+
 /** A payload that carries dated `entries` but no series: a schedule, not a chart. */
 private fun hasEntries(json: String): Boolean =
     try {
@@ -854,6 +1215,12 @@ fun WidgetView(widget: Widget, onSendPrompt: ((String) -> Unit)? = null) {
         is Widget.Voice -> VoiceWidgetView(widget.w, onSendPrompt)
         is Widget.Calc -> CalcWidgetView(widget.w, onSendPrompt)
         is Widget.App -> AppWidgetView(widget.w, onSendPrompt)
+        is Widget.Sim -> SimWidgetView(widget.w)
+        is Widget.Stage3D -> Stage3DWidgetView(widget.w)
+        is Widget.Canvas -> CanvasWidgetView(widget.w)
+        is Widget.Editor -> EditorWidgetView(widget.w)
+        is Widget.Terminal -> TerminalWidgetView(widget.w)
+        is Widget.Collab -> CollabWidgetView(widget.w)
     }
 }
 
@@ -873,7 +1240,10 @@ private val CHART_HUE_SLOTS = mapOf(
     "scatter" to 6, "bubble" to 6,
     "radar" to 7, "chord" to 7,
     "waterfall" to 8, "heatmap" to 9, "correlation" to 9,
-    "treemap" to 10, "candlestick" to 11
+    "treemap" to 10, "candlestick" to 11,
+    "violin" to 4, "contour" to 5, "parallel" to 8, "dendrogram" to 10,
+    "force" to 7, "depth" to 3, "sankey" to 10, "network" to 1,
+    "wordcloud" to 8, "sunburst" to 4, "bullet" to 2, "quadrant" to 6
 )
 
 /** Charts that read better as a figure than as a filled card. */
@@ -907,11 +1277,26 @@ private fun ChartWidgetView(w: ChartWidget) {
             "candlestick" -> CandlestickChart(w)
             "gantt" -> GanttChart(w)
             "chord" -> ChordChart(w)
+            // v3 parity (WidgetsCharts3.kt)
+            "sankey" -> SankeyChart(w)
+            "network" -> NetworkChart(w)
+            "force" -> ForceChart(w)
+            "wordcloud" -> WordcloudChart(w)
+            "sunburst" -> SunburstChart(w)
+            "bullet" -> BulletChart(w)
+            "quadrant" -> QuadrantChart(w)
+            "violin" -> ViolinChart(w)
+            "contour" -> ContourChart(w)
+            "parallel" -> ParallelChart(w)
+            "dendrogram" -> DendrogramChart(w)
+            "depth" -> DepthChart(w)
             else -> LineChart(w, filled = w.type == "area")
         }
         if (w.series.size > 1 && w.type !in setOf(
                 "pie", "donut", "funnel", "radar", "hbar", "chord",
-                "heatmap", "correlation", "treemap", "waterfall", "candlestick", "gantt"
+                "heatmap", "correlation", "treemap", "waterfall", "candlestick", "gantt",
+                "sankey", "network", "force", "wordcloud", "sunburst", "bullet",
+                "dendrogram", "depth", "contour"
             )
         ) {
             Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
