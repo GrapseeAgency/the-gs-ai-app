@@ -463,8 +463,8 @@ fun GsLoadingState(label: String = "Thinking", modifier: Modifier = Modifier) {
 }
 
 /**
- * The staggered wait-state loader (uiverse fast-vampirebat-53 intent,
- * monochrome): three ink dots pulsing in sequence while a long operation runs
+ * The staggered wait-state loader (uiverse fast-vampirebat-53 intent): three
+ * warm accent dots pulsing in sequence while a long operation runs
  * with no measurable progress. A loading affordance, not decoration, so the
  * loop is legitimate; under reduce-motion it holds the static mid-alpha frame
  * like every other gated loop.
@@ -497,7 +497,7 @@ fun GsStaggeredLoader(modifier: Modifier = Modifier) {
                 modifier = Modifier
                     .size(8.dp)
                     .graphicsLayer { this.alpha = alpha }
-                    .background(MaterialTheme.colorScheme.onSurface, CircleShape)
+                    .background(MaterialTheme.colorScheme.primary, CircleShape)
             )
         }
     }
