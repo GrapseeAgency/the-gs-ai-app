@@ -9,6 +9,7 @@ struct AnimatedGsIllustration: View {
     var breathDuration: Double = 2.4
     var rotationDegrees: Double = 2.2
     var lift: CGFloat = -3
+    var startDelay: Double = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isAlive = false
 
@@ -22,7 +23,7 @@ struct AnimatedGsIllustration: View {
             .rotationEffect(.degrees(reduceMotion ? 0 : (isAlive ? rotationDegrees : 0)))
             .offset(y: reduceMotion ? 0 : (isAlive ? lift : 0))
             .animation(
-                reduceMotion ? nil : .easeInOut(duration: breathDuration).repeatForever(autoreverses: true),
+                reduceMotion ? nil : .easeInOut(duration: breathDuration).delay(startDelay).repeatForever(autoreverses: true),
                 value: isAlive
             )
             .onAppear {

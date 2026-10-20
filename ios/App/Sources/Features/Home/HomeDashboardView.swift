@@ -116,7 +116,7 @@ struct HomeDashboardView: View {
                 .frame(maxHeight: .infinity, alignment: .top)
                 .padding(16)
                 VStack(spacing: 10) {
-                    AnimatedGsIllustration(imageName: "GSCompanionOrb", size: 112)
+                    AnimatedGsIllustration(imageName: "GSCompanionOrb", size: 112, breathDuration: 3.4, rotationDegrees: 1.2, lift: -2, startDelay: 0.08)
                     Text("A calmer way to create").font(Aero.label()).foregroundStyle(Aero.text)
                 }
             }
@@ -163,7 +163,7 @@ struct HomeDashboardView: View {
             .padding(Aero.Spacing.m)
             .background(LinearGradient(colors: [Color(red: 1, green: 0.89, blue: 0.82), Color(red: 1, green: 0.78, blue: 0.72)], startPoint: .leading, endPoint: .trailing))
             .overlay(alignment: .bottomTrailing) {
-                AnimatedGsIllustration(imageName: "GSCompanionOrb", size: 98, breathDuration: 3.6, rotationDegrees: 1.4, lift: -2)
+                AnimatedGsIllustration(imageName: "GSCompanionOrb", size: 98, breathDuration: 3.6, rotationDegrees: 1.4, lift: -2, startDelay: 0.52)
                     .opacity(0.18)
                     .allowsHitTesting(false)
             }
@@ -272,7 +272,7 @@ private struct HomeFeatureCard: View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 6) {
                 if title.hasPrefix("Video") {
-                    AnimatedGsIllustration(imageName: "GSVideoCreate", size: 54, cornerRadius: 14, breathDuration: 3.0, rotationDegrees: 2.8, lift: -2)
+                    AnimatedGsIllustration(imageName: "GSVideoCreate", size: 54, cornerRadius: 14, breathDuration: 3.0, rotationDegrees: 2.8, lift: -2, startDelay: 0.4)
                 } else {
                     Image(systemName: icon)
                         .font(.system(size: 18, weight: .semibold))

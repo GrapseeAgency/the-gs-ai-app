@@ -2673,7 +2673,7 @@ private fun WorkspaceEmptyState(
     ) {
         // Reference-inspired companion orb: the empty state should feel alive
         // before the first prompt, not like a blank utility screen.
-        AnimatedGsIllustration(R.drawable.gs_companion_orb, "GS AI companion", 112.dp, shape = CircleShape)
+        AnimatedGsIllustration(R.drawable.gs_companion_orb, "GS AI companion", 112.dp, shape = CircleShape, breathDuration = 3200, rotationDegrees = .9f, liftPixels = -2f, startDelayMillis = 180)
         Spacer(Modifier.height(24.dp))
         Text(
             text = "How can GS make today lighter?",

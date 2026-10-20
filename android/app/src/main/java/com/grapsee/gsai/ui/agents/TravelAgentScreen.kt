@@ -56,7 +56,7 @@ fun TravelAgentScreen(onBack: () -> Unit, onSendToChat: (String) -> Unit) {
         }
         Spacer(Modifier.height(GsSpacing.xl))
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-            AnimatedGsIllustration(R.drawable.gs_travel_agent_orb, "Travel Agent", 148.dp, shape = CircleShape, breathDuration = 4100, rotationDegrees = 1.6f, liftPixels = -4f)
+            AnimatedGsIllustration(R.drawable.gs_travel_agent_orb, "Travel Agent", 148.dp, shape = CircleShape, breathDuration = 4100, rotationDegrees = 1.6f, liftPixels = -4f, startDelayMillis = 260)
             Spacer(Modifier.height(GsSpacing.m))
             Text("Welcome to Travel Agent", style = MaterialTheme.typography.headlineSmall, color = colors.textPrimary, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(GsSpacing.s))

@@ -33,6 +33,7 @@ fun AnimatedGsIllustration(
     breathDuration: Int = 2400,
     rotationDegrees: Float = 2.2f,
     liftPixels: Float = -3f,
+    startDelayMillis: Int = 0,
 ) {
     val reduced = SettingsStore.reduceMotion || SettingsStore.reduceAnimations
     val transition = rememberInfiniteTransition(label = "gs-illustration-motion")
@@ -40,7 +41,7 @@ fun AnimatedGsIllustration(
         initialValue = 1f,
         targetValue = if (reduced) 1f else 1.035f,
         animationSpec = infiniteRepeatable(
-            animation = tween(breathDuration, easing = FastOutSlowInEasing),
+            animation = tween(breathDuration, delayMillis = startDelayMillis, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "gs-illustration-breath"
@@ -49,7 +50,7 @@ fun AnimatedGsIllustration(
         initialValue = 0f,
         targetValue = if (reduced) 0f else rotationDegrees,
         animationSpec = infiniteRepeatable(
-            animation = tween(3200, easing = FastOutSlowInEasing),
+            animation = tween(3200, delayMillis = startDelayMillis, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "gs-illustration-drift"
@@ -58,7 +59,7 @@ fun AnimatedGsIllustration(
         initialValue = 0f,
         targetValue = if (reduced) 0f else liftPixels,
         animationSpec = infiniteRepeatable(
-            animation = tween(2800, easing = FastOutSlowInEasing),
+            animation = tween(2800, delayMillis = startDelayMillis, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "gs-illustration-lift"

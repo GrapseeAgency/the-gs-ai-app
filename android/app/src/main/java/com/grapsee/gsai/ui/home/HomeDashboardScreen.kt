@@ -212,7 +212,7 @@ private fun UsageTile(label: String, value: String, progress: Float, modifier: M
 private fun ReflectionCard(onClick: () -> Unit) {
     Card(onClick = onClick, modifier = Modifier.fillMaxWidth(), shape = GsRadius.cardShape(), colors = CardDefaults.cardColors(containerColor = Color.Transparent), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)) {
         Box(Modifier.fillMaxWidth().background(Brush.horizontalGradient(listOf(Color(0xFFFFE3D2), Color(0xFFFFC6B7)))).padding(GsSpacing.m)) {
-            AnimatedGsIllustration(R.drawable.gs_companion_orb, "Mind guide", 98.dp, Modifier.align(Alignment.BottomEnd).alpha(.22f), breathDuration = 3600, rotationDegrees = 1.4f, liftPixels = -2f)
+            AnimatedGsIllustration(R.drawable.gs_companion_orb, "Mind guide", 98.dp, Modifier.align(Alignment.BottomEnd).alpha(.22f), breathDuration = 3600, rotationDegrees = 1.4f, liftPixels = -2f, startDelayMillis = 520)
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Surface(shape = CircleShape, color = Color.White.copy(alpha = .65f)) {
@@ -257,7 +257,7 @@ private fun HeroVisual(onClick: () -> Unit) {
                     Icon(GsIcons.ChevronDown, contentDescription = null, modifier = Modifier.size(14.dp), tint = colors.textSecondary)
                 }
             }
-            AnimatedGsIllustration(R.drawable.gs_companion_orb, "Start with GS AI", 112.dp, Modifier.align(Alignment.Center), CircleShape)
+            AnimatedGsIllustration(R.drawable.gs_companion_orb, "Start with GS AI", 112.dp, Modifier.align(Alignment.Center), CircleShape, breathDuration = 3400, rotationDegrees = 1.2f, liftPixels = -2f, startDelayMillis = 80)
             Text("A calmer way to create", modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 18.dp), style = MaterialTheme.typography.labelLarge, color = colors.textPrimary)
         }
     }
@@ -281,7 +281,7 @@ private fun FeatureCard(modifier: Modifier, title: String, subtitle: String, ico
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(colors)).padding(GsSpacing.m)) {
             Column {
                 if (title.startsWith("Video")) {
-                    AnimatedGsIllustration(R.drawable.gs_video_create, "Video creation", 54.dp, shape = RoundedCornerShape(16.dp), breathDuration = 3000, rotationDegrees = 2.8f, liftPixels = -2f)
+                    AnimatedGsIllustration(R.drawable.gs_video_create, "Video creation", 54.dp, shape = RoundedCornerShape(16.dp), breathDuration = 3000, rotationDegrees = 2.8f, liftPixels = -2f, startDelayMillis = 400)
                 } else {
                     Surface(shape = CircleShape, color = Color.White.copy(alpha = .72f)) { Icon(icon, contentDescription = null, modifier = Modifier.padding(10.dp), tint = GsTheme.colors.accentStrong) }
                 }
