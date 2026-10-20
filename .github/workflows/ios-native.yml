@@ -2472,7 +2472,15 @@ jobs:
           # A test that never returns must fail LOUDLY and SOON, not hold the
           # gate open. Two bounds, both real:
           #   -test-timeouts-enabled  XCTest itself kills an overrunning test
-          #                           and names it (default allowance 180s).
+          #                           and names it. The allowance is 10 MINUTES,
+          #                           not the 3-minute default this step first
+          #                           used: the engine tests on a CPU-only
+          #                           simulator take ~135s PER GENERATION, so
+          #                           run 39342295960 had
+          #                           testSamePromptTwiceIsIdentical killed at
+          #                           3:00 for being exactly what it is (two
+          #                           generations) -- a harness failure, not a
+          #                           product one.
           #   the loop below          kills xcodebuild if it stalls outside a
           #                           test (simulator boot, runner handshake).
           # The step still runs to COMPLETION (no YAML timeout-minutes), so the
@@ -2483,8 +2491,8 @@ jobs:
             -scheme GSApp \
             -destination "id=$UDID" \
             -test-timeouts-enabled YES \
-            -default-test-execution-time-allowance 180 \
-            -maximum-test-execution-time-allowance 900 \
+            -default-test-execution-time-allowance 600 \
+            -maximum-test-execution-time-allowance 1200 \
             CODE_SIGNING_ALLOWED=NO \
             > test-simulator.log 2>&1 &
           XCODE_PID=$!

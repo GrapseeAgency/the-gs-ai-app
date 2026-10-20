@@ -95,7 +95,20 @@ final class GsChatUiTests: XCTestCase {
         let field = app.textFields["Ask anything…"].firstMatch
         XCTAssertTrue(field.waitForExistence(timeout: 15),
                       "composer field never appeared")
+        // THE TAP CAN BE DROPPED WHILE THE APP IS STILL LOADING THE MODEL.
+        // GSApp.init initialises the GGUF synchronously, so the composer is in
+        // the tree long before the main thread is free. On run 39342295960
+        // field.tap() was accepted at t=37.6s and typeText() then failed with
+        // "Neither element nor any descendant has keyboard focus": the tap
+        // landed while the field could not become first responder. Tap, prove
+        // focus by requiring the keyboard, retry once, then type.
+        let keyboard = app.keyboards.firstMatch
         field.tap()
+        if !keyboard.waitForExistence(timeout: 10) {
+            field.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        }
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 15),
+                      "composer never took keyboard focus, so the send path cannot be typed")
         field.typeText("hello")
 
         // 3. send it.
