@@ -1,0 +1,5 @@
+{
+  "extends": "/home/user/the-gs-ai-app/tsconfig.json",
+  "include": ["/home/user/the-gs-ai-app/src/**/*"],
+  "exclude": ["/home/user/the-gs-ai-app/node_modules"]
+}
