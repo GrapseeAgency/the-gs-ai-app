@@ -12,6 +12,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.semantics.Role
@@ -26,6 +30,8 @@ import androidx.lifecycle.LifecycleEventObserver
 import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.ui.theme.LocalGsIsDark
 import com.grapsee.gsai.ui.theme.GsTheme
+import kotlin.math.PI
+import kotlin.math.sin
 
 /**
  * The shared orb clock. Every mounted orb derives its time from the SAME
@@ -86,7 +92,13 @@ fun ThinkingOrb(
     dark: Boolean = LocalGsIsDark.current,
     reduceMotion: Boolean = SettingsStore.reduceMotion || SettingsStore.reduceAnimations,
     contentDescription: String? = null,
-    renderScale: Float = 1f
+    renderScale: Float = 1f,
+    // LUMINOUS layer (OrbPhase.kt). [luminance] overrides the per-state default
+    // presentation; null borrows [luminousProfileFor] so geometry-only callers
+    // still glow. [amplitude] is a live 0..1 signal (the microphone level while
+    // recording) that lifts the core halo; negative means "not reactive".
+    luminance: LuminousProfile? = null,
+    amplitude: Float = -1f
 ) {
     val resolved = remember(state, size) { OrbSpec.resolve(state, size) }
     val buffer = remember(state, size) { OrbFrameBuffer() }
@@ -126,7 +138,24 @@ fun ThinkingOrb(
     val scaleFactor = renderScale.coerceAtLeast(0.01f)
     // Read the accent during composition: the Canvas lambda is DrawScope and
     // cannot touch GsTheme.
-    val aiActive = GsTheme.colors.aiActive
+    val colors = GsTheme.colors
+    val aiActive = colors.aiActive
+    // Resolve the glow hues here, not in the draw cache — a role maps to real
+    // token colours so an accent or appearance flip relights the orb with it.
+    val profile = luminance ?: luminousProfileFor(state)
+    val glowColors = listOf(
+        when (profile.role) {
+            OrbLuminousRole.CALM -> aiActive
+            OrbLuminousRole.ACTIVE -> colors.accentStrong
+            OrbLuminousRole.SUCCESS -> colors.success
+            OrbLuminousRole.ALERT -> colors.error
+            OrbLuminousRole.MUTED -> colors.textSecondary
+        },
+        Color.Transparent,
+    )
+    // The iridescent tail the reference is made of — the aurora spectrum as a
+    // faint outer ring, only for the alive/calm roles, never for alarm or mute.
+    val iridescent = profile.role == OrbLuminousRole.CALM || profile.role == OrbLuminousRole.ACTIVE
     Canvas(
         modifier
             .size((presetPx * scaleFactor).dp)
@@ -135,6 +164,41 @@ fun ThinkingOrb(
                 this.contentDescription = contentDescription ?: state.label
             }
     ) {
+        // LUMINOUS PASS — drawn first, so it sits *behind* the dots and adds
+        // light without touching the locked geometry. A radial bloom in the
+        // phase hue, breathing on the shared clock; a live amplitude lifts the
+        // core. Screen blend makes it glow over the atmosphere, not tint it.
+        val glowCenter = Offset(size.width / 2f, size.height / 2f)
+        val glowRadius = size.minDimension / 2f
+        val breathe = if (profile.pulse) {
+            (0.5 + 0.5 * sin(tState.doubleValue * profile.pulseSpeed * PI)).toFloat()
+        } else {
+            1f
+        }
+        val boost = if (amplitude >= 0f) amplitude.coerceIn(0f, 1f) else 0f
+        if (iridescent) {
+            drawCircle(
+                brush = Brush.radialGradient(colors.aurora + Color.Transparent, center = glowCenter, radius = glowRadius, tileMode = TileMode.Clamp),
+                radius = glowRadius,
+                center = glowCenter,
+                alpha = (profile.glowAlpha * 0.5f * breathe).coerceIn(0f, 1f),
+                blendMode = BlendMode.Screen,
+            )
+        }
+        drawCircle(
+            brush = Brush.radialGradient(glowColors, center = glowCenter, radius = glowRadius, tileMode = TileMode.Clamp),
+            radius = glowRadius,
+            center = glowCenter,
+            alpha = (profile.glowAlpha * breathe + boost * 0.22f).coerceIn(0f, 1f),
+            blendMode = BlendMode.Screen,
+        )
+        drawCircle(
+            brush = Brush.radialGradient(listOf(aiActive, Color.Transparent), center = glowCenter, radius = glowRadius * 0.46f, tileMode = TileMode.Clamp),
+            radius = glowRadius * 0.46f,
+            center = glowCenter,
+            alpha = (profile.coreAlpha * (0.6f + 0.4f * breathe) + boost * 0.5f).coerceIn(0f, 1f),
+            blendMode = BlendMode.Screen,
+        )
         val contentPx = presetPx * density
         // NEGATIVE when scaling a preset DOWN (authored space is larger than
         // the canvas). Clamping this at 0 would leave the drawing anchored to

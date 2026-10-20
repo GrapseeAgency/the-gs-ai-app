@@ -69,6 +69,7 @@ import com.grapsee.gsai.ui.components.GsChip
 import com.grapsee.gsai.ui.components.RefIconButton
 import com.grapsee.gsai.ui.orbs.OrbSize
 import com.grapsee.gsai.ui.orbs.ThinkingOrb
+import com.grapsee.gsai.ui.orbs.OrbPhase
 import com.grapsee.gsai.ui.orbs.orbStateForVoice
 import com.grapsee.gsai.ui.theme.GsHaptics
 import com.grapsee.gsai.ui.theme.GsMotion
@@ -322,10 +323,17 @@ fun VoiceScreen(
             // processes. Idle, error and permission states show no orb: an
             // absent state is never faked.
             orbStateForVoice(phase)?.let { orbState ->
+                // The live RMS feeds the orb's reactive core (mandate: RECORDING
+                // glows with the voice); processing falls back to the default
+                // luminous wash. This is the Android mirror of the iOS
+                // RMS-in-installTap path.
+                val live = phase == VoicePhase.Listening
                 ThinkingOrb(
                     state = orbState,
                     size = OrbSize.STANDARD,
                     contentDescription = orbState.label,
+                    luminance = if (live) OrbPhase.RECORDING.luminance else null,
+                    amplitude = if (live) rmsLevel.value else -1f,
                     modifier = Modifier.padding(bottom = GsMotion.spaceM)
                 )
             }
