@@ -1,3 +1,19 @@
+# WIDGET COVERAGE
+
+> **V2 (2026-10-20).** The catalogue stopped at 18 kinds and became a
+> compositional vocabulary: **29 kinds, 28 chart types, 20 app experiences,
+> 14 calculators, 17 form-field types, 16 media forms, 24 mermaid languages,
+> 3 native blocks — 151 declared component types**, plus unlimited bespoke
+> ```html. The model's prompt now states that number and bans quoting a
+> smaller one (the "I can only do 18" bug).
+>
+> | Layer | Status |
+> |---|---|
+> | Catalogue + validators + compiler + palettes (`src/lib/widgets/`) | shipped, 90/90 tests |
+> | Web renderers (`src/components/genui/`, 115 files) | shipped — gallery at `/genui` |
+> | Android renderers (Compose) | v1 kinds shipped; v2 kinds to sync |
+> | Prompt contract (`src/lib/widgets/prompt.ts`) | shipped — full vocabulary + palette system |
+
 # Widget coverage — the 150-item interactive set
 
 Route legend:
