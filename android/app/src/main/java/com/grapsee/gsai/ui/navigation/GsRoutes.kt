@@ -4,6 +4,7 @@ import android.net.Uri
 
 /** AERUO KINETIC — route map. Screens are plain composables; this file owns all routing. */
 object GsRoutes {
+    const val HOME = "home"
     const val CHATS = "chats"
     const val PROFILE = "profile"
     const val SETTINGS = "settings"
@@ -61,7 +62,7 @@ object GsRoutes {
 
     /** Root-level destinations the drawer switches to. */
     val SECTION_ROUTES = setOf(
-        CHATS,
+        HOME, CHATS,
         PROFILE, NOTIFICATIONS, SETTINGS, BILLING
     )
 

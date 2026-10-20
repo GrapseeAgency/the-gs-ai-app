@@ -80,16 +80,14 @@ struct RootView: View {
                 // a fresh conversation; its empty state (greeting + composer
                 // suggestions) lives inside this very screen. Keyed on
                 // workspaceEpoch so a reset is a true re-seed.
-                ChatDetailView(
-                    conversationID: nil,
-                    isWorkspaceRoot: true,
+                HomeDashboardView(
+                    onNewChat: { router.path.append(.chat(nil)) },
                     onOpenDrawer: {
                         drawerEntryOffset = 0
                         withAnimation(Aero.motion(Aero.spring)) { showDrawer = true }
                     },
-                    onNewChat: { router.resetWorkspace() }
+                    onOpenChats: { router.path.append(.chats) }
                 )
-                .id(router.workspaceEpoch)
                 .aeroDestinations()
             }
             .environmentObject(router)

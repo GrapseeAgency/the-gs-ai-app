@@ -42,6 +42,7 @@ import com.grapsee.gsai.ui.notifications.NotificationsScreen
 import com.grapsee.gsai.ui.profile.ProfileScreen
 import com.grapsee.gsai.ui.settings.SettingsScreen
 import com.grapsee.gsai.ui.voice.VoiceScreen
+import com.grapsee.gsai.ui.home.HomeDashboardScreen
 import com.grapsee.gsai.ui.theme.GsMotion
 import com.grapsee.gsai.ui.theme.gsHaptic
 import kotlinx.coroutines.launch
@@ -78,7 +79,7 @@ fun GsNavHost(modifier: Modifier = Modifier) {
     val view = LocalView.current
     // Session gate — first launch walks Auth → Onboarding; later launches go
     // straight into the workspace.
-    val start = if (SessionStore.isSessionActive(context)) GsRoutes.CHAT else GsRoutes.AUTH
+    val start = if (SessionStore.isSessionActive(context)) GsRoutes.HOME else GsRoutes.AUTH
 
     // The current destination drives two shell behaviours at once: whether the
     // drawer may exist at all (never inside the session gate) and which row
@@ -106,7 +107,7 @@ fun GsNavHost(modifier: Modifier = Modifier) {
     LaunchedEffect(shortcutRoute) {
         val route = shortcutRoute ?: return@LaunchedEffect
         ShortcutBus.consume()
-        if (start == GsRoutes.CHAT) {
+        if (start == GsRoutes.HOME || start == GsRoutes.CHAT) {
             if (route == GsRoutes.chat(null)) newChat() else open(route)
         }
     }
@@ -211,6 +212,13 @@ fun GsNavHost(modifier: Modifier = Modifier) {
             }
         }
     ) {
+        composable(GsRoutes.HOME) {
+            HomeDashboardScreen(
+                onNewChat = { navController.navigate(GsRoutes.chat(null)) },
+                onOpenDrawer = { scope.launch { drawerState.open() } },
+                onOpenChats = { open(GsRoutes.CHATS) },
+            )
+        }
         composable(GsRoutes.CHATS) { ChatsScreen(onNavigate = open) }
         composable(GsRoutes.PROFILE) { ProfileScreen(onNavigate = open) }
 
@@ -270,7 +278,7 @@ fun GsNavHost(modifier: Modifier = Modifier) {
                 onFinished = {
                     SessionStore.activateSession(context)
                     SessionStore.setOnboarded(context, true)
-                    navController.navigate(GsRoutes.chat(null)) {
+                    navController.navigate(GsRoutes.HOME) {
                         popUpTo(0) { inclusive = true }
                     }
                 }
