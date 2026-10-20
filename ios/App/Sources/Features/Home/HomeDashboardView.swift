@@ -19,16 +19,7 @@ struct HomeDashboardView: View {
                 reflectionCard
                 usageStats
                 focusCard
-                Button(action: onNewChat) {
-                    Label("Generate", systemImage: "wand.and.stars")
-                        .font(Aero.button())
-                        .foregroundStyle(Aero.onAccent)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(Capsule().fill(Aero.accent))
-                        .shadow(color: Aero.accent.opacity(0.22), radius: 14, y: 7)
-                }
-                .buttonStyle(KineticPressStyle())
+                bottomActionDock
             }
             .padding(.horizontal, Aero.Spacing.m)
             .padding(.top, Aero.Spacing.s)
@@ -43,6 +34,28 @@ struct HomeDashboardView: View {
             .ignoresSafeArea()
         )
         .toolbar(.hidden, for: .navigationBar)
+    }
+
+    private var bottomActionDock: some View {
+        HStack(spacing: 6) {
+            DockIcon(icon: "photo.on.rectangle", label: "Image", action: onNewChat)
+            DockIcon(icon: "play.rectangle", label: "Video", action: onNewChat)
+            Button(action: onNewChat) {
+                Label("Generate", systemImage: "wand.and.stars")
+                    .font(Aero.button())
+                    .foregroundStyle(Aero.onAccent)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 13)
+                    .background(Capsule().fill(Aero.accent))
+            }
+            .buttonStyle(KineticPressStyle())
+            DockIcon(icon: "clock.arrow.circlepath", label: "History", action: onOpenChats)
+            DockIcon(icon: "gearshape", label: "Settings", action: onNewChat)
+        }
+        .padding(8)
+        .background(Capsule().fill(Aero.surface))
+        .overlay(Capsule().stroke(Aero.outline, lineWidth: 1))
+        .aeroCardShadow()
     }
 
     private var topBar: some View {
@@ -189,6 +202,23 @@ struct HomeDashboardView: View {
         .background(RoundedRectangle(cornerRadius: Aero.Radius.card).fill(Aero.surface))
         .overlay(RoundedRectangle(cornerRadius: Aero.Radius.card).stroke(Aero.outline, lineWidth: 1))
         .aeroCardShadow()
+    }
+}
+
+private struct DockIcon: View {
+    let icon: String
+    let label: String
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Aero.accentDeep)
+                .frame(width: 38, height: 38)
+                .background(Circle().fill(Aero.accentSoft))
+        }
+        .buttonStyle(KineticPressStyle())
+        .accessibilityLabel(label)
     }
 }
 

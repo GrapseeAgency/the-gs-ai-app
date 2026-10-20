@@ -150,20 +150,34 @@ fun HomeDashboardScreen(
             }
         }
         Spacer(Modifier.weight(1f))
-        Surface(
-            onClick = onNewChat,
-            modifier = Modifier.fillMaxWidth(),
-            shape = GsRadius.inputShape(),
-            color = colors.accent,
-            shadowElevation = 4.dp,
-        ) {
-            Row(Modifier.padding(vertical = 16.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                Icon(GsIcons.Wand, contentDescription = null, tint = colors.onAccent)
-                Spacer(Modifier.width(GsSpacing.s))
-                Text("Generate", color = colors.onAccent, fontWeight = FontWeight.SemiBold)
-            }
-        }
+        BottomActionDock(onGenerate = onNewChat, onHistory = onOpenChats)
         Spacer(Modifier.height(GsSpacing.l))
+    }
+}
+
+@Composable
+private fun BottomActionDock(onGenerate: () -> Unit, onHistory: () -> Unit) {
+    Surface(shape = GsRadius.inputShape(), color = GsTheme.colors.surface, shadowElevation = 4.dp, modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            DockIcon(GsIcons.ImagePlus, "Image", onGenerate)
+            DockIcon(GsIcons.Presentation, "Video", onGenerate)
+            Surface(onClick = onGenerate, shape = GsRadius.pill, color = GsTheme.colors.accent, modifier = Modifier.weight(1f)) {
+                Row(Modifier.padding(vertical = 13.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                    Icon(GsIcons.Wand, contentDescription = null, modifier = Modifier.size(16.dp), tint = GsTheme.colors.onAccent)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Generate", color = GsTheme.colors.onAccent, fontWeight = FontWeight.SemiBold)
+                }
+            }
+            DockIcon(GsIcons.History, "History", onHistory)
+            DockIcon(GsIcons.Settings, "Settings", onGenerate)
+        }
+    }
+}
+
+@Composable
+private fun DockIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
+    Surface(onClick = onClick, shape = CircleShape, color = GsTheme.colors.accentSoft) {
+        Icon(icon, contentDescription = label, modifier = Modifier.padding(11.dp).size(17.dp), tint = GsTheme.colors.accentStrong)
     }
 }
 
