@@ -8,7 +8,8 @@ import { useWidgetIdentity } from '../theme/WidgetSurface'
 /** Violin — kernel-density silhouettes per group (Gaussian kernel, Silverman bw). */
 export function ViolinChartView({ payload, height = 210 }: { payload: ChartPayload; height?: number }) {
   const { ramp, theme } = useWidgetIdentity()
-  const series = (payload.series ?? []).map((s) => ({ name: s.name, samples: s.data.map((d) => d[d.length - 1]) }))
+  // the validator flattens sample pairs to plain numbers; array rows keep the last element
+  const series = (payload.series ?? []).map((s) => ({ name: s.name, samples: s.data.map((d) => (Array.isArray(d) ? d[d.length - 1] : d)) }))
   const h = height ?? 210
   if (!series.length) return <ChartFrame title={payload.title} seriesNames={[]} legend={false}>{() => null}</ChartFrame>
   const all = series.flatMap((s) => s.samples)
