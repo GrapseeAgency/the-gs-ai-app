@@ -120,3 +120,9 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* GS AI consumer surface: warm, tactile, and intentionally softer than the legacy command centre. */
+html, body { min-height: 100%; }
+body { background: #FFF4EF; }
+button, a, input, textarea { -webkit-tap-highlight-color: transparent; }
+::selection { background: #FFC38F; color: #2B1A17; }

@@ -36,19 +36,19 @@ async function readJson<T>(res: Response): Promise<T> {
 }
 
 const C = {
-  bg: '#0A0D12',
-  surface: '#11151C',
-  raised: '#181E28',
-  container: '#141923',
-  text: '#EDEFF2',
-  muted: '#8B93A1',
-  outline: '#232B37',
-  accent: '#2DD4A8',
-  accentDeep: '#0FA37E',
-  danger: '#E5484D',
+  bg: '#FFF4EF',
+  surface: '#FFFBF8',
+  raised: '#FFFFFF',
+  container: '#FFE8DE',
+  text: '#2B1A17',
+  muted: '#8F7169',
+  outline: '#F0D2C6',
+  accent: '#FF9142',
+  accentDeep: '#F36F2C',
+  danger: '#D95C55',
 } as const
 
-const AURORA = 'linear-gradient(90deg, #2DD4A8, #4CC3FF, #9D7BFF)'
+const AURORA = 'linear-gradient(90deg, #FFB36D, #FF8847, #F36F2C)'
 
 /**
  * FLASH MODE (Phase 3) — the composer's thinking-mode selector.
@@ -281,7 +281,7 @@ function SourceCardView({ s }: { s: SourceCard }) {
           <span className="flex items-center gap-1.5">
             <span
               className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-[9px] font-bold"
-              style={{ background: 'rgba(45,212,168,0.14)', color: C.accent }}
+              style={{ background: 'rgba(255,145,66,0.14)', color: C.accent }}
             >
               {s.ordinal}
             </span>
@@ -343,7 +343,7 @@ function AnswerText({ text, sources }: { text: string; sources?: SourceCard[] })
           aria-label={`Open citation ${n}: ${src.title}`}
           title={`${src.title} — ${src.domain}`}
           className="mx-0.5 inline-flex h-4 min-w-4 cursor-pointer items-center justify-center rounded px-1 align-[2px] text-[10px] font-bold transition-colors hover:brightness-125"
-          style={{ background: 'rgba(45,212,168,0.16)', color: C.accent }}
+          style={{ background: 'rgba(255,145,66,0.16)', color: C.accent }}
         >
           {n}
         </button>
@@ -371,7 +371,7 @@ function ClarifyChips({ clarify, onPick }: { clarify: ClarifyChoices; onPick: (l
             <button
               key={o.id}
               onClick={() => onPick(o.label)}
-              className="rounded-full border px-3 py-1.5 text-xs font-medium transition-all hover:border-[#2DD4A8] active:scale-95"
+              className="rounded-full border px-3 py-1.5 text-xs font-medium transition-all hover:border-[#FF9142] active:scale-95"
               style={{ borderColor: C.outline, color: C.text, background: C.container }}
               aria-label={`Ask for ${o.label} news`}
             >
@@ -1070,26 +1070,29 @@ export default function Home() {
   const activeConv = conversations.find((c) => c.id === conversationId)
 
   return (
-    <div className="flex min-h-screen flex-col" style={{ background: C.bg, color: C.text }}>
+    <div className="gs-shell-glow flex min-h-screen flex-col" style={{ background: C.bg, color: C.text }}>
       <style>{`
         .gs-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
         .gs-scroll::-webkit-scrollbar-thumb { background: ${C.outline}; border-radius: 9999px; }
         .gs-scroll::-webkit-scrollbar-thumb:hover { background: ${C.accentDeep}; }
         .gs-scroll::-webkit-scrollbar-track { background: transparent; }
-        .gs-card { transition: transform .18s ease, border-color .18s ease; }
-        .gs-card:hover { transform: translateY(-2px); border-color: ${C.accentDeep}; }
+        .gs-card { transition: transform .22s ease, border-color .22s ease, box-shadow .22s ease; box-shadow: 0 12px 30px rgba(181, 91, 47, .08); }
+        .gs-card:hover { transform: translateY(-3px); border-color: ${C.accentDeep}; box-shadow: 0 18px 38px rgba(181, 91, 47, .14); }
         .gs-card .gs-hairline { transform: scaleX(0); transform-origin: left; transition: transform .25s ease; }
         .gs-card:hover .gs-hairline { transform: scaleX(1); }
+        .gs-shell-glow { background: radial-gradient(circle at 12% 0%, rgba(255, 181, 109, .30), transparent 34%), radial-gradient(circle at 92% 8%, rgba(255, 132, 83, .16), transparent 30%); }
+        .gs-glass { box-shadow: 0 16px 40px rgba(181, 91, 47, .10); backdrop-filter: blur(18px); }
+        .gs-soft-ring { box-shadow: 0 0 0 8px rgba(255, 145, 66, .10), 0 16px 34px rgba(181, 91, 47, .14); }
       `}</style>
 
       {/* Header */}
       <header
-        className="sticky top-0 z-20 border-b px-6 py-5"
-        style={{ borderColor: C.outline, background: `${C.surface}F2`, backdropFilter: 'blur(10px)' }}
+        className="sticky top-0 z-20 border-b px-6 py-4 gs-glass"
+        style={{ borderColor: C.outline, background: 'rgba(255,251,248,.78)', backdropFilter: 'blur(18px)' }}
       >
         <div className="mx-auto flex max-w-6xl items-center gap-4">
           <div
-            className="flex h-11 w-11 items-center justify-center rounded-2xl font-serif text-lg font-semibold"
+            className="gs-soft-ring flex h-11 w-11 items-center justify-center rounded-2xl font-serif text-lg font-semibold"
             style={{ background: C.container, color: C.accent }}
           >
             G
@@ -1120,7 +1123,7 @@ export default function Home() {
             style={{
               borderColor: health === 'ok' ? C.accent : C.outline,
               color: health === 'ok' ? C.accent : C.muted,
-              background: health === 'ok' ? 'rgba(45,212,168,0.08)' : 'transparent',
+              background: health === 'ok' ? 'rgba(255,145,66,0.10)' : 'transparent',
             }}
           >
             <span
@@ -1135,10 +1138,9 @@ export default function Home() {
       <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-8">
         {/* Greeting */}
         <section className="mb-8">
-          <h2 className="font-serif text-4xl font-semibold">{greet()}</h2>
-          <p className="mt-1 text-sm" style={{ color: C.muted }}>
-            One platform · two native clients · one contract. This page drives the same
-            API your Android and iOS apps use.
+          <h2 className="max-w-2xl font-serif text-4xl font-semibold leading-[1.05] sm:text-5xl">Intelligence reimagined.<br /><span style={{ color: C.accentDeep }}>Discover a softer way to think.</span></h2>
+          <p className="mt-3 max-w-xl text-sm leading-relaxed" style={{ color: C.muted }}>
+            Ask, create, explore, and get things done with your personal GS AI companion.
           </p>
         </section>
 
@@ -1173,7 +1175,7 @@ export default function Home() {
                           {c.pinned && (
                             <span
                               className="rounded px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide"
-                              style={{ background: 'rgba(45,212,168,0.12)', color: C.accent }}
+                              style={{ background: 'rgba(255,145,66,0.12)', color: C.accent }}
                             >
                               pinned
                             </span>
@@ -1224,7 +1226,7 @@ export default function Home() {
               {activeAssistant && (
                 <span
                   className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium"
-                  style={{ borderColor: C.accentDeep, color: C.accent, background: 'rgba(45,212,168,0.08)' }}
+                  style={{ borderColor: C.accentDeep, color: C.accent, background: 'rgba(255,145,66,0.10)' }}
                 >
                   {activeAssistant.name}
                 </span>
@@ -1286,7 +1288,7 @@ export default function Home() {
                     <div key={i} className="flex justify-end">
                       <div
                         className="max-w-[85%] rounded-2xl rounded-br-md px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap"
-                        style={{ background: 'rgba(45,212,168,0.12)', color: C.text }}
+                        style={{ background: 'rgba(255,145,66,0.12)', color: C.text }}
                       >
                         {m.content}
                       </div>
@@ -1434,7 +1436,7 @@ export default function Home() {
                       className="inline-flex max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px]"
                       style={{ borderColor: C.outline, color: a.uploading ? C.muted : C.text, background: C.raised }}
                     >
-                      {a.kind === 'image' ? '🖼' : '📎'} <span className="truncate">{a.displayName}</span>
+                      {a.kind === 'image' ? 'Image' : 'File'} <span className="truncate">{a.displayName}</span>
                       {a.uploading ? (
                         <span className="animate-pulse" style={{ color: C.accent }}>···</span>
                       ) : (
@@ -1465,7 +1467,7 @@ export default function Home() {
                   style={{
                     borderColor: sheetOpen || mode !== 'flash' ? C.accent : C.outline,
                     color: sheetOpen || mode !== 'flash' ? C.accent : C.muted,
-                    background: sheetOpen ? 'rgba(45,212,168,0.08)' : 'transparent',
+                    background: sheetOpen ? 'rgba(255,145,66,0.10)' : 'transparent',
                   }}
                 >
                   +
@@ -1481,7 +1483,7 @@ export default function Home() {
                     style={{
                       borderColor: mode === 'thinking' ? C.accent : C.outline,
                       color: mode === 'thinking' ? C.accent : C.muted,
-                      background: mode === 'thinking' ? 'rgba(45,212,168,0.08)' : 'transparent',
+                      background: mode === 'thinking' ? 'rgba(255,145,66,0.10)' : 'transparent',
                     }}
                   >
                     {mode === 'thinking' ? 'Thinking' : 'Auto'} ▾
@@ -1504,8 +1506,8 @@ export default function Home() {
                 <button
                   onClick={() => send()}
                   disabled={!draft.trim() || isStreaming}
-                  className="rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all hover:shadow-[0_0_14px_rgba(45,212,168,0.35)] active:scale-95 disabled:opacity-40"
-                  style={{ background: C.accent, color: '#06231C' }}
+                  className="rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all hover:shadow-[0_0_14px_rgba(255,145,66,0.35)] active:scale-95 disabled:opacity-40"
+                  style={{ background: C.accent, color: '#3A1B10' }}
                 >
                   Send
                 </button>
@@ -1532,14 +1534,14 @@ export default function Home() {
                         className="rounded-full border px-3 py-1.5 text-xs font-medium transition-all active:scale-95"
                         style={{ borderColor: C.outline, color: C.text }}
                       >
-                        📎 File
+                        File
                       </button>
                       <button
                         onClick={() => imageInputRef.current?.click()}
                         className="rounded-full border px-3 py-1.5 text-xs font-medium transition-all active:scale-95"
                         style={{ borderColor: C.outline, color: C.text }}
                       >
-                        🖼 Image
+                        Image
                       </button>
                       <label
                         className="cursor-pointer rounded-full border px-3 py-1.5 text-xs font-medium transition-all active:scale-95 sm:hidden"
@@ -1598,7 +1600,7 @@ export default function Home() {
                             className="flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-all active:scale-[0.99]"
                             style={{
                               borderColor: active ? C.accent : C.outline,
-                              background: active ? 'rgba(45,212,168,0.07)' : 'transparent',
+                              background: active ? 'rgba(255,145,66,0.08)' : 'transparent',
                             }}
                           >
                             <span
@@ -1633,7 +1635,7 @@ export default function Home() {
                       style={{ borderColor: C.outline }}
                     >
                       <span className="text-sm" style={{ color: C.text }}>
-                        🌐 Search
+                        Web search
                       </span>
                       <span className="text-[11px]" style={{ color: C.muted }}>
                         Auto — the backend gate decides when to search
@@ -1661,7 +1663,7 @@ export default function Home() {
                   style={{
                     borderColor: active ? C.accent : C.outline,
                     color: active ? C.accent : C.muted,
-                    background: active ? 'rgba(45,212,168,0.08)' : 'transparent',
+                    background: active ? 'rgba(255,145,66,0.10)' : 'transparent',
                   }}
                 >
                   {cat === 'all' ? 'All' : (CATEGORY_LABELS[cat] ?? cat)}
@@ -1688,7 +1690,7 @@ export default function Home() {
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold">{a.name}</p>
                     <p className="text-[11px]" style={{ color: C.muted }}>
-                      {CATEGORY_LABELS[a.category] ?? a.category} · ★ {a.rating.toFixed(1)} · {fmtUses(a.uses)} uses
+                      {CATEGORY_LABELS[a.category] ?? a.category} · {a.rating.toFixed(1)} · {fmtUses(a.uses)} uses
                     </p>
                   </div>
                   <button
@@ -1710,7 +1712,7 @@ export default function Home() {
                       <button
                         key={s}
                         onClick={() => startAssistantChat(a, s)}
-                        className="max-w-full truncate rounded-full border px-2.5 py-1 text-[11px] transition-colors hover:border-[#2DD4A8]"
+                        className="max-w-full truncate rounded-full border px-2.5 py-1 text-[11px] transition-colors hover:border-[#FF9142]"
                         style={{ borderColor: C.outline, color: C.muted }}
                       >
                         {s}
@@ -1722,7 +1724,7 @@ export default function Home() {
                   onClick={() => startAssistantChat(a)}
                   disabled={startingChat === a.id || isStreaming}
                   className="mt-3 w-full rounded-xl border py-2 text-xs font-semibold transition-all active:scale-[0.98] disabled:opacity-50"
-                  style={{ borderColor: C.accentDeep, color: C.accent, background: 'rgba(45,212,168,0.06)' }}
+                  style={{ borderColor: C.accentDeep, color: C.accent, background: 'rgba(255,145,66,0.07)' }}
                 >
                   {startingChat === a.id ? 'Opening…' : 'Start chat'}
                 </button>
@@ -1755,7 +1757,7 @@ export default function Home() {
 function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div
-      className="rounded-2xl border p-4 transition-colors hover:border-[#2DD4A8]/40"
+      className="rounded-2xl border p-4 transition-colors hover:border-[#FF9142]/40"
       style={{ background: C.surface, borderColor: C.outline }}
     >
       <p className="text-xs font-medium uppercase tracking-wider" style={{ color: C.muted }}>
