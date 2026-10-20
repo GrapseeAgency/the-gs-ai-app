@@ -2,9 +2,8 @@ import SwiftUI
 import UIKit
 
 /**
- * MONOCHROME — single source of design truth for iOS.
- * "Black / white / neutral": disciplined editorial surfaces, no hue in the
- * product interface — energy reserved for motion alone.
+ * WARM CONSUMER — single source of design truth for iOS.
+ * "Peach / orange / cream": soft consumer surfaces, tactile cards, and a warm AI action language.
  * Mirrors android/.../ui/theme/ (Color.kt + Tokens.kt + Type.kt + Motion.kt).
  *
  * RULES
@@ -55,25 +54,25 @@ enum Aero {
 
     // ---- Background hierarchy ------------------------------------------------
     static let background = dynamic(          // window canvas
-        light: .white,                                                     // FFFFFF
+        light: UIColor(red: 1.0, green: 0.957, blue: 0.937, alpha: 1),                  // FFF4EF
         dark: UIColor(red: 0, green: 0, blue: 0, alpha: 1))                // 000000
     static let secondaryBackground = dynamic( // grouped / under-page canvas
-        light: UIColor(red: 0.949, green: 0.949, blue: 0.953, alpha: 1),   // F2F2F3
+        light: UIColor(red: 1.0, green: 0.910, blue: 0.871, alpha: 1),   // FFE8DE
         dark: UIColor(red: 0.051, green: 0.055, blue: 0.063, alpha: 1))    // 0D0E10
     static let surface = dynamic(             // standard content surface
-        light: .white,
+        light: UIColor(red: 1.0, green: 0.984, blue: 0.973, alpha: 1),
         dark: UIColor(red: 0.063, green: 0.071, blue: 0.078, alpha: 1))    // 101214
     static let elevatedSurface = dynamic(     // above-surface content
         light: .white,
         dark: UIColor(red: 0.090, green: 0.098, blue: 0.110, alpha: 1))    // 17191C
     static let raisedSurface = dynamic(       // raised controls: pills, tiles
-        light: UIColor(red: 0.949, green: 0.949, blue: 0.953, alpha: 1),   // F2F2F3
+        light: UIColor(red: 1.0, green: 0.910, blue: 0.871, alpha: 1),   // FFE8DE
         dark: UIColor(red: 0.082, green: 0.090, blue: 0.098, alpha: 1))    // 151719
     static let inputSurface = dynamic(        // text fields, composer field
-        light: UIColor(red: 0.949, green: 0.949, blue: 0.953, alpha: 1),   // F2F2F3
+        light: UIColor(red: 1.0, green: 0.910, blue: 0.871, alpha: 1),   // FFE8DE
         dark: UIColor(red: 0.071, green: 0.078, blue: 0.090, alpha: 1))    // 121417
     static let sheetSurface = dynamic(        // bottom sheets
-        light: .white,
+        light: UIColor(red: 1.0, green: 0.984, blue: 0.973, alpha: 1),
         dark: UIColor(red: 0.063, green: 0.071, blue: 0.078, alpha: 1))    // 101214
     static let dialogSurface = dynamic(       // dialogs / confirmations
         light: .white,
@@ -84,12 +83,12 @@ enum Aero {
 
     // ---- Text hierarchy --------------------------------------------------------
     static let text = dynamic(
-        light: UIColor(red: 0, green: 0, blue: 0, alpha: 1),               // 000000
+        light: UIColor(red: 0.169, green: 0.102, blue: 0.090, alpha: 1),               // 2B1A17
         dark: UIColor(red: 0.973, green: 0.976, blue: 0.984, alpha: 1),    // F8F9FB
         lightHC: .black,
         darkHC: .white)
     static let textSecondary = dynamic(
-        light: UIColor(red: 0.420, green: 0.439, blue: 0.475, alpha: 1),   // 6B7079
+        light: UIColor(red: 0.561, green: 0.443, blue: 0.412, alpha: 1),   // 8F7169
         dark: UIColor(red: 0.639, green: 0.659, blue: 0.686, alpha: 1),    // A3A8AF
         lightHC: UIColor(red: 0.278, green: 0.298, blue: 0.329, alpha: 1), // 474C54
         darkHC: UIColor(red: 0.780, green: 0.800, blue: 0.827, alpha: 1))  // C7CCD3
@@ -106,12 +105,12 @@ enum Aero {
         light: .white,
         dark: UIColor(red: 0.039, green: 0.039, blue: 0.039, alpha: 1))    // 0A0A0A
     static let link = dynamic(
-        light: UIColor(red: 0, green: 0, blue: 0, alpha: 1),               // 000000
+        light: UIColor(red: 0.953, green: 0.435, blue: 0.173, alpha: 1),               // F36F2C
         dark: UIColor(red: 0.973, green: 0.976, blue: 0.984, alpha: 1))    // F8F9FB
 
     // ---- Structural --------------------------------------------------------------
     static let outline = dynamic(
-        light: UIColor(red: 0.906, green: 0.906, blue: 0.914, alpha: 1),   // E7E7E9
+        light: UIColor(red: 0.941, green: 0.824, blue: 0.776, alpha: 1),   // F0D2C6
         dark: UIColor(red: 0.153, green: 0.161, blue: 0.176, alpha: 1),    // 27292D
         lightHC: UIColor(red: 0.749, green: 0.749, blue: 0.761, alpha: 1), // BFBFC2
         darkHC: UIColor(red: 0.337, green: 0.353, blue: 0.384, alpha: 1))  // 565A62
@@ -124,7 +123,7 @@ enum Aero {
         light: UIColor(red: 0.933, green: 0.933, blue: 0.941, alpha: 1),   // EEEEEF
         dark: UIColor(red: 0.106, green: 0.114, blue: 0.125, alpha: 1))    // 1B1D20
     static let selected = dynamic(
-        light: UIColor(red: 0, green: 0, blue: 0, alpha: 1),               // 000000
+        light: UIColor(red: 0.953, green: 0.435, blue: 0.173, alpha: 1),               // F36F2C
         dark: UIColor(red: 0.973, green: 0.976, blue: 0.984, alpha: 1))    // F8F9FB
     static let pressed = dynamic(             // pressed/hover overlay
         light: UIColor(red: 0, green: 0, blue: 0, alpha: 0.06),
@@ -140,13 +139,13 @@ enum Aero {
     /// The monochrome accent — white on black (dark), ink on paper (light).
     /// There is no hue anywhere in the product chrome.
     static let accent = dynamic(
-        light: UIColor(red: 0, green: 0, blue: 0, alpha: 1),               // 000000
+        light: UIColor(red: 0.953, green: 0.435, blue: 0.173, alpha: 1),               // F36F2C
         dark: UIColor(red: 0.973, green: 0.976, blue: 0.984, alpha: 1))    // F8F9FB
     static let accentStrong = dynamic(
-        light: UIColor(red: 0, green: 0, blue: 0, alpha: 1),               // 000000
+        light: UIColor(red: 0.953, green: 0.435, blue: 0.173, alpha: 1),               // F36F2C
         dark: .white)
     static let accentSoft = dynamic(
-        light: UIColor(red: 0, green: 0, blue: 0, alpha: 0.07),
+        light: UIColor(red: 1.0, green: 0.569, blue: 0.259, alpha: 0.14),
         dark: UIColor(red: 1, green: 1, blue: 1, alpha: 0.11))
     static let onAccent = dynamic(
         light: .white,
@@ -180,7 +179,7 @@ enum Aero {
     // ---- AI-specific -----------------------------------------------------------------
     static let aiActive = accent              // model alive: streaming dot
     static let streaming = dynamic(           // neutral — the life-sign carries no hue
-        light: UIColor(red: 0.420, green: 0.439, blue: 0.475, alpha: 1),   // 6B7079
+        light: UIColor(red: 0.561, green: 0.443, blue: 0.412, alpha: 1),   // 8F7169
         dark: UIColor(red: 0.639, green: 0.659, blue: 0.686, alpha: 1))    // A3A8AF
     static let toolExecution = streaming      // neutral
     static let research = streaming           // neutral
@@ -376,8 +375,8 @@ enum Aero {
     }
     enum Radius {
         static let sm: CGFloat = 10     // small controls: banners, skeletons
-        static let md: CGFloat = 14     // medium controls: list rows, buttons
-        static let card: CGFloat = 16   // cards, tiles
+        static let md: CGFloat = 16     // medium controls: list rows, buttons
+        static let card: CGFloat = 20   // cards, tiles
         static let sheet: CGFloat = 24  // sheets, dialogs, large surfaces
         static let input: CGFloat = 26  // composer / input bars
         static let chip: CGFloat = 999  // full pill: chips & status only

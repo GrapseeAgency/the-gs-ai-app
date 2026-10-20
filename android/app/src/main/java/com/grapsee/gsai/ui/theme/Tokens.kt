@@ -97,8 +97,8 @@ private const val SCRIM_DARK = 0x99000000L  // 60% black
 
 /** Light appearance — deliberate paper-editorial theme, not "default white". */
 fun lightGsColors(highContrast: Boolean = false): GsColors {
-    val textSecondary = if (highContrast) Color(0xFF3D4450) else Color(0xFF5B6472)
-    val border = if (highContrast) Color(0xFFB9B9B2) else Color(0xFFE5E5E1)
+    val textSecondary = if (highContrast) Color(0xFF5A4037) else Aeruo.InkMuted
+    val border = if (highContrast) Color(0xFFC48E78) else Aeruo.OutlineLight
     return GsColors(
         appBackground = Aeruo.Paper,
         secondaryBackground = Aeruo.ContainerLowLight,
@@ -112,22 +112,22 @@ fun lightGsColors(highContrast: Boolean = false): GsColors {
 
         textPrimary = if (highContrast) Color(0xFF000000) else Aeruo.Ink,
         textSecondary = textSecondary,
-        textTertiary = Color(0xFF8A919D),
+        textTertiary = Color(0xFFB08D80),
         textDisabled = Color(0xFFC0C4CB),
-        textPlaceholder = Color(0xFF9AA1AC),
+        textPlaceholder = Color(0xFFB08D80),
         textInverted = Color(0xFFFFFFFF),
         link = Aeruo.Ink,
 
         border = border,
-        borderStrong = if (highContrast) Color(0xFF8F8F87) else Color(0xFFD2D2CC),
-        divider = Color(0xFFE8E8E4),
+        borderStrong = if (highContrast) Color(0xFFA96B53) else Color(0xFFFFC7B1),
+        divider = Color(0xFFF4DCD2),
         selected = Aeruo.AccentDeep,
-        pressedOverlay = Color(0x0F14161A), // 6% ink
+        pressedOverlay = Color(0x14F36F2C), // 6% ink
         focus = Aeruo.AccentDeep,
         scrim = Color(SCRIM_LIGHT),
 
         accent = Aeruo.AccentDeep,          // ink — the monochrome accent on paper
-        accentStrong = Color(0xFF000000),   // one step stronger: pure black
+        accentStrong = Color(0xFFF36F2C),   // one step stronger: pure black
         accentSoft = Aeruo.AccentSoftLight,
         onAccent = Color(0xFFFFFFFF),
         success = Aeruo.SuccessLight,
@@ -140,11 +140,11 @@ fun lightGsColors(highContrast: Boolean = false): GsColors {
         info = Aeruo.InfoLight,
         infoSoft = Color(0x1A2E7DD1),
 
-        aiActive = Aeruo.AccentDeep,
+        aiActive = Aeruo.Accent,
         streaming = Color(0xFF5B6472),      // neutral — the life-sign carries no hue
         toolExecution = Color(0xFF5B6472),  // neutral
         research = Color(0xFF5B6472),       // neutral
-        voice = Aeruo.AccentDeep,
+        voice = Aeruo.Accent,
         generation = Color(0xFF5B6472),     // neutral
 
         codeSurface = Aeruo.CodeSurfaceLight,
@@ -264,13 +264,13 @@ object GsSpacing {
 
 object GsRadius {
     /** Small controls: banners, skeletons, mini-surfaces. */
-    val sm: Dp = 10.dp
+    val sm: Dp = 12.dp
     fun smShape(): Shape = RoundedCornerShape(sm)
     /** Medium controls: list rows, secondary buttons. */
-    val md: Dp = 14.dp
+    val md: Dp = 16.dp
     fun mdShape(): Shape = RoundedCornerShape(md)
     /** Cards and tiles. */
-    val card: Dp = 16.dp
+    val card: Dp = 20.dp
     fun cardShape(): Shape = RoundedCornerShape(card)
     /** Sheets, dialogs and other large surfaces. */
     val sheet: Dp = 24.dp
