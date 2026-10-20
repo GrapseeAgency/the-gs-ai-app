@@ -54,6 +54,7 @@ import com.grapsee.gsai.ui.settings.PrivacySettingsScreen
 import com.grapsee.gsai.ui.settings.SettingsHubScreen
 import com.grapsee.gsai.ui.settings.ThemeCustomisationScreen
 import com.grapsee.gsai.ui.settings.VoiceSettingsScreen
+import com.grapsee.gsai.ui.specimen.GlassSpecimenScreen
 import com.grapsee.gsai.ui.voice.VoiceScreen
 import com.grapsee.gsai.ui.home.HomeDashboardScreen
 import com.grapsee.gsai.ui.agents.TravelAgentScreen
@@ -329,6 +330,9 @@ fun GsNavHost(modifier: Modifier = Modifier) {
                 onBack = back,
                 onNavigate = { navController.navigate(it) }
             )
+        }
+        composable(GsRoutes.GLASS_SPECIMEN) {
+            GlassSpecimenScreen(onBack = back)
         }
         composable(GsRoutes.VOICE) {
             VoiceScreen(

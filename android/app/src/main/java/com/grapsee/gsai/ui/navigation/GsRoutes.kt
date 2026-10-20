@@ -26,6 +26,9 @@ object GsRoutes {
     const val SETTINGS_PLAN = "settings/plan"
     const val NOTIFICATIONS = "notifications"
     const val VOICE = "voice"
+    /** Mandate §3 material specimen. Internal tooling: dispatched directly, never
+     *  linked from the app, so it can be screenshotted without a nav path. */
+    const val GLASS_SPECIMEN = "glass-specimen"
     // PHASE 2: the fabricated Folders/Shared destinations are gone — Archive
     // (real) remains the only chats hub quick-link.
     const val CHAT_ARCHIVE = "chats/archived"
