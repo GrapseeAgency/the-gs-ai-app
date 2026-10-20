@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
+import { MessageContent, type Citation } from '@/components/genui'
 
 /**
  * GS AI — Platform Command Centre (web preview)
@@ -1302,7 +1303,21 @@ export default function Home() {
                             border: `1px solid ${C.outline}`,
                           }}
                         >
-                          <AnswerText text={m.content} sources={m.sources} />
+                          <MessageContent
+                            text={m.content}
+                            dark
+                            onPrompt={(prompt) => sendRef.current(prompt)}
+                            citations={
+                              m.sources?.map(
+                                (src): Citation => ({
+                                  ordinal: src.ordinal,
+                                  title: src.title,
+                                  url: src.url,
+                                  domain: src.domain,
+                                })
+                              ) ?? undefined
+                            }
+                          />
                           <span className="mt-2 flex items-center gap-1.5 opacity-0 transition-opacity group-hover:opacity-100">
                             <button
                               onClick={() => copyMessage(i, m.content)}
@@ -1393,7 +1408,12 @@ export default function Home() {
                     className="max-w-[92%] rounded-2xl rounded-bl-md px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap"
                     style={{ background: C.raised, color: C.text, border: `1px solid ${C.outline}` }}
                   >
-                    {streamText}
+                    <MessageContent
+                      text={streamText}
+                      dark
+                      streaming
+                      onPrompt={(prompt) => sendRef.current(prompt)}
+                    />
                     <span
                       className="ml-0.5 inline-block h-4 w-0.5 animate-pulse align-middle"
                       style={{ background: C.accent }}
