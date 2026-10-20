@@ -29,6 +29,12 @@ import { SunburstChartView } from '../charts/SunburstChart'
 import { TreemapChartView } from '../charts/TreemapChart'
 import { WaterfallChartView } from '../charts/WaterfallChart'
 import { WordcloudChartView } from '../charts/WordcloudChart'
+import { ViolinChartView } from '../charts/ViolinChart'
+import { ContourChartView } from '../charts/ContourChart'
+import { ParallelChartView } from '../charts/ParallelChart'
+import { DendrogramChartView } from '../charts/DendrogramChart'
+import { ForceGraphChartView } from '../charts/ForceGraphChart'
+import { DepthChartView } from '../charts/DepthChart'
 
 export function ChartWidget({ payload }: { payload: ChartPayload }) {
   switch (payload.type) {
@@ -59,6 +65,12 @@ export function ChartWidget({ payload }: { payload: ChartPayload }) {
     case 'wordcloud': return <WordcloudChartView payload={payload} />
     case 'sunburst': return <SunburstChartView payload={payload} />
     case 'bullet': return <BulletChartView payload={payload} />
+    case 'violin': return <ViolinChartView payload={payload} />
+    case 'contour': return <ContourChartView payload={payload} />
+    case 'parallel': return <ParallelChartView payload={payload} />
+    case 'dendrogram': return <DendrogramChartView payload={payload} />
+    case 'force': return <ForceGraphChartView payload={payload} />
+    case 'depth': return <DepthChartView payload={payload} />
     default: return <BarChartView payload={payload} />
   }
 }

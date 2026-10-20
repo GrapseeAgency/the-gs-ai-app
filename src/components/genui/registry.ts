@@ -37,6 +37,11 @@ import { DiffWidget } from './widgets/DiffWidget'
 import { MediaWidget } from './widgets/MediaWidget'
 import { AppWidget } from './widgets/AppWidget'
 import { MapBlock } from './blocks/MapBlock'
+import { SimWidget } from './sims/SimWidget'
+import { Stage3DWidget } from './stage3d/Stage3DViews'
+import { CanvasWidget } from './canvas/CanvasWidget'
+import { EditorWidget } from './editor/EditorWidget'
+import { TerminalWidget } from './terminal/TerminalWidget'
 
 export type PromptHandler = (prompt: string) => void
 
@@ -77,6 +82,11 @@ export const REGISTRY: Record<string, WidgetComponent> = {
   media: MediaWidget,
   app: AppWidget,
   map: MapBlock,
+  sim: SimWidget,
+  stage3d: Stage3DWidget,
+  canvas: CanvasWidget,
+  editor: EditorWidget,
+  terminal: TerminalWidget,
 }
 
 export function rendererFor(kind: string): WidgetComponent | null {
