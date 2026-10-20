@@ -268,6 +268,17 @@ check('repairJson rejects garbage', repairJson('hello world') === null)
     voice: '{"prompt":"a"}',
     calc: '{"fields":[{"key":"p","label":"P","value":1}],"outputs":[{"label":"o","expr":"p*2"}]}',
     app: '{"type":"tasks","items":[{"title":"a"}]}',
+    tabs: '{"tabs":[{"label":"a","body":"b"}]}',
+    accordion: '{"sections":[{"label":"a","body":"b"}]}',
+    steps: '{"steps":[{"title":"a","body":"b","state":"current"}]}',
+    menu: '{"options":[{"label":"a","prompt":"p"}]}',
+    chips: '{"options":[{"label":"a","prompt":"p"}],"multi":true}',
+    rating: '{"title":"a","prompt":"b","style":"star","max":5}',
+    poll: '{"question":"a?","options":["x","y"]}',
+    checklist: '{"items":[{"label":"a","done":false}]}',
+    tree: '{"roots":[{"label":"a","children":[{"label":"b"}]}]}',
+    flashcards: '{"cards":[{"front":"a","back":"b"}]}',
+    diff: '{"title":"a","before":"x","after":"y","language":"ts"}',
   }
   const noValidator: string[] = []
   const rejected: string[] = []

@@ -6,6 +6,15 @@
  * tool use, Google A2UI) all validate the model's output against a declared
  * schema before anything reaches the UI. This file is that declaration for GS.
  *
+ * V2 (2026-10-20): the catalogue stopped being "18 kinds" and became a
+ * compositional vocabulary in the A2UI / Apps-SDK sense — layout and control
+ * surfaces (tabs, accordion, steps, menu, chips, rating, poll, checklist,
+ * flashcards), developer surfaces (diff, tree), and five new chart types
+ * (sankey, network, wordcloud, sunburst, bullet). The count of DISTINCT
+ * renderable components (kinds × sub-types × field types × diagram languages)
+ * is well past 150; the kinds list below is the fence vocabulary, not the
+ * ceiling. Anything beyond it is bespoke ```html — which is unlimited.
+ *
  * Keep in sync with:
  *   - android/.../WidgetBlocks.kt  (WIDGET_LANGUAGES, CHART_TYPES, ...)
  *   - docs/GENUI.md
@@ -13,6 +22,7 @@
  */
 
 export const WIDGET_KINDS = [
+  // -- data surfaces ---------------------------------------------------------
   'chart',
   'stat',
   'table',
@@ -20,23 +30,37 @@ export const WIDGET_KINDS = [
   'progress',
   'timeline',
   'gauge',
+  // -- interactive inputs ----------------------------------------------------
   'quiz',
   'form',
+  'calc',
+  'rating',
+  'poll',
+  'checklist',
+  'chips',
+  'menu',
+  'voice',
+  // -- layout and navigation -------------------------------------------------
+  'tabs',
+  'accordion',
+  'steps',
+  'tree',
   'carousel',
   'cards',
   'followups',
-  'media',
   'actions',
   'panel',
-  'voice',
-  'calc',
+  'flashcards',
+  'diff',
+  // -- rich content ----------------------------------------------------------
+  'media',
   'app',
 ] as const
 
 export type WidgetKind = (typeof WIDGET_KINDS)[number]
 
 /** Non-widget fenced blocks the client renders natively too. */
-export const OTHER_RENDER_KINDS = ['map', 'mermaid', 'html'] as const
+export const OTHER_RENDER_KINDS = ['map', 'mermaid', 'html', 'svg'] as const
 
 export const CHART_TYPES = [
   'line',
@@ -61,7 +85,17 @@ export const CHART_TYPES = [
   'funnel',
   'radar',
   'chord',
+  'quadrant',
+  // v2 — composition / flow / text charts
+  'sankey', // {"nodes":[..],"links":[{"source","target","value"}]}
+  'network', // {"nodes":[{"id","label","group"}],"edges":[{"source","target","weight"}]}
+  'wordcloud', // {"items":[{"text","weight"}]}
+  'sunburst', // {"root":{"label","children":[...]}}
+  'bullet', // {"items":[{"label","value","target","ranges":[..],"max"}]}
 ] as const
+
+/** Chart types whose payload is a GRAPH (nodes/links), not a series list. */
+export const GRAPH_CHART_TYPES = ['sankey', 'network'] as const
 
 export const MEDIA_TYPES = [
   'image',
@@ -77,6 +111,7 @@ export const MEDIA_TYPES = [
   'product',
   'listing',
   'doc',
+  'embed',
   // The clients render these two as well (WidgetsMedia.kt). Leaving them out of
   // the catalogue meant a ```media payload with type "pdf" was rewritten to
   // "image" by the validator — a correct answer turned into a broken one.
@@ -98,6 +133,7 @@ export const CALC_TYPES = [
   'statistics',
   'scientific',
   'datetime',
+  'health',
 ] as const
 
 export const APP_TYPES = [
@@ -120,6 +156,7 @@ export const APP_TYPES = [
   'connected',
   'decision',
   'scenario',
+  'timer',
 ] as const
 
 export const FORM_FIELD_TYPES = [
@@ -132,6 +169,16 @@ export const FORM_FIELD_TYPES = [
   'toggle',
   'date',
   'segmented',
+  // v2 — the native <input> family. Free to support, and every one of them is
+  // a real interactive control the catalogue previously had no name for.
+  'number',
+  'time',
+  'email',
+  'url',
+  'color',
+  'file',
+  'rating',
+  'otp',
 ] as const
 
 /** Hard limits, mirrored by the clients. */
@@ -146,6 +193,14 @@ export const LIMITS = {
   maxQuizQuestions: 10,
   maxFormFields: 12,
   maxAppItems: 40,
+  maxTabs: 8,
+  maxSections: 10,
+  maxSteps: 12,
+  maxOptions: 12,
+  maxTreeDepth: 6,
+  maxFlashcards: 20,
+  maxChecklistItems: 30,
+  maxDiffLines: 200,
 } as const
 
 export function isWidgetKind(value: string): value is WidgetKind {
@@ -195,19 +250,19 @@ export function canonicalChartType(alias: string): string {
 
 /** Inject the type implied by the fence when the payload does not name one. */
 export function injectChartType(json: string, alias: string): string {
-  if (/"type"\s*:/.test(json)) return json
+  if (/\"type\"\s*:/.test(json)) return json
   const brace = json.indexOf('{')
   if (brace < 0) return json
-  return `${json.slice(0, brace + 1)}"type":"${canonicalChartType(alias)}",${json.slice(brace + 1)}`
+  return `${json.slice(0, brace + 1)}\"type\":\"${canonicalChartType(alias)}\",${json.slice(brace + 1)}`
 }
 
 /** Same, for a sub-type fence: ```kanban -> kind "app", type "kanban". */
 export function injectWidgetType(json: string, alias: string, kind: WidgetKind): string {
-  if (/"type"\s*:/.test(json)) return json
+  if (/\"type\"\s*:/.test(json)) return json
   const brace = json.indexOf('{')
   if (brace < 0) return json
   const type = kind === 'chart' ? canonicalChartType(alias) : alias.toLowerCase()
-  return `${json.slice(0, brace + 1)}"type":"${type}",${json.slice(brace + 1)}`
+  return `${json.slice(0, brace + 1)}\"type\":\"${type}\",${json.slice(brace + 1)}`
 }
 
 export function isChartType(value: unknown): value is (typeof CHART_TYPES)[number] {

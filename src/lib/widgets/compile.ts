@@ -179,7 +179,7 @@ export function compileWidgets(input: CompileInput): CompileResult {
 
   const widget = buildChart(points, chartType)
   const direction = directWidgetArt({ kind: 'chart', payload: widget, priorText })
-  const styled = { ...widget, accent: direction.accent, variant: direction.variant }
+  const styled = { ...widget, accent: direction.accent, variant: direction.variant, palette: direction.palette }
   const body = strip(reply, invalid).trimEnd()
   return {
     text: `${body}${body ? '\n\n' : ''}${fenceBlock('chart', JSON.stringify(styled))}`,
