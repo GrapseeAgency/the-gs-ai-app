@@ -162,6 +162,11 @@ struct HomeDashboardView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(Aero.Spacing.m)
             .background(LinearGradient(colors: [Color(red: 1, green: 0.89, blue: 0.82), Color(red: 1, green: 0.78, blue: 0.72)], startPoint: .leading, endPoint: .trailing))
+            .overlay(alignment: .bottomTrailing) {
+                AnimatedGsIllustration(imageName: "GSCompanionOrb", size: 98)
+                    .opacity(0.18)
+                    .allowsHitTesting(false)
+            }
             .clipShape(RoundedRectangle(cornerRadius: Aero.Radius.card))
             .overlay(RoundedRectangle(cornerRadius: Aero.Radius.card).stroke(Aero.outline, lineWidth: 1))
             .aeroCardShadow()

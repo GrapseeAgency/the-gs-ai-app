@@ -28,6 +28,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -211,6 +212,7 @@ private fun UsageTile(label: String, value: String, progress: Float, modifier: M
 private fun ReflectionCard(onClick: () -> Unit) {
     Card(onClick = onClick, modifier = Modifier.fillMaxWidth(), shape = GsRadius.cardShape(), colors = CardDefaults.cardColors(containerColor = Color.Transparent), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)) {
         Box(Modifier.fillMaxWidth().background(Brush.horizontalGradient(listOf(Color(0xFFFFE3D2), Color(0xFFFFC6B7)))).padding(GsSpacing.m)) {
+            AnimatedGsIllustration(R.drawable.gs_companion_orb, "Mind guide", 98.dp, Modifier.align(Alignment.BottomEnd).alpha(.22f))
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Surface(shape = CircleShape, color = Color.White.copy(alpha = .65f)) {
