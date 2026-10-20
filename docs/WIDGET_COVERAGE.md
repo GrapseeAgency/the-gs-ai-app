@@ -16,7 +16,7 @@
 > |---|---|
 > | Catalogue + validators + compiler + palettes (`src/lib/widgets/`) | shipped, 107/107 tests |
 > | Web renderers (`src/components/genui/`, 115 files) | shipped — gallery at `/genui` |
-> | Android renderers (Compose) | v1 kinds shipped; v2 kinds to sync |
+> | Android renderers (Compose) | v3 PARITY: every kind renders natively — 34 charts (v3 sub-types incl. sankey/network/wordcloud/sunburst/bullet/violin/contour/parallel/dendrogram/depth), 8 sims (withFrameNanos worlds), 8 stage3d (projected Canvas), 4 canvas, 7 editors + sheet formula engine, terminal REPL (CalcExpr-gated), collab (Ktor SSE), same lenient-JSON/clamp-and-render contract + fence aliases |
 > | Prompt contract (`src/lib/widgets/prompt.ts`) | shipped — full vocabulary + palette system |
 
 # Widget coverage — the 150-item interactive set
@@ -307,7 +307,7 @@ molecular/cad conventions), marching-squares literature (contours), Streamlit
 | CAD part | `stage3d` view=`cad` | articulated primitives |
 | Anatomy | `stage3d` view=`anatomy` | layered shells |
 | 3D scene | `stage3d` view=`scene` | composed node graph |
-| VR/AR | `stage3d` view=`vr`/`ar` | **Tier 2** magic-window framing, labelled |
+| VR/AR | `stage3d` view=`vr`/`ar` | **Tier 2** magic-window framing + **inline-WebXR device parallax (2026-10-20)**: guaranteed-creatable inline sessions (w3.org/TR/webxr §14.1 — only immersive modes need `xr-spatial-tracking`; §2.1 phones report the phone's own gyro pose, desktops report none) drive clamped viewer-space yaw/pitch deltas into the SCENE rotation; iOS Safari falls back to DeviceOrientation behind a user-gesture permission button (developer.mozilla.org/en-US/docs/Web/API/DeviceOrientationEvent). Labelled in the hint row. |
 | Whiteboard | `canvas` surface=`whiteboard` | pens, eraser, DPR-clean |
 | Mind map | `canvas` surface=`mindmap` | draggable, curved edges, branch button |
 | Diagram editor | `canvas` surface=`diagram` | shapes, arrow connect, orthogonal drag |
@@ -334,7 +334,7 @@ molecular/cad conventions), marching-squares literature (contours), Streamlit
 | Item | Shipped as | Why degraded |
 |---|---|---|
 | VR/AR | `stage3d` `vr`/`ar` magic window (gyro-free orbit + framed passthrough styling) | Per the WebXR spec, immersive sessions require the `xr-spatial-tracking` permissions policy (default allowlist `'self'`, embeddable only via `allow="xr-spatial-tracking"`) AND user consent — a chat widget iframe cannot claim one unilaterally (w3.org/TR/webxr §3.2, immersiveweb.dev). Labelled in-renderer; a host that opts in with the iframe allow attribute unlocks full VR later. |
-| Multiplayer collaboration | `collab` kind (v3.1): counter / vote / todo / pointer over `/api/v1/collab` (SSE + POST) | SHIPPED as a labelled prototype: commutative server-side deltas for counts (Notion ships server-side LWW for blocks — jitl, HN 2023), list-replace LWW for todos, ephemeral presence with 10s heartbeat / 30s TTL (Yjs awareness semantics, docs.yjs.dev). Per-server memory, resets on restart; free-text co-editing (sequence CRDT) stays refused. |
+| Multiplayer collaboration | `collab` kind (v3.1): counter / vote / todo / pointer over `/api/v1/collab` (SSE + POST) | SHIPPED as a labelled prototype: commutative server-side deltas for counts (Notion ships server-side LWW for blocks — jitl, HN 2023), list-replace LWW for todos, ephemeral presence with 10s heartbeat / 30s TTL (Yjs awareness semantics, docs.yjs.dev). Backend now node:sqlite (stdlib `DatabaseSync`, zero native deps): rooms/counters/todos survive restart and are shared across replica processes — rev + merge inside BEGIN IMMEDIATE, presence TTL-swept in SQL (verified live: POST delta/SET → SSE snapshot; server restart → same rev/state from disk, `.data/collab.db` WAL). Remaining Tier-2 honesty: deltas commutative, todos LWW replace, free-text co-editing (sequence CRDT) stays refused. |
 
 ## Tier 3 — refused, with reasons (never faked)
 
