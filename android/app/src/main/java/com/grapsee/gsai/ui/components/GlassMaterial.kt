@@ -8,6 +8,7 @@ import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
@@ -174,7 +175,7 @@ fun DrawScope.gsGlassEdgeGlow(colors: GsColors, strength: Float = 1f) {
             1f to glow.copy(alpha = 0f),
         ),
         topLeft = Offset.Zero,
-        size = Offset(size.width, size.height * 0.24f),
+        size = Size(size.width, size.height * 0.24f),
     )
 }
 
@@ -182,7 +183,7 @@ fun DrawScope.gsGlassEdgeGlow(colors: GsColors, strength: Float = 1f) {
 private fun Outline.toPath(): Path = when (this) {
     is Outline.Rounded -> Path().apply { addRoundRect(roundRect) }
     is Outline.Generic -> Path().apply { addPath(path) }
-    is Outline.Rectangular -> Path().apply { addRect(rect) }
+    is Outline.Rectangle -> Path().apply { addRect(bounds) }
 }
 
 /** Corner radius helper for callers that draw glass geometry by hand. */
