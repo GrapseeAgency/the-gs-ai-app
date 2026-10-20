@@ -333,7 +333,7 @@ molecular/cad conventions), marching-squares literature (contours), Streamlit
 
 | Item | Shipped as | Why degraded |
 |---|---|---|
-| VR/AR | `stage3d` `vr`/`ar` magic window (gyro-free orbit + framed passthrough styling) | True WebXR needs a device-granted immersive session; chat iframes cannot claim one. Labelled in-renderer. |
+| VR/AR | `stage3d` `vr`/`ar` magic window (gyro-free orbit + framed passthrough styling) | Per the WebXR spec, immersive sessions require the `xr-spatial-tracking` permissions policy (default allowlist `'self'`, embeddable only via `allow="xr-spatial-tracking"`) AND user consent — a chat widget iframe cannot claim one unilaterally (w3.org/TR/webxr §3.2, immersiveweb.dev). Labelled in-renderer; a host that opts in with the iframe allow attribute unlocks full VR later. |
 | Multiplayer collaboration | shared-state prototype via the SSE stream broker | True CRDT co-editing needs a presence backend; the broker gives one-writer-many-readers sync. |
 
 ## Tier 3 — refused, with reasons (never faked)
