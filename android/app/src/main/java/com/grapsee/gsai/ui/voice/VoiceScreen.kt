@@ -46,6 +46,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -125,6 +126,16 @@ fun VoiceScreen(
     }
     var sessionTick by remember { mutableStateOf(0) } // restart handle for a fresh listen
 
+    // Real microphone level, fed by RecognitionListener.onRmsChanged while the
+    // mic is open. Held as a Float state so the waveform reads it in the draw
+    // phase — the bars track actual loudness without ever recomposing.
+    val rmsLevel = remember { mutableStateOf(0f) }
+    // Capability probe: some OEM recognizers never invoke onRmsChanged. The
+    // first callback flips this true; while the mic is open and it is still
+    // false, the waveform falls back to its oscillator so the screen is never
+    // dead during real speech.
+    val rmsSeen = remember { mutableStateOf(false) }
+
     // Read-aloud engine for the speaker toggle — same discipline as chat: the
     // engine is wrapped in the shared audio-focus helper (focus before speak,
     // abandon on stop/shutdown, stop on focus loss), silent when the device
@@ -162,7 +173,18 @@ fun VoiceScreen(
         newRecognizer.setRecognitionListener(object : RecognitionListener {
             override fun onReadyForSpeech(params: Bundle?) { phase = VoicePhase.Listening }
             override fun onBeginningOfSpeech() {}
-            override fun onRmsChanged(rmsdB: Float) {}
+            override fun onRmsChanged(rmsdB: Float) {
+                rmsSeen.value = true
+                // The system reports RMS in dB, empirically about [-2, 10] with
+                // silence near the floor. Normalize and clamp to 0..1, then smooth
+                // asymmetrically: rise quickly so onset reads, fall slowly so the
+                // bars glide down instead of stuttering with each sample.
+                val raw = ((rmsdB + 2f) / 12f).coerceIn(0f, 1f)
+                val prev = rmsLevel.value
+                rmsLevel.value =
+                    if (raw > prev) prev + (raw - prev) * 0.5f
+                    else prev + (raw - prev) * 0.12f
+            }
             override fun onBufferReceived(buffer: ByteArray?) {}
             override fun onEndOfSpeech() { if (phase == VoicePhase.Listening) phase = VoicePhase.Processing }
             override fun onError(error: Int) {
@@ -207,6 +229,8 @@ fun VoiceScreen(
         recognizer.value = newRecognizer
         transcript = ""
         finalTranscript = ""
+        rmsLevel.value = 0f
+        rmsSeen.value = false
         phase = VoicePhase.Processing
         newRecognizer.startListening(intent)
     }
@@ -363,7 +387,12 @@ fun VoiceScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 repeat(24) { index ->
-                    WaveformBar(index = index, active = phase == VoicePhase.Listening)
+                    WaveformBar(
+                        index = index,
+                        active = phase == VoicePhase.Listening,
+                        level = rmsLevel,
+                        driven = rmsSeen.value,
+                    )
                 }
             }
 
@@ -476,15 +505,28 @@ fun VoiceScreen(
     }
 }
 
-/** One animated waveform bar — height oscillates 8–56dp with a per-index phase delay.
- *  Draw-phase: the phase state is read inside drawBehind, so the bar never recomposes
- *  and never re-lays-out; only its 4×56dp node re-renders each frame. Bars rest at a
- *  calm 10dp whenever the microphone is not genuinely open. */
+/** One waveform bar. Height spans 8–56dp.
+ *
+ *  When the recognizer reports a live level ([driven], proven by the onRmsChanged
+ *  probe) the bar's amplitude follows the microphone: loud speech pushes it up,
+ *  silence lets it settle near the baseline. A per-index oscillator is layered on
+ *  top so the surface shimmers rather than moving as one slab. When no level ever
+ *  arrives the oscillator carries the bar alone, so older recognizers still get a
+ *  lively — if not audio-true — waveform.
+ *
+ *  Draw-phase throughout: [level] and the oscillator are read inside drawBehind,
+ *  so a level change invalidates the draw but never recomposes or re-lays-out the
+ *  bar. Bars rest at a calm 10dp whenever the microphone is not genuinely open. */
 @Composable
-private fun WaveformBar(index: Int, active: Boolean) {
+private fun WaveformBar(
+    index: Int,
+    active: Boolean,
+    level: State<Float>,
+    driven: Boolean,
+) {
+    val aurora = GsTheme.colors.aurora
+    val brush = remember(aurora) { Brush.verticalGradient(colors = aurora) }
     if (!active) {
-        val aurora = GsTheme.colors.aurora
-        val brush = remember(aurora) { Brush.verticalGradient(colors = aurora) }
         Box(
             modifier = Modifier
                 .width(4.dp)
@@ -512,16 +554,16 @@ private fun WaveformBar(index: Int, active: Boolean) {
         ),
         label = "wavePhase"
     )
-    val aurora = GsTheme.colors.aurora
-    val brush = remember(aurora) {
-        Brush.verticalGradient(colors = aurora)
-    }
     Box(
         modifier = Modifier
             .width(4.dp)
             .height(56.dp)
             .drawBehind {
-                val barHeight = 8.dp.toPx() + 48.dp.toPx() * phase
+                // Oscillator gives each bar its own rhythm; the live level scales
+                // the whole excursion so the group breathes with the speaker.
+                val shimmer = 0.55f + 0.45f * phase
+                val amp = if (driven) level.value * shimmer else shimmer
+                val barHeight = 8.dp.toPx() + 48.dp.toPx() * amp.coerceIn(0f, 1f)
                 drawRoundRect(
                     brush = brush,
                     topLeft = Offset(0f, size.height - barHeight),
