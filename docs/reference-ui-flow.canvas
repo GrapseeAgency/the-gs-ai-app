@@ -1,0 +1,102 @@
+{
+  "nodes": [
+    {
+      "id": "a1b2c3d4e5f67890",
+      "type": "group",
+      "x": -40,
+      "y": -40,
+      "width": 420,
+      "height": 420,
+      "label": "Session",
+      "color": "#FFE3D2"
+    },
+    {
+      "id": "1111222233334444",
+      "type": "text",
+      "x": 20,
+      "y": 30,
+      "width": 300,
+      "height": 180,
+      "color": "#FFF4EF",
+      "text": "# Onboarding\n\nCompanion orb, warm welcome, interests, preferences, and a soft completion moment."
+    },
+    {
+      "id": "5555666677778888",
+      "type": "group",
+      "x": 480,
+      "y": -40,
+      "width": 520,
+      "height": 500,
+      "label": "Core experience",
+      "color": "#FFC7B1"
+    },
+    {
+      "id": "9999aaaabbbbcccc",
+      "type": "text",
+      "x": 540,
+      "y": 30,
+      "width": 360,
+      "height": 220,
+      "color": "#FFF4EF",
+      "text": "# GS AI dashboard\n\nLuminous hero, model selector, creation cards, reflection, usage meters, and Generate CTA."
+    },
+    {
+      "id": "ddddeeeeffff0000",
+      "type": "text",
+      "x": 540,
+      "y": 290,
+      "width": 360,
+      "height": 160,
+      "color": "#FFF4EF",
+      "text": "# Travel Agent\n\nDedicated assistant identity, trip planning card, media actions, and chat handoff."
+    },
+    {
+      "id": "1234567890abcdef",
+      "type": "text",
+      "x": 1080,
+      "y": 80,
+      "width": 360,
+      "height": 220,
+      "color": "#FFF4EF",
+      "text": "# Empty chat\n\nLiving orb, gentle greeting, starter prompts, and the existing composer."
+    }
+  ],
+  "edges": [
+    {
+      "id": "fedcba0987654321",
+      "fromNode": "1111222233334444",
+      "fromSide": "right",
+      "toNode": "9999aaaabbbbcccc",
+      "toSide": "left",
+      "toEnd": "arrow",
+      "label": "complete"
+    },
+    {
+      "id": "abcdefabcdefabcd",
+      "fromNode": "9999aaaabbbbcccc",
+      "fromSide": "right",
+      "toNode": "ddddeeeeffff0000",
+      "toSide": "top",
+      "toEnd": "arrow",
+      "label": "open assistant"
+    },
+    {
+      "id": "0123012301230123",
+      "fromNode": "9999aaaabbbbcccc",
+      "fromSide": "right",
+      "toNode": "1234567890abcdef",
+      "toSide": "left",
+      "toEnd": "arrow",
+      "label": "start chat"
+    },
+    {
+      "id": "4567456745674567",
+      "fromNode": "ddddeeeeffff0000",
+      "fromSide": "right",
+      "toNode": "1234567890abcdef",
+      "toSide": "left",
+      "toEnd": "arrow",
+      "label": "prefill prompt"
+    }
+  ]
+}
