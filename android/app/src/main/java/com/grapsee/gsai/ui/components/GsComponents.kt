@@ -424,17 +424,7 @@ fun GsEmptyState(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
     ) {
-        Surface(
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.primaryContainer,
-            modifier = Modifier.size(72.dp)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(icon, contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.size(30.dp))
-            }
-        }
+        NativeGsIllustration(size = 72.dp)
         Text(title, style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onBackground)
         Text(message, style = MaterialTheme.typography.bodySmall,

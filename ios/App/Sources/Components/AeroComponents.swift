@@ -313,11 +313,7 @@ struct EmptyStateView: View {
     var body: some View {
         let _ = hc.highContrast
         VStack(spacing: Aero.Spacing.s) {
-            Image(systemName: icon)
-                .font(.system(size: 30))
-                .foregroundStyle(Aero.accent)
-                .frame(width: 72, height: 72)
-                .background(Circle().fill(Aero.accentSoft))
+            NativeGsIllustration(size: 72, accessibilityLabel: "\(title) illustration")
             Text(title).font(Aero.title()).foregroundStyle(Aero.text)
             if !message.isEmpty {
                 Text(message)
