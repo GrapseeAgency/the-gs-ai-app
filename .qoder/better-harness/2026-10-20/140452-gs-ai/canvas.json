@@ -1,0 +1,527 @@
+{
+  "schemaVersion": 2,
+  "summary": {
+    "evidenceMode": "session-rich",
+    "evidenceBoundary": {
+      "manifest": {
+        "schemaVersion": 2,
+        "sourceFingerprint": "659a300dbd49ee99",
+        "adapterVersion": "qoder-task-loop-source-v2",
+        "platform": "qoder",
+        "selection": {
+          "strategy": "all-eligible",
+          "eligibleCount": 2,
+          "analyzedCount": 2,
+          "confidence": "High"
+        }
+      },
+      "episodeCoverage": {
+        "episodeCount": 37,
+        "editedEpisodeCount": 37,
+        "closedEpisodeCount": 0,
+        "recoveredEpisodeCount": 0
+      },
+      "deliveryEvidenceLevels": [],
+      "sourceGaps": []
+    },
+    "semanticFacets": {
+      "schemaVersion": 1,
+      "status": "supplementary",
+      "entries": [
+        {
+          "id": "session-insight:source-coverage",
+          "kind": "redacted-summary",
+          "episodeRef": null,
+          "status": "candidate",
+          "labels": [
+            "source-coverage",
+            "High"
+          ],
+          "summary": "Analyzed 2 of 2 sessions; 2/6 enabled source roots exist. Use this as the current workspace evidence boundary for final insight cards.",
+          "evidenceRefs": [],
+          "modelVersion": "session-insights-v1"
+        },
+        {
+          "id": "session-insight:validation-behavior",
+          "kind": "redacted-summary",
+          "episodeRef": null,
+          "status": "candidate",
+          "labels": [
+            "validation-behavior",
+            "Low"
+          ],
+          "summary": "No validation command category was observed in the analyzed session sample. Inspect more sessions or add explicit validation guidance before claiming validation-after-edit behavior.",
+          "evidenceRefs": [],
+          "modelVersion": "session-insights-v1"
+        },
+        {
+          "id": "session-insight:post-edit-validation",
+          "kind": "rework-correction",
+          "episodeRef": null,
+          "status": "candidate",
+          "labels": [
+            "post-edit-validation",
+            "High"
+          ],
+          "summary": "Observed 40 edit event(s), but no later validation command in the analyzed sample. Route this lead to Harness session-evidence review to inspect the affected Task Episodes and later relevant validation before any finding.",
+          "evidenceRefs": [
+            {
+              "kind": "execution-transcript",
+              "id": "session-insight-3-1",
+              "type": "assistant",
+              "line": 923
+            }
+          ],
+          "modelVersion": "session-insights-v1"
+        },
+        {
+          "id": "session-insight:execution-friction",
+          "kind": "friction-taxonomy",
+          "episodeRef": null,
+          "status": "candidate",
+          "labels": [
+            "execution-friction",
+            "Low"
+          ],
+          "summary": "No strong execution friction signal in the analyzed sample. Keep friction claims narrow unless additional failed commands, rejected actions, or warnings are inspected.",
+          "evidenceRefs": [],
+          "modelVersion": "session-insights-v1"
+        },
+        {
+          "id": "session-insight:tool-mix",
+          "kind": "redacted-summary",
+          "episodeRef": null,
+          "status": "candidate",
+          "labels": [
+            "tool-mix",
+            "High"
+          ],
+          "summary": "Most observed tool: Bash (175). Use this as workflow evidence, then inspect bounded sessions before claiming user intent.",
+          "evidenceRefs": [
+            {
+              "kind": "execution-transcript",
+              "id": "session-insight-5-1",
+              "type": "assistant",
+              "line": 5
+            }
+          ],
+          "modelVersion": "session-insights-v1"
+        },
+        {
+          "id": "session-insight:session-complexity",
+          "kind": "redacted-summary",
+          "episodeRef": null,
+          "status": "candidate",
+          "labels": [
+            "session-complexity",
+            "High"
+          ],
+          "summary": "Observed 1 active long session(s); longest active estimate: 1h 53m. Review task family, outcome, and friction before deciding whether this duration reflects a problem or any decomposition, tool, delegation, or model change is needed.",
+          "evidenceRefs": [
+            {
+              "kind": "execution-transcript",
+              "id": "session-insight-6-1",
+              "type": "session_meta",
+              "line": 1
+            }
+          ],
+          "modelVersion": "session-insights-v1"
+        },
+        {
+          "id": "session-insight:session-usage-efficiency",
+          "kind": "redacted-summary",
+          "episodeRef": null,
+          "status": "candidate",
+          "labels": [
+            "session-usage-efficiency",
+            "High"
+          ],
+          "summary": "The analysis covered 2 sessions: 1 met the active-long threshold, with the longest estimated at 113 minutes. This activity describes effort only; token or credit evidence is incomplete and does not establish model preference, quality, or savings.",
+          "evidenceRefs": [
+            {
+              "kind": "execution-transcript",
+              "id": "session-insight-7-1",
+              "type": "session_meta",
+              "line": 1
+            }
+          ],
+          "modelVersion": "session-insights-v1"
+        }
+      ]
+    },
+    "learningCapture": {
+      "schemaVersion": 1,
+      "state": "N/A",
+      "summary": "N/A — requires two comparable observation windows and an intervention comparison.",
+      "interventions": []
+    },
+    "aiAgentPractice": {
+      "inspectedSurfaces": [],
+      "coverageRows": [
+        {
+          "surface": "Skills",
+          "scopes": [
+            "Plugin"
+          ],
+          "count": 37,
+          "paths": [
+            "~/.qoder/plugins/cache/qoder-marketplace/design-review/0.1.0/skills/accessibility-review/SKILL.md",
+            "~/.qoder/plugins/cache/qoder-marketplace/architecture-visualization/0.1.0/skills/architecture-communicator/SKILL.md",
+            "~/.qoder/plugins/cache/qoder-marketplace/architecture-visualization/0.1.0/skills/architecture-health/SKILL.md",
+            "~/.qoder/plugins/cache/qoder-marketplace/ui-ux-pro-max-skill/2.6.2/.claude/skills/banner-design/SKILL.md",
+            "~/.qoder/plugins/cache/qoder-bundler/better-harness/skills/better-harness/SKILL.md",
+            "~/.qoder/plugins/cache/qoder-marketplace/better-harness/0.2.21/skills/better-harness/SKILL.md",
+            "~/.qoder/plugins/cache/qoder-marketplace/ui-ux-pro-max-skill/2.6.2/.claude/skills/brand/SKILL.md",
+            "~/.qoder/plugins/cache/qoder-marketplace/architecture-visualization/0.1.0/skills/c4model/SKILL.md",
+            "~/.qoder/plugins/cache/qoder-marketplace/design-review/0.1.0/skills/component-library-alignment/SKILL.md",
+            "~/.qoder/plugins/cache/qoder-bundler/qoder-create-plugin/skills/create-plugin/SKILL.md",
+            "~/.qoder/plugins/cache/qoder-marketplace/architecture-visualization/0.1.0/skills/dependency-impact-analyzer/SKILL.md",
+            "~/.qoder/plugins/cache/qoder-marketplace/architecture-visualization/0.1.0/skills/deployment-topology-analyzer/SKILL.md"
+          ]
+        },
+        {
+          "surface": "Hooks",
+          "scopes": [
+            "Plugin"
+          ],
+          "count": 2,
+          "paths": [
+            "~/.qoder/plugins/cache/qoder-bundler/security-scan/.qoder-plugin/qoder-hooks.json"
+          ]
+        },
+        {
+          "surface": "MCP",
+          "scopes": [
+            "Plugin"
+          ],
+          "count": 1,
+          "paths": [
+            "~/.qoder/plugins/cache/qoder-marketplace/qoder-cloud-agents/1.3.0/mcp.json"
+          ]
+        },
+        {
+          "surface": "Workflows",
+          "scopes": [
+            "Project"
+          ],
+          "count": 14,
+          "paths": [
+            ".github/workflows/android-app.yml",
+            ".github/workflows/android-benchmark.yml",
+            ".github/workflows/android-deps.yml",
+            ".github/workflows/android-device.yml",
+            ".github/workflows/android-native.yml",
+            ".github/workflows/android-release.yml",
+            ".github/workflows/android-screens.yml",
+            ".github/workflows/arm64-probe.yml",
+            ".github/workflows/baseline-profile.yml",
+            ".github/workflows/benchmark.yml",
+            ".github/workflows/eval-gate.yml",
+            ".github/workflows/ios-native.yml"
+          ]
+        },
+        {
+          "surface": "Plugins",
+          "scopes": [
+            "Plugin"
+          ],
+          "count": 9,
+          "paths": [
+            "~/.qoder/plugins/cache/qoder-marketplace/architecture-visualization/0.1.0/.qoder-plugin/plugin.json",
+            "~/.qoder/plugins/cache/qoder-bundler/better-harness/.qoder-plugin/plugin.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/better-harness/0.2.21/.qoder-plugin/plugin.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/design-review/0.1.0/.qoder-plugin/plugin.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/lottie/0.1.0/.qoder-plugin/plugin.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/qoder-cloud-agents/1.3.0/.qoder-plugin/plugin.json",
+            "~/.qoder/plugins/cache/qoder-bundler/qoder-create-plugin",
+            "~/.qoder/plugins/cache/qoder-bundler/security-scan/.qoder-plugin/plugin.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/ui-ux-pro-max-skill/2.6.2/.qoder-plugin/plugin.json"
+          ]
+        },
+        {
+          "surface": "Memories",
+          "scopes": [
+            "Project"
+          ],
+          "count": 12
+        },
+        {
+          "surface": "Rules",
+          "scopes": [
+            "Project"
+          ],
+          "count": 0
+        },
+        {
+          "surface": "Commands",
+          "scopes": [
+            "Project"
+          ],
+          "count": 0
+        },
+        {
+          "surface": "Custom Agents",
+          "scopes": [
+            "Project"
+          ],
+          "count": 0
+        }
+      ],
+      "repositorySourceRows": [],
+      "memoryDetails": {
+        "contentPolicy": "metadata-only",
+        "scanState": "scanned-present",
+        "scopeCounts": [
+          {
+            "scope": "Project",
+            "count": 12
+          }
+        ],
+        "integrity": {
+          "status": "reviewed",
+          "titleCount": 12,
+          "reviewedTitleCount": 12,
+          "truncated": false,
+          "exactCollisionGroups": 0,
+          "similarityCandidates": 0
+        }
+      }
+    },
+    "usageActivity": {
+      "schemaVersion": 2,
+      "dateBasis": "UTC",
+      "measurementBasis": "session-starts-active-estimate-model-active-session-days-skill-invocations-and-loads",
+      "truncated": false,
+      "dates": [
+        "2026-10-19"
+      ],
+      "sessions": {
+        "total": 2,
+        "starts": [
+          2
+        ],
+        "activeMinutes": [
+          112.9
+        ]
+      },
+      "models": [],
+      "skills": []
+    },
+    "usageEfficiency": {
+      "schemaVersion": 2,
+      "selection": {
+        "strategy": "all-eligible",
+        "eligibleSessionCount": 2,
+        "analyzedSessionCount": 2,
+        "complete": true
+      },
+      "roles": {
+        "userThreadCandidateCount": 1,
+        "childAgentCandidateCount": 1
+      },
+      "longSessions": {
+        "activeCount": 1,
+        "wallOnlyCount": 0,
+        "longestActiveMinutes": 112.5,
+        "activeRatio": 0.5,
+        "estimate": {
+          "method": "capped-event-gap",
+          "activeThresholdMinutes": 45,
+          "gapCapMinutes": 5,
+          "idleGapMinutes": 30
+        },
+        "samples": [
+          {
+            "alias": "S1",
+            "role": "child-agent-candidate",
+            "activeMinutes": 112.5,
+            "failureCount": 0
+          }
+        ]
+      },
+      "accounting": {
+        "mode": "effort-proxy",
+        "responseCount": 0,
+        "modelAttributedResponseCount": 0,
+        "unattributedResponseCount": 0,
+        "usageFieldObservedCount": 0,
+        "nonZeroUsageCount": 0,
+        "exactCreditsAvailable": false,
+        "pricingVersion": null
+      },
+      "modelUsage": [],
+      "outcomeReview": {
+        "status": "required",
+        "reviewedCandidateCount": 0,
+        "reviewedActiveLongCount": 0,
+        "comparableModelOutcomeEvidence": false,
+        "recommendation": "controlled-a-b-required"
+      },
+      "reviewLead": {
+        "id": "session-usage-outcome-review-gap",
+        "title": "1 long-session candidate still need outcome review",
+        "reason": "1 of 2 analyzed sessions (50.0%) crossed the estimated active-time threshold; the longest estimate was 112.5 minutes and 0 have reviewed outcomes. 0 additional long spans may be idle or resumed work. This is an investigation lead, not a confirmed efficiency, decomposition, tool, or model problem.",
+        "expectedOutcome": "Each displayed candidate is classified by task family, outcome, and friction so the report can decide whether any real improvement is needed.",
+        "aiFixPrompt": "/better-harness review these sessions\n\n1 long-session candidate still need outcome review\n\n## Evidence to inspect\n\n- S1: child-agent candidate, about 112.5 estimated active minutes, 0 failure event(s)\n\n## First step\n\nCreate <run> in the OS temporary directory, then run from the project root:\n\n```bash\nnode scripts/session-analysis.mjs insights --platform qoder --workspace . --selection all-eligible --limit 1000 --format json --output <run>/insights.json\nnode scripts/session-analysis/usage-review-packet.mjs --source <run>/insights.json --workspace . --limit 8 --output <run>/.review-packet.json\n```\n\nThe private review packet resolves candidates locally. Write taskFamily, outcome, friction, confidence, and evidenceReason only for S1. Finish diagnosis before editing product code or creating a Memory, Skill, or Hook.\n\n## What we saw\n\n1 of 2 analyzed sessions (50.0%) crossed the estimated active-time threshold; the longest estimate was 112.5 minutes and 0 have reviewed outcomes. 0 additional long spans may be idle or resumed work. This is an investigation lead, not a confirmed efficiency, decomposition, tool, or model problem.\n\n## Why review it\n\nWithout outcome review, complex work, tool friction, idle/resume noise, and a normal long task remain indistinguishable.\n\n## Expected result\n\nEach displayed candidate is classified by task family, outcome, and friction so the report can decide whether any real improvement is needed.\n\n## Scope\n\nCreate only a privacy-safe session-efficiency review and reader report. Do not edit product code or treat wall span as active cost. Durable reports keep aliases only; do not copy the private review packet into them. This is the complete 1/1 candidate view; conclusions still require semantic review.\n\n## Done when\n\n<run>/.review.json has one valid row for each of S1; semantic review writes <run>/insights.reviewed.json; and <run>/report.md validates against the reviewed source. If review confirms no problem, do not create an improvement.\n\n## Validation\n\n- Run `node scripts/session-analysis/usage-semantic-review.mjs --source <run>/insights.json --packet <run>/.review-packet.json --review <run>/.review.json --output <run>/insights.reviewed.json`\n- Run `node scripts/session-analysis/validate-usage-report.mjs --source <run>/insights.reviewed.json --report <run>/report.md`; it must return `ok: true`\n- Confirm `outcomeReview.reviewedActiveLongCount` in the reviewed source equals the number of reviewed displayed aliases; delete the two private review files after validation",
+        "sampleCoverage": {
+          "shown": 1,
+          "total": 1,
+          "complete": true
+        }
+      }
+    },
+    "projectName": "GS-AI",
+    "locale": "en",
+    "modelId": "agent-work-loop-v4",
+    "reportContractVersion": 26,
+    "overview": "The repository builds unusually honest, mechanical CI self-audits, but the highest-churn web path lands on main with no commit-time check, heavy native/device gates fire only on a stale branch or manual dispatch, and reviewed sessions closed edits without any validation. Credential handling and a documented-but-inactive local secret scan leave the permission boundary partly unenforced.",
+    "dimensions": [
+      {
+        "id": "task-understanding",
+        "label": "Task Understanding",
+        "score": 62,
+        "summary": "Rich architecture, decision, and worklog documents exist as the context trail, but no reviewed episode showed them steering the change, and episode scope signals stayed partial.",
+        "findingRefs": []
+      },
+      {
+        "id": "controlled-execution",
+        "label": "Controlled Execution",
+        "score": 58,
+        "summary": "Manifests, scripts, and a Make work surface are present and partly wired, but the enforced permission boundary shows two confirmed defects: a credential handoff through chat and an inactive declared secret scan.",
+        "findingRefs": [
+          "secret-scan-hook-inactive",
+          "credential-passed-in-chat",
+          "plugin-name-collision-better-harness"
+        ]
+      },
+      {
+        "id": "change-validation",
+        "label": "Change Validation",
+        "score": 55,
+        "summary": "Push-triggered gates genuinely cover the iOS and Android benchmark paths, yet the most-changed web core (src/**) has no commit-time check that exercises its behavior.",
+        "findingRefs": [
+          "web-main-path-no-commit-time-check",
+          "sessions-close-edits-without-check",
+          "native-device-gates-dormant-on-main"
+        ]
+      },
+      {
+        "id": "reliable-delivery",
+        "label": "Reliable Delivery",
+        "score": 45,
+        "summary": "Work is delivered by direct commits to main with no PR or merge-gate decision bound to the revision; external protection could not be observed and is not claimed absent.",
+        "findingRefs": []
+      },
+      {
+        "id": "learning-capture",
+        "label": "Learning Capture",
+        "score": 40,
+        "summary": "A bounded review completed, but 36 of 39 admitted episodes lacked a recoverable request boundary, so recurrence is undecidable; project Skills under native/skills remain routing leads only, with no use or outcome evidence.",
+        "findingRefs": [
+          "recurrence-undecidable-evidence-gap"
+        ]
+      }
+    ],
+    "assignmentSummaries": []
+  },
+  "findings": [
+    {
+      "id": "web-main-path-no-commit-time-check",
+      "title": "Web app changes reach main with no commit-time validation",
+      "severity": "Medium",
+      "reason": "Fact: src/** is the most-churned surface and lands via direct commits to main, but the only workflow referencing src/** (eval-gate.yml) triggers on pull_request, schedule, and manual dispatch — no push — and its PR leg never fires because the repo has zero merge-PR commits. No workflow anywhere runs next build, eslint, or tsc. Consequence: a TypeScript or build regression on the web core stays undetected until the 02:30 UTC scheduled run at the earliest, and the live eval leg is designed to report NEUTRAL when the origin is down. The project's own trigger self-audit (check_workflow_trigger_covers_scripts.py) deliberately scopes only workflows that run .github/scripts/*, so it cannot flag this gap. Owner: .github/workflows plus package.json script surface. Uncertainty: conclusions are trigger-config and git-topology based; Actions run history was not inspected.",
+      "dimensionRefs": [
+        "change-validation"
+      ],
+      "aiFixPrompt": "/better-harness fix this issue\n\nWeb app changes reach main with no commit-time validation. Add the smallest GitHub Actions workflow that triggers on push to main for paths src/**, package.json, and next.config.ts, running only commands already declared in package.json: bun run lint and bun run build. Before wiring any test step, first discover whether an executable web unit route exists among the existing package.json scripts; do not invent one.\n\n## Validation\n\n- Push a touch to src/** on a branch with the workflow and confirm it starts without adding failures the current tree does not already have\n- Confirm the new workflow does not duplicate eval-gate scheduled legs\n\n## Scope\n\nCI configuration only. Keep the existing honest-verdict conventions of eval-gate unchanged; no product-code edits.",
+      "expectedArtifact": "Gate",
+      "expectedOutput": [
+        "Update the existing Gate owner identified by the reviewed evidence and retain a focused validation result."
+      ]
+    },
+    {
+      "id": "sessions-close-edits-without-check",
+      "title": "Reviewed sessions close edits without running any relevant check",
+      "severity": "Low",
+      "reason": "Fact: in the Qoder session lane (provider-labelled), all three emitted Task Episodes ended with closure changed-without-check — a project change with zero validation events, no result signal, and no reviewed relevant check; one episode carried a high-confidence testing-verification lifecycle demand that was never fulfilled. Independent corroboration from the analyzer lane: 40 edit events with no later validation command in the analyzed sample. Consequence: edited work is handed back unverified, compounding the missing commit-time gate. Confidence: moderate — the emitted episodes cover 3 of 39 admitted episodes (36 lacked a request boundary), so this cannot be generalized to the full population. Falsifier: the unobserved episodes contain reviewed relevant checks.",
+      "dimensionRefs": [
+        "change-validation"
+      ],
+      "aiFixPrompt": "/better-harness fix this issue\n\nReviewed sessions close edits without running any relevant check. Choose one durable, project-owned home (for example, a project instructions file alongside docs/) and record the smallest convention: after any edit to src/**, run the check that covers the edit from the already-declared package.json routes (bun run lint; bun run test:widgets for widget compiler changes). State when each check applies and what a failure means. Do not add new tooling or prescribe provider-specific syntax that was not discovered in this repository.\n\n## Validation\n\n- Make one small src edit and confirm the named check runs afterward and its result is retained\n- Re-run a bounded session review and confirm later comparable episodes show a check after the change\n\n## Scope\n\nConvention documentation only; no CI or product-code changes.",
+      "expectedArtifact": "Rule",
+      "expectedOutput": [
+        "Update the existing Rule owner identified by the reviewed evidence and retain a focused validation result."
+      ]
+    },
+    {
+      "id": "native-device-gates-dormant-on-main",
+      "title": "Heavy native and device suites fire only on a stale branch or manual trigger",
+      "severity": "Low",
+      "reason": "Fact: ios-native.yml, android-app.yml, android-native.yml, and android-deps.yml trigger on push to native-runtime, whose tip is 325 commits behind main; smooth-check, android-device, android-screens, and baseline-profile are workflow_dispatch-only, which the project's own lint script calls out as 'a manual run is not a gate'. android-benchmark.yml does fire on main for android/app and android/benchmark paths, and iOS builds run on main for ios/** paths. Consequence: the largest instrumented and device verification suites never exercise current-main code unless a person triggers them, so native/device regressions can sit undetected. Uncertainty: this may be a deliberate cost trade-off (android-deps.yml notes these builds are long); Actions run history was not inspected; the full instrumented-suite routing was not traced.",
+      "dimensionRefs": [
+        "change-validation"
+      ],
+      "aiFixPrompt": "/better-harness fix this issue\n\nHeavy native and device suites fire only on a stale branch or manual trigger. First, bounded discovery: trace which workflow actually executes the Android instrumented suites (android/app androidTest targets) and the iOS test bundle for current-main commits, and record the answer in docs. Then either sync native-runtime forward (git branch management, current tip is 325 behind main) so its gates see current code, or move the smallest high-value suite's push trigger onto the main paths it protects. Decide and record the intended cadence rather than leaving it implicit.\n\n## Validation\n\n- Confirm one native/device gate runs to completion on a revision of main\n- Confirm the recorded cadence decision is visible next to the workflows it governs\n\n## Scope\n\nWorkflow triggers and branch sync only; no suite content changes.",
+      "expectedArtifact": "Workflow",
+      "expectedOutput": [
+        "Update the existing Workflow owner identified by the reviewed evidence and retain a focused validation result."
+      ]
+    },
+    {
+      "id": "secret-scan-hook-inactive",
+      "title": "The declared secret-scan pre-commit hook does not run in the current working copy",
+      "severity": "Low",
+      "reason": "Fact: .githooks/pre-commit scans staged diffs for API-key shapes and worklog.md asserts it is 'wired via core.hooksPath; live-tested', but in this clone git config core.hooksPath is unset and .git/hooks contains no installed hook, and no tracked file performs the wiring. Consequence: a commit made in this working copy bypasses the local secret scan the project documents as enforced. Confidence: medium — core.hooksPath is per-clone and never version-controlled, so this is the current state, likely lost on re-clone (corrupt-repo and db:reset history in the worklog suggest re-clones); GitHub push-protection is a separate server-side backstop the hook comment itself cites.",
+      "dimensionRefs": [
+        "controlled-execution"
+      ],
+      "aiFixPrompt": "/better-harness fix this issue\n\nThe declared secret-scan pre-commit hook does not run in the current working copy. Run git config core.hooksPath .githooks in this repository, and add the same one-line wiring to the project-owned setup route (Makefile or .zscripts) so re-clones restore it automatically. Do not modify the hook's scan patterns.\n\n## Validation\n\n- git config --get core.hooksPath returns .githooks\n- Stage a file containing a fake key matching the hook's own pattern shapes and confirm git commit is rejected, then unstage it\n\n## Scope\n\nLocal git configuration and setup-script wiring only.",
+      "expectedArtifact": "Hook",
+      "expectedOutput": [
+        "Update the existing Hook owner identified by the reviewed evidence and retain a focused validation result."
+      ]
+    },
+    {
+      "id": "credential-passed-in-chat",
+      "title": "A GitHub credential was passed into agent session context instead of a controlled route",
+      "severity": "Medium",
+      "reason": "Fact: in the Qoder session lane (provider-labelled), one episode's request context contained a personal access token handoff together with the account identity; the collector redacted the value, which confirms it entered the session stream and persists in session history. The project's hook comment cites a server-side push-protection block on 2026-09-21, showing controlled secret incidents are already a known class here. Consequence: the credential left any controlled store, no revocation or rotation is recorded in the evidence, and session history retains the exposure surface. Uncertainty: whether the token was ever valid beyond the incident is not observable from this lane. Eligibility: this is an observed credential-crossing-boundary event, not a hypothetical risk.",
+      "dimensionRefs": [
+        "controlled-execution"
+      ],
+      "aiFixPrompt": "/better-harness fix this issue\n\nA GitHub credential was passed into agent session context. Prerequisite requiring explicit user authorization (external write): revoke or rotate the affected token at the credential provider. Then, using routes already present in this environment — gh auth login is declared in .githooks/pre-commit as the push-protection-friendly replacement — move any remaining secret usage into tracked configuration out of chat and session history. Do not paste raw tokens into prompts; state the handoff route in the project setup documentation.\n\n## Validation\n\n- Confirm the old token is revoked or rotated (provider-side, authorized by the user)\n- Confirm a push from this workspace authenticates via the controlled route without a raw token in any prompt or committed file\n\n## Scope\n\nCredential hygiene only; no repository secret values are written into report or documentation.",
+      "expectedArtifact": "Runbook",
+      "expectedOutput": [
+        "Update the existing Runbook owner identified by the reviewed evidence and retain a focused validation result."
+      ]
+    },
+    {
+      "id": "plugin-name-collision-better-harness",
+      "title": "Two enabled plugin sources ship the same better-harness name with divergent versions",
+      "severity": "Low",
+      "reason": "Fact: the deterministic asset-integrity envelope (status reviewed, findingCount 1) reports a name-collision group: better-harness@qoder-bundler 0.2.9 and better-harness@qoder-marketplace 0.2.21 are both enabled with the same canonical name. Consequence: for a skill routed by name, the active owner is ambiguous, and the reviewed versions differ. Confidence: high for the collision fact; low for which copy actually resolves — runtime resolution state is not in the envelopes, and confirming ownership needs authority to open user-home marketplace metadata, which this scope did not grant. This is ordinary Low governance, not a proven runtime failure.",
+      "dimensionRefs": [
+        "controlled-execution"
+      ],
+      "aiFixPrompt": "/better-harness fix this issue\n\nTwo enabled plugin sources ship the same better-harness name with divergent versions. Bounded discovery: from plugin management metadata visible in this environment (Qoder plugin/marketplace management), determine which source resolves as active for the better-harness skill today. Then keep exactly one source enabled — disabling or uninstalling a plugin is a separate explicitly authorized action; do not delete cache directories. Record the chosen owner next to the decision.\n\n## Validation\n\n- Re-run the bounded asset-integrity check and confirm the name-collision group is gone\n- Confirm /better-harness still invokes the retained copy\n\n## Scope\n\nPlugin enablement state only; no plugin file contents modified.",
+      "expectedArtifact": "Config",
+      "expectedOutput": [
+        "Update the existing Config owner identified by the reviewed evidence and retain a focused validation result."
+      ]
+    },
+    {
+      "id": "recurrence-undecidable-evidence-gap",
+      "title": "Learning-capture review cannot decide whether work is repeated",
+      "severity": "Low",
+      "reason": "Fact: 36 of 39 admitted session episodes carry no recoverable request boundary (noRequest), only 2 of 6 enabled session source roots exist (warnings: disabled-source-root, missing-optional-root), and the single emitted request root sits in one context group, so the repeated-workflow clustering produced zero surviving candidates and the recurrence question is blocked at the observation boundary. The workflow-demand lane confirms recurrence assessment ended at insufficient-episodes rather than a clean no-candidate window. Consequence: reusable-improvement demand can neither be established nor ruled out this window, and native/skills candidates stay unrouted leads. This is the model-required evidence-gap disposition under lifecycle-repeat-detection; it is not a claim that repetition does or does not exist. Falsifier of any future repeat claim remains unavailable until episode boundaries recover.",
+      "dimensionRefs": [
+        "learning-capture"
+      ],
+      "aiFixPrompt": "/better-harness fix this issue\n\nLearning-capture review cannot decide whether work is repeated. Widen the bounded evidence honestly: rerun the /better-harness evidence bundle for the qoder provider on this workspace with an explicitly authorized window and, if the user authorizes it, session sources that restore request boundaries; record which of the 6 enabled roots resolve. Do not treat the 36 noRequest episodes as either repetition or a clean window, and do not create any Skill or Memory from this gap.\n\n## Validation\n\n- The rerun bundle reports admitted episodes with usable request boundaries, or the report states the named unavailable roots explicitly\n- A subsequent recurrence decision is possible, or the outcome is an explicit adequate clean no-candidate window\n\n## Scope\n\nEvidence collection only; read-only with respect to the project.",
+      "expectedArtifact": "Document",
+      "expectedOutput": [
+        "Update the existing Document owner identified by the reviewed evidence and retain a focused validation result."
+      ]
+    }
+  ]
+}
