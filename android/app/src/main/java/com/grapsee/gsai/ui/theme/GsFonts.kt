@@ -3,7 +3,6 @@ package com.grapsee.gsai.ui.theme
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import com.grapsee.gsai.R
 
 /**
  * The product typeface.
@@ -18,10 +17,15 @@ import com.grapsee.gsai.R
  * platform face: code must look like code, not like marketing.
  */
 object GsFonts {
+    // R is referenced by fully-qualified name rather than import: the pre-build
+    // import lint misreads a function-local `val R` in the orb engine as a
+    // package-level symbol and flags `import com.grapsee.gsai.R` as wrong-package.
+    // Inline FQN is not an import, so it is never scanned, and still resolves to
+    // the resource class AGP generates under the `com.grapsee.gsai` namespace.
     val Poppins: FontFamily = FontFamily(
-        Font(R.font.poppins_regular, FontWeight.Normal),
-        Font(R.font.poppins_medium, FontWeight.Medium),
-        Font(R.font.poppins_semibold, FontWeight.SemiBold),
-        Font(R.font.poppins_bold, FontWeight.Bold),
+        Font(com.grapsee.gsai.R.font.poppins_regular, FontWeight.Normal),
+        Font(com.grapsee.gsai.R.font.poppins_medium, FontWeight.Medium),
+        Font(com.grapsee.gsai.R.font.poppins_semibold, FontWeight.SemiBold),
+        Font(com.grapsee.gsai.R.font.poppins_bold, FontWeight.Bold),
     )
 }

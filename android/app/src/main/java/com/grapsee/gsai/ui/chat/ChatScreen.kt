@@ -136,7 +136,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
-import com.grapsee.gsai.R
 import com.grapsee.gsai.data.chat.ChatStreamController
 import com.grapsee.gsai.data.chat.ClarifyOption
 import com.grapsee.gsai.data.chat.ClarifyPrompt
