@@ -31,7 +31,9 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.Arrangement
@@ -114,6 +116,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
@@ -128,6 +131,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
@@ -148,7 +152,11 @@ import com.grapsee.gsai.di.ServiceLocator
 import androidx.activity.compose.BackHandler
 import com.grapsee.gsai.ui.components.GsOfflineBanner
 import com.grapsee.gsai.ui.components.AnimatedGsIllustration
+import com.grapsee.gsai.ui.components.RefArt
+import com.grapsee.gsai.ui.components.RefArtwork
+import com.grapsee.gsai.ui.components.RefIconTile
 import com.grapsee.gsai.data.SettingsStore
+import com.grapsee.gsai.data.OnboardingProfileStore
 import com.grapsee.gsai.data.notifications.ReplyNotifier
 import com.grapsee.gsai.data.tts.TtsFocus
 import com.grapsee.gsai.ui.components.GsInputBar
@@ -1229,7 +1237,7 @@ fun ChatScreen(
                         lineHeight = 26.sp,
                         fontWeight = FontWeight.SemiBold
                     ),
-                    color = MaterialTheme.colorScheme.onBackground,
+                    color = GsTheme.colors.textPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f).padding(start = 8.dp)
@@ -1251,7 +1259,7 @@ fun ChatScreen(
             if (transcriptScrolled) {
                 HorizontalDivider(
                     thickness = 1.dp,
-                    color = MaterialTheme.colorScheme.outlineVariant
+                    color = GsTheme.colors.divider
                 )
             }
         }
@@ -1336,7 +1344,8 @@ fun ChatScreen(
                     // throughout — no navigation hop.
                     WorkspaceEmptyState(
                         draftText = { draft },
-                        onNewChat = newChatAction
+                        onNewChat = newChatAction,
+                        onSuggestion = { prompt -> dispatch(prompt, echoUser = true) }
                     )
                 } else {
                     LazyColumn(
@@ -1652,7 +1661,8 @@ private fun ChatTopIconButton(icon: ImageVector, label: String, onClick: () -> U
         modifier = Modifier
             .size(40.dp)
             .kineticPress()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(CircleShape)
+            .background(GsTheme.colors.glassSurface.copy(alpha = 0.55f))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -1665,8 +1675,8 @@ private fun ChatTopIconButton(icon: ImageVector, label: String, onClick: () -> U
         Icon(
             icon,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.size(24.dp)
+            tint = GsTheme.colors.textPrimary,
+            modifier = Modifier.size(21.dp)
         )
     }
 }
@@ -1761,15 +1771,15 @@ private fun UserMessage(
                                 bottomStart = 20.dp,
                                 bottomEnd = 4.dp
                             ),
-                            color = MaterialTheme.colorScheme.primary,
+                            color = GsTheme.colors.accent,
                             border = if (highlight) {
-                                BorderStroke(2.dp, MaterialTheme.colorScheme.onPrimary)
+                                BorderStroke(2.dp, GsTheme.colors.onAccent)
                             } else null
                         ) {
                             Text(
                                 text = message.content,
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onPrimary,
+                                color = GsTheme.colors.onAccent,
                                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
                             )
                         }
@@ -1864,8 +1874,9 @@ private fun ComposerRow(
         // clean 1dp hairline (outlineVariant) wrapped on a 28dp pill.
         Surface(
             shape = RoundedCornerShape(28.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = .96f),
-            border = BorderStroke(1.dp, GsTheme.colors.accent.copy(alpha = .24f)),
+            color = GsTheme.colors.glassSurface,
+            border = BorderStroke(1.dp, GsTheme.colors.glassBorder),
+            shadowElevation = 8.dp,
             modifier = Modifier.fillMaxWidth()
         ) {
             Row(
@@ -1877,7 +1888,7 @@ private fun ComposerRow(
                     Icon(
                         GsIcons.Plus,
                         contentDescription = "Attach",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        tint = GsTheme.colors.textSecondary
                     )
                 }
                 if (modeLabel != null) {
@@ -1923,9 +1934,9 @@ private fun ComposerRow(
             .weight(1f)
             .padding(vertical = 12.dp),
         textStyle = MaterialTheme.typography.bodyLarge.copy(
-            color = MaterialTheme.colorScheme.onSurface
+            color = GsTheme.colors.textPrimary
         ),
-        cursorBrush = SolidColor(MaterialTheme.colorScheme.onSurface),
+        cursorBrush = SolidColor(GsTheme.colors.accentStrong),
         keyboardOptions = KeyboardOptions(
             capitalization = KeyboardCapitalization.Sentences
         ),
@@ -1936,7 +1947,7 @@ private fun ComposerRow(
                                 Text(
                                     text = "Ask anything\u2026",
                                     style = MaterialTheme.typography.bodyLarge,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = GsTheme.colors.textPlaceholder
                                 )
                             }
                             inner()
@@ -2435,13 +2446,22 @@ private fun AssistantMessage(
                         shape = GsRadius.smShape()
                     )
                     .padding(horizontal = 6.dp, vertical = 2.dp)
-                    .combinedClickable(
-                        onClick = {},
-                        onLongClick = {
-                            if (GsHaptics.enabled()) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                            menuExpanded = true
-                        }
-                    )
+                    // Long-press only. There used to be `onClick = {}` here,
+                    // which made every non-interactive pixel of an answer a
+                    // button that did nothing — the exact "taps are swallowed"
+                    // experience. A short tap now falls through to whatever is
+                    // under it (a chart probe, a link, a widget control); only
+                    // a deliberate long press opens the turn menu.
+                    .pointerInput(message.id) {
+                        detectTapGestures(
+                            onLongPress = {
+                                if (GsHaptics.enabled()) {
+                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                }
+                                menuExpanded = true
+                            }
+                        )
+                    }
             ) {
                 // perf-4-a (technique C): the live stream read is isolated in
                 // [LiveStreamText] so ~30 Hz text flushes recompose the text
@@ -2550,14 +2570,12 @@ private fun AssistantMessage(
 /** Compact assistant identity mark beside the first assistant block of a turn. */
 @Composable
 private fun AssistantAvatar() {
-    AnimatedGsIllustration(
-        resourceId = R.drawable.gs_companion_orb,
-        contentDescription = "GS assistant",
-        size = 28.dp,
-        breathDuration = 3200,
-        rotationDegrees = 0.8f,
-        liftPixels = -1f,
-        startDelayMillis = 160
+    // The same hand-drawn bloom that greets the reader on the empty surface —
+    // one motif, used consistently, never a second logo.
+    RefArtwork(
+        art = RefArt.Bloom,
+        size = 30.dp,
+        contentDescription = "GS assistant"
     )
 }
 
@@ -2650,49 +2668,129 @@ private fun WorkspaceEmptyState(
     // on it. A deferred read moves the state read down into the one line that
     // uses it; the screen no longer subscribes to keystrokes.
     draftText: () -> String,
-    onNewChat: (() -> Unit)?
+    onNewChat: (() -> Unit)?,
+    onSuggestion: (String) -> Unit = {}
 ) {
+    val colors = GsTheme.colors
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp),
+            .padding(horizontal = 20.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        // Reference-inspired companion orb: the empty state should feel alive
-        // before the first prompt, not like a blank utility screen.
-        AnimatedGsIllustration(R.drawable.gs_companion_orb, "GS AI companion", 112.dp, shape = CircleShape, breathDuration = 3200, rotationDegrees = .9f, liftPixels = -2f, startDelayMillis = 180)
-        Spacer(Modifier.height(24.dp))
+        // The companion, hand-drawn from the same primitives as onboarding —
+        // not a bitmap, and not a second visual language. The halo is what
+        // makes it sit IN the bloom instead of on top of it.
+        Box(contentAlignment = Alignment.Center) {
+            Box(
+                Modifier
+                    .size(196.dp)
+                    .clip(CircleShape)
+                    .background(
+                        Brush.radialGradient(
+                            listOf(colors.aurora.first().copy(alpha = 0.45f), Color.Transparent)
+                        )
+                    )
+            )
+            RefArtwork(RefArt.Bloom, size = 132.dp, contentDescription = "GS companion")
+        }
+        Spacer(Modifier.height(14.dp))
         Text(
-            text = "How can GS make today lighter?",
-            style = MaterialTheme.typography.titleLarge.copy(
-                fontSize = 24.sp,
-                lineHeight = 30.sp,
-                fontWeight = FontWeight.SemiBold
+            text = "GS",
+            style = MaterialTheme.typography.labelMedium.copy(
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 1.2.sp
             ),
-            color = MaterialTheme.colorScheme.onBackground,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            color = colors.accentStrong
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = "What should we make of today?",
+            style = MaterialTheme.typography.displaySmall,
+            color = colors.textPrimary,
+            textAlign = TextAlign.Center,
             modifier = Modifier.semantics { heading() }
         )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = "Ask for an answer, a plan, or something you can touch.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.textSecondary,
+            textAlign = TextAlign.Center
+        )
         // perf-smooth-5: the draft read is confined to its own composable.
-        // It used to sit directly in WorkspaceEmptyState's body, so every
-        // keystroke on a fresh chat recomposed the monogram, the greeting and
-        // the capability card along with it — the entire empty screen, per
-        // character. The read now invalidates only the block that depends on it.
-        EmptyStateActions(draftText = draftText, onNewChat = onNewChat)
+        EmptyStateActions(
+            draftText = draftText,
+            onSuggestion = onSuggestion
+        )
+    }
+}
+
+/**
+ * The four doors into an empty chat are chosen from the setup answers by
+ * [chatSuggestionsFor]; see ChatSuggestions.kt for the pool and the ranking.
+ */
+@Composable
+private fun EmptyStateActions(draftText: () -> String, onSuggestion: (String) -> Unit) {
+    if (!draftText().isBlank()) return
+    val suggestions = remember(OnboardingProfileStore.capabilities, OnboardingProfileStore.interests) {
+        chatSuggestionsFor(OnboardingProfileStore.capabilities, OnboardingProfileStore.interests)
+    }
+    Spacer(Modifier.height(24.dp))
+    Column(
+        modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(9.dp)
+    ) {
+        suggestions.chunked(2).forEach { row ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(9.dp)
+            ) {
+                row.forEach { suggestion ->
+                    SuggestionCard(
+                        suggestion = suggestion,
+                        onClick = { onSuggestion(suggestion.prompt) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                if (row.size == 1) Spacer(Modifier.weight(1f))
+            }
+        }
     }
 }
 
 @Composable
-private fun EmptyStateActions(draftText: () -> String, onNewChat: (() -> Unit)?) {
-    if (!draftText().isBlank()) return
-    Spacer(Modifier.height(8.dp))
-    if (onNewChat != null) {
-        NewChatButton(onClick = onNewChat)
+private fun SuggestionCard(
+    suggestion: ChatSuggestion,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = GsTheme.colors
+    Column(
+        modifier = modifier
+            .heightIn(min = 96.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .background(colors.glassSurface.copy(alpha = 0.62f))
+            .border(1.dp, colors.glassBorder, RoundedCornerShape(20.dp))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                role = Role.Button,
+                onClickLabel = suggestion.label,
+                onClick = onClick
+            )
+            .padding(14.dp)
+    ) {
+        RefIconTile(suggestion.icon, size = 34.dp)
+        Spacer(Modifier.height(10.dp))
+        Text(
+            text = suggestion.label,
+            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+            color = colors.textPrimary
+        )
     }
-    Spacer(Modifier.height(16.dp))
-    EmptyCapabilityCard()
 }
 
 /**

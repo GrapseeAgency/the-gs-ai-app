@@ -27,6 +27,10 @@ object SettingsStore {
 
     // Appearance
     var themeMode by mutableStateOf("System"); private set
+    /** One of the six families in `GsAccents` — a real re-theme, not a swatch. */
+    var accentId by mutableStateOf("apricot"); private set
+    /** Blurred | Gradient | Solid — how much of the bloom backdrop is drawn. */
+    var backgroundStyle by mutableStateOf("Blurred"); private set
     var reduceAnimations by mutableStateOf(false); private set
     // AI
     /**
@@ -60,6 +64,8 @@ object SettingsStore {
         // onCreate, which reads on the device as "app opens, instantly
         // closes, every single time".
         themeMode = p.string(K.themeMode, themeMode)
+        accentId = p.string(K.accentId, accentId)
+        backgroundStyle = p.string(K.backgroundStyle, backgroundStyle)
         reduceAnimations = p.bool(K.reduceAnimations, reduceAnimations)
         // false is the field's own value, so an unset key means OFF. Turning
         // local AI on without asking is the worse failure.
@@ -83,6 +89,8 @@ object SettingsStore {
 
     private object K {
         const val themeMode = "settings.themeMode"
+        const val accentId = "settings.accentId"
+        const val backgroundStyle = "settings.backgroundStyle"
         const val reduceAnimations = "settings.reduceAnimations"
         const val preferLocal = "settings.preferLocal"
         const val pushNotifications = "settings.pushNotifications"
@@ -129,6 +137,8 @@ object SettingsStore {
 
     // Appearance
     fun updateThemeMode(v: String) { themeMode = v; put(K.themeMode, v) }
+    fun updateAccentId(v: String) { accentId = v; put(K.accentId, v) }
+    fun updateBackgroundStyle(v: String) { backgroundStyle = v; put(K.backgroundStyle, v) }
     fun updateReduceAnimations(v: Boolean) { reduceAnimations = v; put(K.reduceAnimations, v) }
 
     /** Commit 1(b). See the field for why the default is off. */

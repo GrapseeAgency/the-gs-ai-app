@@ -910,8 +910,14 @@ class ChatRepository(
      */
     private suspend fun nativeReply(prompt: String): String? {
         if (!GsNativeLoader.isAvailable()) return null
+        // The small on-device model has never been shown the widget wire format,
+        // so it answers in prose even when a visual would be better. The
+        // instruction is prepended at the call site (not baked into the engine)
+        // so it applies to whichever model is installed and never leaks into
+        // the transcript.
+        val instructed = WidgetShowcase.nativeInstruction + "\n\nUser: " + prompt
         return try {
-            onInferenceThread { GsNative.chat(prompt) }.takeIf { it.isNotBlank() }
+            onInferenceThread { GsNative.chat(instructed) }.takeIf { it.isNotBlank() }
         } catch (t: Throwable) {
             Log.w("ChatRepository", "native generation failed; using the built-in responder", t)
             null
@@ -937,6 +943,11 @@ class ChatRepository(
         val topic = p.take(72).trimEnd('.', '?', '!')
 
         fun pick(vararg options: String) = options[abs(p.hashCode()) % options.size]
+
+        // The rendered-component catalogue is answered before the generic
+        // branches, otherwise "show me the chart catalogue" lands in prose.
+        // Model-agnostic: this runs whenever no provider answered.
+        WidgetShowcase.replyFor(p)?.let { return it }
 
         return when {
             lower.matches(Regex("^(hi|hey|hello|yo|sup|hola|good (morning|afternoon|evening))[!.? ]*$")) ->

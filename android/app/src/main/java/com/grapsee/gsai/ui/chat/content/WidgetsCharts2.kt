@@ -11,6 +11,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -37,6 +38,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.ui.theme.GsTheme
@@ -79,7 +81,35 @@ internal fun GroupedBarChart(w: ChartWidget) {
         w.series.maxOfOrNull { s -> s.data.getOrNull(ci)?.getOrElse(1) { 0f } ?: 0f } ?: 0f
     }?.takeIf { it > 0f } ?: 1f
     val labels = categoryLabels(w, cats)
-    Canvas(Modifier.fillMaxWidth().height(180.dp).padding(top = 8.dp)) {
+    val probe = rememberChartProbe()
+    val selected = probe.datum
+    val ink = GsTheme.colors.textPrimary
+    Canvas(
+        Modifier
+            .fillMaxWidth()
+            .height(180.dp)
+            .pointerInput(w.series, labels) {
+                detectTapGestures { at ->
+                    val cw = size.width
+                    val groupW = cw / cats.coerceAtLeast(1)
+                    val ci = (at.x / groupW).toInt().coerceIn(0, cats - 1)
+                    val n = w.series.size.coerceAtLeast(1)
+                    val barW = groupW * 0.82f / n
+                    val local = at.x - (ci * groupW + groupW * 0.09f)
+                    val si = (local / barW).toInt().coerceIn(0, n - 1)
+                    val point = w.series.getOrNull(si)?.data?.getOrNull(ci) ?: return@detectTapGestures
+                    probe.select(
+                        ChartDatum(
+                            label = labels.getOrElse(ci) { "S${ci + 1}" },
+                            value = point.getOrElse(1) { 0f },
+                            series = w.series[si].name,
+                            index = ci
+                        )
+                    )
+                }
+            }
+            .padding(top = 8.dp)
+    ) {
         val cw = size.width
         val ch = size.height
         repeat(4) { g ->
@@ -94,10 +124,26 @@ internal fun GroupedBarChart(w: ChartWidget) {
                 val v = point.getOrElse(1) { 0f }.coerceAtLeast(0f)
                 val h = ch * (v / maxV) * progress
                 val x = ci * groupW + groupW * 0.09f + si * barW
-                drawRect(colors[si % colors.size], topLeft = Offset(x, ch - h), size = Size(barW * 0.9f, h))
+                val isSelected = selected != null && selected.index == ci &&
+                    (selected.series == null || selected.series == s.name)
+                val dim = selected != null && !isSelected
+                drawRect(
+                    colors[si % colors.size].copy(alpha = if (dim) 0.3f else 1f),
+                    topLeft = Offset(x, ch - h),
+                    size = Size(barW * 0.9f, h)
+                )
+                if (isSelected) {
+                    drawRect(
+                        color = ink.copy(alpha = 0.6f),
+                        topLeft = Offset(x, ch - h),
+                        size = Size(barW * 0.9f, h),
+                        style = Stroke(width = 1.5.dp.toPx())
+                    )
+                }
             }
         }
     }
+    ChartInspectBar(probe, w.unit, "Tap a bar to inspect", colors.firstOrNull() ?: GsTheme.colors.accent)
     Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
         labels.take(8).forEach {
             Text(it, style = MaterialTheme.typography.labelSmall, color = GsTheme.colors.textTertiary)

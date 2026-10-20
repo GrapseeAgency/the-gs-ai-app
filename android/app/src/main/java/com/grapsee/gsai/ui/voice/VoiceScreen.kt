@@ -92,11 +92,12 @@ internal enum class VoicePhase {
 }
 
 /**
- * Full-screen dark voice mode, now real: on-device SpeechRecognizer drives the
- * live transcript, TextToSpeech reads a finished transcript back, and the
- * result hands off to a brand-new chat via the prefill route. The obsidian
- * palette and the aurora waveform are unchanged — the waveform just only
- * breathes while the microphone is genuinely open.
+ * Full-screen voice mode, in the reference language: the global bloom stays
+ * visible (no opaque scrim), the transcript is one cream-glass card, and the
+ * only accent fills are the live microphone and the send action. On-device
+ * SpeechRecognizer drives the live transcript, TextToSpeech reads a finished
+ * transcript back, and the result hands off to a brand-new chat via the
+ * prefill route. The waveform only breathes while the microphone is open.
  */
 @Composable
 fun VoiceScreen(
@@ -267,7 +268,8 @@ fun VoiceScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(GsTheme.colors.appBackground)
+            // No opaque appBackground: the global ReferenceBackdrop is the
+            // surface here too, so voice mode belongs to the same product.
             // Voice mode is a full-bleed custom canvas (no GsScreenScaffold),
             // so it carries its own system-bar insets: safeDrawing covers the
             // status bar, gesture bar and display cutout around the 24dp rhythm.
@@ -278,15 +280,14 @@ fun VoiceScreen(
                 .fillMaxSize()
                 .padding(GsMotion.spaceL)
         ) {
-            // Close — top start
+            // Close — top start, the same bare chevron/cross the reference uses.
             Row(modifier = Modifier.fillMaxWidth()) {
-                IconButton(onClick = onBack) {
-                    Icon(
-                        imageVector = GsIcons.X,
-                        contentDescription = "Close voice mode",
-                        tint = GsTheme.colors.textPrimary
-                    )
-                }
+                RefIconButton(
+                    icon = GsIcons.X,
+                    label = "Close voice mode",
+                    onClick = onBack,
+                    tint = GsTheme.colors.textPrimary
+                )
             }
 
             Spacer(modifier = Modifier.weight(1f))

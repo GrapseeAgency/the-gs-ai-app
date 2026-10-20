@@ -55,6 +55,7 @@ import androidx.compose.ui.window.DialogProperties
 import kotlin.math.min
 import com.grapsee.gsai.ui.components.NativeGsIllustration
 import com.grapsee.gsai.ui.icons.GsIcons
+import com.grapsee.gsai.ui.theme.GsTheme
 
 /**
  * STEP 5 — native Mermaid rendering. NO WebView, NO remote page, NO new

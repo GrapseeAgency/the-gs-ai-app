@@ -1,48 +1,51 @@
 package com.grapsee.gsai.ui.chat
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.data.local.ftsMatchQuery
 import com.grapsee.gsai.di.ServiceLocator
-import com.grapsee.gsai.ui.components.GsChip
-import com.grapsee.gsai.ui.components.GsEmptyState
-import com.grapsee.gsai.ui.components.GsInputBar
-import com.grapsee.gsai.ui.components.GsListItem
-import com.grapsee.gsai.ui.components.GsScreenScaffold
-import com.grapsee.gsai.ui.components.GsSectionHeader
+import com.grapsee.gsai.ui.components.RefArt
+import com.grapsee.gsai.ui.components.RefCard
+import com.grapsee.gsai.ui.components.RefChip
+import com.grapsee.gsai.ui.components.RefDivider
+import com.grapsee.gsai.ui.components.RefEmptyState
+import com.grapsee.gsai.ui.components.RefIconTile
+import com.grapsee.gsai.ui.components.RefPage
+import com.grapsee.gsai.ui.components.RefTextField
 import com.grapsee.gsai.ui.components.gsConversationTitle
-import com.grapsee.gsai.ui.theme.GsMotion
+import com.grapsee.gsai.ui.icons.GsIcons
+import com.grapsee.gsai.ui.theme.GsTheme
 import java.time.Duration
 import java.time.Instant
 import java.time.OffsetDateTime
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import androidx.compose.runtime.rememberCoroutineScope
-import com.grapsee.gsai.ui.icons.GsIcons
 
 private data class ChatHit(
     val conversationId: String,
@@ -52,20 +55,14 @@ private data class ChatHit(
 )
 
 /**
- * The filters that are REAL. "Model" was deleted in the 0.77.8 sweep: it
- * rendered a chip, toggled its selected state and re-ran the search — and
- * nothing in [searchChats] read it, so it filtered nothing. A chip that
- * pretends to filter is a chip that lies. "Has files" is implemented for
- * real (messages whose attachments column is non-empty); "This week" always
- * was.
+ * The filters that are REAL. "Model" was deleted because nothing read it;
+ * "This week" and "Has files" change the query for real.
  */
 private val searchFilters = listOf("This week", "Has files")
 
 /**
  * Chat-scoped search over the on-device store — real hits from Room (titles +
- * message bodies) with honest edge states: a start-typing hint, a no-matches
- * empty state, and tap-through into the conversation. Store hiccups resolve
- * to "no matches", never an error.
+ * message bodies), real filters, tap-through into the conversation.
  */
 @Composable
 fun ChatSearchScreen(
@@ -85,12 +82,11 @@ fun ChatSearchScreen(
             searched = false
             return@LaunchedEffect
         }
-        delay(220) // settle keystrokes before touching the store
+        delay(220)
         hits = searchChats(term, activeFilter)
         searched = true
     }
 
-    /** IME Search commits: skip the debounce tail and hit the store now. */
     fun commitSearch() {
         if (term.length < 2) return
         scope.launch {
@@ -99,97 +95,115 @@ fun ChatSearchScreen(
         }
     }
 
-    GsScreenScaffold(title = "Search chats", onBack = onBack) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(GsMotion.spaceM)
-        ) {
-            GsInputBar(
-                value = query,
-                onValueChange = { query = it },
-                onSend = { commitSearch() },
-                imeAction = ImeAction.Search,
-                trailingIcon = {
-                    IconButton(onClick = { commitSearch() }, enabled = term.length >= 2) {
-                        Icon(
-                            GsIcons.TextSearch,
-                            contentDescription = "Search",
-                            tint = if (term.length >= 2) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                },
-                placeholder = "Search messages and chats…"
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)) {
-                searchFilters.forEach { filter ->
-                    GsChip(
-                        text = filter,
-                        selected = activeFilter == filter,
-                        onClick = { activeFilter = if (activeFilter == filter) null else filter }
-                    )
-                }
+    RefPage(
+        title = "Search",
+        subtitle = "Titles and message text, on this device.",
+        onBack = onBack
+    ) {
+        RefTextField(
+            value = query,
+            onValueChange = { query = it },
+            label = "What are you looking for?",
+            placeholder = "A word or phrase",
+            leadingIcon = GsIcons.TextSearch,
+            imeAction = ImeAction.Search,
+            onDone = { commitSearch() }
+        )
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            searchFilters.forEach { filter ->
+                RefChip(
+                    text = filter,
+                    selected = activeFilter == filter,
+                    onClick = { activeFilter = if (activeFilter == filter) null else filter }
+                )
             }
+        }
+        Spacer(Modifier.height(16.dp))
 
-            when {
-                term.length < 2 -> GsEmptyState(
-                    icon = GsIcons.TextSearch,
-                    title = "Search your chats",
-                    message = "Start typing to find any conversation or message on this device."
-                )
-                searched && hits.isEmpty() -> GsEmptyState(
-                    icon = GsIcons.SearchX,
-                    title = "No matches",
-                    message = if (activeFilter != null) {
-                        "Nothing matched \"$term\" with the \"$activeFilter\" filter on. Try another filter or a shorter word."
-                    } else {
-                        "Nothing matched \"$term\". Try a shorter word or different phrasing."
-                    }
-                )
-                else -> {
-                    GsSectionHeader("Results")
-                    hits.forEach { hit ->
-                        GsListItem(
-                            title = gsConversationTitle(hit.title),
-                            subtitle = "${hit.snippet} · ${hit.moment}",
-                            leading = {
-                                Surface(
-                                    shape = CircleShape,
-                                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                    modifier = Modifier.size(34.dp)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            GsIcons.MessageCircle,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    }
-                                }
-                            },
-                            onClick = { onOpenConversation(hit.conversationId) }
-                        )
-                    }
-                    Text(
-                        text = "Search runs across every conversation on this device.",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(bottom = GsMotion.spaceM)
-                    )
+        when {
+            term.length < 2 -> RefEmptyState(
+                art = RefArt.Search,
+                title = "Search your chats",
+                message = "Type at least two characters. Every conversation and message on this device is searched."
+            )
+            searched && hits.isEmpty() -> RefEmptyState(
+                art = RefArt.Search,
+                title = "No matches",
+                message = if (activeFilter != null) {
+                    "Nothing matched \"$term\" with \"$activeFilter\" on. Try another filter or a shorter word."
+                } else {
+                    "Nothing matched \"$term\". Try a shorter word or different phrasing."
                 }
+            )
+            else -> {
+                Text(
+                    text = "${hits.size} result${if (hits.size == 1) "" else "s"}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = GsTheme.colors.textTertiary,
+                    modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+                )
+                RefCard {
+                    hits.forEachIndexed { index, hit ->
+                        if (index > 0) RefDivider()
+                        HitRow(hit) { onOpenConversation(hit.conversationId) }
+                    }
+                }
+                Text(
+                    text = "Search runs across every conversation on this device. Nothing is sent to a server.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = GsTheme.colors.textTertiary,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 16.dp)
+                )
             }
         }
     }
 }
 
-/** Room-backed search; any store hiccup quietly reads as "no matches".
- *  ASCII word queries ride the FTS full-text index; CJK/symbol input falls
- *  back to the LIKE path, where the simple tokenizer can't follow.
- *  "Has files" keeps only message hits whose turn actually carried
- *  attachments — and drops title hits, because a title never has a file. */
+@Composable
+private fun HitRow(hit: ChatHit, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 68.dp)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                role = Role.Button,
+                onClickLabel = gsConversationTitle(hit.title),
+                onClick = onClick
+            )
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        RefIconTile(GsIcons.MessageCircle, tint = GsTheme.colors.textSecondary)
+        Column(Modifier.weight(1f)) {
+            Text(
+                gsConversationTitle(hit.title),
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                color = GsTheme.colors.textPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                "${hit.snippet} · ${hit.moment}",
+                style = MaterialTheme.typography.labelMedium,
+                color = GsTheme.colors.textSecondary,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Icon(
+            GsIcons.ChevronRight,
+            contentDescription = null,
+            tint = GsTheme.colors.textTertiary,
+            modifier = Modifier.size(18.dp)
+        )
+    }
+}
+
+/** Room-backed search; any store hiccup quietly reads as "no matches". */
 private suspend fun searchChats(term: String, filter: String?): List<ChatHit> {
     return runCatching {
         val db = ServiceLocator.db
@@ -227,11 +241,6 @@ private suspend fun searchChats(term: String, filter: String?): List<ChatHit> {
     }.getOrElse { emptyList() }
 }
 
-/**
- * Whether a message's attachments column holds any file. "[]" is the column
- * default and "none" is what pre-attachment rows read back as, so both count
- * as empty rather than a file named none.
- */
 private fun hasFiles(attachmentsJson: String): Boolean {
     val t = attachmentsJson.trim()
     return t.isNotEmpty() && t != "[]" && t != "none"
@@ -254,7 +263,6 @@ private fun relativeMoment(iso: String): String = runCatching {
     }
 }.getOrDefault("earlier")
 
-/** Window the match into a single readable line. */
 private fun snippet(content: String, term: String): String {
     val clean = content.replace('\n', ' ').trim()
     val index = clean.lowercase().indexOf(term.lowercase())

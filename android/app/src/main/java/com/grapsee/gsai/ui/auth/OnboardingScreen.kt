@@ -2,31 +2,19 @@ package com.grapsee.gsai.ui.auth
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ContentTransform
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.AnimationSpec
-import androidx.compose.animation.core.EaseOut
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -34,23 +22,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -60,43 +39,80 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import com.grapsee.gsai.R
-import com.grapsee.gsai.ui.components.AnimatedGsIllustration
-import com.grapsee.gsai.ui.components.NativeGsIllustration
-import com.grapsee.gsai.ui.components.NativeIllustrationVariant
+import androidx.compose.ui.unit.sp
+import androidx.compose.animation.core.tween
+import com.grapsee.gsai.data.AccountStore
+import com.grapsee.gsai.data.OnboardingProfileStore
 import com.grapsee.gsai.data.SettingsStore
-import com.grapsee.gsai.ui.components.GsCard
-import com.grapsee.gsai.ui.components.GsChip
+import com.grapsee.gsai.ui.components.RefAccentRow
+import com.grapsee.gsai.ui.components.RefArt
+import com.grapsee.gsai.ui.components.RefArtwork
+import com.grapsee.gsai.ui.components.RefCard
+import com.grapsee.gsai.ui.components.RefChip
+import com.grapsee.gsai.ui.components.RefChoiceRow
+import com.grapsee.gsai.ui.components.RefDivider
+import com.grapsee.gsai.ui.components.RefFootnote
+import com.grapsee.gsai.ui.components.RefIconButton
+import com.grapsee.gsai.ui.components.RefPrimaryButton
+import com.grapsee.gsai.ui.components.RefQuietButton
+import com.grapsee.gsai.ui.components.RefTextField
+import com.grapsee.gsai.ui.components.RefToggleRow
+import com.grapsee.gsai.ui.icons.GsIcons
+import com.grapsee.gsai.ui.theme.GsAccents
 import com.grapsee.gsai.ui.theme.GsMotion
 import com.grapsee.gsai.ui.theme.GsTheme
-import com.grapsee.gsai.ui.theme.rememberAuroraBrush
-import com.grapsee.gsai.ui.theme.GsEase
-import com.grapsee.gsai.ui.theme.GsRadius
-import com.grapsee.gsai.ui.icons.GsIcons
 
-/** Six-step onboarding wizard — all selections are screen-local state. */
-private enum class OnboardingStep { Interests, AiPreferences, Capabilities, Notifications, Personalisation, Ready }
+/**
+ * The setup wizard — six real questions, every answer kept.
+ *
+ * This is the reference language end to end: a bare back chevron, one
+ * segmented progress line, a hand-drawn scene, then groups in cream glass.
+ * The old version asked for interests, capabilities, a response style and a
+ * name and then discarded all of them (they lived in `remember`). Now:
+ *
+ *   interests / capabilities / style / personality -> OnboardingProfileStore,
+ *     read by Home suggestions, the chat empty state and the local responder;
+ *   name -> AccountStore (the same source the drawer and Profile read);
+ *   accent -> SettingsStore.updateAccentId, applied live so the next tap is
+ *     already in the chosen colour.
+ */
+private enum class SetupStep { Interests, Voice, Tools, Quiet, Personal, Ready }
 
 private val interestOptions = listOf(
     "Writing", "Coding", "Research", "Business", "Design", "Education",
-    "Science", "Language", "Productivity", "Entertainment", "Marketing", "Data"
+    "Science", "Language", "Productivity", "Marketing", "Data", "Travel"
 )
 
-// Accent choices come from the semantic layer's aurora family (GsTheme.colors.aurora)
-private val accentNames = listOf("Aurora", "Sky", "Violet")
+private val responseStyles = listOf(
+    Triple("Concise", "Short answers, no preamble", GsIcons.Zap),
+    Triple("Standard", "A balanced answer with context", GsIcons.MessageCircle),
+    Triple("Detailed", "Thorough, with reasoning and examples", GsIcons.BookOpen)
+)
 
-/** Kinetic horizontal slide shared by all step changes. */
-private fun onboardingTransition(forward: Boolean): ContentTransform {
+private val personalityOptions = listOf(
+    Triple("Professional", "Direct, neutral, work-first", GsIcons.Briefcase),
+    Triple("Friendly", "Warm, plain language, a little humour", GsIcons.Heart),
+    Triple("Playful", "Light, curious, more personality", GsIcons.Wand)
+)
+
+private data class CapabilityOption(val title: String, val caption: String, val icon: androidx.compose.ui.graphics.vector.ImageVector)
+
+private val capabilityOptions = listOf(
+    CapabilityOption("Draft and write", "Docs, emails and posts in your voice", GsIcons.NotebookPen),
+    CapabilityOption("Research the web", "Sourced answers with links", GsIcons.Globe),
+    CapabilityOption("Analyse images", "Charts, screenshots and photos", GsIcons.ImagePlus),
+    CapabilityOption("Write and fix code", "Reviews, refactors and tests", GsIcons.Code),
+    CapabilityOption("Summarise documents", "PDFs, reports and long threads", GsIcons.FileText),
+    CapabilityOption("Think it through", "Naming, plans and fresh angles", GsIcons.Lightbulb)
+)
+
+private fun setupTransition(forward: Boolean): ContentTransform {
     val slideSpec = tween<IntOffset>(durationMillis = 220)
     return (
         slideInHorizontally(animationSpec = slideSpec) { full ->
@@ -111,271 +127,273 @@ private fun onboardingTransition(forward: Boolean): ContentTransform {
 
 @Composable
 fun OnboardingScreen(onFinished: () -> Unit) {
+    val context = LocalContext.current
     var stepIndex by remember { mutableIntStateOf(0) }
-    val interests = remember { mutableStateListOf<String>() }
-    var responseStyle by remember { mutableStateOf("Standard") }
-    var personality by remember { mutableStateOf("Friendly") }
-    val capabilities = remember { mutableStateListOf<String>() }
-    var taskAlerts by remember { mutableStateOf(true) }
-    var fileAlerts by remember { mutableStateOf(true) }
-    var assistantUpdates by remember { mutableStateOf(false) }
-    var productNews by remember { mutableStateOf(false) }
-    var displayName by remember { mutableStateOf("") }
-    var accentIndex by remember { mutableIntStateOf(0) }
-    // uiverse sour-dragon-56: the ONE onboarding tooltip. Armed once per visit,
-    // retired by any press anywhere (observed without consuming, below).
-    var showHint by remember { mutableStateOf(true) }
+    val currentStep = SetupStep.entries[stepIndex]
 
-    val currentStep = OnboardingStep.entries[stepIndex]
-    val canContinue = when (currentStep) {
-        OnboardingStep.Interests -> interests.isNotEmpty()
-        OnboardingStep.AiPreferences -> true
-        OnboardingStep.Capabilities -> capabilities.isNotEmpty()
-        OnboardingStep.Notifications -> true
-        OnboardingStep.Personalisation -> true
-        OnboardingStep.Ready -> true
+    val interests = remember {
+        mutableStateListOf<String>().apply { addAll(OnboardingProfileStore.interests.sorted()) }
+    }
+    val capabilities = remember {
+        mutableStateListOf<String>().apply { addAll(OnboardingProfileStore.capabilities.sorted()) }
+    }
+    var responseStyle by remember { mutableStateOf(OnboardingProfileStore.responseStyle) }
+    var personality by remember { mutableStateOf(OnboardingProfileStore.personality) }
+    var displayName by remember { mutableStateOf(AccountStore.displayName(context)) }
+    var accentIndex by remember {
+        mutableIntStateOf(GsAccents.all.indexOfFirst { it.id == SettingsStore.accentId }.coerceAtLeast(0))
     }
 
-    // perf-smooth-2 (cause 5): the Ready progress sweep is animated INSIDE
-    // ReadyStep now. The old screen-level animateFloatAsState re-composed the
-    // whole onboarding screen every frame of the 1200ms sweep; the read now
-    // lives in the only composable that draws it.
+    val canContinue = when (currentStep) {
+        SetupStep.Interests -> interests.isNotEmpty()
+        SetupStep.Tools -> capabilities.isNotEmpty()
+        else -> true
+    }
+
+    fun commitAndFinish() {
+        AccountStore.setDisplayName(context, displayName)
+        OnboardingProfileStore.save(
+            interests = interests,
+            capabilities = capabilities,
+            responseStyle = responseStyle,
+            personality = personality
+        )
+        onFinished()
+    }
+
+    fun next() {
+        if (!canContinue) return
+        if (stepIndex < SetupStep.entries.lastIndex) stepIndex++ else commitAndFinish()
+    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        Color(0xFFFFB36D).copy(alpha = .22f),
-                        MaterialTheme.colorScheme.background,
-                        MaterialTheme.colorScheme.background
-                    )
-                )
-            )
             .statusBarsPadding()
             .navigationBarsPadding()
-            .pointerInput(Unit) {
-                // The tooltip's dismissal surface: every press on the screen
-                // (buttons, chips, switches, empty canvas) retires it. Events
-                // are observed, never consumed, so real controls still work.
-                awaitEachGesture {
-                    awaitFirstDown(requireUnconsumed = false)
-                    showHint = false
-                }
-            }
     ) {
-        Column(
+        // Bare top bar: back, the step's position, and one honest escape.
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = GsMotion.spaceL, vertical = GsMotion.spaceM)
+                .padding(start = 8.dp, end = 16.dp, top = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            LinearProgressIndicator(
-                progress = { (stepIndex + 1) / 6f },
-                modifier = Modifier.fillMaxWidth(),
-                color = MaterialTheme.colorScheme.primary,
-                trackColor = MaterialTheme.colorScheme.surfaceContainerHigh
-            )
-            Spacer(Modifier.height(GsMotion.spaceS))
+            if (stepIndex > 0) {
+                RefIconButton(
+                    icon = GsIcons.ChevronLeft,
+                    label = "Back",
+                    onClick = { stepIndex-- }
+                )
+            } else {
+                Spacer(Modifier.width(40.dp))
+            }
             Text(
-                text = "Step ${stepIndex + 1} of 6",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                text = "STEP ${stepIndex + 1} OF ${SetupStep.entries.size}",
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontSize = 10.5.sp,
+                    letterSpacing = 1.3.sp,
+                    fontWeight = FontWeight.Medium
+                ),
+                color = GsTheme.colors.textTertiary,
+                modifier = Modifier.weight(1f)
             )
+            Text(
+                text = "Skip",
+                style = MaterialTheme.typography.labelMedium,
+                color = GsTheme.colors.textSecondary,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(999.dp))
+                    .clickable(
+                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                        indication = null,
+                        role = Role.Button,
+                        onClickLabel = "Skip setup",
+                        onClick = onFinished
+                    )
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+            )
+        }
+
+        // Segmented progress — six marks, the walked ones filled.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(top = 8.dp, bottom = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
+            repeat(SetupStep.entries.size) { index ->
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(3.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(
+                            if (index <= stepIndex) GsTheme.colors.accent
+                            else GsTheme.colors.border
+                        )
+                )
+            }
         }
 
         AnimatedContent(
             targetState = stepIndex,
             modifier = Modifier.weight(1f),
-            transitionSpec = {
-                onboardingTransition(forward = targetState > initialState)
-            },
-            label = "onboardingStep"
+            transitionSpec = { setupTransition(forward = targetState > initialState) },
+            label = "setupStep"
         ) { index ->
-            when (OnboardingStep.entries[index]) {
-                OnboardingStep.Interests -> InterestsStep(interests = interests, showHint = showHint)
-                OnboardingStep.AiPreferences -> AiPreferencesStep(
+            when (SetupStep.entries[index]) {
+                SetupStep.Interests -> InterestsStep(interests)
+                SetupStep.Voice -> VoiceStep(
                     responseStyle = responseStyle,
-                    onStyleChange = { responseStyle = it },
+                    onStyle = { responseStyle = it },
                     personality = personality,
-                    onPersonalityChange = { personality = it }
+                    onPersonality = { personality = it }
                 )
-                OnboardingStep.Capabilities -> CapabilitiesStep(capabilities = capabilities)
-                OnboardingStep.Notifications -> NotificationsStep(
-                    taskAlerts = taskAlerts,
-                    onTaskAlertsChange = { taskAlerts = it },
-                    fileAlerts = fileAlerts,
-                    onFileAlertsChange = { fileAlerts = it },
-                    assistantUpdates = assistantUpdates,
-                    onAssistantUpdatesChange = { assistantUpdates = it },
-                    productNews = productNews,
-                    onProductNewsChange = { productNews = it }
-                )
-                OnboardingStep.Personalisation -> PersonalisationStep(
+                SetupStep.Tools -> ToolsStep(capabilities)
+                SetupStep.Quiet -> QuietStep()
+                SetupStep.Personal -> PersonalStep(
                     name = displayName,
-                    onNameChange = { displayName = it },
+                    onName = { displayName = it },
                     accentIndex = accentIndex,
-                    onAccentChange = { accentIndex = it },
-                    onContinue = {
-                        if (canContinue) {
-                            if (stepIndex < OnboardingStep.entries.lastIndex) stepIndex++ else onFinished()
-                        }
-                    }
+                    onAccent = { index ->
+                        accentIndex = index
+                        SettingsStore.updateAccentId(GsAccents.all[index].id)
+                    },
+                    onDone = { next() }
                 )
-                OnboardingStep.Ready -> ReadyStep(name = displayName)
+                SetupStep.Ready -> ReadyStep(
+                    name = displayName,
+                    interests = interests,
+                    style = responseStyle,
+                    personality = personality,
+                    tools = capabilities
+                )
             }
         }
 
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = GsMotion.spaceL, vertical = GsMotion.spaceM),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            IconButton(
-                onClick = { if (stepIndex > 0) stepIndex-- },
-                enabled = stepIndex in 1..OnboardingStep.entries.lastIndex - 1
-            ) {
-                Icon(
-                    imageVector = GsIcons.ChevronLeft,
-                    contentDescription = "Back"
+            if (!canContinue) {
+                Text(
+                    text = if (currentStep == SetupStep.Interests) {
+                        "Pick at least one starting point, or skip setup."
+                    } else {
+                        "Choose at least one tool, or skip setup."
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = GsTheme.colors.textTertiary,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center
                 )
             }
-            GsArrowPillButton(
-                label = if (currentStep == OnboardingStep.Ready) "Enter GS AI" else "Continue",
-                enabled = canContinue,
-                onClick = {
-                    if (stepIndex < OnboardingStep.entries.lastIndex) stepIndex++ else onFinished()
-                },
-                modifier = Modifier.weight(1f)
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                if (stepIndex > 0) {
+                    RefQuietButton(
+                        label = "Back",
+                        onClick = { stepIndex-- },
+                        modifier = Modifier.width(104.dp)
+                    )
+                }
+                RefPrimaryButton(
+                    label = if (currentStep == SetupStep.Ready) "Enter GS AI" else "Continue",
+                    onClick = { next() },
+                    enabled = canContinue,
+                    modifier = Modifier.weight(1f)
+                )
+            }
         }
     }
 }
 
-/**
- * uiverse clever-insect-61, materialised: the onboarding CONTINUE pill. Solid
- * primary fill (no gradient), label + trailing ArrowRight. Press slides the
- * arrow 4dp right and settles the pill 1dp down over 120ms ease-out; release
- * returns on the app's standard spring. Reduced motion holds the resting
- * frame: no shift, no sink.
- */
 @Composable
-private fun GsArrowPillButton(
-    label: String,
-    enabled: Boolean,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val reduced = SettingsStore.reduceAnimations || SettingsStore.reduceMotion
-    val settleSpec: AnimationSpec<Float> = when {
-        reduced -> tween(1)
-        pressed -> tween(durationMillis = 120, easing = EaseOut)
-        else -> GsMotion.standard()
-    }
-    val arrowShift by animateFloatAsState(
-        targetValue = if (pressed && !reduced) 4f else 0f,
-        animationSpec = settleSpec,
-        label = "continueArrowShift"
-    )
-    val pillSink by animateFloatAsState(
-        targetValue = if (pressed && !reduced) 1f else 0f,
-        animationSpec = settleSpec,
-        label = "continuePillSink"
-    )
-    Surface(
-        onClick = onClick,
-        enabled = enabled,
-        interactionSource = interaction,
-        shape = RoundedCornerShape(percent = 50),
-        color = if (enabled) {
-            MaterialTheme.colorScheme.primary
-        } else {
-            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
-        },
-        contentColor = if (enabled) {
-            MaterialTheme.colorScheme.onPrimary
-        } else {
-            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-        },
-        modifier = modifier
-            .height(48.dp)
-            .graphicsLayer { translationY = pillSink.dp.toPx() }
-    ) {
-        Row(
-            modifier = Modifier.fillMaxSize(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Text(text = label, style = MaterialTheme.typography.labelLarge)
-            Spacer(Modifier.width(8.dp))
-            Icon(
-                imageVector = GsIcons.ArrowRight,
-                contentDescription = null,
-                modifier = Modifier
-                    .size(24.dp)
-                    .graphicsLayer { translationX = arrowShift.dp.toPx() }
-            )
-        }
-    }
-}
-
-/** Scrollable step body used by every wizard page. */
-@Composable
-private fun StepColumn(content: @Composable ColumnScope.() -> Unit) {
+private fun StepBody(content: @Composable ColumnScope.() -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = GsMotion.spaceL)
+            .padding(horizontal = 16.dp)
     ) {
+        Spacer(Modifier.height(6.dp))
         content()
-        Spacer(Modifier.height(GsMotion.spaceL))
+        Spacer(Modifier.height(18.dp))
     }
 }
 
 @Composable
-private fun StepHeading(title: String, caption: String) {
-    Spacer(Modifier.height(GsMotion.spaceS))
-    Text(
-        text = title,
-        style = MaterialTheme.typography.displaySmall,
-        color = MaterialTheme.colorScheme.onBackground
-    )
-    Spacer(Modifier.height(GsMotion.spaceS))
-    Text(
-        text = caption,
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
-    Spacer(Modifier.height(GsMotion.spaceM))
+private fun StepHero(art: RefArt, size: Int = 132) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 4.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        RefArtwork(art = art, size = size.dp)
+    }
 }
 
 @Composable
-private fun InterestsStep(interests: SnapshotStateList<String>, showHint: Boolean) {
-    StepColumn {
-        OnboardingOrb()
+private fun StepHeading(eyebrow: String, title: String, caption: String) {
+    Spacer(Modifier.height(10.dp))
+    Text(
+        text = eyebrow.uppercase(),
+        style = MaterialTheme.typography.labelMedium.copy(
+            fontSize = 10.5.sp,
+            letterSpacing = 1.4.sp,
+            fontWeight = FontWeight.SemiBold
+        ),
+        color = GsTheme.colors.accentStrong
+    )
+    Spacer(Modifier.height(6.dp))
+    Text(
+        text = title,
+        style = MaterialTheme.typography.displaySmall,
+        color = GsTheme.colors.textPrimary
+    )
+    Spacer(Modifier.height(8.dp))
+    Text(
+        text = caption,
+        style = MaterialTheme.typography.bodyMedium,
+        color = GsTheme.colors.textSecondary
+    )
+    Spacer(Modifier.height(16.dp))
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun InterestsStep(interests: MutableList<String>) {
+    StepBody {
+        StepHero(RefArt.Bloom, 138)
         StepHeading(
-            title = "Your smarter world starts here",
-            caption = "Tell GS what inspires you. Your companion will shape itself around the way you think."
+            eyebrow = "A warmer start",
+            title = "What should we make of today?",
+            caption = "Pick the things you reach for. GS uses them to choose the first suggestions you see — you can change them any time."
         )
-        if (showHint) {
-            // uiverse sour-dragon-56: one tooltip, above the first control.
-            HintBubble(text = "Tap the topics you like. GS uses them to tune your answers.")
-            Spacer(Modifier.height(4.dp))
-        }
-        interestOptions.chunked(3).forEach { row ->
-            Row(
+        RefCard {
+            Text(
+                text = "I'm mostly here for",
+                style = MaterialTheme.typography.titleSmall,
+                color = GsTheme.colors.textPrimary,
+                modifier = Modifier.padding(start = 16.dp, top = 16.dp)
+            )
+            FlowRow(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
+                    .padding(14.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                row.forEach { topic ->
-                    GsChip(
+                interestOptions.forEach { topic ->
+                    RefChip(
                         text = topic,
                         selected = topic in interests,
                         onClick = {
@@ -384,418 +402,247 @@ private fun InterestsStep(interests: SnapshotStateList<String>, showHint: Boolea
                     )
                 }
             }
-            Spacer(Modifier.height(GsMotion.spaceS))
         }
     }
 }
 
 @Composable
-private fun OnboardingOrb() {
-    Box(
-        modifier = Modifier.fillMaxWidth().height(190.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        AnimatedGsIllustration(R.drawable.gs_companion_orb, "GS AI companion", 138.dp, shape = CircleShape)
-    }
-}
-
-/**
- * uiverse sour-dragon-56, materialised: a small dark bubble (inverseSurface on
- * inverseOnSurface, 12dp radius, 4dp tail) pointing at the first onboarding
- * control. Shown once; any press anywhere on the screen dismisses it.
- */
-@Composable
-private fun HintBubble(text: String) {
-    val bubbleColor = MaterialTheme.colorScheme.inverseSurface
-    Column {
-        Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = bubbleColor,
-            contentColor = MaterialTheme.colorScheme.inverseOnSurface
-        ) {
-            Text(
-                text = text,
-                style = MaterialTheme.typography.labelMedium,
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-            )
-        }
-        Canvas(
-            modifier = Modifier
-                .padding(start = 24.dp)
-                .size(width = 8.dp, height = 4.dp)
-        ) {
-            val tail = Path().apply {
-                moveTo(0f, 0f)
-                lineTo(size.width, 0f)
-                lineTo(size.width / 2f, size.height)
-                close()
-            }
-            drawPath(tail, color = bubbleColor)
-        }
-    }
-}
-
-@Composable
-private fun AiPreferencesStep(
+private fun VoiceStep(
     responseStyle: String,
-    onStyleChange: (String) -> Unit,
+    onStyle: (String) -> Unit,
     personality: String,
-    onPersonalityChange: (String) -> Unit
+    onPersonality: (String) -> Unit,
 ) {
-    StepColumn {
+    StepBody {
+        StepHero(RefArt.Conversation, 112)
         StepHeading(
-            title = "Tune your AI",
-            caption = "Set the defaults, every chat can override them."
+            eyebrow = "Tune the voice",
+            title = "How should GS sound?",
+            caption = "The default for every new chat. A conversation can always ask for something different."
         )
-        PreferenceChipCard(
-            title = "Response style",
-            options = listOf("Concise", "Standard", "Detailed"),
-            selected = responseStyle,
-            onSelect = onStyleChange
-        )
-        Spacer(Modifier.height(GsMotion.spaceS))
-        PreferenceChipCard(
-            title = "Personality",
-            options = listOf("Professional", "Friendly", "Playful"),
-            selected = personality,
-            onSelect = onPersonalityChange
-        )
-        // PHASE 2: the "Reasoning effort" cards are removed — reasoning-mode
-        // vocabulary is not ordinary-user configuration (and never persisted).
-    }
-}
-
-@Composable
-private fun PreferenceChipCard(
-    title: String,
-    options: List<String>,
-    selected: String,
-    onSelect: (String) -> Unit
-) {
-    GsCard {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        Spacer(Modifier.height(GsMotion.spaceS))
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
-        ) {
-            options.forEach { option ->
-                GsChip(
-                    text = option,
-                    selected = option == selected,
-                    onClick = { onSelect(option) }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun CapabilitiesStep(capabilities: SnapshotStateList<String>) {
-    StepColumn {
-        StepHeading(
-            title = "What should GS do first?",
-            caption = "Choose the tools to pin to your command centre. Pick at least one."
-        )
-        val capabilityItems = listOf(
-            Triple(NativeIllustrationVariant.Companion, "Draft and write", "Docs, emails and posts in your voice"),
-            Triple(NativeIllustrationVariant.Research, "Research the web", "Sourced answers with links"),
-            Triple(NativeIllustrationVariant.Vision, "Analyse images", "Charts, screenshots and photos"),
-            Triple(NativeIllustrationVariant.Code, "Write and fix code", "Reviews, refactors and tests"),
-            Triple(NativeIllustrationVariant.Documents, "Summarise documents", "PDFs, reports and long threads"),
-            Triple(NativeIllustrationVariant.Ideas, "Brainstorm ideas", "Naming, plans and fresh angles")
-        )
-        capabilityItems.forEach { (icon, title, caption) ->
-            CapabilityCard(
-                variant = icon,
-                title = title,
-                caption = caption,
-                selected = title in capabilities,
-                onToggle = {
-                    if (title in capabilities) capabilities.remove(title) else capabilities.add(title)
-                }
-            )
-            Spacer(Modifier.height(GsMotion.spaceS))
-        }
-    }
-}
-
-@Composable
-private fun CapabilityCard(
-    variant: NativeIllustrationVariant,
-    title: String,
-    caption: String,
-    selected: Boolean,
-    onToggle: () -> Unit
-) {
-    // uiverse tiny-moose-42, materialised: a quiet multi-select card whose
-    // check circle carries a 2dp accent ring and one static radial glow
-    // (accent at 12% fading out) while selected; unselected is a quiet
-    // monochrome outline. The check itself arrives with a scale-in state
-    // change (180ms ease-in-out). No looping animation anywhere.
-    val checkScale by animateFloatAsState(
-        targetValue = if (selected) 1f else 0f,
-        animationSpec = GsEase.state(),
-        label = "capabilityCheck"
-    )
-    GsCard(onClick = onToggle) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Surface(
-                shape = RoundedCornerShape(GsRadius.md),
-                color = if (selected) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.surfaceContainerHigh
-                },
-                modifier = Modifier.size(40.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    NativeGsIllustration(size = 34.dp, variant = variant, contentDescription = "$title illustration")
-                }
-            }
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = caption,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            val ringColor by animateColorAsState(
-                targetValue = if (selected) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.outline
-                },
-                animationSpec = GsEase.state(),
-                label = "capabilityCheckRing"
-            )
-            val glowColor = MaterialTheme.colorScheme.primary
-            Box(
-                modifier = Modifier
-                    .size(24.dp)
-                    .drawBehind {
-                        if (selected) {
-                            drawCircle(
-                                brush = Brush.radialGradient(
-                                    colors = listOf(
-                                        glowColor.copy(alpha = 0.12f),
-                                        Color.Transparent
-                                    ),
-                                    center = center,
-                                    radius = size.maxDimension
-                                ),
-                                radius = size.maxDimension
-                            )
-                        }
-                    }
-                    .border(2.dp, ringColor, CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = GsIcons.Check,
-                    contentDescription = if (selected) "Selected" else null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier
-                        .size(16.dp)
-                        .graphicsLayer {
-                            scaleX = checkScale
-                            scaleY = checkScale
-                            alpha = checkScale
-                        }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun NotificationsStep(
-    taskAlerts: Boolean,
-    onTaskAlertsChange: (Boolean) -> Unit,
-    fileAlerts: Boolean,
-    onFileAlertsChange: (Boolean) -> Unit,
-    assistantUpdates: Boolean,
-    onAssistantUpdatesChange: (Boolean) -> Unit,
-    productNews: Boolean,
-    onProductNewsChange: (Boolean) -> Unit
-) {
-    StepColumn {
-        StepHeading(
-            title = "Stay in the loop",
-            caption = "Quiet by default, only the pings you actually want."
-        )
-        GsCard {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                SwitchRow(title = "Task completions", checked = taskAlerts, onCheckedChange = onTaskAlertsChange)
-                SwitchRow(title = "File processed", checked = fileAlerts, onCheckedChange = onFileAlertsChange)
-                SwitchRow(title = "Assistant updates", checked = assistantUpdates, onCheckedChange = onAssistantUpdatesChange)
-                SwitchRow(title = "Product news", checked = productNews, onCheckedChange = onProductNewsChange)
-            }
-        }
-    }
-}
-
-@Composable
-private fun SwitchRow(title: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.weight(1f)
-        )
-        Spacer(Modifier.width(GsMotion.spaceM))
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
-    }
-}
-
-@Composable
-private fun PersonalisationStep(
-    name: String,
-    onNameChange: (String) -> Unit,
-    accentIndex: Int,
-    onAccentChange: (Int) -> Unit,
-    onContinue: () -> Unit
-) {
-    StepColumn {
-        StepHeading(
-            title = "Make it yours",
-            caption = "A name and an accent, that's all GS needs."
-        )
-        GsCard {
+        RefCard {
             Text(
-                text = "Name",
+                text = "Answer length",
                 style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurface
+                color = GsTheme.colors.textPrimary,
+                modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp)
             )
-            Spacer(Modifier.height(GsMotion.spaceS))
-            OutlinedTextField(
-                value = name,
-                onValueChange = onNameChange,
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("What should GS call you?") },
-                placeholder = { Text("e.g. Alex") },
-                singleLine = true,
-                // Done on the keyboard action continues the flow — the action
-                // key on a singleLine field otherwise does nothing at all.
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = { onContinue() })
+            responseStyles.forEachIndexed { index, (label, caption, icon) ->
+                if (index > 0) RefDivider(startIndent = 66.dp)
+                RefChoiceRow(
+                    title = label,
+                    subtitle = caption,
+                    icon = icon,
+                    selected = responseStyle == label,
+                    onClick = { onStyle(label) }
+                )
+            }
+            Spacer(Modifier.height(6.dp))
+        }
+        Spacer(Modifier.height(12.dp))
+        RefCard {
+            Text(
+                text = "Personality",
+                style = MaterialTheme.typography.titleSmall,
+                color = GsTheme.colors.textPrimary,
+                modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp)
+            )
+            personalityOptions.forEachIndexed { index, (label, caption, icon) ->
+                if (index > 0) RefDivider(startIndent = 66.dp)
+                RefChoiceRow(
+                    title = label,
+                    subtitle = caption,
+                    icon = icon,
+                    selected = personality == label,
+                    onClick = { onPersonality(label) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ToolsStep(capabilities: MutableList<String>) {
+    StepBody {
+        StepHero(RefArt.Library, 104)
+        StepHeading(
+            eyebrow = "Your toolkit",
+            title = "What should GS do first?",
+            caption = "These become the quick actions on Home. Pick the ones you actually use."
+        )
+        RefCard {
+            capabilityOptions.forEachIndexed { index, option ->
+                if (index > 0) RefDivider(startIndent = 66.dp)
+                RefChoiceRow(
+                    title = option.title,
+                    subtitle = option.caption,
+                    icon = option.icon,
+                    selected = option.title in capabilities,
+                    onClick = {
+                        if (option.title in capabilities) capabilities.remove(option.title)
+                        else capabilities.add(option.title)
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun QuietStep() {
+    StepBody {
+        StepHero(RefArt.Privacy, 104)
+        StepHeading(
+            eyebrow = "Quiet by default",
+            title = "Only the pings you want",
+            caption = "No marketing, no streaks, no badges begging for attention. You can change both of these later in Settings."
+        )
+        RefCard {
+            RefToggleRow(
+                title = "Reply ready",
+                subtitle = "One quiet notice when an answer finishes while GS is in the background",
+                icon = GsIcons.Bell,
+                checked = SettingsStore.pushNotifications,
+                onCheckedChange = { SettingsStore.updatePushNotifications(it) }
+            )
+            RefDivider()
+            RefToggleRow(
+                title = "Haptic feedback",
+                subtitle = "A soft tap when a message sends or an action commits",
+                icon = GsIcons.Smartphone,
+                checked = SettingsStore.haptics,
+                onCheckedChange = { SettingsStore.updateHaptics(it) }
             )
         }
-        Spacer(Modifier.height(GsMotion.spaceS))
-        GsCard {
+        RefFootnote("GS never sends product news to your lock screen.")
+    }
+}
+
+@Composable
+private fun PersonalStep(
+    name: String,
+    onName: (String) -> Unit,
+    accentIndex: Int,
+    onAccent: (Int) -> Unit,
+    onDone: () -> Unit,
+) {
+    val family = GsAccents.all[accentIndex.coerceIn(0, GsAccents.all.lastIndex)]
+    StepBody {
+        StepHero(RefArt.Success, 96)
+        StepHeading(
+            eyebrow = "Make it yours",
+            title = "A name and a colour",
+            caption = "That's all GS needs. Your name only appears in greetings and your account row."
+        )
+        RefTextField(
+            value = name,
+            onValueChange = onName,
+            label = "What should GS call you?",
+            placeholder = "e.g. Alex",
+            imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+            onDone = onDone,
+            leadingIcon = GsIcons.UserRound
+        )
+        Spacer(Modifier.height(16.dp))
+        RefCard {
             Text(
                 text = "Accent",
                 style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurface
+                color = GsTheme.colors.textPrimary,
+                modifier = Modifier.padding(start = 16.dp, top = 16.dp)
             )
-            Spacer(Modifier.height(GsMotion.spaceS))
-            Row(horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceL)) {
-                val accentColors = GsTheme.colors.aurora
-                accentColors.forEachIndexed { index, color ->
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Surface(
-                            onClick = { onAccentChange(index) },
-                            shape = CircleShape,
-                            color = color,
-                            modifier = Modifier.size(44.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                if (index == accentIndex) {
-                                    Icon(
-                                        imageVector = GsIcons.Check,
-                                        contentDescription = "Selected",
-                                        tint = MaterialTheme.colorScheme.onPrimary,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-                            }
-                        }
-                        Spacer(Modifier.height(GsMotion.spaceXS))
-                        Text(
-                            text = accentNames[index],
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
+            Spacer(Modifier.height(12.dp))
+            RefAccentRow(
+                selectedId = family.id,
+                onSelect = { id ->
+                    val index = GsAccents.all.indexOfFirst { it.id == id }
+                    if (index >= 0) onAccent(index)
+                },
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = "${family.label} — used for buttons, switches and the bloom behind this page.",
+                style = MaterialTheme.typography.labelMedium,
+                color = GsTheme.colors.textSecondary,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+            )
+            Spacer(Modifier.height(10.dp))
         }
     }
 }
 
-/** The Ready step: aurora progress sweeps to full while the serif headline lands. */
 @Composable
-private fun ReadyStep(name: String) {
-    // perf-smooth-2 (cause 5): this is the single sanctioned aurora moment --
-    // the Ready setup bar sweeping 0 -> 1. The 1200ms animation and its read
-    // both live in this scope, so the sweep re-composes only this step.
-    val readyProgress by animateFloatAsState(
-        targetValue = 1f,
-        animationSpec = tween(durationMillis = 1200),
-        label = "readyProgress"
-    )
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = GsMotion.spaceL),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(8.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(readyProgress.coerceIn(0.02f, 1f))
-                    .height(8.dp)
-                    .clip(CircleShape)
-                .background(rememberAuroraBrush(shape = CircleShape))
+private fun ReadyStep(
+    name: String,
+    interests: List<String>,
+    style: String,
+    personality: String,
+    tools: List<String>,
+) {
+    StepBody {
+        StepHero(RefArt.Success, 148)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = "You're all set",
+            style = MaterialTheme.typography.displayMedium,
+            color = GsTheme.colors.textPrimary,
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = if (name.isBlank()) {
+                "Your companion is ready. Start with a thought, a file, or a blank page."
+            } else {
+                "Welcome, $name. Your companion is ready — start with a thought, a file, or a blank page."
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            color = GsTheme.colors.textSecondary,
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(20.dp))
+        RefCard(padding = androidx.compose.foundation.layout.PaddingValues(16.dp)) {
+            Text(
+                text = "This is how GS will start",
+                style = MaterialTheme.typography.titleSmall,
+                color = GsTheme.colors.textPrimary
+            )
+            Spacer(Modifier.height(10.dp))
+            SummaryLine(
+                label = "Interests",
+                value = if (interests.isEmpty()) "None picked yet" else interests.take(4).joinToString(", ")
+            )
+            SummaryLine(label = "Answers", value = "$style · $personality")
+            SummaryLine(
+                label = "Tools",
+                value = if (tools.isEmpty()) "None pinned yet" else tools.joinToString(", ")
             )
         }
-        Spacer(Modifier.height(GsMotion.spaceL))
-        OnboardingOrb()
-        Spacer(Modifier.height(GsMotion.spaceXL))
+        RefFootnote("Everything here can be changed later in Settings → Personalisation.")
+    }
+}
+
+@Composable
+private fun SummaryLine(label: String, value: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 5.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
         Text(
-            text = if (name.isBlank()) "You're all set" else "You're all set, $name",
-            style = MaterialTheme.typography.displayMedium,
-            color = MaterialTheme.colorScheme.onBackground,
-            textAlign = TextAlign.Center
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = GsTheme.colors.textTertiary,
+            modifier = Modifier.width(78.dp)
         )
-        Spacer(Modifier.height(GsMotion.spaceS))
         Text(
-            text = "Your smarter world is ready.",
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center
-        )
-        Spacer(Modifier.height(GsMotion.spaceXS))
-        Text(
-            text = "Interests, models and tools are tuned to how you work.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center
+            text = value,
+            style = MaterialTheme.typography.labelMedium,
+            color = GsTheme.colors.textPrimary,
+            modifier = Modifier.weight(1f)
         )
     }
 }

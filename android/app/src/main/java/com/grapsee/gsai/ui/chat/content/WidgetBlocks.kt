@@ -6,6 +6,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -44,8 +46,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
@@ -1371,11 +1375,61 @@ private fun LineChart(w: ChartWidget, filled: Boolean) {
     val spanY = geom.spanY
     val measurer = rememberTextMeasurer()
     val axisStyle = TextStyle(fontSize = 9.sp, color = GsTheme.colors.textTertiary)
-    Canvas(Modifier.fillMaxWidth().height(180.dp).padding(top = 8.dp)) {
+    val probe = rememberChartProbe()
+    val ink = GsTheme.colors.textPrimary
+    val xLabels = remember(w.series, w.labels) {
+        val count = w.series.maxOfOrNull { it.data.size } ?: 0
+        if (w.labels.size >= count && count > 0) w.labels.take(count)
+        else List(count) { w.series.firstOrNull()?.data?.getOrNull(it)?.getOrNull(0)?.toInt()?.toString() ?: "" }
+    }
+    Canvas(
+        Modifier
+            .fillMaxWidth()
+            .height(180.dp)
+            .pointerInput(w.series, geom) {
+                detectTapGestures { at ->
+                    val padL = 34.dp.toPx()
+                    val padT = 8.dp.toPx()
+                    val cw = (size.width - padL).coerceAtLeast(1f)
+                    val ch = (size.height - padT * 2f).coerceAtLeast(1f)
+                    val tapX = at.x
+                    val tapY = at.y - padT
+                    var best: ChartDatum? = null
+                    var bestDist = Float.MAX_VALUE
+                    w.series.forEach { s ->
+                        s.data.forEachIndexed { i, pt ->
+                            val px = padL + cw * ((pt.getOrElse(0) { 0f } - minX) / spanX)
+                            val py = padT + ch * (1f - ((pt.getOrElse(1) { 0f } - minY) / spanY))
+                            val dx = px - tapX
+                            val dy = py - tapY
+                            val d = dx * dx + dy * dy
+                            if (d < bestDist) {
+                                bestDist = d
+                                best = ChartDatum(
+                                    label = xLabels.getOrElse(i) { pt.getOrElse(0) { 0f }.toInt().toString() },
+                                    value = pt.getOrElse(1) { 0f },
+                                    series = s.name,
+                                    index = i
+                                )
+                            }
+                        }
+                    }
+                    // 44dp is the touch-target radius, not a precision limit:
+                    // a tap anywhere near the series should read, not miss.
+                    if (best != null && bestDist <= (44.dp.toPx() * 44.dp.toPx())) {
+                        probe.select(best!!)
+                    } else {
+                        probe.clear()
+                    }
+                }
+            }
+            .padding(top = 8.dp)
+    ) {
         val padL = 34.dp.toPx(); val padT = 8.dp.toPx()
         val cw = (size.width - padL).coerceAtLeast(1f)
         val ch = (size.height - padT).coerceAtLeast(1f)
         val base = padT + ch
+        val selected = probe.datum
         repeat(4) { g ->
             val y = padT + ch * g / 3f
             drawLine(gridColor, Offset(padL, y), Offset(size.width, y), strokeWidth = 1f)
@@ -1422,14 +1476,30 @@ private fun LineChart(w: ChartWidget, filled: Boolean) {
             }
             drawPath(path, col, style = Stroke(width = 3.dp.toPx()))
             if (progress >= 1f) pts.forEach { drawCircle(col, radius = 3.dp.toPx(), center = it) }
+            // The selected datum gets a ring and a guide line, so "which point"
+            // is never a guess on a dense series.
+            if (selected != null && progress >= 1f &&
+                (selected.series.isNullOrBlank() || selected.series == s.name)
+            ) {
+                val idx = if (selected.index >= 0) selected.index else s.data.indexOfFirst {
+                    it.getOrElse(1) { 0f } == selected.value
+                }
+                if (idx >= 0 && idx < pts.size) {
+                    val p = pts[idx]
+                    drawLine(
+                        col.copy(alpha = 0.35f),
+                        Offset(p.x, padT),
+                        Offset(p.x, base),
+                        strokeWidth = 1.dp.toPx()
+                    )
+                    drawCircle(ink, radius = 6.5.dp.toPx(), center = p, style = Stroke(2.dp.toPx()))
+                    drawCircle(col, radius = 4.dp.toPx(), center = p)
+                }
+            }
         }
     }
+    ChartInspectBar(probe, w.unit, "Tap a point to read it", colors.firstOrNull() ?: GsTheme.colors.accent)
     // X labels in equal cells, so they line up with the points above them.
-    val xLabels = remember(w.series, w.labels) {
-        val count = w.series.maxOfOrNull { it.data.size } ?: 0
-        if (w.labels.size >= count && count > 0) w.labels.take(count)
-        else List(count) { w.series.firstOrNull()?.data?.getOrNull(it)?.getOrNull(0)?.toInt()?.toString() ?: "" }
-    }
     if (xLabels.isNotEmpty()) {
         Row(Modifier.fillMaxWidth().padding(top = 4.dp, start = 34.dp)) {
             xLabels.take(8).forEach { label ->
@@ -1469,7 +1539,7 @@ private fun niceStep(raw: Float): Float {
 }
 
 /** 1234 -> "1.2K", 0.5 -> "0.5", 100 -> "100" (+ the widget's unit). */
-private fun axisLabel(value: Float, unit: String): String {
+internal fun axisLabel(value: Float, unit: String): String {
     val n = when {
         value >= 1_000_000f -> String.format(java.util.Locale.US, "%.1fM", value / 1_000_000f)
         value >= 1_000f -> String.format(java.util.Locale.US, "%.1fK", value / 1_000f)
@@ -1487,6 +1557,7 @@ private fun BarChart(w: ChartWidget) {
     val c = GsTheme.colors
     val colors = w.series.indices.map { seriesColor(it) }
     val gridColor = c.divider
+    val probe = rememberChartProbe()
     val labels = remember(w.series, w.labels) {
         val first = w.series.firstOrNull()?.data.orEmpty()
         if (w.labels.size >= first.size) w.labels
@@ -1502,13 +1573,44 @@ private fun BarChart(w: ChartWidget) {
     // Value labels only when they cannot collide: one series, at most eight bars.
     val showValues = w.series.size == 1 && labels.size <= 8
 
-    Canvas(Modifier.fillMaxWidth().height(190.dp).padding(top = 8.dp)) {
+    Canvas(
+        Modifier
+            .fillMaxWidth()
+            .height(190.dp)
+            // Tap first, pad second: the gesture node must own the full 190dp
+            // box or the 8dp top inset would shift every hit test.
+            .pointerInput(w.series, labels) {
+                detectTapGestures { at ->
+                    val gutter = 34.dp.toPx()
+                    if (at.x < gutter) return@detectTapGestures
+                    val groups = labels.size.coerceAtLeast(1)
+                    val groupW = ((size.width - gutter).coerceAtLeast(1f)) / groups
+                    val gi = ((at.x - gutter) / groupW).toInt().coerceIn(0, groups - 1)
+                    val seriesCount = w.series.size.coerceAtLeast(1)
+                    val barW = (groupW * 0.62f) / seriesCount
+                    val local = at.x - (gutter + gi * groupW + groupW * 0.19f)
+                    val si = (local / barW).toInt().coerceIn(0, seriesCount - 1)
+                    val point = w.series.getOrNull(si)?.data?.getOrNull(gi)
+                    if (point != null) {
+                        probe.select(
+                            ChartDatum(
+                                label = labels.getOrElse(gi) { "" },
+                                value = point.getOrElse(1) { 0f },
+                                series = w.series[si].name
+                            )
+                        )
+                    }
+                }
+            }
+            .padding(top = 8.dp)
+    ) {
         val gutter = 34.dp.toPx()
         val top = 16.dp.toPx()
         val plotW = (size.width - gutter).coerceAtLeast(1f)
         val plotH = (size.height - top).coerceAtLeast(1f)
         val groups = labels.size.coerceAtLeast(1)
         val seriesCount = w.series.size.coerceAtLeast(1)
+        val selected = probe.datum
 
         repeat(4) { g ->
             val y = top + plotH * g / 3f
@@ -1533,12 +1635,25 @@ private fun BarChart(w: ChartWidget) {
                 if (h <= 0.5f) return@forEachIndexed
                 val x = gutter + gi * groupW + groupW * 0.19f + si * barW
                 val width = barW * 0.92f
+                val isSelected = selected != null &&
+                    selected.label == labels.getOrElse(gi) { "" } &&
+                    (selected.series == null || selected.series == w.series[si].name)
+                val dim = selected != null && !isSelected
                 drawRoundRect(
-                    colors[si % colors.size],
+                    colors[si % colors.size].copy(alpha = if (dim) 0.32f else 1f),
                     topLeft = Offset(x, top + plotH - h),
                     size = Size(width, h),
                     cornerRadius = radius
                 )
+                if (isSelected) {
+                    drawRoundRect(
+                        color = c.textPrimary.copy(alpha = 0.55f),
+                        topLeft = Offset(x, top + plotH - h),
+                        size = Size(width, h),
+                        cornerRadius = radius,
+                        style = Stroke(width = 1.5.dp.toPx())
+                    )
+                }
                 if (showValues) {
                     val laid = measurer.measure(axisLabel(v, w.unit), valueStyle)
                     drawText(
@@ -1552,6 +1667,7 @@ private fun BarChart(w: ChartWidget) {
             }
         }
     }
+    ChartInspectBar(probe, w.unit, "Tap a bar to inspect", colors.firstOrNull() ?: c.accent)
     // Labels sit in equal cells under the plot, so they line up with the bars
     // instead of being spread edge to edge.
     Row(Modifier.fillMaxWidth().padding(top = 4.dp, start = 34.dp)) {
@@ -1607,28 +1723,111 @@ private fun PieChart(w: ChartWidget) {
     // same colour — a five-slice pie that looked like a single-colour disc.
     val colors = slices.indices.map { seriesColor(it) }
     val total = slices.sumOf { it.second.toDouble() }.toFloat().takeIf { it > 0f } ?: 1f
-    Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Canvas(Modifier.size(140.dp)) {
-            var start = -90f
-            slices.forEachIndexed { i, (_, v) ->
-                val sweep = 360f * (v / total) * progress
-                drawArc(colors[i % colors.size], startAngle = start, sweepAngle = sweep, useCenter = true)
-                start += 360f * (v / total) * progress
+    val probe = rememberChartProbe()
+    val selected = probe.datum
+    // Hoisted: a Canvas draw lambda is not @Composable, so theme reads must
+    // happen in the composition above it.
+    val ink = GsTheme.colors.textPrimary
+
+    // Cumulative sweeps, used by BOTH the painter and the hit test so a tap
+    // always lands on the slice the reader sees, even at a boundary.
+    val sweeps = remember(slices) {
+        var running = 0f
+        slices.map { (_, v) -> running.let { start -> running += 360f * (v / total); start } }
+    }
+
+    Column {
+        Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Canvas(
+                Modifier
+                    .size(140.dp)
+                    .pointerInput(slices) {
+                        detectTapGestures { at ->
+                            val r = 70.dp.toPx()
+                            val dx = at.x - r
+                            val dy = at.y - r
+                            if (dx * dx + dy * dy > r * r) {
+                                probe.clear()
+                                return@detectTapGestures
+                            }
+                            val deg = ((Math.toDegrees(kotlin.math.atan2(dy, dx).toDouble()) + 90.0) % 360.0 + 360.0) % 360.0
+                            var hit = slices.lastIndex
+                            for (i in slices.indices) {
+                                val start = sweeps[i]
+                                val sweep = 360f * (slices[i].second / total)
+                                if (deg >= start && deg < start + sweep) {
+                                    hit = i
+                                    break
+                                }
+                            }
+                            val slice = slices.getOrNull(hit) ?: return@detectTapGestures
+                            probe.select(
+                                ChartDatum(
+                                    label = slice.first.ifEmpty { "Slice ${hit + 1}" },
+                                    value = slice.second,
+                                    share = slice.second / total,
+                                    index = hit
+                                )
+                            )
+                        }
+                    }
+            ) {
+                var start = -90f
+                slices.forEachIndexed { i, (_, v) ->
+                    val arc = 360f * (v / total) * progress
+                    drawArc(colors[i % colors.size], startAngle = start, sweepAngle = arc, useCenter = true)
+                    start += arc
+                }
+                if (selected != null && progress >= 1f) {
+                    val i = selected.index
+                    if (i in slices.indices) {
+                        drawArc(
+                            color = ink.copy(alpha = 0.65f),
+                            startAngle = -90f + sweeps[i],
+                            sweepAngle = 360f * (slices[i].second / total),
+                            useCenter = true,
+                            style = Stroke(width = 2.dp.toPx())
+                        )
+                    }
+                }
             }
-        }
-        Column(Modifier.padding(start = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            slices.forEachIndexed { i, (name, v) ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(8.dp).clip(CircleShape).background(colors[i % colors.size]))
-                    Text(
-                        "${name.ifEmpty { "Slice ${i + 1}" }} — ${((v / total) * 100).toInt()}%",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = GsTheme.colors.textSecondary,
-                        modifier = Modifier.padding(start = 8.dp)
-                    )
+            Column(Modifier.padding(start = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                slices.forEachIndexed { i, (name, v) ->
+                    val isSelected = selected?.index == i
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                role = Role.Button
+                            ) {
+                                probe.select(
+                                    ChartDatum(
+                                        label = name.ifEmpty { "Slice ${i + 1}" },
+                                        value = v,
+                                        share = v / total,
+                                        index = i
+                                    )
+                                )
+                            }
+                            .padding(horizontal = 4.dp, vertical = 3.dp)
+                    ) {
+                        Box(Modifier.size(8.dp).clip(CircleShape).background(colors[i % colors.size]))
+                        Text(
+                            "${name.ifEmpty { "Slice ${i + 1}" }} — ${((v / total) * 100).toInt()}%",
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                            ),
+                            color = if (isSelected) GsTheme.colors.textPrimary else GsTheme.colors.textSecondary,
+                            modifier = Modifier.padding(start = 8.dp)
+                        )
+                    }
                 }
             }
         }
+        ChartInspectBar(probe, w.unit, "Tap a slice to read it", colors.firstOrNull() ?: GsTheme.colors.accent)
     }
 }
 

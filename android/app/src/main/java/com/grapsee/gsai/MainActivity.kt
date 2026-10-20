@@ -20,6 +20,7 @@ import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.data.liveupdate.LiveUpdater
 import com.grapsee.gsai.data.notifications.AppForeground
 import com.grapsee.gsai.ui.settings.OnDeviceModelConsentDialog
+import com.grapsee.gsai.ui.components.ReferenceBackdrop
 import com.grapsee.gsai.ui.navigation.GsNavHost
 import com.grapsee.gsai.ui.theme.TheGsAiTheme
 
@@ -80,6 +81,11 @@ class MainActivity : ComponentActivity() {
                     // ABOVE the whole nav graph without adding a node to it. No
                     // new route, no new screen, no change to GsNavHost.
                     Box(Modifier.fillMaxSize()) {
+                        // THE BLOOM — one ambient canvas behind every screen.
+                        // Screens own content, never atmosphere; a screen that
+                        // paints its own background is a bug in the design
+                        // system, not a preference.
+                        ReferenceBackdrop()
                         GsNavHost()
                         OnDeviceModelConsentDialog()
                     }

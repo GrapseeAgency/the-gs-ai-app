@@ -1,134 +1,224 @@
 package com.grapsee.gsai.ui.agents
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
-import com.grapsee.gsai.R
-import com.grapsee.gsai.ui.components.AnimatedGsIllustration
+import com.grapsee.gsai.ui.components.RefArt
+import com.grapsee.gsai.ui.components.RefArtwork
+import com.grapsee.gsai.ui.components.RefCard
+import com.grapsee.gsai.ui.components.RefDivider
+import com.grapsee.gsai.ui.components.RefIconTile
+import com.grapsee.gsai.ui.components.RefPage
+import com.grapsee.gsai.ui.components.RefPrimaryButton
+import com.grapsee.gsai.ui.components.RefTextField
 import com.grapsee.gsai.ui.icons.GsIcons
-import com.grapsee.gsai.ui.theme.GsRadius
-import com.grapsee.gsai.ui.theme.GsSpacing
 import com.grapsee.gsai.ui.theme.GsTheme
 
+private data class TravelIdea(val title: String, val prompt: String)
+
+private val travelIdeas = listOf(
+    TravelIdea(
+        "A slow week somewhere warm",
+        "Plan a slow seven-day trip somewhere warm. Ask me my budget and preferred pace, then build a day-by-day plan with one good neighbourhood and two day trips."
+    ),
+    TravelIdea(
+        "A calm trip with family",
+        "Help me plan a calm family trip. Ask ages and how far we'll travel, then suggest three places with short transfers, easy food, and a rest day between activities."
+    ),
+    TravelIdea(
+        "A work trip that leaves room to look around",
+        "I have a work trip coming up. Ask me the city and the meeting hours, then build an itinerary that protects focus time and adds one good walk each evening."
+    ),
+    TravelIdea(
+        "Compare two cities honestly",
+        "Compare two cities for a four-night break. Ask me the month and budget, then use a table for cost, weather, walkability and the one thing each city does better."
+    )
+)
+
+/**
+ * Travel agent — a real door into chat, not a static brochure.
+ *
+ * The old screen used two legacy PNG orbs and four cards whose actions all
+ * sent nearly the same sentence. This version is the reference language: one
+ * hand-drawn scene, four distinct prompts, and a composer that sends the words
+ * the person actually typed.
+ */
 @Composable
 fun TravelAgentScreen(onBack: () -> Unit, onSendToChat: (String) -> Unit) {
-    val colors = GsTheme.colors
-    Column(
-        Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFFFFB36D).copy(alpha = .24f), colors.appBackground, colors.appBackground)))
-            .padding(horizontal = GsSpacing.m)
+    var brief by remember { mutableStateOf("") }
+
+    RefPage(
+        title = "Travel agent",
+        subtitle = "Plans, routes and honest trade-offs.",
+        onBack = onBack
     ) {
-        Spacer(Modifier.height(GsSpacing.s))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Surface(onClick = onBack, shape = CircleShape, color = colors.surface) {
-                Icon(GsIcons.ChevronLeft, contentDescription = "Back", modifier = Modifier.padding(12.dp), tint = colors.textPrimary)
+        RefCard(padding = androidx.compose.foundation.layout.PaddingValues(22.dp)) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                RefArtwork(art = RefArt.Bloom, size = 120.dp)
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = "Where are we going?",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = GsTheme.colors.textPrimary
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = "Tell me the month, the budget and who's coming. I'll ask what I still need, then shape the days around how you actually travel.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = GsTheme.colors.textSecondary
+                )
             }
-            Spacer(Modifier.width(GsSpacing.s))
-            Text("Travel Agent", style = MaterialTheme.typography.titleLarge, color = colors.textPrimary, modifier = Modifier.weight(1f))
-            Surface(shape = CircleShape, color = colors.accentSoft) {
-                Icon(GsIcons.Globe, contentDescription = "Travel tools", modifier = Modifier.padding(11.dp), tint = colors.accent)
+        }
+
+        Spacer(Modifier.height(18.dp))
+        Text(
+            text = "Start with a brief",
+            style = MaterialTheme.typography.titleSmall,
+            color = GsTheme.colors.textPrimary,
+            modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+        )
+        RefTextField(
+            value = brief,
+            onValueChange = { brief = it },
+            label = "Your trip",
+            placeholder = "e.g. Lisbon in April, four nights, two of us, medium budget",
+            singleLine = false,
+            minLines = 3,
+            imeAction = ImeAction.Done,
+            onDone = {
+                val prompt = brief.trim().ifBlank { "Help me plan a thoughtful trip." }
+                onSendToChat(prompt)
             }
-        }
-        Spacer(Modifier.height(GsSpacing.xl))
-        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-            AnimatedGsIllustration(R.drawable.gs_travel_agent_orb, "Travel Agent", 148.dp, shape = CircleShape, breathDuration = 4100, rotationDegrees = 1.6f, liftPixels = -4f, startDelayMillis = 260)
-            Spacer(Modifier.height(GsSpacing.m))
-            Text("Welcome to Travel Agent", style = MaterialTheme.typography.headlineSmall, color = colors.textPrimary, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(GsSpacing.s))
-            Text("Your own smart companion is here to make every journey feel easier.", style = MaterialTheme.typography.bodyMedium, color = colors.textSecondary)
-        }
-        Spacer(Modifier.height(GsSpacing.l))
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(GsSpacing.s)) {
-            AgentChip("Yesterday", GsIcons.History, onSendToChat)
-            AgentChip("Creative", GsIcons.Wand, onSendToChat)
-            AgentChip("Planning", GsIcons.Compass, onSendToChat)
-        }
-        Spacer(Modifier.height(GsSpacing.l))
-        Surface(shape = GsRadius.cardShape(), color = colors.surface, shadowElevation = 2.dp, modifier = Modifier.fillMaxWidth()) {
-            Row(Modifier.padding(GsSpacing.m), verticalAlignment = Alignment.CenterVertically) {
-                Surface(shape = CircleShape, color = colors.accentSoft) { Icon(GsIcons.Globe, contentDescription = null, modifier = Modifier.padding(10.dp), tint = colors.accent) }
-                Spacer(Modifier.width(GsSpacing.s))
-                Column(Modifier.weight(1f)) {
-                    Text("Plan your next escape", style = MaterialTheme.typography.titleMedium, color = colors.textPrimary)
-                    Text("Destinations, stays, routes, and beautiful details.", style = MaterialTheme.typography.bodySmall, color = colors.textSecondary)
+        )
+        Spacer(Modifier.height(10.dp))
+        RefPrimaryButton(
+            label = "Plan with GS",
+            icon = GsIcons.ArrowUp,
+            onClick = {
+                val prompt = brief.trim().ifBlank {
+                    "Help me plan a thoughtful trip. Ask me where, when, who's coming and the budget."
                 }
-                Icon(GsIcons.ChevronRight, contentDescription = null, tint = colors.textSecondary)
+                onSendToChat(prompt)
+            }
+        )
+
+        Spacer(Modifier.height(22.dp))
+        Text(
+            text = "Or borrow a starting point",
+            style = MaterialTheme.typography.titleSmall,
+            color = GsTheme.colors.textPrimary,
+            modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+        )
+        RefCard {
+            travelIdeas.forEachIndexed { index, idea ->
+                if (index > 0) RefDivider()
+                IdeaRow(idea) { onSendToChat(idea.prompt) }
             }
         }
-        Spacer(Modifier.height(GsSpacing.s))
-        Surface(shape = GsRadius.cardShape(), color = Color.White.copy(alpha = .58f), modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(GsSpacing.m)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Surface(shape = CircleShape, color = Color(0xFFFFB169).copy(alpha = .35f)) {
-                        Icon(GsIcons.Globe, contentDescription = null, modifier = Modifier.padding(9.dp), tint = colors.accent)
-                    }
-                    Spacer(Modifier.width(GsSpacing.s))
-                    Text("Travel Agent", style = MaterialTheme.typography.titleMedium, color = colors.textPrimary)
-                }
-                Spacer(Modifier.height(GsSpacing.s))
-                Text("Tell me where you want to go, and I’ll shape the whole journey around you.", style = MaterialTheme.typography.bodyMedium, color = colors.textPrimary)
-                Spacer(Modifier.height(GsSpacing.m))
-                Row(horizontalArrangement = Arrangement.spacedBy(GsSpacing.s)) {
-                    MediaAction("Gif", GsIcons.Image, onSendToChat)
-                    MediaAction("Image", GsIcons.ImagePlus, onSendToChat)
-                    MediaAction("Video", GsIcons.Presentation, onSendToChat)
-                }
-            }
+
+        Spacer(Modifier.height(20.dp))
+        RefCard {
+            CapabilityRow(GsIcons.Compass, "Itineraries that breathe", "One anchor a day, not eight stops and a sprint.")
+            RefDivider()
+            CapabilityRow(GsIcons.Globe, "Routes and neighbourhoods", "Walk times, transfers and where to stay for the trip you want.")
+            RefDivider()
+            CapabilityRow(GsIcons.Gauge, "Budgets you can read", "A table with the real trade-offs, not a single invented total.")
+            RefDivider()
+            CapabilityRow(GsIcons.FileText, "A plan you can keep", "Ask for a day-by-day table, a packing list, or a map with pins.")
         }
-        Spacer(Modifier.weight(1f))
-        Surface(onClick = { onSendToChat("Help me plan a thoughtful trip") }, shape = GsRadius.inputShape(), color = colors.surface, shadowElevation = 3.dp, modifier = Modifier.fillMaxWidth()) {
-            Row(Modifier.padding(horizontal = GsSpacing.m, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("Ask me anything...", style = MaterialTheme.typography.bodyMedium, color = colors.textSecondary, modifier = Modifier.weight(1f))
-                Surface(shape = CircleShape, color = colors.accent) { Icon(GsIcons.ArrowUp, contentDescription = "Send", modifier = Modifier.padding(9.dp), tint = colors.onAccent) }
-            }
-        }
-        Spacer(Modifier.height(GsSpacing.l))
+        Text(
+            text = "Travel details change. Verify opening hours, visas and prices before you book.",
+            style = MaterialTheme.typography.labelSmall,
+            color = GsTheme.colors.textTertiary,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 16.dp)
+        )
     }
 }
 
 @Composable
-private fun MediaAction(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onSend: (String) -> Unit) {
-    Surface(onClick = { onSend("Generate a $label for my trip") }, shape = GsRadius.pill, color = GsTheme.colors.accentSoft) {
-        Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, contentDescription = null, modifier = Modifier.size(15.dp), tint = GsTheme.colors.accent)
-            Spacer(Modifier.width(5.dp))
-            Text(label, style = MaterialTheme.typography.labelMedium, color = GsTheme.colors.textPrimary)
-        }
+private fun IdeaRow(idea: TravelIdea, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 62.dp)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                role = Role.Button,
+                onClickLabel = idea.title,
+                onClick = onClick
+            )
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        RefIconTile(GsIcons.Compass)
+        Text(
+            text = idea.title,
+            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+            color = GsTheme.colors.textPrimary,
+            modifier = Modifier.weight(1f)
+        )
+        Icon(
+            GsIcons.ChevronRight,
+            contentDescription = null,
+            tint = GsTheme.colors.textTertiary,
+            modifier = Modifier.size(18.dp)
+        )
     }
 }
 
 @Composable
-private fun AgentChip(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onSend: (String) -> Unit) {
-    Surface(onClick = { onSend("Open my $label travel ideas") }, shape = GsRadius.pill, color = GsTheme.colors.surface, shadowElevation = 1.dp) {
-        Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, contentDescription = null, modifier = Modifier.size(15.dp), tint = GsTheme.colors.accent)
-            Spacer(Modifier.width(6.dp))
-            Text(label, style = MaterialTheme.typography.labelMedium, color = GsTheme.colors.textPrimary)
+private fun CapabilityRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    caption: String,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        RefIconTile(icon, tint = GsTheme.colors.textSecondary)
+        Column(Modifier.weight(1f)) {
+            Text(
+                title,
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                color = GsTheme.colors.textPrimary
+            )
+            Text(
+                caption,
+                style = MaterialTheme.typography.labelMedium,
+                color = GsTheme.colors.textSecondary
+            )
         }
     }
 }

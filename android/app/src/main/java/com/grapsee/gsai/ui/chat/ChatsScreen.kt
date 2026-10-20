@@ -1,30 +1,25 @@
 package com.grapsee.gsai.ui.chat
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-// Material3 1.3.0: PullToRefreshBox lives in the pulltorefresh sub-package
-// (top-level material3.PullToRefreshBox only arrived later).
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
-import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -36,9 +31,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalView
-import android.view.HapticFeedbackConstants
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.data.local.ConversationEntity
 import com.grapsee.gsai.data.local.ConversationPreviewRow
@@ -46,52 +43,50 @@ import com.grapsee.gsai.data.liveupdate.LiveUpdateState
 import com.grapsee.gsai.data.liveupdate.LiveUpdater
 import com.grapsee.gsai.di.ServiceLocator
 import com.grapsee.gsai.ui.components.ConversationActionsSheet
-import com.grapsee.gsai.ui.components.GsCard
-import com.grapsee.gsai.ui.components.GsChip
-import com.grapsee.gsai.ui.components.GsEmptyState
-import com.grapsee.gsai.ui.components.GsListItem
-import com.grapsee.gsai.ui.components.GsOfflineBanner
-import com.grapsee.gsai.ui.components.GsScreenScaffold
+import com.grapsee.gsai.ui.components.RefArt
+import com.grapsee.gsai.ui.components.RefCard
+import com.grapsee.gsai.ui.components.RefDivider
+import com.grapsee.gsai.ui.components.RefEmptyState
+import com.grapsee.gsai.ui.components.RefIconButton
+import com.grapsee.gsai.ui.components.RefIconTile
+import com.grapsee.gsai.ui.components.RefPage
+import com.grapsee.gsai.ui.components.RefSegmented
 import com.grapsee.gsai.ui.components.gsConversationTitle
-import com.grapsee.gsai.ui.components.GsSkeleton
 import com.grapsee.gsai.ui.components.rememberDeviceOffline
+import com.grapsee.gsai.ui.icons.GsIcons
 import com.grapsee.gsai.ui.navigation.GsRoutes
-import com.grapsee.gsai.ui.theme.GsMotion
-import com.grapsee.gsai.ui.theme.gsHaptic
+import com.grapsee.gsai.ui.theme.GsTheme
 import java.time.Duration
 import java.time.OffsetDateTime
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
-import com.grapsee.gsai.ui.icons.GsIcons
 
 /**
- * Chats hub — Room conversation list as the source of truth with the
- * backend sync engine behind it. Nothing is invented when the list is
- * empty: an honest empty state is shown instead of sample rows. The only
- * quick link is Archive (a real store-backed surface — Folders and Shared
- * were dead fabrication and are gone). Rows carry the benchmark action set
- * (pin / archive / delete) via the overflow menu.
+ * Chats — the conversation shelf.
+ *
+ * One page title, one segmented filter, one glass group of real Room rows.
+ * Nothing here is invented: the list is the on-device store, the preview is
+ * the last real message, and the empty state says so. The old screen wrapped
+ * each row in its own card and painted a separate gradient behind the page;
+ * both fought the bloom. Now the page is transparent and the rows share one
+ * cream surface, like the reference.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatsScreen(onNavigate: (String) -> Unit) {
     val conversationList = remember { conversationsPreviewFlow() }
     val conversations by conversationList.collectAsStateWithLifecycle(initialValue = emptyList())
-    // GS LiveUpdate state — the pill below is its only UI surface.
     val liveUpdate by LiveUpdater.state.collectAsStateWithLifecycle()
     val offline by rememberDeviceOffline()
     val scope = rememberCoroutineScope()
-    val view = LocalView.current
 
     var firstLoadDone by rememberSaveable { mutableStateOf(false) }
     var filter by rememberSaveable { mutableStateOf(FILTER_ALL) }
     var actionTarget by remember { mutableStateOf<ConversationEntity?>(null) }
-    // Pull-to-refresh honesty: this flag IS the in-flight refreshConversations()
-    // call — the spinner never shows when no refresh is running.
     var refreshing by remember { mutableStateOf(false) }
 
     suspend fun doRefresh() {
+        if (refreshing) return
         refreshing = true
         runCatching { ServiceLocator.chat.refreshConversations() }
         refreshing = false
@@ -100,152 +95,150 @@ fun ChatsScreen(onNavigate: (String) -> Unit) {
 
     LaunchedEffect(Unit) { doRefresh() }
 
-    // No sample fallback: when Room is empty the honest empty state shows.
     val rows = when (filter) {
         FILTER_PINNED -> conversations.filter { it.conversation.pinned }
         else -> conversations
     }
     val loading = !firstLoadDone && conversations.isEmpty()
 
-    GsScreenScaffold(
+    RefPage(
         title = "Chats",
+        subtitle = "Every conversation stays on this device.",
+        onBack = null,
         actions = {
-            IconButton(onClick = { onNavigate(GsRoutes.CHAT_SEARCH) }) {
-                Icon(GsIcons.Search, contentDescription = "Search chats",
-                    tint = MaterialTheme.colorScheme.onBackground)
-            }
-            IconButton(onClick = { onNavigate(GsRoutes.chat(null)) }) {
-                Icon(GsIcons.Plus, contentDescription = "New chat",
-                    tint = MaterialTheme.colorScheme.onBackground)
-            }
+            RefIconButton(
+                icon = GsIcons.Search,
+                label = "Search chats",
+                onClick = { onNavigate(GsRoutes.CHAT_SEARCH) }
+            )
+            RefIconButton(
+                icon = GsIcons.SquarePen,
+                label = "New chat",
+                onClick = { onNavigate(GsRoutes.chat(null)) }
+            )
         }
     ) {
-        // Material3 1.3 pull-to-refresh around the whole hub content; the list
-        // underneath is a LazyColumn, so the nested-scroll drag is handed to
-        // the indicator only at the top of the list.
-        PullToRefreshBox(
-            isRefreshing = refreshing,
-            onRefresh = { scope.launch { doRefresh() } },
-            state = rememberPullToRefreshState(),
-            modifier = Modifier.fillMaxWidth().weight(1f)
+        if (offline) {
+            InfoCard(
+                icon = GsIcons.WifiOff,
+                title = "Working offline",
+                body = "New replies will use the built-in responder until the connection is back."
+            )
+        }
+
+        when (val update = liveUpdate) {
+            is LiveUpdateState.Available -> InfoCard(
+                icon = GsIcons.Download,
+                title = "GS ${update.versionName} is ready",
+                body = "Tap to install the update.",
+                onClick = { LiveUpdater.beginInstallFlow() }
+            )
+            is LiveUpdateState.Downloading -> InfoCard(
+                icon = GsIcons.Download,
+                title = "Updating… ${update.percent}%",
+                body = "Keep GS open for a moment."
+            )
+            is LiveUpdateState.Ready -> InfoCard(
+                icon = GsIcons.Download,
+                title = "Starting installer…",
+                body = "The system will ask you to confirm."
+            )
+            is LiveUpdateState.Failed -> InfoCard(
+                icon = GsIcons.CircleAlert,
+                title = "Update didn't finish",
+                body = "Tap to try again.",
+                onClick = { LiveUpdater.beginInstallFlow() }
+            )
+            is LiveUpdateState.Idle -> Unit
+        }
+
+        Spacer(Modifier.height(16.dp))
+        RefSegmented(
+            options = listOf(FILTER_ALL, FILTER_PINNED),
+            selected = filter,
+            onSelect = { filter = it },
+            modifier = Modifier.padding(horizontal = 2.dp)
+        )
+
+        Spacer(Modifier.height(14.dp))
+        RefCard {
+            ShelfRow(
+                title = "Archive",
+                subtitle = "Chats you've put away",
+                icon = GsIcons.Archive,
+                onClick = { onNavigate(GsRoutes.CHAT_ARCHIVE) }
+            )
+            RefDivider()
+            ShelfRow(
+                title = "Search chats",
+                subtitle = "Find a word across every message",
+                icon = GsIcons.TextSearch,
+                onClick = { onNavigate(GsRoutes.CHAT_SEARCH) }
+            )
+        }
+
+        Spacer(Modifier.height(20.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(GsMotion.spaceM)
-        ) {
-            GsOfflineBanner(visible = offline)
+            Text(
+                text = if (filter == FILTER_PINNED) "Pinned" else "Recent",
+                style = MaterialTheme.typography.titleSmall,
+                color = GsTheme.colors.textPrimary,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = when {
+                    loading -> "Checking…"
+                    refreshing -> "Refreshing…"
+                    rows.isEmpty() -> "Nothing yet"
+                    else -> "${rows.size} conversation${if (rows.size == 1) "" else "s"}"
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = GsTheme.colors.textTertiary
+            )
+        }
+        Spacer(Modifier.height(8.dp))
 
-            // GS LiveUpdate pill — the one-tap install surface for the update
-            // check that runs on foreground (MainActivity ON_START). Before
-            // 0.77.8 the updater was fully built but never called and never
-            // shown, while the About screen claimed "Automatic via GS
-            // LiveUpdate" — a claim with nothing behind it. Idle renders
-            // nothing at all, which is the state for 99% of users.
-            when (val update = liveUpdate) {
-                is LiveUpdateState.Available -> UpdatePill(
-                    text = "GS ${update.versionName} is ready · tap to update",
-                    onClick = { LiveUpdater.beginInstallFlow() }
-                )
-                is LiveUpdateState.Downloading -> UpdatePill(
-                    text = "Updating… ${update.percent}%",
-                    onClick = {}
-                )
-                is LiveUpdateState.Ready -> UpdatePill(text = "Starting installer…", onClick = {})
-                is LiveUpdateState.Failed -> UpdatePill(
-                    text = "Update didn't finish · tap to retry",
-                    onClick = { LiveUpdater.beginInstallFlow() }
-                )
-                is LiveUpdateState.Idle -> Unit
-            }
-
-            // Archive only: the one quick link with a real destination behind
-            // it. Folders and Shared led to hardcoded fake screens and are
-            // deliberately not offered.
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                QuickLink("Archive", GsIcons.Archive) { onNavigate(GsRoutes.CHAT_ARCHIVE) }
-            }
-
-            // All/Pinned only — both are computed from real Room state. The
-            // old "Unread" chip was hardcoded to filter to an empty list
-            // (nothing tracks read state), so it never offered anything true.
-            Row(horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)) {
-                listOf(FILTER_ALL, FILTER_PINNED).forEach { label ->
-                    GsChip(text = label, selected = filter == label) {
-                        view.gsHaptic(HapticFeedbackConstants.VIRTUAL_KEY)
-                        filter = label
-                    }
+        when {
+            loading -> RefCard {
+                repeat(3) { index ->
+                    if (index > 0) RefDivider()
+                    SkeletonRow()
                 }
             }
-
-            when {
-                loading -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    GsSkeleton(68)
-                    GsSkeleton(68)
-                    GsSkeleton(68)
-                }
-                rows.isEmpty() -> GsEmptyState(
-                    icon = GsIcons.Inbox,
-                    title = if (filter == FILTER_PINNED) "Nothing pinned yet" else "No conversations yet",
-                    message = if (filter == FILTER_PINNED) {
-                        "Pin a chat from its overflow menu and it will live here."
-                    } else {
-                        "Start a chat with the + button and it will show up here."
-                    }
-                )
-                else -> LazyColumn(
-                    modifier = Modifier.fillMaxWidth().weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(rows, key = { it.conversation.id }) { row ->
-                        GsListItem(
-                            title = gsConversationTitle(row.conversation.title),
-                            subtitle = previewLine(row),
-                            leading = {
-                                Surface(
-                                    shape = CircleShape,
-                                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                    modifier = Modifier.size(38.dp)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            GsIcons.MessageCircle,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
-                                }
-                            },
-                            trailing = {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    if (row.conversation.pinned) {
-                                        Icon(
-                                            GsIcons.Star,
-                                            contentDescription = "Pinned",
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
-                                    IconButton(
-                                        onClick = { actionTarget = row.conversation },
-                                        modifier = Modifier.size(30.dp)
-                                    ) {
-                                        Icon(
-                                            GsIcons.EllipsisVertical,
-                                            contentDescription = "Conversation actions",
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
-                                }
-                            },
-                            onClick = { onNavigate(GsRoutes.chat(row.conversation.id)) }
-                        )
-                    }
+            rows.isEmpty() -> RefEmptyState(
+                art = if (filter == FILTER_PINNED) RefArt.Archive else RefArt.Conversation,
+                title = if (filter == FILTER_PINNED) "Nothing pinned yet" else "No conversations yet",
+                message = if (filter == FILTER_PINNED) {
+                    "Pin a chat from its row menu and it will wait here."
+                } else {
+                    "Start with a thought. Your first conversation will live here."
+                },
+                actionLabel = if (filter == FILTER_PINNED) null else "Start a chat",
+                onAction = if (filter == FILTER_PINNED) null else ({ onNavigate(GsRoutes.chat(null)) })
+            )
+            else -> RefCard {
+                rows.forEachIndexed { index, row ->
+                    if (index > 0) RefDivider()
+                    ChatRow(
+                        row = row,
+                        onClick = { onNavigate(GsRoutes.chat(row.conversation.id)) },
+                        onActions = { actionTarget = row.conversation }
+                    )
                 }
             }
         }
-        }
+
+        Text(
+            text = "History is stored locally. Signing out keeps it on this device.",
+            style = MaterialTheme.typography.labelSmall,
+            color = GsTheme.colors.textTertiary,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 18.dp)
+        )
     }
 
     val target = actionTarget
@@ -275,75 +268,220 @@ fun ChatsScreen(onNavigate: (String) -> Unit) {
 }
 
 @Composable
-private fun UpdatePill(text: String, onClick: () -> Unit) {
-    Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+private fun InfoCard(
+    icon: ImageVector,
+    title: String,
+    body: String,
+    onClick: (() -> Unit)? = null,
+) {
+    RefCard(
         modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .padding(bottom = 10.dp)
+            .then(
+                if (onClick != null) Modifier.clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    role = Role.Button,
+                    onClick = onClick
+                ) else Modifier
+            )
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = GsMotion.spaceM, vertical = 10.dp),
+            modifier = Modifier.padding(14.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Icon(
-                GsIcons.Download,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(18.dp)
+            RefIconTile(icon)
+            Column(Modifier.weight(1f)) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                    color = GsTheme.colors.textPrimary
+                )
+                Text(
+                    body,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = GsTheme.colors.textSecondary
+                )
+            }
+            if (onClick != null) {
+                Icon(
+                    GsIcons.ChevronRight,
+                    contentDescription = null,
+                    tint = GsTheme.colors.textTertiary,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ShelfRow(
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 62.dp)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                role = Role.Button,
+                onClickLabel = title,
+                onClick = onClick
+            )
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        RefIconTile(icon)
+        Column(Modifier.weight(1f)) {
+            Text(
+                title,
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                color = GsTheme.colors.textPrimary
             )
             Text(
-                text = text,
+                subtitle,
                 style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurface
+                color = GsTheme.colors.textSecondary
+            )
+        }
+        Icon(
+            GsIcons.ChevronRight,
+            contentDescription = null,
+            tint = GsTheme.colors.textTertiary,
+            modifier = Modifier.size(18.dp)
+        )
+    }
+}
+
+@Composable
+private fun ChatRow(
+    row: ConversationPreviewRow,
+    onClick: () -> Unit,
+    onActions: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 72.dp)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                role = Role.Button,
+                onClickLabel = gsConversationTitle(row.conversation.title),
+                onClick = onClick
+            )
+            .padding(start = 14.dp, end = 6.dp, top = 10.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(GsTheme.colors.accentSoft),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                GsIcons.MessageCircle,
+                contentDescription = null,
+                tint = GsTheme.colors.accentStrong,
+                modifier = Modifier.size(19.dp)
+            )
+        }
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    gsConversationTitle(row.conversation.title),
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                    color = GsTheme.colors.textPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                if (row.conversation.pinned) {
+                    Spacer(Modifier.width(6.dp))
+                    Icon(
+                        GsIcons.Star,
+                        contentDescription = "Pinned",
+                        tint = GsTheme.colors.accentStrong,
+                        modifier = Modifier.size(13.dp)
+                    )
+                }
+            }
+            Text(
+                previewLine(row),
+                style = MaterialTheme.typography.labelMedium,
+                color = GsTheme.colors.textSecondary,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        IconButton(onClick = onActions, modifier = Modifier.size(38.dp)) {
+            Icon(
+                GsIcons.EllipsisVertical,
+                contentDescription = "Conversation actions",
+                tint = GsTheme.colors.textTertiary,
+                modifier = Modifier.size(18.dp)
             )
         }
     }
 }
 
 @Composable
-private fun RowScope.QuickLink(label: String, icon: ImageVector, onClick: () -> Unit) {
-    GsCard(modifier = Modifier.weight(1f), onClick = onClick) {
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Icon(icon, contentDescription = label,
-                tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.height(GsMotion.spaceXS))
-            Text(label, style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurface)
+private fun SkeletonRow() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 72.dp)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Box(
+            Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(GsTheme.colors.border.copy(alpha = 0.45f))
+        )
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            Box(
+                Modifier
+                    .fillMaxWidth(0.55f)
+                    .height(11.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(GsTheme.colors.border.copy(alpha = 0.55f))
+            )
+            Box(
+                Modifier
+                    .fillMaxWidth(0.85f)
+                    .height(9.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(GsTheme.colors.border.copy(alpha = 0.35f))
+            )
         }
     }
 }
-
-// --- null-safe ServiceLocator access (previews never crash) -----------------
-
-// rememberDeviceOffline lives in ui.components (shared with the chat surface).
 
 private fun conversationsPreviewFlow(): Flow<List<ConversationPreviewRow>> =
     runCatching { ServiceLocator.db.conversationDao().observeActiveWithPreview() }
         .getOrElse { flowOf(emptyList()) }
 
-// --- filters -----------------------------------------------------------------
-
 private const val FILTER_ALL = "All"
 private const val FILTER_PINNED = "Pinned"
 
-/**
- * The row subtitle: the REAL last message when the conversation has turns
- * (one line, clipped, then the relative time — the benchmark list shape),
- * and the honest relative time alone when it has none. The old row printed
- * "Last message · 5m ago" for every chat, which was a preview label glued
- * to a timestamp and never any message text at all.
- */
+/** The real last message + its moment, or just the moment when there is none. */
 private fun previewLine(row: ConversationPreviewRow): String {
     val message = row.lastMessage?.trim()?.replace('\n', ' ')?.trim()
     return when {
         !message.isNullOrBlank() -> {
-            val clipped = if (message.length > 80) message.take(80) + "…" else message
+            val clipped = if (message.length > 90) message.take(90) + "…" else message
             "$clipped · ${relativeTime(row.conversation.updatedAt)}"
         }
         else -> relativeTime(row.conversation.updatedAt)

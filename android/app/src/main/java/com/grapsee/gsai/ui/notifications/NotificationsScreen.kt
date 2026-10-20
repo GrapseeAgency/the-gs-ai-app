@@ -1,34 +1,45 @@
 package com.grapsee.gsai.ui.notifications
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import com.grapsee.gsai.ui.components.GsEmptyState
-import com.grapsee.gsai.ui.components.GsScreenScaffold
+import androidx.compose.ui.unit.dp
+import com.grapsee.gsai.ui.components.RefArt
+import com.grapsee.gsai.ui.components.RefEmptyState
+import com.grapsee.gsai.ui.components.RefPage
 import com.grapsee.gsai.ui.icons.GsIcons
+import com.grapsee.gsai.ui.navigation.GsRoutes
+import com.grapsee.gsai.ui.components.RefSection
+import com.grapsee.gsai.ui.components.RefRow
 
 /**
- * Notifications — honest gate. No notification channel is wired yet, so
- * there is nothing to list: the eight hardcoded sample alerts that used to
- * populate this screen (with deep links into fake destinations) simulated
- * activity that never happened. The screen keeps its place in the shell and
- * states the truth: nothing here, updates will land when they are real.
+ * Notifications — honest gate with a way out.
+ *
+ * No notification feed is wired, so there is nothing to list. The empty state
+ * is hand-drawn, and the two real controls live below it: the reply notice
+ * switch and the system notification settings. The old page was a blank
+ * centered label with no action at all.
  */
 @Composable
 fun NotificationsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit) {
-    GsScreenScaffold(title = "Notifications", onBack = onBack) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            GsEmptyState(
-                icon = GsIcons.Bell,
-                title = "You're all caught up",
-                message = "Updates about your conversations will appear here.",
-                modifier = Modifier.fillMaxWidth()
+    RefPage(
+        title = "Notifications",
+        subtitle = "Only what finished while you were away.",
+        onBack = onBack
+    ) {
+        RefEmptyState(
+            art = RefArt.Notifications,
+            title = "You're all caught up",
+            message = "Finished replies will appear here when GS is working in the background. There is no feed to scroll."
+        )
+        Spacer(Modifier.height(6.dp))
+        RefSection(label = "Controls") {
+            RefRow(
+                title = "Notification settings",
+                subtitle = "Reply notices, permission and channel",
+                icon = GsIcons.SlidersHorizontal,
+                onClick = { onNavigate(GsRoutes.SETTINGS_NOTIFICATIONS) }
             )
         }
     }

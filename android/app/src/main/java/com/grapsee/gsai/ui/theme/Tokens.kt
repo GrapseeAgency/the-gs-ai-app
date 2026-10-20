@@ -38,6 +38,21 @@ data class GsColors(
     val dialogSurface: Color,        // dialogs / confirmations
     val navSurface: Color,           // drawer / navigation chrome
 
+    // ---- Glass (the reference's signature material) --------------------------
+    // The reference light is a large soft source above and slightly LEFT, in
+    // every one of the source screens. That single fact is what makes these
+    // surfaces read as glass rather than plastic, so the rim is split into a
+    // lit end and an unlit end rather than being one uniform hairline: the
+    // top-left edge catches the light, the bottom-right edge falls away.
+    val glassSurface: Color,         // translucent card fill over the bloom
+    val glassBorder: Color,          // warm hairline around glass (unlit reference)
+    val glassHighlight: Color,       // top-edge inner light / lit end of the rim
+    val glassRimShadow: Color,       // unlit end of the directional rim
+    // Glass casts light through itself, so its shadow is never neutral grey:
+    // it carries the warm hue of the scene and is far wider than its offset.
+    val glassShadowAmbient: Color,   // warm, wide, low-contrast contact shadow
+    val glassShadowSpot: Color,      // warm, diffuse cast shadow (soft source)
+
     // ---- Text hierarchy ------------------------------------------------------
     val textPrimary: Color,
     val textSecondary: Color,
@@ -94,57 +109,74 @@ data class GsColors(
 private const val SCRIM_LIGHT = 0x80000000L // 50% black
 private const val SCRIM_DARK = 0x99000000L  // 60% black
 
-/** Light appearance — deliberate paper-editorial theme, not "default white". */
-fun lightGsColors(highContrast: Boolean = false): GsColors {
-    val textSecondary = if (highContrast) Color(0xFF5A4037) else Aeruo.InkMuted
-    val border = if (highContrast) Color(0xFFC48E78) else Aeruo.OutlineLight
+/**
+ * Light appearance — blush paper, cream glass, apricot ink.
+ *
+ * `accentId` resolves one of the six families in [GsAccents]; every accent
+ * role below is derived from it, so Appearance → Accent colour is a real
+ * re-theme rather than a swatch that does nothing.
+ */
+fun lightGsColors(highContrast: Boolean = false, accentId: String = "apricot"): GsColors {
+    val accent = GsAccents.byId(accentId)
+    val textSecondary = if (highContrast) Color(0xFF5C4138) else Aeruo.InkMuted
+    val textTertiary = if (highContrast) Color(0xFF74584F) else Color(0xFF9C7F75)
+    val border = if (highContrast) Color(0xFFC99682) else Aeruo.OutlineLight
     return GsColors(
         appBackground = Aeruo.Paper,
         secondaryBackground = Aeruo.ContainerLowLight,
         surface = Aeruo.SurfaceLight,
-        elevatedSurface = Aeruo.SurfaceLight,
-        raisedSurface = Aeruo.ContainerLowLight,
-        inputSurface = Aeruo.ContainerLowLight,
-        sheetSurface = Aeruo.SurfaceLight,
-        dialogSurface = Aeruo.SurfaceLight,
-        navSurface = Aeruo.SurfaceLight,
+        elevatedSurface = Color(0xFFFFFFFF),
+        raisedSurface = Aeruo.SurfaceRaisedLight,
+        inputSurface = Color(0xFFFFF7F2),
+        sheetSurface = Color(0xFFFFFBF8),
+        dialogSurface = Color(0xFFFFFCFA),
+        navSurface = Color(0xFFFFFBF8),
 
-        textPrimary = if (highContrast) Color(0xFF000000) else Aeruo.Ink,
+        glassSurface = Color(0xCCFFFDFB),
+        glassBorder = Color(0xCCF4DBD0),
+        glassHighlight = Color(0xE6FFFFFF),
+        glassRimShadow = Color(0x30D9A08A),
+        glassShadowAmbient = Color(0x14A65A38),
+        glassShadowSpot = Color(0x1FA65A38),
+
+        textPrimary = if (highContrast) Color(0xFF1F1210) else Aeruo.Ink,
         textSecondary = textSecondary,
-        textTertiary = Color(0xFFB08D80),
-        textDisabled = Color(0xFFC0C4CB),
-        textPlaceholder = Color(0xFFB08D80),
+        textTertiary = textTertiary,
+        textDisabled = Color(0xFFB9A49C),
+        textPlaceholder = Color(0xFFA5897F),
         textInverted = Color(0xFFFFFFFF),
-        link = Aeruo.Ink,
+        // Links were previously ink-on-ink: a tappable line that looked
+        // exactly like body copy. They now carry the accent.
+        link = accent.strong,
 
         border = border,
-        borderStrong = if (highContrast) Color(0xFFA96B53) else Color(0xFFFFC7B1),
-        divider = Color(0xFFF4DCD2),
-        selected = Aeruo.AccentDeep,
-        pressedOverlay = Color(0x14F36F2C), // 6% ink
-        focus = Aeruo.AccentDeep,
+        borderStrong = if (highContrast) Color(0xFFB07A64) else Color(0xFFF0C4B0),
+        divider = Aeruo.DividerLight,
+        selected = accent.base,
+        pressedOverlay = accent.soft,
+        focus = accent.base,
         scrim = Color(SCRIM_LIGHT),
 
-        accent = Aeruo.AccentDeep,
-        accentStrong = Color(0xFFF36F2C),
-        accentSoft = Aeruo.AccentSoftLight,
-        onAccent = Color(0xFFFFFFFF),
+        accent = accent.base,
+        accentStrong = accent.strong,
+        accentSoft = accent.soft,
+        onAccent = accent.on,
         success = Aeruo.SuccessLight,
-        successSoft = Color(0x1A2E7D53),
+        successSoft = Color(0x1A2F7D57),
         warning = Aeruo.WarningLight,
-        warningSoft = Color(0x1A9A6B12),
+        warningSoft = Color(0x1A94650F),
         error = Aeruo.DangerLight,
-        errorSoft = Color(0x1AD64545),
+        errorSoft = Color(0x1AC94B4B),
         onError = Color(0xFFFFFFFF),
         info = Aeruo.InfoLight,
-        infoSoft = Color(0x1A2E7DD1),
+        infoSoft = Color(0x1A2C74C4),
 
-        aiActive = Aeruo.Accent,
-        streaming = Color(0xFF5B6472),      // neutral — the life-sign carries no hue
-        toolExecution = Color(0xFF5B6472),  // neutral
-        research = Color(0xFF5B6472),       // neutral
-        voice = Aeruo.Accent,
-        generation = Color(0xFF5B6472),     // neutral
+        aiActive = accent.base,
+        streaming = textSecondary,
+        toolExecution = textSecondary,
+        research = textSecondary,
+        voice = accent.base,
+        generation = textSecondary,
 
         codeSurface = Aeruo.CodeSurfaceLight,
         codeText = Aeruo.CodeTextLight,
@@ -153,13 +185,18 @@ fun lightGsColors(highContrast: Boolean = false): GsColors {
         codeComment = Aeruo.SyntaxComLight,
         codeNumber = Aeruo.SyntaxNumLight,
 
-        aurora = Aeruo.Aurora,
+        aurora = listOf(accent.pale, accent.base, accent.strong),
     )
 }
 
-/** Dark appearance — warm espresso surfaces with candlelit peach actions. */
-fun darkGsColors(highContrast: Boolean = false): GsColors {
-    val textSecondary = if (highContrast) Color(0xFFFFE1D4) else Aeruo.TextMutedDark
+/** Dark appearance — warm cocoa surfaces with candlelit accents. */
+fun darkGsColors(highContrast: Boolean = false, accentId: String = "apricot"): GsColors {
+    val family = GsAccents.byId(accentId)
+    // On espresso, the saturated base is too heavy for small text; the pale
+    // sibling keeps the accent's identity while lifting contrast.
+    val accent = family.pale
+    val textSecondary = if (highContrast) Color(0xFFFFE3D7) else Aeruo.TextMutedDark
+    val textTertiary = if (highContrast) Color(0xFFE7C6BA) else Aeruo.TextTertiaryDark
     return GsColors(
         appBackground = Aeruo.Obsidian,
         secondaryBackground = Aeruo.ContainerLowDark,
@@ -167,30 +204,37 @@ fun darkGsColors(highContrast: Boolean = false): GsColors {
         elevatedSurface = Aeruo.ContainerDark,
         raisedSurface = Aeruo.RaisedDark,
         inputSurface = Aeruo.ContainerLowDark,
-        sheetSurface = Aeruo.SurfaceDark,
-        dialogSurface = Aeruo.ContainerDark,
-        navSurface = Aeruo.Obsidian,
+        sheetSurface = Color(0xFF2B1D1A),
+        dialogSurface = Color(0xFF2E1F1C),
+        navSurface = Color(0xFF211613),
+
+        glassSurface = Color(0xD92A1C19),
+        glassBorder = Color(0xCC51362F),
+        glassHighlight = Color(0x33FFE7DE),
+        glassRimShadow = Color(0x4A150B08),
+        glassShadowAmbient = Color(0x590B0504),
+        glassShadowSpot = Color(0x73150A07),
 
         textPrimary = if (highContrast) Color(0xFFFFFFFF) else Aeruo.TextDark,
         textSecondary = textSecondary,
-        textTertiary = Color(0xFFA98478),
-        textDisabled = Color(0xFF725149),
-        textPlaceholder = Color(0xFFA98478),
+        textTertiary = textTertiary,
+        textDisabled = Color(0xFF7E5F56),
+        textPlaceholder = Color(0xFFB2958B),
         textInverted = Aeruo.Obsidian,
-        link = Aeruo.Accent,
+        link = accent,
 
         border = if (highContrast) Color(0xFFFFD0BE) else Aeruo.OutlineDark,
-        borderStrong = if (highContrast) Color(0xFFFFB393) else Color(0xFF694037),
-        divider = Color(0xFF4A2B25),
-        selected = Aeruo.Accent,
-        pressedOverlay = Color(0x24FFAE73),
-        focus = Aeruo.Accent,
+        borderStrong = if (highContrast) Color(0xFFFFB393) else Color(0xFF6A443A),
+        divider = Aeruo.DividerDark,
+        selected = accent,
+        pressedOverlay = family.base.copy(alpha = 0.18f),
+        focus = accent,
         scrim = Color(SCRIM_DARK),
 
-        accent = Aeruo.Accent,
-        accentStrong = Color(0xFFFFC18F),
-        accentSoft = Aeruo.AccentSoftDark,
-        onAccent = Color(0xFF3A1B12),
+        accent = family.base,
+        accentStrong = accent,
+        accentSoft = family.base.copy(alpha = 0.22f),
+        onAccent = family.on,
         success = Aeruo.SuccessDark,
         successSoft = Color(0x244CC38A),
         warning = Aeruo.WarningDark,
@@ -201,12 +245,12 @@ fun darkGsColors(highContrast: Boolean = false): GsColors {
         info = Aeruo.InfoDark,
         infoSoft = Color(0x246CB8FF),
 
-        aiActive = Aeruo.Accent,
-        streaming = Aeruo.GrayMid,           // neutral — the life-sign carries no hue
-        toolExecution = Aeruo.GrayMid,       // neutral
-        research = Aeruo.GrayMid,            // neutral
-        voice = Aeruo.Accent,
-        generation = Aeruo.GrayMid,          // neutral
+        aiActive = accent,
+        streaming = textSecondary,
+        toolExecution = textSecondary,
+        research = textSecondary,
+        voice = accent,
+        generation = textSecondary,
 
         codeSurface = Aeruo.CodeSurfaceDark,
         codeText = Aeruo.CodeTextDark,
@@ -215,7 +259,7 @@ fun darkGsColors(highContrast: Boolean = false): GsColors {
         codeComment = Aeruo.SyntaxComDark,
         codeNumber = Aeruo.SyntaxNumDark,
 
-        aurora = Aeruo.Aurora,
+        aurora = listOf(family.pale, family.base, family.strong),
     )
 }
 

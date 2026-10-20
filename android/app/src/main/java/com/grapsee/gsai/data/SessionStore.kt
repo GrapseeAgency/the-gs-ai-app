@@ -58,4 +58,16 @@ object SessionStore {
     fun setOnboarded(context: Context, value: Boolean) {
         prefs(context).edit().putBoolean(KEY_ONBOARDED, value).apply()
     }
+
+    /**
+     * Sign out. Closes the session gate so the next launch starts at Auth, and
+     * clears the identity the account screens surface. Chat history, settings
+     * and downloaded models stay — signing out is an identity operation, not a
+     * factory reset (that lives in Privacy → Erase).
+     */
+    fun signOut(context: Context) {
+        prefs(context).edit().putBoolean(KEY_SESSION_ACTIVE, false).apply()
+        AccountStore.setDisplayName(context, "")
+        AccountStore.setEmail(context, "")
+    }
 }

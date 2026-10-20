@@ -73,7 +73,11 @@ fun TheGsAiTheme(
     val highContrast = SettingsStore.highContrast
     val fontScale = SettingsStore.fontScale
 
-    val gsColors = if (dark) darkGsColors(highContrast) else lightGsColors(highContrast)
+    val gsColors = if (dark) {
+        darkGsColors(highContrast, SettingsStore.accentId)
+    } else {
+        lightGsColors(highContrast, SettingsStore.accentId)
+    }
     // LocalDensity scales the WHOLE tree (every sp value). The semantic text
     // roles (code/metadata/button) are not sp-resolved through Density in every
     // custom drawing context, so they are pre-scaled here as well.
@@ -138,14 +142,14 @@ fun gsTextSet(fontScale: Float): GsTextSet {
         lineHeight = 22.sp,
     )
     val metadata = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = GsFonts.Poppins,
         fontWeight = FontWeight.Medium,
         fontSize = 11.sp,
         lineHeight = 14.sp,
         letterSpacing = 0.3.sp,
     )
     val button = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = GsFonts.Poppins,
         fontWeight = FontWeight.Medium,
         fontSize = 14.sp,
         lineHeight = 19.sp,

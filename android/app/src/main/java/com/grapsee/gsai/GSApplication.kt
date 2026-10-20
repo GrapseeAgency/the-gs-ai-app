@@ -2,6 +2,7 @@ package com.grapsee.gsai
 
 import android.app.Application
 import android.util.Log
+import com.grapsee.gsai.data.OnboardingProfileStore
 import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.di.ServiceLocator
 import dagger.hilt.android.HiltAndroidApp
@@ -30,6 +31,10 @@ class GSApplication : Application() {
         // Remembered settings hydrate before any composable reads a switch.
         runCatching { SettingsStore.init(this) }
             .onFailure { Log.e("GSStartup", "SettingsStore init failed", it) }
+        // The wizard's answers are read by Home, the chat empty state and the
+        // local responder; hydrate before any of them compose.
+        runCatching { OnboardingProfileStore.init(this) }
+            .onFailure { Log.e("GSStartup", "OnboardingProfileStore init failed", it) }
         // On-device model consent and the installed path hydrate before any UI
         // asks whether local AI is available. It also re-checks the installed
         // file, because a restored backup can carry a preference pointing at a

@@ -13,6 +13,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,6 +45,8 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -145,51 +149,145 @@ internal fun DonutChart(w: ChartWidget) {
     // series holding one point per slice, which collapsed to a single colour.
     val colors = slices.indices.map { seriesColor(it) }
     val total = slices.sumOf { it.second.toDouble() }.toFloat().takeIf { it > 0f } ?: 1f
-    Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(contentAlignment = Alignment.Center) {
-            Canvas(Modifier.size(140.dp)) {
-                val stroke = 26.dp.toPx()
-                val inset = stroke / 2f
-                var start = -90f
-                slices.forEachIndexed { i, (_, v) ->
-                    val sweep = 360f * (v / total) * progress
-                    drawArc(
-                        color = colors[i % colors.size],
-                        startAngle = start,
-                        sweepAngle = sweep,
-                        useCenter = false,
-                        topLeft = Offset(inset, inset),
-                        size = Size(size.width - stroke, size.height - stroke),
-                        style = Stroke(width = stroke)
-                    )
-                    start += sweep
+    val probe = rememberChartProbe()
+    val selected = probe.datum
+    val ink = GsTheme.colors.textPrimary
+    val sweeps = remember(slices) {
+        var running = 0f
+        slices.map { (_, v) -> running.let { start -> running += 360f * (v / total); start } }
+    }
+    Column {
+        Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(contentAlignment = Alignment.Center) {
+                Canvas(
+                    Modifier
+                        .size(140.dp)
+                        .pointerInput(slices) {
+                            detectTapGestures { at ->
+                                val r = 70.dp.toPx()
+                                val dx = at.x - r
+                                val dy = at.y - r
+                                val dist2 = dx * dx + dy * dy
+                                // The hole is not a slice: a tap in the middle
+                                // clears the readout instead of guessing.
+                                if (dist2 > r * r || dist2 < (30.dp.toPx() * 30.dp.toPx())) {
+                                    probe.clear()
+                                    return@detectTapGestures
+                                }
+                                val deg = ((Math.toDegrees(kotlin.math.atan2(dy, dx).toDouble()) + 90.0) % 360.0 + 360.0) % 360.0
+                                var hit = slices.lastIndex
+                                for (i in slices.indices) {
+                                    val start = sweeps[i]
+                                    val sweep = 360f * (slices[i].second / total)
+                                    if (deg >= start && deg < start + sweep) {
+                                        hit = i
+                                        break
+                                    }
+                                }
+                                val slice = slices.getOrNull(hit) ?: return@detectTapGestures
+                                probe.select(
+                                    ChartDatum(
+                                        label = slice.first.ifEmpty { "Slice ${hit + 1}" },
+                                        value = slice.second,
+                                        share = slice.second / total,
+                                        index = hit
+                                    )
+                                )
+                            }
+                        }
+                ) {
+                    val stroke = 26.dp.toPx()
+                    val inset = stroke / 2f
+                    var start = -90f
+                    slices.forEachIndexed { i, (_, v) ->
+                        val sweep = 360f * (v / total) * progress
+                        drawArc(
+                            color = colors[i % colors.size],
+                            startAngle = start,
+                            sweepAngle = sweep,
+                            useCenter = false,
+                            topLeft = Offset(inset, inset),
+                            size = Size(size.width - stroke, size.height - stroke),
+                            style = Stroke(width = stroke)
+                        )
+                        start += sweep
+                    }
+                    // The selected arc gets a hairline of ink on its inner and
+                    // outer edge — a ring, not a colour change, so the slice
+                    // keeps its identity.
+                    if (selected != null && progress >= 1f && selected.index in slices.indices) {
+                        val i = selected.index
+                        drawArc(
+                            color = ink.copy(alpha = 0.5f),
+                            startAngle = -90f + sweeps[i],
+                            sweepAngle = 360f * (slices[i].second / total),
+                            useCenter = false,
+                            topLeft = Offset(inset - 1.dp.toPx(), inset - 1.dp.toPx()),
+                            size = Size(size.width - stroke + 2.dp.toPx(), size.height - stroke + 2.dp.toPx()),
+                            style = Stroke(width = 1.5.dp.toPx())
+                        )
+                    }
                 }
-            }
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    if (progress >= 0.99f) "${total.toInt()}" else "",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = GsTheme.colors.textPrimary,
-                    fontWeight = FontWeight.Bold
-                )
-                Text("total", style = MaterialTheme.typography.labelSmall, color = GsTheme.colors.textTertiary)
-            }
-        }
-        Column(Modifier.padding(start = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            slices.forEachIndexed { i, (name, v) ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(8.dp).clip(CircleShape).background(colors[i % colors.size]))
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        "${name.ifEmpty { "Slice ${i + 1}" }} — ${((v / total) * 100).toInt()}%",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = GsTheme.colors.textSecondary,
-                        modifier = Modifier.padding(start = 8.dp)
+                        when {
+                            selected != null -> chartShareLabel(selected)
+                            progress >= 0.99f -> "${total.toInt()}"
+                            else -> ""
+                        },
+                        style = MaterialTheme.typography.titleLarge,
+                        color = GsTheme.colors.textPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        if (selected != null) selected.label else "total",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = GsTheme.colors.textTertiary
                     )
                 }
             }
+            Column(Modifier.padding(start = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                slices.forEachIndexed { i, (name, v) ->
+                    val isSelected = selected?.index == i
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                role = Role.Button
+                            ) {
+                                probe.select(
+                                    ChartDatum(
+                                        label = name.ifEmpty { "Slice ${i + 1}" },
+                                        value = v,
+                                        share = v / total,
+                                        index = i
+                                    )
+                                )
+                            }
+                            .padding(horizontal = 4.dp, vertical = 3.dp)
+                    ) {
+                        Box(Modifier.size(8.dp).clip(CircleShape).background(colors[i % colors.size]))
+                        Text(
+                            "${name.ifEmpty { "Slice ${i + 1}" }} — ${((v / total) * 100).toInt()}%",
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                            ),
+                            color = if (isSelected) GsTheme.colors.textPrimary else GsTheme.colors.textSecondary,
+                            modifier = Modifier.padding(start = 8.dp)
+                        )
+                    }
+                }
+            }
         }
+        ChartInspectBar(probe, w.unit, "Tap a slice to read it", colors.firstOrNull() ?: GsTheme.colors.accent)
     }
 }
+
+private fun chartShareLabel(datum: ChartDatum): String =
+    "${((datum.share ?: 0f) * 100).toInt()}%"
 
 // --- horizontal bar ----------------------------------------------------------
 
@@ -255,7 +353,47 @@ internal fun StackedBarChart(w: ChartWidget) {
         w.series.sumOf { s -> s.data.getOrNull(ci)?.getOrElse(1) { 0f }?.toDouble() ?: 0.0 }
     }?.toFloat()?.takeIf { it > 0f } ?: 1f
     val labels = if (w.labels.size >= cats) w.labels else (0 until cats).map { "S${it + 1}" }
-    Canvas(Modifier.fillMaxWidth().height(180.dp).padding(top = 8.dp)) {
+    val probe = rememberChartProbe()
+    val selected = probe.datum
+    Canvas(
+        Modifier
+            .fillMaxWidth()
+            .height(180.dp)
+            .pointerInput(w.series, labels) {
+                detectTapGestures { at ->
+                    val cw = size.width
+                    val groupW = cw / cats.coerceAtLeast(1)
+                    val ci = (at.x / groupW).toInt().coerceIn(0, cats - 1)
+                    // A stacked column is read top-down: find the segment whose
+                    // band contains the finger, then fall back to the whole
+                    // column (sum) when the tap is on empty space.
+                    val ch = size.height - 8.dp.toPx()
+                    val tapY = (at.y - 8.dp.toPx()).coerceIn(0f, ch)
+                    val v = (1f - tapY / ch) * stackMax
+                    var running = 0f
+                    var chosen = -1
+                    for (si in w.series.indices) {
+                        running += w.series[si].data.getOrNull(ci)?.getOrElse(1) { 0f } ?: 0f
+                        if (v <= running) {
+                            chosen = si
+                            break
+                        }
+                    }
+                    if (chosen < 0) chosen = w.series.lastIndex
+                    val point = w.series.getOrNull(chosen)?.data?.getOrNull(ci)
+                        ?: return@detectTapGestures
+                    probe.select(
+                        ChartDatum(
+                            label = labels.getOrElse(ci) { "S${ci + 1}" },
+                            value = point.getOrElse(1) { 0f },
+                            series = w.series[chosen].name,
+                            index = ci
+                        )
+                    )
+                }
+            }
+            .padding(top = 8.dp)
+    ) {
         val cw = size.width; val ch = size.height
         repeat(4) { g ->
             val y = ch * g / 3f
@@ -272,10 +410,18 @@ internal fun StackedBarChart(w: ChartWidget) {
                 val h = ch * (v / stackMax) * progress
                 val x = ci * groupW + groupW * 0.22f
                 val bottom = ch - ch * (below / stackMax) * progress
-                drawRect(colors[si], topLeft = Offset(x, bottom - h), size = Size(barW, h))
+                val isSelected = selected != null && selected.index == ci &&
+                    (selected.series == null || selected.series == s.name)
+                val dim = selected != null && !isSelected
+                drawRect(
+                    colors[si].copy(alpha = if (dim) 0.35f else 1f),
+                    topLeft = Offset(x, bottom - h),
+                    size = Size(barW, h)
+                )
             }
         }
     }
+    ChartInspectBar(probe, w.unit, "Tap a segment to read it", colors.firstOrNull() ?: GsTheme.colors.accent)
     Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
         labels.take(8).forEach {
             Text(it, style = MaterialTheme.typography.labelSmall, color = GsTheme.colors.textTertiary)
@@ -352,25 +498,72 @@ internal fun ScatterChart(w: ChartWidget, bubble: Boolean) {
     val spanX = (maxX - minX).takeIf { it > 0f } ?: 1f
     val spanY = (maxY - minY).takeIf { it > 0f } ?: 1f
     val maxZ = zs.maxOrNull()?.takeIf { it > 0f } ?: 1f
-    Canvas(Modifier.fillMaxWidth().height(180.dp).padding(top = 8.dp)) {
+    val probe = rememberChartProbe()
+    val selected = probe.datum
+    Canvas(
+        Modifier
+            .fillMaxWidth()
+            .height(180.dp)
+            .pointerInput(w.series) {
+                detectTapGestures { at ->
+                    val cw = size.width
+                    val ch = size.height - 8.dp.toPx()
+                    val tapY = at.y - 8.dp.toPx()
+                    var best: ChartDatum? = null
+                    var bestDist = Float.MAX_VALUE
+                    w.series.forEach { s ->
+                        s.data.forEach { p ->
+                            val cx = cw * ((p.getOrElse(0) { 0f } - minX) / spanX)
+                            val cy = ch * (1f - ((p.getOrElse(1) { 0f } - minY) / spanY))
+                            val dx = cx - at.x
+                            val dy = cy - tapY
+                            val d = dx * dx + dy * dy
+                            if (d < bestDist) {
+                                bestDist = d
+                                best = ChartDatum(
+                                    label = "x ${formatChartValue(p.getOrElse(0) { 0f })}",
+                                    value = p.getOrElse(1) { 0f },
+                                    series = s.name
+                                )
+                            }
+                        }
+                    }
+                    val radius = 30.dp.toPx()
+                    val hit = best
+                    if (hit != null && bestDist <= radius * radius) probe.select(hit) else probe.clear()
+                }
+            }
+            .padding(top = 8.dp)
+    ) {
         val cw = size.width; val ch = size.height
+        val active = selected
         repeat(4) { g ->
             val y = ch * g / 3f
             drawLine(gridColor, Offset(0f, y), Offset(cw, y), strokeWidth = 1f)
         }
         w.series.forEachIndexed { si, s ->
             s.data.forEach { p ->
-                val cx = cw * ((p.getOrElse(0) { 0f } - minX) / spanX)
-                val cy = ch * (1f - ((p.getOrElse(1) { 0f } - minY) / spanY))
+                val px = p.getOrElse(0) { 0f }
+                val py = p.getOrElse(1) { 0f }
+                val cx = cw * ((px - minX) / spanX)
+                val cy = ch * (1f - ((py - minY) / spanY))
                 val r = if (bubble) {
                     5.dp.toPx() + 13.dp.toPx() * ((p.getOrNull(2) ?: 0f) / maxZ)
                 } else {
                     5.dp.toPx() * progress + 1.dp.toPx()
                 }
-                drawCircle(colors[si % colors.size], radius = r, center = Offset(cx, cy), alpha = 0.85f)
+                val isSelected = active != null && active.value == py && active.label == "x ${formatChartValue(px)}"
+                val dim = active != null && !isSelected
+                drawCircle(
+                    colors[si % colors.size],
+                    radius = if (isSelected) r + 2.dp.toPx() else r,
+                    center = Offset(cx, cy),
+                    alpha = if (dim) 0.35f else 0.85f
+                )
             }
         }
     }
+    ChartInspectBar(probe, w.unit, "Tap a point to read it", colors.firstOrNull() ?: GsTheme.colors.accent)
     SeriesLegend(w)
 }
 

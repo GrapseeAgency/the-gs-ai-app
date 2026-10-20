@@ -7,106 +7,127 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
 /**
- * AERUO KINETIC type system — refined serif for display/editorial voice,
- * modern sans for interface. Sizes mirror iOS DesignSystem.swift.
+ * REFERENCE TYPE RAMP.
+ *
+ * One family (Poppins) across the whole product, three voices inside it:
+ *  · display / headline — SemiBold, tight tracking, generous line height;
+ *  · body — Regular, 15sp, 23sp leading (a reading measure, not a label);
+ *  · label / metadata — Medium, tracked +0.2sp so small text stays crisp.
+ *
+ * The old serif display tier is gone. In the reference language the page
+ * title is a confident sans line sitting on the bloom — a serif headline read
+ * as editorial whereas this product is a companion. Sizes are deliberately
+ * compact: the reference fits a complete settings page above the fold.
+ *
+ * Mirrors ios/App/Sources/Theme/DesignSystem.swift.
  */
 val GsTypography = Typography(
     displayLarge = TextStyle(
-        fontFamily = FontFamily.Serif,
-        fontWeight = FontWeight.SemiBold,
+        fontFamily = GsFonts.Poppins,
+        fontWeight = FontWeight.Bold,
         fontSize = 34.sp,
-        lineHeight = 40.sp,
-        letterSpacing = (-0.5).sp
+        lineHeight = 42.sp,
+        letterSpacing = (-0.6).sp
     ),
     displayMedium = TextStyle(
-        fontFamily = FontFamily.Serif,
+        fontFamily = GsFonts.Poppins,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 28.sp,
-        lineHeight = 34.sp,
-        letterSpacing = (-0.4).sp
+        fontSize = 30.sp,
+        lineHeight = 38.sp,
+        letterSpacing = (-0.5).sp
     ),
     displaySmall = TextStyle(
-        fontFamily = FontFamily.Serif,
+        fontFamily = GsFonts.Poppins,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 24.sp,
-        lineHeight = 30.sp
+        fontSize = 26.sp,
+        lineHeight = 33.sp,
+        letterSpacing = (-0.3).sp
     ),
     headlineLarge = TextStyle(
-        fontFamily = FontFamily.Serif,
+        fontFamily = GsFonts.Poppins,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 28.sp,
-        lineHeight = 34.sp
+        fontSize = 26.sp,
+        lineHeight = 33.sp,
+        letterSpacing = (-0.3).sp
     ),
     headlineMedium = TextStyle(
-        fontFamily = FontFamily.Serif,
+        fontFamily = GsFonts.Poppins,
         fontWeight = FontWeight.SemiBold,
         fontSize = 22.sp,
-        lineHeight = 28.sp
+        lineHeight = 29.sp,
+        letterSpacing = (-0.2).sp
     ),
     headlineSmall = TextStyle(
-        fontFamily = FontFamily.Serif,
+        fontFamily = GsFonts.Poppins,
         fontWeight = FontWeight.SemiBold,
         fontSize = 19.sp,
-        lineHeight = 25.sp
+        lineHeight = 26.sp,
+        letterSpacing = (-0.1).sp
     ),
     titleLarge = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = GsFonts.Poppins,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 19.sp,
-        lineHeight = 25.sp
+        fontSize = 17.sp,
+        lineHeight = 23.sp,
+        letterSpacing = 0.sp
     ),
     titleMedium = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = GsFonts.Poppins,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 16.sp,
-        lineHeight = 22.sp,
-        letterSpacing = 0.1.sp
+        fontSize = 15.sp,
+        lineHeight = 21.sp,
+        letterSpacing = 0.sp
     ),
     titleSmall = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = GsFonts.Poppins,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 14.sp,
-        lineHeight = 19.sp
-    ),
-    bodyLarge = TextStyle(
-        fontFamily = FontFamily.SansSerif,
-        fontWeight = FontWeight.Normal,
-        fontSize = 16.sp,
-        lineHeight = 24.sp,
-        letterSpacing = 0.2.sp
-    ),
-    bodyMedium = TextStyle(
-        fontFamily = FontFamily.SansSerif,
-        fontWeight = FontWeight.Normal,
-        fontSize = 15.sp,
-        lineHeight = 22.sp,
-        letterSpacing = 0.2.sp
-    ),
-    bodySmall = TextStyle(
-        fontFamily = FontFamily.SansSerif,
-        fontWeight = FontWeight.Normal,
         fontSize = 13.sp,
         lineHeight = 18.sp,
         letterSpacing = 0.1.sp
     ),
-    labelLarge = TextStyle(
-        fontFamily = FontFamily.SansSerif,
-        fontWeight = FontWeight.Medium,
+    bodyLarge = TextStyle(
+        fontFamily = GsFonts.Poppins,
+        fontWeight = FontWeight.Normal,
+        fontSize = 15.sp,
+        lineHeight = 23.sp,
+        letterSpacing = 0.1.sp
+    ),
+    bodyMedium = TextStyle(
+        fontFamily = GsFonts.Poppins,
+        fontWeight = FontWeight.Normal,
         fontSize = 14.sp,
-        lineHeight = 18.sp
+        lineHeight = 21.sp,
+        letterSpacing = 0.1.sp
+    ),
+    bodySmall = TextStyle(
+        fontFamily = GsFonts.Poppins,
+        fontWeight = FontWeight.Normal,
+        fontSize = 12.sp,
+        lineHeight = 17.sp,
+        letterSpacing = 0.1.sp
+    ),
+    labelLarge = TextStyle(
+        fontFamily = GsFonts.Poppins,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 14.sp,
+        lineHeight = 19.sp,
+        letterSpacing = 0.1.sp
     ),
     labelMedium = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = GsFonts.Poppins,
         fontWeight = FontWeight.Medium,
-        fontSize = 12.sp,
+        fontSize = 11.5.sp,
         lineHeight = 16.sp,
-        letterSpacing = 0.3.sp
+        letterSpacing = 0.2.sp
     ),
     labelSmall = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = GsFonts.Poppins,
         fontWeight = FontWeight.Medium,
-        fontSize = 10.sp,
+        fontSize = 10.5.sp,
         lineHeight = 14.sp,
-        letterSpacing = 0.4.sp
+        letterSpacing = 0.25.sp
     )
 )
+
+/** Code keeps a platform monospace face: it is a different material. */
+val GsCodeFamily: FontFamily = FontFamily.Monospace

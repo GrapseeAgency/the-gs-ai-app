@@ -9,6 +9,21 @@ object GsRoutes {
     const val CHATS = "chats"
     const val PROFILE = "profile"
     const val SETTINGS = "settings"
+    // Reference settings architecture — each row in the hub is a real
+    // destination with its own scaffold, not an accordion that grows the hub.
+    const val SETTINGS_ACCOUNT = "settings/account"
+    const val SETTINGS_CHAT = "settings/chat"
+    const val SETTINGS_APPEARANCE = "settings/appearance"
+    const val SETTINGS_THEME = "settings/theme"
+    const val SETTINGS_NOTIFICATIONS = "settings/notifications"
+    const val SETTINGS_PRIVACY = "settings/privacy"
+    const val SETTINGS_AI = "settings/ai"
+    const val SETTINGS_MEMORY = "settings/memory"
+    const val SETTINGS_VOICE = "settings/voice"
+    const val SETTINGS_ACCESSIBILITY = "settings/accessibility"
+    const val SETTINGS_HELP = "settings/help"
+    const val SETTINGS_ABOUT = "settings/about"
+    const val SETTINGS_PLAN = "settings/plan"
     const val NOTIFICATIONS = "notifications"
     const val VOICE = "voice"
     // PHASE 2: the fabricated Folders/Shared destinations are gone — Archive

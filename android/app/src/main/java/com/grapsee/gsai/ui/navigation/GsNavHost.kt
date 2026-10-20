@@ -41,7 +41,19 @@ import com.grapsee.gsai.ui.chat.ChatSearchScreen
 import com.grapsee.gsai.ui.chat.ChatsScreen
 import com.grapsee.gsai.ui.notifications.NotificationsScreen
 import com.grapsee.gsai.ui.profile.ProfileScreen
-import com.grapsee.gsai.ui.settings.SettingsScreen
+import com.grapsee.gsai.ui.settings.AboutSettingsScreen
+import com.grapsee.gsai.ui.settings.AccessibilitySettingsScreen
+import com.grapsee.gsai.ui.settings.AccountSettingsScreen
+import com.grapsee.gsai.ui.settings.AiIntelligenceScreen
+import com.grapsee.gsai.ui.settings.AppearanceSettingsScreen
+import com.grapsee.gsai.ui.settings.ChatSettingsScreen
+import com.grapsee.gsai.ui.settings.HelpSettingsScreen
+import com.grapsee.gsai.ui.settings.MemorySettingsScreen
+import com.grapsee.gsai.ui.settings.NotificationSettingsScreen
+import com.grapsee.gsai.ui.settings.PrivacySettingsScreen
+import com.grapsee.gsai.ui.settings.SettingsHubScreen
+import com.grapsee.gsai.ui.settings.ThemeCustomisationScreen
+import com.grapsee.gsai.ui.settings.VoiceSettingsScreen
 import com.grapsee.gsai.ui.voice.VoiceScreen
 import com.grapsee.gsai.ui.home.HomeDashboardScreen
 import com.grapsee.gsai.ui.agents.TravelAgentScreen
@@ -217,23 +229,26 @@ fun GsNavHost(modifier: Modifier = Modifier) {
         composable(GsRoutes.HOME) {
             HomeDashboardScreen(
                 onNewChat = { navController.navigate(GsRoutes.chat(null)) },
+                onStartPrompt = { prompt -> navController.navigate(GsRoutes.chat(null, prompt)) },
+                onOpenConversation = { id -> navController.navigate(GsRoutes.chat(id)) },
                 onOpenDrawer = { scope.launch { drawerState.open() } },
                 onOpenChats = { open(GsRoutes.CHATS) },
                 onOpenAgent = { open(GsRoutes.TRAVEL_AGENT) },
+                onOpenVoice = { open(GsRoutes.VOICE) },
             )
         }
         composable(GsRoutes.TRAVEL_AGENT) {
             TravelAgentScreen(onBack = back, onSendToChat = { prompt -> navController.navigate(GsRoutes.chat(null, prompt)) })
         }
         composable(GsRoutes.CHATS) { ChatsScreen(onNavigate = open) }
-        composable(GsRoutes.PROFILE) { ProfileScreen(onNavigate = open) }
+        composable(GsRoutes.PROFILE) { ProfileScreen(onNavigate = open, onBack = back) }
 
         composable(GsRoutes.SETTINGS) {
             // Commit 1(b). The consent dialog is already hosted in MainActivity
             // above the nav graph; this only asks it to show, so a second host
             // and a second dialog cannot exist.
             var askLocalConsent by remember { mutableStateOf(false) }
-            SettingsScreen(
+            SettingsHubScreen(
                 onBack = back,
                 onNavigate = open,
                 onLocalAiRequested = { askLocalConsent = true },
@@ -241,6 +256,73 @@ fun GsNavHost(modifier: Modifier = Modifier) {
             if (askLocalConsent) {
                 OnDeviceModelConsentDialog(onDismiss = { askLocalConsent = false })
             }
+        }
+
+        // --- Settings sub-pages -------------------------------------------
+        // Each hub row is a real destination with its own scaffold and back
+        // gesture. SETTINGS_PLAN deliberately reuses Billing — one purchase
+        // surface, reached from two places.
+        composable(GsRoutes.SETTINGS_ACCOUNT) {
+            AccountSettingsScreen(
+                onBack = back,
+                onLogout = {
+                    SessionStore.signOut(context)
+                    navController.navigate(GsRoutes.AUTH) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                }
+            )
+        }
+        composable(GsRoutes.SETTINGS_CHAT) {
+            ChatSettingsScreen(onBack = back, onNavigate = open)
+        }
+        composable(GsRoutes.SETTINGS_APPEARANCE) {
+            AppearanceSettingsScreen(onBack = back, onNavigate = open)
+        }
+        composable(GsRoutes.SETTINGS_THEME) {
+            ThemeCustomisationScreen(onBack = back)
+        }
+        composable(GsRoutes.SETTINGS_NOTIFICATIONS) {
+            NotificationSettingsScreen(onBack = back)
+        }
+        composable(GsRoutes.SETTINGS_PRIVACY) {
+            PrivacySettingsScreen(onBack = back)
+        }
+        composable(GsRoutes.SETTINGS_AI) {
+            var askLocalConsent by remember { mutableStateOf(false) }
+            AiIntelligenceScreen(
+                onBack = back,
+                onLocalAiRequested = { askLocalConsent = true },
+                onTryComponents = {
+                    navController.navigate(
+                        GsRoutes.chat(
+                            null,
+                            "Show me a gallery of rendered components — charts, tables, a timeline, a map and a code block — so I can tap them."
+                        )
+                    )
+                }
+            )
+            if (askLocalConsent) {
+                OnDeviceModelConsentDialog(onDismiss = { askLocalConsent = false })
+            }
+        }
+        composable(GsRoutes.SETTINGS_MEMORY) {
+            MemorySettingsScreen(onBack = back, onNavigate = open)
+        }
+        composable(GsRoutes.SETTINGS_VOICE) {
+            VoiceSettingsScreen(onBack = back, onNavigate = open)
+        }
+        composable(GsRoutes.SETTINGS_ACCESSIBILITY) {
+            AccessibilitySettingsScreen(onBack = back)
+        }
+        composable(GsRoutes.SETTINGS_HELP) {
+            HelpSettingsScreen(onBack = back)
+        }
+        composable(GsRoutes.SETTINGS_ABOUT) {
+            AboutSettingsScreen(onBack = back)
+        }
+        composable(GsRoutes.SETTINGS_PLAN) {
+            BillingScreen(onBack = back)
         }
         composable(GsRoutes.NOTIFICATIONS) {
             NotificationsScreen(
