@@ -468,17 +468,32 @@ jobs:
           # failed in ~40s and the JOB STILL WENT GREEN: no unit test ever ran.
           # The compile step above generates the pinned 8.13 wrapper in this
           # same workspace, so use it and let a test failure fail the job.
-          ./gradlew --no-daemon --console=plain --stacktrace :app:testDebugUnitTest
+          # --rerun: a Gradle cache hit on this task means "the same inputs
+          # passed earlier", not "tests ran in THIS run". The evidence for this
+          # commit is the result XML, so the task is forced to execute.
+          ./gradlew --no-daemon --console=plain --stacktrace :app:testDebugUnitTest --rerun
 
       - name: Report
         if: always()
         run: |
           set -euo pipefail
-          RESULTS=app/build/test-results/testDebugUnitTest
-          if [ -d "$RESULTS" ]; then
-            python3 -c "import glob,xml.etree.ElementTree as E; rs=[E.parse(p).getroot() for p in glob.glob('$RESULTS/*.xml')]; t=sum(int(r.get('tests',0)) for r in rs); f=sum(int(r.get('failures',0))+int(r.get('errors',0)) for r in rs); print(f'unit tests: {t} run, {f} failed')" >> "$GITHUB_STEP_SUMMARY" || true
-          else
-            echo "unit tests: no result XML" >> "$GITHUB_STEP_SUMMARY"
+          # THE APP MODULE IS android/app. This path used to be
+          # `app/build/test-results/...` resolved from the REPOSITORY ROOT, so
+          # it never existed and every green run printed "no result XML" --
+          # a pass with no evidence behind it. The path is now the real one and
+          # an empty/missing result is a FAILURE, not a shrug.
+          RESULTS=android/app/build/test-results/testDebugUnitTest
+          if [ ! -d "$RESULTS" ]; then
+            echo "::error::no test result XML at $RESULTS -- the test task did not run"
+            exit 1
+          fi
+          COUNT=$(python3 -c "import glob,xml.etree.ElementTree as E; rs=[E.parse(p).getroot() for p in glob.glob('$RESULTS/*.xml')]; t=sum(int(r.get('tests',0)) for r in rs); f=sum(int(r.get('failures',0))+int(r.get('errors',0)) for r in rs); print(f'{t} {f}')")
+          TESTS=${COUNT%% *}
+          FAILS=${COUNT##* }
+          echo "unit tests: $TESTS run, $FAILS failed" | tee -a "$GITHUB_STEP_SUMMARY"
+          if [ "$TESTS" -eq 0 ]; then
+            echo "::error::0 unit tests in $RESULTS -- an empty run is not a pass"
+            exit 1
           fi
           {
             echo "### android-app"
