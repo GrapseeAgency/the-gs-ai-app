@@ -1864,8 +1864,8 @@ private fun ComposerRow(
         // clean 1dp hairline (outlineVariant) wrapped on a 28dp pill.
         Surface(
             shape = RoundedCornerShape(28.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerLow,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            color = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = .96f),
+            border = BorderStroke(1.dp, GsTheme.colors.accent.copy(alpha = .24f)),
             modifier = Modifier.fillMaxWidth()
         ) {
             Row(
@@ -1884,7 +1884,7 @@ private fun ComposerRow(
                     Surface(
                         onClick = onModeChipClick,
                         shape = RoundedCornerShape(999.dp),
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        color = GsTheme.colors.accentSoft,
                         modifier = Modifier.padding(end = 4.dp)
                     ) {
                         Row(

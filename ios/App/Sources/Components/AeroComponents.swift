@@ -228,8 +228,8 @@ struct AeroInputBar: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .background(Capsule().fill(Aero.inputSurface))
-        .overlay(Capsule().stroke(Aero.outline, lineWidth: 1))
+        .background(Capsule().fill(LinearGradient(colors: [Aero.inputSurface, Aero.surface], startPoint: .topLeading, endPoint: .bottomTrailing)))
+        .overlay(Capsule().stroke(Aero.accent.opacity(0.28), lineWidth: 1))
     }
 
     /// The send gate is the send button's gate, verbatim: non-empty text (or

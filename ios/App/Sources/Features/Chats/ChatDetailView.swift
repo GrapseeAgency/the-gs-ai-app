@@ -638,7 +638,10 @@ struct ChatDetailView: View {
         .padding(.horizontal, Aero.Spacing.m)
         .padding(.vertical, Aero.Spacing.s)
         .frame(maxWidth: columnMaxWidth)
-        .background(Aero.surface.ignoresSafeArea(edges: .bottom))
+        .background(
+            LinearGradient(colors: [Aero.surface, Aero.background], startPoint: .top, endPoint: .bottom)
+                .ignoresSafeArea(edges: .bottom)
+        )
     }
 
     /// Slim honest offline line (Step 4): shown only while the system reports
