@@ -14,7 +14,7 @@
  */
 
 import { DESIGN_REMINDER, DESIGN_RULEBOOK, PALETTES, SURFACES } from '../design/rulebook'
-import { APP_TYPES, CALC_TYPES, CHART_TYPES, FORM_FIELD_TYPES, MEDIA_TYPES, WIDGET_KINDS } from './catalog'
+import { APP_TYPES, CALC_TYPES, CANVAS_TYPES, CHART_TYPES, EDITOR_TYPES, FORM_FIELD_TYPES, MEDIA_TYPES, SIM_TYPES, STAGE3D_TYPES, WIDGET_KINDS } from './catalog'
 
 /**
  * The honest, computed size of the component surface. Derived from the
@@ -30,6 +30,10 @@ export const COMPONENT_SURFACE_SIZE =
   CALC_TYPES.length +
   APP_TYPES.length +
   FORM_FIELD_TYPES.length +
+  SIM_TYPES.length +
+  STAGE3D_TYPES.length +
+  CANVAS_TYPES.length +
+  EDITOR_TYPES.length +
   24 + // mermaid diagram languages the contract names
   3 // map, html, svg blocks
 
@@ -115,6 +119,11 @@ RICH CONTENT
 - actions: {"title":"...","buttons":[{"label":"...","kind":"prompt|copy|open","value":"...","style":"filled|tonal|text"}]}  (real buttons; prompt sends value, copy copies it, open launches the URL)
 - panel: {"title":"...","summary":"...","body":"...","expanded":true|false,"badges":[{"label":"...","tone":"accent|success|warning|danger"}],"popover":"..."}  (tap the header to expand/collapse; badges are inline chips; non-blank popover adds a "More info" reveal)
 - map: {"title":"...","center":[lat,lng],"zoom":N,"pins":[{"lat":N,"lng":N,"label":"...","detail":"..."}],"route":[[lat,lng],...],"mode":"driving|walking|cycling","stops":[{"lat":N,"lng":N,"label":"..."}],"steps":[{"instruction":"...","distance":"1.2 km"}],"cluster":true|false,"cards":true|false,"compare":[{"title":"...","center":[lat,lng],"zoom":N,"pins":[...],"route":[...]}]}  (interactive map with pins/routes. Give \`mode\` + 2 or more \`stops\` for real routing with turn-by-turn directions; \`route\` is only a fallback polyline. \`cluster\` groups dense pins; \`cards\` adds a tappable place carousel under the map; \`compare\` renders 2-4 maps side by side — do not use \`compare\` together with top-level \`pins\`)
+- sim: {"sim":"${SIM_TYPES.join('|')}","title":"...","gravity":9.8,"speed":1,"damping":0.99,"count":60,"seed":42,"note":"..."}  (a LIVE simulation running in the chat: cloth, soft-body jelly, stable fluids, fire/smoke, a particle playground, rigid-body stacking, sculptable terrain, a playable keyboard game. Real integration every frame — pick it whenever the user says simulate / physics / playground / fire / cloth / game.)
+- stage3d: {"view":"${STAGE3D_TYPES.join('|')}","title":"...","nodes":[{"id","label","x","y","z","r","group"}],"bonds":[[i,j]],"z":"sin(x)*cos(y)","span":2,"spin":true}  (a real WebGL stage via three.js: orbitable scenes, 3D scatter/surface plots (z may be a math expression of x,y), ball-and-stick molecules from nodes+bonds, a parametric CAD manipulator, a layered anatomy explorer, magic-window VR/AR. Drag rotates, wheel zooms — never static.)
+- canvas: {"surface":"${CANVAS_TYPES.join('|')}","title":"...","nodes":[{"label","x":0-1,"y":0-1,"group"}],"edges":[[i,j]]}  (a freeform pointer surface: infinite whiteboard, draggable mind-map, node diagram editor with connections, polygon drawing on a live map. Provide seed nodes for mindmap/diagram; whiteboard and polygons start blank.)
+- editor: {"editor":"${EDITOR_TYPES.join('|')}","title":"...","columns":[...],"cells":{"A1":"=SUM(B1:B3)","B1":"12"},"nodes":[...],"edges":[...],"blocks":[{"type":"hero|text|image|button","text"}],"groups":[...],"tracks":[{"name","clips":[{"start","dur","label"}]}],"duration":60,"layout":{"direction":"row|column","gap":12,"justify":"flex-start","align":"stretch"}}  (a real in-chat editor with live evaluation: node-graph programming, a spreadsheet with a formula engine (=SUM/=AVG/=A1*B2), a pivot builder, a drag-and-drop site builder, a visual CSS layout editor, a video clip timeline, a waveform/spectrogram audio editor.)
+- terminal: {"title":"Terminal","welcome":"...","commands":[{"name":"greet","description":"prints a greeting"}]}  (a working terminal with a sandboxed JavaScript runtime: JS evaluation, a simulated filesystem (ls/cd/cat/mkdir/touch/rm/echo >), help/history/clear, plus any custom \`commands\` you define. Use it whenever the user wants to "run" something.)
 - mermaid: a fenced block with mermaid source — flowchart, sequence, class, state, ER, journey, gantt, gitGraph, mindmap, pie, quadrant, timeline, sankey, block, packet, architecture, radar, treemap, kanban, requirement, xychart. Use this for ANY diagram request.
 - app: {"type":"${APP_TYPES.join('|')}","title":"...","steps":[{"title":"...","body":"...","fields":[{"type":"text|textarea|select|radio|slider","label":"...","options":["..."]}]}],"columns":[{"title":"...","items":[{"title":"...","subtitle":"...","badge":"..."}]}],"items":[{"title":"...","subtitle":"...","meta":"...","badge":"...","prompt":"...","date":"2026-10-20","price":0}],"groups":[{"title":"...","options":[{"label":"...","detail":"...","price":0}]}],"rows":[["Header","Header"],["a","1"]],"slots":["09:00","10:00"],"month":"2026-10","submitLabel":"..."}  (native app surfaces with real state: wizard/onboarding steps with per-step fields, kanban boards you tap to advance, a month calendar with event dots, an editable sheet with column sums, task checklists, dashboard metric tiles, priced configurators, booking/scheduling slot pickers, live search and facet filters, a countdown timer. Use this for app-style requests instead of html.)
 - html: a fenced block with ONE self-contained HTML document (inline CSS+JS; CDN only for map tiles/everything else inline). The app renders it in a live interactive view. Reserve it for genuinely custom experiences that no other kind covers — prototypes, bespoke visualisations, games, simulations, embedded video/audio. Prefer calc/app/chart/table/form/media when one of them fits. Keep it under 200KB, mobile-sized (no fixed pixel widths wider than the screen), and set <body data-gs-height="Npx"> when a specific height suits the content.
@@ -182,6 +191,11 @@ the first row that fits, and stop:
   an opinion to measure        -> rating or poll
   things to memorise           -> flashcards
   places or a route            -> map
+  physics / fire / cloth / a game -> sim
+  3D, molecules, orbit plots   -> stage3d
+  freehand drawing / mind maps -> canvas
+  build/edit an artifact       -> editor
+  run commands or code         -> terminal
   a picture, icon or bespoke   -> svg
   anything else interactive    -> html
 If two rows fit, prefer the one that shows the data rather than describing it.

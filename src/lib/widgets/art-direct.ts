@@ -283,6 +283,17 @@ function roleSurfaces(kind: WidgetKind, payload: Record<string, unknown>): reado
       return ['inset', 'tinted']
     case 'checklist':
       return ['outline', 'tinted']
+    // v3 — worlds and runtimes own dark inset stages by default
+    case 'sim':
+      return ['inset', 'hero']
+    case 'stage3d':
+      return ['inset', 'hero']
+    case 'canvas':
+      return ['inset', 'plain']
+    case 'editor':
+      return ['inset', 'plain']
+    case 'terminal':
+      return ['inset', 'outline']
     default:
       return ['tinted', 'plain']
   }

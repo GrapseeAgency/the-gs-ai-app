@@ -9,12 +9,17 @@
  * it" two different questions — the second one is answered here.
  */
 
+import { evaluateExpr } from '../calc/evaluate'
 import {
   APP_TYPES,
   CALC_TYPES,
+  CANVAS_TYPES,
   CHART_TYPES,
+  EDITOR_TYPES,
   FORM_FIELD_TYPES,
   LIMITS,
+  SIM_TYPES,
+  STAGE3D_TYPES,
   MEDIA_TYPES,
   injectWidgetType,
   isChartType,
@@ -399,7 +404,7 @@ function normalisePoints(raw: unknown[], labelHints: string[]): number[][] {
  * v2 chart payload families whose shape is a GRAPH or a composition, not a
  * series list. Each has its own normaliser below.
  */
-const GRAPH_PAYLOAD_TYPES = new Set(['sankey', 'network', 'wordcloud', 'sunburst', 'bullet'])
+const GRAPH_PAYLOAD_TYPES = new Set(['sankey', 'network', 'wordcloud', 'sunburst', 'bullet', 'force', 'depth', 'violin', 'contour', 'parallel', 'dendrogram'])
 
 /** sankey / network / wordcloud / sunburst / bullet payloads. */
 function normaliseGraphChart(type: string, p: Record<string, unknown>, alreadyRepaired: boolean): Check {
@@ -484,6 +489,84 @@ function normaliseGraphChart(type: string, p: Record<string, unknown>, alreadyRe
     const root = readNode(p.root ?? p.hierarchy, 0)
     if (!root || (root.children.length === 0 && root.value === 0)) errors.push('sunburst needs a root with children or a value')
     return { widget: { type, title: asString(p.title), unit: asString(p.unit), root: root ?? { label: '', value: 0, children: [] } }, errors, repaired }
+  }
+
+  if (type === 'force') {
+    // same shape as network; the renderer adds a force-directed layout
+    const asNetwork = normaliseGraphChart('network', p, alreadyRepaired)
+    if (asNetwork.errors.length === 0) {
+      return { ...asNetwork, widget: { ...asNetwork.widget, type: 'force' } }
+    }
+    return asNetwork
+  }
+
+  if (type === 'depth') {
+    const side = (v: unknown) =>
+      asArray(v)
+        .map((row) => {
+          const pair = asArray(row).map((x) => asNumber(x)).filter((n): n is number => n !== null)
+          return pair.length >= 2 ? [pair[0], pair[1]] : null
+        })
+        .filter((row): row is [number, number] => row !== null)
+        .slice(0, 40)
+    const bids = side(p.bids)
+    const asks = side(p.asks)
+    if (bids.length === 0 && asks.length === 0) errors.push('depth needs bids and asks as [price,size] pairs')
+    return { widget: { type, title: asString(p.title), unit: asString(p.unit), bids, asks }, errors, repaired }
+  }
+
+  if (type === 'violin') {
+    const series = asArray(p.series)
+      .map((ser) => {
+        const row = isObj(ser) ? ser : {}
+        const samples = asArray(row.data).map((d) => asNumber(Array.isArray(d) ? d[d.length - 1] : d)).filter((n): n is number => n !== null)
+        return { name: asString(row.name, 'Group'), data: samples.slice(0, 400) }
+      })
+      .filter((ser) => ser.data.length >= 3)
+      .slice(0, 8)
+    if (series.length === 0) errors.push('violin needs series with at least 3 samples')
+    return { widget: { type, title: asString(p.title), unit: asString(p.unit), series }, errors, repaired }
+  }
+
+  if (type === 'contour') {
+    const points = asArray(p.points)
+      .map((pt) => {
+        const nums = asArray(pt).map((x) => asNumber(x)).filter((n): n is number => n !== null)
+        return nums.length >= 3 ? [nums[0], nums[1], nums[2]] : null
+      })
+      .filter((pt): pt is [number, number, number] => pt !== null)
+      .slice(0, 2500)
+    if (points.length < 9) errors.push('contour needs a grid of [x,y,z] points')
+    return { widget: { type, title: asString(p.title), unit: asString(p.unit), points, levels: clamp(asNumber(p.levels) ?? 6, 3, 12) }, errors, repaired }
+  }
+
+  if (type === 'parallel') {
+    const axes = asArray(p.axes).map((a) => asString(a)).filter(Boolean).slice(0, 10)
+    const series = asArray(p.series)
+      .map((ser) => {
+        const row = isObj(ser) ? ser : {}
+        const values = asArray(row.values).map((v) => asNumber(v) ?? 0)
+        return { name: asString(row.name, 'Row'), values: values.slice(0, 10) }
+      })
+      .filter((ser) => ser.values.length === axes.length && axes.length >= 3)
+      .slice(0, 12)
+    if (axes.length < 3 || series.length === 0) errors.push('parallel needs 3+ axes and series aligned to them')
+    return { widget: { type, title: asString(p.title), axes, series }, errors, repaired }
+  }
+
+  if (type === 'dendrogram') {
+    const read = (v: unknown, depth: number): { label: string; distance: number; children: unknown[] } | null => {
+      if (depth > LIMITS.maxTreeDepth) return null
+      const o = isObj(v) ? v : {}
+      const label = asString(o.label ?? o.name)
+      if (!label) return null
+      const dist = asNumber(o.distance) ?? 0
+      return { label, distance: dist, children: asArray(o.children).map((c) => read(c, depth + 1)).filter((c): c is { label: string; distance: number; children: unknown[] } => c !== null) }
+    }
+    const rawRoots = asArray(p.roots).length > 0 ? asArray(p.roots) : isObj(p.root) ? [p.root] : []
+    const roots = rawRoots.map((r) => read(r, 0)).filter((r): r is { label: string; distance: number; children: unknown[] } => r !== null).slice(0, 8)
+    if (!roots.length) errors.push('dendrogram needs a merge tree with labels')
+    return { widget: { type, title: asString(p.title), roots }, errors, repaired }
   }
 
   // bullet
@@ -1181,6 +1264,178 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
       errors: items.length ? [] : ['checklist needs items'],
       repaired: false,
     }
+  },
+
+  // ------------------------------------------------------------------
+  // v3 — simulations, 3D stages, canvases, editors, runtime
+  // ------------------------------------------------------------------
+
+  sim: (p) => {
+    let repaired = false
+    let sim = asString(p.sim ?? p.type, 'particles')
+    if (!(SIM_TYPES as readonly string[]).includes(sim)) {
+      sim = 'particles'
+      repaired = true
+    }
+    const knob = (key: string, lo: number, hi: number, dflt: number) => {
+      const v = asNumber(p[key])
+      return v === null ? dflt : clamp(v, lo, hi)
+    }
+    const widget = {
+      sim,
+      title: asString(p.title),
+      gravity: knob('gravity', -30, 30, 9.8),
+      speed: knob('speed', 0.1, 3, 1),
+      damping: knob('damping', 0, 1, 0.99),
+      size: knob('size', 40, 100, 64),
+      count: Math.round(knob('count', 10, LIMITS.maxSimBodies, 60)),
+      seed: Math.round(knob('seed', 1, 9999, 42)),
+      interactive: p.interactive !== false,
+      note: asString(p.note),
+    }
+    return { widget, errors: [], repaired }
+  },
+
+  stage3d: (p) => {
+    let repaired = false
+    let view = asString(p.view ?? p.type ?? p.mode, 'scene')
+    if (!(STAGE3D_TYPES as readonly string[]).includes(view)) {
+      view = 'scene'
+      repaired = true
+    }
+    const nodes = asArray(p.nodes)
+      .map((n, i) => {
+        const o = isObj(n) ? n : {}
+        const pick = (k: string) => asNumber(o[k]) ?? 0
+        return {
+          id: asString(o.id ?? o.label, `n${i}`),
+          label: asString(o.label ?? o.id, `n${i}`),
+          x: pick('x'),
+          y: pick('y'),
+          z: pick('z'),
+          r: asNumber(o.r) ?? undefined,
+          group: asString(o.group),
+        }
+      })
+      .slice(0, LIMITS.max3dNodes)
+    const bonds = asArray(p.bonds ?? p.links ?? p.edges)
+      .map((b) => {
+        const pair = asArray(b).map((x) => asNumber(x)).filter((n): n is number => n !== null)
+        return pair.length >= 2 ? [Math.round(pair[0]), Math.round(pair[1])] : null
+      })
+      .filter((b): b is [number, number] => b !== null)
+      .filter(([a, b]) => a >= 0 && b >= 0 && a < nodes.length && b < nodes.length)
+      .slice(0, 200)
+    let zExpr: string | undefined = asString(p.z)
+    // surface fields are a whitelisted math expression over x,y. Two gates:
+    // 1. obvious junk chars; 2. the expression must actually EVALUATE under
+    // the shared calc engine (the same one the renderer uses) — so
+    // "fetch(window)" or any non-math identifier is dropped here, in the
+    // validator, not merely at render time.
+    if (zExpr && !/^[\s()+\-*/%^,.a-z0-9]*$/i.test(zExpr)) {
+      zExpr = undefined
+      repaired = true
+    }
+    if (zExpr) {
+      try {
+        const probe = evaluateExpr(zExpr, { x: 0.5, y: 0.5 })
+        if (!Number.isFinite(probe)) throw new Error('non-finite')
+      } catch {
+        zExpr = undefined
+        repaired = true
+      }
+    }
+    const widget = {
+      view,
+      title: asString(p.title),
+      nodes,
+      bonds,
+      ...(zExpr && !repaired ? { z: zExpr } : {}),
+      span: asNumber(p.span) ?? 2,
+      spin: p.spin !== false,
+      note: asString(p.note),
+    }
+    return { widget, errors: [], repaired }
+  },
+
+  canvas: (p) => {
+    let repaired = false
+    let surface = asString(p.surface ?? p.type, 'whiteboard')
+    if (!(CANVAS_TYPES as readonly string[]).includes(surface)) {
+      surface = 'whiteboard'
+      repaired = true
+    }
+    const nodes = asArray(p.nodes)
+      .map((n, i) => {
+        const o = isObj(n) ? n : {}
+        return {
+          id: i,
+          label: asString(o.label ?? o.title, `Node ${i + 1}`),
+          x: clamp(asNumber(o.x) ?? 0.5, 0, 1),
+          y: clamp(asNumber(o.y) ?? 0.5, 0, 1),
+          group: asString(o.group),
+        }
+      })
+      .slice(0, LIMITS.maxCanvasNodes)
+    const edges = asArray(p.edges ?? p.links)
+      .map((e) => {
+        if (isObj(e)) {
+          const a = asNumber(e.source ?? e.from)
+          const b = asNumber(e.target ?? e.to)
+          return a !== null && b !== null ? [Math.round(a), Math.round(b)] : null
+        }
+        const pair = asArray(e).map((x) => asNumber(x)).filter((n): n is number => n !== null)
+        return pair.length >= 2 ? [Math.round(pair[0]), Math.round(pair[1])] : null
+      })
+      .filter((e): e is [number, number] => e !== null)
+      .filter(([a, b]) => a >= 0 && b >= 0 && a < nodes.length && b < nodes.length)
+    const widget = { surface, title: asString(p.title), nodes, edges, note: asString(p.note) }
+    return { widget, errors: [], repaired }
+  },
+
+  editor: (p) => {
+    let repaired = false
+    let editor = asString(p.editor ?? p.type, 'sheet')
+    if (!(EDITOR_TYPES as readonly string[]).includes(editor)) {
+      editor = 'sheet'
+      repaired = true
+    }
+    const widget = {
+      editor,
+      title: asString(p.title),
+      // sheet
+      columns: asArray(p.columns).map((c) => asString(c)).slice(0, 12),
+      cells: isObj(p.cells) ? p.cells : isObj(p.data) ? p.data : {},
+      // nodes / site / pivot
+      nodes: asArray(p.nodes).slice(0, LIMITS.maxCanvasNodes),
+      edges: asArray(p.edges).slice(0, 120),
+      blocks: asArray(p.blocks).slice(0, 20),
+      groups: asArray(p.groups).slice(0, 8),
+      rows: asArray(p.rows).slice(0, 60),
+      // timeline editors
+      tracks: asArray(p.tracks).slice(0, LIMITS.maxTracks),
+      duration: Math.min(600, Math.max(1, asNumber(p.duration) ?? 60)),
+      // css editor
+      layout: isObj(p.layout) ? p.layout : {},
+      note: asString(p.note),
+      submitLabel: asString(p.submitLabel),
+    }
+    return { widget, errors: [], repaired }
+  },
+
+  terminal: (p) => {
+    const widget = {
+      title: asString(p.title, 'Terminal'),
+      welcome: asString(p.welcome),
+      commands: asArray(p.commands)
+        .map((c) => {
+          const o = isObj(c) ? c : {}
+          return { name: asString(o.name), description: asString(o.description) }
+        })
+        .filter((c) => c.name)
+        .slice(0, 12),
+    }
+    return { widget, errors: [], repaired: false }
   },
 }
 

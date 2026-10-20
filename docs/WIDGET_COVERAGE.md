@@ -1,15 +1,20 @@
 # WIDGET COVERAGE
 
+> **V3 (2026-10-20).** The 60-item "impossible" mega-list is now a tier map:
+> **34 kinds, 34 chart types, 8 live simulations, 8 three-dimensional stage
+> views, 4 canvas surfaces, 7 app editors, 1 terminal runtime, 20 app
+> experiences, 14 calculators, 17 form-field types, 16 media forms, 24
+> mermaid languages, 3 native blocks — 189 declared component types**, plus
+> unlimited bespoke ```html. Tier 1 is native and real; Tier 2 ships
+> degraded and labelled; Tier 3 is refused with stated reasons — never faked.
+>
 > **V2 (2026-10-20).** The catalogue stopped at 18 kinds and became a
-> compositional vocabulary: **29 kinds, 28 chart types, 20 app experiences,
-> 14 calculators, 17 form-field types, 16 media forms, 24 mermaid languages,
-> 3 native blocks — 151 declared component types**, plus unlimited bespoke
-> ```html. The model's prompt now states that number and bans quoting a
-> smaller one (the "I can only do 18" bug).
+> compositional vocabulary: 29 kinds, 28 chart types — 151 declared types
+> (see git history for the V2 header).
 >
 > | Layer | Status |
 > |---|---|
-> | Catalogue + validators + compiler + palettes (`src/lib/widgets/`) | shipped, 90/90 tests |
+> | Catalogue + validators + compiler + palettes (`src/lib/widgets/`) | shipped, 107/107 tests |
 > | Web renderers (`src/components/genui/`, 115 files) | shipped — gallery at `/genui` |
 > | Android renderers (Compose) | v1 kinds shipped; v2 kinds to sync |
 > | Prompt contract (`src/lib/widgets/prompt.ts`) | shipped — full vocabulary + palette system |
@@ -274,3 +279,69 @@ was already shipped.
 including the sector-list → bar-chart case, and assert the recovered block
 survives `parseWidget` — the real renderer gate — with a composition key that
 cannot collide with a parsed block.
+
+---
+
+# Catalogue v3 — the 60-item mega-list, tier by tier
+
+Research anchors: OpenAI Apps SDK (sandboxed widget iframes, `window.openai`
+bridge, `requestDisplayMode`), Google A2UI v1.0 (flat ID-referenced component
+lists, BYO-design-system catalogs), three.js examples (OrbitControls,
+molecular/cad conventions), marching-squares literature (contours), Streamlit
+`data_editor` (spreadsheet semantics), Mermaid mindmap/kanban grammar.
+
+## Tier 1 — native, real, interactive (shipped)
+
+| Mega-list item | Route | Notes |
+|---|---|---|
+| Physics — cloth | `sim` view=`cloth` | Verlet integration, mouse tearing, pin row |
+| Physics — soft body | `sim` view=`softbody` | pressure-soft ring, pokeable |
+| Physics — fluid | `sim` view=`fluid` | semi-Lagrangian stable fluids |
+| Physics — smoke | `sim` view=`smoke` | advected density field |
+| Physics — particles | `sim` view=`particles` | gravity/emitter, tap to burst |
+| Physics — rigid bodies | `sim` view=`rigid` | stacked impulse bodies |
+| Terrain editor | `sim` view=`terrain` | sculptable heightbrush |
+| Playable game | `sim` view=`game` | keyboard+touch, localStorage best score |
+| 3D scatter / surface | `stage3d` view=`scatter3d`/`surface3d` | lazy three.js, z = real expression |
+| Molecule viewer | `stage3d` view=`molecule` | ball-and-stick from nodes+bonds |
+| CAD part | `stage3d` view=`cad` | articulated primitives |
+| Anatomy | `stage3d` view=`anatomy` | layered shells |
+| 3D scene | `stage3d` view=`scene` | composed node graph |
+| VR/AR | `stage3d` view=`vr`/`ar` | **Tier 2** magic-window framing, labelled |
+| Whiteboard | `canvas` surface=`whiteboard` | pens, eraser, DPR-clean |
+| Mind map | `canvas` surface=`mindmap` | draggable, curved edges, branch button |
+| Diagram editor | `canvas` surface=`diagram` | shapes, arrow connect, orthogonal drag |
+| GIS polygon drawing | `canvas` surface=`polygons` | Leaflet draw, spherical area |
+| Spreadsheet + formulas | `editor` editor=`sheet` | A1 refs, SUM/AVG/MIN/MAX/COUNT, cycle guard |
+| Node/visual programming | `editor` editor=`nodes` | live dataflow evaluation |
+| Pivot table | `editor` editor=`pivot` | group-by + sum/avg/count |
+| Website builder | `editor` editor=`site` | block list, DnD reorder, preview |
+| CSS editor | `editor` editor=`css` | flex controls + live codegen |
+| Video editor | `editor` editor=`video` | multi-track timeline, rAF playhead |
+| Audio editor/DAW | `editor` editor=`audio` | WebAudio playback, waveform, STFT spectrogram, note sequencer |
+| Terminal | `terminal` | toy fs, history, sandboxed JS REPL (no network/DOM/storage ids) |
+| Charts — violin | `chart` type=`violin` | Gaussian KDE, Silverman bandwidth |
+| Charts — contour | `chart` type=`contour` | marching squares, 3–12 iso levels |
+| Charts — parallel coordinates | `chart` type=`parallel` | per-axis normalisation |
+| Charts — dendrogram | `chart` type=`dendrogram` | merge-distance tree |
+| Charts — force graph | `chart` type=`force` | rAF simulation, draggable nodes |
+| Charts — depth (order book) | `chart` type=`depth` | bids/asks ladder |
+| Streaming dashboards | `app` type=`dashboard` + SSE broker (v1) | live sections |
+| Kanban drag-and-drop | `app` type=`kanban` | pointer DnD columns |
+
+## Tier 2 — degraded, labelled (honest capability ceiling)
+
+| Item | Shipped as | Why degraded |
+|---|---|---|
+| VR/AR | `stage3d` `vr`/`ar` magic window (gyro-free orbit + framed passthrough styling) | Per the WebXR spec, immersive sessions require the `xr-spatial-tracking` permissions policy (default allowlist `'self'`, embeddable only via `allow="xr-spatial-tracking"`) AND user consent — a chat widget iframe cannot claim one unilaterally (w3.org/TR/webxr §3.2, immersiveweb.dev). Labelled in-renderer; a host that opts in with the iframe allow attribute unlocks full VR later. |
+| Multiplayer collaboration | shared-state prototype via the SSE stream broker | True CRDT co-editing needs a presence backend; the broker gives one-writer-many-readers sync. |
+
+## Tier 3 — refused, with reasons (never faked)
+
+| Item | Reason |
+|---|---|
+| Full IDE + debugger in chat | A debugger needs an execution target; the chat sandbox has no user processes to attach to. Anything rendered would be a lying mock. |
+| Persistent apps with their own backend + database | Chat surfaces are stateless between turns by design; granting per-app DBs means granting storage privileges the runtime does not have. |
+| Device-hardware panels (camera/mic/battery/sensors) | Iframe sandbox denies device prompts by policy; a fake battery meter is worse than none. |
+| Notification UIs | Notifications require a service worker + user permission; both are outside the widget sandbox. |
+| Unrestricted execution | The model's code runs behind CSP + blocked identifiers (`fetch`, storage, DOM) — by threat model, not by omission. |

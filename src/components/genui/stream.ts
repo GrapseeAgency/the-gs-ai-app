@@ -26,6 +26,14 @@ const WIDGET_LANGS = new Set([
   'calc', 'rating', 'poll', 'checklist', 'chips', 'menu', 'voice', 'tabs', 'accordion',
   'steps', 'tree', 'carousel', 'cards', 'followups', 'actions', 'panel', 'flashcards',
   'diff', 'media', 'app',
+  // v3 kinds
+  'sim', 'stage3d', 'canvas', 'editor', 'terminal',
+  // v3 sub-type fences the backend promotes to kinds
+  'cloth', 'softbody', 'fluid', 'smoke', 'particles', 'rigid', 'terrain', 'game',
+  'scatter3d', 'surface3d', 'molecule', 'cad', 'anatomy', 'scene', 'vr', 'ar',
+  'whiteboard', 'mindmap', 'diagram', 'polygons',
+  'nodes', 'pivot', 'site', 'css',
+  'violin', 'contour', 'parallel', 'dendrogram', 'force', 'depth',
   // sub-type fences the backend promotes to kinds
   'line', 'area', 'stackedarea', 'bar', 'hbar', 'stacked', 'grouped', 'pie', 'donut',
   'scatter', 'bubble', 'histogram', 'boxplot', 'heatmap', 'correlation', 'treemap',
@@ -46,6 +54,11 @@ const CANON: Record<string, string> = {
   waterfall: 'chart', candlestick: 'chart', gantt: 'chart', funnel: 'chart', radar: 'chart',
   chord: 'chart', quadrant: 'chart', sankey: 'chart', network: 'chart', wordcloud: 'chart',
   sunburst: 'chart', bullet: 'chart',
+  violin: 'chart', contour: 'chart', parallel: 'chart', dendrogram: 'chart', force: 'chart', depth: 'chart',
+  cloth: 'sim', softbody: 'sim', fluid: 'sim', smoke: 'sim', particles: 'sim', rigid: 'sim', terrain: 'sim', game: 'sim',
+  scatter3d: 'stage3d', surface3d: 'stage3d', molecule: 'stage3d', cad: 'stage3d', anatomy: 'stage3d', scene: 'stage3d', vr: 'stage3d', ar: 'stage3d',
+  whiteboard: 'canvas', mindmap: 'canvas', diagram: 'canvas', polygons: 'canvas',
+  nodes: 'editor', pivot: 'editor', site: 'editor', css: 'editor',
   image: 'media', gallery: 'media', video: 'media', audio: 'media', link: 'media',
   citation: 'media', entity: 'media', product: 'media', listing: 'media', doc: 'media',
   document: 'media', pdf: 'media', embed: 'media',

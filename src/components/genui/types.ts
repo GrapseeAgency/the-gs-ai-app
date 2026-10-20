@@ -28,6 +28,63 @@ export interface ChartPayload extends StyledPayload {
   items?: Array<{ text?: string; weight?: number; label?: string; value?: number; target?: number | null; max?: number | null; ranges?: number[]; unit?: string }>
   root?: TreeNode
   max?: number | null
+  // v3 chart families
+  axes?: string[]
+  points?: number[][]
+  levels?: number
+  bids?: Array<[number, number]>
+  asks?: Array<[number, number]>
+}
+
+/** The sim kind: one of the 8 live simulations. */
+export interface SimPayload extends Record<string, unknown> {
+  sim?: string
+  gravity?: number
+  speed?: number
+  damping?: number
+  count?: number
+  size?: number
+  seed?: number
+  interactive?: boolean
+  note?: string
+}
+
+/** The stage3d kind: a lazy-loaded three.js scene view. */
+export interface Stage3DPayload extends Record<string, unknown> {
+  view?: string
+  nodes?: Array<{ id?: string | number; label?: string; x: number; y: number; z: number; r?: number; group?: string }>
+  bonds?: Array<[number, number]>
+  z?: string
+  span?: number
+  spin?: boolean
+}
+
+/** The canvas kind: freeform pointer surface. */
+export interface CanvasPayload extends Record<string, unknown> {
+  surface?: string
+  nodes?: Array<{ id?: number; label?: string; x: number; y: number; group?: string }>
+  edges?: Array<[number, number]>
+  note?: string
+}
+
+/** The editor kind: an in-chat application editor. */
+export interface EditorPayload extends Record<string, unknown> {
+  editor?: string
+  columns?: string[]
+  cells?: Record<string, string>
+  blocks?: Array<{ type: string; text: string }>
+  groups?: Array<{ title: string; rows?: string[][] }>
+  rows?: string[][]
+  tracks?: Array<{ name: string; clips: Array<{ start: number; dur: number; label: string }> }>
+  duration?: number
+  layout?: { direction?: string; gap?: number; justify?: string; align?: string; wrap?: string }
+  submitLabel?: string
+}
+
+/** The terminal kind: sandboxed shell + JS REPL. */
+export interface TerminalPayload extends Record<string, unknown> {
+  welcome?: string
+  commands?: Array<{ name: string; description: string }>
 }
 
 export interface TreeNode {
