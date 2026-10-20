@@ -12,12 +12,9 @@ import androidx.compose.ui.graphics.Color
  * light and dark appearance, so a single change here re-themes the app.
  *
  * Product-shell visual identity: warm peach surfaces, orange AI actions,
- * and soft tactile cards inspired by the reference mobile experience. Dark = black surfaces / white text / neutral grays. Light =
- * white surfaces / black text / neutral grays. The former teal/green accent
- * language is gone — "accent" is now ink-on-paper (light) and white-on-black
- * (dark). Only semantic status hues (error / success / warning / info) and
- * the code syntax palette keep colour, and they are content states, never
- * interface chrome.
+ * and soft tactile cards inspired by the reference mobile experience. Both
+ * appearances keep the same warm family; dark mode shifts toward espresso,
+ * terracotta, and candlelit peach rather than reverting to black utility chrome.
  *
  * Mirrors ios/App/Sources/Theme/DesignSystem.swift.
  */
@@ -32,23 +29,22 @@ object Aeruo {
     val ContainerLight = Color(0xFFFFD8C8)
     val ContainerHighLight = Color(0xFFFFC7B1)
 
-    // Dark palette (genuinely neutral black — no blue cast)
-    val Obsidian = Color(0xFF000000)
-    val SurfaceDark = Color(0xFF101214)
-    val RaisedDark = Color(0xFF151719)
-    val TextDark = Color(0xFFF2F3F5)
-    val TextMutedDark = Color(0xFF8F7169)
-    val OutlineDark = Color(0xFF27292D)
-    val ContainerLowDark = Color(0xFF121417)
-    val ContainerDark = Color(0xFF17191C)
-    val ContainerHighDark = Color(0xFF202225)
+    // Dark palette (warm espresso / terracotta companion to the light theme)
+    val Obsidian = Color(0xFF1A1110)
+    val SurfaceDark = Color(0xFF221716)
+    val RaisedDark = Color(0xFF2B1D1A)
+    val TextDark = Color(0xFFFFF4EF)
+    val TextMutedDark = Color(0xFFC7A197)
+    val OutlineDark = Color(0xFF4A2B25)
+    val ContainerLowDark = Color(0xFF2A1D1A)
+    val ContainerDark = Color(0xFF35221E)
+    val ContainerHighDark = Color(0xFF432B24)
 
-    // Accent — now MONOCHROME. In dark appearance the accent is the primary
-    // text white; in light appearance it is the primary ink. There is no hue.
-    val Accent = Color(0xFFFF9142)       // dark accent = primary white
-    val AccentDeep = Color(0xFFF36F2C)   // light accent = ink
-    val AccentSoftDark = Color(0x24FF9142) // 14% white on black
-    val AccentSoftLight = Color(0x1AFF9142) // 10% ink on paper
+    // Accent — warm orange action color shared by both appearances.
+    val Accent = Color(0xFFFFAE73)
+    val AccentDeep = Color(0xFFF36F2C)
+    val AccentSoftDark = Color(0x33FFAE73)
+    val AccentSoftLight = Color(0x1AFF9142)
 
     // Neutral motion grays (streaming shimmer, AI life-signs — no colour)
     val GrayBright = Color(0xFFF2F3F5)
@@ -80,8 +76,6 @@ object Aeruo {
     val SyntaxNumLight = Color(0xFFD84315)
     val SyntaxNumDark = Color(0xFFF78C6C)
 
-    // Kinetic life-sign gradient — ONLY for AI-active moments
-    // (streaming caret, generation progress). Now a quiet WHITE→GRAY shimmer:
-    // alive but colourless, per the monochrome identity.
+    // Kinetic life-sign gradient — reserved for AI-active moments.
     val Aurora = listOf(Color(0xFFFFB36D), Color(0xFFFF8847), Color(0xFFF36F2C))
 }

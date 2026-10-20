@@ -13,12 +13,9 @@ import UIKit
  *    via .preferredColorScheme at the app root; every dynamic token follows.
  *  - Reduce motion / reduce animations degrade springs, press scale and the
  *    decorative loops; font scale multiplies every Aero type role.
- *  - MONOCHROME identity (workspace reset): dark = black surfaces / white
- *    text / neutral grays; light = white surfaces / black text / neutral
- *    grays. The former teal accent is gone — "accent" is now white-on-black
- *    (dark) and ink-on-paper (light). Only semantic status hues (error /
- *    success / warning / info) and the code syntax palette keep colour, and
- *    they are content states, never interface chrome.
+ *  - Warm reference identity: light mode uses peach / cream surfaces and
+ *    orange actions; dark mode shifts to espresso / terracotta surfaces with
+ *    candlelit peach actions. Semantic status hues remain reserved for status.
  */
 
 // MARK: - Accessibility + font-scale flag store (plain class: read from
@@ -55,98 +52,97 @@ enum Aero {
     // ---- Background hierarchy ------------------------------------------------
     static let background = dynamic(          // window canvas
         light: UIColor(red: 1.0, green: 0.957, blue: 0.937, alpha: 1),                  // FFF4EF
-        dark: UIColor(red: 0, green: 0, blue: 0, alpha: 1))                // 000000
+        dark: UIColor(red: 0.102, green: 0.067, blue: 0.063, alpha: 1)) // 1A1110
     static let secondaryBackground = dynamic( // grouped / under-page canvas
         light: UIColor(red: 1.0, green: 0.910, blue: 0.871, alpha: 1),   // FFE8DE
-        dark: UIColor(red: 0.051, green: 0.055, blue: 0.063, alpha: 1))    // 0D0E10
+        dark: UIColor(red: 0.165, green: 0.114, blue: 0.102, alpha: 1)) // 2A1D1A
     static let surface = dynamic(             // standard content surface
         light: UIColor(red: 1.0, green: 0.984, blue: 0.973, alpha: 1),
-        dark: UIColor(red: 0.063, green: 0.071, blue: 0.078, alpha: 1))    // 101214
+        dark: UIColor(red: 0.133, green: 0.090, blue: 0.086, alpha: 1)) // 221716
     static let elevatedSurface = dynamic(     // above-surface content
         light: .white,
-        dark: UIColor(red: 0.090, green: 0.098, blue: 0.110, alpha: 1))    // 17191C
+        dark: UIColor(red: 0.208, green: 0.133, blue: 0.118, alpha: 1)) // 35221E
     static let raisedSurface = dynamic(       // raised controls: pills, tiles
         light: UIColor(red: 1.0, green: 0.910, blue: 0.871, alpha: 1),   // FFE8DE
-        dark: UIColor(red: 0.082, green: 0.090, blue: 0.098, alpha: 1))    // 151719
+        dark: UIColor(red: 0.169, green: 0.114, blue: 0.102, alpha: 1)) // 2B1D1A
     static let inputSurface = dynamic(        // text fields, composer field
         light: UIColor(red: 1.0, green: 0.910, blue: 0.871, alpha: 1),   // FFE8DE
-        dark: UIColor(red: 0.071, green: 0.078, blue: 0.090, alpha: 1))    // 121417
+        dark: UIColor(red: 0.165, green: 0.114, blue: 0.102, alpha: 1)) // 2A1D1A
     static let sheetSurface = dynamic(        // bottom sheets
         light: UIColor(red: 1.0, green: 0.984, blue: 0.973, alpha: 1),
-        dark: UIColor(red: 0.063, green: 0.071, blue: 0.078, alpha: 1))    // 101214
+        dark: UIColor(red: 0.133, green: 0.090, blue: 0.086, alpha: 1)) // 221716
     static let dialogSurface = dynamic(       // dialogs / confirmations
         light: .white,
-        dark: UIColor(red: 0.090, green: 0.098, blue: 0.110, alpha: 1))    // 17191C
+        dark: UIColor(red: 0.208, green: 0.133, blue: 0.118, alpha: 1)) // 35221E
     static let navSurface = dynamic(          // drawer / navigation chrome
         light: .white,
-        dark: UIColor(red: 0, green: 0, blue: 0, alpha: 1))                // 000000
+        dark: UIColor(red: 0.102, green: 0.067, blue: 0.063, alpha: 1)) // 1A1110
 
     // ---- Text hierarchy --------------------------------------------------------
     static let text = dynamic(
         light: UIColor(red: 0.169, green: 0.102, blue: 0.090, alpha: 1),               // 2B1A17
-        dark: UIColor(red: 0.973, green: 0.976, blue: 0.984, alpha: 1),    // F8F9FB
+        dark: UIColor(red: 1.0, green: 0.957, blue: 0.937, alpha: 1), // FFF4EF
         lightHC: .black,
         darkHC: .white)
     static let textSecondary = dynamic(
         light: UIColor(red: 0.561, green: 0.443, blue: 0.412, alpha: 1),   // 8F7169
-        dark: UIColor(red: 0.639, green: 0.659, blue: 0.686, alpha: 1),    // A3A8AF
+        dark: UIColor(red: 0.780, green: 0.631, blue: 0.592, alpha: 1), // C7A197
         lightHC: UIColor(red: 0.278, green: 0.298, blue: 0.329, alpha: 1), // 474C54
         darkHC: UIColor(red: 0.780, green: 0.800, blue: 0.827, alpha: 1))  // C7CCD3
     static let textTertiary = dynamic(
         light: UIColor(red: 0.573, green: 0.596, blue: 0.631, alpha: 1),   // 9298A1
-        dark: UIColor(red: 0.471, green: 0.494, blue: 0.529, alpha: 1))    // 787E87
+        dark: UIColor(red: 0.659, green: 0.518, blue: 0.471, alpha: 1)) // A88478
     static let textDisabled = dynamic(
         light: UIColor(red: 0.769, green: 0.780, blue: 0.800, alpha: 1),   // C4C7CC
-        dark: UIColor(red: 0.318, green: 0.337, blue: 0.365, alpha: 1))    // 51565D
+        dark: UIColor(red: 0.447, green: 0.318, blue: 0.286, alpha: 1)) // 725149
     static let textPlaceholder = dynamic(
         light: UIColor(red: 0.620, green: 0.639, blue: 0.671, alpha: 1),   // 9EA3AB
-        dark: UIColor(red: 0.471, green: 0.494, blue: 0.529, alpha: 1))    // 787E87
+        dark: UIColor(red: 0.659, green: 0.518, blue: 0.471, alpha: 1)) // A88478
     static let textInverted = dynamic(        // text on accent / dark imagery
         light: .white,
-        dark: UIColor(red: 0.039, green: 0.039, blue: 0.039, alpha: 1))    // 0A0A0A
+        dark: UIColor(red: 0.102, green: 0.067, blue: 0.063, alpha: 1)) // 1A1110
     static let link = dynamic(
         light: UIColor(red: 0.953, green: 0.435, blue: 0.173, alpha: 1),               // F36F2C
-        dark: UIColor(red: 0.973, green: 0.976, blue: 0.984, alpha: 1))    // F8F9FB
+        dark: UIColor(red: 1.0, green: 0.682, blue: 0.451, alpha: 1)) // FFAE73
 
     // ---- Structural --------------------------------------------------------------
     static let outline = dynamic(
         light: UIColor(red: 0.941, green: 0.824, blue: 0.776, alpha: 1),   // F0D2C6
-        dark: UIColor(red: 0.153, green: 0.161, blue: 0.176, alpha: 1),    // 27292D
+        dark: UIColor(red: 0.290, green: 0.169, blue: 0.145, alpha: 1), // 4A2B25
         lightHC: UIColor(red: 0.749, green: 0.749, blue: 0.761, alpha: 1), // BFBFC2
         darkHC: UIColor(red: 0.337, green: 0.353, blue: 0.384, alpha: 1))  // 565A62
     static let outlineStrong = dynamic(
         light: UIColor(red: 0.835, green: 0.835, blue: 0.847, alpha: 1),   // D5D5D8
-        dark: UIColor(red: 0.204, green: 0.216, blue: 0.235, alpha: 1),    // 34373C
+        dark: UIColor(red: 0.412, green: 0.251, blue: 0.216, alpha: 1), // 694037
         lightHC: UIColor(red: 0.588, green: 0.588, blue: 0.600, alpha: 1), // 969699
         darkHC: UIColor(red: 0.431, green: 0.451, blue: 0.490, alpha: 1))  // 6E737D
     static let divider = dynamic(
         light: UIColor(red: 0.933, green: 0.933, blue: 0.941, alpha: 1),   // EEEEEF
-        dark: UIColor(red: 0.106, green: 0.114, blue: 0.125, alpha: 1))    // 1B1D20
+        dark: UIColor(red: 0.290, green: 0.169, blue: 0.145, alpha: 1)) // 4A2B25
     static let selected = dynamic(
         light: UIColor(red: 0.953, green: 0.435, blue: 0.173, alpha: 1),               // F36F2C
-        dark: UIColor(red: 0.973, green: 0.976, blue: 0.984, alpha: 1))    // F8F9FB
+        dark: UIColor(red: 1.0, green: 0.682, blue: 0.451, alpha: 1)) // FFAE73
     static let pressed = dynamic(             // pressed/hover overlay
         light: UIColor(red: 0, green: 0, blue: 0, alpha: 0.06),
         dark: UIColor(red: 1, green: 1, blue: 1, alpha: 0.08))
     static let focus = dynamic(
         light: UIColor(red: 0, green: 0, blue: 0, alpha: 1),
-        dark: UIColor(red: 0.973, green: 0.976, blue: 0.984, alpha: 1))
+        dark: UIColor(red: 1.0, green: 0.682, blue: 0.451, alpha: 1))
     static let scrim = dynamic(
         light: UIColor(red: 0, green: 0, blue: 0, alpha: 0.5),
         dark: UIColor(red: 0, green: 0, blue: 0, alpha: 0.6))
 
     // ---- Semantic ------------------------------------------------------------------
-    /// The monochrome accent — white on black (dark), ink on paper (light).
-    /// There is no hue anywhere in the product chrome.
+    /// Warm peach/orange accent shared by the reference-inspired product chrome.
     static let accent = dynamic(
         light: UIColor(red: 0.953, green: 0.435, blue: 0.173, alpha: 1),               // F36F2C
-        dark: UIColor(red: 0.973, green: 0.976, blue: 0.984, alpha: 1))    // F8F9FB
+        dark: UIColor(red: 1.0, green: 0.682, blue: 0.451, alpha: 1)) // FFAE73
     static let accentStrong = dynamic(
-        light: UIColor(red: 0.953, green: 0.435, blue: 0.173, alpha: 1),               // F36F2C
-        dark: .white)
+        light: UIColor(red: 0.953, green: 0.435, blue: 0.173, alpha: 1), // F36F2C
+        dark: UIColor(red: 1.0, green: 0.757, blue: 0.561, alpha: 1))
     static let accentSoft = dynamic(
         light: UIColor(red: 1.0, green: 0.569, blue: 0.259, alpha: 0.14),
-        dark: UIColor(red: 1, green: 1, blue: 1, alpha: 0.11))
+        dark: UIColor(red: 1.0, green: 0.682, blue: 0.451, alpha: 0.20))
     static let onAccent = dynamic(
         light: .white,
         dark: UIColor(red: 0.039, green: 0.039, blue: 0.039, alpha: 1))    // 0A0A0A
@@ -206,11 +202,10 @@ enum Aero {
         light: UIColor(red: 0.847, green: 0.263, blue: 0.082, alpha: 1),   // D84315
         dark: UIColor(red: 0.969, green: 0.549, blue: 0.424, alpha: 1))    // F78C6C
 
-    // ---- Life-sign gradient (AI-active moments ONLY) — a quiet white→gray
-    // shimmer: alive but colourless, per the monochrome identity.
+    // ---- Life-sign gradient (AI-active moments ONLY).
     static let aurora: [Color] = [
-        Color(red: 0.973, green: 0.976, blue: 0.984),   // F8F9FB
-        Color(red: 0.639, green: 0.659, blue: 0.686)    // A3A8AF
+        Color(red: 1.0, green: 0.682, blue: 0.451),
+        Color(red: 1.0, green: 0.839, blue: 0.690)
     ]
 
     // ---- Legacy raw-value aliases (DEPRECATED bridge for un-migrated call sites) -----

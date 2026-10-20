@@ -14,7 +14,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /**
- * MONOCHROME — SEMANTIC design tokens.
+ * WARM CONSUMER — SEMANTIC design tokens.
  *
  * This is the one authoritative vocabulary for the app's visual foundation.
  * Screens and components consume `GsTheme.colors.*`, `GsSpacing`, `GsRadius`,
@@ -22,9 +22,8 @@ import androidx.compose.ui.unit.dp
  * never the raw `Aeruo.*` registry.
  *
  * Every colour below is theme-resolved (light + dark constructors) and every
- * text/border role has a high-contrast variant. The accent family is neutral
- * ink/white — the product interface carries no hue; only semantic status
- * roles do. Mirrors iOS DesignSystem.swift.
+ * text/border role has a high-contrast variant. The accent family stays warm
+ * peach/orange across appearances. Mirrors iOS DesignSystem.swift.
  */
 @Immutable
 data class GsColors(
@@ -126,8 +125,8 @@ fun lightGsColors(highContrast: Boolean = false): GsColors {
         focus = Aeruo.AccentDeep,
         scrim = Color(SCRIM_LIGHT),
 
-        accent = Aeruo.AccentDeep,          // ink — the monochrome accent on paper
-        accentStrong = Color(0xFFF36F2C),   // one step stronger: pure black
+        accent = Aeruo.AccentDeep,
+        accentStrong = Color(0xFFF36F2C),
         accentSoft = Aeruo.AccentSoftLight,
         onAccent = Color(0xFFFFFFFF),
         success = Aeruo.SuccessLight,
@@ -158,40 +157,40 @@ fun lightGsColors(highContrast: Boolean = false): GsColors {
     )
 }
 
-/** Dark appearance — genuinely monochrome: black surfaces, white text. */
+/** Dark appearance — warm espresso surfaces with candlelit peach actions. */
 fun darkGsColors(highContrast: Boolean = false): GsColors {
-    val textSecondary = if (highContrast) Color(0xFFB4BCC9) else Color(0xFF8B93A1)
+    val textSecondary = if (highContrast) Color(0xFFFFE1D4) else Aeruo.TextMutedDark
     return GsColors(
-        appBackground = Color(0xFF000000),   // true black canvas
-        secondaryBackground = Color(0xFF0D0F12),
-        surface = Color(0xFF101214),         // near-black neutral — no blue cast
-        elevatedSurface = Color(0xFF17191C),
-        raisedSurface = Color(0xFF151719),
-        inputSurface = Color(0xFF121417),
-        sheetSurface = Color(0xFF101214),
-        dialogSurface = Color(0xFF17191C),
-        navSurface = Color(0xFF000000),
+        appBackground = Aeruo.Obsidian,
+        secondaryBackground = Aeruo.ContainerLowDark,
+        surface = Aeruo.SurfaceDark,
+        elevatedSurface = Aeruo.ContainerDark,
+        raisedSurface = Aeruo.RaisedDark,
+        inputSurface = Aeruo.ContainerLowDark,
+        sheetSurface = Aeruo.SurfaceDark,
+        dialogSurface = Aeruo.ContainerDark,
+        navSurface = Aeruo.Obsidian,
 
-        textPrimary = if (highContrast) Color(0xFFFFFFFF) else Color(0xFFF2F3F5),
+        textPrimary = if (highContrast) Color(0xFFFFFFFF) else Aeruo.TextDark,
         textSecondary = textSecondary,
-        textTertiary = Color(0xFF777E8A),
-        textDisabled = Color(0xFF4E545E),
-        textPlaceholder = Color(0xFF777E8A),
-        textInverted = Color(0xFF0A0A0A),
-        link = Color(0xFFF2F3F5),
+        textTertiary = Color(0xFFA98478),
+        textDisabled = Color(0xFF725149),
+        textPlaceholder = Color(0xFFA98478),
+        textInverted = Aeruo.Obsidian,
+        link = Aeruo.Accent,
 
-        border = if (highContrast) Color(0xFF565B64) else Color(0xFF27292D),
-        borderStrong = if (highContrast) Color(0xFF6E747E) else Color(0xFF34373C),
-        divider = Color(0xFF1B1D20),
-        selected = Color(0xFFF2F3F5),
-        pressedOverlay = Color(0x14F2F3F5), // 8% white
-        focus = Color(0xFFF2F3F5),
+        border = if (highContrast) Color(0xFFFFD0BE) else Aeruo.OutlineDark,
+        borderStrong = if (highContrast) Color(0xFFFFB393) else Color(0xFF694037),
+        divider = Color(0xFF4A2B25),
+        selected = Aeruo.Accent,
+        pressedOverlay = Color(0x24FFAE73),
+        focus = Aeruo.Accent,
         scrim = Color(SCRIM_DARK),
 
-        accent = Color(0xFFF2F3F5),          // white — the monochrome accent on black
-        accentStrong = Color(0xFFFFFFFF),    // one step stronger: pure white
+        accent = Aeruo.Accent,
+        accentStrong = Color(0xFFFFC18F),
         accentSoft = Aeruo.AccentSoftDark,
-        onAccent = Color(0xFF0A0A0A),        // black content on white controls
+        onAccent = Color(0xFF3A1B12),
         success = Aeruo.SuccessDark,
         successSoft = Color(0x244CC38A),
         warning = Aeruo.WarningDark,
@@ -202,11 +201,11 @@ fun darkGsColors(highContrast: Boolean = false): GsColors {
         info = Aeruo.InfoDark,
         infoSoft = Color(0x246CB8FF),
 
-        aiActive = Color(0xFFF2F3F5),
+        aiActive = Aeruo.Accent,
         streaming = Aeruo.GrayMid,           // neutral — the life-sign carries no hue
         toolExecution = Aeruo.GrayMid,       // neutral
         research = Aeruo.GrayMid,            // neutral
-        voice = Color(0xFFF2F3F5),
+        voice = Aeruo.Accent,
         generation = Aeruo.GrayMid,          // neutral
 
         codeSurface = Aeruo.CodeSurfaceDark,
