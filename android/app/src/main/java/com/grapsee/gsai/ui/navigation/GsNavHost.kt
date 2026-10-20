@@ -33,6 +33,7 @@ import com.grapsee.gsai.ShortcutBus
 import com.grapsee.gsai.data.SessionStore
 import com.grapsee.gsai.ui.auth.AuthScreen
 import com.grapsee.gsai.ui.auth.OnboardingScreen
+import com.grapsee.gsai.ui.auth.ReferenceWelcomeScreen
 import com.grapsee.gsai.ui.billing.BillingScreen
 import com.grapsee.gsai.ui.chat.ArchivedChatsScreen
 import com.grapsee.gsai.ui.chat.ChatScreen
@@ -279,6 +280,16 @@ fun GsNavHost(modifier: Modifier = Modifier) {
             )
         }
         composable(GsRoutes.ONBOARDING) {
+            ReferenceWelcomeScreen(
+                onExplore = { navController.navigate(GsRoutes.ONBOARDING_SETUP) },
+                onSkip = {
+                    SessionStore.activateSession(context)
+                    SessionStore.setOnboarded(context, true)
+                    navController.navigate(GsRoutes.HOME) { popUpTo(0) { inclusive = true } }
+                }
+            )
+        }
+        composable(GsRoutes.ONBOARDING_SETUP) {
             OnboardingScreen(
                 onFinished = {
                     SessionStore.activateSession(context)
