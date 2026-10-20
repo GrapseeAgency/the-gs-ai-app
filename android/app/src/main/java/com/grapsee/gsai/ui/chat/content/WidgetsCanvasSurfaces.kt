@@ -43,12 +43,15 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.size
 import com.grapsee.gsai.ui.theme.GsTheme
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Size
 
 private val PEN_HUES = listOf(0, 1, 2, 9, 4)
 
@@ -91,7 +94,7 @@ private fun WhiteboardSurface(w: CanvasWidgetData) {
                         moveTo(stroke.first().x, stroke.first().y)
                         stroke.drop(1).forEach { lineTo(it.x, it.y) }
                     }
-                    drawPath(path, seriesColor(PEN_HUES[pen]), style = Stroke(3f))
+                    drawPath(path, seriesInk(PEN_HUES[pen]), style = Stroke(3f))
                 }
             }
         }
@@ -100,7 +103,7 @@ private fun WhiteboardSurface(w: CanvasWidgetData) {
                 Box(
                     Modifier
                         .size(width = 22.dp, height = 22.dp)
-                        .background(seriesColor(hue), RoundedCornerShape(11.dp))
+                        .background(seriesInk(hue), RoundedCornerShape(11.dp))
                         .border(
                             width = if (pen == i) 2.dp else 0.dp,
                             color = GsTheme.colors.textPrimary,
@@ -157,7 +160,7 @@ private fun MindMapSurface(w: CanvasWidgetData) {
                         moveTo(ax, ay)
                         cubicTo((ax + bx) / 2f, ay, (ax + bx) / 2f, by, bx, by)
                     }
-                    drawPath(path, seriesColor(0).copy(alpha = 0.5f), style = Stroke(2f))
+                    drawPath(path, seriesInk(0).copy(alpha = 0.5f), style = Stroke(2f))
                 }
             }
             nodes.forEachIndexed { i, node ->
@@ -178,8 +181,8 @@ private fun MindMapSurface(w: CanvasWidgetData) {
                 ) {
                     Row(
                         Modifier
-                            .background(seriesColor(i % 12).copy(alpha = 0.16f), RoundedCornerShape(999.dp))
-                            .border(1.dp, seriesColor(i % 12), RoundedCornerShape(999.dp))
+                            .background(seriesInk(i % 12).copy(alpha = 0.16f), RoundedCornerShape(999.dp))
+                            .border(1.dp, seriesInk(i % 12), RoundedCornerShape(999.dp))
                             .clickable {
                                 val id = nodes.size
                                 nodes.add(MapNodeState((node.x + 0.18f).coerceAtMost(0.9f), (node.y + if (id % 2 == 0) 0.14f else -0.14f).coerceIn(0.08f, 0.9f)))
@@ -192,7 +195,7 @@ private fun MindMapSurface(w: CanvasWidgetData) {
                         Text(
                             " +",
                             style = MaterialTheme.typography.labelMedium,
-                            color = seriesColor(i % 12),
+                            color = seriesInk(i % 12),
                             fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
                         )
                     }
@@ -241,7 +244,7 @@ private fun DiagramSurface(w: CanvasWidgetData) {
                     val ay = a.y * size.height
                     val bx = b.x * size.width
                     val by = b.y * size.height
-                    drawLine(seriesColor(0).copy(alpha = 0.8f), Offset(ax, ay), Offset(bx, by), strokeWidth = 2f)
+                    drawLine(seriesInk(0).copy(alpha = 0.8f), Offset(ax, ay), Offset(bx, by), strokeWidth = 2f)
                     // arrowhead
                     val ang = atan2(by - ay, bx - ax)
                     val head = 10f
@@ -254,7 +257,7 @@ private fun DiagramSurface(w: CanvasWidgetData) {
                         lineTo(p3.x, p3.y)
                         close()
                     }
-                    drawPath(tri, seriesColor(0).copy(alpha = 0.8f))
+                    drawPath(tri, seriesInk(0).copy(alpha = 0.8f))
                 }
             }
             nodes.forEachIndexed { i, node ->
@@ -276,12 +279,12 @@ private fun DiagramSurface(w: CanvasWidgetData) {
                     Box(
                         Modifier
                             .background(
-                                if (selected == i) seriesColor(0) else seriesColor(0).copy(alpha = 0.13f),
+                                if (selected == i) seriesInk(0) else seriesInk(0).copy(alpha = 0.13f),
                                 RoundedCornerShape(if (isDecision) 6.dp else 999.dp)
                             )
                             .border(
                                 1.5.dp,
-                                if (selected == i) seriesColor(0) else seriesColor(0).copy(alpha = 0.5f),
+                                if (selected == i) seriesInk(0) else seriesInk(0).copy(alpha = 0.5f),
                                 RoundedCornerShape(if (isDecision) 6.dp else 999.dp)
                             )
                             .clickable {
@@ -331,11 +334,11 @@ private fun PolygonSurface(w: CanvasWidgetData) {
                 .pointerInput(w) {
                     detectTapGestures { p ->
                         verts.add(p)
-                        area = if (verts.size >= 3) polygonAreaKm2(verts.toList(), size) else 0f
+                        area = if (verts.size >= 3) polygonAreaKm2(verts.toList(), Size(size.width.toFloat(), size.height.toFloat())) else 0f
                     }
                 }
         ) {
-            val grid = GsTheme.colors.divider
+            val grid = Color(0x33808080)
             // graticule: 6 x 4 cells
             for (i in 0..6) drawLine(grid, Offset(size.width * i / 6f, 0f), Offset(size.width * i / 6f, size.height), strokeWidth = 1f)
             for (j in 0..4) drawLine(grid, Offset(0f, size.height * j / 4f), Offset(size.width, size.height * j / 4f), strokeWidth = 1f)
@@ -345,10 +348,10 @@ private fun PolygonSurface(w: CanvasWidgetData) {
                     verts.drop(1).forEach { lineTo(it.x, it.y) }
                     if (verts.size >= 3) close()
                 }
-                drawPath(path, seriesColor(2).copy(alpha = 0.22f))
-                drawPath(path, seriesColor(2), style = Stroke(2f))
+                drawPath(path, seriesInk(2).copy(alpha = 0.22f))
+                drawPath(path, seriesInk(2), style = Stroke(2f))
             }
-            verts.forEach { v -> drawCircle(seriesColor(2), radius = 4f, center = v) }
+            verts.forEach { v -> drawCircle(seriesInk(2), radius = 4f, center = v) }
         }
         Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text(

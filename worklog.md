@@ -5228,3 +5228,14 @@ Work Log:
 - {"subtitle":"All day]} — the live model closed a string with ]} (missing quote AND brace). repairJson only appended one `}` and gave up. Replaced with closeOpenStructures: string-aware walk that closes an unterminated string BEFORE the structural char that ended it, and closes objects stranded by an early `]`.
 - gantt encoded as ONE RANGE PER SERIES (Task 1 = [0,2]) — canonical gantt shape rejected by the 2-points-per-series rule. gantt joins pie/donut in the one-point club, both sides.
 - Tests: backend 71/71 (block 26), Android 219/219. versionName 0.81.16, versionCode 117. Gates re-verified.
+
+---
+Task ID: build-0.81.17-arena-repair
+Agent: main
+Task: Rebuild the app from the new main (arena PR #5/#6 merged) and update the release page.
+
+Work Log:
+- main pulled (4dbddd3). The merged arena work DID NOT COMPILE: 219 Kotlin errors across 11 files — the v3 catalogue was written but never built.
+- Root causes, fixed: DrawScope lambdas calling @Composable seriesColor/GsTheme (new non-composable seriesInk + static GRID_INK/TEXT_INK); missing imports (layout.size, fillMaxSize, offset, onSizeChanged, mutableStateListOf, Alignment, kotlin.math.max, Color, Size); EditorWidgetData had no nodes/edges (added + EditorNodeData); Map.take() on cells; evalSheetCell trailing lambda after a defaulted param; OkHttp readTimeout property; RowScope align misuse; IntSize vs Size at three sites.
+- Catalogue contract tests updated to the v3 set: 6 new kinds, 12 new chart sub-types, embed, timer.
+- Tests: 235/235 Android. APK gates: com.grapsee.gsai, versionCode 118 / 0.81.17, 4 ABIs, libgs_ffi.so ×4, cert b1ffd75d…8b1a483.

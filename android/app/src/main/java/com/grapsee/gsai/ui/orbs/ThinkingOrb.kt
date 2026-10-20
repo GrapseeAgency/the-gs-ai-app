@@ -124,6 +124,9 @@ fun ThinkingOrb(
     // control cropping them. No third preset, no re-tuning, no clipped edge.
     val presetPx = size.px
     val scaleFactor = renderScale.coerceAtLeast(0.01f)
+    // Read the accent during composition: the Canvas lambda is DrawScope and
+    // cannot touch GsTheme.
+    val aiActive = GsTheme.colors.aiActive
     Canvas(
         modifier
             .size((presetPx * scaleFactor).dp)
@@ -149,7 +152,7 @@ fun ThinkingOrb(
                     val w = buffer.lWhite[li].coerceIn(0.0, 1.0)
                     val gray = (if (dark) 1 - w else w)
                     drawLine(
-                        color = GsTheme.colors.aiActive.copy(alpha = buffer.lAlpha[li].coerceIn(0.0, 1.0).toFloat() * (0.35f + gray.toFloat() * 0.65f)),
+                        color = aiActive.copy(alpha = buffer.lAlpha[li].coerceIn(0.0, 1.0).toFloat() * (0.35f + gray.toFloat() * 0.65f)),
                         start = Offset(
                             (buffer.lx1[li] * density).toFloat(),
                             (buffer.ly1[li] * density).toFloat()
@@ -181,7 +184,7 @@ fun ThinkingOrb(
                     val w = buffer.pWhite[i].coerceIn(0.0, 1.0)
                     val gray = (if (dark) 1 - w else w)
                     drawCircle(
-                        color = GsTheme.colors.aiActive.copy(alpha = alpha.coerceIn(0.0, 1.0).toFloat() * (0.35f + gray.toFloat() * 0.65f)),
+                        color = aiActive.copy(alpha = alpha.coerceIn(0.0, 1.0).toFloat() * (0.35f + gray.toFloat() * 0.65f)),
                         radius = radius,
                         center = Offset(
                             (buffer.px[i] * density).toFloat(),

@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.Alignment
 import com.grapsee.gsai.ui.theme.GsTheme
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -157,7 +158,7 @@ internal fun TerminalWidgetView(w: TerminalWidget) {
                     color = when (line.kind) {
                         "in" -> GsTheme.colors.textTertiary
                         "err" -> WidgetPalette.legible(WidgetPalette.at(9), true)
-                        "sys" -> seriesColor(1)
+                        "sys" -> seriesInk(1)
                         else -> GsTheme.colors.textPrimary
                     }
                 )
@@ -165,7 +166,7 @@ internal fun TerminalWidgetView(w: TerminalWidget) {
             Text(
                 "${cwd.value} $",
                 style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
-                color = seriesColor(1)
+                color = seriesInk(1)
             )
         }
         Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {

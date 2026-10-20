@@ -54,12 +54,18 @@ import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.math.sqrt
 
+// DrawScope has no composition, so the theme read for hairline ink happens
+// here as a static mid-grey that reads on both canvases.
+private val GRID_INK = Color(0x33808080)
+private val TEXT_INK = Color(0xFF808080)
+
 private const val CHART_LAYOUT_W = 320f
 private const val CHART_LAYOUT_H = 190f
 
+@Composable
 private fun groupHue(group: String): Color {
     val idx = if (group.isEmpty()) 0 else abs(group.hashCode()) % 12
-    return seriesColor(idx)
+    return seriesInk(idx)
 }
 
 // --- sankey ------------------------------------------------------------------
@@ -73,8 +79,10 @@ internal fun SankeyChart(w: ChartWidget) {
     val targeted = links.mapNotNull { l -> indexOf[l.target] }.toSet()
     val total = max(1f, links.sumOf { max(it.value, 0.1f).toDouble() }.toFloat())
     val usable = CHART_LAYOUT_H - 16f
-    val accent = seriesColor(0)
-    val grid = GsTheme.colors.divider
+    val accent = seriesInk(0)
+    // DrawScope is not @Composable — resolve the palette once, before the Canvas.
+    val palette = List(12) { seriesInk(it) }
+    val grid = GRID_INK
     Canvas(Modifier.fillMaxWidth().height(190.dp).padding(top = 8.dp)) {
         val cw = size.width
         val ch = size.height
@@ -86,8 +94,8 @@ internal fun SankeyChart(w: ChartWidget) {
         val dstH = usable / max(1, targets.size)
         val srcBase = HashMap<Int, Float>()
         val dstBase = HashMap<Int, Float>()
-        sources.forEach { (j, entry) -> srcBase[entry.index] = 8f + j * srcH }
-        targets.forEach { (j, entry) -> dstBase[entry.index] = 8f + j * dstH }
+        sources.forEach { (j, _) -> srcBase[j] = 8f + j * srcH }
+        targets.forEach { (j, _) -> dstBase[j] = 8f + j * dstH }
         val srcOff = HashMap<Int, Float>()
         val dstOff = HashMap<Int, Float>()
         links.forEach { l ->
@@ -110,13 +118,13 @@ internal fun SankeyChart(w: ChartWidget) {
             srcOff[si] = (srcOff[si] ?: 0f) + h + 2f
             dstOff[ti] = (dstOff[ti] ?: 0f) + h + 2f
         }
-        sources.forEachIndexed { i, (_, n) ->
-            val y = srcBase[n.index] ?: 8f
-            drawRect(seriesColor(i % 12), topLeft = Offset(cw * 0.18f, y * sy), size = Size(9f * scale, min(srcH - 4f, usable - y).coerceAtLeast(4f)))
+        sources.forEachIndexed { i, (idx, _) ->
+            val y = srcBase[idx] ?: 8f
+            drawRect(palette[i % 12], topLeft = Offset(cw * 0.18f, y * sy), size = Size(9f * scale, min(srcH - 4f, usable - y).coerceAtLeast(4f)))
         }
-        targets.forEachIndexed { i, (_, n) ->
-            val y = dstBase[n.index] ?: 8f
-            drawRect(seriesColor((i + 5) % 12), topLeft = Offset(cw * 0.78f, y * sy), size = Size(9f * scale, min(dstH - 4f, usable - y).coerceAtLeast(4f)))
+        targets.forEachIndexed { i, (idx, _) ->
+            val y = dstBase[idx] ?: 8f
+            drawRect(palette[(i + 5) % 12], topLeft = Offset(cw * 0.78f, y * sy), size = Size(9f * scale, min(dstH - 4f, usable - y).coerceAtLeast(4f)))
         }
         drawLine(grid, Offset(cw * 0.5f, 4f), Offset(cw * 0.5f, ch - 4f), strokeWidth = 1f)
     }
@@ -156,11 +164,11 @@ internal fun NetworkChart(w: ChartWidget) {
             val a = idx[l.source]
             val b = idx[l.target]
             if (a != null && b != null && a < pos.size && b < pos.size) {
-                drawLine(GsTheme.colors.divider, pos[a], pos[b], strokeWidth = (l.value * 0.6f).coerceIn(0.8f, 3f))
+                drawLine(GRID_INK, pos[a], pos[b], strokeWidth = (l.value * 0.6f).coerceIn(0.8f, 3f))
             }
         }
         pos.forEachIndexed { i, p ->
-            drawCircle(seriesColor(i % 12), radius = 7f, center = p)
+            drawCircle(seriesInk(i % 12), radius = 7f, center = p)
             drawCircle(Color.White.copy(alpha = 0.6f), radius = 3f, center = p)
         }
     }
@@ -259,10 +267,10 @@ internal fun ForceChart(w: ChartWidget) {
         val sy = size.height / CHART_LAYOUT_H
         val pos = pts.map { Offset(it.x * scale, it.y * sy) }
         links.forEach { (a, b) ->
-            if (a < pos.size && b < pos.size) drawLine(GsTheme.colors.divider, pos[a], pos[b], strokeWidth = 1.4f)
+            if (a < pos.size && b < pos.size) drawLine(GRID_INK, pos[a], pos[b], strokeWidth = 1.4f)
         }
         pos.forEachIndexed { i, p ->
-            drawCircle(seriesColor(i % 12), radius = 8f * scale, center = p)
+            drawCircle(seriesInk(i % 12), radius = 8f * scale, center = p)
         }
     }
     Text(
@@ -290,7 +298,7 @@ internal fun WordcloudChart(w: ChartWidget) {
                             t,
                             fontSize = (11 + (weight / maxW) * 13).sp,
                             fontWeight = if (weight / maxW > 0.6f) FontWeight.SemiBold else FontWeight.Normal,
-                            color = seriesColor((t.hashCode() % 12 + 12) % 12),
+                            color = seriesInk((t.hashCode() % 12 + 12) % 12),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
@@ -325,7 +333,7 @@ internal fun SunburstChart(w: ChartWidget) {
         kids.forEachIndexed { i, child ->
             val sweep = (subtreeValue(child) / total) * 360f
             drawArc(
-                seriesColor(i % 12).copy(alpha = 0.9f),
+                seriesInk(i % 12).copy(alpha = 0.9f),
                 startAngle = start,
                 sweepAngle = sweep,
                 useCenter = false,
@@ -340,7 +348,7 @@ internal fun SunburstChart(w: ChartWidget) {
             sub.forEachIndexed { j, gc ->
                 val sweep2 = (subtreeValue(gc) / subTotal) * sweep
                 drawArc(
-                    seriesColor((i * 3 + j + 1) % 12).copy(alpha = 0.6f),
+                    seriesInk((i * 3 + j + 1) % 12).copy(alpha = 0.6f),
                     startAngle = s2,
                     sweepAngle = sweep2,
                     useCenter = false,
@@ -352,12 +360,12 @@ internal fun SunburstChart(w: ChartWidget) {
             }
             start += sweep
         }
-        drawCircle(GsTheme.colors.divider, radius = 3f, center = Offset(cx, cy))
+        drawCircle(GRID_INK, radius = 3f, center = Offset(cx, cy))
     }
     Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         kids.take(5).forEachIndexed { i, c ->
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.padding(end = 4.dp).height(8.dp).fillMaxWidth(0.03f).background(seriesColor(i % 12), androidx.compose.foundation.shape.RoundedCornerShape(4.dp)))
+                Box(Modifier.padding(end = 4.dp).height(8.dp).fillMaxWidth(0.03f).background(seriesInk(i % 12), androidx.compose.foundation.shape.RoundedCornerShape(4.dp)))
                 Text(c.label, style = MaterialTheme.typography.labelSmall, color = GsTheme.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
@@ -384,19 +392,19 @@ internal fun BulletChart(w: ChartWidget) {
                         val lo = r.getOrNull(0) ?: 0f
                         val hi = r.getOrNull(1) ?: lo
                         drawRect(
-                            seriesColor(i % 12).copy(alpha = 0.14f + bi * 0.10f),
+                            seriesInk(i % 12).copy(alpha = 0.14f + bi * 0.10f),
                             topLeft = Offset(cw * (lo / track).coerceIn(0f, 1f), 0f),
                             size = Size(cw * ((hi - lo) / track).coerceIn(0f, 1f), size.height)
                         )
                     }
                     drawRect(
-                        seriesColor(i % 12),
+                        seriesInk(i % 12),
                         topLeft = Offset(0f, size.height * 0.3f),
                         size = Size(cw * (value / track).coerceIn(0f, 1f), size.height * 0.4f)
                     )
                     if (!target.isNaN()) {
                         val tx = cw * (target / track).coerceIn(0f, 1f)
-                        drawRect(GsTheme.colors.textPrimary, topLeft = Offset(tx - 1.5f, 0f), size = Size(3f, size.height))
+                        drawRect(TEXT_INK, topLeft = Offset(tx - 1.5f, 0f), size = Size(3f, size.height))
                     }
                 }
             }
@@ -422,15 +430,15 @@ internal fun QuadrantChart(w: ChartWidget) {
         val ch = size.height
         val mx = cw / 2f
         val my = ch / 2f
-        drawRect(GsTheme.colors.divider.copy(alpha = 0.12f), topLeft = Offset(0f, 0f), size = Size(mx, my))
-        drawRect(GsTheme.colors.divider.copy(alpha = 0.12f), topLeft = Offset(mx, my), size = Size(mx, my))
-        drawLine(GsTheme.colors.divider, Offset(mx, 0f), Offset(mx, ch), strokeWidth = 1f)
-        drawLine(GsTheme.colors.divider, Offset(0f, my), Offset(cw, my), strokeWidth = 1f)
+        drawRect(GRID_INK.copy(alpha = 0.12f), topLeft = Offset(0f, 0f), size = Size(mx, my))
+        drawRect(GRID_INK.copy(alpha = 0.12f), topLeft = Offset(mx, my), size = Size(mx, my))
+        drawLine(GRID_INK, Offset(mx, 0f), Offset(mx, ch), strokeWidth = 1f)
+        drawLine(GRID_INK, Offset(0f, my), Offset(cw, my), strokeWidth = 1f)
         pts.forEachIndexed { i, (x, y, name) ->
             val si = w.series.indexOfFirst { it.name == name }.coerceAtLeast(0)
             val px = mx + (((x - xLo) / (xHi - xLo)) * cw - mx).coerceIn(-mx + 8f, mx - 8f)
             val py = my - (((y - yLo) / (yHi - yLo)) * ch - my).coerceIn(-my + 8f, my - 8f)
-            drawCircle(seriesColor(si % 12).copy(alpha = 0.85f), radius = 6f, center = Offset(px, py))
+            drawCircle(seriesInk(si % 12).copy(alpha = 0.85f), radius = 6f, center = Offset(px, py))
         }
     }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -483,7 +491,7 @@ private fun violinPath(values: List<Float>, x0: Float, colW: Float, usableH: Flo
 internal fun ViolinChart(w: ChartWidget) {
     val series = w.series.take(8).filter { it.data.isNotEmpty() }
     if (series.isEmpty()) return
-    val colors = series.indices.map { seriesColor(it) }
+    val colors = series.indices.map { seriesInk(it) }
     val usableH = CHART_LAYOUT_H - 24f
     Canvas(Modifier.fillMaxWidth().height(190.dp).padding(top = 8.dp)) {
         val cw = size.width
@@ -498,7 +506,7 @@ internal fun ViolinChart(w: ChartWidget) {
             val lo = values.minOrNull() ?: 0f
             val hi = max(lo + 1e-4f, values.maxOrNull() ?: 1f)
             val my = usableH - ((mean - lo) / (hi - lo)).coerceIn(0f, 1f) * usableH
-            drawLine(GsTheme.colors.textPrimary, Offset(i * colW + colW * 0.34f, my * sy), Offset(i * colW + colW * 0.66f, my * sy), strokeWidth = 1.6f)
+            drawLine(TEXT_INK, Offset(i * colW + colW * 0.34f, my * sy), Offset(i * colW + colW * 0.66f, my * sy), strokeWidth = 1.6f)
         }
     }
     Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
@@ -533,7 +541,7 @@ internal fun ContourChart(w: ChartWidget) {
     val zLo = grid.flatMap { it.toList() }.minOrNull() ?: 0f
     val zHi = max(zLo + 1e-4f, grid.flatMap { it.toList() }.maxOrNull() ?: 1f)
     val levels = (if (w.levels in 3..12) w.levels else 6)
-    val accent = seriesColor(0)
+    val accent = seriesInk(0)
     Canvas(Modifier.fillMaxWidth().height(200.dp).padding(top = 8.dp)) {
         val cw = size.width
         val ch = size.height
@@ -603,7 +611,7 @@ internal fun ParallelChart(w: ChartWidget) {
     val axes = w.axes.take(10)
     val series = w.series.filter { it.values.isNotEmpty() }.take(12)
     if (axes.size < 3 || series.isEmpty()) return
-    val colors = series.indices.map { seriesColor(it) }
+    val colors = series.indices.map { seriesInk(it) }
     val axisX = { i: Int, cw: Float -> 24f + (i.toFloat() / (axes.size - 1)) * (cw - 48f) }
     Canvas(Modifier.fillMaxWidth().height(190.dp).padding(top = 8.dp)) {
         val cw = size.width
@@ -615,7 +623,7 @@ internal fun ParallelChart(w: ChartWidget) {
             val lo = col.minOrNull() ?: 0f
             val hi = max(lo + 1e-4f, col.maxOrNull() ?: 1f)
             val x = axisX(i, cw)
-            drawLine(GsTheme.colors.divider, Offset(x, top), Offset(x, bottom), strokeWidth = 1.2f)
+            drawLine(GRID_INK, Offset(x, top), Offset(x, bottom), strokeWidth = 1.2f)
         }
         series.forEachIndexed { si, s ->
             val path = Path()
@@ -681,8 +689,8 @@ internal fun DendrogramChart(w: ChartWidget) {
         val scale = size.width / CHART_LAYOUT_W
         val sy = size.height / CHART_LAYOUT_H
         val baseY = size.height - 22f * sy
-        val ink = seriesColor(0)
-        val grid = GsTheme.colors.divider
+        val ink = seriesInk(0)
+        val grid = GRID_INK
         drawLine(grid, Offset(0f, baseY), Offset(size.width, baseY), strokeWidth = 1f)
         layout.values.filter { it.isLeaf }.forEach { l ->
             drawLine(grid, Offset(l.x * scale, l.y * sy), Offset(l.x * scale, baseY), strokeWidth = 1f)
@@ -720,8 +728,8 @@ internal fun DepthChart(w: ChartWidget) {
     val bestBid = bids.maxOfOrNull { it.first }
     val bestAsk = asks.minOfOrNull { it.first }
     val spread = if (bestBid != null && bestAsk != null) bestAsk - bestBid else Float.NaN
-    val jade = seriesColor(1)
-    val crimson = seriesColor(9)
+    val jade = seriesInk(1)
+    val crimson = seriesInk(9)
     Canvas(Modifier.fillMaxWidth().height(190.dp).padding(top = 8.dp)) {
         val cw = size.width
         val ch = size.height
@@ -737,7 +745,7 @@ internal fun DepthChart(w: ChartWidget) {
             val y = ch / 2f + i * rowH
             if (y <= ch) drawRect(crimson.copy(alpha = 0.75f), topLeft = Offset(midX, y), size = Size(wpx, (rowH - 2f).coerceAtLeast(2f)))
         }
-        drawLine(GsTheme.colors.divider, Offset(midX, 0f), Offset(midX, ch), strokeWidth = 1.2f)
+        drawLine(GRID_INK, Offset(midX, 0f), Offset(midX, ch), strokeWidth = 1.2f)
     }
     Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
         Text("bid ${bestBid?.toString() ?: "—"}", style = MaterialTheme.typography.labelSmall, color = jade)

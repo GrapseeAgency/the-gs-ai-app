@@ -440,7 +440,18 @@ data class EditorWidgetData(
     val tracks: List<TrackData> = emptyList(),
     val duration: Int = 60,
     val layout: Map<String, JsonElement> = emptyMap(),
-    val blocks: List<SiteBlock> = emptyList()
+    val blocks: List<SiteBlock> = emptyList(),
+    // Node-graph editor payload (v3). Defaulted so sheet payloads decode unchanged.
+    val nodes: List<EditorNodeData> = emptyList(),
+    val edges: List<List<Int>> = emptyList()
+)
+
+@Serializable
+data class EditorNodeData(
+    val x: Float = 0f,
+    val y: Float = 0f,
+    val label: String = "",
+    val group: String = ""
 )
 
 @Serializable
@@ -764,7 +775,7 @@ fun parseWidget(kind: String, json: String): Widget? {
                         editor = editor,
                         columns = w.columns.take(12),
                         rows = w.rows.take(60).map { r -> r.take(12) },
-                        cells = w.cells.take(200).toMap(),
+                        cells = w.cells.entries.take(200).associate { it.key to it.value },
                         tracks = w.tracks.take(6),
                         duration = w.duration.coerceIn(1, 600),
                         blocks = w.blocks.take(20)
@@ -901,6 +912,14 @@ internal fun seriesColor(i: Int): Color {
     }
     return WidgetPalette.legible(WidgetPalette.at(i), dark)
 }
+
+/**
+ * DrawScope-safe twin of [seriesColor]: Canvas draw lambdas are NOT
+ * @Composable, so a palette read has to happen without composition. Same
+ * twelve hues, same index stability — only the accent override is skipped.
+ */
+internal fun seriesInk(i: Int, dark: Boolean = false): Color =
+    WidgetPalette.legible(WidgetPalette.at(i), dark)
 
 /**
  * Surface treatment. Six genuinely different faces, so a chart, a KPI, a form

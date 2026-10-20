@@ -414,7 +414,10 @@ internal fun FormWidgetView(w: FormWidget, onSendPrompt: ((String) -> Unit)?) {
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(
                             keyboardType = when (f.type) {
-                                "time" -> KeyboardType.Time
+                                // Compose has no Time keyboard; the date/time
+                                // pickers above already constrain the shape, so
+                                // a numeric pad is the closest honest hint.
+                                "time" -> KeyboardType.Number
                                 "email" -> KeyboardType.Email
                                 else -> KeyboardType.Uri
                             }

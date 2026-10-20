@@ -65,11 +65,13 @@ private abstract class SimWorld(protected val spec: SimWidget) {
     open fun drag(p: Offset, size: Size) {}
     abstract fun draw(scope: DrawScope)
 
-    protected fun accent(): Color = WidgetPalette.legible(WidgetPalette.at(0), WidgetPalette.onDarkCanvas())
-    protected fun jade(): Color = WidgetPalette.legible(WidgetPalette.at(1), WidgetPalette.onDarkCanvas())
-    protected fun amber(): Color = WidgetPalette.legible(WidgetPalette.at(2), WidgetPalette.onDarkCanvas())
-    protected fun rose(): Color = WidgetPalette.legible(WidgetPalette.at(9), WidgetPalette.onDarkCanvas())
-    protected fun ink(): Color = GsTheme.colors.textTertiary
+    // Worlds draw inside DrawScope, where composition is not available — these
+    // read the static palette instead of the theme.
+    protected fun accent(): Color = seriesInk(0)
+    protected fun jade(): Color = seriesInk(1)
+    protected fun amber(): Color = seriesInk(2)
+    protected fun rose(): Color = seriesInk(9)
+    protected fun ink(): Color = Color(0xFF8A8A8A)
 }
 
 private fun scaleOf(size: Size): Pair<Float, Float> = size.width / SIM_W to size.height / SIM_H
@@ -133,7 +135,7 @@ private class ParticleWorld(spec: SimWidget) : SimWorld(spec) {
     override fun draw(scope: DrawScope) {
         val (sx, sy) = scaleOf(scope.size)
         for (i in 0 until n) {
-            scope.drawCircle(WidgetPalette.legible(WidgetPalette.at(hue[i]), WidgetPalette.onDarkCanvas()), radius = 3.4f * sx, center = Offset(x[i] * sx, y[i] * sy))
+            scope.drawCircle(seriesInk(hue[i]), radius = 3.4f * sx, center = Offset(x[i] * sx, y[i] * sy))
         }
     }
 }
@@ -651,13 +653,13 @@ internal fun SimWidgetView(w: SimWidget) {
                 .pointerInput(world) {
                     detectTapGestures { p ->
                         val g = world as? GameWorld
-                        if (g != null && g.over) world = createWorld(w) else world.tap(p, size)
+                        if (g != null && g.over) world = createWorld(w) else world.tap(p, Size(size.width.toFloat(), size.height.toFloat()))
                     }
                 }
                 .pointerInput(world) {
                     detectDragGestures { change, _ ->
                         change.consume()
-                        world.drag(change.position, size)
+                        world.drag(change.position, Size(size.width.toFloat(), size.height.toFloat()))
                     }
                 }
         ) {

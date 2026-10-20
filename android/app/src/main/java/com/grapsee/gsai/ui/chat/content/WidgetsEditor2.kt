@@ -48,12 +48,17 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.mutableStateListOf
 import com.grapsee.gsai.ui.theme.GsTheme
 import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sin
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.layout.onSizeChanged
 
 // --- sheet engine ------------------------------------------------------------
 
@@ -112,7 +117,7 @@ private fun SheetEditorView(w: EditorWidgetData) {
         mutableStateMapOf<String, String>().apply {
             put("B1", "120"); put("B2", "180"); put("B3", "95")
             put("B4", "=SUM(B1:B3)"); put("B5", "=AVG(B1:B3)"); put("C1", "=B4*1.2")
-            putAll(w.cells.take(200).toMap())
+            putAll(w.cells.entries.take(200).associate { it.key to it.value })
         }
     }
     var editing by remember { mutableStateOf<String?>(null) }
@@ -135,7 +140,7 @@ private fun SheetEditorView(w: EditorWidgetData) {
                         val ref = "${colName(c)}${r + 1}"
                         val raw = cells[ref] ?: ""
                         val value = if (raw.isEmpty()) "" else {
-                            val evaluated = evalSheetCell(raw) { cells[it] ?: "" }
+                            val evaluated = evalSheetCell(raw, { cells[it] ?: "" })
                             if (evaluated == null) raw else {
                                 val rounded = (evaluated * 100).toLong() / 100.0
                                 if (raw.startsWith("=")) rounded.toString() else raw
@@ -152,7 +157,7 @@ private fun SheetEditorView(w: EditorWidgetData) {
                             Text(
                                 value,
                                 style = MaterialTheme.typography.labelMedium,
-                                color = if (isFormula) seriesColor(0) else GsTheme.colors.textPrimary,
+                                color = if (isFormula) seriesInk(0) else GsTheme.colors.textPrimary,
                                 maxLines = 1
                             )
                         }
@@ -221,7 +226,7 @@ private fun PivotEditorView(w: EditorWidgetData) {
                     if (value % 1.0 == 0.0) value.toLong().toString() else "%.2f".format(value),
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
-                    color = seriesColor(0)
+                    color = seriesInk(0)
                 )
                 Box(Modifier.width(28.dp))
             }
@@ -276,7 +281,7 @@ private fun NodesEditorView(w: EditorWidgetData) {
                     val ay = a.y * size.height
                     val bx = b.x * size.width
                     val by = b.y * size.height
-                    drawLine(seriesColor(0).copy(alpha = 0.7f), Offset(ax, ay), Offset(bx, by), strokeWidth = 2f)
+                    drawLine(seriesInk(0).copy(alpha = 0.7f), Offset(ax, ay), Offset(bx, by), strokeWidth = 2f)
                 }
             }
             nodes.forEachIndexed { i, node ->
@@ -284,7 +289,7 @@ private fun NodesEditorView(w: EditorWidgetData) {
                     Modifier
                         .offset { androidx.compose.ui.unit.IntOffset((node.x * pxSize.width).roundToInt() - 40, (node.y * pxSize.height).roundToInt() - 18) }
                         .background(GsTheme.colors.elevatedSurface, RoundedCornerShape(8.dp))
-                        .border(1.5.dp, seriesColor(0).copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                        .border(1.5.dp, seriesInk(0).copy(alpha = 0.5f), RoundedCornerShape(8.dp))
                         .clickable {
                             if (node.kind == "input") node.value += 1.0
                         }
@@ -303,7 +308,7 @@ private fun NodesEditorView(w: EditorWidgetData) {
                     Text(
                         if (node.kind == "input") "tap +1 → ${node.value.toLong()}" else "= ${valueOf(i)}",
                         style = MaterialTheme.typography.labelSmall,
-                        color = seriesColor(0)
+                        color = seriesInk(0)
                     )
                 }
             }
@@ -347,14 +352,14 @@ private fun SiteEditorView(w: EditorWidgetData) {
                     Box(Modifier.weight(1f)) {
                         val text = block.text
                         when (block.type) {
-                            "hero" -> Text(text, style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = seriesColor(0))
+                            "hero" -> Text(text, style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = seriesInk(0))
                             "button" -> Text(
                                 text,
                                 style = MaterialTheme.typography.labelMedium,
                                 color = GsTheme.colors.appBackground,
-                                modifier = Modifier.background(seriesColor(0), RoundedCornerShape(999.dp)).padding(horizontal = 12.dp, vertical = 5.dp)
+                                modifier = Modifier.background(seriesInk(0), RoundedCornerShape(999.dp)).padding(horizontal = 12.dp, vertical = 5.dp)
                             )
-                            "image" -> Box(Modifier.fillMaxWidth().height(28.dp).background(seriesColor(i % 12).copy(alpha = 0.14f), RoundedCornerShape(6.dp))) {
+                            "image" -> Box(Modifier.fillMaxWidth().height(28.dp).background(seriesInk(i % 12).copy(alpha = 0.14f), RoundedCornerShape(6.dp))) {
                                 Text("🖼 $text", style = MaterialTheme.typography.labelSmall, color = GsTheme.colors.textTertiary, modifier = Modifier.padding(4.dp))
                             }
                             else -> Text(text, style = MaterialTheme.typography.bodySmall, color = GsTheme.colors.textSecondary)
@@ -413,11 +418,11 @@ private fun CssEditorView(w: EditorWidgetData) {
         ) {
             if (direction == "row") {
                 Row(horizontalArrangement = Arrangement.spacedBy(gap.dp)) {
-                    hues.take(4).forEach { Box(Modifier.size(width = 34.dp, height = 60.dp).background(seriesColor(it), RoundedCornerShape(6.dp))) }
+                    hues.take(4).forEach { Box(Modifier.size(width = 34.dp, height = 60.dp).background(seriesInk(it), RoundedCornerShape(6.dp))) }
                 }
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(gap.dp)) {
-                    hues.take(4).forEach { Box(Modifier.size(width = 120.dp, height = 14.dp).background(seriesColor(it), RoundedCornerShape(6.dp))) }
+                    hues.take(4).forEach { Box(Modifier.size(width = 120.dp, height = 14.dp).background(seriesInk(it), RoundedCornerShape(6.dp))) }
                 }
             }
         }
@@ -470,11 +475,11 @@ private fun VideoEditorView(w: EditorWidgetData) {
                 track.clips.forEach { clip ->
                     val x = (clip.start / duration) * cw
                     val clipW = (clip.dur / duration) * cw
-                    drawRect(seriesColor(ti % 12).copy(alpha = 0.4f), topLeft = Offset(x, y + 3f), size = androidx.compose.ui.geometry.Size(clipW, trackH - 6f))
+                    drawRect(seriesInk(ti % 12).copy(alpha = 0.4f), topLeft = Offset(x, y + 3f), size = androidx.compose.ui.geometry.Size(clipW, trackH - 6f))
                 }
             }
             val px = (playhead / duration) * cw
-            drawLine(seriesColor(9), Offset(px, 0f), Offset(px, size.height), strokeWidth = 2f)
+            drawLine(seriesInk(9), Offset(px, 0f), Offset(px, size.height), strokeWidth = 2f)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = { playing = !playing }) { Text(if (playing) "Pause" else "Play") }
@@ -511,16 +516,16 @@ private fun AudioEditorView(w: EditorWidgetData) {
                 val y = mid - v * (mid - 6f)
                 if (first) { path.moveTo(x.toFloat(), y); first = false } else path.lineTo(x.toFloat(), y)
             }
-            drawPath(path, seriesColor(0), style = Stroke(1.4f))
+            drawPath(path, seriesInk(0), style = Stroke(1.4f))
         }
         Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             seq.forEachIndexed { i, note ->
                 Text(
                     note,
                     style = MaterialTheme.typography.labelSmall,
-                    color = seriesColor(0),
+                    color = seriesInk(0),
                     modifier = Modifier
-                        .border(1.dp, seriesColor(0).copy(alpha = 0.5f), RoundedCornerShape(6.dp))
+                        .border(1.dp, seriesInk(0).copy(alpha = 0.5f), RoundedCornerShape(6.dp))
                         .clickable { seq[i] = notes[(notes.indexOf(note) + 1) % notes.size] }
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                 )

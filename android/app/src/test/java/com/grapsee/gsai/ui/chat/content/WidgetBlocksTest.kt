@@ -158,7 +158,10 @@ class WidgetBlocksTest {
         val types = listOf(
             "line", "area", "stackedArea", "bar", "hbar", "stacked", "grouped",
             "pie", "donut", "scatter", "bubble", "histogram", "boxplot", "heatmap",
-            "correlation", "treemap", "waterfall", "candlestick", "gantt", "funnel", "radar", "chord"
+            "correlation", "treemap", "waterfall", "candlestick", "gantt", "funnel", "radar", "chord",
+            // v3 — parity with the web renderer
+            "quadrant", "sankey", "network", "wordcloud", "sunburst", "bullet",
+            "violin", "contour", "parallel", "dendrogram", "force", "depth"
         )
         assertEquals(CHART_TYPES, types.toSet())
         for (type in types) {
@@ -238,7 +241,8 @@ class WidgetBlocksTest {
             "listing" to """{"type":"listing","items":[{"title":"X","meta":"m"}]}""",
             "doc" to """{"type":"doc","items":[{"url":"https://x/a.pdf","title":"a.pdf"}]}""",
             "document" to """{"type":"document","items":[{"url":"https://x/b.pdf","title":"b.pdf"}]}""",
-            "pdf" to """{"type":"pdf","items":[{"url":"https://x/c.pdf","title":"c.pdf"}]}"""
+            "pdf" to """{"type":"pdf","items":[{"url":"https://x/c.pdf","title":"c.pdf"}]}""",
+            "embed" to """{"type":"embed","items":[{"url":"https://x/embed","title":"Embed"}]}"""
         )
         assertEquals(MEDIA_TYPES, payloads.keys)
         for ((type, json) in payloads) {
@@ -294,7 +298,14 @@ class WidgetBlocksTest {
             "panel" to """{"title":"T","summary":"s","body":"b"}""",
             "voice" to """{"title":"Talk","prompt":"hello"}""",
             "calc" to """{"type":"loan","fields":[{"key":"p","label":"Principal","value":1000,"min":0,"max":5000}],"outputs":[{"label":"Pay","expr":"p*2","format":"money","primary":true}]}""",
-            "app" to """{"type":"tasks","items":[{"title":"Do it"}]}"""
+            "app" to """{"type":"tasks","items":[{"title":"Do it"}]}""",
+            // v3 kinds — same contract: routed means parsed.
+            "sim" to """{"sim":"particles","count":40}""",
+            "stage3d" to """{"view":"scene","nodes":[{"id":"a","label":"A"}]}""",
+            "canvas" to """{"surface":"whiteboard","nodes":[{"x":0.2,"y":0.3}]}""",
+            "editor" to """{"editor":"sheet","cells":{"A1":"1"}}""",
+            "terminal" to """{"commands":[{"name":"help","description":"list commands"}]}""",
+            "collab" to """{"surface":"counter","room":"lobby"}"""
         )
         // The routing set is exactly the parser set — no orphan language, no
         // parser branch reachable only by a hand-written call.
@@ -414,7 +425,8 @@ class WidgetBlocksTest {
             "files" to """{"items":[{"title":"a.pdf"}]}""",
             "connected" to """{"items":[{"title":"Drive"}]}""",
             "decision" to """{"steps":[{"title":"Criteria","body":"pick"}]}""",
-            "scenario" to """{"items":[{"title":"Base","meta":"$10k"}]}"""
+            "scenario" to """{"items":[{"title":"Base","meta":"$10k"}]}""",
+            "timer" to """{"items":[{"title":"Focus","price":25}]}"""
         )
         assertEquals(APP_TYPES, payloads.keys)
         for ((type, json) in payloads) {

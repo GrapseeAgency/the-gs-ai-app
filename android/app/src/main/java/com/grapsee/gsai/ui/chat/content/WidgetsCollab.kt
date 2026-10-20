@@ -89,7 +89,7 @@ internal fun CollabWidgetView(w: CollabWidgetData) {
     val root = remember(w) { BuildConfig.BASE_URL.trimEnd('/') + "/api/v1/collab" }
     val client = remember(w) {
         HttpClient(OkHttp) {
-            engine { config { readTimeoutMillis = 0 } }
+            engine { config { readTimeout(0, java.util.concurrent.TimeUnit.MILLISECONDS) } }
             expectSuccess = false
         }
     }
@@ -185,8 +185,8 @@ internal fun CollabWidgetView(w: CollabWidgetData) {
     }
 
     fun num(key: String): Int = sharedState[key]?.toDoubleOrNull()?.toInt() ?: 0
-    fun colorOf(hex: String): Color = parseHexColor(hex) ?: seriesColor(0)
-    val dotColor = { s: String -> if (s == "live") seriesColor(1) else if (s == "connecting") seriesColor(2) else seriesColor(9) }
+    fun colorOf(hex: String): Color = parseHexColor(hex) ?: seriesInk(0)
+    val dotColor = { s: String -> if (s == "live") seriesInk(1) else if (s == "connecting") seriesInk(2) else seriesInk(9) }
 
     WidgetCardShell(w.title.ifEmpty { "Shared — ${w.surface}" }, "collab") {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -216,7 +216,7 @@ internal fun CollabWidgetView(w: CollabWidgetData) {
                     ) {
                         Row(Modifier.fillMaxWidth()) {
                             Text(label, style = MaterialTheme.typography.bodySmall, color = GsTheme.colors.textPrimary, modifier = Modifier.weight(1f))
-                            Text(votes[i].toString(), style = MaterialTheme.typography.bodySmall, color = seriesColor(0), fontWeight = FontWeight.SemiBold)
+                            Text(votes[i].toString(), style = MaterialTheme.typography.bodySmall, color = seriesInk(0), fontWeight = FontWeight.SemiBold)
                         }
                         Box(
                             Modifier
@@ -228,7 +228,7 @@ internal fun CollabWidgetView(w: CollabWidgetData) {
                                 Modifier
                                     .fillMaxWidth((votes[i].toFloat() / total).coerceIn(0f, 1f))
                                     .height(6.dp)
-                                    .background(seriesColor(i % 12).copy(alpha = 0.55f), RoundedCornerShape(3.dp))
+                                    .background(seriesInk(i % 12).copy(alpha = 0.55f), RoundedCornerShape(3.dp))
                             )
                         }
                     }
@@ -346,7 +346,7 @@ internal fun CollabWidgetView(w: CollabWidgetData) {
                         num("n").toString(),
                         style = MaterialTheme.typography.displaySmall,
                         fontWeight = FontWeight.Bold,
-                        color = seriesColor(0)
+                        color = seriesInk(0)
                     )
                     Text(
                         w.label.ifBlank { "this number is the same for everyone, right now" },
@@ -354,7 +354,7 @@ internal fun CollabWidgetView(w: CollabWidgetData) {
                         color = GsTheme.colors.textTertiary
                     )
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(-1, 1, 5).forEach { d ->
                         TextButton(onClick = { delta("n", d) }) { Text(if (d > 0) "+$d" else "$d") }
                     }

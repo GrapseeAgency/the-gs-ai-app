@@ -37,6 +37,8 @@ import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.min
 import kotlin.math.sin
+import kotlin.math.max
+import androidx.compose.runtime.mutableStateOf
 
 private data class StagePoint(val x: Float, val y: Float, val z: Float, val r: Float, val hueIdx: Int, val label: String)
 
@@ -156,13 +158,13 @@ internal fun Stage3DWidgetView(w: Stage3DWidget) {
                     val pa = projected[a]
                     val pb = projected[b]
                     val depthAlpha = (0.75f - ((pa.second + pb.second) / 2f) * 0.12f).coerceIn(0.25f, 0.8f)
-                    drawLine(seriesColor(0).copy(alpha = depthAlpha), pa.first, pb.first, strokeWidth = 2f)
+                    drawLine(seriesInk(0).copy(alpha = depthAlpha), pa.first, pb.first, strokeWidth = 2f)
                 }
             }
             order.forEach { (_, triple) ->
                 val (pt, z, radius) = triple
                 val depth = ((z + 2f) / 4f).coerceIn(0f, 1f)
-                val color = WidgetPalette.legible(WidgetPalette.at(stage[projected.indexOf(triple)].hueIdx), WidgetPalette.onDarkCanvas())
+                val color = seriesInk(stage[projected.indexOf(triple)].hueIdx)
                 drawCircle(color.copy(alpha = 0.35f + 0.55f * depth), radius = radius, center = pt)
                 drawCircle(Color.White.copy(alpha = 0.25f * depth), radius = radius * 0.4f, center = Offset(pt.x - radius * 0.25f, pt.y - radius * 0.25f))
             }

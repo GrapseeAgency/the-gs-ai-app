@@ -30,13 +30,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -786,6 +786,9 @@ private fun TimerLayout(w: AppWidget) {
     val mm = (left / 60).toString().padStart(2, '0')
     val ss = (left % 60).toString().padStart(2, '0')
 
+    // The draw lambda is DrawScope, not @Composable — resolve the theme colour
+    // once, outside it, instead of calling seriesColor() per frame.
+    val accent = seriesColor(0)
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(Modifier.size(150.dp), contentAlignment = Alignment.Center) {
         Canvas(Modifier.fillMaxSize()) {
@@ -801,7 +804,7 @@ private fun TimerLayout(w: AppWidget) {
                 topLeft = rect.topLeft, size = rect.size, style = Stroke(strokeW)
             )
             drawArc(
-                color = seriesColor(0),
+                color = accent,
                 startAngle = -90f, sweepAngle = 360f * frac.coerceIn(0f, 1f), useCenter = false,
                 topLeft = rect.topLeft, size = rect.size, style = Stroke(strokeW)
             )
