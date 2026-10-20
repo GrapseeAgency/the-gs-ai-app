@@ -315,9 +315,9 @@ struct EmptyStateView: View {
         VStack(spacing: Aero.Spacing.s) {
             Image(systemName: icon)
                 .font(.system(size: 30))
-                .foregroundStyle(Aero.textMuted)
+                .foregroundStyle(Aero.accent)
                 .frame(width: 72, height: 72)
-                .background(Circle().fill(Aero.raisedSurface))
+                .background(Circle().fill(Aero.accentSoft))
             Text(title).font(Aero.title()).foregroundStyle(Aero.text)
             if !message.isEmpty {
                 Text(message)
