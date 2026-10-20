@@ -1,5 +1,6 @@
 package com.grapsee.gsai.ui.auth
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,6 +28,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.painterResource
+import com.grapsee.gsai.R
 import com.grapsee.gsai.ui.icons.GsIcons
 import com.grapsee.gsai.ui.theme.GsRadius
 import com.grapsee.gsai.ui.theme.GsSpacing
@@ -56,10 +59,7 @@ fun ReferenceWelcomeScreen(onExplore: () -> Unit, onSkip: () -> Unit) {
                 }
             }
             Spacer(Modifier.height(GsSpacing.l))
-            Box(Modifier.size(168.dp).clip(CircleShape).background(Brush.radialGradient(listOf(Color.White.copy(alpha = .98f), Color(0xFFFFC08C).copy(alpha = .68f), Color(0xFFFF7B45).copy(alpha = .30f)))), contentAlignment = Alignment.Center) {
-                Box(Modifier.size(112.dp).clip(CircleShape).background(Brush.sweepGradient(listOf(Color(0xFFFF8450), Color(0xFFFFD1AA), Color(0xFFFF8450)))))
-                Icon(GsIcons.Wand, contentDescription = "GS AI", modifier = Modifier.size(36.dp), tint = Color.White)
-            }
+            Image(painterResource(R.drawable.gs_companion_orb), contentDescription = "GS AI companion", modifier = Modifier.size(168.dp).clip(CircleShape))
             Spacer(Modifier.height(GsSpacing.xl))
             Text("Your smarter digital assistant", style = MaterialTheme.typography.headlineMedium, color = colors.textPrimary, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
             Text("A calmer way to think, create, explore, and get things done.", modifier = Modifier.padding(top = GsSpacing.s), style = MaterialTheme.typography.bodyMedium, color = colors.textSecondary, textAlign = TextAlign.Center)

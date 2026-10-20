@@ -24,11 +24,11 @@ struct ReferenceWelcomeView: View {
                     .padding(.horizontal, 14)
                     .padding(.vertical, 9)
                     .background(Capsule().fill(Color.white.opacity(0.46)))
-                ZStack {
-                    Circle().fill(RadialGradient(colors: [.white.opacity(0.98), Color(red: 1, green: 0.75, blue: 0.55).opacity(0.68), Color(red: 1, green: 0.48, blue: 0.25).opacity(0.30)], center: .center, startRadius: 12, endRadius: 132)).frame(width: 168, height: 168)
-                    Circle().fill(AngularGradient(colors: [Color(red: 1, green: 0.52, blue: 0.30), Color(red: 1, green: 0.82, blue: 0.64), Color(red: 1, green: 0.52, blue: 0.30)], center: .center)).frame(width: 112, height: 112)
-                    Image(systemName: "wand.and.stars").font(.system(size: 36, weight: .semibold)).foregroundStyle(.white)
-                }
+                Image("GSCompanionOrb")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 168, height: 168)
+                    .accessibilityLabel("GS AI companion")
                 VStack(spacing: Aero.Spacing.s) {
                     Text("Your smarter digital assistant")
                         .font(Aero.display())

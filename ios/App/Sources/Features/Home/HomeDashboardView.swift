@@ -116,11 +116,7 @@ struct HomeDashboardView: View {
                 .frame(maxHeight: .infinity, alignment: .top)
                 .padding(16)
                 VStack(spacing: 10) {
-                    ZStack {
-                        Circle().fill(Color.white.opacity(0.88)).frame(width: 112, height: 112)
-                        Circle().fill(AngularGradient(colors: [Color(red: 1, green: 0.55, blue: 0.30), Color(red: 1, green: 0.84, blue: 0.68), Color(red: 1, green: 0.55, blue: 0.30)], center: .center)).frame(width: 74, height: 74)
-                        Image(systemName: "wand.and.stars").font(.system(size: 26, weight: .semibold)).foregroundStyle(.white)
-                    }
+                    Image("GSCompanionOrb").resizable().scaledToFit().frame(width: 112, height: 112)
                     Text("A calmer way to create").font(Aero.label()).foregroundStyle(Aero.text)
                 }
             }
@@ -270,11 +266,19 @@ private struct HomeFeatureCard: View {
     var body: some View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 6) {
-                Image(systemName: icon)
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(Aero.accentDeep)
-                    .frame(width: 40, height: 40)
-                    .background(Circle().fill(Color.white.opacity(0.70)))
+                if title.hasPrefix("Video") {
+                    Image("GSVideoCreate")
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 54, height: 54)
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                } else {
+                    Image(systemName: icon)
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(Aero.accentDeep)
+                        .frame(width: 40, height: 40)
+                        .background(Circle().fill(Color.white.opacity(0.70)))
+                }
                 Spacer(minLength: 12)
                 Text(title).font(Aero.title()).foregroundStyle(Aero.text).multilineTextAlignment(.leading)
                 Text(subtitle).font(Aero.caption()).foregroundStyle(Aero.textMuted).multilineTextAlignment(.leading)

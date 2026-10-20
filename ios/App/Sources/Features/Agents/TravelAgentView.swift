@@ -84,12 +84,11 @@ struct TravelAgentView: View {
     }
 
     private var orb: some View {
-        ZStack {
-            Circle().fill(RadialGradient(colors: [.white.opacity(0.94), Color(red: 1, green: 0.69, blue: 0.42).opacity(0.62), Color(red: 1, green: 0.48, blue: 0.25).opacity(0.34)], center: .center, startRadius: 10, endRadius: 120)).frame(width: 148, height: 148)
-            Circle().fill(AngularGradient(colors: [Color(red: 1, green: 0.52, blue: 0.30), Color(red: 1, green: 0.82, blue: 0.64), Color(red: 1, green: 0.52, blue: 0.30)], center: .center)).frame(width: 94, height: 94)
-            Image(systemName: "globe").font(.system(size: 32, weight: .semibold)).foregroundStyle(.white)
-        }
-        .frame(height: 164)
+        Image("GSTravelAgentOrb")
+            .resizable()
+            .scaledToFit()
+            .frame(width: 164, height: 164)
+            .accessibilityLabel("Travel Agent companion orb")
     }
 
     private var chips: some View {
