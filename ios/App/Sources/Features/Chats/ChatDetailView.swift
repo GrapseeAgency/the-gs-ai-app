@@ -1126,7 +1126,15 @@ private struct MessageBubble: View, Equatable {
                     .foregroundStyle(Aero.text)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
-                    .background(RoundedRectangle(cornerRadius: 18).fill(Aero.accent.opacity(highlight ? 0.32 : 0.14)))
+                    .background(
+                        RoundedRectangle(cornerRadius: 18).fill(
+                            LinearGradient(
+                                colors: [Aero.accent.opacity(highlight ? 0.34 : 0.18), Aero.accentSoft],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                    )
                     .frame(maxWidth: 280, alignment: .trailing)
                     .textSelection(.enabled)
             }
