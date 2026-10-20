@@ -132,6 +132,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import com.grapsee.gsai.R
 import com.grapsee.gsai.data.chat.ChatStreamController
 import com.grapsee.gsai.data.chat.ClarifyOption
 import com.grapsee.gsai.data.chat.ClarifyPrompt
@@ -146,6 +147,7 @@ import com.grapsee.gsai.data.repository.ChatRepository
 import com.grapsee.gsai.di.ServiceLocator
 import androidx.activity.compose.BackHandler
 import com.grapsee.gsai.ui.components.GsOfflineBanner
+import com.grapsee.gsai.ui.components.AnimatedGsIllustration
 import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.data.notifications.ReplyNotifier
 import com.grapsee.gsai.data.tts.TtsFocus
@@ -2671,16 +2673,7 @@ private fun WorkspaceEmptyState(
     ) {
         // Reference-inspired companion orb: the empty state should feel alive
         // before the first prompt, not like a blank utility screen.
-        Box(
-            modifier = Modifier
-                .size(112.dp)
-                .clip(CircleShape)
-                .background(Brush.radialGradient(listOf(Color.White.copy(alpha = .92f), Color(0xFFFFB169).copy(alpha = .64f), Color(0xFFFF7B45).copy(alpha = .42f)))),
-            contentAlignment = Alignment.Center
-        ) {
-            Box(Modifier.size(72.dp).clip(CircleShape).background(Brush.sweepGradient(listOf(Color(0xFFFF8450), Color(0xFFFFD1AA), Color(0xFFFF8450)))))
-            Icon(GsIcons.Wand, contentDescription = "GS AI companion", tint = Color.White, modifier = Modifier.size(28.dp))
-        }
+        AnimatedGsIllustration(R.drawable.gs_companion_orb, "GS AI companion", 112.dp, shape = CircleShape, breathDuration = 3200, rotationDegrees = .9f, liftPixels = -2f, startDelayMillis = 180)
         Spacer(Modifier.height(24.dp))
         Text(
             text = "How can GS make today lighter?",

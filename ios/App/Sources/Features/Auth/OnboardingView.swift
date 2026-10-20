@@ -172,17 +172,7 @@ struct OnboardingView: View {
     }
 
     private var onboardingOrb: some View {
-        ZStack {
-            Circle()
-                .fill(RadialGradient(colors: [.white.opacity(0.94), Color(red: 1, green: 0.75, blue: 0.55).opacity(0.55), Color(red: 1, green: 0.48, blue: 0.25).opacity(0.22)], center: .center, startRadius: 8, endRadius: 110))
-                .frame(width: 138, height: 138)
-            Circle()
-                .fill(AngularGradient(colors: [Color(red: 1, green: 0.52, blue: 0.30), Color(red: 1, green: 0.82, blue: 0.64), Color(red: 1, green: 0.52, blue: 0.30)], center: .center))
-                .frame(width: 92, height: 92)
-            Image(systemName: "wand.and.stars")
-                .font(.system(size: 30, weight: .semibold))
-                .foregroundStyle(.white)
-        }
+        AnimatedGsIllustration(imageName: "GSCompanionOrb", size: 138, breathDuration: 2.7, rotationDegrees: 1.0, lift: -2, startDelay: 0.16)
         .frame(maxWidth: .infinity)
         .frame(height: 190)
     }

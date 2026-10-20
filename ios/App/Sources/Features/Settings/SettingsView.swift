@@ -32,7 +32,14 @@ struct SettingsView: View {
             .padding(.top, Aero.Spacing.s)
             .padding(.bottom, Aero.Spacing.xl)
         }
-        .background(Aero.background.ignoresSafeArea())
+        .background(
+            LinearGradient(
+                colors: [Color(red: 1, green: 0.70, blue: 0.43).opacity(0.18), Aero.background, Aero.background],
+                startPoint: .topLeading,
+                endPoint: .center
+            )
+            .ignoresSafeArea()
+        )
         .confirmationDialog(
             "Clear local data?",
             isPresented: $showClearData,

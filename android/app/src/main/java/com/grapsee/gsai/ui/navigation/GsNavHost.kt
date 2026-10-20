@@ -33,6 +33,7 @@ import com.grapsee.gsai.ShortcutBus
 import com.grapsee.gsai.data.SessionStore
 import com.grapsee.gsai.ui.auth.AuthScreen
 import com.grapsee.gsai.ui.auth.OnboardingScreen
+import com.grapsee.gsai.ui.auth.ReferenceWelcomeScreen
 import com.grapsee.gsai.ui.billing.BillingScreen
 import com.grapsee.gsai.ui.chat.ArchivedChatsScreen
 import com.grapsee.gsai.ui.chat.ChatScreen
@@ -43,6 +44,7 @@ import com.grapsee.gsai.ui.profile.ProfileScreen
 import com.grapsee.gsai.ui.settings.SettingsScreen
 import com.grapsee.gsai.ui.voice.VoiceScreen
 import com.grapsee.gsai.ui.home.HomeDashboardScreen
+import com.grapsee.gsai.ui.agents.TravelAgentScreen
 import com.grapsee.gsai.ui.theme.GsMotion
 import com.grapsee.gsai.ui.theme.gsHaptic
 import kotlinx.coroutines.launch
@@ -217,7 +219,11 @@ fun GsNavHost(modifier: Modifier = Modifier) {
                 onNewChat = { navController.navigate(GsRoutes.chat(null)) },
                 onOpenDrawer = { scope.launch { drawerState.open() } },
                 onOpenChats = { open(GsRoutes.CHATS) },
+                onOpenAgent = { open(GsRoutes.TRAVEL_AGENT) },
             )
+        }
+        composable(GsRoutes.TRAVEL_AGENT) {
+            TravelAgentScreen(onBack = back, onSendToChat = { prompt -> navController.navigate(GsRoutes.chat(null, prompt)) })
         }
         composable(GsRoutes.CHATS) { ChatsScreen(onNavigate = open) }
         composable(GsRoutes.PROFILE) { ProfileScreen(onNavigate = open) }
@@ -274,6 +280,16 @@ fun GsNavHost(modifier: Modifier = Modifier) {
             )
         }
         composable(GsRoutes.ONBOARDING) {
+            ReferenceWelcomeScreen(
+                onExplore = { navController.navigate(GsRoutes.ONBOARDING_SETUP) },
+                onSkip = {
+                    SessionStore.activateSession(context)
+                    SessionStore.setOnboarded(context, true)
+                    navController.navigate(GsRoutes.HOME) { popUpTo(0) { inclusive = true } }
+                }
+            )
+        }
+        composable(GsRoutes.ONBOARDING_SETUP) {
             OnboardingScreen(
                 onFinished = {
                     SessionStore.activateSession(context)

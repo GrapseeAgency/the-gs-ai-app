@@ -54,7 +54,13 @@ struct AeroDrawer: View {
 
     // Theme-following navigation palette: the drawer belongs to the active
     // appearance — monochrome black/white in both.
-    private let panel = Aero.navSurface
+    private var panel: LinearGradient {
+        LinearGradient(
+            colors: [Color(red: 1, green: 0.70, blue: 0.43).opacity(0.18), Aero.navSurface, Aero.navSurface],
+            startPoint: .topLeading,
+            endPoint: .center
+        )
+    }
 
     var body: some View {
         ZStack(alignment: .leading) {

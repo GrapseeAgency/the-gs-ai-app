@@ -942,13 +942,8 @@ struct ChatDetailView: View {
     /// the transcript. No navigation hop anywhere.
     private var emptyState: some View {
         VStack(spacing: Aero.Spacing.l) {
-            // Phase 4 §14: a very restrained breathing identity mark — small,
-            // monochrome, calm, and strictly secondary to the composer below.
-            ThinkingOrbView(
-                state: .breathing,
-                size: .standard,
-                contentDescription: "GS assistant"
-            )
+            AnimatedGsIllustration(imageName: "GSCompanionOrb", size: 112, breathDuration: 3.2, rotationDegrees: 0.9, lift: -2, startDelay: 0.18)
+                .accessibilityLabel("GS assistant companion")
             Text("How can GS make today lighter?")
                 .font(Aero.headline())
                 .foregroundStyle(Aero.text)

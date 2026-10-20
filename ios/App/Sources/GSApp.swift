@@ -13,6 +13,7 @@ struct GSApp: App {
     @UIApplicationDelegateAdaptor(QuickActionAppDelegate.self) private var appDelegate
     @AppStorage("gs.session.active") private var sessionActive = false
     @AppStorage("gs.onboarded") private var onboarded = false
+    @State private var showReferenceWelcome = true
     // Appearance + accessibility contract (Task 85-e): the Settings theme
     // choice tints the system chrome (sheets, alerts, keyboard) and the
     // font-scale slider drives real Dynamic Type app-wide.
@@ -62,8 +63,15 @@ struct GSApp: App {
                     if onboarded {
                         RootView()
                     } else {
-                        OnboardingView {
-                            onboarded = true
+                        if showReferenceWelcome {
+                            ReferenceWelcomeView(
+                                onExplore: { withAnimation(Aero.spring) { showReferenceWelcome = false } },
+                                onSkip: { onboarded = true }
+                            )
+                        } else {
+                            OnboardingView {
+                                onboarded = true
+                            }
                         }
                     }
                 } else {

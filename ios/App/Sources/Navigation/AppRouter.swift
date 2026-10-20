@@ -27,6 +27,7 @@ enum AeroRoute: Hashable {
     case voice
     case chatArchive
     case chatSearch
+    case travelAgent
 
     // Section roots — reached from the drawer (no tab bar anywhere)
     case chats
@@ -86,7 +87,8 @@ struct RootView: View {
                         drawerEntryOffset = 0
                         withAnimation(Aero.motion(Aero.spring)) { showDrawer = true }
                     },
-                    onOpenChats: { router.path.append(.chats) }
+                    onOpenChats: { router.path.append(.chats) },
+                    onOpenAgent: { router.path.append(.travelAgent) }
                 )
                 .aeroDestinations()
             }
@@ -172,6 +174,7 @@ struct RootView: View {
 
 /// Install once per NavigationStack: resolves every pushed route.
 struct AeroDestinations: ViewModifier {
+    @EnvironmentObject private var router: Router
     func body(content: Content) -> some View {
         content.navigationDestination(for: AeroRoute.self) { route in
             switch route {
@@ -184,6 +187,7 @@ struct AeroDestinations: ViewModifier {
             case .voice: VoiceView()
             case .chatArchive: ArchivedChatsView()
             case .chatSearch: ChatSearchView()
+            case .travelAgent: TravelAgentView(onBack: { router.path.removeLast() }, onSendToChat: { prompt in router.path.append(.chatPrefill(prompt)) })
 
             // Section roots (drawer)
             case .chats: ChatsListView()

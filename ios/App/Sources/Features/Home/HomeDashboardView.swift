@@ -6,6 +6,7 @@ struct HomeDashboardView: View {
     let onNewChat: () -> Void
     let onOpenDrawer: () -> Void
     let onOpenChats: () -> Void
+    let onOpenAgent: () -> Void
 
     var body: some View {
         ScrollView(showsIndicators: false) {
@@ -16,17 +17,9 @@ struct HomeDashboardView: View {
                 quickActions
                 featureGrid
                 reflectionCard
+                usageStats
                 focusCard
-                Button(action: onNewChat) {
-                    Label("Generate", systemImage: "wand.and.stars")
-                        .font(Aero.button())
-                        .foregroundStyle(Aero.onAccent)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(Capsule().fill(Aero.accent))
-                        .shadow(color: Aero.accent.opacity(0.22), radius: 14, y: 7)
-                }
-                .buttonStyle(KineticPressStyle())
+                bottomActionDock
             }
             .padding(.horizontal, Aero.Spacing.m)
             .padding(.top, Aero.Spacing.s)
@@ -41,6 +34,28 @@ struct HomeDashboardView: View {
             .ignoresSafeArea()
         )
         .toolbar(.hidden, for: .navigationBar)
+    }
+
+    private var bottomActionDock: some View {
+        HStack(spacing: 6) {
+            DockIcon(icon: "photo.on.rectangle", label: "Image", action: onNewChat)
+            DockIcon(icon: "play.rectangle", label: "Video", action: onNewChat)
+            Button(action: onNewChat) {
+                Label("Generate", systemImage: "wand.and.stars")
+                    .font(Aero.button())
+                    .foregroundStyle(Aero.onAccent)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 13)
+                    .background(Capsule().fill(Aero.accent))
+            }
+            .buttonStyle(KineticPressStyle())
+            DockIcon(icon: "clock.arrow.circlepath", label: "History", action: onOpenChats)
+            DockIcon(icon: "gearshape", label: "Settings", action: onNewChat)
+        }
+        .padding(8)
+        .background(Capsule().fill(Aero.surface))
+        .overlay(Capsule().stroke(Aero.outline, lineWidth: 1))
+        .aeroCardShadow()
     }
 
     private var topBar: some View {
@@ -101,11 +116,8 @@ struct HomeDashboardView: View {
                 .frame(maxHeight: .infinity, alignment: .top)
                 .padding(16)
                 VStack(spacing: 10) {
-                    ZStack {
-                        Circle().fill(Color.white.opacity(0.88)).frame(width: 112, height: 112)
-                        Circle().fill(AngularGradient(colors: [Color(red: 1, green: 0.55, blue: 0.30), Color(red: 1, green: 0.84, blue: 0.68), Color(red: 1, green: 0.55, blue: 0.30)], center: .center)).frame(width: 74, height: 74)
-                        Image(systemName: "wand.and.stars").font(.system(size: 26, weight: .semibold)).foregroundStyle(.white)
-                    }
+                    AnimatedHeroHalo()
+                    AnimatedGsIllustration(imageName: "GSCompanionOrb", size: 112, breathDuration: 3.4, rotationDegrees: 1.2, lift: -2, startDelay: 0.08)
                     Text("A calmer way to create").font(Aero.label()).foregroundStyle(Aero.text)
                 }
             }
@@ -121,16 +133,16 @@ struct HomeDashboardView: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: Aero.Spacing.s) {
                 HomeChip(title: "Start new chat", icon: "square.and.pencil", selected: true, action: onNewChat)
-                HomeChip(title: "Mind guide", icon: "brain", action: onNewChat)
-                HomeChip(title: "Research", icon: "telescope", action: onNewChat)
+                HomeChip(title: "Gemini 3", icon: "brain", action: onNewChat)
+                HomeChip(title: "Grok 4.1", icon: "bolt.fill", action: onNewChat)
             }
         }
     }
 
     private var featureGrid: some View {
         HStack(spacing: Aero.Spacing.s) {
-            HomeFeatureCard(title: "Create\nwith AI", subtitle: "Turn ideas into something real", icon: "wand.and.stars", colors: [Color(red: 1, green: 0.83, blue: 0.69), Aero.surface], action: onNewChat)
-            HomeFeatureCard(title: "Mind\nguide", subtitle: "A calmer place to think", icon: "lightbulb", colors: [Color(red: 1, green: 0.78, blue: 0.69), Aero.background], action: onNewChat)
+            HomeFeatureCard(title: "Video\ncreate", subtitle: "Create stunning videos with AI", icon: "play.rectangle", colors: [Color(red: 1, green: 0.83, blue: 0.69), Aero.surface], action: onNewChat)
+            HomeFeatureCard(title: "Travel\nagent", subtitle: "Make every journey easier", icon: "globe", colors: [Color(red: 1, green: 0.78, blue: 0.69), Aero.background], action: onOpenAgent)
         }
     }
 
@@ -151,11 +163,23 @@ struct HomeDashboardView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(Aero.Spacing.m)
             .background(LinearGradient(colors: [Color(red: 1, green: 0.89, blue: 0.82), Color(red: 1, green: 0.78, blue: 0.72)], startPoint: .leading, endPoint: .trailing))
+            .overlay(alignment: .bottomTrailing) {
+                AnimatedGsIllustration(imageName: "GSCompanionOrb", size: 98, breathDuration: 3.6, rotationDegrees: 1.4, lift: -2, startDelay: 0.52)
+                    .opacity(0.18)
+                    .allowsHitTesting(false)
+            }
             .clipShape(RoundedRectangle(cornerRadius: Aero.Radius.card))
             .overlay(RoundedRectangle(cornerRadius: Aero.Radius.card).stroke(Aero.outline, lineWidth: 1))
             .aeroCardShadow()
         }
         .buttonStyle(KineticPressStyle())
+    }
+
+    private var usageStats: some View {
+        HStack(spacing: Aero.Spacing.s) {
+            UsageTile(title: "Image generate", value: "64%", progress: 0.64)
+            UsageTile(title: "Video generate", value: "15%", progress: 0.15)
+        }
     }
 
     private var focusCard: some View {
@@ -180,6 +204,44 @@ struct HomeDashboardView: View {
         .background(RoundedRectangle(cornerRadius: Aero.Radius.card).fill(Aero.surface))
         .overlay(RoundedRectangle(cornerRadius: Aero.Radius.card).stroke(Aero.outline, lineWidth: 1))
         .aeroCardShadow()
+    }
+}
+
+private struct DockIcon: View {
+    let icon: String
+    let label: String
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Aero.accentDeep)
+                .frame(width: 38, height: 38)
+                .background(Circle().fill(Aero.accentSoft))
+        }
+        .buttonStyle(KineticPressStyle())
+        .accessibilityLabel(label)
+    }
+}
+
+private struct UsageTile: View {
+    let title: String
+    let value: String
+    let progress: Double
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack {
+                Text(value).font(Aero.title()).foregroundStyle(Aero.accentDeep)
+                Spacer()
+                Image(systemName: "gauge.medium").font(.caption).foregroundStyle(Aero.textMuted)
+            }
+            Text(title).font(Aero.caption()).foregroundStyle(Aero.textMuted)
+            ProgressView(value: progress).tint(Aero.accent)
+        }
+        .padding(Aero.Spacing.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: Aero.Radius.card).fill(Aero.surface))
+        .overlay(RoundedRectangle(cornerRadius: Aero.Radius.card).stroke(Aero.outline, lineWidth: 1))
     }
 }
 
@@ -210,11 +272,15 @@ private struct HomeFeatureCard: View {
     var body: some View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 6) {
-                Image(systemName: icon)
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(Aero.accentDeep)
-                    .frame(width: 40, height: 40)
-                    .background(Circle().fill(Color.white.opacity(0.70)))
+                if title.hasPrefix("Video") {
+                    AnimatedGsIllustration(imageName: "GSVideoCreate", size: 54, cornerRadius: 14, breathDuration: 3.0, rotationDegrees: 2.8, lift: -2, startDelay: 0.4)
+                } else {
+                    Image(systemName: icon)
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(Aero.accentDeep)
+                        .frame(width: 40, height: 40)
+                        .background(Circle().fill(Color.white.opacity(0.70)))
+                }
                 Spacer(minLength: 12)
                 Text(title).font(Aero.title()).foregroundStyle(Aero.text).multilineTextAlignment(.leading)
                 Text(subtitle).font(Aero.caption()).foregroundStyle(Aero.textMuted).multilineTextAlignment(.leading)
@@ -227,5 +293,24 @@ private struct HomeFeatureCard: View {
             .aeroCardShadow()
         }
         .buttonStyle(KineticPressStyle())
+    }
+}
+
+private struct AnimatedHeroHalo: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isAlive = false
+
+    var body: some View {
+        Circle()
+            .fill(RadialGradient(colors: [.white.opacity(0.72), Color(red: 1, green: 0.82, blue: 0.65).opacity(0.24), .clear], center: .center, startRadius: 8, endRadius: 80))
+            .frame(width: 158, height: 158)
+            .scaleEffect(reduceMotion ? 1 : (isAlive ? 1.04 : 1))
+            .opacity(reduceMotion ? 0.24 : (isAlive ? 0.38 : 0.22))
+            .animation(reduceMotion ? nil : .easeInOut(duration: 2.6).repeatForever(autoreverses: true), value: isAlive)
+            .onAppear {
+                guard !reduceMotion else { return }
+                isAlive = true
+            }
+            .allowsHitTesting(false)
     }
 }

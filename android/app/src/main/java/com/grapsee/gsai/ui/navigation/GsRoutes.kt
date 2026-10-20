@@ -5,6 +5,7 @@ import android.net.Uri
 /** AERUO KINETIC — route map. Screens are plain composables; this file owns all routing. */
 object GsRoutes {
     const val HOME = "home"
+    const val TRAVEL_AGENT = "travel-agent"
     const val CHATS = "chats"
     const val PROFILE = "profile"
     const val SETTINGS = "settings"
@@ -18,6 +19,7 @@ object GsRoutes {
     // Session — first launch walks Auth → Onboarding before the command centre.
     const val AUTH = "auth"
     const val ONBOARDING = "onboarding"
+    const val ONBOARDING_SETUP = "onboarding/setup"
 
     // Billing / subscription (reached from Profile).
     const val BILLING = "billing"
@@ -67,7 +69,7 @@ object GsRoutes {
     )
 
     /** Auth/onboarding — outside the product shell; no drawer, no product nav. */
-    val SESSION_ROUTES = setOf(AUTH, ONBOARDING)
+    val SESSION_ROUTES = setOf(AUTH, ONBOARDING, ONBOARDING_SETUP)
 
     /** True for the drawer's section-switch destinations (exact route match —
      *  pattern routes like [CHAT] are always detail pushes). */
