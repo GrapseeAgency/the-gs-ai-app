@@ -44,6 +44,7 @@ const Stage3DViews_1 = require("./stage3d/Stage3DViews");
 const CanvasWidget_1 = require("./canvas/CanvasWidget");
 const EditorWidget_1 = require("./editor/EditorWidget");
 const TerminalWidget_1 = require("./terminal/TerminalWidget");
+const CollabWidget_1 = require("./collab/CollabWidget");
 /** kind -> renderer. `map` renders natively on web via Leaflet. */
 exports.REGISTRY = {
     chart: ChartWidget_1.ChartWidget,
@@ -81,6 +82,7 @@ exports.REGISTRY = {
     canvas: CanvasWidget_1.CanvasWidget,
     editor: EditorWidget_1.EditorWidget,
     terminal: TerminalWidget_1.TerminalWidget,
+    collab: CollabWidget_1.CollabWidget,
 };
 function rendererFor(kind) {
     return exports.REGISTRY[kind] ?? null;

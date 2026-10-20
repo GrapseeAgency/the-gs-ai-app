@@ -42,6 +42,7 @@ import { Stage3DWidget } from './stage3d/Stage3DViews'
 import { CanvasWidget } from './canvas/CanvasWidget'
 import { EditorWidget } from './editor/EditorWidget'
 import { TerminalWidget } from './terminal/TerminalWidget'
+import { CollabWidget } from './collab/CollabWidget'
 
 export type PromptHandler = (prompt: string) => void
 
@@ -87,6 +88,7 @@ export const REGISTRY: Record<string, WidgetComponent> = {
   canvas: CanvasWidget,
   editor: EditorWidget,
   terminal: TerminalWidget,
+  collab: CollabWidget,
 }
 
 export function rendererFor(kind: string): WidgetComponent | null {

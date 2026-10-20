@@ -15,7 +15,7 @@ const fs_1 = require("fs");
 const stream_1 = require("../src/components/genui/stream");
 const registry_1 = require("../src/components/genui/registry");
 const page = (0, fs_1.readFileSync)('/home/user/the-gs-ai-app/src/app/genui/page.tsx', 'utf8');
-const ids = ['sims', 'stage3d', 'canvas', 'editors', 'terminal'];
+const ids = ['sims', 'stage3d', 'canvas', 'editors', 'terminal', 'collab'];
 let total = 0;
 let missing = 0;
 for (const id of ids) {

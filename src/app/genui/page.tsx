@@ -155,7 +155,7 @@ A form with eight field types:
     md: `## Tabs, accordions, steps, trees, flashcards, diffs
 
 \`\`\`tabs
-{"title":"One topic, three facets","tabs":[{"label":"Summary","body":"The v3 library covers 189 declared component types — every kind, sub-type and control the catalogue names, rendered natively on web and Android."},{"label":"For the model","body":"The prompt carries the full vocabulary, a palette system, and a hard ban on capability self-doubt. The compiler enforces the art direction."},{"label":"For clients","body":"Web renders this library; Android renders its Compose twin from the same wire format."}],"palette":"harbour","accent":"#0B7285","variant":"plain"}
+{"title":"One topic, three facets","tabs":[{"label":"Summary","body":"The v3.1 library covers 190 declared component types — every kind, sub-type and control the catalogue names, rendered natively on web and Android."},{"label":"For the model","body":"The prompt carries the full vocabulary, a palette system, and a hard ban on capability self-doubt. The compiler enforces the art direction."},{"label":"For clients","body":"Web renders this library; Android renders its Compose twin from the same wire format."}],"palette":"harbour","accent":"#0B7285","variant":"plain"}
 \`\`\`
 
 \`\`\`accordion
@@ -163,7 +163,7 @@ A form with eight field types:
 \`\`\`
 
 \`\`\`steps
-{"title":"Rollout plan","steps":[{"title":"Catalogue v3","body":"34 kinds, 189 component types, palettes","state":"done"},{"title":"Web GenUI library","body":"sims, 3D stages, canvases, editors, terminal","state":"done"},{"title":"Android v2 renderers","body":"new kinds in Compose","state":"current"},{"title":"Measure","body":"parse-rate + art-direction metrics","state":"todo"}],"palette":"meadow","accent":"#0CA678","variant":"editorial"}
+{"title":"Rollout plan","steps":[{"title":"Catalogue v3","body":"35 kinds, 190 component types, palettes","state":"done"},{"title":"Web GenUI library","body":"sims, 3D stages, canvases, editors, terminal","state":"done"},{"title":"Android v2 renderers","body":"new kinds in Compose","state":"current"},{"title":"Measure","body":"parse-rate + art-direction metrics","state":"todo"}],"palette":"meadow","accent":"#0CA678","variant":"editorial"}
 \`\`\`
 
 \`\`\`tree
@@ -276,7 +276,7 @@ A bespoke interactive — the escape hatch:
   <rect x="2" y="12" width="44" height="36" rx="10" fill="var(--gs-accent)"/>
   <text x="24" y="37" text-anchor="middle" font-size="20" font-weight="800" fill="#0F1216">G</text>
   <text x="56" y="38" font-size="20" font-weight="700" fill="var(--gs-text)">GenUI</text>
-  <text x="56" y="50" font-size="8" fill="var(--gs-text-3)">189 components, one wire format</text>
+  <text x="56" y="50" font-size="8" fill="var(--gs-text-3)">190 components, one wire format</text>
 </svg>
 \`\`\``,
   },
@@ -292,7 +292,7 @@ Counting the fences as they land:
 \`\`\`
 
 \`\`\`stat
-{"title":"The count that matters","cards":[{"label":"Declared component types","value":"189"},{"label":"Kinds","value":"34","delta":"+5","direction":"up"},{"label":"Chart types","value":"34","delta":"+6","direction":"up"},{"label":"Live simulations","value":"8","delta":"new","direction":"up"}],"palette":"aurora","accent":"#4C6FFF","variant":"hero"}
+{"title":"The count that matters","cards":[{"label":"Declared component types","value":"190"},{"label":"Kinds","value":"35","delta":"+6","direction":"up"},{"label":"Chart types","value":"34","delta":"+6","direction":"up"},{"label":"Live simulations","value":"8","delta":"new","direction":"up"}],"palette":"aurora","accent":"#4C6FFF","variant":"hero"}
 \`\`\`
 
 \`\`\`gauge
@@ -450,6 +450,37 @@ Try \`ls\`, \`cat notes.txt\`, \`js [1,2,3].map(x => x*x)\`, arrow-up for histor
 {"title":"guest@gs","welcome":"guest shell — type help","commands":[{"name":"deploy","description":"staged deploy plan (demo)"},{"name":"metrics","description":"print the live counters"}],"palette":"forest","accent":"#0CA678","variant":"outline"}
 \`\`\``, 
   },
+  {
+    id: 'collab',
+    name: 'Shared state (Tier 2)',
+    md: `## LIVE shared widgets — everyone viewing this page edits the same state
+
+All four widgets below share the room \`gs-launch\` — tap in one, watch the others' counts, votes and cursors move.
+
+Shared counter — server-side deltas, concurrent taps never lose state:
+
+\`\`\`counter
+{"surface":"counter","room":"gs-launch","title":"Release taps","label":"this number is the same for everyone, right now","start":0,"palette":"forest","accent":"#0CA678","variant":"hero"}
+\`\`\`
+
+Live vote — one vote per option per viewer, counts aggregate live:
+
+\`\`\`vote
+{"surface":"vote","room":"gs-launch","title":"Ship date","items":["Ship Monday","Ship Friday","Add a week of polish"],"palette":"glacier","accent":"#4C6FFF","variant":"hero"}
+\`\`\`
+
+Shared todo list — list-replace, last-write-wins (the widget says so):
+
+\`\`\`todo
+{"surface":"todo","room":"gs-launch","title":"Launch checklist","items":["Read the answer","Tap a button","See presence dots"],"palette":"citrus","accent":"#E8590C","variant":"inset"}
+\`\`\`
+
+Live cursors — presence only, nothing stored, cursors expire 30s after movement stops:
+
+\`\`\`pointer
+{"surface":"pointer","room":"gs-launch","title":"Who's here","palette":"orchid","accent":"#9C36B5","variant":"hero"}
+\`\`\``, 
+  },
 ]
 
 
@@ -466,7 +497,7 @@ export default function GenUIGallery() {
         <div style={{ maxWidth: 720, margin: '0 auto' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
             <h1 style={{ fontSize: 24, fontWeight: 800, margin: 0 }}>
-              GenUI Gallery <span style={{ color: C.accent }}>— {SECTIONS.length} live sections, 189 component types</span>
+              GenUI Gallery <span style={{ color: C.accent }}>— {SECTIONS.length} live sections, 190 component types</span>
             </h1>
             <button
               onClick={() => setRaw((r) => !r)}
