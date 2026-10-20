@@ -61,6 +61,7 @@ export const WIDGET_KINDS = [
   'canvas', // freeform drawing surfaces (whiteboard, mindmap, diagram, polygons)
   'editor', // in-chat application editors (nodes, sheet, pivot, site, css, video, audio)
   'terminal', // a real terminal with a sandboxed JS runtime
+  'collab', // LIVE shared state across viewers (prototype: per-server memory, LWW)
 ] as const
 
 export type WidgetKind = (typeof WIDGET_KINDS)[number]
@@ -227,6 +228,12 @@ export const CANVAS_TYPES = [
 ] as const
 
 /** editor sub-types — in-chat application editors. */
+export const COLLAB_TYPES = [
+  'counter', // shared tally, server-side increments
+  'vote', // shared options with live counts
+  'todo', // shared checklist (list replace, LWW)
+  'pointer', // live cursors + presence only (ephemeral)
+] as const
 export const EDITOR_TYPES = [
   'nodes', // node-based visual programming
   'sheet', // spreadsheet with a formula engine
@@ -262,6 +269,7 @@ export const LIMITS = {
   maxCanvasNodes: 40,
   maxSheetCells: 400,
   maxTracks: 6,
+  maxCollabItems: 12,
 } as const
 
 export function isWidgetKind(value: string): value is WidgetKind {
@@ -292,6 +300,7 @@ const SIM_ALIASES = SIM_TYPES as readonly string[]
 const STAGE3D_ALIASES = STAGE3D_TYPES as readonly string[]
 const CANVAS_ALIASES = CANVAS_TYPES as readonly string[]
 const EDITOR_ALIASES = EDITOR_TYPES as readonly string[]
+const COLLAB_ALIASES = COLLAB_TYPES as readonly string[]
 /** ```code is source code, never a media widget. */
 const MEDIA_ALIASES = (MEDIA_TYPES as readonly string[]).filter((t) => t !== 'code')
 
@@ -309,6 +318,7 @@ export function widgetKindOf(language: string): WidgetKind | null {
   if (CANVAS_ALIASES.includes(lang)) return 'canvas'
   if (EDITOR_ALIASES.includes(lang)) return 'editor'
   if (lang === 'terminal') return 'terminal'
+  if (COLLAB_ALIASES.includes(lang)) return 'collab'
   return null
 }
 

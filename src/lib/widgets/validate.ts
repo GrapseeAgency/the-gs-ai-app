@@ -12,6 +12,7 @@
 import { evaluateExpr } from '../calc/evaluate'
 import {
   APP_TYPES,
+  COLLAB_TYPES,
   CALC_TYPES,
   CANVAS_TYPES,
   CHART_TYPES,
@@ -1419,6 +1420,29 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
       layout: isObj(p.layout) ? p.layout : {},
       note: asString(p.note),
       submitLabel: asString(p.submitLabel),
+    }
+    return { widget, errors: [], repaired }
+  },
+
+  collab: (p) => {
+    let repaired = false
+    let surface = asString(p.surface ?? p.type, 'counter')
+    if (!(COLLAB_TYPES as readonly string[]).includes(surface)) {
+      surface = 'counter'
+      repaired = true
+    }
+    // room: slug — this is the shared key everyone converges on, so it must
+    // survive a low-tier model: lowercase, [a-z0-9-], <=48 chars, default lobby.
+    const rawRoom = asString(p.room ?? p.channel ?? p.id, 'lobby')
+    const room = rawRoom.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'lobby'
+    const widget = {
+      surface,
+      room,
+      title: asString(p.title),
+      label: asString(p.label),
+      items: asArray(p.items ?? p.options).map((i) => asString(i)).filter(Boolean).slice(0, 12),
+      start: asNumber(p.start ?? p.value) ?? 0,
+      note: asString(p.note),
     }
     return { widget, errors: [], repaired }
   },
