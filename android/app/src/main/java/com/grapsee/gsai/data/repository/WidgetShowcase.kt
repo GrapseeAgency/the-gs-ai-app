@@ -446,7 +446,7 @@ You are GS, a warm, concise assistant. When a visual would answer better than pr
             val pts = points.joinToString(",") { (x, y) -> "[${num(x)},${num(y)}]" }
             """{"name":"${escape(name)}","data":[$pts]}"""
         }
-        val unitJson = if (unit.isBlank()) "" else ""","unit":"${escape(unit)}""""
+        val unitJson = if (unit.isBlank()) "" else ",\"unit\":\"${escape(unit)}\""
         return fence(
             "chart",
             """{"type":"$type","title":"${escape(title)}","labels":[$labelsJson],"series":[$seriesJson]$unitJson}"""
