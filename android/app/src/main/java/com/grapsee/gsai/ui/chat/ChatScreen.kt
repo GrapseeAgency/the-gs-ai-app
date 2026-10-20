@@ -104,6 +104,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -2667,28 +2669,21 @@ private fun WorkspaceEmptyState(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        // 72dp GS monogram circle — the screen's identity mark: solid primary
-        // fill, onPrimary glyph, nothing orbiting it.
+        // Reference-inspired companion orb: the empty state should feel alive
+        // before the first prompt, not like a blank utility screen.
         Box(
             modifier = Modifier
-                .size(72.dp)
+                .size(112.dp)
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primary),
+                .background(Brush.radialGradient(listOf(Color.White.copy(alpha = .92f), Color(0xFFFFB169).copy(alpha = .64f), Color(0xFFFF7B45).copy(alpha = .42f)))),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = "GS",
-                style = MaterialTheme.typography.titleLarge.copy(
-                    fontSize = 28.sp,
-                    lineHeight = 32.sp,
-                    fontWeight = FontWeight.Bold
-                ),
-                color = MaterialTheme.colorScheme.onPrimary
-            )
+            Box(Modifier.size(72.dp).clip(CircleShape).background(Brush.sweepGradient(listOf(Color(0xFFFF8450), Color(0xFFFFD1AA), Color(0xFFFF8450)))))
+            Icon(GsIcons.Wand, contentDescription = "GS AI companion", tint = Color.White, modifier = Modifier.size(28.dp))
         }
         Spacer(Modifier.height(24.dp))
         Text(
-            text = "What can I do for you?",
+            text = "How can GS make today lighter?",
             style = MaterialTheme.typography.titleLarge.copy(
                 fontSize = 24.sp,
                 lineHeight = 30.sp,
@@ -2819,14 +2814,14 @@ private fun EmptyCapabilityCard() {
             }
             Column {
                 Text(
-                    text = "Ask GS anything",
+                    text = "Your smarter companion",
                     style = MaterialTheme.typography.titleMedium
                         .copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = "Type below and GS answers, drafts, plans and codes with you.",
+                    text = "Ask, create, explore, and make something beautiful.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

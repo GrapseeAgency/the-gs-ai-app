@@ -134,12 +134,13 @@ struct OnboardingView: View {
 
     private var interestsStep: some View {
         VStack(alignment: .leading, spacing: Aero.Spacing.m) {
+            onboardingOrb
             StaggerIn(index: 0) {
                 VStack(alignment: .leading, spacing: Aero.Spacing.xs) {
-                    Text("What are you into?")
+                    Text("Your smarter world starts here")
                         .font(Aero.headline())
                         .foregroundStyle(Aero.text)
-                    Text("Pick a few. GS tunes itself to your world.")
+                    Text("Tell GS what inspires you. Your companion will shape itself around the way you think.")
                         .font(Aero.caption())
                         .foregroundStyle(Aero.textMuted)
                 }
@@ -161,6 +162,22 @@ struct OnboardingView: View {
                 }
             }
         }
+    }
+
+    private var onboardingOrb: some View {
+        ZStack {
+            Circle()
+                .fill(RadialGradient(colors: [.white.opacity(0.94), Color(red: 1, green: 0.75, blue: 0.55).opacity(0.55), Color(red: 1, green: 0.48, blue: 0.25).opacity(0.22)], center: .center, startRadius: 8, endRadius: 110))
+                .frame(width: 138, height: 138)
+            Circle()
+                .fill(AngularGradient(colors: [Color(red: 1, green: 0.52, blue: 0.30), Color(red: 1, green: 0.82, blue: 0.64), Color(red: 1, green: 0.52, blue: 0.30)], center: .center))
+                .frame(width: 92, height: 92)
+            Image(systemName: "wand.and.stars")
+                .font(.system(size: 30, weight: .semibold))
+                .foregroundStyle(.white)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 190)
     }
 
     // Step 2 — AI preferences

@@ -345,9 +345,10 @@ private fun StepHeading(title: String, caption: String) {
 @Composable
 private fun InterestsStep(interests: SnapshotStateList<String>, showHint: Boolean) {
     StepColumn {
+        OnboardingOrb()
         StepHeading(
-            title = "What are you into?",
-            caption = "Pick at least one. GS tunes itself to your world. You can change these anytime."
+            title = "Your smarter world starts here",
+            caption = "Tell GS what inspires you. Your companion will shape itself around the way you think."
         )
         if (showHint) {
             // uiverse sour-dragon-56: one tooltip, above the first control.
@@ -372,6 +373,24 @@ private fun InterestsStep(interests: SnapshotStateList<String>, showHint: Boolea
                 }
             }
             Spacer(Modifier.height(GsMotion.spaceS))
+        }
+    }
+}
+
+@Composable
+private fun OnboardingOrb() {
+    Box(
+        modifier = Modifier.fillMaxWidth().height(190.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier.size(138.dp).clip(CircleShape).background(
+                Brush.radialGradient(listOf(Color.White.copy(alpha = .94f), Color(0xFFFFC08C).copy(alpha = .50f), Color(0xFFFF7B45).copy(alpha = .25f)))
+            ),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(Modifier.size(92.dp).clip(CircleShape).background(Brush.sweepGradient(listOf(Color(0xFFFF8450), Color(0xFFFFD1AA), Color(0xFFFF8450)))))
+            Icon(GsIcons.Wand, contentDescription = "GS AI companion", modifier = Modifier.size(30.dp), tint = Color.White)
         }
     }
 }

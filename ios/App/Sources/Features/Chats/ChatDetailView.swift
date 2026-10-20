@@ -949,9 +949,13 @@ struct ChatDetailView: View {
                 size: .standard,
                 contentDescription: "GS assistant"
             )
-            Text(workspaceGreeting)
+            Text("How can GS make today lighter?")
                 .font(Aero.headline())
                 .foregroundStyle(Aero.text)
+                .multilineTextAlignment(.center)
+            Text("Ask, create, explore, and make something beautiful.")
+                .font(Aero.caption())
+                .foregroundStyle(Aero.textMuted)
                 .multilineTextAlignment(.center)
             if vm.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 VStack(spacing: Aero.Spacing.s) {
