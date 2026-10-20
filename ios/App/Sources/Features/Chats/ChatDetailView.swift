@@ -942,10 +942,7 @@ struct ChatDetailView: View {
     /// the transcript. No navigation hop anywhere.
     private var emptyState: some View {
         VStack(spacing: Aero.Spacing.l) {
-            Image("GSCompanionOrb")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 112, height: 112)
+            AnimatedGsIllustration(imageName: "GSCompanionOrb", size: 112)
                 .accessibilityLabel("GS assistant companion")
             Text("How can GS make today lighter?")
                 .font(Aero.headline())

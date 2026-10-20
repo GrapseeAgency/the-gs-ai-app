@@ -1,6 +1,5 @@
 package com.grapsee.gsai.ui.agents
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -30,8 +29,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.res.painterResource
 import com.grapsee.gsai.R
+import com.grapsee.gsai.ui.components.AnimatedGsIllustration
 import com.grapsee.gsai.ui.icons.GsIcons
 import com.grapsee.gsai.ui.theme.GsRadius
 import com.grapsee.gsai.ui.theme.GsSpacing
@@ -57,7 +56,7 @@ fun TravelAgentScreen(onBack: () -> Unit, onSendToChat: (String) -> Unit) {
         }
         Spacer(Modifier.height(GsSpacing.xl))
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-            Image(painterResource(R.drawable.gs_travel_agent_orb), contentDescription = "Travel Agent", modifier = Modifier.size(148.dp).clip(CircleShape))
+            AnimatedGsIllustration(R.drawable.gs_travel_agent_orb, "Travel Agent", 148.dp, shape = CircleShape)
             Spacer(Modifier.height(GsSpacing.m))
             Text("Welcome to Travel Agent", style = MaterialTheme.typography.headlineSmall, color = colors.textPrimary, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(GsSpacing.s))

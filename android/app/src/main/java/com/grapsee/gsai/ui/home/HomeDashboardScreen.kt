@@ -1,6 +1,5 @@
 package com.grapsee.gsai.ui.home
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -35,8 +34,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.res.painterResource
 import com.grapsee.gsai.R
+import com.grapsee.gsai.ui.components.AnimatedGsIllustration
 import com.grapsee.gsai.ui.icons.GsIcons
 import com.grapsee.gsai.ui.theme.GsRadius
 import com.grapsee.gsai.ui.theme.GsSpacing
@@ -256,7 +255,7 @@ private fun HeroVisual(onClick: () -> Unit) {
                     Icon(GsIcons.ChevronDown, contentDescription = null, modifier = Modifier.size(14.dp), tint = colors.textSecondary)
                 }
             }
-            Image(painterResource(R.drawable.gs_companion_orb), contentDescription = "Start with GS AI", modifier = Modifier.align(Alignment.Center).size(112.dp).clip(CircleShape))
+            AnimatedGsIllustration(R.drawable.gs_companion_orb, "Start with GS AI", 112.dp, Modifier.align(Alignment.Center), CircleShape)
             Text("A calmer way to create", modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 18.dp), style = MaterialTheme.typography.labelLarge, color = colors.textPrimary)
         }
     }
@@ -280,7 +279,7 @@ private fun FeatureCard(modifier: Modifier, title: String, subtitle: String, ico
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(colors)).padding(GsSpacing.m)) {
             Column {
                 if (title.startsWith("Video")) {
-                    Image(painterResource(R.drawable.gs_video_create), contentDescription = "Video creation", modifier = Modifier.size(54.dp).clip(RoundedCornerShape(16.dp)))
+                    AnimatedGsIllustration(R.drawable.gs_video_create, "Video creation", 54.dp, shape = RoundedCornerShape(16.dp))
                 } else {
                     Surface(shape = CircleShape, color = Color.White.copy(alpha = .72f)) { Icon(icon, contentDescription = null, modifier = Modifier.padding(10.dp), tint = GsTheme.colors.accentStrong) }
                 }

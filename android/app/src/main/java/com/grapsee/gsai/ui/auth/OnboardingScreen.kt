@@ -14,7 +14,6 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -71,8 +70,8 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.res.painterResource
 import com.grapsee.gsai.R
+import com.grapsee.gsai.ui.components.AnimatedGsIllustration
 import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.ui.components.GsCard
 import com.grapsee.gsai.ui.components.GsChip
@@ -394,7 +393,7 @@ private fun OnboardingOrb() {
         modifier = Modifier.fillMaxWidth().height(190.dp),
         contentAlignment = Alignment.Center
     ) {
-        Image(painterResource(R.drawable.gs_companion_orb), contentDescription = "GS AI companion", modifier = Modifier.size(138.dp).clip(CircleShape))
+        AnimatedGsIllustration(R.drawable.gs_companion_orb, "GS AI companion", 138.dp, shape = CircleShape)
     }
 }
 

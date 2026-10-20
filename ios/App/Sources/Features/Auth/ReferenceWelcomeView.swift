@@ -24,10 +24,7 @@ struct ReferenceWelcomeView: View {
                     .padding(.horizontal, 14)
                     .padding(.vertical, 9)
                     .background(Capsule().fill(Color.white.opacity(0.46)))
-                Image("GSCompanionOrb")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 168, height: 168)
+                AnimatedGsIllustration(imageName: "GSCompanionOrb", size: 168)
                     .accessibilityLabel("GS AI companion")
                 VStack(spacing: Aero.Spacing.s) {
                     Text("Your smarter digital assistant")

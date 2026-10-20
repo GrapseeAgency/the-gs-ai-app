@@ -116,7 +116,7 @@ struct HomeDashboardView: View {
                 .frame(maxHeight: .infinity, alignment: .top)
                 .padding(16)
                 VStack(spacing: 10) {
-                    Image("GSCompanionOrb").resizable().scaledToFit().frame(width: 112, height: 112)
+                    AnimatedGsIllustration(imageName: "GSCompanionOrb", size: 112)
                     Text("A calmer way to create").font(Aero.label()).foregroundStyle(Aero.text)
                 }
             }
@@ -267,11 +267,7 @@ private struct HomeFeatureCard: View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 6) {
                 if title.hasPrefix("Video") {
-                    Image("GSVideoCreate")
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 54, height: 54)
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                    AnimatedGsIllustration(imageName: "GSVideoCreate", size: 54, cornerRadius: 14)
                 } else {
                     Image(systemName: icon)
                         .font(.system(size: 18, weight: .semibold))
