@@ -47,6 +47,7 @@ import com.grapsee.gsai.ui.icons.GsIcons
 import com.grapsee.gsai.ui.theme.GsRadius
 import com.grapsee.gsai.ui.theme.GsSpacing
 import com.grapsee.gsai.ui.theme.GsTheme
+import com.grapsee.gsai.ui.theme.kineticPress
 
 /**
  * Native consumer home. This is intentionally a real product surface rather
@@ -216,7 +217,7 @@ private fun UsageTile(label: String, value: String, progress: Float, modifier: M
 
 @Composable
 private fun ReflectionCard(onClick: () -> Unit) {
-    Card(onClick = onClick, modifier = Modifier.fillMaxWidth(), shape = GsRadius.cardShape(), colors = CardDefaults.cardColors(containerColor = Color.Transparent), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)) {
+    Card(onClick = onClick, modifier = Modifier.fillMaxWidth().kineticPress(), shape = GsRadius.cardShape(), colors = CardDefaults.cardColors(containerColor = Color.Transparent), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)) {
         Box(Modifier.fillMaxWidth().background(Brush.horizontalGradient(listOf(Color(0xFFFFE3D2), Color(0xFFFFC6B7)))).padding(GsSpacing.m)) {
             AnimatedGsIllustration(R.drawable.gs_companion_orb, "Mind guide", 98.dp, Modifier.align(Alignment.BottomEnd).alpha(.22f), breathDuration = 3600, rotationDegrees = 1.4f, liftPixels = -2f, startDelayMillis = 520)
             Column {
@@ -241,7 +242,7 @@ private fun HeroVisual(onClick: () -> Unit) {
     val colors = GsTheme.colors
     Card(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth().height(204.dp),
+        modifier = Modifier.fillMaxWidth().height(204.dp).kineticPress(),
         shape = RoundedCornerShape(30.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
@@ -286,7 +287,7 @@ private fun AnimatedHalo(modifier: Modifier = Modifier) {
 @Composable
 private fun QuickChip(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit, selected: Boolean = false) {
     val colors = GsTheme.colors
-    Surface(onClick = onClick, shape = GsRadius.pill, color = if (selected) colors.accent else colors.surface, shadowElevation = 1.dp) {
+    Surface(onClick = onClick, modifier = Modifier.kineticPress(), shape = GsRadius.pill, color = if (selected) colors.accent else colors.surface, shadowElevation = 1.dp) {
         Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, contentDescription = null, modifier = Modifier.size(16.dp), tint = if (selected) colors.onAccent else colors.textPrimary)
             Spacer(Modifier.width(6.dp))
@@ -297,7 +298,7 @@ private fun QuickChip(label: String, icon: androidx.compose.ui.graphics.vector.I
 
 @Composable
 private fun FeatureCard(modifier: Modifier, title: String, subtitle: String, icon: androidx.compose.ui.graphics.vector.ImageVector, colors: List<Color>, onClick: () -> Unit) {
-    Card(onClick = onClick, modifier = modifier.height(164.dp), shape = GsRadius.cardShape(), colors = CardDefaults.cardColors(containerColor = colors.first()), elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)) {
+    Card(onClick = onClick, modifier = modifier.height(164.dp).kineticPress(), shape = GsRadius.cardShape(), colors = CardDefaults.cardColors(containerColor = colors.first()), elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)) {
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(colors)).padding(GsSpacing.m)) {
             Column {
                 if (title.startsWith("Video")) {
