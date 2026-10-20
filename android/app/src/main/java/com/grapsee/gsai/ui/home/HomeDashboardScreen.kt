@@ -49,6 +49,7 @@ fun HomeDashboardScreen(
     onNewChat: () -> Unit,
     onOpenDrawer: () -> Unit,
     onOpenChats: () -> Unit,
+    onOpenAgent: () -> Unit,
 ) {
     val colors = GsTheme.colors
     Column(
@@ -112,7 +113,7 @@ fun HomeDashboardScreen(
                 subtitle = "A calmer place to think",
                 icon = GsIcons.Lightbulb,
                 colors = listOf(Color(0xFFFFC7B1), Color(0xFFFFF4EF)),
-                onClick = onNewChat,
+                onClick = onOpenAgent,
             )
         }
         Spacer(Modifier.height(GsSpacing.l))

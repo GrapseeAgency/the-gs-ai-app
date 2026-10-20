@@ -6,6 +6,7 @@ struct HomeDashboardView: View {
     let onNewChat: () -> Void
     let onOpenDrawer: () -> Void
     let onOpenChats: () -> Void
+    let onOpenAgent: () -> Void
 
     var body: some View {
         ScrollView(showsIndicators: false) {
@@ -130,7 +131,7 @@ struct HomeDashboardView: View {
     private var featureGrid: some View {
         HStack(spacing: Aero.Spacing.s) {
             HomeFeatureCard(title: "Create\nwith AI", subtitle: "Turn ideas into something real", icon: "wand.and.stars", colors: [Color(red: 1, green: 0.83, blue: 0.69), Aero.surface], action: onNewChat)
-            HomeFeatureCard(title: "Mind\nguide", subtitle: "A calmer place to think", icon: "lightbulb", colors: [Color(red: 1, green: 0.78, blue: 0.69), Aero.background], action: onNewChat)
+            HomeFeatureCard(title: "Travel\nagent", subtitle: "Make every journey easier", icon: "globe", colors: [Color(red: 1, green: 0.78, blue: 0.69), Aero.background], action: onOpenAgent)
         }
     }
 

@@ -5,6 +5,7 @@ import android.net.Uri
 /** AERUO KINETIC — route map. Screens are plain composables; this file owns all routing. */
 object GsRoutes {
     const val HOME = "home"
+    const val TRAVEL_AGENT = "travel-agent"
     const val CHATS = "chats"
     const val PROFILE = "profile"
     const val SETTINGS = "settings"
