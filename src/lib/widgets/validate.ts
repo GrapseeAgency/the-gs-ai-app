@@ -23,7 +23,7 @@ import {
   widgetKindOf,
   type WidgetKind,
 } from './catalog'
-import { SURFACES, type Surface } from '../design/rulebook'
+import { SURFACES, PALETTES, type Palette, type Surface } from '../design/rulebook'
 
 export interface WidgetFence {
   kind: string
@@ -319,22 +319,27 @@ export function validateWidget(kind: string, rawJson: string): ValidationResult 
   }
   if (!isObj(payload)) return { ok: false, kind, errors: ['payload is not an object'] }
 
-  const jsonRepaired = repairedJson !== rawJson.trim()
-  const check = CHECKS[kind](payload)
-  if (check.errors.length > 0) return { ok: false, kind, errors: check.errors }
+    const jsonRepaired = repairedJson !== rawJson.trim()
+    const check = CHECKS[kind](payload)
+    if (check.errors.length > 0) return { ok: false, kind, errors: check.errors }
 
-  // Art direction belongs to the model: it may choose an accent and a surface
-  // for THIS widget instead of accepting the renderer's default identity. The
-  // validator carries the two keys through untouched (and rejects anything
-  // that is not a real colour/variant) — dropping them here silently threw
-  // away every deliberate design decision the model made.
-  const styled: Record<string, unknown> = { ...check.widget }
-  const accent = typeof payload.accent === 'string' ? payload.accent.trim() : ''
-  if (/^#?[0-9a-fA-F]{6}$/.test(accent)) {
-    styled.accent = accent.startsWith('#') ? accent.toLowerCase() : `#${accent.toLowerCase()}`
-  }
-  const variant = typeof payload.variant === 'string' ? payload.variant.trim().toLowerCase() : ''
-  if ((SURFACES as readonly string[]).includes(variant)) styled.variant = variant as Surface
+    // Art direction belongs to the model: it may choose an accent and a surface
+    // for THIS widget instead of accepting the renderer's default identity. The
+    // validator carries the two keys through untouched (and rejects anything
+    // that is not a real colour/variant) — dropping them here silently threw
+    // away every deliberate design decision the model made.
+    const styled: Record<string, unknown> = { ...check.widget }
+    const accent = typeof payload.accent === 'string' ? payload.accent.trim() : ''
+    if (/^#?[0-9a-fA-F]{6}$/.test(accent)) {
+      styled.accent = accent.startsWith('#') ? accent.toLowerCase() : `#${accent.toLowerCase()}`
+    }
+    const variant = typeof payload.variant === 'string' ? payload.variant.trim().toLowerCase() : ''
+    if ((SURFACES as readonly string[]).includes(variant)) styled.variant = variant as Surface
+    // The reply-level palette: one id, every widget in the answer inherits it,
+    // so a reply reads as one designed object. An unknown id is dropped and the
+    // art director picks the subject-fit palette instead.
+    const palette = typeof payload.palette === 'string' ? payload.palette.trim().toLowerCase() : ''
+    if ((PALETTES as readonly Palette[]).some((p) => p.id === palette)) styled.palette = palette
 
   const json = JSON.stringify(styled)
   if (json.length > LIMITS.maxWidgetBytes) {
@@ -390,6 +395,121 @@ function normalisePoints(raw: unknown[], labelHints: string[]): number[][] {
   return out.slice(0, LIMITS.maxPointsPerSeries)
 }
 
+/**
+ * v2 chart payload families whose shape is a GRAPH or a composition, not a
+ * series list. Each has its own normaliser below.
+ */
+const GRAPH_PAYLOAD_TYPES = new Set(['sankey', 'network', 'wordcloud', 'sunburst', 'bullet'])
+
+/** sankey / network / wordcloud / sunburst / bullet payloads. */
+function normaliseGraphChart(type: string, p: Record<string, unknown>, alreadyRepaired: boolean): Check {
+  const errors: string[] = []
+  const repaired = alreadyRepaired
+
+  if (type === 'sankey') {
+    const links = asArray(p.links)
+      .map((l) => {
+        const o = isObj(l) ? l : {}
+        const value = asNumber(o.value)
+        return { source: asString(o.source ?? o.from), target: asString(o.target ?? o.to), value: value === null ? 0 : value }
+      })
+      .filter((l) => l.source && l.target && l.value > 0)
+      .slice(0, 60)
+    const declaredNodes = asArray(p.nodes)
+      .map((n) => asString(typeof n === 'string' ? n : isObj(n) ? String((n as Record<string, unknown>).id ?? (n as Record<string, unknown>).name ?? '') : ''))
+      .filter(Boolean)
+    const derived = new Set<string>()
+    for (const l of links) {
+      derived.add(l.source)
+      derived.add(l.target)
+    }
+    const nodes = declaredNodes.length > 0 ? declaredNodes.slice(0, 40) : [...derived]
+    if (links.length === 0) errors.push('sankey needs links with source, target and value')
+    return { widget: { type, title: asString(p.title), unit: asString(p.unit), nodes, links }, errors, repaired }
+  }
+
+  if (type === 'network') {
+    const nodes = asArray(p.nodes)
+      .map((n) => {
+        if (typeof n === 'string') return { id: n, label: n, group: '' }
+        const o = isObj(n) ? n : {}
+        const id = asString(o.id ?? o.name)
+        return { id, label: asString(o.label, id), group: asString(o.group) }
+      })
+      .filter((n) => n.id)
+      .slice(0, 40)
+    const rawEdges = asArray(p.edges).length > 0 ? asArray(p.edges) : asArray(p.links)
+    const edges = asArray(rawEdges)
+      .map((e) => {
+        const o = isObj(e) ? e : {}
+        const weight = asNumber(o.weight ?? o.value)
+        return { source: asString(o.source ?? o.from), target: asString(o.target ?? o.to), weight: weight === null ? 1 : weight }
+      })
+      .filter((e) => e.source && e.target)
+      .slice(0, 80)
+    const ids = new Set(nodes.map((n) => n.id))
+    const known = edges.filter((e) => ids.has(e.source) && ids.has(e.target))
+    if (nodes.length === 0 || known.length === 0) errors.push('network needs nodes and edges between them')
+    return { widget: { type, title: asString(p.title), nodes, edges: known }, errors, repaired }
+  }
+
+  if (type === 'wordcloud') {
+    const raw = asArray(p.items).length > 0 ? asArray(p.items) : asArray(p.words)
+    const items = raw
+      .map((w) => {
+        if (typeof w === 'string') return { text: w, weight: 1 }
+        const o = isObj(w) ? w : {}
+        const weight = asNumber(o.weight ?? o.value)
+        return { text: asString(o.text ?? o.word ?? o.label), weight: weight === null ? 1 : Math.max(0, weight) }
+      })
+      .filter((w) => w.text)
+      .slice(0, 60)
+    if (items.length === 0) errors.push('wordcloud needs items with text and weight')
+    return { widget: { type, title: asString(p.title), items }, errors, repaired }
+  }
+
+  if (type === 'sunburst') {
+    const readNode = (v: unknown, depth: number): { label: string; value: number; children: unknown[] } | null => {
+      if (depth > LIMITS.maxTreeDepth) return null
+      if (typeof v === 'string') return { label: v, value: 0, children: [] }
+      const o = isObj(v) ? v : {}
+      const value = asNumber(o.value)
+      const children = asArray(o.children)
+        .map((c) => readNode(c, depth + 1))
+        .filter((c): c is { label: string; value: number; children: unknown[] } => c !== null)
+      const label = asString(o.label ?? o.name)
+      if (!label) return null
+      return { label, value: value === null ? 0 : value, children }
+    }
+    const root = readNode(p.root ?? p.hierarchy, 0)
+    if (!root || (root.children.length === 0 && root.value === 0)) errors.push('sunburst needs a root with children or a value')
+    return { widget: { type, title: asString(p.title), unit: asString(p.unit), root: root ?? { label: '', value: 0, children: [] } }, errors, repaired }
+  }
+
+  // bullet
+  const max = asNumber(p.max)
+  const items = asArray(p.items)
+    .map((i) => {
+      const o = isObj(i) ? i : {}
+      const value = asNumber(o.value)
+      const target = asNumber(o.target)
+      const itemMax = asNumber(o.max)
+      const ranges = asArray(o.ranges).map((r) => asNumber(r)).filter((n): n is number => n !== null)
+      return {
+        label: asString(o.label),
+        value: value === null ? 0 : value,
+        target: target === null ? null : target,
+        max: itemMax === null || itemMax <= 0 ? null : itemMax,
+        ranges: ranges.slice(0, 4),
+        unit: asString(o.unit),
+      }
+    })
+    .filter((i) => i.label)
+    .slice(0, 8)
+  if (items.length === 0) errors.push('bullet needs items with label and value')
+  return { widget: { type, title: asString(p.title), unit: asString(p.unit), max: max === null || max <= 0 ? null : max, items }, errors, repaired }
+}
+
 const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
   chart: (p) => {
     const errors: string[] = []
@@ -398,6 +518,11 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
     if (!isChartType(type)) {
       type = 'bar'
       repaired = true
+    }
+    // v2 graph / composition charts have their own payload shapes and do not
+    // fit the series model at all.
+    if (GRAPH_PAYLOAD_TYPES.has(type)) {
+      return normaliseGraphChart(type, p, repaired)
     }
     const pieLike = type === 'pie' || type === 'donut'
     // A gantt chart is encoded as ONE RANGE PER SERIES — Task 1 is [0,2],
@@ -848,6 +973,213 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
       widget,
       errors: hasBody ? [] : ['app needs steps, columns, items, groups, rows or slots'],
       repaired,
+    }
+  },
+
+  // ------------------------------------------------------------------
+  // v2 — layout, control and study surfaces
+  // ------------------------------------------------------------------
+
+  tabs: (p) => {
+    const tabs = asArray(p.tabs)
+      .map((t) => {
+        const o = isObj(t) ? t : {}
+        return {
+          label: asString(o.label),
+          body: asString(o.body),
+          items: asArray(o.items).map((i) => asString(i)).filter(Boolean).slice(0, LIMITS.maxAppItems),
+        }
+      })
+      .filter((t) => t.label && (t.body || t.items.length > 0))
+      .slice(0, LIMITS.maxTabs)
+    return {
+      widget: { title: asString(p.title), tabs },
+      errors: tabs.length ? [] : ['tabs need at least one labelled tab'],
+      repaired: false,
+    }
+  },
+
+  accordion: (p) => {
+    const sections = asArray(p.sections ?? p.items)
+      .map((s) => {
+        const o = isObj(s) ? s : {}
+        return {
+          label: asString(o.label ?? o.title),
+          body: asString(o.body ?? o.detail),
+          expanded: o.expanded === true,
+        }
+      })
+      .filter((s) => s.label && s.body)
+      .slice(0, LIMITS.maxSections)
+    return {
+      widget: { title: asString(p.title), sections },
+      errors: sections.length ? [] : ['accordion needs labelled sections with body text'],
+      repaired: false,
+    }
+  },
+
+  steps: (p) => {
+    const stepList = asArray(p.steps)
+      .map((s) => {
+        const o = isObj(s) ? s : {}
+        return {
+          title: asString(o.title),
+          body: asString(o.body ?? o.detail),
+          state: ['done', 'current', 'todo'].includes(asString(o.state)) ? asString(o.state) : 'todo',
+        }
+      })
+      .filter((s) => s.title)
+      .slice(0, LIMITS.maxSteps)
+    return {
+      widget: { title: asString(p.title), steps: stepList },
+      errors: stepList.length ? [] : ['steps need titled steps'],
+      repaired: false,
+    }
+  },
+
+  menu: (p) => {
+    const options = asArray(p.options ?? p.items)
+      .map((o) => {
+        const row = isObj(o) ? o : {}
+        return {
+          label: typeof o === 'string' ? o : asString(row.label),
+          detail: asString(row.detail),
+          prompt: asString(row.prompt ?? row.value),
+        }
+      })
+      .filter((o) => o.label)
+      .slice(0, LIMITS.maxOptions)
+    return {
+      widget: { title: asString(p.title), options },
+      errors: options.length ? [] : ['menu needs options'],
+      repaired: false,
+    }
+  },
+
+  chips: (p) => {
+    const options = asArray(p.options ?? p.chips)
+      .map((o) => {
+        const row = isObj(o) ? o : {}
+        return {
+          label: typeof o === 'string' ? o : asString(row.label),
+          prompt: asString(row.prompt ?? row.value),
+        }
+      })
+      .filter((o) => o.label)
+      .slice(0, LIMITS.maxOptions)
+    return {
+      widget: { title: asString(p.title), options, multi: p.multi !== false },
+      errors: options.length ? [] : ['chips need options'],
+      repaired: false,
+    }
+  },
+
+  rating: (p) => {
+    let repaired = false
+    let style = asString(p.style, 'star')
+    if (!['star', 'heart', 'thumb', 'nps'].includes(style)) {
+      style = 'star'
+      repaired = true
+    }
+    const widget = {
+      title: asString(p.title),
+      prompt: asString(p.prompt),
+      max: clamp(asNumber(p.max) ?? (style === 'nps' ? 11 : 5), 2, 11),
+      style,
+      labels: asArray(p.labels).map((l) => asString(l)).slice(0, 2),
+    }
+    return {
+      widget,
+      errors: widget.title || widget.prompt ? [] : ['rating needs a title or prompt'],
+      repaired,
+    }
+  },
+
+  poll: (p) => {
+    const options = asArray(p.options)
+      .map((o) => {
+        const row = isObj(o) ? o : {}
+        return typeof o === 'string' ? { label: o, votes: 0 } : { label: asString(row.label), votes: asNumber(row.votes) ?? 0 }
+      })
+      .filter((o) => o.label)
+      .slice(0, LIMITS.maxOptions)
+    return {
+      widget: { title: asString(p.title), question: asString(p.question), options },
+      errors: options.length >= 2 ? [] : ['poll needs at least two options'],
+      repaired: false,
+    }
+  },
+
+  diff: (p) => {
+    const before = asString(p.before ?? p.old)
+    const after = asString(p.after ?? p.newText ?? p.updated)
+    const unified = asString(p.unified)
+    const ok = unified.length > 0 || before.length > 0 || after.length > 0
+    return {
+      widget: { title: asString(p.title), language: asString(p.language), before, after, unified },
+      errors: ok ? [] : ['diff needs before/after or a unified patch'],
+      repaired: false,
+    }
+  },
+
+  tree: (p) => {
+    const read = (v: unknown, depth: number): { label: string; detail: string; children: unknown[] } | null => {
+      if (depth > LIMITS.maxTreeDepth) return null
+      if (typeof v === 'string') return { label: v, detail: '', children: [] }
+      const o = isObj(v) ? v : {}
+      const label = asString(o.label ?? o.name ?? o.title)
+      if (!label) return null
+      return {
+        label,
+        detail: asString(o.detail ?? o.meta),
+        children: asArray(o.children)
+          .map((c) => read(c, depth + 1))
+          .filter((c): c is { label: string; detail: string; children: unknown[] } => c !== null),
+      }
+    }
+    const rawRoots = asArray(p.roots).length > 0 ? asArray(p.roots) : isObj(p.root) ? [p.root] : asArray(p.nodes)
+    const roots = rawRoots
+      .map((r) => read(r, 0))
+      .filter((r): r is { label: string; detail: string; children: unknown[] } => r !== null)
+      .slice(0, LIMITS.maxOptions)
+    return {
+      widget: { title: asString(p.title), roots },
+      errors: roots.length ? [] : ['tree needs at least one root node'],
+      repaired: false,
+    }
+  },
+
+  flashcards: (p) => {
+    const cards = asArray(p.cards)
+      .map((c) => {
+        const o = isObj(c) ? c : {}
+        return { front: asString(o.front ?? o.q ?? o.question), back: asString(o.back ?? o.a ?? o.answer) }
+      })
+      .filter((c) => c.front && c.back)
+      .slice(0, LIMITS.maxFlashcards)
+    return {
+      widget: { title: asString(p.title), cards },
+      errors: cards.length ? [] : ['flashcards need front and back text'],
+      repaired: false,
+    }
+  },
+
+  checklist: (p) => {
+    const items = asArray(p.items)
+      .map((i) => {
+        const o = isObj(i) ? i : {}
+        return {
+          label: typeof i === 'string' ? i : asString(o.label ?? o.title),
+          detail: asString(o.detail),
+          done: o.done === true,
+        }
+      })
+      .filter((i) => i.label)
+      .slice(0, LIMITS.maxChecklistItems)
+    return {
+      widget: { title: asString(p.title), items },
+      errors: items.length ? [] : ['checklist needs items'],
+      repaired: false,
     }
   },
 }

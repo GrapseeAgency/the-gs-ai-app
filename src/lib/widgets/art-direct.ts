@@ -13,12 +13,14 @@
  * stable. The model still owns intent — this only breaks ties and fills gaps.
  */
 
-import { DATA_HUES, SURFACES, type Surface } from '../design/rulebook'
+import { DATA_HUES, PALETTES, SURFACES, type Palette, type Surface } from '../design/rulebook'
 import type { WidgetKind } from './catalog'
 
 export interface ArtDirection {
   accent: string
   variant: Surface
+  /** The palette this reply draws from. Clients use it for coherent theming. */
+  palette?: string
 }
 
 export interface ArtInput {
@@ -87,6 +89,50 @@ export const SUBJECT_HUES: ReadonlyArray<{
 /** Charts that read better as a figure than as a filled card. */
 const EDITORIAL_CHARTS = new Set(['line', 'area', 'stackedArea', 'scatter', 'bubble', 'candlestick'])
 
+/**
+ * Subject → palette families. One step above the hue lexicon: the reply picks
+ * a three-hue FAMILY first, then the widgets pick hues inside it, so a reply
+ * reads as one designed object instead of three unrelated cards. Deterministic
+ * tie-break: the turn fence count rotates within the family so two consecutive
+ * replies on the same subject still change their face.
+ */
+const SUBJECT_PALETTES: ReadonlyArray<{ keywords: readonly string[]; palettes: readonly string[] }> = [
+  { keywords: ['risk', 'churn', 'loss', 'losses', 'error', 'incident', 'outage', 'threat', 'fraud', 'debt', 'security', 'failure', 'downtime', 'breach', 'attack', 'bug', 'defect'], palettes: ['ember', 'berry'] },
+  { keywords: ['revenue', 'profit', 'cost', 'price', 'budget', 'sales', 'income', 'spend', 'tax', 'loan', 'mortgage', 'payment', 'cash', 'margin', 'salary', 'invoice', 'pricing', 'earning', 'valuation', 'funding', 'burn', 'mrr', 'arr'], palettes: ['citrus', 'harbour'] },
+  { keywords: ['health', 'medical', 'patient', 'fitness', 'sleep', 'calorie', 'wellness', 'recovery', 'heart', 'blood', 'glucose', 'nutrition', 'diagnosis', 'treatment'], palettes: ['forest', 'reef'] },
+  { keywords: ['growth', 'increase', 'adoption', 'user', 'traffic', 'engagement', 'retention', 'conversion', 'signup', 'subscriber', 'download', 'active', 'mau', 'dau'], palettes: ['aurora', 'meadow'] },
+  { keywords: ['schedule', 'timeline', 'deadline', 'milestone', 'plan', 'roadmap', 'sprint', 'calendar', 'quarter'], palettes: ['dusk', 'harbour'] },
+  { keywords: ['route', 'map', 'trip', 'location', 'delivery', 'distance', 'travel', 'commute', 'shipping', 'logistics', 'store', 'city'], palettes: ['reef', 'glacier'] },
+  { keywords: ['energy', 'carbon', 'emission', 'climate', 'water', 'temperature', 'renewable', 'electricity', 'fuel', 'co2'], palettes: ['sunrise', 'forest'] },
+  { keywords: ['team', 'employee', 'hiring', 'headcount', 'customer', 'audience', 'staff', 'talent'], palettes: ['orchid', 'berry'] },
+  { keywords: ['product', 'inventory', 'stock', 'order', 'shipment', 'catalog', 'sku', 'warehouse', 'supply'], palettes: ['citrus', 'glacier'] },
+  { keywords: ['course', 'student', 'learning', 'score', 'grade', 'quiz', 'exam', 'lesson'], palettes: ['dusk', 'meadow'] },
+]
+
+/**
+ * The reply's palette. Explicit subject match wins; otherwise the full
+ * twelve-palette wheel rotates by the prior turn's fence count, skipping any
+ * palette whose lead hue the previous turn already wore.
+ */
+export function paletteFor(text: string, priorText = ''): Palette {
+  const words = new Set(text.split(/[^a-z0-9]+/).filter(Boolean))
+  const matched: string[] = []
+  for (const family of SUBJECT_PALETTES) {
+    if (family.keywords.some((word) => words.has(word) || words.has(`${word}s`))) {
+      matched.push(...family.palettes)
+      break
+    }
+  }
+  const pool = matched.length > 0 ? PALETTES.filter((p) => matched.includes(p.id)) : PALETTES
+  const start = fenceCount(priorText) % pool.length
+  const avoid = accentsIn(priorText)
+  for (let i = 0; i < pool.length; i++) {
+    const palette = pool[(start + i) % pool.length]
+    if (!avoid.has(palette.hues[0].toLowerCase())) return palette
+  }
+  return pool[start % pool.length]
+}
+
 /** The style keys a payload may already carry, excluded from subject text. */
 const STYLE_KEYS = new Set(['accent', 'variant'])
 const URL_KEYS = new Set(['url', 'image', 'thumb', 'src', 'href', 'icon'])
@@ -111,8 +157,11 @@ export function accentsIn(text: string): Set<string> {
 export function directWidgetArt({ kind, payload, prior = null, seen = [], priorText = '' }: ArtInput): ArtDirection {
   const text = subjectText(payload)
   const seed = hash(`${kind}|${text}`)
-  // Emitted accents are lowercase, matching the validator's normalisation.
-  const candidates = subjectHues(text).map((hue) => hue.toLowerCase())
+  // The reply's palette decides the candidate hues; the subject lexicon has
+  // already chosen WHICH palette. Emitted accents are lowercase, matching the
+  // validator's normalisation.
+  const palette = paletteFor(text, priorText)
+  const candidates = palette.hues.map((hue) => hue.toLowerCase())
   const turn = fenceCount(priorText)
   const used = accentsIn(priorText)
   const seenAccents = new Set(seen.map((direction) => direction.accent))
@@ -137,6 +186,7 @@ export function directWidgetArt({ kind, payload, prior = null, seen = [], priorT
   return {
     accent: modelAccent && modelAccent !== prior?.accent ? modelAccent : derivedAccent,
     variant: modelVariant && modelVariant !== prior?.variant ? modelVariant : derivedVariant,
+    palette: palette.id,
   }
 }
 
@@ -211,19 +261,31 @@ function roleSurfaces(kind: WidgetKind, payload: Record<string, unknown>): reado
       return ['inset', 'plain']
     case 'app':
       return ['inset', 'plain']
+    case 'tabs':
+      return ['plain', 'tinted']
+    case 'accordion':
+      return ['outline', 'tinted']
+    case 'steps':
+      return ['editorial', 'outline']
+    case 'menu':
+      return ['outline', 'plain']
+    case 'chips':
+      return ['outline', 'tinted']
+    case 'rating':
+      return ['inset', 'outline']
+    case 'poll':
+      return ['tinted', 'outline']
+    case 'diff':
+      return ['plain', 'inset']
+    case 'tree':
+      return ['editorial', 'plain']
+    case 'flashcards':
+      return ['inset', 'tinted']
+    case 'checklist':
+      return ['outline', 'tinted']
     default:
       return ['tinted', 'plain']
   }
-}
-
-function subjectHues(text: string): readonly string[] {
-  const words = new Set(text.split(/[^a-z0-9]+/).filter(Boolean))
-  for (const family of SUBJECT_HUES) {
-    if (family.keywords.some((word) => words.has(word) || words.has(`${word}s`))) {
-      return family.hues
-    }
-  }
-  return DATA_HUES
 }
 
 /**

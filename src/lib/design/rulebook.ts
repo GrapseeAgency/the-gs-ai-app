@@ -29,6 +29,39 @@ export const DATA_HUES = [
   '#5F3DC4', // indigo
 ] as const
 
+/**
+ * Twelve PALETTES — curated three-hue families drawn from DATA_HUES.
+ *
+ * This is the answer to "every reply looks the same": a reply does not pick a
+ * colour, it picks a PALETTE (explicitly via "palette":"id", or implicitly
+ * through the subject lexicon + a deterministic rotation), and every widget in
+ * the reply draws from that family. Two replies on the same subject can still
+ * differ because the rotation advances. Deterministic: the same reply text and
+ * the same prior turn always select the same palette — tests and replays hold.
+ */
+export interface Palette {
+  id: string
+  name: string
+  hues: readonly [string, string, string]
+  /** The subjects this family was built for (advisory, the lexicon decides). */
+  mood: string
+}
+
+export const PALETTES: readonly Palette[] = [
+  { id: 'aurora', name: 'Aurora', hues: ['#4C6FFF', '#0CA678', '#5F3DC4'], mood: 'technology, growth, product' },
+  { id: 'citrus', name: 'Citrus', hues: ['#E8590C', '#F08C00', '#66A80F'], mood: 'money, food, commerce' },
+  { id: 'reef', name: 'Reef', hues: ['#1098AD', '#0B7285', '#4C6FFF'], mood: 'water, travel, calm' },
+  { id: 'orchid', name: 'Orchid', hues: ['#9C36B5', '#6741D9', '#D6336C'], mood: 'creative, people, brand' },
+  { id: 'ember', name: 'Ember', hues: ['#E03131', '#D6336C', '#E8590C'], mood: 'risk, urgency, incidents' },
+  { id: 'forest', name: 'Forest', hues: ['#0CA678', '#66A80F', '#1098AD'], mood: 'health, nature, sustainability' },
+  { id: 'dusk', name: 'Dusk', hues: ['#6741D9', '#5F3DC4', '#9C36B5'], mood: 'premium, evening, editorial' },
+  { id: 'sunrise', name: 'Sunrise', hues: ['#F08C00', '#E8590C', '#D6336C'], mood: 'energy, sport, warmth' },
+  { id: 'harbour', name: 'Harbour', hues: ['#0B7285', '#1098AD', '#5F3DC4'], mood: 'finance, corporate, research' },
+  { id: 'meadow', name: 'Meadow', hues: ['#66A80F', '#0CA678', '#F08C00'], mood: 'education, growth plans' },
+  { id: 'berry', name: 'Berry', hues: ['#D6336C', '#9C36B5', '#E03131'], mood: 'social, entertainment, fun' },
+  { id: 'glacier', name: 'Glacier', hues: ['#4C6FFF', '#1098AD', '#0B7285'], mood: 'data, infrastructure, systems' },
+] as const
+
 export const INK = {
   light: { primary: '#14171C', secondary: '#5B6472', tertiary: '#8A93A0', rule: '#E5E5E1' },
   dark: { primary: '#F2F5F9', secondary: '#B4BCC9', tertiary: '#8B93A1', rule: '#2A3038' },
@@ -66,10 +99,13 @@ export type Surface = (typeof SURFACES)[number]
 export const DESIGN_RULEBOOK = `DESIGN RULEBOOK — read before composing any visual.
 
 COLOUR
-- Data hues, in order: ${DATA_HUES.join(' ')}.
-- A chart uses ONE hue plus neutrals for a single series; two to four hues for
-  a comparison; never more than five in one visual, never a rainbow for ordered
-  data (that is what sequential light-to-dark is for).
+- Twelve data hues, in order: ${DATA_HUES.join(' ')}.
+- Twelve palettes, one per reply mood: ${PALETTES.map((p) => `${p.id} (${p.hues.join('/')})`).join('; ')}.
+- A reply picks ONE palette and draws every widget's accent from it — name it
+  per reply with "palette":"id", or let the subject decide. Never more than
+  five hues in one visual, never a rainbow for ordered data.
+- A chart uses ONE hue plus neutrals for a single series; two to four for a
+  comparison.
 - Accent is a decision, not a default: name it per widget with "accent":"#hex".
   Pick the hue that matches the subject (money tangerine, health jade, risk
   crimson, growth azure) rather than reusing the same one every time.
@@ -128,4 +164,4 @@ WHEN IT IS WRONG
  * Compact reminder appended to the widget contract. The rulebook is long; this
  * is what the model sees on every single turn.
  */
-export const DESIGN_REMINDER = `Art direction is yours: every widget accepts "accent":"#hex" and "variant":"${SURFACES.join('|')}". Use them to make each block look like it belongs to its subject, vary the accent across a reply, and never let two adjacent blocks share an accent or a surface.`
+export const DESIGN_REMINDER = `Art direction is yours: pick the reply's palette ("palette":"${PALETTES.map((p) => p.id).join('|')}"), and every widget accepts "accent":"#hex" plus "variant":"${SURFACES.join('|')}". Use them to make each block belong to its subject, vary the accent across a reply, and never let two adjacent blocks share an accent or a surface.`

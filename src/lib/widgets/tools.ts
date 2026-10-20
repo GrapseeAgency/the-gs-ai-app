@@ -13,8 +13,8 @@
  * the long tail uses `render_widget` with a closed kind enum.
  */
 
-import { APP_TYPES, CALC_TYPES, CHART_TYPES, MEDIA_TYPES } from './catalog'
-import { DATA_HUES, SURFACES } from '../design/rulebook'
+import { APP_TYPES, CALC_TYPES, CHART_TYPES, MEDIA_TYPES, WIDGET_KINDS } from './catalog'
+import { DATA_HUES, PALETTES, SURFACES } from '../design/rulebook'
 
 export interface JsonSchema {
   type: 'object'
@@ -45,9 +45,14 @@ const STYLE_PROPERTIES = {
     enum: [...SURFACES],
     description: 'The surface: hero KPI, tinted chart, editorial figure, inset form, outline list, plain table.',
   },
+  palette: {
+    type: 'string',
+    enum: PALETTES.map((p) => p.id),
+    description: 'The reply-level palette. Every widget in one answer should share it.',
+  },
 } as const
 
-const STYLE_REQUIRED = ['accent', 'variant'] as const
+const STYLE_REQUIRED = ['accent', 'variant', 'palette'] as const
 
 const CHART_TOOL: ToolDefinition = {
   name: 'render_chart',
@@ -139,24 +144,10 @@ const WIDGET_TOOL: ToolDefinition = {
     type: 'object',
     properties: {
       kind: {
+        // Derived from the catalogue so a new kind can never drift from the
+        // tool contract (chart/table/stat have their own dedicated tools).
         type: 'string',
-        enum: [
-          'compare',
-          'progress',
-          'timeline',
-          'gauge',
-          'quiz',
-          'form',
-          'carousel',
-          'cards',
-          'followups',
-          'media',
-          'actions',
-          'panel',
-          'voice',
-          'calc',
-          'app',
-        ],
+        enum: WIDGET_KINDS.filter((k) => !['chart', 'table', 'stat'].includes(k)),
       },
       payload: { type: 'object' },
       subtype: {
