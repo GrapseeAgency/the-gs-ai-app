@@ -1241,16 +1241,10 @@ private struct MessageBubble: View, Equatable {
         }
     }
 
-    /// Small assistant badge — mirrors the Android thread mark. The identity
-    /// mark is the GS monogram, a glyph, not an illustration (the previous
-    /// sparkle is banned chrome under RULE ZERO).
+    /// Small assistant badge — mirrors the Android companion identity mark.
     private var assistantAvatar: some View {
-        Text("GS")
-            .font(.system(size: 10, weight: .semibold))
-            .foregroundStyle(Aero.text)
-            .frame(width: 26, height: 26)
-            .background(Circle().fill(Aero.accent.opacity(0.12)))
-            .overlay(Circle().stroke(Aero.outline, lineWidth: 1))
+        AnimatedGsIllustration(imageName: "GSCompanionOrb", size: 28, breathDuration: 3.2, rotationDegrees: 0.8, lift: -1, startDelay: 0.16)
+            .accessibilityLabel("GS assistant")
     }
 
     /// Finalized content → ordered blocks (STEP 5). Empty content renders the

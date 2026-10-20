@@ -2547,29 +2547,18 @@ private fun AssistantMessage(
     }
 }
 
-/** Compact assistant identity mark — the 24dp GS monogram circle beside the
- *  "GS" name in the turn-group header row (design-3-b role header: solid
- *  primary container, onPrimary glyph). Rendered only on the FIRST assistant
- *  block of a turn; the name text carries the meaning. */
+/** Compact assistant identity mark beside the first assistant block of a turn. */
 @Composable
 private fun AssistantAvatar() {
-    // The identity mark is the GS monogram — a glyph, not an illustration.
-    // (The previous sparkle icon is banned chrome under RULE ZERO.)
-    Box(
-        modifier = Modifier
-            .size(24.dp)
-            .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.primary),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = "GS",
-            style = MaterialTheme.typography.labelMedium,
-            fontSize = 8.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onPrimary
-        )
-    }
+    AnimatedGsIllustration(
+        resourceId = R.drawable.gs_companion_orb,
+        contentDescription = "GS assistant",
+        size = 28.dp,
+        breathDuration = 3200,
+        rotationDegrees = 0.8f,
+        liftPixels = -1f,
+        startDelayMillis = 160
+    )
 }
 
 /**
