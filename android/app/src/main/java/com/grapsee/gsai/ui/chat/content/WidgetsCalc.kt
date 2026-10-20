@@ -90,7 +90,7 @@ data class CalcWidget(
 
 internal val CALC_TYPES = setOf(
     "unit", "currency", "finance", "loan", "mortgage", "pricing", "tax",
-    "budget", "investment", "probability", "statistics", "scientific", "datetime"
+    "budget", "investment", "probability", "statistics", "scientific", "datetime", "health"
 )
 
 /** Recursive-descent expression evaluator: numbers, variables, + - * / % ^, functions. */

@@ -221,6 +221,7 @@ fun MediaWidgetView(w: MediaWidget, onSendPrompt: ((String) -> Unit)? = null) {
             "product" -> ProductList(w.items, onSendPrompt)
             "listing" -> ListingList(w.items, onSendPrompt)
             "doc", "document", "pdf" -> DocList(w.items, w.pages)
+            "embed" -> LinkList(w.items)
             else -> Text(
                 "Unsupported media type",
                 style = MaterialTheme.typography.bodySmall,

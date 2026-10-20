@@ -402,7 +402,9 @@ private fun parseFence(lines: List<Line>, start: Int): Pair<Block, Int> {
 val WIDGET_LANGUAGES = setOf(
     "chart", "stat", "table", "compare", "progress", "timeline",
     "gauge", "quiz", "form", "carousel", "cards", "followups",
-    "media", "actions", "panel", "voice", "calc", "app"
+    "media", "actions", "panel", "voice", "calc", "app",
+    // v3 kinds
+    "sim", "stage3d", "canvas", "editor", "terminal", "collab"
 )
 
 /**
@@ -417,7 +419,9 @@ val WIDGET_LANGUAGES = setOf(
 val CHART_LANGUAGE_ALIASES = setOf(
     "line", "area", "stackedarea", "bar", "hbar", "stacked", "pie", "donut",
     "scatter", "bubble", "histogram", "funnel", "radar", "grouped", "boxplot",
-    "heatmap", "correlation", "treemap", "waterfall", "candlestick", "gantt", "chord"
+    "heatmap", "correlation", "treemap", "waterfall", "candlestick", "gantt", "chord",
+    "quadrant", "sankey", "network", "wordcloud", "sunburst", "bullet",
+    "violin", "contour", "parallel", "dendrogram", "force", "depth"
 )
 
 /**
@@ -427,13 +431,28 @@ val CHART_LANGUAGE_ALIASES = setOf(
  * Mapping them to their parent kind (with the type injected) is the difference
  * between a rendered board and a wall of JSON.
  */
+/**
+ * v3 sub-type fence languages: ```cloth, ```molecule, ```whiteboard,
+ * ```pivot, ```vote … route to their parent kind with the type injected —
+ * the exact mechanism ```funnel already had. EDITOR/SIM/CANVAS/COLLAB sit
+ * BEFORE the media/app/calc alias checks: "video"/"audio"/"site"/"css" are
+ * media names too, and the payload shape ({"editor":...}) must win.
+ */
+val EDITOR_LANGUAGE_ALIASES: Set<String> = setOf("nodes", "pivot", "site", "css", "video", "audio")
+val SIM_LANGUAGE_ALIASES: Set<String> = SIM_TYPES
+val STAGE3D_LANGUAGE_ALIASES: Set<String> = STAGE3D_TYPES
+val CANVAS_LANGUAGE_ALIASES: Set<String> = setOf("whiteboard", "mindmap", "diagram", "polygons")
+val COLLAB_LANGUAGE_ALIASES: Set<String> = COLLAB_TYPES
+
 val APP_LANGUAGE_ALIASES: Set<String> = APP_TYPES
 val CALC_LANGUAGE_ALIASES: Set<String> = CALC_TYPES
 val MEDIA_LANGUAGE_ALIASES: Set<String> = MEDIA_TYPES - "code" // ```code is source, never a widget
 
 /** Every fence language that opens a widget block (kinds + aliases). */
 val WIDGET_FENCE_LANGUAGES: Set<String> =
-    WIDGET_LANGUAGES + CHART_LANGUAGE_ALIASES + APP_LANGUAGE_ALIASES +
+    WIDGET_LANGUAGES + CHART_LANGUAGE_ALIASES + EDITOR_LANGUAGE_ALIASES +
+        SIM_LANGUAGE_ALIASES + STAGE3D_LANGUAGE_ALIASES + CANVAS_LANGUAGE_ALIASES +
+        COLLAB_LANGUAGE_ALIASES + APP_LANGUAGE_ALIASES +
         CALC_LANGUAGE_ALIASES + MEDIA_LANGUAGE_ALIASES
 
 /**
@@ -448,6 +467,13 @@ fun widgetKindOf(language: String?): String? {
     return when {
         lang in WIDGET_LANGUAGES -> lang
         lang in CHART_LANGUAGE_ALIASES -> "chart"
+        // v3 sub-type families before media/app — several of their names
+        // ("video", "audio", "site", "css") double as media types.
+        lang in EDITOR_LANGUAGE_ALIASES -> "editor"
+        lang in SIM_LANGUAGE_ALIASES -> "sim"
+        lang in STAGE3D_LANGUAGE_ALIASES -> "stage3d"
+        lang in CANVAS_LANGUAGE_ALIASES -> "canvas"
+        lang in COLLAB_LANGUAGE_ALIASES -> "collab"
         // Media first: "search" is a media result list AND an app filter panel,
         // and the result list is what a ```search fence almost always holds.
         lang in MEDIA_LANGUAGE_ALIASES -> "media"
@@ -515,7 +541,7 @@ private fun fenceToBlock(language: String?, code: String, open: Boolean, offset:
         // gantt syntax (dateFormat/section lines) instead of a JSON payload.
         // Rendering either as source code wastes the fence.
         (language.equals("mermaid", ignoreCase = true) ||
-            language.equals("mindmap", ignoreCase = true) ||
+            (language.equals("mindmap", ignoreCase = true) && !isJson) ||
             (language.equals("gantt", ignoreCase = true) && !isJson)) && !open ->
             Block.MermaidBlock(code, offset)
         lang == "map" -> Block.HtmlBlock("map", code, open, offset)

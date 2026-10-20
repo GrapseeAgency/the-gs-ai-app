@@ -155,3 +155,6 @@ __pycache__/
 # build time with a missing-asset error naming neither the rule nor the icon.
 download/*.png
 upload/*.png
+
+# collab broker SQLite (runtime state, never in git)
+.data/
