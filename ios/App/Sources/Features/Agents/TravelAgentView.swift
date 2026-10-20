@@ -84,7 +84,7 @@ struct TravelAgentView: View {
     }
 
     private var orb: some View {
-        AnimatedGsIllustration(imageName: "GSTravelAgentOrb", size: 164)
+        AnimatedGsIllustration(imageName: "GSTravelAgentOrb", size: 164, breathDuration: 4.1, rotationDegrees: 1.6, lift: -4)
             .accessibilityLabel("Travel Agent companion orb")
     }
 

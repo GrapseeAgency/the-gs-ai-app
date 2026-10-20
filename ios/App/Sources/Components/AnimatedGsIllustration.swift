@@ -6,6 +6,9 @@ struct AnimatedGsIllustration: View {
     let imageName: String
     let size: CGFloat
     var cornerRadius: CGFloat = 0
+    var breathDuration: Double = 2.4
+    var rotationDegrees: Double = 2.2
+    var lift: CGFloat = -3
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isAlive = false
 
@@ -16,10 +19,10 @@ struct AnimatedGsIllustration: View {
             .frame(width: size, height: size)
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
             .scaleEffect(reduceMotion ? 1 : (isAlive ? 1.035 : 1))
-            .rotationEffect(.degrees(reduceMotion ? 0 : (isAlive ? 2.2 : 0)))
-            .offset(y: reduceMotion ? 0 : (isAlive ? -3 : 0))
+            .rotationEffect(.degrees(reduceMotion ? 0 : (isAlive ? rotationDegrees : 0)))
+            .offset(y: reduceMotion ? 0 : (isAlive ? lift : 0))
             .animation(
-                reduceMotion ? nil : .easeInOut(duration: 2.4).repeatForever(autoreverses: true),
+                reduceMotion ? nil : .easeInOut(duration: breathDuration).repeatForever(autoreverses: true),
                 value: isAlive
             )
             .onAppear {

@@ -19,7 +19,7 @@ import androidx.compose.ui.unit.Dp
 import com.grapsee.gsai.data.SettingsStore
 
 /**
- * A deliberately restrained idle motion: a 2.4s breath and a 4-degree drift.
+ * A deliberately restrained idle motion: a configurable breath, drift, and lift.
  * It gives the artwork life without turning a frequently visited screen into
  * a loading indicator. SettingsStore gates both animations and accessibility.
  */
@@ -30,6 +30,9 @@ fun AnimatedGsIllustration(
     size: Dp,
     modifier: Modifier = Modifier,
     shape: Shape? = null,
+    breathDuration: Int = 2400,
+    rotationDegrees: Float = 2.2f,
+    liftPixels: Float = -3f,
 ) {
     val reduced = SettingsStore.reduceMotion || SettingsStore.reduceAnimations
     val transition = rememberInfiniteTransition(label = "gs-illustration-motion")
@@ -37,14 +40,14 @@ fun AnimatedGsIllustration(
         initialValue = 1f,
         targetValue = if (reduced) 1f else 1.035f,
         animationSpec = infiniteRepeatable(
-            animation = tween(2400, easing = FastOutSlowInEasing),
+            animation = tween(breathDuration, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "gs-illustration-breath"
     )
     val drift by transition.animateFloat(
         initialValue = 0f,
-        targetValue = if (reduced) 0f else 2.2f,
+        targetValue = if (reduced) 0f else rotationDegrees,
         animationSpec = infiniteRepeatable(
             animation = tween(3200, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
@@ -53,7 +56,7 @@ fun AnimatedGsIllustration(
     )
     val lift by transition.animateFloat(
         initialValue = 0f,
-        targetValue = if (reduced) 0f else -3f,
+        targetValue = if (reduced) 0f else liftPixels,
         animationSpec = infiniteRepeatable(
             animation = tween(2800, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse

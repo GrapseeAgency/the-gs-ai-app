@@ -58,7 +58,7 @@ fun ReferenceWelcomeScreen(onExplore: () -> Unit, onSkip: () -> Unit) {
                 }
             }
             Spacer(Modifier.height(GsSpacing.l))
-            AnimatedGsIllustration(R.drawable.gs_companion_orb, "GS AI companion", 168.dp, shape = CircleShape)
+            AnimatedGsIllustration(R.drawable.gs_companion_orb, "GS AI companion", 168.dp, shape = CircleShape, breathDuration = 2900, rotationDegrees = 1.1f, liftPixels = -2f)
             Spacer(Modifier.height(GsSpacing.xl))
             Text("Your smarter digital assistant", style = MaterialTheme.typography.headlineMedium, color = colors.textPrimary, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
             Text("A calmer way to think, create, explore, and get things done.", modifier = Modifier.padding(top = GsSpacing.s), style = MaterialTheme.typography.bodyMedium, color = colors.textSecondary, textAlign = TextAlign.Center)
