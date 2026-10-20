@@ -1,7 +1,7 @@
 // Native SwiftUI activity-orb view (Phase 4) — Canvas + TimelineView, per the
 // reference port plan. The orb shows what the app is REALLY doing via the
 // honest mapping helpers at the bottom of this file; it never fabricates a
-// state, never re-colours (strictly monochrome ink mirroring the theme), and
+// state, using the shared warm AI-active accent, and
 // never steals attention from the conversation, the composer or the answer.
 
 import SwiftUI
@@ -23,7 +23,6 @@ public struct ThinkingOrbView: View {
     var paused: Bool = false
     var contentDescription: String?
 
-    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     @State private var buffer = OrbFrameBuffer()
 
@@ -60,35 +59,30 @@ public struct ThinkingOrbView: View {
     private func orbCanvas(resolved: ResolvedOrb, t: Double) -> some View {
         Canvas { context, _ in
             OrbEngine.render(size: Double(size.rawValue), t: t, resolved: resolved, buf: buffer)
-            let dark = colorScheme == .dark
             // Upstream paint contract: lines first (only `connecting` emits
-            // them), then dots far→near; ink mirrors the theme; plain
-            // source-over fills, no filters, no blend modes.
+            // them), then dots far→near; warm accent; plain source-over fills,
+            // no filters, no blend modes.
             for i in 0..<buffer.lineCount {
                 let w = min(1, max(0, buffer.lWhite[i]))
-                let g = dark ? 1 - w : w
-                let gray = (g * 255).rounded() / 255
                 let alpha = min(1, max(0, buffer.lAlpha[i]))
                 var path = Path()
                 path.move(to: CGPoint(x: buffer.lx1[i], y: buffer.ly1[i]))
                 path.addLine(to: CGPoint(x: buffer.lx2[i], y: buffer.ly2[i]))
                 context.stroke(
                     path,
-                    with: .color(Color(.sRGB, red: gray, green: gray, blue: gray, opacity: alpha)),
+                    with: .color(Aero.aiActive.opacity(alpha * (0.35 + w * 0.65))),
                     lineWidth: buffer.lWidth[i]
                 )
             }
             for k in 0..<buffer.dotCount {
                 let i = buffer.drawOrder[k]
                 let w = min(1, max(0, buffer.pWhite[i]))
-                let g = dark ? 1 - w : w
-                let gray = (g * 255).rounded() / 255
                 let alpha = min(1, max(0, buffer.pAlpha[i]))
                 let r = buffer.pr[i]
                 let rect = CGRect(x: buffer.px[i] - r, y: buffer.py[i] - r, width: r * 2, height: r * 2)
                 context.fill(
                     Path(ellipseIn: rect),
-                    with: .color(Color(.sRGB, red: gray, green: gray, blue: gray, opacity: alpha))
+                    with: .color(Aero.aiActive.opacity(alpha * (0.35 + w * 0.65)))
                 )
             }
         }

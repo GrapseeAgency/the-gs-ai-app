@@ -52,8 +52,8 @@ struct AeroDrawer: View {
         min(340, UIScreen.main.bounds.width * 0.85)
     }
 
-    // Theme-following navigation palette: the drawer belongs to the active
-    // appearance — monochrome black/white in both.
+    // Theme-following navigation palette: cream in light mode and espresso
+    // in dark mode, with the same warm accent wash in both appearances.
     private var panel: LinearGradient {
         LinearGradient(
             colors: [Color(red: 1, green: 0.70, blue: 0.43).opacity(0.18), Aero.navSurface, Aero.navSurface],

@@ -12,7 +12,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.semantics.Role
@@ -26,7 +25,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.ui.theme.LocalGsIsDark
-import kotlin.math.roundToInt
+import com.grapsee.gsai.ui.theme.GsTheme
 
 /**
  * The shared orb clock. Every mounted orb derives its time from the SAME
@@ -45,14 +44,14 @@ internal object OrbClock {
 }
 
 /**
- * The native AI activity orb (Phase 4): a restrained, monochrome visual
+ * The native AI activity orb (Phase 4): a restrained, warm visual
  * language for what the assistant is currently doing. The state comes from
  * the honest mapping layer (OrbStateMapping.kt) — the orb shows what the app
  * is REALLY doing, never what it wants to look like it is doing.
  *
  * Design contract (thinking-orbs@0.3.1, vendored spec in docs/orbs/):
- *  - Monochrome only: ink mirrors the theme (light dots on dark canvas, dark
- *    dots on light); all identity comes from shape + motion + density.
+ *  - Warm AI-active color: the shared accent carries identity while shape,
+ *    motion, and density communicate the honest activity state.
  *  - Two purpose-tuned sizes (INLINE 20 / STANDARD 64) — separate designs,
  *    not a scale factor.
  *  - Reduced motion renders ONE static representative frame (t = 0.6) — the
@@ -144,19 +143,13 @@ fun ThinkingOrb(
             scale(scaleFactor, scaleFactor, pivot = Offset(contentPx / 2f, contentPx / 2f)) {
                 OrbEngine.render(presetPx.toDouble(), tState.doubleValue, resolved, buffer)
                 // Upstream paint contract: lines first (only `connecting` emits
-                // them), then dots far→near; ink mirrors the theme; plain
+                // them), then dots far→near; warm accent; plain
                 // source-over fills.
                 for (li in 0 until buffer.lineCount) {
                     val w = buffer.lWhite[li].coerceIn(0.0, 1.0)
                     val gray = (if (dark) 1 - w else w)
-                    val g = (gray * 255.0).roundToInt().coerceIn(0, 255)
                     drawLine(
-                        color = Color(
-                            red = g / 255f,
-                            green = g / 255f,
-                            blue = g / 255f,
-                            alpha = buffer.lAlpha[li].coerceIn(0.0, 1.0).toFloat()
-                        ),
+                        color = GsTheme.colors.aiActive.copy(alpha = buffer.lAlpha[li].coerceIn(0.0, 1.0).toFloat() * (0.35f + gray.toFloat() * 0.65f)),
                         start = Offset(
                             (buffer.lx1[li] * density).toFloat(),
                             (buffer.ly1[li] * density).toFloat()
@@ -187,14 +180,8 @@ fun ThinkingOrb(
                     if (radius < 0.05f) continue
                     val w = buffer.pWhite[i].coerceIn(0.0, 1.0)
                     val gray = (if (dark) 1 - w else w)
-                    val g = (gray * 255.0).roundToInt().coerceIn(0, 255)
                     drawCircle(
-                        color = Color(
-                            red = g / 255f,
-                            green = g / 255f,
-                            blue = g / 255f,
-                            alpha = alpha.coerceIn(0.0, 1.0).toFloat()
-                        ),
+                        color = GsTheme.colors.aiActive.copy(alpha = alpha.coerceIn(0.0, 1.0).toFloat() * (0.35f + gray.toFloat() * 0.65f)),
                         radius = radius,
                         center = Offset(
                             (buffer.px[i] * density).toFloat(),

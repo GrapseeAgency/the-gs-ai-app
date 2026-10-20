@@ -1,7 +1,7 @@
 import SwiftUI
 
 /**
- * MONOCHROME workspace shell navigation. The CONVERSATION WORKSPACE is the
+ * Warm consumer workspace shell navigation. The CONVERSATION WORKSPACE is the
  * root: opening the app lands directly in the AI workspace (a fresh
  * conversation is simply the empty state of that same surface). There is no
  * Home launcher and no separate "New chat" page — the drawer swaps content
