@@ -4,7 +4,7 @@
 > **34 kinds, 34 chart types, 8 live simulations, 8 three-dimensional stage
 > views, 4 canvas surfaces, 7 app editors, 1 terminal runtime, 20 app
 > experiences, 14 calculators, 17 form-field types, 16 media forms, 24
-> mermaid languages, 3 native blocks — 189 declared component types**, plus
+> mermaid languages, 1 shared-state runtime, 3 native blocks — 190 declared component types**, plus
 > unlimited bespoke ```html. Tier 1 is native and real; Tier 2 ships
 > degraded and labelled; Tier 3 is refused with stated reasons — never faked.
 >
@@ -334,7 +334,7 @@ molecular/cad conventions), marching-squares literature (contours), Streamlit
 | Item | Shipped as | Why degraded |
 |---|---|---|
 | VR/AR | `stage3d` `vr`/`ar` magic window (gyro-free orbit + framed passthrough styling) | Per the WebXR spec, immersive sessions require the `xr-spatial-tracking` permissions policy (default allowlist `'self'`, embeddable only via `allow="xr-spatial-tracking"`) AND user consent — a chat widget iframe cannot claim one unilaterally (w3.org/TR/webxr §3.2, immersiveweb.dev). Labelled in-renderer; a host that opts in with the iframe allow attribute unlocks full VR later. |
-| Multiplayer collaboration | shared-state prototype via the SSE stream broker | True CRDT co-editing needs a presence backend; the broker gives one-writer-many-readers sync. |
+| Multiplayer collaboration | `collab` kind (v3.1): counter / vote / todo / pointer over `/api/v1/collab` (SSE + POST) | SHIPPED as a labelled prototype: commutative server-side deltas for counts (Notion ships server-side LWW for blocks — jitl, HN 2023), list-replace LWW for todos, ephemeral presence with 10s heartbeat / 30s TTL (Yjs awareness semantics, docs.yjs.dev). Per-server memory, resets on restart; free-text co-editing (sequence CRDT) stays refused. |
 
 ## Tier 3 — refused, with reasons (never faked)
 

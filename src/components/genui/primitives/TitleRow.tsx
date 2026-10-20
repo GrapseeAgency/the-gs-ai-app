@@ -1,6 +1,6 @@
 'use client'
 
-import type { CSSProperties } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import { useWidgetIdentity } from '../theme/WidgetSurface'
 import { TYPE } from '../theme/tokens'
 
@@ -11,7 +11,7 @@ export function TitleRow({
   style,
 }: {
   title?: string
-  right?: string
+  right?: ReactNode
   style?: CSSProperties
 }) {
   const { theme } = useWidgetIdentity()

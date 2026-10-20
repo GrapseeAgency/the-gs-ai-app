@@ -284,6 +284,7 @@ check('repairJson rejects garbage', repairJson('hello world') === null)
     canvas: '{"surface":"mindmap","nodes":[{"label":"A","x":0.3,"y":0.3},{"label":"B","x":0.7,"y":0.6}],"edges":[[0,1]]}',
     editor: '{"editor":"sheet","cells":{"A1":"2","A2":"=A1*3"}}',
     terminal: '{"title":"sh","commands":[{"name":"deploy","description":"demo"}]}',
+    collab: '{"surface":"vote","room":"Launch Day","items":["Ship it","Hold"]}',
   }
   const noValidator: string[] = []
   const rejected: string[] = []
@@ -573,6 +574,21 @@ check('repairJson rejects garbage', repairJson('hello world') === null)
   check('stage3d z rejects non-math tokens in the validator', !!evil && evil.ok && evil.widget.z === undefined && evil.repaired === true, JSON.stringify(evil.ok ? evil.widget.z : null))
   const editor = validateWidget('editor', '{"editor":"video","duration":9999,"tracks":[{"name":"A","clips":[{"start":0,"dur":8,"label":"x"}]}]}')
   check('editor timeline clamps duration', editor.ok && (editor.widget as Record<string, unknown>).duration !== 9999)
+}
+
+// 37. v3.1 — collab: shared-state kind validates, slugs, clamps, repairs.
+{
+  const vote = validateWidget('collab', '{"surface":"vote","room":"Launch Day!!","items":["a","b"],"junk":1}')
+  const w = vote.ok ? vote.widget : null
+  check('collab vote validates with slugified room', !!w && w.room === 'launch-day' && w.surface === 'vote')
+  const junk = validateWidget('collab', '{"surface":"whiteboard","items":"x"}')
+  check('collab junk surface repairs to counter', junk.ok && junk.widget.surface === 'counter' && junk.repaired === true)
+  const clamped = validateWidget('collab', '{"surface":"todo","room":"r","items":' + JSON.stringify(Array.from({ length: 20 }, (_, i) => `i${i}`)) + '}')
+  check('collab items clamp to 12', clamped.ok && (clamped.widget.items as unknown[]).length === 12)
+  const counterFence = extractWidgetFences('```counter\n{"room":"taps"}\n```')
+  check('counter fence -> collab kind', counterFence[0]?.kind === 'collab', JSON.stringify(counterFence[0]?.kind))
+  const pointerFence = extractWidgetFences('```pointer\n{}\n```')
+  check('pointer fence -> collab kind with default room', pointerFence[0]?.kind === 'collab')
 }
 
 console.log(`\n${passed} passed, ${failures.length} failed`)

@@ -28,6 +28,8 @@ const WIDGET_LANGS = new Set([
   'diff', 'media', 'app',
   // v3 kinds
   'sim', 'stage3d', 'canvas', 'editor', 'terminal',
+  'collab',
+  'counter', 'vote', 'todo', 'pointer',
   // v3 sub-type fences the backend promotes to kinds
   'cloth', 'softbody', 'fluid', 'smoke', 'particles', 'rigid', 'terrain', 'game',
   'scatter3d', 'surface3d', 'molecule', 'cad', 'anatomy', 'scene', 'vr', 'ar',
@@ -58,6 +60,7 @@ const CANON: Record<string, string> = {
   cloth: 'sim', softbody: 'sim', fluid: 'sim', smoke: 'sim', particles: 'sim', rigid: 'sim', terrain: 'sim', game: 'sim',
   scatter3d: 'stage3d', surface3d: 'stage3d', molecule: 'stage3d', cad: 'stage3d', anatomy: 'stage3d', scene: 'stage3d', vr: 'stage3d', ar: 'stage3d',
   whiteboard: 'canvas', mindmap: 'canvas', diagram: 'canvas', polygons: 'canvas',
+  counter: 'collab', vote: 'collab', todo: 'collab', pointer: 'collab',
   nodes: 'editor', pivot: 'editor', site: 'editor', css: 'editor',
   image: 'media', gallery: 'media', video: 'media', audio: 'media', link: 'media',
   citation: 'media', entity: 'media', product: 'media', listing: 'media', doc: 'media',

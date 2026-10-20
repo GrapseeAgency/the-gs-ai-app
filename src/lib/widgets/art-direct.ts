@@ -294,6 +294,8 @@ function roleSurfaces(kind: WidgetKind, payload: Record<string, unknown>): reado
       return ['inset', 'plain']
     case 'terminal':
       return ['inset', 'outline']
+    case 'collab':
+      return ['hero', 'inset']
     default:
       return ['tinted', 'plain']
   }

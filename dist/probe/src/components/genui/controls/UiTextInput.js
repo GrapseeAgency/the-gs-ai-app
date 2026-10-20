@@ -6,9 +6,9 @@ const jsx_runtime_1 = require("react/jsx-runtime");
 const tokens_1 = require("../theme/tokens");
 const WidgetSurface_1 = require("../theme/WidgetSurface");
 /** Single-line text family: text | email | url | number | password | otp. */
-function UiTextInput({ placeholder, value, onChange, inputType = 'text', inputMode, maxLength, ariaLabel, }) {
+function UiTextInput({ placeholder, value, onChange, inputType = 'text', inputMode, maxLength, ariaLabel, onKeyDown, }) {
     const { accent, theme } = (0, WidgetSurface_1.useWidgetIdentity)();
-    return ((0, jsx_runtime_1.jsx)("input", { "aria-label": ariaLabel, type: inputType, inputMode: inputMode, maxLength: maxLength, placeholder: placeholder, value: value, onChange: (e) => onChange(e.target.value), style: {
+    return ((0, jsx_runtime_1.jsx)("input", { "aria-label": ariaLabel, type: inputType, inputMode: inputMode, maxLength: maxLength, placeholder: placeholder, value: value, onChange: (e) => onChange(e.target.value), onKeyDown: onKeyDown, style: {
             width: '100%',
             padding: '9px 12px',
             borderRadius: tokens_1.RADIUS.md,

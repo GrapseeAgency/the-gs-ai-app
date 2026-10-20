@@ -81,6 +81,15 @@ export interface EditorPayload extends Record<string, unknown> {
   submitLabel?: string
 }
 
+/** The collab kind: LIVE shared state (Tier-2 prototype). */
+export interface CollabPayload extends Record<string, unknown> {
+  surface?: string
+  room?: string
+  items?: string[]
+  start?: number
+  label?: string
+}
+
 /** The terminal kind: sandboxed shell + JS REPL. */
 export interface TerminalPayload extends Record<string, unknown> {
   welcome?: string

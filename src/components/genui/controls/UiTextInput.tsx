@@ -1,5 +1,6 @@
 'use client'
 
+import type { KeyboardEvent } from 'react'
 import { RADIUS, TYPE } from '../theme/tokens'
 import { useWidgetIdentity } from '../theme/WidgetSurface'
 
@@ -12,6 +13,7 @@ export function UiTextInput({
   inputMode,
   maxLength,
   ariaLabel,
+  onKeyDown,
 }: {
   placeholder?: string
   value: string
@@ -20,6 +22,7 @@ export function UiTextInput({
   inputMode?: 'text' | 'numeric' | 'email' | 'url' | 'tel'
   maxLength?: number
   ariaLabel?: string
+  onKeyDown?: (e: KeyboardEvent<HTMLInputElement>) => void
 }) {
   const { accent, theme } = useWidgetIdentity()
   return (
@@ -31,6 +34,7 @@ export function UiTextInput({
       placeholder={placeholder}
       value={value}
       onChange={(e) => onChange(e.target.value)}
+      onKeyDown={onKeyDown}
       style={{
         width: '100%',
         padding: '9px 12px',
