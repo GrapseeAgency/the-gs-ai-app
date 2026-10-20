@@ -2948,7 +2948,11 @@ private fun TranslationSheet(
     onDismiss: () -> Unit,
     onCopy: (String) -> Unit
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = GsTheme.colors.glassSurface,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -3034,7 +3038,11 @@ private fun AttachSheet(
     selectedMode: String = "flash",
     onModeSelected: (String) -> Unit = {}
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = GsTheme.colors.glassSurface,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()

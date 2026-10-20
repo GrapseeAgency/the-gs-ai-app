@@ -1,5 +1,6 @@
 package com.grapsee.gsai.ui.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -235,7 +236,24 @@ fun FrostedBloom(
     if (GsBlurTier.realBlur) {
         ReferenceBackdrop(modifier.blur(radius))
     } else {
-        ReferenceBackdrop(modifier)
+        // API 26 tier (b9). There is no RenderEffect pass, so bake the frost the
+        // honest way: the same bloom under a thin airlight veil — the veiling
+        // light a GPU blur would add back on API 31+. Two stacked layers, one
+        // call, and no undefined bitmap readback. Same soft result, no shader.
+        val colors = GsTheme.colors
+        Box(modifier = modifier) {
+            ReferenceBackdrop(Modifier.matchParentSize())
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .background(
+                        Brush.verticalGradient(
+                            0f to colors.glassHighlight.copy(alpha = 0.16f),
+                            1f to colors.glassSurface.copy(alpha = 0.10f),
+                        )
+                    )
+            )
+        }
     }
 }
 
@@ -262,7 +280,20 @@ fun GlassFrostedPanel(
         if (realBlur) {
             ReferenceBackdrop(frost.blur(radius))
         } else {
+            // b9 baked frost: bloom, then the airlight veil, then the glass fill.
             ReferenceBackdrop(frost)
+            val colors = GsTheme.colors
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .clip(shape)
+                    .background(
+                        Brush.verticalGradient(
+                            0f to colors.glassHighlight.copy(alpha = 0.16f),
+                            1f to colors.glassSurface.copy(alpha = 0.10f),
+                        )
+                    )
+            )
         }
         // Top: the real material — a translucent fill over the frost, the veil,
         // the directional rim and the warm shadow — then the panel content.

@@ -47,6 +47,8 @@ import com.grapsee.gsai.ui.components.RefIconTile
 import com.grapsee.gsai.ui.components.RefPage
 import com.grapsee.gsai.ui.components.RefPrimaryButton
 import com.grapsee.gsai.ui.components.gsConversationTitle
+import com.grapsee.gsai.ui.components.GsGlassRole
+import com.grapsee.gsai.ui.components.gsGlass
 import com.grapsee.gsai.ui.icons.GsIcons
 import com.grapsee.gsai.ui.theme.GsTheme
 import java.time.LocalDate
@@ -288,15 +290,10 @@ private fun HeroCard(onStart: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(shape)
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        colors.glassSurface,
-                        colors.accentSoft.copy(alpha = 0.7f)
-                    )
-                )
-            )
+            // The hero is the one Elevated glass panel on Home — the material's
+            // four cues (fill, veil, top-left rim, warm shadow) do the depth, and
+            // the accent wash lives as the bloom echo inside, not as a fake fill.
+            .gsGlass(GsGlassRole.Elevated, shape)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
