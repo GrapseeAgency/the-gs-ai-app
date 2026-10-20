@@ -47,16 +47,16 @@ struct OnboardingView: View {
     private struct CapabilityOption {
         let title: String
         let caption: String
-        let icon: String
+        let variant: NativeIllustrationVariant
     }
 
     private let capabilityOptions: [CapabilityOption] = [
-        CapabilityOption(title: "Draft and write", caption: "Emails, posts, docs and scripts", icon: "pencil.line"),
-        CapabilityOption(title: "Research the web", caption: "Live sources with citations", icon: "magnifyingglass"),
-        CapabilityOption(title: "Analyse images", caption: "Charts, screenshots and scans", icon: "eye"),
-        CapabilityOption(title: "Write and fix code", caption: "Debug, explain and refactor", icon: "curlybraces"),
-        CapabilityOption(title: "Summarise documents", caption: "Long files into key points", icon: "doc.text"),
-        CapabilityOption(title: "Brainstorm ideas", caption: "Names, angles and wild cards", icon: "lightbulb")
+        CapabilityOption(title: "Draft and write", caption: "Emails, posts, docs and scripts", variant: .companion),
+        CapabilityOption(title: "Research the web", caption: "Live sources with citations", variant: .research),
+        CapabilityOption(title: "Analyse images", caption: "Charts, screenshots and scans", variant: .vision),
+        CapabilityOption(title: "Write and fix code", caption: "Debug, explain and refactor", variant: .code),
+        CapabilityOption(title: "Summarise documents", caption: "Long files into key points", variant: .documents),
+        CapabilityOption(title: "Brainstorm ideas", caption: "Names, angles and wild cards", variant: .ideas)
     ]
 
     private let chipColumns = [GridItem(.adaptive(minimum: 104), spacing: Aero.Spacing.xs)]
@@ -258,11 +258,7 @@ struct OnboardingView: View {
             }
         } label: {
             HStack(spacing: Aero.Spacing.s + 4) {
-                Image(systemName: option.icon)
-                    .font(.system(size: 14))
-                    .foregroundStyle(selected ? Aero.accent : Aero.textMuted)
-                    .frame(width: 34, height: 34)
-                    .background(Circle().fill(Aero.container))
+                NativeGsIllustration(size: 34, variant: option.variant, accessibilityLabel: "\(option.title) illustration")
                 VStack(alignment: .leading, spacing: 2) {
                     Text(option.title)
                         .font(Aero.title())

@@ -1,9 +1,14 @@
 import SwiftUI
 
+enum NativeIllustrationVariant {
+    case companion, research, vision, code, documents, ideas
+}
+
 /// Small code-drawn companion illustration for utility states. It uses native
 /// SwiftUI geometry and gradients instead of a stock glyph or bitmap.
 struct NativeGsIllustration: View {
     var size: CGFloat = 72
+    var variant: NativeIllustrationVariant = .companion
     var accessibilityLabel: String = "GS companion illustration"
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -20,6 +25,13 @@ struct NativeGsIllustration: View {
                 .fill(Aero.accentStrong)
                 .frame(width: size * 0.09, height: size * 0.09)
                 .offset(x: size * 0.27, y: reduceMotion ? -size * 0.04 : (alive ? -size * 0.10 : size * 0.02))
+
+            if variant != .companion {
+                Circle()
+                    .fill(Aero.accent.opacity(0.78))
+                    .frame(width: size * 0.055, height: size * 0.055)
+                    .offset(satelliteOffset)
+            }
 
             Circle()
                 .fill(
@@ -48,5 +60,19 @@ struct NativeGsIllustration: View {
                 alive = true
             }
         }
+    }
+
+    private var satelliteOffset: CGSize {
+        let angle: CGFloat
+        switch variant {
+        case .research: angle = 38
+        case .vision: angle = 112
+        case .code: angle = 176
+        case .documents: angle = 224
+        case .ideas: angle = 292
+        case .companion: angle = 0
+        }
+        let radians = angle * .pi / 180
+        return CGSize(width: size * 0.24 * cos(radians), height: size * 0.24 * sin(radians))
     }
 }

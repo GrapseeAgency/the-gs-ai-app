@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import kotlin.math.min
+import com.grapsee.gsai.ui.components.NativeGsIllustration
 import com.grapsee.gsai.ui.icons.GsIcons
 
 /**
@@ -512,7 +513,7 @@ private fun MermaidCard(
     }
     Surface(
         shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        color = GsTheme.colors.surface,
         modifier = Modifier
             .fillMaxWidth()
             .semantics { contentDescription = description }
@@ -574,17 +575,12 @@ private fun MermaidFallback(reason: String, source: String, onCopyCode: (String)
     var showSource by remember { mutableStateOf(false) }
     Surface(
         shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        color = GsTheme.colors.surface,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(
-                    GsIcons.Info,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(16.dp)
-                )
+                NativeGsIllustration(size = 26.dp, contentDescription = "Diagram illustration")
                 Text(
                     text = "Diagram unavailable",
                     style = MaterialTheme.typography.labelLarge,

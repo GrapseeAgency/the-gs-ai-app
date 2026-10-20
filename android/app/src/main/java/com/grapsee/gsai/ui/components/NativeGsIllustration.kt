@@ -24,6 +24,8 @@ import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.ui.theme.GsTheme
 
+enum class NativeIllustrationVariant { Companion, Research, Vision, Code, Documents, Ideas }
+
 /**
  * Small code-drawn companion illustration for utility states. It deliberately
  * uses geometry, gradients, and motion rather than a stock glyph or bitmap.
@@ -32,6 +34,7 @@ import com.grapsee.gsai.ui.theme.GsTheme
 fun NativeGsIllustration(
     modifier: Modifier = Modifier,
     size: Dp = 72.dp,
+    variant: NativeIllustrationVariant = NativeIllustrationVariant.Companion,
     contentDescription: String = "GS companion illustration"
 ) {
     val reduced = SettingsStore.reduceMotion || SettingsStore.reduceAnimations
@@ -83,6 +86,25 @@ fun NativeGsIllustration(
                 radius = this.size.minDimension * 0.045f,
                 center = Offset(center.x + orbit * 0.92f, center.y - orbit * 0.16f)
             )
+            if (variant != NativeIllustrationVariant.Companion) {
+                val satelliteAngle = when (variant) {
+                    NativeIllustrationVariant.Research -> 38f
+                    NativeIllustrationVariant.Vision -> 112f
+                    NativeIllustrationVariant.Code -> 176f
+                    NativeIllustrationVariant.Documents -> 224f
+                    NativeIllustrationVariant.Ideas -> 292f
+                    NativeIllustrationVariant.Companion -> 0f
+                }
+                val radians = Math.toRadians(satelliteAngle.toDouble())
+                drawCircle(
+                    color = colors.accent.copy(alpha = 0.78f),
+                    radius = this.size.minDimension * 0.028f,
+                    center = Offset(
+                        center.x + (orbit * 0.78f * kotlin.math.cos(radians)).toFloat(),
+                        center.y + (orbit * 0.78f * kotlin.math.sin(radians)).toFloat()
+                    )
+                )
+            }
         }
         drawCircle(
             brush = Brush.radialGradient(

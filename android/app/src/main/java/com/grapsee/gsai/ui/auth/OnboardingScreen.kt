@@ -72,6 +72,8 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.R
 import com.grapsee.gsai.ui.components.AnimatedGsIllustration
+import com.grapsee.gsai.ui.components.NativeGsIllustration
+import com.grapsee.gsai.ui.components.NativeIllustrationVariant
 import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.ui.components.GsCard
 import com.grapsee.gsai.ui.components.GsChip
@@ -502,16 +504,16 @@ private fun CapabilitiesStep(capabilities: SnapshotStateList<String>) {
             caption = "Choose the tools to pin to your command centre. Pick at least one."
         )
         val capabilityItems = listOf(
-            Triple(GsIcons.NotebookPen, "Draft and write", "Docs, emails and posts in your voice"),
-            Triple(GsIcons.Telescope, "Research the web", "Sourced answers with links"),
-            Triple(GsIcons.Image, "Analyse images", "Charts, screenshots and photos"),
-            Triple(GsIcons.Code, "Write and fix code", "Reviews, refactors and tests"),
-            Triple(GsIcons.FileText, "Summarise documents", "PDFs, reports and long threads"),
-            Triple(GsIcons.Lightbulb, "Brainstorm ideas", "Naming, plans and fresh angles")
+            Triple(NativeIllustrationVariant.Companion, "Draft and write", "Docs, emails and posts in your voice"),
+            Triple(NativeIllustrationVariant.Research, "Research the web", "Sourced answers with links"),
+            Triple(NativeIllustrationVariant.Vision, "Analyse images", "Charts, screenshots and photos"),
+            Triple(NativeIllustrationVariant.Code, "Write and fix code", "Reviews, refactors and tests"),
+            Triple(NativeIllustrationVariant.Documents, "Summarise documents", "PDFs, reports and long threads"),
+            Triple(NativeIllustrationVariant.Ideas, "Brainstorm ideas", "Naming, plans and fresh angles")
         )
         capabilityItems.forEach { (icon, title, caption) ->
             CapabilityCard(
-                icon = icon,
+                variant = icon,
                 title = title,
                 caption = caption,
                 selected = title in capabilities,
@@ -526,7 +528,7 @@ private fun CapabilitiesStep(capabilities: SnapshotStateList<String>) {
 
 @Composable
 private fun CapabilityCard(
-    icon: ImageVector,
+    variant: NativeIllustrationVariant,
     title: String,
     caption: String,
     selected: Boolean,
@@ -557,16 +559,7 @@ private fun CapabilityCard(
                 modifier = Modifier.size(40.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = if (selected) {
-                            MaterialTheme.colorScheme.onPrimary
-                        } else {
-                            MaterialTheme.colorScheme.onSurface
-                        },
-                        modifier = Modifier.size(20.dp)
-                    )
+                    NativeGsIllustration(size = 34.dp, variant = variant, contentDescription = "$title illustration")
                 }
             }
             Column(modifier = Modifier.weight(1f)) {

@@ -353,10 +353,10 @@ struct CodeBlockCardView: View {
                         if open {
                             Text(code)
                                 .font(.system(size: 12, weight: .regular, design: .monospaced))
-                                .foregroundStyle(Aero.text)
+                                .foregroundStyle(Aero.codeText)
                         } else {
                             highlightedCode(code, language: language)
-                                .foregroundStyle(Aero.text)
+                                .foregroundStyle(Aero.codeText)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -367,7 +367,7 @@ struct CodeBlockCardView: View {
                 .frame(maxHeight: 340)
             }
         }
-        .background(RoundedRectangle(cornerRadius: 12).fill(Aero.container))
+        .background(RoundedRectangle(cornerRadius: 12).fill(Aero.codeSurface))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Aero.outline, lineWidth: 1))
     }
 }

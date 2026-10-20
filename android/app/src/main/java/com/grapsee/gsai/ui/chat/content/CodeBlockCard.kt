@@ -68,7 +68,7 @@ fun CodeBlockCard(
 
     Surface(
         shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        color = GsTheme.colors.codeSurface,
         modifier = Modifier
             .fillMaxWidth()
             .semantics {
@@ -85,14 +85,14 @@ fun CodeBlockCard(
                 Text(
                     text = language ?: "code",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = GsTheme.colors.codeComment,
                     modifier = Modifier.weight(1f)
                 )
                 IconButton(onClick = { onCopyCode(code); copied = true }, modifier = Modifier.size(28.dp)) {
                     Icon(
                         if (copied) GsIcons.Check else GsIcons.Copy,
                         contentDescription = if (copied) "Copied" else "Copy code",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        tint = GsTheme.colors.codeComment,
                         modifier = Modifier.size(14.dp)
                     )
                 }
@@ -105,7 +105,7 @@ fun CodeBlockCard(
                 Text(
                     text = highlighted,
                     style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = GsTheme.colors.codeText,
                     modifier = Modifier
                         .padding(start = 12.dp, end = 12.dp, bottom = 10.dp)
                         .verticalScroll(rememberScrollState())
