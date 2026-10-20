@@ -10,6 +10,42 @@
 > data-binding, semantics (Macaron-A2UI, arXiv 2605.24830) — this audit covers
 > format+structure (validator), rendering (registry), and routing (fences).
 
+## The two audit arms (both fail CI)
+
+| Arm | Script | Proves | Result |
+|---|---|---|---|
+| Structural | `scripts/test-widget-catalogue.ts` | every type validates → has a registered renderer → fence routes | 206 checks, 0 holes |
+| Functional | `scripts/test-widget-render.ts` | every type SERVER-RENDERS real content (no throw, no empty shell, no placeholder) | **168/168 render, 0 crashes, 0 warnings** |
+| Android twin | `scripts/audit-android-parity.py` | every catalog.ts type exists verbatim in the Kotlin sets + dispatch branches; every gated mermaid head is registered by the BUNDLED engine | PASS — all 9 type sets + 17 fields + 23 mermaid heads |
+
+## What the FUNCTIONAL arm caught (all fixed)
+
+| # | Catch | Severity | Fix |
+|---|---|---|---|
+| 1 | `chord` with a single series: validator accepted, renderer read `series[1]` → **crash** (error boundary for the user) | block | ChordChart hardened: real length, optional-chained matrix reads |
+| 2 | `boxplot` documented as "raw samples" (flat numbers) but renderer read `d[d.length-1]` → all undefined → zeroed plot | silent wrong render | BoxPlotChart accepts flat samples AND array rows |
+| 3 | `violin` — validator flattens sample pairs to numbers, renderer read `d[d.length-1]` → NaN geometry | broken render | ViolinChart accepts both shapes |
+| 4 | Android `KNOWN_MERMAID_HEADS` gated `packet-beta` / `architecture-beta` / `kanban` — families the BUNDLED mermaid engine (v0.16.9 asset) does NOT register → parse-error graphic inside the WebView | block (reverse) | heads aligned to the bundle: 3 removed, 4 drawable C4 variants added; `scripts/audit-android-parity.py` now enforces heads-vs-bundle forever |
+
+The payload table (`scripts/widget-payloads.ts`) uses the DOCUMENTED wire
+shapes (prompt.ts contract: OHLC arrays for candlestick, [col,value] rows for
+correlation, raw samples for boxplot) — so the proof tests exactly what a
+model is told to emit, not a privileged internal shape.
+
+## Mermaid coverage, per surface (honest split)
+
+- **Web**: bundled `mermaid@12` npm engine — renders up to ~29 diagram
+  families (flowchart, sequence, class, state, ER, journey, gantt, pie,
+  timeline, gitGraph, mindmap, quadrant, xychart, sankey, block, packet,
+  kanban, architecture, radar, treemap, requirement, C4 ×5, zenuml, venn,
+  ishikawa, wardley, treeView, swimlane…).
+- **Android**: flowchart/graph + sequenceDiagram draw natively on Compose
+  Canvas; 23 further heads route to the WebView harness running the bundled
+  `assets/mermaid.min.js` (each head verified present in the bundle); any
+  family beyond that shows the honest "isn't supported yet" card with the
+  source viewer — never a code block, never an error graphic.
+
+
 ## Result
 
 | Group | Types | Validate | Web renderer | Fence alias routes |

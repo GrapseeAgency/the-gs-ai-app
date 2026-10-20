@@ -964,9 +964,16 @@ private fun isKnownMermaidType(source: String): Boolean {
     return KNOWN_MERMAID_HEADS.any { head.startsWith(it) }
 }
 
+// EXACTLY the families the bundled assets/mermaid.min.js engine registers —
+// verified by grepping the bundle. Heads the engine cannot draw (packet-beta,
+// architecture-beta, kanban, radar/treemap/venn/… — mermaid 11+ families) are
+// deliberately NOT listed: they degrade to the honest "isn't supported yet"
+// Compose card instead of a parse-error graphic inside the WebView. The web
+// client bundles mermaid 12 and renders those natively.
 private val KNOWN_MERMAID_HEADS = listOf(
     "classDiagram", "stateDiagram", "stateDiagram-v2", "erDiagram", "journey", "gantt",
     "mindmap", "pie", "timeline", "gitGraph", "quadrantChart", "xychart-beta", "xychart",
-    "block-beta", "sankey-beta", "sankey", "packet-beta", "architecture-beta",
-    "kanban", "requirementDiagram", "C4Context", "flowchart-elk"
+    "block-beta", "sankey-beta", "sankey",
+    "requirementDiagram", "C4Context", "C4Container", "C4Component", "C4Dynamic",
+    "C4Deployment", "flowchart-elk"
 )

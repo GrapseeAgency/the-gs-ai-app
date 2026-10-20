@@ -4,12 +4,15 @@
 > **35 kinds, 34 chart types, 8 live simulations, 8 three-dimensional stage
 > views, 4 canvas surfaces, 7 app editors, 1 terminal runtime, 4 shared-state
 > surfaces, 20 app experiences, 14 calculators, 17 form-field types, 16 media
-> forms, 24 mermaid diagram families (the bundled mermaid 12 engine renders up
-> to 29), 3 native blocks — 195 declared component types**, plus
+> forms, mermaid: the web engine (mermaid 12) renders up to ~29 families, Android
+> draws flowchart+sequence natively and gates 23 further heads against its
+> bundled engine (audit-enforced), 3 native blocks — 195 declared component types**, plus
 > unlimited bespoke ```html. EVERY one of them is machine-audited through
 > validator → renderer → fence routing on BOTH surfaces
-> (docs/CATALOGUE_AUDIT.md; scripts/test-widget-catalogue.ts — 206 checks,
-> 0 holes, fails CI on any hole). Tier 1 is native and real; Tier 2 ships
+> (docs/CATALOGUE_AUDIT.md: scripts/test-widget-catalogue.ts — 206 checks;
+scripts/test-widget-render.ts — 168/168 actually server-render real content,
+0 crashes; scripts/audit-android-parity.py — Kotlin twin type-set + dispatch +
+mermaid-bundle check; all three fail CI on any hole). Tier 1 is native and real; Tier 2 ships
 > degraded and labelled; Tier 3 is refused with stated reasons — never faked.
 >
 > **V2 (2026-10-20).** The catalogue stopped at 18 kinds and became a

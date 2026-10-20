@@ -18,7 +18,8 @@ export function BoxPlotChartView({ payload, height = 210 }: { payload: ChartPayl
   const series = payload.series ?? []
   const labels = payload.labels ?? []
   const stats = series.map((s, i) => {
-    const sorted = s.data.map((d) => d[d.length - 1]).filter(Number.isFinite).sort((a, b) => a - b)
+    // documented contract is raw samples (flat numbers); array rows take the last element
+    const sorted = s.data.map((d) => (Array.isArray(d) ? d[d.length - 1] : d)).filter(Number.isFinite).sort((a, b) => a - b)
     return {
       name: s.name || labels[i] || `#${i + 1}`,
       min: sorted[0] ?? 0,

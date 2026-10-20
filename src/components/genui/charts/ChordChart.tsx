@@ -18,15 +18,15 @@ export function ChordChartView({ payload, height = 240 }: { payload: ChartPayloa
   const W = 320
   const H = height - 24
   const layout = useMemo(() => {
-    const n = Math.max(2, series.length)
+    const n = series.length
     const cx = W / 2
     const cy = H / 2
     const R = Math.min(cx, cy) - 18
     const names = series.map((s, i) => s.name || labels[i] || `#${i + 1}`)
-    const total = series.reduce((a, s) => a + (s.data[0]?.[0] ?? 1), 0) || 1
+    const total = series.reduce((a, s) => a + (s.data?.[0]?.[0] ?? 1), 0) || 1
     let a0 = -Math.PI / 2
     const arcs = series.map((s, i) => {
-      const frac = (s.data[0]?.[0] ?? 1) / total
+      const frac = (s.data?.[0]?.[0] ?? 1) / total
       const a1 = a0 + frac * Math.PI * 2
       const arc = { name: names[i], a0, a1, i }
       a0 = a1
@@ -35,8 +35,8 @@ export function ChordChartView({ payload, height = 240 }: { payload: ChartPayloa
     const ribbons: Array<{ d: string; color: string; name: string }> = []
     for (let i = 0; i < n; i++) {
       for (let j = i + 1; j < n; j++) {
-        const vi = series[i].data[j]?.[0]
-        const vj = series[j].data[i]?.[0]
+        const vi = series[i]?.data?.[j]?.[0]
+        const vj = series[j]?.data?.[i]?.[0]
         if (vi === undefined && vj === undefined) continue
         const p = (arcIndex: number, frac: number, r: number) => {
           const a = arcs[arcIndex]
@@ -50,7 +50,7 @@ export function ChordChartView({ payload, height = 240 }: { payload: ChartPayloa
     }
     return { arcs, ribbons, cx, cy, R }
   }, [series, labels, H])
-  const colors = ramp(Math.max(2, series.length))
+  const colors = ramp(Math.max(2, series.length || 2))
   return (
     <ChartFrame title={payload.title} unit={payload.unit} legend={false} height={height}>
       {({ width }) => (
