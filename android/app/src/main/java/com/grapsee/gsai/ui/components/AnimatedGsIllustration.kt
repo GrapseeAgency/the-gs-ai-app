@@ -51,6 +51,15 @@ fun AnimatedGsIllustration(
         ),
         label = "gs-illustration-drift"
     )
+    val lift by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = if (reduced) 0f else -3f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2800, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "gs-illustration-lift"
+    )
     Image(
         painter = painterResource(resourceId),
         contentDescription = contentDescription,
@@ -61,6 +70,7 @@ fun AnimatedGsIllustration(
                 scaleX = breath
                 scaleY = breath
                 rotationZ = drift
+                translationY = lift
             }
     )
 }

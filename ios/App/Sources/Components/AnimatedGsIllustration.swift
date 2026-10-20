@@ -17,6 +17,7 @@ struct AnimatedGsIllustration: View {
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
             .scaleEffect(reduceMotion ? 1 : (isAlive ? 1.035 : 1))
             .rotationEffect(.degrees(reduceMotion ? 0 : (isAlive ? 2.2 : 0)))
+            .offset(y: reduceMotion ? 0 : (isAlive ? -3 : 0))
             .animation(
                 reduceMotion ? nil : .easeInOut(duration: 2.4).repeatForever(autoreverses: true),
                 value: isAlive
