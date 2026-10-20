@@ -698,9 +698,7 @@ fun RefQuietButton(label: String, onClick: () -> Unit, modifier: Modifier = Modi
         modifier = modifier
             .fillMaxWidth()
             .height(50.dp)
-            .clip(RoundedCornerShape(999.dp))
-            .background(colors.glassSurface.copy(alpha = 0.55f))
-            .border(1.dp, colors.glassBorder, RoundedCornerShape(999.dp))
+            .gsGlass(GsGlassRole.FloatingControl, RoundedCornerShape(999.dp))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -931,9 +929,7 @@ fun RefStatTile(
     val colors = GsTheme.colors
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(18.dp))
-            .background(colors.glassSurface.copy(alpha = 0.55f))
-            .border(1.dp, colors.glassBorder, RoundedCornerShape(18.dp))
+            .gsGlass(GsGlassRole.Card, RoundedCornerShape(18.dp))
             .padding(14.dp)
     ) {
         if (icon != null) {

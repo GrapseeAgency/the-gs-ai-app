@@ -55,12 +55,14 @@ import androidx.compose.ui.unit.sp
 import com.grapsee.gsai.data.AccountStore
 import com.grapsee.gsai.data.local.ConversationEntity
 import com.grapsee.gsai.di.ServiceLocator
+import com.grapsee.gsai.ui.components.GsGlassRole
 import com.grapsee.gsai.ui.components.ConversationActionsSheet
 import com.grapsee.gsai.ui.components.RefAvatar
 import com.grapsee.gsai.ui.components.RefDivider
 import com.grapsee.gsai.ui.components.RefIconTile
 import com.grapsee.gsai.ui.components.RefPrimaryButton
 import com.grapsee.gsai.ui.components.gsConversationTitle
+import com.grapsee.gsai.ui.components.gsGlass
 import com.grapsee.gsai.ui.icons.GsIcons
 import com.grapsee.gsai.ui.theme.GsHaptics
 import com.grapsee.gsai.ui.theme.GsTheme
@@ -326,8 +328,7 @@ private fun SearchPill(onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .height(46.dp)
-            .clip(RoundedCornerShape(999.dp))
-            .background(GsTheme.colors.glassSurface.copy(alpha = 0.72f))
+            .gsGlass(GsGlassRole.Sunken, RoundedCornerShape(999.dp))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,

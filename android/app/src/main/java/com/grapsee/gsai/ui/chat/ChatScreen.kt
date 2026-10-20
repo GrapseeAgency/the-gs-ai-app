@@ -159,7 +159,9 @@ import com.grapsee.gsai.data.OnboardingProfileStore
 import com.grapsee.gsai.data.notifications.ReplyNotifier
 import com.grapsee.gsai.data.tts.TtsFocus
 import com.grapsee.gsai.ui.components.GsInputBar
+import com.grapsee.gsai.ui.components.GsGlassRole
 import com.grapsee.gsai.ui.components.gsContentWidth
+import com.grapsee.gsai.ui.components.gsGlass
 import com.grapsee.gsai.ui.components.rememberDeviceOffline
 import com.grapsee.gsai.ui.theme.GsMotion
 import com.grapsee.gsai.ui.theme.GsRadius
@@ -1660,8 +1662,7 @@ private fun ChatTopIconButton(icon: ImageVector, label: String, onClick: () -> U
         modifier = Modifier
             .size(40.dp)
             .kineticPress()
-            .clip(CircleShape)
-            .background(GsTheme.colors.glassSurface.copy(alpha = 0.55f))
+            .gsGlass(GsGlassRole.Sunken, CircleShape)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -1871,12 +1872,13 @@ private fun ComposerRow(
         // uiverse Cobp dangerous-dolphin-47, materialized WITHOUT its
         // gradient: the one-pill composer as a calm bordered container — a
         // clean 1dp hairline (outlineVariant) wrapped on a 28dp pill.
-        Surface(
-            shape = RoundedCornerShape(28.dp),
-            color = GsTheme.colors.glassSurface,
-            border = BorderStroke(1.dp, GsTheme.colors.glassBorder),
-            shadowElevation = 8.dp,
-            modifier = Modifier.fillMaxWidth()
+        // THE COMPOSER carries the four-cue floating-control glass: thinnest
+        // fill, brightest directional rim, warm hover shadow — it must read as
+        // glass lifted off the bloom, not a flat tinted pill with a hairline.
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .gsGlass(GsGlassRole.FloatingControl, RoundedCornerShape(28.dp))
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
@@ -2770,9 +2772,7 @@ private fun SuggestionCard(
     Column(
         modifier = modifier
             .heightIn(min = 96.dp)
-            .clip(RoundedCornerShape(20.dp))
-            .background(colors.glassSurface.copy(alpha = 0.62f))
-            .border(1.dp, colors.glassBorder, RoundedCornerShape(20.dp))
+            .gsGlass(GsGlassRole.Card, RoundedCornerShape(20.dp))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,

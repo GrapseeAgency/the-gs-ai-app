@@ -34,6 +34,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.ui.components.GsGlassRadius
+import com.grapsee.gsai.ui.components.GlassFrostedPanel
 import com.grapsee.gsai.ui.components.GsGlassRole
 import com.grapsee.gsai.ui.components.ReferenceBackdrop
 import com.grapsee.gsai.ui.components.RefCard
@@ -269,28 +270,37 @@ private fun ModalSheet(onDismiss: () -> Unit) {
                 ) { onDismiss() },
         )
 
-        Column(
+        // The modal reveals the frosted bloom behind its heaviest glass: a real
+        // RenderEffect blur on API 31+, the same soft bloom without the pass on
+        // API 26 (mandate b6 / b9), both driven from one call.
+        GlassFrostedPanel(
+            shape = GsRadius.sheetShape(),
+            role = GsGlassRole.Modal,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .gsGlass(GsGlassRole.Modal, GsRadius.sheetShape())
-                .padding(GsSpacing.l),
+                .fillMaxWidth(),
         ) {
-            Text(
-                text = "Travel agent",
-                style = MaterialTheme.typography.titleMedium,
-                color = colors.textPrimary,
-            )
-            Spacer(modifier = Modifier.height(GsSpacing.xs))
-            Text(
-                text = "The heaviest glass in the system: the most airlight added " +
-                    "back, so the transcript behind it lifts rather than shows.",
-                style = MaterialTheme.typography.bodySmall,
-                color = colors.textSecondary,
-            )
-            Spacer(modifier = Modifier.height(GsSpacing.m))
-            TextButton(label = "Close", onClick = onDismiss)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(GsSpacing.l),
+            ) {
+                Text(
+                    text = "Travel agent",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = colors.textPrimary,
+                )
+                Spacer(modifier = Modifier.height(GsSpacing.xs))
+                Text(
+                    text = "The heaviest glass in the system: the most airlight added " +
+                        "back, so the transcript behind it lifts rather than shows.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.textSecondary,
+                )
+                Spacer(modifier = Modifier.height(GsSpacing.m))
+                TextButton(label = "Close", onClick = onDismiss)
+            }
         }
     }
 }

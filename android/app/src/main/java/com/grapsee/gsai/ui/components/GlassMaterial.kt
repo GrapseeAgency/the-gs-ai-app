@@ -1,8 +1,10 @@
 package com.grapsee.gsai.ui.components
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.shadow
@@ -189,6 +191,86 @@ private fun Outline.toPath(): Path = when (this) {
 /** Corner radius helper for callers that draw glass geometry by hand. */
 fun DrawScope.glassCornerRadius(radius: Dp): CornerRadius =
     CornerRadius(radius.toPx(), radius.toPx())
+
+/* ------------------------------------------------------------------------- *
+ * BLUR TIERS (mandate b6 / b9).
+ *
+ * The base material above is deliberately analytically blurred — it fakes the
+ * in-scatter and the rim so it costs nothing and works on API 26. That is the
+ * *material*. This section is the separate *frost*: a real backdrop blur that
+ * only the OS can give, layered *behind* translucent glass so the bloom
+ * diffuses through the panel.
+ *
+ * A single [Modifier] cannot sample the pixels already composited behind it,
+ * so a real frosted panel is built the honest way: draw the backdrop a second
+ * time, blurred, clipped to the panel's shape, and let the glass fill sit over
+ * it. [FrostedBloom] owns that redraw, so [Modifier.blur] blurs content the
+ * layer actually holds — no undefined backdrop read.
+ *
+ * Tier split (see Platform-Specific Glass Implementation Strategy):
+ *  - API 31+  — [Modifier.blur] lowers to `RenderEffect.createBlurEffect`, a
+ *    true GPU blur of the bloom. This is b6: the real thing.
+ *  - API 26-30 — no blur pass exists; the bloom is already soft, so drawing it
+ *    un-blurred behind the same fill reproduces the baked frosted look. This is
+ *    b9: the graceful fallback, same call site.
+ * ------------------------------------------------------------------------- */
+
+/** Whether this device can run a real RenderEffect blur (API 31, `Build.VERSION_CODES.S`). */
+internal object GsBlurTier {
+    val realBlur: Boolean = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
+    /** The bloom redraw radius: wide enough to read as ground glass, tight enough to keep colour. */
+    val radius: Dp = 24.dp
+}
+
+/**
+ * The bloom, frosted — the backing layer a translucent glass panel reveals.
+ * Real GPU blur on API 31+; the same soft bloom without the pass on API 26.
+ * Clip to the panel shape at the call site so the frost stays inside the glass.
+ */
+@Composable
+fun FrostedBloom(
+    modifier: Modifier = Modifier,
+    radius: Dp = GsBlurTier.radius,
+) {
+    if (GsBlurTier.realBlur) {
+        ReferenceBackdrop(modifier.blur(radius))
+    } else {
+        ReferenceBackdrop(modifier)
+    }
+}
+
+/**
+ * Frosted backdrop clipped behind a glass shape: the two-line recipe every
+ * full-bleed glass surface (sheets, the specimen modal, hero cards) uses to get
+ * the OS blur where it exists and the baked look where it does not, from one
+ * call. The [content] is drawn on top of the frosted bloom.
+ */
+@Composable
+fun GlassFrostedPanel(
+    shape: Shape,
+    role: GsGlassRole = GsGlassRole.Modal,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    val realBlur = GsBlurTier.realBlur
+    val radius = GsBlurTier.radius
+    Box(modifier = modifier) {
+        // Bottom: the bloom redrawn for this panel, frosted. Blur then clip so
+        // the diffused edge is trimmed back to the glass shape. It fills
+        // whatever size the glass content above gives the box.
+        val frost = Modifier.matchParentSize().clip(shape)
+        if (realBlur) {
+            ReferenceBackdrop(frost.blur(radius))
+        } else {
+            ReferenceBackdrop(frost)
+        }
+        // Top: the real material — a translucent fill over the frost, the veil,
+        // the directional rim and the warm shadow — then the panel content.
+        Box(modifier = Modifier.gsGlass(role, shape)) {
+            content()
+        }
+    }
+}
 
 /** Shared glass corner scale, so sheets and cards stop inventing their own. */
 object GsGlassRadius {

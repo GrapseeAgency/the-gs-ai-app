@@ -76,7 +76,9 @@ import com.grapsee.gsai.data.AccountStore
 import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.ui.components.RefArt
 import com.grapsee.gsai.ui.components.RefArtwork
+import com.grapsee.gsai.ui.components.GsGlassRole
 import com.grapsee.gsai.ui.components.RefCard
+import com.grapsee.gsai.ui.components.gsGlass
 import com.grapsee.gsai.ui.components.RefDivider
 import com.grapsee.gsai.ui.components.RefIconButton
 import com.grapsee.gsai.ui.components.RefPrimaryButton
@@ -780,9 +782,7 @@ private fun HeroGlyph(icon: ImageVector) {
         Box(
             modifier = Modifier
                 .size(88.dp)
-                .clip(RoundedCornerShape(28.dp))
-                .background(colors.glassSurface)
-                .border(1.dp, colors.glassBorder, RoundedCornerShape(28.dp)),
+                .gsGlass(GsGlassRole.Elevated, RoundedCornerShape(28.dp)),
             contentAlignment = Alignment.Center
         ) {
             Icon(
@@ -803,9 +803,7 @@ private fun RefQuietRow(icon: ImageVector, label: String, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .height(50.dp)
-            .clip(RoundedCornerShape(999.dp))
-            .background(colors.glassSurface.copy(alpha = 0.58f))
-            .border(1.dp, colors.glassBorder, RoundedCornerShape(999.dp))
+            .gsGlass(GsGlassRole.FloatingControl, RoundedCornerShape(999.dp))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
