@@ -116,6 +116,7 @@ struct HomeDashboardView: View {
                 .frame(maxHeight: .infinity, alignment: .top)
                 .padding(16)
                 VStack(spacing: 10) {
+                    AnimatedHeroHalo()
                     AnimatedGsIllustration(imageName: "GSCompanionOrb", size: 112, breathDuration: 3.4, rotationDegrees: 1.2, lift: -2, startDelay: 0.08)
                     Text("A calmer way to create").font(Aero.label()).foregroundStyle(Aero.text)
                 }
@@ -292,5 +293,24 @@ private struct HomeFeatureCard: View {
             .aeroCardShadow()
         }
         .buttonStyle(KineticPressStyle())
+    }
+}
+
+private struct AnimatedHeroHalo: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isAlive = false
+
+    var body: some View {
+        Circle()
+            .fill(RadialGradient(colors: [.white.opacity(0.72), Color(red: 1, green: 0.82, blue: 0.65).opacity(0.24), .clear], center: .center, startRadius: 8, endRadius: 80))
+            .frame(width: 158, height: 158)
+            .scaleEffect(reduceMotion ? 1 : (isAlive ? 1.04 : 1))
+            .opacity(reduceMotion ? 0.24 : (isAlive ? 0.38 : 0.22))
+            .animation(reduceMotion ? nil : .easeInOut(duration: 2.6).repeatForever(autoreverses: true), value: isAlive)
+            .onAppear {
+                guard !reduceMotion else { return }
+                isAlive = true
+            }
+            .allowsHitTesting(false)
     }
 }

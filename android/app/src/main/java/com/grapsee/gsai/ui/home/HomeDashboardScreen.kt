@@ -1,5 +1,10 @@
 package com.grapsee.gsai.ui.home
 
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -36,6 +41,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.grapsee.gsai.R
+import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.ui.components.AnimatedGsIllustration
 import com.grapsee.gsai.ui.icons.GsIcons
 import com.grapsee.gsai.ui.theme.GsRadius
@@ -257,10 +263,24 @@ private fun HeroVisual(onClick: () -> Unit) {
                     Icon(GsIcons.ChevronDown, contentDescription = null, modifier = Modifier.size(14.dp), tint = colors.textSecondary)
                 }
             }
+            AnimatedHalo(Modifier.align(Alignment.Center))
             AnimatedGsIllustration(R.drawable.gs_companion_orb, "Start with GS AI", 112.dp, Modifier.align(Alignment.Center), CircleShape, breathDuration = 3400, rotationDegrees = 1.2f, liftPixels = -2f, startDelayMillis = 80)
             Text("A calmer way to create", modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 18.dp), style = MaterialTheme.typography.labelLarge, color = colors.textPrimary)
         }
     }
+}
+
+@Composable
+private fun AnimatedHalo(modifier: Modifier = Modifier) {
+    val reduced = SettingsStore.reduceMotion || SettingsStore.reduceAnimations
+    val transition = rememberInfiniteTransition(label = "gs-hero-halo")
+    val alpha by transition.animateFloat(.22f, if (reduced) .22f else .38f, infiniteRepeatable(tween(2600), RepeatMode.Reverse), label = "gs-hero-halo-alpha")
+    Box(
+        modifier
+            .size(158.dp)
+            .alpha(alpha)
+            .background(Brush.radialGradient(listOf(Color.White, Color(0xFFFFD1A7).copy(alpha = .22f), Color.Transparent)), CircleShape)
+    )
 }
 
 @Composable
