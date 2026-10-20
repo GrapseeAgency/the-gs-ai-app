@@ -82,7 +82,14 @@ struct OnboardingView: View {
                 continueBar
             }
         }
-        .background(Aero.background.ignoresSafeArea())
+        .background(
+            LinearGradient(
+                colors: [Color(red: 1, green: 0.70, blue: 0.43).opacity(0.22), Aero.background, Aero.background],
+                startPoint: .topLeading,
+                endPoint: .center
+            )
+            .ignoresSafeArea()
+        )
     }
 
     // MARK: Header (progress + back)
@@ -400,6 +407,7 @@ struct OnboardingView: View {
 
     private var readyStep: some View {
         VStack(alignment: .leading, spacing: Aero.Spacing.m) {
+            onboardingOrb
             StaggerIn(index: 0) {
                 VStack(alignment: .leading, spacing: Aero.Spacing.s) {
                     GeometryReader { proxy in
@@ -411,7 +419,7 @@ struct OnboardingView: View {
                         }
                     }
                     .frame(height: 8)
-                    Text("Your command centre is ready.")
+                    Text("Your smarter world is ready.")
                         .font(Aero.caption())
                         .foregroundStyle(Aero.textMuted)
                 }

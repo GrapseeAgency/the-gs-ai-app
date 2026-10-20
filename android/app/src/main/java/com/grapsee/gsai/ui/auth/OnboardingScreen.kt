@@ -140,7 +140,15 @@ fun OnboardingScreen(onFinished: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        Color(0xFFFFB36D).copy(alpha = .22f),
+                        MaterialTheme.colorScheme.background,
+                        MaterialTheme.colorScheme.background
+                    )
+                )
+            )
             .statusBarsPadding()
             .navigationBarsPadding()
             .pointerInput(Unit) {
@@ -776,9 +784,11 @@ private fun ReadyStep(name: String) {
                     .fillMaxWidth(readyProgress.coerceIn(0.02f, 1f))
                     .height(8.dp)
                     .clip(CircleShape)
-                    .background(rememberAuroraBrush(shape = CircleShape))
+                .background(rememberAuroraBrush(shape = CircleShape))
             )
         }
+        Spacer(Modifier.height(GsMotion.spaceL))
+        OnboardingOrb()
         Spacer(Modifier.height(GsMotion.spaceXL))
         Text(
             text = if (name.isBlank()) "You're all set" else "You're all set, $name",
@@ -788,7 +798,7 @@ private fun ReadyStep(name: String) {
         )
         Spacer(Modifier.height(GsMotion.spaceS))
         Text(
-            text = "Your command centre is ready.",
+            text = "Your smarter world is ready.",
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
