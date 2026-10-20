@@ -63,45 +63,6 @@ internal fun Stage3DWidgetView(w: Stage3DWidget) {
 }
 
 @Composable
-internal fun EditorWidgetView(w: EditorWidgetData) {
-    WidgetCardShell(w.title.ifEmpty { "Editor — ${w.editor}" }, "editor") {
-        SpecRow("editor", w.editor)
-        if (w.cells.isNotEmpty()) SpecRow("cells", w.cells.size.toString())
-        if (w.rows.isNotEmpty()) SpecRow("rows", "${w.rows.size} × ${w.rows.firstOrNull()?.size ?: 0}")
-        if (w.tracks.isNotEmpty()) SpecRow("tracks", w.tracks.size.toString())
-        if (w.blocks.isNotEmpty()) SpecRow("blocks", w.blocks.size.toString())
-        Text(
-            "editable app — lands in an upcoming build of this client",
-            style = MaterialTheme.typography.labelSmall,
-            color = GsTheme.colors.textTertiary,
-            modifier = Modifier.padding(top = 6.dp)
-        )
-    }
-}
-
-@Composable
-internal fun TerminalWidgetView(w: TerminalWidget) {
-    WidgetCardShell(w.title, "terminal") {
-        if (w.welcome.isNotBlank()) {
-            Text(w.welcome, style = MaterialTheme.typography.bodySmall, color = GsTheme.colors.textSecondary)
-        }
-        if (w.commands.isNotEmpty()) {
-            Column(Modifier.padding(top = 6.dp)) {
-                w.commands.forEach { c ->
-                    SpecRow(c.name, c.description)
-                }
-            }
-        }
-        Text(
-            "sandboxed shell — lands in an upcoming build of this client",
-            style = MaterialTheme.typography.labelSmall,
-            color = GsTheme.colors.textTertiary,
-            modifier = Modifier.padding(top = 6.dp)
-        )
-    }
-}
-
-@Composable
 internal fun CollabWidgetView(w: CollabWidgetData) {
     WidgetCardShell(w.title.ifEmpty { "Shared — ${w.surface}" }, "collab") {
         SpecRow("surface", w.surface)
