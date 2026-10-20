@@ -9,6 +9,7 @@
  * it" two different questions — the second one is answered here.
  */
 
+import { evaluateExpr } from '../calc/evaluate'
 import {
   APP_TYPES,
   CALC_TYPES,
@@ -1325,16 +1326,31 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
       .filter((b): b is [number, number] => b !== null)
       .filter(([a, b]) => a >= 0 && b >= 0 && a < nodes.length && b < nodes.length)
       .slice(0, 200)
-    const zExpr = asString(p.z)
-    // surface fields are a whitelisted math expression over x,y — the calc
-    // engine is the guard; here we only reject obvious junk length/chars.
-    if (zExpr && !/^[\s()+\-*/%^,.a-z0-9]*$/i.test(zExpr)) repaired = true
+    let zExpr: string | undefined = asString(p.z)
+    // surface fields are a whitelisted math expression over x,y. Two gates:
+    // 1. obvious junk chars; 2. the expression must actually EVALUATE under
+    // the shared calc engine (the same one the renderer uses) — so
+    // "fetch(window)" or any non-math identifier is dropped here, in the
+    // validator, not merely at render time.
+    if (zExpr && !/^[\s()+\-*/%^,.a-z0-9]*$/i.test(zExpr)) {
+      zExpr = undefined
+      repaired = true
+    }
+    if (zExpr) {
+      try {
+        const probe = evaluateExpr(zExpr, { x: 0.5, y: 0.5 })
+        if (!Number.isFinite(probe)) throw new Error('non-finite')
+      } catch {
+        zExpr = undefined
+        repaired = true
+      }
+    }
     const widget = {
       view,
       title: asString(p.title),
       nodes,
       bonds,
-      z: zExpr && !repaired ? zExpr : undefined,
+      ...(zExpr && !repaired ? { z: zExpr } : {}),
       span: asNumber(p.span) ?? 2,
       spin: p.spin !== false,
       note: asString(p.note),
@@ -1398,7 +1414,7 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
       rows: asArray(p.rows).slice(0, 60),
       // timeline editors
       tracks: asArray(p.tracks).slice(0, LIMITS.maxTracks),
-      duration: asNumber(p.duration) ?? 60,
+      duration: Math.min(600, Math.max(1, asNumber(p.duration) ?? 60)),
       // css editor
       layout: isObj(p.layout) ? p.layout : {},
       note: asString(p.note),

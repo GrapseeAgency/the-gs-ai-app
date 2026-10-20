@@ -155,7 +155,7 @@ A form with eight field types:
     md: `## Tabs, accordions, steps, trees, flashcards, diffs
 
 \`\`\`tabs
-{"title":"One topic, three facets","tabs":[{"label":"Summary","body":"The v2 library covers 151 declared component types — every kind, sub-type and control the catalogue names, rendered natively on web and Android."},{"label":"For the model","body":"The prompt carries the full vocabulary, a palette system, and a hard ban on capability self-doubt. The compiler enforces the art direction."},{"label":"For clients","body":"Web renders this library; Android renders its Compose twin from the same wire format."}],"palette":"harbour","accent":"#0B7285","variant":"plain"}
+{"title":"One topic, three facets","tabs":[{"label":"Summary","body":"The v3 library covers 189 declared component types — every kind, sub-type and control the catalogue names, rendered natively on web and Android."},{"label":"For the model","body":"The prompt carries the full vocabulary, a palette system, and a hard ban on capability self-doubt. The compiler enforces the art direction."},{"label":"For clients","body":"Web renders this library; Android renders its Compose twin from the same wire format."}],"palette":"harbour","accent":"#0B7285","variant":"plain"}
 \`\`\`
 
 \`\`\`accordion
@@ -163,7 +163,7 @@ A form with eight field types:
 \`\`\`
 
 \`\`\`steps
-{"title":"Rollout plan","steps":[{"title":"Catalogue v2","body":"29 kinds, 151 component types, palettes","state":"done"},{"title":"Web GenUI library","body":"115 files: charts, widgets, apps, blocks","state":"done"},{"title":"Android v2 renderers","body":"new kinds in Compose","state":"current"},{"title":"Measure","body":"parse-rate + art-direction metrics","state":"todo"}],"palette":"meadow","accent":"#0CA678","variant":"editorial"}
+{"title":"Rollout plan","steps":[{"title":"Catalogue v3","body":"34 kinds, 189 component types, palettes","state":"done"},{"title":"Web GenUI library","body":"sims, 3D stages, canvases, editors, terminal","state":"done"},{"title":"Android v2 renderers","body":"new kinds in Compose","state":"current"},{"title":"Measure","body":"parse-rate + art-direction metrics","state":"todo"}],"palette":"meadow","accent":"#0CA678","variant":"editorial"}
 \`\`\`
 
 \`\`\`tree
@@ -276,7 +276,7 @@ A bespoke interactive — the escape hatch:
   <rect x="2" y="12" width="44" height="36" rx="10" fill="var(--gs-accent)"/>
   <text x="24" y="37" text-anchor="middle" font-size="20" font-weight="800" fill="#0F1216">G</text>
   <text x="56" y="38" font-size="20" font-weight="700" fill="var(--gs-text)">GenUI</text>
-  <text x="56" y="50" font-size="8" fill="var(--gs-text-3)">151 components, one wire format</text>
+  <text x="56" y="50" font-size="8" fill="var(--gs-text-3)">189 components, one wire format</text>
 </svg>
 \`\`\``,
   },
@@ -292,7 +292,7 @@ Counting the fences as they land:
 \`\`\`
 
 \`\`\`stat
-{"title":"The count that matters","cards":[{"label":"Declared component types","value":"151"},{"label":"Kinds","value":"29","delta":"+11","direction":"up"},{"label":"Chart types","value":"28","delta":"+6","direction":"up"},{"label":"App experiences","value":"20","delta":"+1","direction":"up"}],"palette":"aurora","accent":"#4C6FFF","variant":"hero"}
+{"title":"The count that matters","cards":[{"label":"Declared component types","value":"189"},{"label":"Kinds","value":"34","delta":"+5","direction":"up"},{"label":"Chart types","value":"34","delta":"+6","direction":"up"},{"label":"Live simulations","value":"8","delta":"new","direction":"up"}],"palette":"aurora","accent":"#4C6FFF","variant":"hero"}
 \`\`\`
 
 \`\`\`gauge
@@ -305,7 +305,147 @@ Counting the fences as they land:
 {"prompts":["Show me every chart type","Build me a pricing calculator","Render a kanban board","Draw the pipeline in mermaid"]}
 \`\`\``,
   },
+  {
+    id: 'sims',
+    name: 'Live simulations',
+    md: `## Physics you can poke — eight real-time simulations
+
+Verlet cloth — drag to tear it:
+
+\`\`\`cloth
+{"title":"Silk drop","gravity":9.8,"speed":1,"damping":0.99,"count":64,"size":72,"seed":4,"interactive":true,"palette":"orchid","accent":"#9C36B5","variant":"inset"}
+\`\`\`
+
+Smoothed-particle fluid:
+
+\`\`\`fluid
+{"title":"Water tank","gravity":12,"count":80,"size":64,"seed":9,"interactive":true,"palette":"reef","accent":"#1098AD","variant":"inset"}
+\`\`\`
+
+Fireworks — tap the stage to launch:
+
+\`\`\`particles
+{"title":"Particle fountain","gravity":-14,"count":90,"speed":1.2,"seed":11,"interactive":true,"palette":"ember","accent":"#E03131","variant":"hero"}
+\`\`\`
+
+And a playable arcade game — arrows or swipe, best score sticks:
+
+\`\`\`game
+{"title":"Dodge","count":7,"speed":1.1,"size":64,"seed":6,"interactive":true,"palette":"citrus","accent":"#F08C00","variant":"inset"}
+\`\`\``, 
+  },
+  {
+    id: 'stage3d',
+    name: '3D stage',
+    md: `## Real WebGL — ball-and-stick, heightfields, scatter clouds
+
+A molecule you can orbit and zoom:
+
+\`\`\`molecule
+{"title":"Caffeine","nodes":[{"id":"C1","label":"C","x":0,"y":0,"z":0,"r":0.7,"group":"C"},{"id":"N1","label":"N","x":1.4,"y":0.4,"z":0.2,"r":0.65,"group":"N"},{"id":"O1","label":"O","x":-0.6,"y":1.3,"z":0.4,"r":0.6,"group":"O"},{"id":"O2","label":"O","x":-1.1,"y":-1.1,"z":-0.3,"r":0.6,"group":"O"},{"id":"C2","label":"C","x":1.1,"y":-1.2,"z":0.1,"r":0.7,"group":"C"},{"id":"C3","label":"C","x":2.6,"y":-0.1,"z":-0.2,"r":0.7,"group":"C"},{"id":"N2","label":"N","x":0.3,"y":2.4,"z":-0.5,"r":0.65,"group":"N"}],"bonds":[[0,1],[0,2],[0,3],[0,4],[1,5],[2,6]],"palette":"forest","accent":"#0CA678","variant":"hero","spin":true}
+\`\`\`
+
+A procedural heightfield — z is a real expression over x and y:
+
+\`\`\`surface3d
+{"title":"Ripple field — z = sin(x)*cos(y)","z":"sin(x)*cos(y)","span":6,"palette":"harbour","accent":"#0B7285","variant":"hero"}
+\`\`\`
+
+3D scatter:
+
+\`\`\`scatter3d
+{"title":"Customers in product space","nodes":[{"label":"Basic","x":-2.1,"y":0.4,"z":1.2,"r":0.3,"group":"free"},{"label":"Plus","x":0.2,"y":-1.3,"z":0.4,"r":0.4,"group":"paid"},{"label":"Pro","x":1.8,"y":1.1,"z":-0.8,"r":0.5,"group":"paid"},{"label":"Team","x":2.9,"y":-0.2,"z":1.6,"r":0.6,"group":"enterprise"},{"label":"Trial","x":-0.8,"y":1.9,"z":-1.4,"r":0.25,"group":"free"},{"label":"Flagship","x":3.4,"y":2.2,"z":0.2,"r":0.7,"group":"enterprise"}],"palette":"dusk","accent":"#5F3DC4","variant":"hero"}
+\`\`\`
+
+The magic window — VR/AR framing of the same scene graph:
+
+\`\`\`ar
+{"title":"Showroom, camera passthrough frame","nodes":[{"label":"Sofa","x":0,"y":-0.5,"z":0,"r":0.8,"group":"furniture"},{"label":"Table","x":1.6,"y":-0.5,"z":0.4,"r":0.5,"group":"furniture"},{"label":"Lamp","x":-1.2,"y":0.2,"z":-0.4,"r":0.3,"group":"decor"}],"bonds":[[0,1]],"palette":"sunrise","accent":"#F08C00","variant":"hero"}
+\`\`\``, 
+  },
+  {
+    id: 'canvas',
+    name: 'Canvas surfaces',
+    md: `## Draw, branch, connect, measure — four pointer surfaces
+
+Freehand whiteboard with pen + eraser:
+
+\`\`\`whiteboard
+{"title":"Sketch it out","palette":"berry","accent":"#D6336C","variant":"inset"}
+\`\`\`
+
+Draggable mind map — tap + to branch:
+
+\`\`\`mindmap
+{"title":"Q4 launch map","nodes":[{"id":0,"label":"Launch","x":0.5,"y":0.2},{"id":1,"label":"Pricing","x":0.22,"y":0.55,"group":"go"},{"id":2,"label":"Press","x":0.5,"y":0.62,"group":"go"},{"id":3,"label":"Analytics","x":0.78,"y":0.5,"group":"post"}],"edges":[[0,1],[0,2],[0,3]],"palette":"meadow","accent":"#66A80F","variant":"inset"}
+\`\`\`
+
+Flowchart editor — drag nodes, tap two to connect:
+
+\`\`\`diagram
+{"title":"Signup flow","nodes":[{"id":0,"label":"Start","x":0.12,"y":0.5},{"id":1,"label":"Email?","x":0.38,"y":0.5},{"id":2,"label":"Verify","x":0.65,"y":0.3},{"id":3,"label":"Login","x":0.65,"y":0.72},{"id":4,"label":"Done","x":0.88,"y":0.5}],"edges":[[0,1]],"palette":"glacier","accent":"#4C6FFF","variant":"inset"}
+\`\`\`
+
+Draw zones over a live map, area computed:
+
+\`\`\`polygons
+{"title":"Delivery zone","palette":"citrus","accent":"#E8590C","variant":"inset"}
+\`\`\``, 
+  },
+  {
+    id: 'editors',
+    name: 'App editors',
+    md: `## Seven editors that actually compute
+
+Spreadsheet — tap cells, formulas evaluate live (SUM/AVG/MIN/MAX/COUNT, A1 refs, cycle guard):
+
+\`\`\`editor
+{"editor":"sheet","title":"Margin model","cells":{"B1":"120","B2":"180","B3":"95","B4":"=SUM(B1:B3)","B5":"=AVG(B1:B3)","C1":"=B4*1.2","C2":"=B5-MIN(B1:B3)"},"palette":"money","accent":"#E8590C","variant":"plain"}
+\`\`\`
+
+Visual programming — wire nodes, numbers flow through:
+
+\`\`\`nodes
+{"title":"Signal chain","nodes":[{"id":0,"label":"A","kind":"input","x":0.1,"y":0.3,"value":6},{"id":1,"label":"B","kind":"input","x":0.1,"y":0.7,"value":9},{"id":2,"label":"A+B","kind":"add","x":0.45,"y":0.5},{"id":3,"label":"x2","kind":"multiply","x":0.75,"y":0.5},{"id":4,"label":"Out","kind":"output","x":0.92,"y":0.5}],"edges":[[0,2],[1,2],[2,3],[3,4]],"palette":"glacier","accent":"#1098AD","variant":"plain"}
+\`\`\`
+
+Pivot builder — real grouping + aggregation:
+
+\`\`\`pivot
+{"title":"Revenue by region","rows":[["Region","Product","Revenue"],["Dhaka","Pro","420"],["Chattogram","Basic","180"],["Dhaka","Basic","260"],["Sylhet","Pro","310"],["Chattogram","Pro","290"],["Dhaka","Team","510"],["Sylhet","Basic","120"]],"palette":"money","accent":"#F08C00","variant":"plain"}
+\`\`\`
+
+Site builder — drag rows, live preview:
+
+\`\`\`site
+{"title":"Landing page","blocks":[{"type":"hero","text":"Launch day"},{"type":"text","text":"Everything ships today."},{"type":"image","text":"banner"},{"type":"button","text":"Get started"}],"palette":"orchid","accent":"#6741D9","variant":"plain"}
+\`\`\`
+
+CSS layout editor — flip flex props, code emits live:
+
+\`\`\`css
+{"title":"Flexbox playground","layout":{"direction":"row","gap":16,"justify":"space-between","align":"center","wrap":"wrap"},"palette":"reef","accent":"#0B7285","variant":"plain"}
+\`\`\`
+
+Clip timeline with running playhead:
+
+\`\`\`video
+{"title":"Launch film","duration":30,"tracks":[{"name":"Video A","clips":[{"start":0,"dur":8,"label":"Intro"},{"start":10,"dur":12,"label":"Demo"}]},{"name":"Audio","clips":[{"start":0,"dur":20,"label":"Voiceover"}]}],"palette":"ember","accent":"#D6336C","variant":"plain"}
+\`\`\``, 
+  },
+  {
+    id: 'terminal',
+    name: 'Terminal',
+    md: `## A sandboxed shell in chat — toy filesystem + JS REPL
+
+Try \`ls\`, \`cat notes.txt\`, \`js [1,2,3].map(x => x*x)\`, arrow-up for history:
+
+\`\`\`terminal
+{"title":"guest@gs","welcome":"guest shell — type help","commands":[{"name":"deploy","description":"staged deploy plan (demo)"},{"name":"metrics","description":"print the live counters"}],"palette":"forest","accent":"#0CA678","variant":"outline"}
+\`\`\``, 
+  },
 ]
+
 
 export default function GenUIGallery() {
   const [active, setActive] = useState(SECTIONS[0].id)
@@ -320,7 +460,7 @@ export default function GenUIGallery() {
         <div style={{ maxWidth: 720, margin: '0 auto' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
             <h1 style={{ fontSize: 24, fontWeight: 800, margin: 0 }}>
-              GenUI Gallery <span style={{ color: C.accent }}>— {SECTIONS.length} live sections, 151 component types</span>
+              GenUI Gallery <span style={{ color: C.accent }}>— {SECTIONS.length} live sections, 189 component types</span>
             </h1>
             <button
               onClick={() => setRaw((r) => !r)}

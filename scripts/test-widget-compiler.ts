@@ -279,6 +279,11 @@ check('repairJson rejects garbage', repairJson('hello world') === null)
     tree: '{"roots":[{"label":"a","children":[{"label":"b"}]}]}',
     flashcards: '{"cards":[{"front":"a","back":"b"}]}',
     diff: '{"title":"a","before":"x","after":"y","language":"ts"}',
+    sim: '{"sim":"particles","gravity":9.8,"count":40,"seed":3}',
+    stage3d: '{"view":"molecule","nodes":[{"label":"O","x":0,"y":0,"z":0},{"label":"H","x":1,"y":0,"z":0}],"bonds":[[0,1]]}',
+    canvas: '{"surface":"mindmap","nodes":[{"label":"A","x":0.3,"y":0.3},{"label":"B","x":0.7,"y":0.6}],"edges":[[0,1]]}',
+    editor: '{"editor":"sheet","cells":{"A1":"2","A2":"=A1*3"}}',
+    terminal: '{"title":"sh","commands":[{"name":"deploy","description":"demo"}]}',
   }
   const noValidator: string[] = []
   const rejected: string[] = []
@@ -518,6 +523,56 @@ check('repairJson rejects garbage', repairJson('hello world') === null)
   check('new surface survives validation', withEditorial.ok && withEditorial.widget.variant === 'editorial')
   const withGlass = validateWidget('chart', '{"type":"bar","title":"T","labels":["a","b"],"series":[{"name":"v","data":[[0,1],[1,2]]}],"variant":"glass"}')
   check('unknown surface is dropped', withGlass.ok && withGlass.widget.variant === undefined)
+}
+
+// 34. v3 — the six new chart families validate through the graph-payload path.
+{
+  const v3charts: Array<[string, string]> = [
+    ['force', '{"type":"force","nodes":["a","b","c"],"links":[{"source":"a","target":"b","value":2},{"source":"b","target":"c","value":1}]}'],
+    ['depth', '{"type":"depth","bids":[[100,5],[99,8]],"asks":[[101,4],[102,6]]}'],
+    ['violin', '{"type":"violin","series":[{"name":"a","data":[[0,1],[1,2],[2,1.2],[3,0.8]]},{"name":"b","data":[[0,2],[1,1],[2,2.4],[3,1.9]]}]}'],
+    ['contour', '{"type":"contour","points":[[0,0,1],[1,0,2],[2,0,1],[0,1,2],[1,1,4],[2,1,2],[0,2,1],[1,2,2],[2,2,1]],"levels":6}'],
+    ['parallel', '{"type":"parallel","axes":["speed","cost","range"],"series":[{"name":"A","values":[8,3,9]},{"name":"B","values":[5,6,4]}]}'],
+    ['dendrogram', '{"type":"dendrogram","root":{"label":"all","distance":0,"children":[{"label":"x","distance":2},{"label":"y","distance":1,"children":[{"label":"y1","distance":0.5},{"label":"y2","distance":0.5}]},{"label":"z","distance":1.5}]}}'],
+  ]
+  for (const [type, json] of v3charts) {
+    const r = validateWidget('chart', json)
+    const okType = r.ok && r.widget.type === type
+    check(`v3 chart ${type} validates`, okType, r.ok ? `type=${String(r.widget.type)}` : validationErrors(r).join('|'))
+  }
+  const badDepth = validateWidget('chart', '{"type":"depth","bids":"nope"}')
+  check('v3 chart junk is rejected', !badDepth.ok)
+}
+
+// 35. v3 — sub-type fences canonicalise to their parent kind on the wire.
+{
+  const molecule = extractWidgetFences('```molecule\n{"nodes":[{"label":"O","x":0,"y":0,"z":0}]}\n```')
+  check('molecule fence -> stage3d kind', molecule[0]?.kind === 'stage3d', JSON.stringify(molecule[0]?.kind))
+  const cloth = extractWidgetFences('```cloth\n{"title":"silk"}\n```')
+  check('cloth fence -> sim kind', cloth[0]?.kind === 'sim', JSON.stringify(cloth[0]?.kind))
+  const pivot = extractWidgetFences('```pivot\n{"rows":[["a","b"],["x","1"]]}\n```')
+  check('pivot fence -> editor kind', pivot[0]?.kind === 'editor', JSON.stringify(pivot[0]?.kind))
+  const depthFence = extractWidgetFences('```depth\n{"bids":[[100,5]],"asks":[[101,4]]}\n```')
+  check('depth fence -> chart kind with type', depthFence[0]?.kind === 'chart', JSON.stringify(depthFence[0]?.kind))
+  const depthValid = depthFence[0] ? validateWidget(depthFence[0].kind, depthFence[0].json) : null
+  check('depth fence payload validates with injected type', !!depthValid && depthValid.ok && depthValid.widget.type === 'depth')
+  // unknown sub-type inside a v3 kind falls back to the default surface
+  const badSim = validateWidget('sim', '{"sim":"blackhole"}')
+  check('unknown sim degrades to particles', badSim.ok && badSim.widget.sim === 'particles' && badSim.repaired === true)
+}
+
+// 36. v3 — knobs clamp and defaults fill in for the sim family.
+{
+  const r = validateWidget('sim', '{"sim":"game","gravity":999,"count":100000,"speed":50}')
+  const w = r.ok ? r.widget : null
+  check('sim knobs clamp', !!w && w.gravity !== 999 && w.count !== 100000, JSON.stringify(w))
+  const stage = validateWidget('stage3d', '{"view":"surface3d","z":"sin(x)*cos(y)","nodes":[{"x":1,"y":2,"z":3}]}')
+  const sw = stage.ok ? stage.widget : null
+  check('surface3d keeps whitelisted z expr', !!sw && sw.z === 'sin(x)*cos(y)')
+  const evil = validateWidget('stage3d', '{"view":"surface3d","z":"fetch(window)","nodes":[]}')
+  check('stage3d z rejects non-math tokens in the validator', !!evil && evil.ok && evil.widget.z === undefined && evil.repaired === true, JSON.stringify(evil.ok ? evil.widget.z : null))
+  const editor = validateWidget('editor', '{"editor":"video","duration":9999,"tracks":[{"name":"A","clips":[{"start":0,"dur":8,"label":"x"}]}]}')
+  check('editor timeline clamps duration', editor.ok && (editor.widget as Record<string, unknown>).duration !== 9999)
 }
 
 console.log(`\n${passed} passed, ${failures.length} failed`)
