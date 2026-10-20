@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -43,6 +44,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
@@ -142,8 +145,10 @@ fun SettingsScreen(
 
     Column(
         modifier = Modifier
+            .fillMaxSize()
             .fillMaxWidth()
             .gsContentWidth()
+            .background(Brush.verticalGradient(listOf(Color(0xFFFFB36D).copy(alpha = .18f), MaterialTheme.colorScheme.background, MaterialTheme.colorScheme.background)))
             .statusBarsPadding()
             .navigationBarsPadding()
             .padding(top = GsMotion.spaceM)
