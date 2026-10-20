@@ -51,7 +51,10 @@ struct ArchivedChatsView: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .environment(\.defaultMinListRowHeight, 1)
-        .background(Aero.background.ignoresSafeArea())
+        .background(
+            LinearGradient(colors: [Aero.secondaryBackground.opacity(0.72), Aero.background], startPoint: .topLeading, endPoint: .bottomTrailing)
+                .ignoresSafeArea()
+        )
         .onAppear { reloadToken += 1 }
         .alert("Rename chat", isPresented: Binding(
             get: { renameTarget != nil },

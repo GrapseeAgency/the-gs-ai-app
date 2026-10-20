@@ -151,7 +151,10 @@ struct ChatSearchView: View {
         .padding(.horizontal, Aero.Spacing.m)
         .padding(.top, Aero.Spacing.s)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Aero.background.ignoresSafeArea())
+        .background(
+            LinearGradient(colors: [Aero.secondaryBackground.opacity(0.72), Aero.background], startPoint: .topLeading, endPoint: .bottomTrailing)
+                .ignoresSafeArea()
+        )
         .task(id: "\(term)|\(activeFilters.sorted().joined(separator: ","))") {
             // Empty/short queries clear immediately; real ones settle for
             // 250 ms, then read off-main. The id also folds the active

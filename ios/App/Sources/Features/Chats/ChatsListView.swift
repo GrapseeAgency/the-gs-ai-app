@@ -94,7 +94,10 @@ struct ChatsListView: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .environment(\.defaultMinListRowHeight, 1)
-        .background(Aero.background.ignoresSafeArea())
+        .background(
+            LinearGradient(colors: [Aero.secondaryBackground.opacity(0.72), Aero.background], startPoint: .topLeading, endPoint: .bottomTrailing)
+                .ignoresSafeArea()
+        )
         .task(id: reloadToken) { await load() }
         .refreshable { await load() }
         .onAppear { reloadToken += 1 }

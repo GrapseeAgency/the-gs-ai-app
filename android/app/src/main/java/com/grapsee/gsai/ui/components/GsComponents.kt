@@ -304,7 +304,7 @@ fun GsListItem(
             .fillMaxWidth()
             .let { if (onClick != null) it.kineticPress(interaction) else it },
         shape = GsRadius.mdShape(),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.90f),
         onClick = onClick ?: {},
         enabled = onClick != null,
         interactionSource = interaction
