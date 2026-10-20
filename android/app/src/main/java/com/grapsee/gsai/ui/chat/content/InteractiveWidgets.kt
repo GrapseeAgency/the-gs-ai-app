@@ -10,6 +10,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -56,6 +57,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
 import com.grapsee.gsai.ui.theme.GsTheme
 import androidx.compose.foundation.Image
 
@@ -403,6 +406,158 @@ internal fun FormWidgetView(w: FormWidget, onSendPrompt: ((String) -> Unit)?) {
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)
                     )
+                    "time", "email", "url" -> OutlinedTextField(
+                        value = values[i] ?: "",
+                        onValueChange = { values[i] = it },
+                        label = { Text(if (f.required) "${f.label} *" else f.label) },
+                        placeholder = { Text(when (f.type) { "time" -> "HH:MM"; "email" -> "name@example.com"; else -> "https://…" }) },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = when (f.type) {
+                                "time" -> KeyboardType.Time
+                                "email" -> KeyboardType.Email
+                                else -> KeyboardType.Uri
+                            }
+                        ),
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)
+                    )
+                    "number" -> Row(
+                        Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            if (f.required) "${f.label} *" else f.label,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = c.textSecondary,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(onClick = {
+                            val cur = values[i]?.toFloatOrNull() ?: f.value
+                            values[i] = ((cur - 1f).coerceIn(f.min, f.max)).toInt().toString()
+                        }) { Text("−") }
+                        Text(
+                            "${values[i]?.toFloatOrNull() ?: f.value}${f.unit}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = c.textPrimary
+                        )
+                        TextButton(onClick = {
+                            val cur = values[i]?.toFloatOrNull() ?: f.value
+                            values[i] = ((cur + 1f).coerceIn(f.min, f.max)).toInt().toString()
+                        }) { Text("+") }
+                    }
+                    "rating" -> Row(
+                        Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            if (f.required) "${f.label} *" else f.label,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = c.textSecondary,
+                            modifier = Modifier.weight(1f)
+                        )
+                        val maxStars = f.max.toInt().coerceIn(1, 10)
+                        val current = (values[i]?.toFloatOrNull() ?: 0f).toInt()
+                        Text(
+                            "★".repeat(current) + "☆".repeat(maxStars - current),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = seriesColor(0),
+                            modifier = Modifier
+                                .clickable {
+                                    val next = if (current >= maxStars) 0 else current + 1
+                                    values[i] = next.toString()
+                                }
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                        Text("tap to rate", style = MaterialTheme.typography.labelSmall, color = c.textTertiary)
+                    }
+                    "otp" -> Column(Modifier.padding(vertical = 6.dp)) {
+                        Text(
+                            if (f.required) "${f.label} *" else f.label,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = c.textSecondary
+                        )
+                        val code = values[i] ?: ""
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 4.dp)) {
+                            repeat(6) { d ->
+                                Box(
+                                    Modifier
+                                        .size(width = 34.dp, height = 44.dp)
+                                        .border(
+                                            1.5.dp,
+                                            if (d < code.length) seriesColor(0) else c.divider,
+                                            RoundedCornerShape(8.dp)
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        code.getOrNull(d)?.toString() ?: "",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = c.textPrimary
+                                    )
+                                }
+                            }
+                        }
+                        OutlinedTextField(
+                            value = code,
+                            onValueChange = { v -> values[i] = v.filter { it.isDigit() }.take(6) },
+                            label = { Text("6-digit code") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                            modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
+                        )
+                    }
+                    "color" -> Column(Modifier.padding(vertical = 6.dp)) {
+                        Text(
+                            if (f.required) "${f.label} *" else f.label,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = c.textSecondary
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 6.dp)) {
+                            listOf("#4C6FFF", "#22C55E", "#F59E0B", "#EF4444", "#A855F7", "#06B6D4", "#EC4899", "#84CC16").forEach { hex ->
+                                Box(
+                                    Modifier
+                                        .size(26.dp)
+                                        .background(parseHexColor(hex) ?: seriesColor(0), RoundedCornerShape(13.dp))
+                                        .border(
+                                            width = if (values[i] == hex) 2.dp else 1.dp,
+                                            color = if (values[i] == hex) c.textPrimary else c.divider,
+                                            shape = RoundedCornerShape(13.dp)
+                                        )
+                                        .clickable { values[i] = hex }
+                                )
+                            }
+                        }
+                        Text(
+                            values[i] ?: "pick a colour",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = c.textTertiary,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+                    "file" -> Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 6.dp)
+                            .border(1.dp, c.divider, RoundedCornerShape(10.dp))
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("📎", modifier = Modifier.padding(end = 8.dp))
+                        Text(
+                            "Attach — ${f.label}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = c.textSecondary,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            "file pickers open on the web client",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = c.textTertiary
+                        )
+                    }
                     else -> OutlinedTextField(
                         value = values[i] ?: "",
                         onValueChange = { values[i] = it },

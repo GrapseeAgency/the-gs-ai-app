@@ -98,7 +98,7 @@ private const val MAX_COMPARE_ITEMS = 12
 internal val MEDIA_TYPES = setOf(
     "image", "gallery", "video", "audio", "code",
     "file", "link", "citation", "search", "entity", "product", "listing",
-    "doc", "document", "pdf"
+    "doc", "document", "pdf", "embed"
 )
 
 /** Chart sub-types the `chart` kind renders (see WidgetsExtra.kt / WidgetsCharts2.kt). */

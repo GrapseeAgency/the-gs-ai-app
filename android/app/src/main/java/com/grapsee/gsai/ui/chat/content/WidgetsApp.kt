@@ -1,5 +1,6 @@
 package com.grapsee.gsai.ui.chat.content
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -8,10 +9,22 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.drawscope.Stroke
+import kotlinx.coroutines.delay
+import kotlin.math.min
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -88,7 +101,7 @@ data class AppWidget(
 internal val APP_TYPES = setOf(
     "wizard", "onboarding", "kanban", "calendar", "sheet", "tasks", "dashboard",
     "config", "configurator", "booking", "schedule", "search", "filter",
-    "analytics", "report", "files", "connected", "decision", "scenario"
+    "analytics", "report", "files", "connected", "decision", "scenario", "timer"
 )
 
 @Composable
@@ -108,6 +121,7 @@ internal fun AppWidgetView(w: AppWidget, onSendPrompt: ((String) -> Unit)? = nul
                 "search" -> SearchLayout(w, onSendPrompt)
                 "filter" -> FilterLayout(w, onSendPrompt)
                 "files", "connected" -> ListLayout(w, onSendPrompt)
+                "timer" -> TimerLayout(w)
                 else -> ListLayout(w, onSendPrompt)
             }
         }
@@ -740,5 +754,76 @@ private fun ListLayout(w: AppWidget, onSendPrompt: ((String) -> Unit)?) {
                 Text(item.meta, style = MaterialTheme.typography.labelSmall, color = c.textTertiary, maxLines = 1)
             }
         }
+    }
+}
+
+// --- timer -------------------------------------------------------------------
+
+/**
+ * Countdown timer app — the Android twin of the web AppTimer: a minutes
+ * stepper (payload items[0].price as the default, clamped 1..180), a progress
+ * ring, and Start/Pause/Reset. Ticks inside LaunchedEffect so the countdown
+ * survives recomposition and stops cleanly at zero.
+ */
+@Composable
+private fun TimerLayout(w: AppWidget) {
+    val c = GsTheme.colors
+    val defaultMinutes = ((w.items.firstOrNull()?.price ?: 25.0).toInt()).coerceIn(1, 180)
+    var minutes by remember(w) { mutableIntStateOf(defaultMinutes) }
+    var left by remember(w) { mutableIntStateOf(defaultMinutes * 60) }
+    var running by remember(w) { mutableStateOf(false) }
+
+    LaunchedEffect(running, left) {
+        if (running && left > 0) {
+            delay(1_000L)
+            left -= 1
+            if (left <= 0) running = false
+        }
+    }
+
+    val total = (minutes * 60).coerceAtLeast(1)
+    val frac = left.toFloat() / total
+    val mm = (left / 60).toString().padStart(2, '0')
+    val ss = (left % 60).toString().padStart(2, '0')
+
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(Modifier.size(150.dp), contentAlignment = Alignment.Center) {
+        Canvas(Modifier.fillMaxSize()) {
+            val strokeW = 11f
+            val r = (min(size.width, size.height) - strokeW) / 2f
+            val rect = androidx.compose.ui.geometry.Rect(
+                size.width / 2f - r, size.height / 2f - r,
+                size.width / 2f + r, size.height / 2f + r
+            )
+            drawArc(
+                color = c.divider.copy(alpha = 0.4f),
+                startAngle = -90f, sweepAngle = 360f, useCenter = false,
+                topLeft = rect.topLeft, size = rect.size, style = Stroke(strokeW)
+            )
+            drawArc(
+                color = seriesColor(0),
+                startAngle = -90f, sweepAngle = 360f * frac.coerceIn(0f, 1f), useCenter = false,
+                topLeft = rect.topLeft, size = rect.size, style = Stroke(strokeW)
+            )
+        }
+        Text(
+            if (left > 0) "$mm:$ss" else "done",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
+            color = c.textPrimary
+        )
+        }
+        Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = { if (!running) { minutes = (minutes - 5).coerceIn(1, 180); left = minutes * 60 } }) { Text("−5 min") }
+            TextButton(onClick = { running = !running }) { Text(if (running) "Pause" else "Start") }
+            TextButton(onClick = { running = false; left = minutes * 60 }) { Text("Reset") }
+            TextButton(onClick = { if (!running) { minutes = (minutes + 5).coerceIn(1, 180); left = minutes * 60 } }) { Text("+5 min") }
+        }
+        Text(
+            "${w.items.size} preset(s) · default $defaultMinutes min",
+            style = MaterialTheme.typography.labelSmall,
+            color = c.textTertiary,
+            modifier = Modifier.padding(top = 6.dp)
+        )
     }
 }
