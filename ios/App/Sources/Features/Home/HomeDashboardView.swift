@@ -11,6 +11,7 @@ struct HomeDashboardView: View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: Aero.Spacing.l) {
                 topBar
+                heroVisual
                 hero
                 quickActions
                 featureGrid
@@ -81,6 +82,38 @@ struct HomeDashboardView: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.top, Aero.Spacing.xl)
+    }
+
+    private var heroVisual: some View {
+        Button(action: onNewChat) {
+            ZStack {
+                RadialGradient(colors: [Color(red: 1, green: 0.82, blue: 0.65), Color(red: 1, green: 0.48, blue: 0.25)], center: .center, startRadius: 8, endRadius: 240)
+                HStack {
+                    Label("GS-5 nano", systemImage: "brain")
+                        .font(Aero.label())
+                        .foregroundStyle(Aero.text)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(Capsule().fill(Color.white.opacity(0.40)))
+                    Spacer()
+                }
+                .frame(maxHeight: .infinity, alignment: .top)
+                .padding(16)
+                VStack(spacing: 10) {
+                    ZStack {
+                        Circle().fill(Color.white.opacity(0.88)).frame(width: 112, height: 112)
+                        Circle().fill(AngularGradient(colors: [Color(red: 1, green: 0.55, blue: 0.30), Color(red: 1, green: 0.84, blue: 0.68), Color(red: 1, green: 0.55, blue: 0.30)], center: .center)).frame(width: 74, height: 74)
+                        Image(systemName: "wand.and.stars").font(.system(size: 26, weight: .semibold)).foregroundStyle(.white)
+                    }
+                    Text("A calmer way to create").font(Aero.label()).foregroundStyle(Aero.text)
+                }
+            }
+            .frame(height: 204)
+            .clipShape(RoundedRectangle(cornerRadius: 30))
+            .overlay(RoundedRectangle(cornerRadius: 30).stroke(Color.white.opacity(0.35), lineWidth: 1))
+            .aeroCardShadow()
+        }
+        .buttonStyle(KineticPressStyle())
     }
 
     private var quickActions: some View {

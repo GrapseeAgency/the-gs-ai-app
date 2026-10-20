@@ -76,9 +76,11 @@ fun HomeDashboardScreen(
                 }
             }
         }
+        Spacer(Modifier.height(GsSpacing.s))
+        HeroVisual(onClick = onNewChat)
         Spacer(Modifier.height(GsSpacing.xl))
         Text("Intelligence reimagined.", style = MaterialTheme.typography.displayMedium, color = colors.textPrimary)
-        Text("Discover a softer way to think.", style = MaterialTheme.typography.headlineSmall, color = colors.accentStrong)
+        Text("Discover a smarter world.", style = MaterialTheme.typography.headlineSmall, color = colors.accentStrong)
         Spacer(Modifier.height(GsSpacing.gap))
         Text(
             "Ask, create, explore, and get things done with your personal AI companion.",
@@ -157,6 +159,47 @@ fun HomeDashboardScreen(
             }
         }
         Spacer(Modifier.height(GsSpacing.l))
+    }
+}
+
+@Composable
+private fun HeroVisual(onClick: () -> Unit) {
+    val colors = GsTheme.colors
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().height(204.dp),
+        shape = RoundedCornerShape(30.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+    ) {
+        Box(
+            Modifier.fillMaxSize().background(
+                Brush.radialGradient(listOf(Color(0xFFFFD1A7), Color(0xFFFF9B62), Color(0xFFFF7B45)))
+            )
+        ) {
+            Surface(
+                modifier = Modifier.align(Alignment.TopStart).padding(16.dp),
+                shape = GsRadius.pill,
+                color = Color.White.copy(alpha = .40f),
+            ) {
+                Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(GsIcons.Brain, contentDescription = null, modifier = Modifier.size(16.dp), tint = colors.textPrimary)
+                    Spacer(Modifier.width(6.dp))
+                    Text("GS-5 nano", style = MaterialTheme.typography.labelMedium, color = colors.textPrimary)
+                    Icon(GsIcons.ChevronDown, contentDescription = null, modifier = Modifier.size(14.dp), tint = colors.textSecondary)
+                }
+            }
+            Box(
+                Modifier.align(Alignment.Center).size(112.dp).clip(CircleShape).background(
+                    Brush.radialGradient(listOf(Color.White.copy(alpha = .95f), Color(0xFFFFB169).copy(alpha = .25f)))
+                ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(Modifier.size(74.dp).clip(CircleShape).background(Brush.sweepGradient(listOf(Color(0xFFFF8A4C), Color(0xFFFFD5B0), Color(0xFFFF8A4C)))))
+                Icon(GsIcons.Wand, contentDescription = "Start with GS AI", modifier = Modifier.size(28.dp), tint = Color.White)
+            }
+            Text("A calmer way to create", modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 18.dp), style = MaterialTheme.typography.labelLarge, color = colors.textPrimary)
+        }
     }
 }
 
