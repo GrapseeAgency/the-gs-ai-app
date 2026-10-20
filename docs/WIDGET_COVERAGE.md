@@ -1,11 +1,15 @@
 # WIDGET COVERAGE
 
 > **V3 (2026-10-20).** The 60-item "impossible" mega-list is now a tier map:
-> **34 kinds, 34 chart types, 8 live simulations, 8 three-dimensional stage
-> views, 4 canvas surfaces, 7 app editors, 1 terminal runtime, 20 app
-> experiences, 14 calculators, 17 form-field types, 16 media forms, 24
-> mermaid languages, 1 shared-state runtime, 3 native blocks — 190 declared component types**, plus
-> unlimited bespoke ```html. Tier 1 is native and real; Tier 2 ships
+> **35 kinds, 34 chart types, 8 live simulations, 8 three-dimensional stage
+> views, 4 canvas surfaces, 7 app editors, 1 terminal runtime, 4 shared-state
+> surfaces, 20 app experiences, 14 calculators, 17 form-field types, 16 media
+> forms, 24 mermaid diagram families (the bundled mermaid 12 engine renders up
+> to 29), 3 native blocks — 195 declared component types**, plus
+> unlimited bespoke ```html. EVERY one of them is machine-audited through
+> validator → renderer → fence routing on BOTH surfaces
+> (docs/CATALOGUE_AUDIT.md; scripts/test-widget-catalogue.ts — 206 checks,
+> 0 holes, fails CI on any hole). Tier 1 is native and real; Tier 2 ships
 > degraded and labelled; Tier 3 is refused with stated reasons — never faked.
 >
 > **V2 (2026-10-20).** The catalogue stopped at 18 kinds and became a
@@ -14,7 +18,7 @@
 >
 > | Layer | Status |
 > |---|---|
-> | Catalogue + validators + compiler + palettes (`src/lib/widgets/`) | shipped, 107/107 tests |
+> | Catalogue + validators + compiler + palettes (`src/lib/widgets/`) | shipped, 112/112 compiler tests + 206-check catalogue audit |
 > | Web renderers (`src/components/genui/`, 115 files) | shipped — gallery at `/genui` |
 > | Android renderers (Compose) | v3 PARITY: every kind renders natively — 34 charts (v3 sub-types incl. sankey/network/wordcloud/sunburst/bullet/violin/contour/parallel/dendrogram/depth), 8 sims (withFrameNanos worlds), 8 stage3d (projected Canvas), 4 canvas, 7 editors + sheet formula engine, terminal REPL (CalcExpr-gated), collab (Ktor SSE), same lenient-JSON/clamp-and-render contract + fence aliases |
 > | Prompt contract (`src/lib/widgets/prompt.ts`) | shipped — full vocabulary + palette system |

@@ -14,6 +14,7 @@
     "/home/user/the-gs-ai-app/src/lib/design/**/*",
     "/home/user/the-gs-ai-app/src/lib/calc/**/*",
     "/home/user/the-gs-ai-app/src/components/**/*",
-    "/home/user/the-gs-ai-app/scripts/test-genui-pipeline.ts"
+    "/home/user/the-gs-ai-app/scripts/test-genui-pipeline.ts",
+    "/home/user/the-gs-ai-app/scripts/test-widget-catalogue.ts"
   ]
 }
