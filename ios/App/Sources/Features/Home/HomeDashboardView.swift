@@ -17,6 +17,7 @@ struct HomeDashboardView: View {
                 quickActions
                 featureGrid
                 reflectionCard
+                usageStats
                 focusCard
                 Button(action: onNewChat) {
                     Label("Generate", systemImage: "wand.and.stars")
@@ -159,6 +160,13 @@ struct HomeDashboardView: View {
         .buttonStyle(KineticPressStyle())
     }
 
+    private var usageStats: some View {
+        HStack(spacing: Aero.Spacing.s) {
+            UsageTile(title: "Image generate", value: "64%", progress: 0.64)
+            UsageTile(title: "Video generate", value: "15%", progress: 0.15)
+        }
+    }
+
     private var focusCard: some View {
         VStack(alignment: .leading, spacing: Aero.Spacing.s) {
             HStack {
@@ -181,6 +189,27 @@ struct HomeDashboardView: View {
         .background(RoundedRectangle(cornerRadius: Aero.Radius.card).fill(Aero.surface))
         .overlay(RoundedRectangle(cornerRadius: Aero.Radius.card).stroke(Aero.outline, lineWidth: 1))
         .aeroCardShadow()
+    }
+}
+
+private struct UsageTile: View {
+    let title: String
+    let value: String
+    let progress: Double
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack {
+                Text(value).font(Aero.title()).foregroundStyle(Aero.accentDeep)
+                Spacer()
+                Image(systemName: "gauge.medium").font(.caption).foregroundStyle(Aero.textMuted)
+            }
+            Text(title).font(Aero.caption()).foregroundStyle(Aero.textMuted)
+            ProgressView(value: progress).tint(Aero.accent)
+        }
+        .padding(Aero.Spacing.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: Aero.Radius.card).fill(Aero.surface))
+        .overlay(RoundedRectangle(cornerRadius: Aero.Radius.card).stroke(Aero.outline, lineWidth: 1))
     }
 }
 

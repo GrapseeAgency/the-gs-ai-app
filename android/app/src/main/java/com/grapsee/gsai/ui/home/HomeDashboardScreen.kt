@@ -119,6 +119,8 @@ fun HomeDashboardScreen(
         Spacer(Modifier.height(GsSpacing.l))
         ReflectionCard(onClick = onNewChat)
         Spacer(Modifier.height(GsSpacing.l))
+        UsageStats()
+        Spacer(Modifier.height(GsSpacing.l))
         SectionTitle("Today’s focus", "See all", onOpenChats)
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -162,6 +164,30 @@ fun HomeDashboardScreen(
             }
         }
         Spacer(Modifier.height(GsSpacing.l))
+    }
+}
+
+@Composable
+private fun UsageStats() {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(GsSpacing.s)) {
+        UsageTile("Image generate", "64%", .64f, Modifier.weight(1f))
+        UsageTile("Video generate", "15%", .15f, Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun UsageTile(label: String, value: String, progress: Float, modifier: Modifier) {
+    Surface(modifier = modifier, shape = GsRadius.cardShape(), color = GsTheme.colors.surface) {
+        Column(Modifier.padding(GsSpacing.m)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(value, style = MaterialTheme.typography.titleLarge, color = GsTheme.colors.accentStrong, modifier = Modifier.weight(1f))
+                Icon(GsIcons.Gauge, contentDescription = null, modifier = Modifier.size(16.dp), tint = GsTheme.colors.textSecondary)
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(label, style = MaterialTheme.typography.labelSmall, color = GsTheme.colors.textSecondary)
+            Spacer(Modifier.height(8.dp))
+            LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth().height(5.dp).clip(CircleShape), color = GsTheme.colors.accent, trackColor = GsTheme.colors.accentSoft)
+        }
     }
 }
 

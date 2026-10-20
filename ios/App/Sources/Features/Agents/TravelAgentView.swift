@@ -34,6 +34,21 @@ struct TravelAgentView: View {
                         Image(systemName: "chevron.right").foregroundStyle(Aero.textMuted)
                     }
                 }
+                AeroCard {
+                    VStack(alignment: .leading, spacing: Aero.Spacing.s) {
+                        Label("Travel Agent", systemImage: "globe")
+                            .font(Aero.title())
+                            .foregroundStyle(Aero.text)
+                        Text("Tell me where you want to go, and I’ll shape the whole journey around you.")
+                            .font(Aero.body())
+                            .foregroundStyle(Aero.text)
+                        HStack(spacing: Aero.Spacing.s) {
+                            MediaAction(title: "Gif", icon: "photo", action: onSendToChat)
+                            MediaAction(title: "Image", icon: "photo.on.rectangle", action: onSendToChat)
+                            MediaAction(title: "Video", icon: "play.rectangle", action: onSendToChat)
+                        }
+                    }
+                }
                 Spacer(minLength: 90)
                 Button { onSendToChat("Help me plan a thoughtful trip") } label: {
                     HStack {
@@ -85,6 +100,23 @@ struct TravelAgentView: View {
                 AgentChip(title: "Planning", icon: "location.north", action: onSendToChat)
             }
         }
+    }
+}
+
+private struct MediaAction: View {
+    let title: String
+    let icon: String
+    let action: (String) -> Void
+    var body: some View {
+        Button { action("Generate a \(title) for my trip") } label: {
+            Label(title, systemImage: icon)
+                .font(Aero.label())
+                .foregroundStyle(Aero.text)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Capsule().fill(Aero.accentSoft))
+        }
+        .buttonStyle(KineticPressStyle())
     }
 }
 

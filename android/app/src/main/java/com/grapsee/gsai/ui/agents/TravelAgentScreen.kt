@@ -81,6 +81,26 @@ fun TravelAgentScreen(onBack: () -> Unit, onSendToChat: (String) -> Unit) {
                 Icon(GsIcons.ChevronRight, contentDescription = null, tint = colors.textSecondary)
             }
         }
+        Spacer(Modifier.height(GsSpacing.s))
+        Surface(shape = GsRadius.cardShape(), color = Color.White.copy(alpha = .58f), modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(GsSpacing.m)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(shape = CircleShape, color = Color(0xFFFFB169).copy(alpha = .35f)) {
+                        Icon(GsIcons.Globe, contentDescription = null, modifier = Modifier.padding(9.dp), tint = colors.accent)
+                    }
+                    Spacer(Modifier.width(GsSpacing.s))
+                    Text("Travel Agent", style = MaterialTheme.typography.titleMedium, color = colors.textPrimary)
+                }
+                Spacer(Modifier.height(GsSpacing.s))
+                Text("Tell me where you want to go, and I’ll shape the whole journey around you.", style = MaterialTheme.typography.bodyMedium, color = colors.textPrimary)
+                Spacer(Modifier.height(GsSpacing.m))
+                Row(horizontalArrangement = Arrangement.spacedBy(GsSpacing.s)) {
+                    MediaAction("Gif", GsIcons.Image, onSendToChat)
+                    MediaAction("Image", GsIcons.ImagePlus, onSendToChat)
+                    MediaAction("Video", GsIcons.Presentation, onSendToChat)
+                }
+            }
+        }
         Spacer(Modifier.weight(1f))
         Surface(onClick = { onSendToChat("Help me plan a thoughtful trip") }, shape = GsRadius.inputShape(), color = colors.surface, shadowElevation = 3.dp, modifier = Modifier.fillMaxWidth()) {
             Row(Modifier.padding(horizontal = GsSpacing.m, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -89,6 +109,17 @@ fun TravelAgentScreen(onBack: () -> Unit, onSendToChat: (String) -> Unit) {
             }
         }
         Spacer(Modifier.height(GsSpacing.l))
+    }
+}
+
+@Composable
+private fun MediaAction(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onSend: (String) -> Unit) {
+    Surface(onClick = { onSend("Generate a $label for my trip") }, shape = GsRadius.pill, color = GsTheme.colors.accentSoft) {
+        Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(15.dp), tint = GsTheme.colors.accent)
+            Spacer(Modifier.width(5.dp))
+            Text(label, style = MaterialTheme.typography.labelMedium, color = GsTheme.colors.textPrimary)
+        }
     }
 }
 
