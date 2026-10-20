@@ -94,16 +94,16 @@ fun HomeDashboardScreen(
             horizontalArrangement = Arrangement.spacedBy(GsSpacing.s),
         ) {
             QuickChip("Start new chat", GsIcons.SquarePen, onNewChat, selected = true)
-            QuickChip("Mind guide", GsIcons.Brain, onNewChat)
-            QuickChip("Research", GsIcons.Telescope, onNewChat)
+            QuickChip("Gemini 3", GsIcons.Brain, onNewChat)
+            QuickChip("Grok 4.1", GsIcons.Zap, onNewChat)
         }
         Spacer(Modifier.height(GsSpacing.l))
         Row(horizontalArrangement = Arrangement.spacedBy(GsSpacing.s)) {
             FeatureCard(
                 modifier = Modifier.weight(1f),
-                title = "Create\nwith AI",
-                subtitle = "Turn ideas into something real",
-                icon = GsIcons.Wand,
+                title = "Video\ncreate",
+                subtitle = "Create stunning videos with AI",
+                icon = GsIcons.Presentation,
                 colors = listOf(Color(0xFFFFD4B0), Color(0xFFFFF7F1)),
                 onClick = onNewChat,
             )

@@ -136,15 +136,15 @@ struct HomeDashboardView: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: Aero.Spacing.s) {
                 HomeChip(title: "Start new chat", icon: "square.and.pencil", selected: true, action: onNewChat)
-                HomeChip(title: "Mind guide", icon: "brain", action: onNewChat)
-                HomeChip(title: "Research", icon: "telescope", action: onNewChat)
+                HomeChip(title: "Gemini 3", icon: "brain", action: onNewChat)
+                HomeChip(title: "Grok 4.1", icon: "bolt.fill", action: onNewChat)
             }
         }
     }
 
     private var featureGrid: some View {
         HStack(spacing: Aero.Spacing.s) {
-            HomeFeatureCard(title: "Create\nwith AI", subtitle: "Turn ideas into something real", icon: "wand.and.stars", colors: [Color(red: 1, green: 0.83, blue: 0.69), Aero.surface], action: onNewChat)
+            HomeFeatureCard(title: "Video\ncreate", subtitle: "Create stunning videos with AI", icon: "play.rectangle", colors: [Color(red: 1, green: 0.83, blue: 0.69), Aero.surface], action: onNewChat)
             HomeFeatureCard(title: "Travel\nagent", subtitle: "Make every journey easier", icon: "globe", colors: [Color(red: 1, green: 0.78, blue: 0.69), Aero.background], action: onOpenAgent)
         }
     }
