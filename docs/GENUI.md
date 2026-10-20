@@ -82,8 +82,9 @@ Rendering rules (both clients, identical):
   never raw JSON.
 - Invalid JSON or failed schema validation → render as a plain code block.
   Degradation is free because the transport is markdown.
-- Hard caps: ≤ 200 data points, ≤ 16 series, ≤ 64 KB per widget, ≤ 6 widgets
-  per message. Enforced at parse time.
+- Hard caps: ≤ 200 data points, ≤ 16 series, ≤ 64 KB per widget, ≤ 3 widgets
+  per message (`LIMITS.maxWidgetsPerAnswer`). Enforced at parse time; extra
+  fences fall back to prose.
 
 ### Widget set v1
 
