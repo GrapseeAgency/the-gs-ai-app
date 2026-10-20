@@ -63,21 +63,6 @@ internal fun Stage3DWidgetView(w: Stage3DWidget) {
 }
 
 @Composable
-internal fun CanvasWidgetView(w: CanvasWidgetData) {
-    WidgetCardShell(w.title.ifEmpty { "Canvas — ${w.surface}" }, "canvas") {
-        SpecRow("surface", w.surface)
-        if (w.nodes.isNotEmpty()) SpecRow("nodes", w.nodes.size.toString())
-        if (w.edges.isNotEmpty()) SpecRow("edges", w.edges.size.toString())
-        Text(
-            "pointer surface — draw/edit lands in an upcoming build of this client",
-            style = MaterialTheme.typography.labelSmall,
-            color = GsTheme.colors.textTertiary,
-            modifier = Modifier.padding(top = 6.dp)
-        )
-    }
-}
-
-@Composable
 internal fun EditorWidgetView(w: EditorWidgetData) {
     WidgetCardShell(w.title.ifEmpty { "Editor — ${w.editor}" }, "editor") {
         SpecRow("editor", w.editor)
