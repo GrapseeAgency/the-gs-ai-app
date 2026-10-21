@@ -164,6 +164,16 @@ fun HomeDashboardScreen(
                     .padding(horizontal = 20.dp)
             ) {
                 Spacer(Modifier.height(6.dp))
+                // Reference order: the thread you were just in sits ABOVE the
+                // greeting, as a readable glass preview — the fastest way back
+                // into real work. Hidden when nothing has been said yet.
+                if (recent.isNotEmpty()) {
+                    val resume = recent.first()
+                    RecentPreviewCard(resume) {
+                        onOpenConversation(resume.conversation.id)
+                    }
+                    Spacer(Modifier.height(16.dp))
+                }
                 GreetingBlock(greeting = greeting, firstName = firstName)
                 Spacer(Modifier.height(18.dp))
                 QuickPills(
@@ -194,29 +204,6 @@ fun HomeDashboardScreen(
                     subtitle = "Try suggested questions first.",
                     onClick = { suggestions.firstOrNull()?.let { onStartPrompt(it.prompt) } },
                 )
-                if (recent.isNotEmpty()) {
-                    Spacer(Modifier.height(18.dp))
-                    Text(
-                        text = "Pick up where you left off",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = GsTheme.colors.textPrimary,
-                        modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
-                    )
-                    GlassPanel {
-                        recent.take(2).forEachIndexed { index, row ->
-                            if (index > 0) {
-                                Box(
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .padding(start = 58.dp)
-                                        .height(1.dp)
-                                        .background(GsTheme.colors.glassBorder.copy(alpha = 0.6f))
-                                )
-                            }
-                            RecentRow(row) { onOpenConversation(row.conversation.id) }
-                        }
-                    }
-                }
                 Spacer(Modifier.height(124.dp))
             }
         }
@@ -632,54 +619,52 @@ private fun SuggestionsCard(title: String, subtitle: String, onClick: () -> Unit
     }
 }
 
+/**
+ * The reference's top "resume" card: the last thing you were working on, in
+ * full sentences rather than a truncated list row. It is a real destination —
+ * the whole card reopens the thread.
+ */
 @Composable
-private fun RecentRow(row: ConversationPreviewRow, onClick: () -> Unit) {
-    val preview = row.lastMessage?.trim()?.replace('\n', ' ')?.take(64)
-    Row(
+private fun RecentPreviewCard(row: ConversationPreviewRow, onClick: () -> Unit) {
+    val colors = GsTheme.colors
+    val preview = (row.lastMessage ?: row.conversation.title).trim().replace('\n', ' ')
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 58.dp)
+            .clip(RoundedCornerShape(22.dp))
+            .gsGlass(GsGlassRole.Card, RoundedCornerShape(22.dp))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 role = Role.Button,
+                onClickLabel = "Continue this chat",
                 onClick = onClick
             )
-            .padding(horizontal = 14.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Box(
-            modifier = Modifier
-                .size(34.dp)
-                .clip(RoundedCornerShape(11.dp))
-                .background(GsTheme.colors.accentSoft),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                GsIcons.MessageCircle,
-                contentDescription = null,
-                tint = GsTheme.colors.accentStrong,
-                modifier = Modifier.size(17.dp)
-            )
-        }
-        Column(Modifier.weight(1f)) {
+        Text(
+            text = preview.ifBlank { "Pick up where you left off." },
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.textPrimary,
+            maxLines = 3,
+            overflow = TextOverflow.Ellipsis
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = gsConversationTitle(row.conversation.title),
-                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-                color = GsTheme.colors.textPrimary,
+                text = row.conversation.title,
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.textTertiary,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
             )
-            if (!preview.isNullOrBlank()) {
-                Text(
-                    text = preview,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = GsTheme.colors.textSecondary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
+            Icon(
+                GsIcons.ArrowRight,
+                contentDescription = null,
+                tint = colors.accentStrong,
+                modifier = Modifier.size(16.dp)
+            )
         }
     }
 }
