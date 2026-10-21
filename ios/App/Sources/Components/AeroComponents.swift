@@ -60,9 +60,9 @@ struct AeroCard<Content: View>: View {
         }
         .padding(Aero.Spacing.m)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: Aero.Radius.card).fill(Aero.surface))
-        .overlay(RoundedRectangle(cornerRadius: Aero.Radius.card).stroke(Aero.outline, lineWidth: 1))
-        .aeroCardShadow()
+        // The shared glass material — iOS twin of Android RefCard's gsGlass(Card).
+        // Material translucency + in-scatter veil + directional rim + warm shadow.
+        .gsGlass(.card, corner: Aero.Radius.card)
     }
 }
 
@@ -228,8 +228,9 @@ struct AeroInputBar: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .background(Capsule().fill(LinearGradient(colors: [Aero.inputSurface, Aero.surface], startPoint: .topLeading, endPoint: .bottomTrailing)))
-        .overlay(Capsule().stroke(Aero.accent.opacity(0.28), lineWidth: 1))
+        // FloatingControl glass — the composer hovers, so thinnest glass,
+        // brightest rim (iOS twin of Android's ComposerRow gsGlass role).
+        .gsCapsuleGlass(.floatingControl)
     }
 
     /// The send gate is the send button's gate, verbatim: non-empty text (or
@@ -409,7 +410,9 @@ struct OfflineBanner: View {
             .frame(maxWidth: .infinity)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(RoundedRectangle(cornerRadius: Aero.Radius.sm).fill(Aero.elevatedSurface))
+            // Offline banner = a calm sunken well, no lift — the ember state
+            // sits into the canvas rather than floating above it.
+            .gsGlass(.sunken, corner: Aero.Radius.sm)
         }
     }
 }
@@ -611,8 +614,21 @@ struct AeroSheetShell<Content: View>: View {
         }
         .padding(.horizontal, Aero.Spacing.l)
         .padding(.bottom, Aero.Spacing.l)
+        .padding(.top, 4)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Aero.sheetSurface.ignoresSafeArea(edges: .bottom))
+        // Modal glass — the slab over the transcript: the heaviest veil and
+        // the brightest lift, iOS twin of Android's ModalBottomSheets, which
+        // take glassSurface + a top-rounded shape. The mask keeps the square
+        // bottom safe-area fill but rounds (and shadows) only the top edge.
+        .gsGlass(.modal, corner: Aero.Radius.sheet)
+        .mask(
+            UnevenRoundedRectangle(
+                topLeadingRadius: Aero.Radius.sheet,
+                topTrailingRadius: Aero.Radius.sheet
+            )
+            .ignoresSafeArea(edges: .bottom)
+        )
     }
 }
 

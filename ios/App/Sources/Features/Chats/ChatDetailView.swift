@@ -603,8 +603,9 @@ struct ChatDetailView: View {
                             .foregroundStyle(Aero.text)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 7)
-                            .background(Capsule().fill(Aero.container))
-                            .overlay(Capsule().stroke(Aero.outline, lineWidth: 1))
+                            // Mode chip = a floating pill control — glass, not a
+                            // flat container fill.
+                            .gsCapsuleGlass(.floatingControl)
                     }
                     .buttonStyle(KineticPressStyle())
                     .accessibilityLabel("Current mode \(vm.chatMode). Open options sheet")
@@ -662,7 +663,9 @@ struct ChatDetailView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: Aero.Radius.sm).fill(Aero.elevatedSurface))
+        // Offline notice sits as a calm well on the canvas — the Sunken glass
+        // role, no lift: an ember state should not look like it is floating up.
+        .gsGlass(.sunken, corner: Aero.Radius.sm)
         .padding(.horizontal, Aero.Spacing.m)
         .padding(.top, Aero.Spacing.s)
         .accessibilityElement(children: .combine)
@@ -872,7 +875,10 @@ struct ChatDetailView: View {
         }
         .padding(.horizontal, Aero.Spacing.m)
         .padding(.vertical, Aero.Spacing.s)
-        .background(Aero.surface)
+        // FloatingControl glass — the find bar hovers over the transcript, so
+        // thinnest glass + brightest rim, the iOS twin of the Android search
+        // surfaces (role contract, not a flat fill).
+        .gsGlass(.floatingControl, corner: Aero.Radius.md)
     }
 
     // MARK: Empty state
@@ -886,8 +892,9 @@ struct ChatDetailView: View {
                 .font(Aero.body())
                 .foregroundStyle(Aero.text)
                 .padding(12)
-                .background(RoundedRectangle(cornerRadius: 14).fill(Aero.container))
-                .overlay(RoundedRectangle(cornerRadius: 14).stroke(Aero.outline, lineWidth: 1))
+                // The inline edit field is a sunken well — glass seen from the
+                // shadowed side (the Sunken role), matching the composer family.
+                .gsGlass(.sunken, corner: 14)
             HStack(spacing: 12) {
                 Button("Cancel") {
                     editingIndex = nil

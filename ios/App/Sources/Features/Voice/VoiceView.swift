@@ -112,10 +112,17 @@ struct VoiceView: View {
             // processes. Idle, error and permission states show no orb: an
             // absent state is never faked.
             if let orbState = orbStateForVoiceSession(dictation.sessionState) {
+                // The luminous layer is phase-honest: live capture glows in
+                // the ACTIVE role with the microphone's real RMS lifting the
+                // core (VoiceDictation.level, the tap-RMS twin of Android's
+                // onRmsChanged); processing borrows the reasoning profile.
+                let live = dictation.sessionState == .listening
                 ThinkingOrbView(
                     state: orbState,
                     size: .standard,
-                    contentDescription: orbState.label
+                    contentDescription: orbState.label,
+                    luminance: live ? OrbPhase.recording.luminance : OrbPhase.reasoning.luminance,
+                    amplitude: live ? Double(dictation.level) : -1
                 )
                 .padding(.bottom, Aero.Spacing.xs)
             }

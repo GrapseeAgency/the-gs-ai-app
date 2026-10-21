@@ -206,7 +206,9 @@ struct SettingsView: View {
                 .foregroundStyle(Aero.text)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
-                .background(RoundedRectangle(cornerRadius: 12).fill(Aero.container))
+                // Destructive row sits as a sunken well inside the glass card —
+                // pressed-in, so it reads as an action, not another floating tile.
+                .gsGlass(.sunken, corner: 12)
             }
             .buttonStyle(KineticPressStyle())
             Button {

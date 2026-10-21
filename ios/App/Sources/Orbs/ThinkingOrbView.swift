@@ -21,7 +21,14 @@ public struct ThinkingOrbView: View {
     var size: OrbSize = .standard
     var speed: Double = 1
     var paused: Bool = false
-    var contentDescription: String?
+    var contentDescription: String? = nil
+    /// The luminous presentation drawn AROUND the geometry — nil resolves to
+    /// the default profile of the state (the 12-phase contract, iOS twin of
+    /// Android's ThinkingOrb `luminance` parameter).
+    var luminance: LuminousProfile? = nil
+    /// Live level 0…1 lifted from the microphone tap (voice); -1 = not
+    /// reactive, the glow only breathes with the clock.
+    var amplitude: Double = -1
 
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     @State private var buffer = OrbFrameBuffer()
@@ -57,7 +64,9 @@ public struct ThinkingOrbView: View {
     }
 
     private func orbCanvas(resolved: ResolvedOrb, t: Double) -> some View {
-        Canvas { context, _ in
+        let profile = luminance ?? luminousProfileFor(state)
+        return Canvas { context, _ in
+            drawLuminousGlow(in: context, profile: profile, t: t)
             OrbEngine.render(size: Double(size.rawValue), t: t, resolved: resolved, buf: buffer)
             // Upstream paint contract: lines first (only `connecting` emits
             // them), then dots far→near; warm accent; plain source-over fills,
@@ -85,6 +94,54 @@ public struct ThinkingOrbView: View {
                     with: .color(Aero.aiActive.opacity(alpha * (0.35 + w * 0.65)))
                 )
             }
+        }
+    }
+
+    /// The luminous layer — additive glow BEHIND the untouched dot geometry
+    /// (iOS twin of Android ThinkingOrb's Screen-blend overlay): a wide role
+    /// bloom, the iridescent aurora ring for calm/active phases, and a tight
+    /// reactive core the microphone amplitude lifts directly. Alphas are
+    /// pulse-modulated on the shared clock and clamped, so a frozen reduced
+    /// frame can never blaze.
+    private func drawLuminousGlow(in context: GraphicsContext, profile: LuminousProfile, t: Double) {
+        let side = CGFloat(size.rawValue)
+        let center = CGPoint(x: side / 2, y: side / 2)
+        let breathe = profile.pulse ? 0.5 + 0.5 * sin(t * profile.pulseSpeed) : 1.0
+        let boost = max(0, amplitude)
+        let iridescent = profile.role == .calm || profile.role == .active
+        let glow = min(1, profile.glowAlpha * (0.55 + 0.45 * breathe) + 0.20 * boost)
+        let core = min(1, profile.coreAlpha * (0.55 + 0.45 * breathe) + 0.45 * boost)
+
+        var layered = context
+        layered.blendMode = .plusLighter
+        layered.fillLayer { layer in
+            layer.fill(
+                Path(ellipseIn: CGRect(x: 0, y: 0, width: side, height: side)),
+                with: .radialGradient(
+                    Gradient(colors: [profile.color.opacity(glow * 0.85), .clear]),
+                    center: center,
+                    startRadius: 0,
+                    endRadius: side * 0.5
+                )
+            )
+            if iridescent, let wash = Aero.aurora.last {
+                let ring = side * 0.46
+                layer.stroke(
+                    Path(ellipseIn: CGRect(x: (side - ring) / 2, y: (side - ring) / 2, width: ring, height: ring)),
+                    with: .color(wash.opacity(glow * 0.35)),
+                    lineWidth: side * 0.055
+                )
+            }
+            let spot = side * 0.30
+            layer.fill(
+                Path(ellipseIn: CGRect(x: (side - spot) / 2, y: (side - spot) / 2, width: spot, height: spot)),
+                with: .radialGradient(
+                    Gradient(colors: [profile.color.opacity(core), .clear]),
+                    center: center,
+                    startRadius: 0,
+                    endRadius: spot / 2
+                )
+            )
         }
     }
 }

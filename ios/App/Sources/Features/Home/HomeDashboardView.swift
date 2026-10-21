@@ -53,9 +53,9 @@ struct HomeDashboardView: View {
             DockIcon(icon: "gearshape", label: "Settings", action: onNewChat)
         }
         .padding(8)
-        .background(Capsule().fill(Aero.surface))
-        .overlay(Capsule().stroke(Aero.outline, lineWidth: 1))
-        .aeroCardShadow()
+        // FloatingControl glass — the dock hovers over the canvas: thinnest
+        // glass, brightest rim (iOS twin of Android's dock gsGlass role).
+        .gsCapsuleGlass(.floatingControl)
     }
 
     private var topBar: some View {
@@ -125,6 +125,10 @@ struct HomeDashboardView: View {
             .clipShape(RoundedRectangle(cornerRadius: 30))
             .overlay(RoundedRectangle(cornerRadius: 30).stroke(Color.white.opacity(0.35), lineWidth: 1))
             .aeroCardShadow()
+            // The hero keeps its branded radial fill; the elevated glass paints
+            // the airlight veil + directional rim + warm shadow over it — the
+            // same Elevated role Android's HomeDashboardScreen HeroCard asks for.
+            .gsGlass(.elevated, corner: 30)
         }
         .buttonStyle(KineticPressStyle())
     }
@@ -201,9 +205,7 @@ struct HomeDashboardView: View {
                 .scaleEffect(y: 1.4)
         }
         .padding(Aero.Spacing.m)
-        .background(RoundedRectangle(cornerRadius: Aero.Radius.card).fill(Aero.surface))
-        .overlay(RoundedRectangle(cornerRadius: Aero.Radius.card).stroke(Aero.outline, lineWidth: 1))
-        .aeroCardShadow()
+        .gsGlass(.elevated, corner: Aero.Radius.card)
     }
 }
 
@@ -240,8 +242,7 @@ private struct UsageTile: View {
         }
         .padding(Aero.Spacing.m)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: Aero.Radius.card).fill(Aero.surface))
-        .overlay(RoundedRectangle(cornerRadius: Aero.Radius.card).stroke(Aero.outline, lineWidth: 1))
+        .gsGlass(.card, corner: Aero.Radius.card)
     }
 }
 
@@ -257,7 +258,16 @@ private struct HomeChip: View {
                 .foregroundStyle(selected ? Aero.onAccent : Aero.text)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
-                .background(Capsule().fill(selected ? Aero.accent : Aero.surface))
+                // Suggestion chips: unselected ones are glass pills (the same
+                // FloatingControl treatment Android's suggestion row uses);
+                // the selected chip stays a solid accent commitment.
+                .background {
+                    if selected {
+                        Capsule().fill(Aero.accent)
+                    } else {
+                        Color.clear.gsCapsuleGlass(.floatingControl)
+                    }
+                }
         }
         .buttonStyle(KineticPressStyle())
     }

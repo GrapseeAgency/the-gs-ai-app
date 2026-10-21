@@ -34,6 +34,11 @@ final class VoiceDictation: ObservableObject {
     @Published private(set) var sessionState: VoiceSessionState = .idle
     /// Final text of the last completed session ("" = nothing recognized).
     @Published private(set) var lastResult = ""
+    /// Live microphone level 0…1, computed from the real PCM inside the
+    /// audio tap — the exact twin of Android's RecognitionListener.onRmsChanged.
+    /// The orb reads it as amplitude while the mic is open, so the glow tracks
+    /// actual loudness instead of an invented pulse.
+    @Published private(set) var level: Float = 0
 
     /// Fires once per hold with the best available text ("" = nothing said —
     /// the call site quietly ignores that).
@@ -45,6 +50,12 @@ final class VoiceDictation: ObservableObject {
     private var task: SFSpeechRecognitionTask?
     private var bestText = ""
     private var holdActive = false
+    /// Tap-queue smoothing state for [level] — never touched on the main
+    /// queue, so no lock is needed (the tap block is the sole writer).
+    private var smoothedLevel: Float = 0
+    /// Throttle for publishing [level]: the tap fires every ~12 ms at 1024
+    /// samples; 20 Hz is plenty for a visual and keeps the UI cheap.
+    private var lastLevelPublish = Date.distantPast
     private var starting = false
     private var handedOff = false
     /// Session interruption watch (phone call, Siri, alarm mid-hold) — any
@@ -76,6 +87,7 @@ final class VoiceDictation: ObservableObject {
         transcript = ""
         isListening = true
         sessionState = .listening
+        smoothedLevel = 0
         requestPermissionsAndStart()
     }
 
@@ -84,6 +96,7 @@ final class VoiceDictation: ObservableObject {
     func end() {
         holdActive = false
         sessionState = .processing
+        level = 0
         request?.endAudio()
         audioEngine.stop()
         audioEngine.inputNode.removeTap(onBus: 0)
@@ -170,7 +183,9 @@ final class VoiceDictation: ObservableObject {
             let input = audioEngine.inputNode
             let format = input.outputFormat(forBus: 0)
             input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
-                self?.request?.append(buffer)
+                guard let self, let request = self.request else { return }
+                request.append(buffer)
+                self.publishLevel(from: buffer)
             }
             audioEngine.prepare()
             try audioEngine.start()
@@ -211,6 +226,30 @@ final class VoiceDictation: ObservableObject {
         onFinish?(text)
     }
 
+    /// Real-tap RMS: mean-square over the buffer's float frames, converted to
+    /// a dB-like scale and normalized exactly like Android's onRmsChanged
+    /// mapping ((rmsdB + 2) / 12 clamped to 0…1), with the same asymmetric
+    /// smoothing — rise fast so onset reads, fall slow so the glow glides.
+    private func publishLevel(from buffer: AVAudioPCMBuffer) {
+        guard let channelData = buffer.floatChannelData?[0] else { return }
+        let frames = Int(buffer.frameLength)
+        guard frames > 0 else { return }
+        var sum: Float = 0
+        for i in 0..<frames { sum += channelData[i] * channelData[i] }
+        let meanSquare = max(sum / Float(frames), 1e-12)
+        // 20·log10 of the RMS — the same dB scale Android's recognizer reports.
+        let rmsdB = 10 * log10(meanSquare)
+        let raw = min(max((rmsdB + 2) / 12, 0), 1)
+        smoothedLevel = raw > smoothedLevel
+            ? smoothedLevel + (raw - smoothedLevel) * 0.5
+            : smoothedLevel + (raw - smoothedLevel) * 0.12
+        let now = Date()
+        guard now.timeIntervalSince(lastLevelPublish) > 0.05 else { return }
+        lastLevelPublish = now
+        let value = smoothedLevel
+        DispatchQueue.main.async { self.level = value }
+    }
+
     private func teardownCapture() {
         task?.finish()
         task = nil
@@ -220,5 +259,6 @@ final class VoiceDictation: ObservableObject {
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         isListening = false
         transcript = ""
+        level = 0
     }
 }
