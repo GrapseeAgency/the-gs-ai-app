@@ -57,6 +57,8 @@ import com.grapsee.gsai.data.local.ConversationEntity
 import com.grapsee.gsai.di.ServiceLocator
 import com.grapsee.gsai.ui.components.GsGlassRole
 import com.grapsee.gsai.ui.components.ConversationActionsSheet
+import com.grapsee.gsai.ui.components.RefArt
+import com.grapsee.gsai.ui.components.RefArtwork
 import com.grapsee.gsai.ui.components.RefAvatar
 import com.grapsee.gsai.ui.components.RefDivider
 import com.grapsee.gsai.ui.components.RefIconTile
@@ -135,71 +137,84 @@ fun GsDrawerContent(
     ) {
         Spacer(Modifier.height(10.dp))
 
-        // Identity first: the panel belongs to a person, not a route map.
+        // Brand lockup — the reference's drawer header, with its close affordance.
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(20.dp))
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    role = Role.Button,
-                    onClickLabel = "Account options"
-                ) { accountSheetOpen = true }
-                .semantics { contentDescription = "Account options" }
-                .padding(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(horizontal = 6.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            RefAvatar(initials = initialsFor(storedName), size = 46.dp)
-            Column(Modifier.weight(1f)) {
-                Text(
-                    storedName.ifBlank { "GS account" },
-                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                    color = GsTheme.colors.textPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    storedEmail.ifBlank { "Signed in on this device" },
-                    style = MaterialTheme.typography.labelSmall,
-                    color = GsTheme.colors.textSecondary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(
+                        Brush.linearGradient(
+                            listOf(Color(0xFFFFE3CE), Color(0xFFFFC9A8), Color(0xFFFFB38F))
+                        )
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                RefArtwork(art = RefArt.Bloom, size = 36.dp, contentDescription = null)
             }
-            Icon(
-                GsIcons.ChevronDown,
-                contentDescription = null,
-                tint = GsTheme.colors.textTertiary,
-                modifier = Modifier.size(16.dp)
+            Spacer(Modifier.width(10.dp))
+            Text(
+                text = "Nexly",
+                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+                color = GsTheme.colors.textPrimary,
+                modifier = Modifier.weight(1f)
             )
-        }
-
-        Spacer(Modifier.height(12.dp))
-
-        SearchPill(
-            onClick = {
-                onClose()
-                onNavigate(GsRoutes.CHAT_SEARCH)
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        role = Role.Button,
+                        onClickLabel = "Close menu",
+                        onClick = onClose
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    GsIcons.X,
+                    contentDescription = "Close menu",
+                    tint = GsTheme.colors.textPrimary,
+                    modifier = Modifier.size(18.dp)
+                )
             }
-        )
-
-        Spacer(Modifier.height(10.dp))
-        RefPrimaryButton(
-            label = "New chat",
-            onClick = {
-                onClose()
-                onNavigate(GsRoutes.chat(null))
-            },
-            icon = GsIcons.SquarePen
-        )
+        }
 
         Column(
             modifier = Modifier
                 .weight(1f)
                 .verticalScroll(rememberScrollState())
         ) {
+            // The reference's seven destinations, in its order.
+            DrawerRow("New chat", GsIcons.Plus, selected = false) {
+                onClose(); onNavigate(GsRoutes.chat(null))
+            }
+            DrawerRow("Search conversations", GsIcons.Search, selectedRoute == GsRoutes.CHAT_SEARCH) {
+                onClose(); onNavigate(GsRoutes.CHAT_SEARCH)
+            }
+            DrawerRow("Your chats", GsIcons.MessageCircle, selectedRoute == GsRoutes.CHATS) {
+                onClose(); onNavigate(GsRoutes.CHATS)
+            }
+            DrawerRow("Saved responses", GsIcons.Bookmark, selectedRoute == GsRoutes.CHAT_ARCHIVE) {
+                onClose(); onNavigate(GsRoutes.CHAT_ARCHIVE)
+            }
+            DrawerRow("Explore tools", GsIcons.Compass, selectedRoute == GsRoutes.TRAVEL_AGENT) {
+                onClose(); onNavigate(GsRoutes.TRAVEL_AGENT)
+            }
+            DrawerRow("Personalization", GsIcons.SlidersHorizontal, selectedRoute == GsRoutes.PROFILE) {
+                onClose(); onNavigate(GsRoutes.PROFILE)
+            }
+            DrawerRow("Settings", GsIcons.Settings, selectedRoute == GsRoutes.SETTINGS) {
+                onClose(); onNavigate(GsRoutes.SETTINGS)
+            }
+
+            Spacer(Modifier.height(10.dp))
             DrawerLabel("Recent")
             if (recents.isEmpty()) {
                 Text(
@@ -224,36 +239,6 @@ fun GsDrawerContent(
                     )
                 }
             }
-
-            DrawerLabel("Go to")
-            DrawerRow(
-                title = "All chats",
-                icon = GsIcons.Inbox,
-                selected = selectedRoute == GsRoutes.CHATS
-            ) {
-                onClose(); onNavigate(GsRoutes.CHATS)
-            }
-            DrawerRow(
-                title = "Voice",
-                icon = GsIcons.AudioLines,
-                selected = selectedRoute == GsRoutes.VOICE
-            ) {
-                onClose(); onNavigate(GsRoutes.VOICE)
-            }
-            DrawerRow(
-                title = "Travel agent",
-                icon = GsIcons.Compass,
-                selected = selectedRoute == GsRoutes.TRAVEL_AGENT
-            ) {
-                onClose(); onNavigate(GsRoutes.TRAVEL_AGENT)
-            }
-            DrawerRow(
-                title = "Settings",
-                icon = GsIcons.Settings,
-                selected = selectedRoute == GsRoutes.SETTINGS
-            ) {
-                onClose(); onNavigate(GsRoutes.SETTINGS)
-            }
             Spacer(Modifier.height(12.dp))
         }
 
@@ -268,22 +253,26 @@ fun GsDrawerContent(
                     role = Role.Button,
                     onClickLabel = "Account options"
                 ) { accountSheetOpen = true }
+                .semantics { contentDescription = "Account options" }
                 .padding(horizontal = 10.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Icon(
-                GsIcons.UserRound,
-                contentDescription = null,
-                tint = GsTheme.colors.textSecondary,
-                modifier = Modifier.size(18.dp)
-            )
-            Text(
-                text = "Account and preferences",
-                style = MaterialTheme.typography.labelMedium,
-                color = GsTheme.colors.textSecondary,
-                modifier = Modifier.weight(1f)
-            )
+            RefAvatar(initials = initialsFor(storedName), size = 36.dp)
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = storedName.ifBlank { "Your account" },
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = GsTheme.colors.textPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = "Personal",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = GsTheme.colors.textSecondary
+                )
+            }
             Icon(
                 GsIcons.ChevronRight,
                 contentDescription = null,
