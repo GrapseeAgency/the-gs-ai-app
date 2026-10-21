@@ -243,13 +243,16 @@ private struct VideoCard: View {
                              Color(red: 1.0, green: 0.85, blue: 0.91),
                              Color(red: 1.0, green: 0.91, blue: 0.83)],
                     startPoint: .topLeading, endPoint: .bottomTrailing)
-                HStack {
+                VStack {
+                    HStack {
+                        Spacer()
+                        GsArtwork(
+                            art: .video,
+                            size: 70,
+                            label: "Translucent film cards with a glass lens")
+                            .offset(x: 10, y: -8)
+                    }
                     Spacer()
-                    Circle()
-                        .fill(RadialGradient(colors: [.white.opacity(0.6), .clear],
-                                             center: .center, startRadius: 2, endRadius: 70))
-                        .frame(width: 130, height: 130)
-                        .offset(x: 30, y: -10)
                 }
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 5) {
@@ -289,13 +292,7 @@ private struct MindGuideCard: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 10) {
-                Circle()
-                    .fill(RadialGradient(
-                        colors: [Color(red: 0.72, green: 0.61, blue: 1.0),
-                                 Color(red: 1.0, green: 0.62, blue: 0.76),
-                                 Color(red: 1.0, green: 0.77, blue: 0.54)],
-                        center: .center, startRadius: 2, endRadius: 22))
-                    .frame(width: 38, height: 38)
+                GsArtwork(art: .clarity, size: 34, label: "A clarity lens holding a bloom")
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Mind Guide").font(Aero.label()).foregroundStyle(Aero.text)
                     Text("Your personal clarity")
@@ -330,10 +327,10 @@ private struct ReflectionCard: View {
                         .font(Aero.caption()).foregroundStyle(Aero.textMuted)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                AnimatedGsIllustration(imageName: "GSCompanionOrb", size: 52,
-                                       breathDuration: 3.6, rotationDegrees: 1.4,
-                                       lift: -2, startDelay: 0.52)
-                    .opacity(0.28)
+                GsArtwork(
+                    art: .reflection,
+                    size: 58,
+                    label: "A lotus resting on still water")
                     .allowsHitTesting(false)
             }
             .padding(14)

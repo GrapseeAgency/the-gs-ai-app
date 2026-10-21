@@ -307,14 +307,36 @@ struct EmptyStateView: View {
     let icon: String
     let title: String
     var message: String = ""
+    /// Optional override. When nil the art is derived from the SF Symbol, so
+    /// every empty state in the app gets the matching GS scene instead of a
+    /// generic glyph.
+    var art: GsArt? = nil
 
     /// High-contrast re-resolve handle (Task 86-e).
     @ObservedObject var hc = SettingsStore.shared
 
+    private var resolvedArt: GsArt {
+        if let art = art { return art }
+        switch icon {
+        case "magnifyingglass": return .search
+        case "archivebox": return .archive
+        case "bell", "bell.badge": return .notifications
+        case "wifi.slash", "icloud.slash": return .offline
+        case "bookmark", "books.vertical", "book.closed": return .library
+        case "waveform", "mic": return .voice
+        case "lock", "lock.shield", "hand.raised": return .privacy
+        case "exclamationmark.triangle", "exclamationmark.circle": return .error
+        case "checkmark.circle", "checkmark.seal": return .success
+        case "bubble.left.and.bubble.right", "bubble.left": return .conversation
+        case "sparkles", "wand.and.stars": return .bloom
+        default: return .bloom
+        }
+    }
+
     var body: some View {
         let _ = hc.highContrast
         VStack(spacing: Aero.Spacing.s) {
-            NativeGsIllustration(size: 72, accessibilityLabel: "\(title) illustration")
+            GsArtwork(art: resolvedArt, size: 104, label: "\(title) illustration")
             Text(title).font(Aero.title()).foregroundStyle(Aero.text)
             if !message.isEmpty {
                 Text(message)
