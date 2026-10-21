@@ -131,12 +131,26 @@ struct AeroDrawer: View {
     private var panelList: some View {
         VStack(alignment: .leading, spacing: Aero.Spacing.s) {
             newChatRow
+            navGroup
+            divider
             recentGroup
             divider
             voiceRow
         }
         .padding(.horizontal, Aero.Spacing.m)
         .padding(.bottom, Aero.Spacing.l)
+    }
+
+    /// The reference's destinations, in its order (New chat + Search already
+    /// live in `newChatRow`). Each routes to a real screen.
+    private var navGroup: some View {
+        VStack(alignment: .leading, spacing: Aero.Spacing.s) {
+            row(title: "Your chats", icon: "bubble.left.and.bubble.right", isSelected: activeRoute == .chats) { onRoute(.chats) }
+            row(title: "Saved responses", icon: "bookmark", isSelected: activeRoute == .chatArchive) { onRoute(.chatArchive) }
+            row(title: "Explore tools", icon: "safari", isSelected: activeRoute == .travelAgent) { onRoute(.travelAgent) }
+            row(title: "Personalization", icon: "person.crop.circle", isSelected: activeRoute == .profile) { onRoute(.profile) }
+            row(title: "Settings", icon: "gearshape", isSelected: activeRoute == .settings) { onRoute(.settings) }
+        }
     }
 
     /// Voice — the one wired non-chat capability, promoted to a real row.
