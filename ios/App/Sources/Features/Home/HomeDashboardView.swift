@@ -276,7 +276,10 @@ struct HomeDashboardView: View {
             Button(action: onNewChat) {
                 HStack(spacing: 6) {
                     Image(systemName: "sparkles").font(.system(size: 18, weight: .semibold))
-                    Text("Generate").font(.system(size: 15, weight: .semibold))
+                    Text("Generate")
+                        .font(.system(size: 15, weight: .semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.9)
                 }
                 .foregroundStyle(Color(red: 0.29, green: 0.14, blue: 0.08))
                 .frame(maxWidth: .infinity)
@@ -323,7 +326,10 @@ private struct HomePill: View {
         Button(action: action) {
             HStack(spacing: 4) {
                 Image(systemName: system).font(.system(size: 12.5, weight: .medium))
-                Text(title).font(.system(size: 12, weight: .medium))
+                Text(title)
+                    .font(.system(size: 12, weight: .medium))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
             }
             .foregroundStyle(Aero.text)
             .padding(.horizontal, 9)
@@ -410,11 +416,12 @@ private struct MindGuideCard: View {
                         .font(.system(size: 13.5, weight: .semibold))
                         .foregroundStyle(Aero.text)
                         .lineLimit(1)
+                        .minimumScaleFactor(0.85)
                     Text("Your personal clarity companion.")
                         .font(.system(size: 11.5))
                         .foregroundStyle(Aero.textMuted)
                         .lineLimit(2)
-                        .minimumScaleFactor(0.9)
+                        .minimumScaleFactor(0.8)
                 }
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.right")
@@ -445,6 +452,8 @@ private struct ReflectionCard: View {
                         Text("Today's reflection")
                             .font(.system(size: 13.5, weight: .semibold))
                             .foregroundStyle(Aero.text)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.85)
                         Spacer()
                         Image(systemName: "chevron.right")
                             .font(.system(size: 12, weight: .semibold)).foregroundStyle(Aero.textMuted)
@@ -452,6 +461,8 @@ private struct ReflectionCard: View {
                     Text("Take a moment to check in with yourself.")
                         .font(.system(size: 11.5))
                         .foregroundStyle(Aero.textMuted)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.85)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.trailing, 26)
                 }

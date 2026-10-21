@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -359,15 +360,21 @@ private fun QuickPills(
     // Four pills, one row, no horizontal scroller. Measured at 12sp with 8dp
     // of inset the set is ~310dp, so it fits a 360dp phone as well as the
     // sheet's 393dp — "More" is never parked off-screen.
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(5.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        GlassPill(GsIcons.Plus, "New Chat", onNewChat)
-        GlassPill(GsIcons.Compass, "Explore", onExplore)
-        GlassPill(GsIcons.Sparkles, "Create", onCreate)
-        GlassPill(GsIcons.Ellipsis, "More", onMore)
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        // The sheet is 393pt wide; a 360pt phone gives the row 12dp less. The
+        // pills step down one notch rather than letting "More" wrap or slide
+        // off-screen — that was the exact defect in the review.
+        val compact = maxWidth < 340.dp
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 5.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            GlassPill(GsIcons.Plus, "New Chat", onNewChat, compact)
+            GlassPill(GsIcons.Compass, "Explore", onExplore, compact)
+            GlassPill(GsIcons.Sparkles, "Create", onCreate, compact)
+            GlassPill(GsIcons.Ellipsis, "More", onMore, compact)
+        }
     }
 }
 
@@ -495,21 +502,27 @@ private fun VideoCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
 @Composable
 private fun MindGuideCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
     GlassPanel(modifier = modifier, onClick = onClick, onClickLabel = "Open Mind Guide") {
-        Box(Modifier.fillMaxSize()) {
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+            val compact = maxWidth < 148.dp
             Row(
                 // The chevron is an overlay, not a third column: the copy needs
                 // every point of width to keep "clarity companion." on line two
                 // exactly as the sheet does.
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(start = 10.dp, end = 24.dp, top = 10.dp, bottom = 10.dp),
+                    .padding(
+                        start = if (compact) 8.dp else 10.dp,
+                        end = if (compact) 18.dp else 24.dp,
+                        top = 10.dp,
+                        bottom = 10.dp
+                    ),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // A pearl, not a lens: violet at the crown, blue at the rim and
                 // a blush underside, exactly as the reference's orb reads.
                 Box(
                     modifier = Modifier
-                        .size(28.dp)
+                        .size(if (compact) 24.dp else 28.dp)
                         .clip(CircleShape)
                         .background(
                             Brush.radialGradient(
@@ -532,12 +545,12 @@ private fun MindGuideCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
                             .background(Color.White.copy(alpha = 0.65f), CircleShape)
                     )
                 }
-                Spacer(Modifier.width(7.dp))
+                Spacer(Modifier.width(if (compact) 4.dp else 7.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
                         text = "Mind Guide",
                         style = MaterialTheme.typography.titleSmall.copy(
-                            fontSize = 12.5.sp,
+                            fontSize = if (compact) 11.sp else 12.5.sp,
                             fontWeight = FontWeight.SemiBold
                         ),
                         color = GsTheme.colors.textPrimary,
@@ -550,12 +563,12 @@ private fun MindGuideCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
                         // instead of leaving it to the measure.
                         text = "Your personal\nclarity companion.",
                         style = MaterialTheme.typography.labelSmall.copy(
-                            fontSize = 10.sp,
-                            lineHeight = 13.sp,
+                            fontSize = if (compact) 9.sp else 10.sp,
+                            lineHeight = if (compact) 11.5.sp else 13.sp,
                             // Poppins is wider than the sheet's face; a hair of
                             // negative tracking is what keeps "clarity
                             // companion." on its second line.
-                            letterSpacing = (-0.2).sp
+                            letterSpacing = if (compact) (-0.3).sp else (-0.2).sp
                         ),
                         color = GsTheme.colors.textSecondary,
                         maxLines = 2,
@@ -579,14 +592,15 @@ private fun MindGuideCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
 @Composable
 private fun ReflectionCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
     GlassPanel(modifier = modifier, onClick = onClick, onClickLabel = "Open today's reflection") {
-        Box(Modifier.fillMaxSize()) {
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+            val compact = maxWidth < 148.dp
             // The lotus is painted first; the copy keeps its own z-plane.
             Column(Modifier.fillMaxSize().padding(12.dp).zIndex(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = "Today's reflection",
                         style = MaterialTheme.typography.titleSmall.copy(
-                            fontSize = 12.5.sp,
+                            fontSize = if (compact) 11.sp else 12.5.sp,
                             fontWeight = FontWeight.SemiBold
                         ),
                         color = GsTheme.colors.textPrimary,
@@ -604,15 +618,16 @@ private fun ReflectionCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
                 Text(
                     text = "Take a moment to check in with yourself.",
                     style = MaterialTheme.typography.labelSmall.copy(
-                        fontSize = 10.5.sp,
-                        lineHeight = 13.5.sp
+                        fontSize = if (compact) 9.sp else 10.5.sp,
+                        lineHeight = if (compact) 11.5.sp else 13.5.sp,
+                        letterSpacing = if (compact) (-0.2).sp else 0.sp
                     ),
                     color = GsTheme.colors.textSecondary,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     // The lotus sits under the copy's last line, as in the
                     // sheet; keep an inset so the two never collide.
-                    modifier = Modifier.padding(end = 12.dp)
+                    modifier = Modifier.padding(end = if (compact) 6.dp else 12.dp)
                 )
             }
             Box(Modifier.align(Alignment.BottomEnd).offset(x = 6.dp, y = 10.dp)) {
@@ -622,7 +637,10 @@ private fun ReflectionCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
                     painter = painterResource(com.grapsee.gsai.R.drawable.gs_home_lotus),
                     contentDescription = "A lotus in bloom",
                     contentScale = ContentScale.Fit,
-                    modifier = Modifier.size(width = 132.dp, height = 96.dp)
+                    modifier = Modifier.size(
+                        width = if (compact) 116.dp else 132.dp,
+                        height = if (compact) 84.dp else 96.dp
+                    )
                 )
             }
         }
@@ -845,14 +863,16 @@ private fun HomeDock(
                     tint = Color(0xFF3A2116),
                     modifier = Modifier.size(19.dp)
                 )
-                Spacer(Modifier.width(7.dp))
+                Spacer(Modifier.width(6.dp))
                 Text(
                     text = "Generate",
                     style = MaterialTheme.typography.labelLarge.copy(
-                        fontSize = 16.sp,
+                        fontSize = 15.sp,
                         fontWeight = FontWeight.SemiBold
                     ),
-                    color = Color(0xFF3A2116)
+                    color = Color(0xFF3A2116),
+                    maxLines = 1,
+                    softWrap = false
                 )
             }
         }
@@ -1089,7 +1109,12 @@ private fun GlassCircleButton(icon: ImageVector, label: String, onClick: () -> U
 }
 
 @Composable
-private fun GlassPill(icon: ImageVector, label: String, onClick: () -> Unit) {
+private fun GlassPill(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    compact: Boolean = false,
+) {
     Row(
         modifier = Modifier
             .heightIn(min = 40.dp)
@@ -1101,20 +1126,25 @@ private fun GlassPill(icon: ImageVector, label: String, onClick: () -> Unit) {
                 onClickLabel = label,
                 onClick = onClick
             )
-            .padding(horizontal = 8.dp, vertical = 9.dp),
+            .padding(horizontal = if (compact) 6.dp else 8.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
             icon,
             contentDescription = null,
             tint = GsTheme.colors.textPrimary,
-            modifier = Modifier.size(14.dp)
+            modifier = Modifier.size(if (compact) 13.dp else 14.dp)
         )
-        Spacer(Modifier.width(4.dp))
+        Spacer(Modifier.width(if (compact) 3.dp else 4.dp))
         Text(
             text = label,
-            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium),
-            color = GsTheme.colors.textPrimary
+            style = MaterialTheme.typography.labelMedium.copy(
+                fontSize = if (compact) 11.5.sp else 12.sp,
+                fontWeight = FontWeight.Medium
+            ),
+            color = GsTheme.colors.textPrimary,
+            maxLines = 1,
+            softWrap = false
         )
     }
 }

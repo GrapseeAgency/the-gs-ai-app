@@ -139,7 +139,8 @@ sync across `home/HomeDashboardScreen` and `Features/Home/HomeDashboardView`.
 | Suggestions | 32dp lightbulb tile, title 14, body 12, no chevron |
 | Dock | 14dp frame and gaps, 46dp wells, 60dp Generate well around a 48dp pill, 15sp label |
 | Rhythm | 52 above greeting, 46 to pills, 40 to bento, 10 to Today's Used, 18 to suggestions |
-| Evidence | `docs/design-pass/home-android.png` — 1080x2400 render from an API 35 emulator |
+| Evidence | `docs/design-pass/home-android.png` (411dp) and `home-android-360.png` (360dp), rendered on an API 35 emulator |
+| Narrow screens | Under 340dp the pill row drops to 11.5sp / 6dp inset; cards under 148dp drop to 11sp titles and 9sp bodies; labels never wrap (`maxLines = 1`, `softWrap = false` on pill and Generate). iOS uses `minimumScaleFactor` instead. |
 
 ## 4c. Chart interactivity coverage
 
