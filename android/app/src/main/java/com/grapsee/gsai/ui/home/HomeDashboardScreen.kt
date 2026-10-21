@@ -53,6 +53,7 @@ import com.grapsee.gsai.data.local.ConversationPreviewRow
 import com.grapsee.gsai.di.ServiceLocator
 import com.grapsee.gsai.ui.components.GsGlassRole
 import com.grapsee.gsai.ui.components.RefArt
+import com.grapsee.gsai.ui.components.ReferenceBackdrop
 import com.grapsee.gsai.ui.components.RefArtwork
 import com.grapsee.gsai.ui.components.gsConversationTitle
 import com.grapsee.gsai.ui.components.gsGlass
@@ -159,6 +160,10 @@ fun HomeDashboardScreen(
     }
 
     Box(Modifier.fillMaxSize()) {
+        // The sheet's backdrop is pearls and silk — no blossom. Repaint the
+        // shared backdrop here without its branches so Home matches the hero
+        // sheet while the rest of the app keeps the bloom.
+        ReferenceBackdrop(Modifier.matchParentSize(), showBlossom = false)
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             HomeHeader(onAssistant = onOpenVoice, onMenu = onOpenDrawer)
             Column(

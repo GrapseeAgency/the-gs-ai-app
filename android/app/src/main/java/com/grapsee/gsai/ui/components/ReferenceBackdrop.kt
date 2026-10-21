@@ -86,7 +86,15 @@ private fun DrawScope.ambientPearl(
 }
 
 @Composable
-fun ReferenceBackdrop(modifier: Modifier = Modifier) {
+fun ReferenceBackdrop(
+    modifier: Modifier = Modifier,
+    /**
+     * The Home sheet is a photograph of pearls and silk, with no blossom in
+     * frame. Home repaints this backdrop without the branches so the hero
+     * matches the sheet; every other screen keeps the bloom.
+     */
+    showBlossom: Boolean = true,
+) {
     val colors = GsTheme.colors
     val dark = LocalGsIsDark.current
     val style = SettingsStore.backgroundStyle
@@ -192,7 +200,7 @@ fun ReferenceBackdrop(modifier: Modifier = Modifier) {
             dark = dark
         )
 
-        if (style == "Gradient") return@Canvas
+        if (style == "Gradient" || !showBlossom) return@Canvas
 
         // 3. In-focus blossom. Two branches, mirrored: the lower-left one
         //    enters from off-screen, the upper-right one hangs in from the
