@@ -1,7 +1,11 @@
 import SwiftUI
 
-/// Warm consumer home for the real iOS app. Presentation is native SwiftUI;
-/// actions hand off to the existing Router and never fabricate backend data.
+/// Warm consumer home for the real iOS app — the SwiftUI twin of the rebuilt
+/// Android `HomeDashboardScreen`, laid out to the Nexly reference sheet: brand
+/// lockup, greeting, quick-action pills, the Video / Mind Guide / reflection
+/// bento, "Today's Used", a suggestions card, and a floating glass dock.
+/// Presentation is native SwiftUI; every action hands off to the Router and
+/// nothing here fabricates backend data.
 struct HomeDashboardView: View {
     let onNewChat: () -> Void
     let onOpenDrawer: () -> Void
@@ -9,21 +13,24 @@ struct HomeDashboardView: View {
     let onOpenAgent: () -> Void
 
     var body: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: Aero.Spacing.l) {
-                topBar
-                heroVisual
-                hero
-                quickActions
-                featureGrid
-                reflectionCard
-                usageStats
-                focusCard
-                bottomActionDock
+        ZStack(alignment: .bottom) {
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 18) {
+                    header
+                    greeting
+                    pills
+                    bento
+                    todayUsedHeader
+                    suggestionsCard
+                    // Clear the floating dock so the last card is reachable.
+                    Spacer(minLength: 120)
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
             }
-            .padding(.horizontal, Aero.Spacing.m)
-            .padding(.top, Aero.Spacing.s)
-            .padding(.bottom, Aero.Spacing.l)
+            dock
+                .padding(.horizontal, 20)
+                .padding(.bottom, 10)
         }
         .background(
             LinearGradient(
@@ -36,291 +43,321 @@ struct HomeDashboardView: View {
         .toolbar(.hidden, for: .navigationBar)
     }
 
-    private var bottomActionDock: some View {
-        HStack(spacing: 6) {
-            DockIcon(icon: "photo.on.rectangle", label: "Image", action: onNewChat)
-            DockIcon(icon: "play.rectangle", label: "Video", action: onNewChat)
-            Button(action: onNewChat) {
-                Label("Generate", systemImage: "wand.and.stars")
-                    .font(Aero.button())
-                    .foregroundStyle(Aero.onAccent)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 13)
-                    .background(Capsule().fill(Aero.accent))
-            }
-            .buttonStyle(KineticPressStyle())
-            DockIcon(icon: "clock.arrow.circlepath", label: "History", action: onOpenChats)
-            DockIcon(icon: "gearshape", label: "Settings", action: onNewChat)
-        }
-        .padding(8)
-        // FloatingControl glass — the dock hovers over the canvas: thinnest
-        // glass, brightest rim (iOS twin of Android's dock gsGlass role).
-        .gsCapsuleGlass(.floatingControl)
-    }
+    // MARK: Header — brand lockup + assistant + menu
 
-    private var topBar: some View {
-        HStack(spacing: Aero.Spacing.s) {
-            Button(action: onOpenDrawer) {
-                Image(systemName: "line.3.horizontal")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(Aero.text)
+    private var header: some View {
+        HStack(spacing: 10) {
+            ZStack {
+                Circle()
+                    .fill(LinearGradient(
+                        colors: [Color(red: 1, green: 0.89, blue: 0.81),
+                                 Color(red: 1, green: 0.79, blue: 0.66),
+                                 Color(red: 1, green: 0.70, blue: 0.56)],
+                        startPoint: .top, endPoint: .bottom))
                     .frame(width: 42, height: 42)
-                    .background(Circle().fill(Aero.surface))
+                AnimatedGsIllustration(imageName: "GSCompanionOrb", size: 34,
+                                       breathDuration: 3.4, rotationDegrees: 1.2,
+                                       lift: -2, startDelay: 0.08)
             }
-            .buttonStyle(KineticPressStyle())
             VStack(alignment: .leading, spacing: 2) {
-                Text("GS AI").font(Aero.title()).foregroundStyle(Aero.text)
-                Text("Your smarter companion").font(Aero.caption()).foregroundStyle(Aero.textMuted)
+                Text("Nexly").font(Aero.title()).foregroundStyle(Aero.text)
+                Text("AI Companion").font(Aero.caption()).foregroundStyle(Aero.textMuted)
             }
             Spacer()
-            Button(action: onOpenChats) {
-                Image(systemName: "clock.arrow.circlepath")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Aero.accent)
-                    .frame(width: 42, height: 42)
-                    .background(Circle().fill(Aero.accentSoft))
-            }
-            .buttonStyle(KineticPressStyle())
+            GlassCircleButton(system: "sparkles", label: "Assistant", action: onNewChat)
+            GlassCircleButton(system: "line.3.horizontal", label: "Open menu", action: onOpenDrawer)
         }
     }
 
-    private var hero: some View {
-        VStack(alignment: .leading, spacing: Aero.Spacing.s) {
-            Text("Intelligence reimagined.")
+    // MARK: Greeting
+
+    private var greeting: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Good morning,")
                 .font(Aero.display())
                 .foregroundStyle(Aero.text)
-            Text("Discover a softer way to think.")
-                .font(Aero.headline())
-                .foregroundStyle(Aero.accentDeep)
-            Text("Ask, create, explore, and get things done with your personal AI companion.")
+            HStack(spacing: 8) {
+                Text("there")
+                    .font(Aero.display())
+                    .foregroundStyle(Aero.text)
+                Image(systemName: "sparkles")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(Aero.accent)
+            }
+            Text("Your thoughts, questions, ideas —\nI'm here for it all.")
                 .font(Aero.body())
                 .foregroundStyle(Aero.textMuted)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.top, Aero.Spacing.xl)
+        .padding(.top, 6)
     }
 
-    private var heroVisual: some View {
-        Button(action: onNewChat) {
-            ZStack {
-                RadialGradient(colors: [Color(red: 1, green: 0.82, blue: 0.65), Color(red: 1, green: 0.48, blue: 0.25)], center: .center, startRadius: 8, endRadius: 240)
-                HStack {
-                    Label("GS-5 nano", systemImage: "brain")
-                        .font(Aero.label())
-                        .foregroundStyle(Aero.text)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(Capsule().fill(Color.white.opacity(0.40)))
-                    Spacer()
-                }
-                .frame(maxHeight: .infinity, alignment: .top)
-                .padding(16)
-                VStack(spacing: 10) {
-                    AnimatedHeroHalo()
-                    AnimatedGsIllustration(imageName: "GSCompanionOrb", size: 112, breathDuration: 3.4, rotationDegrees: 1.2, lift: -2, startDelay: 0.08)
-                    Text("A calmer way to create").font(Aero.label()).foregroundStyle(Aero.text)
-                }
-            }
-            .frame(height: 204)
-            .clipShape(RoundedRectangle(cornerRadius: 30))
-            .overlay(RoundedRectangle(cornerRadius: 30).stroke(Color.white.opacity(0.35), lineWidth: 1))
-            .aeroCardShadow()
-            // The hero keeps its branded radial fill; the elevated glass paints
-            // the airlight veil + directional rim + warm shadow over it — the
-            // same Elevated role Android's HomeDashboardScreen HeroCard asks for.
-            .gsGlass(.elevated, corner: 30)
-        }
-        .buttonStyle(KineticPressStyle())
-    }
+    // MARK: Quick-action pills
 
-    private var quickActions: some View {
+    private var pills: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: Aero.Spacing.s) {
-                HomeChip(title: "Start new chat", icon: "square.and.pencil", selected: true, action: onNewChat)
-                HomeChip(title: "Gemini 3", icon: "brain", action: onNewChat)
-                HomeChip(title: "Grok 4.1", icon: "bolt.fill", action: onNewChat)
+            HStack(spacing: 8) {
+                HomePill(system: "plus", title: "New Chat", action: onNewChat)
+                HomePill(system: "safari", title: "Explore", action: onOpenAgent)
+                HomePill(system: "sparkles", title: "Create", action: onNewChat)
+                HomePill(system: "ellipsis", title: "More", action: onOpenDrawer)
             }
         }
     }
 
-    private var featureGrid: some View {
-        HStack(spacing: Aero.Spacing.s) {
-            HomeFeatureCard(title: "Video\ncreate", subtitle: "Create stunning videos with AI", icon: "play.rectangle", colors: [Color(red: 1, green: 0.83, blue: 0.69), Aero.surface], action: onNewChat)
-            HomeFeatureCard(title: "Travel\nagent", subtitle: "Make every journey easier", icon: "globe", colors: [Color(red: 1, green: 0.78, blue: 0.69), Aero.background], action: onOpenAgent)
+    // MARK: Bento — Video / Mind Guide / Today's reflection
+
+    private var bento: some View {
+        HStack(alignment: .top, spacing: 12) {
+            VideoCard(action: onNewChat)
+                .frame(maxWidth: .infinity)
+            VStack(spacing: 12) {
+                MindGuideCard(action: onNewChat)
+                ReflectionCard(action: onNewChat)
+            }
+            .frame(maxWidth: .infinity)
         }
+        .frame(height: 208)
     }
 
-    private var reflectionCard: some View {
+    // MARK: Today's Used + suggestions
+
+    private var todayUsedHeader: some View {
+        HStack {
+            Text("Today's Used")
+                .font(Aero.headline())
+                .foregroundStyle(Aero.text)
+            Spacer()
+            Button(action: onOpenChats) {
+                HStack(spacing: 4) {
+                    Text("See All").font(Aero.label())
+                    Image(systemName: "arrow.right").font(.system(size: 11, weight: .semibold))
+                }
+                .foregroundStyle(Aero.textMuted)
+            }
+            .buttonStyle(KineticPressStyle())
+        }
+        .padding(.top, 4)
+    }
+
+    private var suggestionsCard: some View {
         Button(action: onNewChat) {
-            VStack(alignment: .leading, spacing: Aero.Spacing.s) {
-                Label("Today's reflection", systemImage: "lightbulb")
-                    .font(Aero.title())
-                    .foregroundStyle(Aero.text)
-                Text("What are you holding onto that you could gently release?")
-                    .font(Aero.body())
-                    .foregroundStyle(Aero.text)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text("Open mind guide  →")
-                    .font(Aero.label())
-                    .foregroundStyle(Aero.accentDeep)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(Aero.Spacing.m)
-            .background(LinearGradient(colors: [Color(red: 1, green: 0.89, blue: 0.82), Color(red: 1, green: 0.78, blue: 0.72)], startPoint: .leading, endPoint: .trailing))
-            .overlay(alignment: .bottomTrailing) {
-                AnimatedGsIllustration(imageName: "GSCompanionOrb", size: 98, breathDuration: 3.6, rotationDegrees: 1.4, lift: -2, startDelay: 0.52)
-                    .opacity(0.18)
-                    .allowsHitTesting(false)
-            }
-            .clipShape(RoundedRectangle(cornerRadius: Aero.Radius.card))
-            .overlay(RoundedRectangle(cornerRadius: Aero.Radius.card).stroke(Aero.outline, lineWidth: 1))
-            .aeroCardShadow()
-        }
-        .buttonStyle(KineticPressStyle())
-    }
-
-    private var usageStats: some View {
-        HStack(spacing: Aero.Spacing.s) {
-            UsageTile(title: "Image generate", value: "64%", progress: 0.64)
-            UsageTile(title: "Video generate", value: "15%", progress: 0.15)
-        }
-    }
-
-    private var focusCard: some View {
-        VStack(alignment: .leading, spacing: Aero.Spacing.s) {
-            HStack {
-                Label("Suggestions", systemImage: "lightbulb")
-                    .font(Aero.title())
-                    .foregroundStyle(Aero.text)
+            HStack(spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                        .fill(Color.white.opacity(0.55))
+                        .frame(width: 40, height: 40)
+                    Image(systemName: "lightbulb")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundStyle(Aero.text)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Suggestions").font(Aero.body()).foregroundStyle(Aero.text)
+                    Text("Try suggested questions first.")
+                        .font(Aero.caption()).foregroundStyle(Aero.textMuted)
+                }
                 Spacer()
-                Button("See all", action: onOpenChats)
-                    .font(Aero.label())
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Aero.textMuted)
             }
-            Text("Try a thoughtful question first")
-                .font(Aero.caption())
-                .foregroundStyle(Aero.textMuted)
-            ProgressView(value: 0.64)
-                .tint(Aero.accent)
-                .scaleEffect(y: 1.4)
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .gsGlass(.card, corner: Aero.Radius.card)
         }
-        .padding(Aero.Spacing.m)
-        .gsGlass(.elevated, corner: Aero.Radius.card)
+        .buttonStyle(KineticPressStyle())
+    }
+
+    // MARK: Floating dock
+
+    private var dock: some View {
+        HStack(spacing: 6) {
+            DockIcon(system: "house.fill", label: "Home", selected: true, action: {})
+            DockIcon(system: "bubble.left", label: "Chats", action: onOpenChats)
+            Button(action: onNewChat) {
+                HStack(spacing: 6) {
+                    Image(systemName: "sparkles").font(.system(size: 15, weight: .semibold))
+                    Text("Generate").font(Aero.button())
+                }
+                .foregroundStyle(Color(red: 0.35, green: 0.18, blue: 0.10))
+                .frame(maxWidth: .infinity)
+                .frame(height: 46)
+                .background(Capsule().fill(LinearGradient(
+                    colors: [Color(red: 1, green: 0.79, blue: 0.66),
+                             Color(red: 1, green: 0.70, blue: 0.56)],
+                    startPoint: .leading, endPoint: .trailing)))
+            }
+            .buttonStyle(KineticPressStyle())
+            DockIcon(system: "gearshape", label: "Settings", action: onOpenDrawer)
+        }
+        .padding(8)
+        .gsCapsuleGlass(.floatingControl)
     }
 }
 
-private struct DockIcon: View {
-    let icon: String
+// MARK: - Building blocks
+
+private struct GlassCircleButton: View {
+    let system: String
     let label: String
     let action: () -> Void
     var body: some View {
         Button(action: action) {
-            Image(systemName: icon)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(Aero.accentDeep)
-                .frame(width: 38, height: 38)
-                .background(Circle().fill(Aero.accentSoft))
+            Image(systemName: system)
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(Aero.text)
+                .frame(width: 42, height: 42)
+                .gsGlass(.floatingControl, corner: 21)
         }
         .buttonStyle(KineticPressStyle())
         .accessibilityLabel(label)
     }
 }
 
-private struct UsageTile: View {
+private struct HomePill: View {
+    let system: String
     let title: String
-    let value: String
-    let progress: Double
+    let action: () -> Void
     var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack {
-                Text(value).font(Aero.title()).foregroundStyle(Aero.accentDeep)
-                Spacer()
-                Image(systemName: "gauge.medium").font(.caption).foregroundStyle(Aero.textMuted)
+        Button(action: action) {
+            HStack(spacing: 7) {
+                Image(systemName: system).font(.system(size: 14, weight: .medium))
+                Text(title).font(Aero.label())
             }
-            Text(title).font(Aero.caption()).foregroundStyle(Aero.textMuted)
-            ProgressView(value: progress).tint(Aero.accent)
+            .foregroundStyle(Aero.text)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+            .gsCapsuleGlass(.floatingControl)
         }
-        .padding(Aero.Spacing.m)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .gsGlass(.card, corner: Aero.Radius.card)
+        .buttonStyle(KineticPressStyle())
     }
 }
 
-private struct HomeChip: View {
-    let title: String
-    let icon: String
+private struct VideoCard: View {
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            ZStack(alignment: .topLeading) {
+                LinearGradient(
+                    colors: [Color(red: 0.91, green: 0.86, blue: 1.0),
+                             Color(red: 1.0, green: 0.85, blue: 0.91),
+                             Color(red: 1.0, green: 0.91, blue: 0.83)],
+                    startPoint: .topLeading, endPoint: .bottomTrailing)
+                HStack {
+                    Spacer()
+                    Circle()
+                        .fill(RadialGradient(colors: [.white.opacity(0.6), .clear],
+                                             center: .center, startRadius: 2, endRadius: 70))
+                        .frame(width: 130, height: 130)
+                        .offset(x: 30, y: -10)
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 5) {
+                        Image(systemName: "play").font(.system(size: 10, weight: .bold))
+                        Text("Video").font(Aero.caption())
+                    }
+                    .foregroundStyle(Aero.text)
+                    .padding(.horizontal, 9).padding(.vertical, 5)
+                    .background(Capsule().fill(Color.white.opacity(0.45)))
+                    Spacer()
+                    Text("Create Stunning\nVideos with AI")
+                        .font(Aero.title()).foregroundStyle(Aero.text)
+                        .multilineTextAlignment(.leading)
+                    Text("Turn your ideas into beautiful videos in minutes.")
+                        .font(Aero.caption()).foregroundStyle(Aero.textMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                    ZStack {
+                        Circle().fill(Color.white.opacity(0.55)).frame(width: 44, height: 44)
+                        Image(systemName: "play.fill").font(.system(size: 15)).foregroundStyle(Aero.text)
+                    }
+                    .padding(.top, 4)
+                }
+                .padding(14)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(Color.white.opacity(0.35), lineWidth: 1))
+            .aeroCardShadow()
+        }
+        .buttonStyle(KineticPressStyle())
+        .frame(maxHeight: .infinity)
+    }
+}
+
+private struct MindGuideCard: View {
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Circle()
+                    .fill(RadialGradient(
+                        colors: [Color(red: 0.72, green: 0.61, blue: 1.0),
+                                 Color(red: 1.0, green: 0.62, blue: 0.76),
+                                 Color(red: 1.0, green: 0.77, blue: 0.54)],
+                        center: .center, startRadius: 2, endRadius: 22))
+                    .frame(width: 38, height: 38)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Mind Guide").font(Aero.label()).foregroundStyle(Aero.text)
+                    Text("Your personal clarity")
+                        .font(Aero.caption()).foregroundStyle(Aero.textMuted)
+                        .lineLimit(2)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold)).foregroundStyle(Aero.textMuted)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .gsGlass(.card, corner: Aero.Radius.card)
+        }
+        .buttonStyle(KineticPressStyle())
+    }
+}
+
+private struct ReflectionCard: View {
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            ZStack(alignment: .bottomTrailing) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("Today's reflection").font(Aero.label()).foregroundStyle(Aero.text)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12, weight: .semibold)).foregroundStyle(Aero.textMuted)
+                    }
+                    Text("Take a moment to check in with yourself.")
+                        .font(Aero.caption()).foregroundStyle(Aero.textMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                AnimatedGsIllustration(imageName: "GSCompanionOrb", size: 52,
+                                       breathDuration: 3.6, rotationDegrees: 1.4,
+                                       lift: -2, startDelay: 0.52)
+                    .opacity(0.28)
+                    .allowsHitTesting(false)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .gsGlass(.card, corner: Aero.Radius.card)
+        }
+        .buttonStyle(KineticPressStyle())
+    }
+}
+
+private struct DockIcon: View {
+    let system: String
+    let label: String
     var selected = false
     let action: () -> Void
     var body: some View {
         Button(action: action) {
-            Label(title, systemImage: icon)
-                .font(Aero.label())
-                .foregroundStyle(selected ? Aero.onAccent : Aero.text)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                // Suggestion chips: unselected ones are glass pills (the same
-                // FloatingControl treatment Android's suggestion row uses);
-                // the selected chip stays a solid accent commitment.
-                .background {
-                    if selected {
-                        Capsule().fill(Aero.accent)
-                    } else {
-                        Color.clear.gsCapsuleGlass(.floatingControl)
-                    }
-                }
+            Image(systemName: system)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(selected ? Aero.text : Aero.textMuted)
+                .frame(width: 46, height: 46)
+                .background(Circle().fill(Aero.text.opacity(selected ? 0.08 : 0)))
         }
         .buttonStyle(KineticPressStyle())
-    }
-}
-
-private struct HomeFeatureCard: View {
-    let title: String
-    let subtitle: String
-    let icon: String
-    let colors: [Color]
-    let action: () -> Void
-    var body: some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: 6) {
-                if title.hasPrefix("Video") {
-                    AnimatedGsIllustration(imageName: "GSVideoCreate", size: 54, cornerRadius: 14, breathDuration: 3.0, rotationDegrees: 2.8, lift: -2, startDelay: 0.4)
-                } else {
-                    Image(systemName: icon)
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(Aero.accentDeep)
-                        .frame(width: 40, height: 40)
-                        .background(Circle().fill(Color.white.opacity(0.70)))
-                }
-                Spacer(minLength: 12)
-                Text(title).font(Aero.title()).foregroundStyle(Aero.text).multilineTextAlignment(.leading)
-                Text(subtitle).font(Aero.caption()).foregroundStyle(Aero.textMuted).multilineTextAlignment(.leading)
-            }
-            .frame(maxWidth: .infinity, minHeight: 164, alignment: .leading)
-            .padding(Aero.Spacing.m)
-            .background(LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing))
-            .clipShape(RoundedRectangle(cornerRadius: Aero.Radius.card))
-            .overlay(RoundedRectangle(cornerRadius: Aero.Radius.card).stroke(Aero.outline, lineWidth: 1))
-            .aeroCardShadow()
-        }
-        .buttonStyle(KineticPressStyle())
-    }
-}
-
-private struct AnimatedHeroHalo: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var isAlive = false
-
-    var body: some View {
-        Circle()
-            .fill(RadialGradient(colors: [.white.opacity(0.72), Color(red: 1, green: 0.82, blue: 0.65).opacity(0.24), .clear], center: .center, startRadius: 8, endRadius: 80))
-            .frame(width: 158, height: 158)
-            .scaleEffect(reduceMotion ? 1 : (isAlive ? 1.04 : 1))
-            .opacity(reduceMotion ? 0.24 : (isAlive ? 0.38 : 0.22))
-            .animation(reduceMotion ? nil : .easeInOut(duration: 2.6).repeatForever(autoreverses: true), value: isAlive)
-            .onAppear {
-                guard !reduceMotion else { return }
-                isAlive = true
-            }
-            .allowsHitTesting(false)
+        .accessibilityLabel(label)
     }
 }
