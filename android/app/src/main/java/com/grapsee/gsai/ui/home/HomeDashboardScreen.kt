@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -409,7 +410,16 @@ private fun VideoCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
                 )
         )
         Column(Modifier.fillMaxSize().padding(14.dp)) {
-            ReferenceChip(icon = GsIcons.Play, label = "Video")
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ReferenceChip(icon = GsIcons.Play, label = "Video")
+                Spacer(Modifier.weight(1f))
+                RefArtwork(
+                    art = RefArt.Video,
+                    size = 58.dp,
+                    modifier = Modifier.offset(x = 6.dp, y = (-6).dp),
+                    contentDescription = "Translucent film cards with a glass lens"
+                )
+            }
             Spacer(Modifier.weight(1f))
             Text(
                 text = "Create Stunning\nVideos with AI",
@@ -455,11 +465,18 @@ private fun MindGuideCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
                     .clip(CircleShape)
                     .background(
                         Brush.radialGradient(
-                            listOf(Color(0xFFB79BFF), Color(0xFFFF9FC2), Color(0xFFFFC48A))
+                            listOf(Color(0x22B79BFF), Color(0x14FF9FC2), Color.Transparent)
                         )
                     )
-                    .border(1.dp, Color.White.copy(alpha = 0.6f), CircleShape)
-            )
+                    .border(1.dp, Color.White.copy(alpha = 0.55f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                RefArtwork(
+                    art = RefArt.Clarity,
+                    size = 34.dp,
+                    contentDescription = "A clarity lens holding a bloom"
+                )
+            }
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text(
@@ -514,9 +531,9 @@ private fun ReflectionCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
             }
             Box(Modifier.align(Alignment.BottomEnd).padding(4.dp)) {
                 RefArtwork(
-                    art = RefArt.Bloom,
-                    size = 56.dp,
-                    contentDescription = "A lotus for today's reflection"
+                    art = RefArt.Reflection,
+                    size = 62.dp,
+                    contentDescription = "A lotus resting on still water"
                 )
             }
         }

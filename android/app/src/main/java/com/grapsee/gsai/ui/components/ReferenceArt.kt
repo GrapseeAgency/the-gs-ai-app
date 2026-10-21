@@ -70,6 +70,15 @@ enum class RefArt {
 
     /** Notifications: a glass bell with a petal clapper and two quiet rings. */
     Notifications,
+
+    /** Video: a stack of silk film cards, a glass lens, and rising bubbles. */
+    Video,
+
+    /** Mind Guide: a clarity lens with a bloom embryo caught inside. */
+    Clarity,
+
+    /** Today's reflection: a lotus resting on still water, mirrored below. */
+    Reflection,
 }
 
 @Composable
@@ -104,6 +113,9 @@ fun RefArtwork(
             RefArt.Privacy -> drawPrivacyScene(accent, strong, pale)
             RefArt.Archive -> drawArchiveScene(accent, strong, pale, ink)
             RefArt.Notifications -> drawNotificationsScene(accent, strong, pale, ink)
+            RefArt.Video -> drawVideoScene(accent, strong, pale)
+            RefArt.Clarity -> drawClarityScene(accent, strong, pale, ink)
+            RefArt.Reflection -> drawReflectionScene(accent, strong, pale)
         }
     }
 }
@@ -690,8 +702,349 @@ private fun DrawScope.drawNotificationsScene(accent: Color, strong: Color, pale:
 }
 
 // ---------------------------------------------------------------------------
+// Bento scenes — the three product tools, drawn with the same light
+// ---------------------------------------------------------------------------
+
+/**
+ * Video: silk ribbons thread a stack of translucent film cards. The aperture
+ * is a real lens with a specular, and the bubbles carry the bloom motif, so
+ * the card reads as the same world as the rest of the set rather than as a
+ * generic "media" glyph.
+ */
+private fun DrawScope.drawVideoScene(accent: Color, strong: Color, pale: Color) {
+    val w = size.width
+    val h = size.height
+    val cx = w * 0.52f
+    val cy = h * 0.46f
+
+    // One light source: a warm pool behind the stack, upper left.
+    drawCircle(
+        brush = Brush.radialGradient(
+            listOf(Color.White.copy(alpha = 0.60f), Color.Transparent),
+            center = Offset(w * 0.26f, h * 0.18f),
+            radius = w * 0.55f
+        ),
+        radius = w * 0.55f,
+        center = Offset(w * 0.26f, h * 0.18f)
+    )
+
+    // Silk that passes behind the stack — depth without a drop shadow.
+    val backRibbon = Path().apply {
+        moveTo(-w * 0.04f, h * 0.78f)
+        cubicTo(w * 0.24f, h * 0.44f, w * 0.46f, h * 0.98f, w * 1.04f, h * 0.52f)
+    }
+    drawPath(
+        backRibbon,
+        Brush.linearGradient(
+            listOf(pale.copy(alpha = 0.55f), accent.copy(alpha = 0.22f)),
+            start = Offset(0f, h * 0.74f),
+            end = Offset(w, h * 0.54f)
+        ),
+        style = Stroke(width = w * 0.085f, cap = StrokeCap.Round)
+    )
+
+    // Back film card, tilted away from the light.
+    rotate(degrees = -9f, pivot = Offset(cx, cy)) {
+        val left = cx - w * 0.27f
+        val top = cy - h * 0.24f
+        val cw = w * 0.54f
+        val ch = h * 0.47f
+        drawRoundRect(
+            brush = Brush.linearGradient(
+                listOf(Color.White.copy(alpha = 0.78f), pale.copy(alpha = 0.50f), accent.copy(alpha = 0.32f)),
+                start = Offset(left, top),
+                end = Offset(left + cw, top + ch)
+            ),
+            topLeft = Offset(left, top),
+            size = Size(cw, ch),
+            cornerRadius = CornerRadius(w * 0.055f)
+        )
+        drawRoundRect(
+            color = Color.White.copy(alpha = 0.50f),
+            topLeft = Offset(left, top),
+            size = Size(cw, ch),
+            cornerRadius = CornerRadius(w * 0.055f),
+            style = Stroke(width = 1.2.dp.toPx())
+        )
+    }
+
+    // Front film card, catching the specular.
+    rotate(degrees = 4f, pivot = Offset(cx, cy + h * 0.05f)) {
+        val left = cx - w * 0.29f
+        val top = cy - h * 0.17f
+        val cw = w * 0.58f
+        val ch = h * 0.43f
+        drawRoundRect(
+            brush = Brush.linearGradient(
+                listOf(Color.White.copy(alpha = 0.94f), pale.copy(alpha = 0.60f), accent.copy(alpha = 0.38f)),
+                start = Offset(left, top),
+                end = Offset(left + cw, top + ch)
+            ),
+            topLeft = Offset(left, top),
+            size = Size(cw, ch),
+            cornerRadius = CornerRadius(w * 0.06f)
+        )
+        drawRoundRect(
+            color = Color.White.copy(alpha = 0.72f),
+            topLeft = Offset(left, top),
+            size = Size(cw, ch),
+            cornerRadius = CornerRadius(w * 0.06f),
+            style = Stroke(width = 1.4.dp.toPx())
+        )
+        // The aperture: a real lens, not a flat play badge.
+        val lx = left + cw * 0.53f
+        val ly = top + ch * 0.47f
+        val lr = w * 0.115f
+        drawCircle(
+            brush = Brush.radialGradient(
+                listOf(Color.White.copy(alpha = 0.95f), pale.copy(alpha = 0.70f), accent.copy(alpha = 0.42f)),
+                center = Offset(lx - lr * 0.32f, ly - lr * 0.42f),
+                radius = lr * 1.5f
+            ),
+            radius = lr,
+            center = Offset(lx, ly)
+        )
+        drawCircle(
+            color = Color.White.copy(alpha = 0.75f),
+            radius = lr,
+            center = Offset(lx, ly),
+            style = Stroke(width = 1.2.dp.toPx())
+        )
+        val tri = Path().apply {
+            moveTo(lx - lr * 0.24f, ly - lr * 0.38f)
+            lineTo(lx + lr * 0.46f, ly)
+            lineTo(lx - lr * 0.24f, ly + lr * 0.38f)
+            close()
+        }
+        drawPath(tri, strong.copy(alpha = 0.88f))
+        // Perforations along the film edge.
+        repeat(4) { i ->
+            drawRoundRect(
+                color = Color.White.copy(alpha = 0.48f),
+                topLeft = Offset(left + w * 0.020f, top + ch * 0.12f + i * ch * 0.20f),
+                size = Size(w * 0.018f, ch * 0.10f),
+                cornerRadius = CornerRadius(w * 0.006f)
+            )
+        }
+    }
+
+    // Bubbles rising through the light.
+    drawBubble(Offset(w * 0.84f, h * 0.26f), w * 0.075f, pale)
+    drawBubble(Offset(w * 0.90f, h * 0.50f), w * 0.045f, accent)
+    drawBubble(Offset(w * 0.14f, h * 0.24f), w * 0.034f, pale)
+    // Motif: a petal caught inside the largest bubble.
+    drawPetal(
+        center = Offset(w * 0.84f, h * 0.26f),
+        angle = -22f,
+        length = w * 0.052f,
+        width = w * 0.019f,
+        top = Color.White.copy(alpha = 0.92f),
+        bottom = strong.copy(alpha = 0.42f)
+    )
+    drawSparkle(Offset(w * 0.18f, h * 0.80f), w * 0.028f, Color.White.copy(alpha = 0.70f))
+}
+
+/**
+ * Mind Guide: a clarity lens. Three depths of ring, a bloom embryo held in the
+ * glass, and one caustic streak — the visual argument that the tool is a lens
+ * you look through, not a magic wand.
+ */
+private fun DrawScope.drawClarityScene(accent: Color, strong: Color, pale: Color, ink: Color) {
+    val c = Offset(size.width * 0.50f, size.height * 0.48f)
+    val r = size.minDimension * 0.30f
+    val stroke = 1.3.dp.toPx()
+
+    // Ground shadow — warm, never grey.
+    drawOval(
+        brush = Brush.radialGradient(
+            listOf(ink.copy(alpha = 0.10f), Color.Transparent),
+            center = Offset(c.x, c.y + r * 1.62f),
+            radius = r * 1.20f
+        ),
+        topLeft = Offset(c.x - r * 1.05f, c.y + r * 1.34f),
+        size = Size(r * 2.10f, r * 0.56f)
+    )
+    // Outer rings, lighter as they recede.
+    drawCircle(pale.copy(alpha = 0.34f), radius = r * 1.36f, center = c, style = Stroke(width = stroke))
+    drawCircle(accent.copy(alpha = 0.20f), radius = r * 1.14f, center = c, style = Stroke(width = stroke))
+    // The lens body.
+    drawCircle(
+        brush = Brush.radialGradient(
+            listOf(Color.White.copy(alpha = 0.92f), pale.copy(alpha = 0.55f), accent.copy(alpha = 0.28f)),
+            center = Offset(c.x - r * 0.34f, c.y - r * 0.42f),
+            radius = r * 1.45f
+        ),
+        radius = r * 0.94f,
+        center = c
+    )
+    // Caustic: a light band refracted through the glass.
+    rotate(degrees = -32f, pivot = c) {
+        drawOval(
+            brush = Brush.radialGradient(
+                listOf(Color.White.copy(alpha = 0.55f), Color.Transparent),
+                center = c,
+                radius = r * 0.9f
+            ),
+            topLeft = Offset(c.x - r * 0.86f, c.y - r * 0.16f),
+            size = Size(r * 1.72f, r * 0.32f)
+        )
+    }
+    // Bloom embryo inside the lens.
+    drawPetalBurst(
+        center = c,
+        radius = r * 0.50f,
+        light = Color.White.copy(alpha = 0.86f),
+        deep = accent.copy(alpha = 0.42f),
+        petals = 5,
+        tilt = -90f
+    )
+    drawCircle(
+        brush = Brush.radialGradient(
+            listOf(Color.White, pale, strong),
+            center = Offset(c.x - r * 0.06f, c.y - r * 0.08f),
+            radius = r * 0.24f
+        ),
+        radius = r * 0.16f,
+        center = c
+    )
+    // Rim + specular: the glass reads as glass.
+    drawCircle(Color.White.copy(alpha = 0.55f), radius = r * 0.86f, center = c, style = Stroke(width = 1.2.dp.toPx()))
+    drawOval(
+        color = Color.White.copy(alpha = 0.60f),
+        topLeft = Offset(c.x - r * 0.56f, c.y - r * 0.66f),
+        size = Size(r * 0.52f, r * 0.24f)
+    )
+    // One satellite, mid-orbit.
+    val orbit = Path().apply {
+        moveTo(c.x + r * 0.72f, c.y - r * 0.92f)
+        cubicTo(c.x + r * 1.30f, c.y - r * 0.70f, c.x + r * 1.34f, c.y + r * 0.30f, c.x + r * 1.02f, c.y + r * 0.86f)
+    }
+    drawPath(orbit, accent.copy(alpha = 0.40f), style = Stroke(width = stroke, cap = StrokeCap.Round))
+    drawCircle(strong, radius = r * 0.085f, center = Offset(c.x + r * 1.30f, c.y - r * 0.44f))
+    drawSparkle(Offset(size.width * 0.18f, size.height * 0.22f), r * 0.16f, Color.White.copy(alpha = 0.80f))
+}
+
+/**
+ * Today's reflection: a lotus on still water. The mirror image below the
+ * waterline is drawn quieter and the ripples are wide, which is what makes it
+ * read as water rather than as a second flower.
+ */
+private fun DrawScope.drawReflectionScene(accent: Color, strong: Color, pale: Color) {
+    val w = size.width
+    val h = size.height
+    val waterY = h * 0.56f
+    val c = Offset(w * 0.50f, waterY)
+
+    // Water disc.
+    drawOval(
+        brush = Brush.verticalGradient(
+            listOf(pale.copy(alpha = 0.50f), accent.copy(alpha = 0.26f), Color.Transparent),
+            startY = waterY - h * 0.10f,
+            endY = waterY + h * 0.34f
+        ),
+        topLeft = Offset(w * 0.06f, waterY - h * 0.10f),
+        size = Size(w * 0.88f, h * 0.34f)
+    )
+    // Mirror image: the same petals, inverted and quieter.
+    repeat(5) { i ->
+        val spread = (i - 2) * 22f
+        drawPetal(
+            center = c,
+            angle = 180f + spread,
+            length = h * 0.15f,
+            width = w * 0.040f,
+            top = accent.copy(alpha = 0.22f),
+            bottom = accent.copy(alpha = 0.06f)
+        )
+    }
+    // Ripples: two widening rings on the surface.
+    drawOval(
+        color = Color.White.copy(alpha = 0.45f),
+        topLeft = Offset(c.x - w * 0.30f, c.y - h * 0.045f),
+        size = Size(w * 0.60f, h * 0.09f),
+        style = Stroke(width = 1.2.dp.toPx())
+    )
+    drawOval(
+        color = accent.copy(alpha = 0.22f),
+        topLeft = Offset(c.x - w * 0.42f, c.y - h * 0.035f),
+        size = Size(w * 0.84f, h * 0.07f),
+        style = Stroke(width = 1.dp.toPx())
+    )
+    // Waterline, brightest where the flower meets the water.
+    drawLine(
+        brush = Brush.horizontalGradient(
+            listOf(Color.Transparent, Color.White.copy(alpha = 0.65f), Color.Transparent),
+            startX = c.x - w * 0.44f,
+            endX = c.x + w * 0.44f
+        ),
+        start = Offset(c.x - w * 0.44f, waterY),
+        end = Offset(c.x + w * 0.44f, waterY),
+        strokeWidth = 1.4.dp.toPx()
+    )
+    // The lotus: five petals fanned upward from the waterline.
+    repeat(5) { i ->
+        val spread = (i - 2) * 24f
+        drawPetal(
+            center = c,
+            angle = spread,
+            length = h * 0.20f - kotlin.math.abs(i - 2) * h * 0.022f,
+            width = w * 0.048f,
+            top = Color.White.copy(alpha = 0.88f),
+            bottom = accent.copy(alpha = 0.50f)
+        )
+    }
+    drawCircle(
+        brush = Brush.radialGradient(
+            listOf(Color.White, pale, strong),
+            center = Offset(c.x - w * 0.015f, c.y - h * 0.020f),
+            radius = w * 0.070f
+        ),
+        radius = w * 0.048f,
+        center = Offset(c.x, c.y - h * 0.012f)
+    )
+    drawCircle(Color.White.copy(alpha = 0.70f), radius = w * 0.040f, center = Offset(c.x, c.y - h * 0.012f), style = Stroke(width = 1.dp.toPx()))
+    // A single petal falling, and the light that catches it.
+    drawPetal(
+        center = Offset(w * 0.80f, h * 0.30f),
+        angle = 128f,
+        length = h * 0.075f,
+        width = w * 0.022f,
+        top = Color.White.copy(alpha = 0.90f),
+        bottom = accent.copy(alpha = 0.40f)
+    )
+    drawSparkle(Offset(w * 0.20f, h * 0.28f), w * 0.032f, Color.White.copy(alpha = 0.80f))
+}
+
+// ---------------------------------------------------------------------------
 // Shared marks
 // ---------------------------------------------------------------------------
+
+/** A glass bubble: body gradient, upper-left specular, and a rim that fades. */
+private fun DrawScope.drawBubble(center: Offset, radius: Float, tint: Color) {
+    drawCircle(
+        brush = Brush.radialGradient(
+            listOf(Color.White.copy(alpha = 0.35f), tint.copy(alpha = 0.12f), Color.Transparent),
+            center = Offset(center.x - radius * 0.30f, center.y - radius * 0.34f),
+            radius = radius * 1.25f
+        ),
+        radius = radius,
+        center = center
+    )
+    drawArc(
+        color = Color.White.copy(alpha = 0.65f),
+        startAngle = 150f,
+        sweepAngle = 200f,
+        useCenter = false,
+        topLeft = Offset(center.x - radius, center.y - radius),
+        size = Size(radius * 2f, radius * 2f),
+        style = Stroke(width = maxOf(1f, radius * 0.10f), cap = StrokeCap.Round)
+    )
+    drawCircle(
+        color = Color.White.copy(alpha = 0.80f),
+        radius = radius * 0.16f,
+        center = Offset(center.x - radius * 0.34f, center.y - radius * 0.40f)
+    )
+}
 
 private fun DrawScope.drawPetal(
     center: Offset,
