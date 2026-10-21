@@ -1,6 +1,45 @@
 Here are all the generated files.
 
-## Latest release: v0.77.3
+## Latest design: v0.82.0 — the glass release (versionCode 119)
+
+One material, five roles, one luminous orb — the reference design system is
+now spread across every real surface on both platforms.
+
+| Home — Elevated hero + Card suggestions | Modal — the on-device AI consent sheet |
+|---|---|
+| ![home glass](qa-0.82-home.png) | ![modal glass](qa-0.82-onboarding-modal.png) |
+
+**What changed**
+
+1. **The glass role contract, screen by screen.** `gsGlass(role, shape)` is now
+   the only way a surface asks to be glass — a screen picks a *role*
+   (Card / Elevated / FloatingControl / Modal / Sunken), never an alpha. Each
+   role paints four optical cues in painterly order: a translucent fill, an
+   in-scattered airlight veil, a directional top-leading rim (the key light in
+   every reference frame), and an interior luminance fall, over a warm,
+   non-grey shadow. Applied to the composer, top bar, suggestion row, the kit
+   rows, the drawer, search, notifications, Settings/Billing/Profile, the Home
+   hero and the chat sheets.
+2. **The 12-state luminous orb.** A presentation layer (`OrbPhase`) maps the
+   twelve product states — idle, listening, recording, thinking, reasoning,
+   generating, streaming, success, error, paused, offline, reduced-motion —
+   onto the nine golden dot-field geometries and lights them with an additive
+   glow. Geometry is untouched, so the golden test stays green; the glow is
+   driven by the real microphone level. `docs/ORBS.md` rewritten to match.
+3. **Blur tiers.** A real `RenderEffect` frost on API 31+ behind the same
+   `gsGlass` call, and a baked airlight-veil frost for API 26 — no bitmap
+   readback, so the low tier never costs a frame.
+4. **iOS parity.** The same five roles rebuilt in SwiftUI (`Material`
+   translucency + veil + directional rim + luminance fall), the 12-phase orb,
+   and RMS computed inside `AVAudioEngine.installTap` — the exact twin of
+   Android's `onRmsChanged`. It compiles on real Xcode for both the device
+   (aarch64-apple-ios) and the simulator.
+
+> Installable APK + the OTA manifest for versionCode 119 publish from the
+> `android-release` CI build; the design above is captured from that same
+> revision on the emulator screenshot run (`android-screens`, green).
+
+## Previous shipped release: v0.77.3
 
     file    GS-AI-App.apk
     size    64356239 bytes
