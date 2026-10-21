@@ -648,8 +648,21 @@ private const val FILTER_ALL = "All"
 private const val FILTER_PINNED = "Pinned"
 
 /** The real last message + its moment, or just the moment when there is none. */
+/**
+ * The preview is prose, not markup. A rich reply's last message can be a
+ * heading, a table or fenced code; showing `## ... | ... |` in a list row is
+ * the equivalent of a raw-JSON widget — true data, unreadable surface.
+ */
+private fun cleanPreviewLine(raw: String): String =
+    raw
+        .replace(Regex("```[\\s\\S]*?```"), " ")
+        .replace(Regex("\\|"), " ")
+        .replace(Regex("[#*_>`]"), " ")
+        .replace(Regex("\\s+"), " ")
+        .trim()
+
 private fun previewLine(row: ConversationPreviewRow): String {
-    val message = row.lastMessage?.trim()?.replace('\n', ' ')?.trim()
+    val message = row.lastMessage?.let { cleanPreviewLine(it) }?.takeIf { it.isNotBlank() }
     return when {
         !message.isNullOrBlank() -> {
             val clipped = if (message.length > 90) message.take(90) + "…" else message
