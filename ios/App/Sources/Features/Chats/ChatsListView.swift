@@ -34,6 +34,9 @@ struct ChatsListView: View {
     @State private var reloadToken = 0
     @State private var renameTarget: StoredConversation?
     @State private var renameDraft = ""
+    /// Reference multi-select: a set of ids, entered from the row's menu.
+    @State private var selection: Set<String> = []
+    private var selecting: Bool { !selection.isEmpty }
 
     /// Card-row insets (Task 86-e): horizontal margins reproduce the
     /// LazyVStack's `.padding(.horizontal, Aero.Spacing.m)`; the 4pt top/bottom
@@ -52,6 +55,12 @@ struct ChatsListView: View {
             }
             .gsListRowChrome(EdgeInsets(
                 top: Aero.Spacing.s, leading: Aero.Spacing.m, bottom: 0, trailing: Aero.Spacing.m))
+
+            if selecting {
+                selectionBar
+                    .gsListRowChrome(EdgeInsets(
+                        top: Aero.Spacing.s, leading: Aero.Spacing.m, bottom: 0, trailing: Aero.Spacing.m))
+            }
 
             quickAccess
                 .gsListRowChrome(EdgeInsets(
@@ -306,7 +315,11 @@ struct ChatsListView: View {
     /// funcs below.
     private func conversationRow(_ row: ConversationRow) -> some View {
         Button {
-            router.path.append(.chat(row.id))
+            if selecting {
+                toggleSelection(row.id)
+            } else {
+                router.path.append(.chat(row.id))
+            }
         } label: {
             AeroListRow(
                 title: row.title,
@@ -319,7 +332,11 @@ struct ChatsListView: View {
                         .background(Circle().fill(Aero.containerHigh))
                 },
                 trailing: {
-                    if row.pinned {
+                    if selecting {
+                        Image(systemName: selection.contains(row.id) ? "checkmark.circle.fill" : "circle")
+                            .font(.system(size: 20))
+                            .foregroundStyle(selection.contains(row.id) ? Aero.accent : Aero.textMuted)
+                    } else if row.pinned {
                         Image(systemName: "star.fill")
                             .font(.system(size: 13))
                             .foregroundStyle(Aero.accent)
@@ -350,6 +367,12 @@ struct ChatsListView: View {
         }
         .contextMenu {
             Button {
+                selection.insert(row.id)
+                GSHaptics.select()
+            } label: {
+                Label("Select", systemImage: "checkmark.circle")
+            }
+            Button {
                 togglePin(row)
             } label: {
                 Label(row.pinned ? "Unpin" : "Pin to top", systemImage: "pin")
@@ -374,6 +397,76 @@ struct ChatsListView: View {
     }
 
     // MARK: Row actions (context menu + swipe share these exact paths)
+
+    // MARK: - Multi-select
+
+    private var selectionBar: some View {
+        AeroCard {
+            HStack(spacing: 10) {
+                Button {
+                    selection.removeAll()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Aero.textSecondary)
+                        .frame(width: 34, height: 34)
+                }
+                .buttonStyle(KineticPressStyle())
+                .accessibilityLabel("Exit selection")
+
+                Text("\(selection.count) selected")
+                    .font(Aero.label())
+                    .foregroundStyle(Aero.text)
+
+                Spacer(minLength: 0)
+
+                selectionAction("pin", "Pin selected") { applyToSelection { id in
+                    store.setPinned(id: id, true)
+                } }
+                selectionAction("archivebox", "Archive selected") { applyToSelection { id in
+                    store.setArchived(id: id, true)
+                } }
+                selectionAction("trash", "Delete selected", destructive: true) {
+                    applyToSelection { id in store.delete(id: id) }
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+        }
+    }
+
+    private func selectionAction(
+        _ icon: String,
+        _ label: String,
+        destructive: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(destructive ? Aero.danger : Aero.textSecondary)
+                .frame(width: 34, height: 34)
+        }
+        .buttonStyle(KineticPressStyle())
+        .accessibilityLabel(label)
+    }
+
+    private func toggleSelection(_ id: String) {
+        if selection.contains(id) {
+            selection.remove(id)
+        } else {
+            selection.insert(id)
+        }
+    }
+
+    /// Runs a bulk mutation off the selection, then clears it. The list is
+    /// driven by the store's @Published arrays, so no manual reload is needed.
+    private func applyToSelection(_ mutation: (String) -> Void) {
+        let ids = selection
+        selection.removeAll()
+        ids.forEach(mutation)
+        GSHaptics.success()
+    }
 
     private func togglePin(_ row: ConversationRow) {
         let target = !row.pinned
