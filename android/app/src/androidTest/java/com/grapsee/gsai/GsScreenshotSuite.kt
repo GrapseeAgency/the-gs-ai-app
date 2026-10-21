@@ -96,10 +96,25 @@ class GsScreenshotSuite {
     }
 
     private fun dismissConsentIfPresent() {
-        val notNow = device.findObject(By.textContains("Not now"))
-        if (notNow != null) {
-            runCatching { notNow.click() }
-            device.waitForIdle(2_000)
+        // The first-run gate appears only after the device survey finishes,
+        // which is slower than the launch idle. Poll for it instead of looking
+        // once: a missed dismissal used to sit over every later shot and
+        // cascade the "MISSING" navigation anchors downstream.
+        val deadline = SystemClock.uptimeMillis() + 12_000
+        while (SystemClock.uptimeMillis() < deadline) {
+            val notNow = device.findObject(By.textContains("Not now"))
+            if (notNow != null) {
+                runCatching { notNow.click() }
+                device.waitForIdle(1_500)
+                // A second gate can stack while the model list resolves.
+                device.findObject(By.textContains("Not now"))?.let { again ->
+                    runCatching { again.click() }
+                    device.waitForIdle(1_200)
+                }
+                SystemClock.sleep(600)
+                return
+            }
+            SystemClock.sleep(400)
         }
     }
 
@@ -212,6 +227,10 @@ Inline `code` and math ${'$'}a^2 + b^2 = c^2$."""
         resetSession(active = true, onboarded = true)
         launchApp()
         device.wait(Until.hasObject(By.textContains("GS")), 8_000)
+        // Home resolves only after the device survey, and the first-run gate
+        // rides on that same resolution. Wait for a Home-only heading before
+        // dismissing, so the shot is the dashboard rather than a dialog.
+        device.wait(Until.hasObject(By.textContains("Today's Used")), 12_000)
         dismissConsentIfPresent()
         device.waitForIdle(2_000)
         shot("20-empty-chat")
