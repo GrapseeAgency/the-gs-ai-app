@@ -1,6 +1,10 @@
 Here are all the generated files.
 
-## Latest design: v0.82.0 — the glass release (versionCode 119)
+## Latest release: v0.82.0 — the glass release (versionCode 119)
+
+    file    GS-AI-App.apk
+    size    66188932 bytes
+    sha256  3a7ecc9a5567bed93ed575cb4a7e289ce72b9c294f1b086a1a1ec98286738550
 
 One material, five roles, one luminous orb — the reference design system is
 now spread across every real surface on both platforms.
@@ -35,9 +39,11 @@ now spread across every real surface on both platforms.
    Android's `onRmsChanged`. It compiles on real Xcode for both the device
    (aarch64-apple-ios) and the simulator.
 
-> Installable APK + the OTA manifest for versionCode 119 publish from the
-> `android-release` CI build; the design above is captured from that same
-> revision on the emulator screenshot run (`android-screens`, green).
+`versionCode 119` installs over 118 without uninstalling. Release build
+verified on CI: not-debuggable, single R8 dex, baseline profile packaged,
+signed with the shipping cert, public origin baked in
+(`android-release` run 39579101136). Design screenshots captured from the same
+revision by `android-screens` (run 39566257125).
 
 ## Previous shipped release: v0.77.3
 
