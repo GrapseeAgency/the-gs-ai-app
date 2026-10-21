@@ -620,6 +620,21 @@ private fun SuggestionsCard(title: String, subtitle: String, onClick: () -> Unit
 }
 
 /**
+ * Preview text for the resume card: prose, not markdown. The last stored
+ * message can be a rich reply — headings, tables, fenced code — and dumping
+ * that into a card reads as garbage rather than as a memory.
+ */
+private fun cleanPreview(raw: String, limit: Int = 150): String {
+    val text = raw
+        .replace(Regex("```[\\s\\S]*?```"), " ")
+        .replace(Regex("\\|"), " ")
+        .replace(Regex("[#*_>`]"), " ")
+        .replace(Regex("\\s+"), " ")
+        .trim()
+    return if (text.length <= limit) text else text.take(limit).trimEnd() + "…"
+}
+
+/**
  * The reference's top "resume" card: the last thing you were working on, in
  * full sentences rather than a truncated list row. It is a real destination —
  * the whole card reopens the thread.
@@ -627,7 +642,7 @@ private fun SuggestionsCard(title: String, subtitle: String, onClick: () -> Unit
 @Composable
 private fun RecentPreviewCard(row: ConversationPreviewRow, onClick: () -> Unit) {
     val colors = GsTheme.colors
-    val preview = (row.lastMessage ?: row.conversation.title).trim().replace('\n', ' ')
+    val preview = cleanPreview(row.lastMessage ?: row.conversation.title)
     Column(
         modifier = Modifier
             .fillMaxWidth()
