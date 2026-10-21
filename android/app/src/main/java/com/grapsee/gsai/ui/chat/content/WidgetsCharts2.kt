@@ -11,6 +11,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -157,6 +158,7 @@ internal fun GroupedBarChart(w: ChartWidget) {
 @Composable
 internal fun BoxPlotChart(w: ChartWidget) {
     var animate by remember { mutableStateOf(false) }
+    val probe = rememberChartProbe()
     LaunchedEffect(w) { animate = true }
     val progress by animateFloatAsState(if (animate) 1f else 0f, tween(700), label = "box")
     val colors = w.series.indices.map { seriesColor(it) }
@@ -167,7 +169,27 @@ internal fun BoxPlotChart(w: ChartWidget) {
     val span = (allMax - allMin).takeIf { it > 0f } ?: 1f
     if (boxes.all { it == null }) return
     val labels = categoryLabels(w, w.series.size)
-    Canvas(Modifier.fillMaxWidth().height(180.dp).padding(top = 8.dp)) {
+    Canvas(
+        Modifier
+            .fillMaxWidth()
+            .height(180.dp)
+            .padding(top = 8.dp)
+            .pointerInput(boxes, labels) {
+                detectTapGestures { tap ->
+                    val slot = size.width.toFloat() / w.series.size.coerceAtLeast(1)
+                    val index = (tap.x / slot).toInt().coerceIn(0, w.series.size - 1)
+                    val stats = boxes.getOrNull(index) ?: return@detectTapGestures
+                    probe.select(
+                        ChartDatum(
+                            label = labels.getOrElse(index) { "Series ${index + 1}" },
+                            value = stats.med,
+                            series = "median",
+                            index = index
+                        )
+                    )
+                }
+            }
+    ) {
         val cw = size.width
         val ch = size.height
         repeat(4) { g ->
@@ -199,6 +221,7 @@ internal fun BoxPlotChart(w: ChartWidget) {
             Text(it, style = MaterialTheme.typography.labelSmall, color = GsTheme.colors.textTertiary)
         }
     }
+    ChartInspectBar(probe, w.unit, "Tap a box to read it", colors.firstOrNull() ?: GsTheme.colors.accent)
 }
 
 // --- heatmap / correlation matrix -------------------------------------------
@@ -214,6 +237,7 @@ internal fun HeatmapChart(w: ChartWidget, diverging: Boolean = false) {
     val rows = w.series
     val cols = rows.maxOfOrNull { it.data.size } ?: 0
     if (cols == 0 || rows.isEmpty()) return
+    val probe = rememberChartProbe()
     val values = rows.flatMap { s -> s.data.map { it.getOrElse(1) { 0f } } }
     val vmax = values.maxOrNull() ?: 1f
     val vmin = values.minOrNull() ?: 0f
@@ -222,6 +246,26 @@ internal fun HeatmapChart(w: ChartWidget, diverging: Boolean = false) {
         Modifier.fillMaxWidth()
             .height(if (rows.size > 6) 220.dp else 160.dp)
             .padding(top = 8.dp)
+            .pointerInput(rows, cols) {
+                detectTapGestures { tap ->
+                    val cellW = size.width.toFloat() / cols
+                    val cellH = size.height.toFloat() / rows.size
+                    val col = (tap.x / cellW).toInt().coerceIn(0, cols - 1)
+                    val row = (tap.y / cellH).toInt().coerceIn(0, rows.size - 1)
+                    val series = rows[row]
+                    val point = series.data.getOrNull(col) ?: return@detectTapGestures
+                    val rowLabel = series.name.ifBlank { w.labels.getOrElse(row) { "Row ${row + 1}" } }
+                    val colLabel = w.labels.getOrElse(col) { "Col ${col + 1}" }
+                    probe.select(
+                        ChartDatum(
+                            label = "$rowLabel × $colLabel",
+                            value = point.getOrElse(1) { 0f },
+                            series = rowLabel,
+                            index = row * cols + col
+                        )
+                    )
+                }
+            }
     ) {
         val cw = size.width
         val ch = size.height
@@ -256,6 +300,7 @@ internal fun HeatmapChart(w: ChartWidget, diverging: Boolean = false) {
             }
         }
     }
+    ChartInspectBar(probe, w.unit, "Tap a cell to read it", accent)
     SeriesLegend(w)
 }
 
@@ -272,7 +317,34 @@ internal fun TreemapChart(w: ChartWidget) {
     val total = vals.sum().takeIf { it > 0f } ?: 1f
     if (vals.isEmpty()) return
     val labels = categoryLabels(w, vals.size)
-    Canvas(Modifier.fillMaxWidth().height(170.dp).padding(top = 8.dp)) {
+    val probe = rememberChartProbe()
+    Canvas(
+        Modifier
+            .fillMaxWidth()
+            .height(170.dp)
+            .padding(top = 8.dp)
+            .pointerInput(vals, total) {
+                detectTapGestures { tap ->
+                    val width = size.width.toFloat()
+                    var edge = 0f
+                    var hit = -1
+                    vals.forEachIndexed { index, value ->
+                        val step = width * (value / total)
+                        if (hit < 0 && tap.x >= edge && tap.x <= edge + step) hit = index
+                        edge += step
+                    }
+                    if (hit >= 0) {
+                        probe.select(
+                            ChartDatum(
+                                label = labels.getOrElse(hit) { "Item ${hit + 1}" },
+                                value = vals[hit],
+                                index = hit
+                            )
+                        )
+                    }
+                }
+            }
+    ) {
         var x = 0f
         val h = size.height
         vals.forEachIndexed { i, v ->
@@ -297,6 +369,7 @@ internal fun TreemapChart(w: ChartWidget) {
             }
         }
     }
+    ChartInspectBar(probe, w.unit, "Tap a tile to read it", palette.first())
 }
 
 // --- waterfall ---------------------------------------------------------------
@@ -318,7 +391,26 @@ internal fun WaterfallChart(w: ChartWidget) {
     val maxV = maxOf(0f, steps.maxOfOrNull { maxOf(it.first, it.second) } ?: 0f)
     val span = (maxV - minV).takeIf { it > 0f } ?: 1f
     val labels = categoryLabels(w, steps.size)
-    Canvas(Modifier.fillMaxWidth().height(180.dp).padding(top = 8.dp)) {
+    val probe = rememberChartProbe()
+    Canvas(
+        Modifier
+            .fillMaxWidth()
+            .height(180.dp)
+            .padding(top = 8.dp)
+            .pointerInput(steps) {
+                detectTapGestures { tap ->
+                    val slot = size.width.toFloat() / steps.size.coerceAtLeast(1)
+                    val index = (tap.x / slot).toInt().coerceIn(0, steps.size - 1)
+                    probe.select(
+                        ChartDatum(
+                            label = labels.getOrElse(index) { "Step ${index + 1}" },
+                            value = deltas.getOrElse(index) { 0f },
+                            index = index
+                        )
+                    )
+                }
+            }
+    ) {
         val cw = size.width
         val ch = size.height
         repeat(4) { g ->
@@ -344,6 +436,7 @@ internal fun WaterfallChart(w: ChartWidget) {
             Text(it, style = MaterialTheme.typography.labelSmall, color = GsTheme.colors.textTertiary)
         }
     }
+    ChartInspectBar(probe, w.unit, "Tap a step to read it", if ((deltas.firstOrNull() ?: 0f) >= 0f) success else warning)
 }
 
 // --- candlestick -------------------------------------------------------------
@@ -371,7 +464,28 @@ internal fun CandlestickChart(w: ChartWidget) {
     val hi = highs.maxOrNull() ?: 1f
     val lo = lows.minOrNull() ?: 0f
     val span = (hi - lo).takeIf { it > 0f } ?: 1f
-    Canvas(Modifier.fillMaxWidth().height(190.dp).padding(top = 8.dp)) {
+    val probe = rememberChartProbe()
+    Canvas(
+        Modifier
+            .fillMaxWidth()
+            .height(190.dp)
+            .padding(top = 8.dp)
+            .pointerInput(candles) {
+                detectTapGestures { tap ->
+                    val slot = size.width.toFloat() / candles.size.coerceAtLeast(1)
+                    val index = (tap.x / slot).toInt().coerceIn(0, candles.size - 1)
+                    val candle = candles[index]
+                    probe.select(
+                        ChartDatum(
+                            label = w.labels.getOrElse(index) { "Candle ${index + 1}" },
+                            value = candle[3],
+                            series = "close",
+                            index = index
+                        )
+                    )
+                }
+            }
+    ) {
         val cw = size.width
         val ch = size.height
         repeat(4) { g ->
@@ -404,6 +518,7 @@ internal fun CandlestickChart(w: ChartWidget) {
         color = GsTheme.colors.textTertiary,
         modifier = Modifier.padding(top = 5.dp)
     )
+    ChartInspectBar(probe, w.unit, "Tap a candle to read its close", success)
 }
 
 // --- gantt -------------------------------------------------------------------
@@ -416,6 +531,7 @@ internal fun GanttChart(w: ChartWidget) {
     if (tasks.isEmpty()) return
     val maxEnd = tasks.maxOfOrNull { maxOf(it.first, it.second) }?.takeIf { it > 0f } ?: 1f
     val labels = categoryLabels(w, tasks.size)
+    val probe = rememberChartProbe()
     Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
         tasks.take(12).forEachIndexed { i, pair ->
             val start = pair.first.coerceAtLeast(0f)
@@ -423,7 +539,20 @@ internal fun GanttChart(w: ChartWidget) {
             val left = (start / maxEnd).coerceIn(0f, 0.98f)
             val width = ((end - start) / maxEnd).coerceIn(0.02f, 1f - left)
             val rest = (1f - left - width).coerceAtLeast(0.001f)
-            Column {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        probe.select(
+                            ChartDatum(
+                                label = labels.getOrElse(i) { "Task ${i + 1}" },
+                                value = end - start,
+                                series = "duration",
+                                index = i
+                            )
+                        )
+                    }
+            ) {
                 Text(
                     labels.getOrElse(i) { "Task ${i + 1}" },
                     style = MaterialTheme.typography.labelSmall,
@@ -442,6 +571,7 @@ internal fun GanttChart(w: ChartWidget) {
             }
         }
     }
+    ChartInspectBar(probe, w.unit, "Tap a task to read its duration", seriesColor(0))
 }
 
 // --- chord diagram -----------------------------------------------------------

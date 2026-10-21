@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.sp
 import com.grapsee.gsai.ui.theme.GsTheme
 import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.exp
 import kotlin.math.max
@@ -86,7 +87,55 @@ internal fun SankeyChart(w: ChartWidget) {
     // DrawScope is not @Composable — resolve the palette once, before the Canvas.
     val palette = List(12) { seriesInk(it) }
     val grid = GRID_INK
-    Canvas(Modifier.fillMaxWidth().height(190.dp).padding(top = 8.dp)) {
+    val probe = rememberChartProbe()
+    Canvas(
+        Modifier
+            .fillMaxWidth()
+            .height(190.dp)
+            .padding(top = 8.dp)
+            .pointerInput(w.nodes, links) {
+                detectTapGestures { tap ->
+                    val ch = size.height.toFloat()
+                    val sy = ch / CHART_LAYOUT_H
+                    val targets = links.mapNotNull { indexOf[it.target] }.toSet()
+                    val sources = w.nodes.withIndex().filter { it.index !in targets }.ifEmpty { w.nodes.withIndex().take(3) }
+                    val dests = w.nodes.withIndex().filter { it.index in targets }.ifEmpty { w.nodes.withIndex().drop(3) }
+                    val fromSources = tap.x < size.width * 0.5f
+                    val band = if (fromSources) sources else dests
+                    val rowH = usable / max(1, band.size)
+                    var best = -1
+                    var bestDistance = Float.MAX_VALUE
+                    band.forEachIndexed { slot, entry ->
+                        val top = (8f + slot * rowH) * sy
+                        val bottom = top + rowH * sy
+                        val distance = when {
+                            tap.y < top -> top - tap.y
+                            tap.y > bottom -> tap.y - bottom
+                            else -> 0f
+                        }
+                        if (distance < bestDistance) {
+                            bestDistance = distance
+                            best = entry.index
+                        }
+                    }
+                    if (best >= 0 && bestDistance <= 44f) {
+                        val node = w.nodes[best]
+                        val flow = links
+                            .filter { indexOf[it.source] == best || indexOf[it.target] == best }
+                            .sumOf { max(it.value, 0f).toDouble() }
+                            .toFloat()
+                        probe.select(
+                            ChartDatum(
+                                label = node.label.ifEmpty { node.id },
+                                value = flow,
+                                series = if (fromSources) "out" else "in",
+                                index = best
+                            )
+                        )
+                    }
+                }
+            }
+    ) {
         val cw = size.width
         val ch = size.height
         val scale = cw / CHART_LAYOUT_W
@@ -142,6 +191,7 @@ internal fun SankeyChart(w: ChartWidget) {
                 Text(n.label.ifEmpty { n.id }, style = MaterialTheme.typography.labelSmall, color = GsTheme.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             }
         }
+        ChartInspectBar(probe, w.unit, "Tap a node to read its flow", accent)
     }
 }
 
@@ -324,7 +374,65 @@ private fun subtreeValue(node: TreeNodeData): Float {
 internal fun SunburstChart(w: ChartWidget) {
     val root = w.root ?: return
     val kids = root.children
-    Canvas(Modifier.fillMaxWidth().height(200.dp).padding(top = 8.dp)) {
+    val probe = rememberChartProbe()
+    Canvas(
+        Modifier
+            .fillMaxWidth()
+            .height(200.dp)
+            .padding(top = 8.dp)
+            .pointerInput(kids) {
+                detectTapGestures { tap ->
+                    val cw = size.width.toFloat()
+                    val ch = size.height.toFloat()
+                    val cx = cw / 2f
+                    val cy = ch / 2f
+                    val outer = min(cx, cy) - 4f
+                    val ringW = outer / 3f
+                    val dx = tap.x - cx
+                    val dy = tap.y - cy
+                    val distance = sqrt(dx * dx + dy * dy)
+                    if (distance > outer + 10f) return@detectTapGestures
+                    val bearing = Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())).toFloat()
+                    val fromTop = ((bearing + 90f) % 360f + 360f) % 360f
+                    val total = max(1f, kids.sumOf { subtreeValue(it).toDouble() }.toFloat())
+                    var start = 0f
+                    kids.forEachIndexed { index, child ->
+                        val sweep = (subtreeValue(child) / total) * 360f
+                        if (fromTop >= start && fromTop < start + sweep) {
+                            val inner = outer - ringW
+                            if (distance >= inner && child.children.isNotEmpty()) {
+                                val sub = child.children
+                                val subTotal = max(1f, sub.sumOf { subtreeValue(it).toDouble() }.toFloat())
+                                var subStart = start
+                                sub.forEachIndexed { subIndex, grand ->
+                                    val sweep2 = (subtreeValue(grand) / subTotal) * sweep
+                                    if (fromTop >= subStart && fromTop < subStart + sweep2) {
+                                        probe.select(
+                                            ChartDatum(
+                                                label = grand.label.ifBlank { child.label },
+                                                value = subtreeValue(grand),
+                                                series = child.label,
+                                                index = index * 100 + subIndex
+                                            )
+                                        )
+                                    }
+                                    subStart += sweep2
+                                }
+                            } else {
+                                probe.select(
+                                    ChartDatum(
+                                        label = child.label.ifBlank { "Segment ${index + 1}" },
+                                        value = subtreeValue(child),
+                                        index = index
+                                    )
+                                )
+                            }
+                        }
+                        start += sweep
+                    }
+                }
+            }
+    ) {
         val cw = size.width
         val ch = size.height
         val cx = cw / 2f
@@ -373,6 +481,7 @@ internal fun SunburstChart(w: ChartWidget) {
             }
         }
     }
+    ChartInspectBar(probe, w.unit, "Tap a ring to read it", seriesInk(0))
 }
 
 // --- bullet ------------------------------------------------------------------
