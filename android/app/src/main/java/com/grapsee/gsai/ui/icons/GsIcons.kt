@@ -2220,7 +2220,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M12,8 L12,12"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -2230,7 +2230,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M12,16 L12.01,16"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -2384,7 +2384,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M8,12 L16,12"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -2466,7 +2466,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M15,9 L9,15"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -2476,7 +2476,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M9,9 L15,15"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -2680,7 +2680,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M22,11 L22,13"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -2731,7 +2731,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M22,11 L22,13"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -2762,7 +2762,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M22,11 L22,13"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -2772,7 +2772,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M6,11 L6,13"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -5509,7 +5509,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M8,6 L16,6"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -5519,7 +5519,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M16,14 L16,18"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -6545,7 +6545,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M2,20 L2.01,20"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -6963,7 +6963,7 @@ public object GsIcons {
         ).apply {
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M12,20 L12,10"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -6973,7 +6973,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M18,20 L18,4"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -6983,7 +6983,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M6,20 L6,16"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -7366,7 +7366,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M21.17,8 L12,8"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -7376,7 +7376,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M3.95,6.06 L8.54,14"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -7386,7 +7386,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M10.88,21.94 L15.46,14"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -7478,7 +7478,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M12,8 L12,12"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -7488,7 +7488,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M12,16 L12.01,16"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -8031,7 +8031,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M10,15 L10,9"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -8041,7 +8041,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M14,15 L14,9"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -9443,7 +9443,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M12,22 L12,15.5"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -9473,7 +9473,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M12,2 L12,8.5"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -10135,7 +10135,7 @@ public object GsIcons {
         ).apply {
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M12,15 L18,15"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -10176,7 +10176,7 @@ public object GsIcons {
         ).apply {
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M12,12 L18,18"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -10186,7 +10186,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M12,18 L18,12"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -10482,7 +10482,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M2,10 L22,10"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -10647,7 +10647,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M3,3 L6,6"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -10657,7 +10657,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M21,3 L18,6"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -10667,7 +10667,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M3,21 L6,18"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -10677,7 +10677,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M21,21 L18,18"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -11056,7 +11056,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M5,12 L19,12"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -11380,7 +11380,7 @@ public object GsIcons {
         ).apply {
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M12,2 L12,22"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -11492,7 +11492,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M12,15 L12,3"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -11953,7 +11953,7 @@ public object GsIcons {
         ).apply {
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M5,9 L19,9"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -11963,7 +11963,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M5,15 L19,15"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -14073,7 +14073,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M4,22 L4,15"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -14124,7 +14124,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M2,2 L22,22"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -14697,7 +14697,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M9,9 L9.01,9"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -14707,7 +14707,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M15,9 L15.01,9"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -14769,7 +14769,7 @@ public object GsIcons {
         ).apply {
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M6,11 L10,11"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -14779,7 +14779,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M8,9 L8,13"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -14789,7 +14789,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M15,12 L15.01,12"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -14799,7 +14799,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M18,10 L18.01,10"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -14953,7 +14953,7 @@ public object GsIcons {
         ).apply {
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M6,3 L6,15"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -15177,7 +15177,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M6,9 L6,21"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -15718,7 +15718,7 @@ public object GsIcons {
         ).apply {
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M22,12 L2,12"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -15738,7 +15738,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M6,16 L6.01,16"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -15748,7 +15748,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M10,16 L10.01,16"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -15769,7 +15769,7 @@ public object GsIcons {
         ).apply {
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M4,9 L20,9"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -15779,7 +15779,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M4,15 L20,15"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -15789,7 +15789,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M10,3 L8,21"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -15799,7 +15799,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M16,3 L14,21"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -16210,7 +16210,7 @@ public object GsIcons {
         ).apply {
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M2,2 L22,22"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -16230,7 +16230,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M13.5,13.5 L6,21"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -16240,7 +16240,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M18,12 L21,15"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -16576,7 +16576,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M17.5,6.5 L17.51,6.5"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -17076,7 +17076,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M8,12 L16,12"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -17464,7 +17464,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M21,12 L9,12"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -17986,7 +17986,7 @@ public object GsIcons {
         ).apply {
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M4,12 L20,12"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -17996,7 +17996,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M4,6 L20,6"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -18006,7 +18006,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M4,18 L20,18"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -18150,7 +18150,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M12,19 L12,22"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -18171,7 +18171,7 @@ public object GsIcons {
         ).apply {
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M2,2 L22,22"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -18221,7 +18221,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M12,19 L12,22"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -18477,7 +18477,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M8,21 L16,21"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -18487,7 +18487,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M12,17 L12,21"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -19583,7 +19583,7 @@ public object GsIcons {
         ).apply {
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M19,5 L5,19"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -19726,7 +19726,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M22,2 L2,22"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -21331,7 +21331,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M6,6 L6.01,6"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -21341,7 +21341,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M6,18 L6.01,18"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -21464,7 +21464,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M12,2 L12,15"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -21515,7 +21515,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M8.59,13.51 L15.42,17.49"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -21525,7 +21525,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M15.41,6.51 L8.59,10.49"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -22088,7 +22088,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M5,19 L5,5"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -22119,7 +22119,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M19,5 L19,19"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -22231,7 +22231,7 @@ public object GsIcons {
         ).apply {
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M21,4 L14,4"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -22241,7 +22241,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M10,4 L3,4"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -22251,7 +22251,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M21,12 L12,12"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -22261,7 +22261,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M8,12 L3,12"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -22271,7 +22271,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M21,20 L16,20"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -22281,7 +22281,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M12,20 L3,20"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -22291,7 +22291,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M14,2 L14,6"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -22301,7 +22301,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M8,10 L8,14"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -22311,7 +22311,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M16,18 L16,22"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -22332,7 +22332,7 @@ public object GsIcons {
         ).apply {
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M4,21 L4,14"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -22342,7 +22342,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M4,10 L4,3"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -22352,7 +22352,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M12,21 L12,12"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -22362,7 +22362,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M12,8 L12,3"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -22372,7 +22372,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M20,21 L20,16"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -22382,7 +22382,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M20,12 L20,3"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -22392,7 +22392,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M2,14 L6,14"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -22402,7 +22402,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M10,8 L14,8"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -22412,7 +22412,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M18,16 L22,16"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -22484,7 +22484,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M9,9 L9.01,9"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -22494,7 +22494,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M15,9 L15.01,9"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -23179,7 +23179,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M2,2 L22,22"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -23200,7 +23200,7 @@ public object GsIcons {
         ).apply {
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M6,4 L6,20"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -23951,7 +23951,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M12,18 L12.01,18"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -24104,7 +24104,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M12,19 L20,19"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -24269,7 +24269,7 @@ public object GsIcons {
         ).apply {
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M10,2 L14,2"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -24279,7 +24279,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M12,14 L15,11"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -24371,7 +24371,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M10,11 L10,17"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -24381,7 +24381,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M14,11 L14,17"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -24935,7 +24935,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M8,2 L8,5"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -24945,7 +24945,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M2,8 L5,8"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -24955,7 +24955,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M16,19 L16,22"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -24965,7 +24965,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M19,16 L22,16"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -25249,7 +25249,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M22,11 L16,11"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -25290,7 +25290,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M19,8 L19,14"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -25300,7 +25300,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M22,11 L16,11"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -25536,7 +25536,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M6,16 L18,16"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -25608,7 +25608,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M22,9 L16,15"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -25618,7 +25618,7 @@ public object GsIcons {
             )
             addPath(
                 pathData = PathParser().parsePathString(
-                    "M0,0 L0,0"
+                    "M16,9 L22,15"
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),

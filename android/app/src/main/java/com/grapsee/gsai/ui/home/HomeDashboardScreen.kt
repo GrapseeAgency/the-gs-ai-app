@@ -456,12 +456,12 @@ private fun VideoCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
 private fun MindGuideCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
     GlassPanel(modifier = modifier, onClick = onClick, onClickLabel = "Open Mind Guide") {
         Row(
-            modifier = Modifier.fillMaxSize().padding(14.dp),
+            modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
-                    .size(38.dp)
+                    .size(34.dp)
                     .clip(CircleShape)
                     .background(
                         Brush.radialGradient(
@@ -473,16 +473,18 @@ private fun MindGuideCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
             ) {
                 RefArtwork(
                     art = RefArt.Clarity,
-                    size = 34.dp,
+                    size = 30.dp,
                     contentDescription = "A clarity lens holding a bloom"
                 )
             }
-            Spacer(Modifier.width(10.dp))
+            Spacer(Modifier.width(8.dp))
             Column(Modifier.weight(1f)) {
                 Text(
                     text = "Mind Guide",
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                    color = GsTheme.colors.textPrimary
+                    color = GsTheme.colors.textPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     text = "Your personal clarity companion.",

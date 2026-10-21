@@ -194,8 +194,20 @@ def svg_elem_to_path(tag: str, attrs: dict) -> str | None:
     return None
 
 
-ATTR_RE = re.compile(r'([a-zA-Z-]+)="([^"]*)"')
+ATTR_RE = re.compile(r'([a-zA-Z][a-zA-Z0-9-]*)="([^"]*)"')
 TAG_RE = re.compile(r"<(path|line|polyline|polygon|circle|ellipse|rect)\b([^/>]*)/?>")
+
+# A path string whose coordinates are all zero draws nothing. `<line>`-only
+# icons (menu, equals, sliders, align…) became `M0,0 L0,0` when the attribute
+# regex could not match names containing digits (`x1`, `y1`, `x2`, `y2`) — the
+# whole family rendered as an empty tile. Geometry is never allowed to be a
+# no-op: the generator fails loudly instead of committing blank icons.
+NOOP_PATHS = {"M0,0 L0,0", "M0,0L0,0"}
+
+
+def is_blank(d: str) -> bool:
+    compact = d.replace(" ", "").upper()
+    return compact in {p.replace(" ", "").upper() for p in NOOP_PATHS}
 
 
 def fetch_icon(stem: str) -> list[str] | None:
@@ -222,7 +234,12 @@ def fetch_icon(stem: str) -> list[str] | None:
         d = svg_elem_to_path(tag, attrs)
         if d:
             ds.append(" ".join(d.split()).strip())
-    return ds or None
+    real = [d for d in ds if not is_blank(d)]
+    if ds and not real:
+        # Geometry was read as a no-op: a parser regression, not a missing
+        # icon. Fail the run rather than commit an invisible icon.
+        raise SystemExit(f"FAIL {stem}: every path resolved to a no-op")
+    return real or None
 
 
 def kotlin_name(stem: str) -> str:

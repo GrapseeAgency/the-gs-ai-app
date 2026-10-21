@@ -40,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -122,9 +123,13 @@ fun GsDrawerContent(
             .width(308.dp)
             .clip(RoundedCornerShape(topEnd = 30.dp, bottomEnd = 30.dp))
             .background(
+                // Opaque veil. A translucent top stop let the dashboard's
+                // greeting ghost through the brand lockup — the panel must be
+                // a surface, not a tint. Blend the accent INTO the nav surface
+                // so the peach cast survives without transparency.
                 Brush.verticalGradient(
                     listOf(
-                        GsTheme.colors.accentSoft.copy(alpha = 0.55f),
+                        lerp(GsTheme.colors.navSurface, GsTheme.colors.accent, 0.10f),
                         GsTheme.colors.navSurface,
                         GsTheme.colors.navSurface
                     )
