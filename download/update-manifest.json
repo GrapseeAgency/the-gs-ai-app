@@ -1,10 +1,10 @@
 {
-  "versionCode": 123,
-  "versionName": "0.86.0",
+  "versionCode": 124,
+  "versionName": "0.86.1",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "sha256": "ceed8ec21398770f215e74faaae24d9b3668428b315b6c13f1abda239df1e200",
-  "size": 66270856,
-  "notes": "v0.86.0 (versionCode 123) \u2014 CI android-release run 39669874799 from main at c4ce776e. CHATS MULTI-SELECT. Long-press a row (or \"Select\" in its menu) to enter selection: the contextual bar shows \"N selected\", select-all, and pin / archive / delete; rows carry the accent wash and a check; delete confirms; system back exits selection first. PREVIEWS READ AS PROSE: the last message is stripped of code fences, table pipes, headings and emphasis before clipping, so a rich reply no longer appears as \"## \u2026 | \u2026 | \u2026\" in the list or on the Home resume card. Table separator rows are stripped in the follow-up commit on main (this APK still shows the dash/colon run). ALSO IN THIS LINE: onboarding is reached (start destination honours isOnboarded) and the first-run model consent no longer covers it; AI Intelligence uses the reference 2-up/3-up tile layout; Model Details is a real page with measured size, RAM, parameters and capabilities; the chat \"\u2026\" sheet is the reference list with a Chat Details page; the greeting is 32pt medium. iOS has the same options sheet, Chat Info, multi-select and artwork port; its app target builds and the two tests that kept the gate red were fixed (navigation from Home; bounded determinism probe) \u2014 verification of the fixed tests is in flight. Verified: android-app 39669879201 (green), android-screens 39669883308 (green, screenshots in download/qa-0.86-*.png), android-release 39669874799 (green, this APK).",
+  "sha256": "78f559206be84b4b5dd023326afb75530d47c7e0147988fc49b9f0df6d184711",
+  "size": 66270852,
+  "notes": "v0.86.1 (versionCode 124) \u2014 CI android-release run 39671519887 from main at 06416a67. PREVIEWS FULLY CLEAN + DOCK NO LONGER SITS ON TEXT. (1) List previews and the Home resume card now strip markdown table separator rows as well as pipes, headings, emphasis and code fences, so the last message reads as prose instead of \"## \u2026 | Planet | Moons | :--- :---: ---:\". (2) A canvas-coloured gradient now fades content beneath the floating dock: \"Today's Used\" was readable through the glass, and the dock now floats over atmosphere rather than over text. (3) Carried: chats multi-select (long-press \u2192 N selected \u2192 pin/archive/delete), onboarding is reached and unobstructed, the reference AI tiles, the Model Details page, the chat options sheet with Chat Details, and the 32pt greeting. Verified: android-app 39671528911 (green), android-screens 39671524849 (green, screenshots in download/qa-0.86.1-*.png), android-release 39671519887 (green, this APK).",
   "knownLimitations": [
     "iOS is compile-verified by ios-native device+simulator builds; there is no iOS screenshot harness.",
     "The artwork is vector-only by design \u2014 no raster illustrations ship.",

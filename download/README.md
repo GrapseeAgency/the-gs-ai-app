@@ -1,30 +1,30 @@
 Here are all the generated files.
 
-## Latest release: v0.86.0 — chats multi-select, previews as prose (versionCode 123)
+## Latest release: v0.86.1 — previews as prose, dock over atmosphere (versionCode 124)
 
     file    GS-AI-App.apk
-    size    66270856 bytes
-    sha256  ceed8ec21398770f215e74faaae24d9b3668428b315b6c13f1abda239df1e200
+    size    66270852 bytes
+    sha256  78f559206be84b4b5dd023326afb75530d47c7e0147988fc49b9f0df6d184711
 
-| Chats — long-press, N selected, pin / archive / delete | Home — resume card + illustrated bento |
+| Home — clean resume card, dock fades the content under it | Chats — multi-select |
 |---|---|
-| ![multi-select](qa-0.86-multiselect.png) | ![home](qa-0.86-home.png) |
+| ![home](qa-0.86.1-home.png) | ![multi-select](qa-0.86.1-multiselect.png) |
 
 What landed in this build:
 
-- **Multi-select in Chats** (reference row-2 screen): long-press or "Select"
-  enters selection; the contextual bar shows the count, select-all, and the
-  three bulk actions the store can perform. Delete confirms; system back exits
-  selection before the screen.
-- **Previews read as prose**: code fences, table pipes, headings and emphasis
-  are stripped before clipping, so a rich reply no longer shows as
-  `## … | … | …` in the list or on the Home resume card.
-- Carried from v0.85.0: onboarding is reached and unobstructed, the reference
-  2-up / 3-up AI tiles, the Model Details page, the chat options sheet with a
-  Chat Details page, and the 32pt greeting.
+- **Previews read as prose.** Code fences, table pipes, separator rows,
+  headings and emphasis are stripped before clipping, so a rich reply shows as
+  "The first three planets Planet Moons Orbit days Mercury 0 88 …" instead of
+  raw markdown.
+- **The dock no longer sits on text.** A canvas-coloured gradient beneath the
+  floating dock fades the content that scrolls under it.
+- Carried from v0.86.0: chats multi-select (long-press → N selected →
+  pin/archive/delete), onboarding reached and unobstructed, the reference
+  2-up/3-up AI tiles, Model Details, the chat options sheet with Chat Details,
+  and the 32pt greeting.
 
-Verification: `android-app` 39669879201 green, `android-screens` 39669883308
-green (the screenshots above), `android-release` 39669874799 green (this APK).
+Verification: `android-app` 39671528911 green, `android-screens` 39671524849
+green (the screenshots above), `android-release` 39671519887 green (this APK).
 
 ## Previous shipped release: v0.82.0 — the glass release (versionCode 119)
 
