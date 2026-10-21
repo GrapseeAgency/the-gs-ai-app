@@ -1056,6 +1056,45 @@ private struct TranslationSheet: View {
 
 // MARK: - Bubble
 
+/// THE PRE-ANSWER CARD (reference, iOS twin of Android's ReferenceThinkingCard):
+/// the three real stages of a turn, shown only while the model is working and
+/// no token has landed. Gone the instant content exists.
+private struct ReferenceThinkingCard: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            row(icon: "sparkles", tint: Aero.accentDeep, tile: Aero.accentSoft,
+                title: "Thinking", subtitle: "Analyzing your request…")
+            row(icon: "brain", tint: Color(red: 0.56, green: 0.48, blue: 1.0),
+                tile: Color(red: 0.56, green: 0.48, blue: 1.0).opacity(0.20),
+                title: "Reasoning", subtitle: "Planning the best structure…")
+            row(icon: "slider.horizontal.3", tint: Color(red: 0.18, green: 0.62, blue: 0.42),
+                tile: Color(red: 0.18, green: 0.62, blue: 0.42).opacity(0.18),
+                title: "Effort", subtitle: "Composing a detailed answer…")
+        }
+        .padding(14)
+        .frame(maxWidth: 420, alignment: .leading)
+        .gsGlass(.card, corner: Aero.Radius.card)
+    }
+
+    private func row(icon: String, tint: Color, tile: Color, title: String, subtitle: String) -> some View {
+        HStack(spacing: 10) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .fill(tile)
+                    .frame(width: 34, height: 34)
+                Image(systemName: icon)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(tint)
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title).font(Aero.label()).foregroundStyle(Aero.text)
+                Text(subtitle).font(Aero.caption()).foregroundStyle(Aero.textMuted)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+}
+
 private struct MessageBubble: View, Equatable {
 
     let message: ChatViewModel.ChatMessage
@@ -1210,9 +1249,8 @@ private struct MessageBubble: View, Equatable {
                     // parser freezes completed blocks, so a reader dragging
                     // inside settled text no longer fights the live tail.
                     if message.content.isEmpty {
-                        Text("\u{2026}")
-                            .font(Aero.body())
-                            .foregroundStyle(Aero.text)
+                        // Reference pre-answer card — before the first token.
+                        ReferenceThinkingCard()
                     } else {
                         BlocksView(blocks: streamingBlocks, citations: citationLinks)
                     }
