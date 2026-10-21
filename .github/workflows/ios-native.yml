@@ -34,7 +34,12 @@ on:
 
 concurrency:
   group: ios-native-${{ github.ref }}
-  cancel-in-progress: true
+  # Verification runs must FINISH, not cancel each other. With
+  # cancel-in-progress: true a freshly dispatched run cancelled the previous
+  # one mid llama.cpp build, so the app-compile step (the only real Swift gate)
+  # never ran and every "result" was "cancelled" — indistinguishable from a
+  # failure without reading the step. Queue instead.
+  cancel-in-progress: false
 
 env:
   # THE ONE RUST TOOLCHAIN IN THE REPOSITORY, and it is a PIN for a reason.
