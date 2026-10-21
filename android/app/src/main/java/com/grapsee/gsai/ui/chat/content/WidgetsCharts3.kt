@@ -13,7 +13,10 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -376,6 +379,7 @@ internal fun SunburstChart(w: ChartWidget) {
 
 @Composable
 internal fun BulletChart(w: ChartWidget) {
+    val probe = rememberChartProbe()
     val items = w.items.take(8)
     Column(Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         items.forEachIndexed { i, item ->
@@ -383,8 +387,30 @@ internal fun BulletChart(w: ChartWidget) {
             val value = if (item.value.isNaN()) 0f else item.value
             val target = if (item.target.isNaN()) Float.NaN else item.target
             val track = max(max(item.max, max(value, if (target.isNaN()) 0f else target)) * 1.15f, 1f)
-            Column {
-                Text(label, style = MaterialTheme.typography.labelSmall, color = GsTheme.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            val selected = probe.datum?.index == i
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) {
+                        probe.select(
+                            ChartDatum(
+                                label = label.ifBlank { "Item ${i + 1}" },
+                                value = value,
+                                index = i
+                            )
+                        )
+                    }
+            ) {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (selected) GsTheme.colors.textPrimary else GsTheme.colors.textSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
                 Canvas(Modifier.fillMaxWidth().height(14.dp).padding(top = 2.dp)) {
                     val cw = size.width
                     val band = item.ranges.take(3)
@@ -409,6 +435,7 @@ internal fun BulletChart(w: ChartWidget) {
                 }
             }
         }
+        ChartInspectBar(probe, w.unit, "Tap a bar to inspect", seriesInk(0))
     }
 }
 
@@ -416,6 +443,7 @@ internal fun BulletChart(w: ChartWidget) {
 
 @Composable
 internal fun QuadrantChart(w: ChartWidget) {
+    val probe = rememberChartProbe()
     val pts = w.series.flatMap { s -> s.data.map { p -> Triple(p.getOrElse(0) { 0f }, p.getOrElse(1) { 0f }, s.name) } }
     if (pts.isEmpty()) return
     val xs = pts.map { it.first }
@@ -425,7 +453,46 @@ internal fun QuadrantChart(w: ChartWidget) {
     val yLo = (ys.minOrNull() ?: 0f)
     val yHi = max(yLo + 1f, ys.maxOrNull() ?: 1f)
     val labels = w.axes.take(2)
-    Canvas(Modifier.fillMaxWidth().height(200.dp).padding(top = 8.dp)) {
+    val selectedIndex = probe.datum?.index ?: -1
+    Canvas(
+        Modifier
+            .fillMaxWidth()
+            .height(200.dp)
+            .padding(top = 8.dp)
+            .pointerInput(pts) {
+                detectTapGestures { tap ->
+                    val cw = size.width.toFloat()
+                    val ch = size.height.toFloat()
+                    val mxc = cw / 2f
+                    val myc = ch / 2f
+                    var best = -1
+                    var bestDist = Float.MAX_VALUE
+                    pts.forEachIndexed { i, p ->
+                        val px = mxc + (((p.first - xLo) / (xHi - xLo)) * cw - mxc).coerceIn(-mxc + 8f, mxc - 8f)
+                        val py = myc - (((p.second - yLo) / (yHi - yLo)) * ch - myc).coerceIn(-myc + 8f, myc - 8f)
+                        val dx = tap.x - px
+                        val dy = tap.y - py
+                        val d = dx * dx + dy * dy
+                        if (d < bestDist) {
+                            bestDist = d
+                            best = i
+                        }
+                    }
+                    if (best >= 0 && bestDist <= 44f * 44f) {
+                        val p = pts[best]
+                        probe.select(
+                            ChartDatum(
+                                label = p.third.ifBlank { "Point ${best + 1}" },
+                                value = p.second,
+                                index = best
+                            )
+                        )
+                    } else {
+                        probe.clear()
+                    }
+                }
+            }
+    ) {
         val cw = size.width
         val ch = size.height
         val mx = cw / 2f
@@ -439,12 +506,16 @@ internal fun QuadrantChart(w: ChartWidget) {
             val px = mx + (((x - xLo) / (xHi - xLo)) * cw - mx).coerceIn(-mx + 8f, mx - 8f)
             val py = my - (((y - yLo) / (yHi - yLo)) * ch - my).coerceIn(-my + 8f, my - 8f)
             drawCircle(seriesInk(si % 12).copy(alpha = 0.85f), radius = 6f, center = Offset(px, py))
+            if (i == selectedIndex) {
+                drawCircle(TEXT_INK, radius = 10f, center = Offset(px, py), style = Stroke(width = 2f))
+            }
         }
     }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         Text(labels.getOrNull(0) ?: "", style = MaterialTheme.typography.labelSmall, color = GsTheme.colors.textTertiary, modifier = Modifier.padding(start = 4.dp))
         Text(labels.getOrNull(1) ?: "", style = MaterialTheme.typography.labelSmall, color = GsTheme.colors.textTertiary, modifier = Modifier.padding(end = 4.dp))
     }
+    ChartInspectBar(probe, w.unit, "Tap a point to inspect", seriesInk(0))
 }
 
 // --- violin ------------------------------------------------------------------
