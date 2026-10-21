@@ -54,6 +54,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -793,6 +794,82 @@ fun RefOptionCard(
                 Icon(GsIcons.Check, contentDescription = null, tint = colors.onAccent, modifier = Modifier.size(13.dp))
             }
         }
+    }
+}
+
+/**
+ * A reference "choice tile": icon, title, one supporting line, check when
+ * selected. The reference uses this 3-up for reasoning effort and 2-up for
+ * model source — a row of tall tiles reads faster than a stack of rows when
+ * the options are few and mutually exclusive.
+ */
+@Composable
+fun RefChoiceTile(
+    title: String,
+    subtitle: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    icon: ImageVector? = null,
+) {
+    val colors = GsTheme.colors
+    val shape = RoundedCornerShape(18.dp)
+    val border by animateColorAsState(
+        if (selected) colors.accent.copy(alpha = 0.60f) else colors.glassBorder,
+        label = "choice-tile-border"
+    )
+    Column(
+        modifier = modifier
+            .clip(shape)
+            .background(
+                if (selected) colors.accentSoft.copy(alpha = 0.55f)
+                else colors.glassSurface.copy(alpha = 0.55f)
+            )
+            .border(1.dp, border, shape)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                role = Role.Button,
+                onClickLabel = title,
+                onClick = onClick
+            )
+            .semantics { this.selected = selected }
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            if (icon != null) {
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = if (selected) colors.accentStrong else colors.textSecondary,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            Spacer(Modifier.weight(1f))
+            if (selected) {
+                Icon(
+                    GsIcons.Check,
+                    contentDescription = null,
+                    tint = colors.accentStrong,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+        }
+        Text(
+            title,
+            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+            color = colors.textPrimary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            subtitle,
+            style = MaterialTheme.typography.labelSmall,
+            color = colors.textSecondary,
+            maxLines = 3,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 

@@ -64,6 +64,7 @@ import com.grapsee.gsai.ui.components.RefAvatar
 import com.grapsee.gsai.ui.components.RefCard
 import com.grapsee.gsai.ui.components.RefDivider
 import com.grapsee.gsai.ui.components.RefFootnote
+import com.grapsee.gsai.ui.components.RefChoiceTile
 import com.grapsee.gsai.ui.components.RefIconTile
 import com.grapsee.gsai.ui.components.RefOptionCard
 import com.grapsee.gsai.ui.components.RefPage
@@ -617,7 +618,7 @@ fun AiIntelligenceScreen(
 
     RefPage(
         title = "AI Intelligence",
-        subtitle = "Where answers run and how deeply they think.",
+        subtitle = "Configure how Nexly thinks, responds and helps you.",
         onBack = onBack
     ) {
         RefCard(padding = androidx.compose.foundation.layout.PaddingValues(18.dp)) {
@@ -636,56 +637,71 @@ fun AiIntelligenceScreen(
         }
 
         RefSection(label = "Model source") {
-            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                RefOptionCard(
-                    title = "GS Cloud",
+            Row(
+                Modifier.padding(12.dp).fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                RefChoiceTile(
+                    title = "Nexly Cloud",
                     subtitle = "Full-quality answers through the GS backend",
                     selected = !local,
                     onClick = { SettingsStore.updatePreferLocal(false) },
                     icon = GsIcons.Globe,
-                    badge = "Default"
+                    modifier = Modifier.weight(1f)
                 )
-                RefOptionCard(
+                RefChoiceTile(
                     title = "On-device",
                     subtitle = if (installed) {
                         installedModelLabel()
                     } else {
-                        "No model installed — tap to download one"
+                        "No model installed — tap to download"
                     },
                     selected = local && installed,
                     onClick = {
                         if (installed) SettingsStore.updatePreferLocal(true) else onLocalAiRequested()
                     },
                     icon = GsIcons.Cpu,
-                    badge = if (installed) "Installed" else "Optional"
+                    modifier = Modifier.weight(1f)
                 )
             }
         }
 
         RefSection(label = "Reasoning effort") {
-            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                RefOptionCard(
-                    title = "Flash",
-                    subtitle = "Immediate, concise, conversational",
+            Row(
+                Modifier.padding(12.dp).fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                RefChoiceTile(
+                    title = "Fast",
+                    subtitle = "Immediate, concise replies",
                     selected = mode == "flash",
                     onClick = { SettingsStore.setChatMode(null, "flash") },
-                    icon = GsIcons.Zap
+                    icon = GsIcons.Zap,
+                    modifier = Modifier.weight(1f)
                 )
-                RefOptionCard(
+                RefChoiceTile(
                     title = "Thinking",
                     subtitle = "Spends longer on hard problems",
                     selected = mode == "thinking",
                     onClick = { SettingsStore.setChatMode(null, "thinking") },
-                    icon = GsIcons.Brain
+                    icon = GsIcons.Brain,
+                    modifier = Modifier.weight(1f)
                 )
-                RefOptionCard(
+                RefChoiceTile(
                     title = "Auto",
                     subtitle = "Chooses per question",
                     selected = mode == "auto",
                     onClick = { SettingsStore.setChatMode(null, "auto") },
-                    icon = GsIcons.Split
+                    icon = GsIcons.Split,
+                    modifier = Modifier.weight(1f)
                 )
             }
+            Text(
+                "This is the same switch the chat header exposes — changing it here changes the next reply.",
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.textTertiary,
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 12.dp)
+            )
         }
 
         RefSection(label = "Rendering") {
