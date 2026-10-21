@@ -1,30 +1,54 @@
 Here are all the generated files.
 
-## Latest release: v0.83.0 — the Nexly reference redesign (versionCode 120)
+## Latest release: v0.84.0 — icons that draw, illustrations, tappable charts (versionCode 121)
 
     file    GS-AI-App.apk
-    size    66238084 bytes
-    sha256  59ea1cee74a13084ec6d9d79f7aad2e233e6fcd95c1578593e468930a9e363fc
+    size    66254468 bytes
+    sha256  79f295f9d338c9a7af028c4856a41b25dafa85ef4e4bbfeb3875add7fa17ccff
 
-The reference sheets, now built on `main`. Captured on the emulator from the
-same revision the release APK builds from.
+Captured on the emulator from the same revision the release APK builds from
+(`main` at `e35e2f34`).
 
-| Home — brand lockup, glass pills, bento, floating dock | Drawer — Nexly header, seven destinations, account footer |
+| Home — brand lockup, glass pills, illustrated bento, floating dock | Drawer — Nexly header, seven destinations, account footer |
 |---|---|
-| ![home](qa-0.83-home.png) | ![drawer](qa-0.83-drawer.png) |
+| ![home](qa-0.84-home.png) | ![drawer](qa-0.84-drawer.png) |
 
-| Onboarding — the reference welcome flow | Chat — rich reply rendering |
+| Onboarding — the reference welcome flow | Attach — mode sheet with real pickers |
 |---|---|
-| ![onboarding](qa-0.83-onboarding.png) | ![chat](qa-0.83-chat.png) |
+| ![onboarding](qa-0.84-onboarding.png) | ![attach](qa-0.84-attach-mode.png) |
 
-What landed: the invisible-icon defect is fixed (all 331 icon strokes were
-transparent — the whole family now renders); interactive artifacts are tappable
-again (charts no longer lose their taps to the message's text-selection
-container); Home, the drawer, the Settings hub and the welcome flow are rebuilt
-to the sheets; and the chat shows the reference's Thinking / Reasoning / Effort
-pre-answer card. Still to come in this line: the remaining screens (Billing,
-Profile, Voice, Search, Notifications), the extended glass icon set, the
-illustration pass, and per-datum interactivity on the advanced charts.
+What landed in this build:
+
+- **The invisible-icon root cause.** The icon generator's attribute regex did
+  not accept digits, so `x1/y1/x2/y2` never matched and every `<line>`-based
+  Lucide glyph (menu, sliders, equals, minus, alignment) was emitted as
+  `M0,0 L0,0` — a blank glass tile. The regex now accepts digits, all 540
+  icons were regenerated (zero no-op paths), and the generator fails loudly
+  instead of committing blank geometry. The emulator shots above show the
+  drawer sliders tile and the top-bar menu glyph rendering.
+- **Illustrations.** A fourteen-scene hand-drawn set — Bloom, Conversation,
+  Search, Offline, Error, Library, Voice, Success, Privacy, Archive,
+  Notifications, Video, Clarity, Reflection — sharing one light source (upper
+  left), one material (peach glass, white edge, warm shadow) and one motif
+  (the five-petal bloom). Android draws it from primitives in
+  `ReferenceArt.kt`; iOS has a full SwiftUI `Canvas` port (`GsArtwork.swift`)
+  plus an SF-Symbol→scene map for every empty state. The Home bento now carries
+  real art: silk film cards with a glass aperture, a clarity lens holding a
+  bloom, and a lotus mirrored in still water.
+- **Every chart is tappable.** Box plot, heatmap, treemap, waterfall,
+  candlestick, gantt, sankey, network, force, wordcloud, sunburst, bullet,
+  quadrant, violin, contour, parallel coordinates, dendrogram and depth all
+  resolve a tap to a datum and print it in the readout line under the plot.
+  Selecting a datum never selects the transcript.
+- **Drawer legibility.** The panel's top stop was 55%-alpha, letting the
+  dashboard greeting ghost through the brand lockup; it is now an opaque
+  accent-into-surface veil.
+- **iOS.** The chat top bar gained the same rename / archive / delete options
+  as Android.
+
+Verification: `android-app` 39649476009 (green), `android-screens` 39649480119
+(green, the screenshots above), `android-release` 39649484624 (green, this
+APK).
 
 ## Previous shipped release: v0.82.0 — the glass release (versionCode 119)
 
