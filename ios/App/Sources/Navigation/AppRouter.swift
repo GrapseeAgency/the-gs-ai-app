@@ -182,7 +182,7 @@ struct AeroDestinations: ViewModifier {
             case .chatPrefill(let prompt): ChatDetailView(conversationID: nil, prefill: prompt)
             case .chatAutoSend(let prompt): ChatDetailView(conversationID: nil, prefill: prompt, autoSendPrefill: true)
             case .search: SearchView()
-            case .settings: SettingsView()
+            case .settings: SettingsView(onRoute: { router.path.append($0) })
             case .notifications: NotificationsView()
             case .voice: VoiceView()
             case .chatArchive: ArchivedChatsView()

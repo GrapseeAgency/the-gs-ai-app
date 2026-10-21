@@ -7,6 +7,11 @@ struct SettingsView: View {
     /// Every switch, chip and slider reads and writes the remembered store.
     @ObservedObject private var settings = SettingsStore.shared
 
+    /// The router hand-off (reference hub): the top rows are DESTINATIONS, not
+    /// inline toggles, exactly like the sheets. Nil keeps the inline sections
+    /// working when the view is embedded without a router.
+    var onRoute: ((AeroRoute) -> Void)? = nil
+
     // Privacy flows (UI-local)
     @State private var showClearData = false
     @State private var showDeleteAccount = false
@@ -18,6 +23,7 @@ struct SettingsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Aero.Spacing.m) {
                 header
+                if onRoute != nil { hubSection }
                 appearanceSection
                 chatSection
                 aiSection
@@ -117,6 +123,54 @@ struct SettingsView: View {
                 .font(Aero.caption())
                 .foregroundStyle(Aero.textMuted)
         }
+    }
+
+    // MARK: Reference hub (destinations)
+
+    /// The sheets' Settings hub — rows that PUSH a screen, not inline toggles.
+    /// Each route already exists; this is the hand-off the inline-only page was
+    /// missing. Shown only when the view was given a router.
+    private var hubSection: some View {
+        VStack(alignment: .leading, spacing: Aero.Spacing.m) {
+            section("Account") {
+                AeroListRow(
+                    title: "Profile",
+                    subtitle: "Manage your profile",
+                    leading: { leadingIcon("person.crop.circle") },
+                    trailing: { hubChevron },
+                    action: { onRoute?(.profile) }
+                )
+                AeroListRow(
+                    title: "Subscription",
+                    subtitle: "Free Plan",
+                    leading: { leadingIcon("creditcard") },
+                    trailing: { hubChevron },
+                    action: { onRoute?(.billing) }
+                )
+            }
+            section("Chat") {
+                AeroListRow(
+                    title: "Notifications",
+                    subtitle: "Responses and updates",
+                    leading: { leadingIcon("bell") },
+                    trailing: { hubChevron },
+                    action: { onRoute?(.notifications) }
+                )
+                AeroListRow(
+                    title: "Voice & Speech",
+                    subtitle: "Choose your voice and hands-free mode",
+                    leading: { leadingIcon("waveform") },
+                    trailing: { hubChevron },
+                    action: { onRoute?(.voice) }
+                )
+            }
+        }
+    }
+
+    private var hubChevron: some View {
+        Image(systemName: "chevron.right")
+            .font(.system(size: 12))
+            .foregroundStyle(Aero.textMuted)
     }
 
     // MARK: Appearance
