@@ -83,6 +83,8 @@ enum class RefArt {
     /** Pearlescent light: overlapping glass spheres, the reference's hero art. */
     Pearl,
 
+    /** A lotus in three rings of petals — the reflection card's art. */
+    Lotus,
 }
 
 @Composable

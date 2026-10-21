@@ -49,8 +49,8 @@ private fun DrawScope.ambientPearl(
     tint: Color,
     dark: Boolean,
 ) {
-    val bodyAlpha = if (dark) 0.12f else 0.46f
-    val rimAlpha = if (dark) 0.14f else 0.52f
+    val bodyAlpha = if (dark) 0.14f else 0.56f
+    val rimAlpha = if (dark) 0.16f else 0.62f
     drawCircle(
         brush = Brush.radialGradient(
             listOf(
@@ -99,16 +99,18 @@ fun ReferenceBackdrop(
     val dark = LocalGsIsDark.current
     val style = SettingsStore.backgroundStyle
 
-    val top = if (dark) Color(0xFF241715) else Color(0xFFFFFAF6)
-    val middle = if (dark) Color(0xFF1D1211) else Color(0xFFFDEFE9)
-    val bottom = if (dark) Color(0xFF1A1110) else Color(0xFFFCE7E1)
+    // Sampled from the reference photography: a cream paper that warms to
+    // beige, not a peach wash.
+    val top = if (dark) Color(0xFF241715) else Color(0xFFFBF6F1)
+    val middle = if (dark) Color(0xFF1D1211) else Color(0xFFF6EDE7)
+    val bottom = if (dark) Color(0xFF1A1110) else Color(0xFFF2E7DF)
     val petalLight = if (dark) colors.accent.copy(alpha = 0.20f) else Color(0xFFFFC9B6)
     val petalDeep = if (dark) colors.accentStrong.copy(alpha = 0.14f) else Color(0xFFF7A98F)
     val petalCore = if (dark) colors.accent.copy(alpha = 0.45f) else Color(0xFFFFD9A8)
     val stem = if (dark) Color(0xFF6A4A40).copy(alpha = 0.35f) else Color(0xFFD9A996).copy(alpha = 0.55f)
-    val glowA = if (dark) colors.accent.copy(alpha = 0.10f) else Color(0xFFFFB98F).copy(alpha = 0.34f)
-    val glowB = if (dark) Color(0xFF8C6FE0).copy(alpha = 0.08f) else Color(0xFFFFC6D8).copy(alpha = 0.30f)
-    val glowC = if (dark) Color(0xFFFFC98C).copy(alpha = 0.06f) else Color(0xFFFFE0B8).copy(alpha = 0.35f)
+    val glowA = if (dark) colors.accent.copy(alpha = 0.10f) else Color(0xFFFFB98F).copy(alpha = 0.22f)
+    val glowB = if (dark) Color(0xFF8C6FE0).copy(alpha = 0.08f) else Color(0xFFFFC6D8).copy(alpha = 0.20f)
+    val glowC = if (dark) Color(0xFFFFC98C).copy(alpha = 0.06f) else Color(0xFFFFE0B8).copy(alpha = 0.24f)
 
     Canvas(modifier.fillMaxSize()) {
         drawRect(Brush.verticalGradient(0f to top, 0.52f to middle, 1f to bottom))
@@ -170,7 +172,7 @@ fun ReferenceBackdrop(
                 center = c
             )
             drawCircle(
-                color = Color.White.copy(alpha = a * 0.42f),
+                color = Color.White.copy(alpha = a * 0.18f),
                 radius = r * 0.82f,
                 center = c,
                 style = Stroke(width = 1.dp.toPx())
@@ -185,6 +187,13 @@ fun ReferenceBackdrop(
             center = Offset(size.width * 1.02f, size.height * 0.16f),
             radius = size.width * 0.34f,
             tint = Color(0xFFFFC7B4),
+            dark = dark
+        )
+        // The sheet's hero pearl sits behind the greeting's right shoulder.
+        ambientPearl(
+            center = Offset(size.width * 0.94f, size.height * 0.30f),
+            radius = size.width * 0.27f,
+            tint = Color(0xFFFFBE9E),
             dark = dark
         )
         ambientPearl(

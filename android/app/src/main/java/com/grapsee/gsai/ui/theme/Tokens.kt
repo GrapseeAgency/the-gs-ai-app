@@ -132,7 +132,7 @@ fun lightGsColors(highContrast: Boolean = false, accentId: String = "apricot"): 
         dialogSurface = Color(0xFFFFFCFA),
         navSurface = Color(0xFFFFFBF8),
 
-        glassSurface = Color(0xCCFFFDFB),
+        glassSurface = Color(0xCCFBF6F1),
         glassBorder = Color(0xCCF4DBD0),
         glassHighlight = Color(0xE6FFFFFF),
         glassRimShadow = Color(0x30D9A08A),

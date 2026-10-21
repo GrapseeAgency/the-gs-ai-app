@@ -32,6 +32,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -39,6 +40,7 @@ import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
@@ -432,8 +434,9 @@ private fun VideoCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
             contentScale = ContentScale.Fit,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .offset(x = 36.dp, y = 34.dp)
-                .size(212.dp)
+                .offset(x = 20.dp, y = 34.dp)
+                .size(150.dp)
+                .alpha(0.92f)
         )
         Column(Modifier.fillMaxSize().padding(14.dp)) {
             ReferenceChip(icon = GsIcons.Play, label = "Video")
@@ -479,64 +482,82 @@ private fun VideoCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
 @Composable
 private fun MindGuideCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
     GlassPanel(modifier = modifier, onClick = onClick, onClickLabel = "Open Mind Guide") {
-        Row(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // A pearl, not a lens: violet at the crown, blue at the rim and a
-            // blush underside, exactly as the reference's orb reads.
-            Box(
+        Box(Modifier.fillMaxSize()) {
+            Row(
+                // The chevron is an overlay, not a third column: the copy needs
+                // every point of width to keep "clarity companion." on line two
+                // exactly as the sheet does.
                 modifier = Modifier
-                    .size(38.dp)
-                    .clip(CircleShape)
-                    .background(
-                        Brush.radialGradient(
-                            colors = listOf(
-                                Color(0xFFFFFFFF),
-                                Color(0xFFD9C8FF),
-                                Color(0xFF8E9BFF),
-                                Color(0xFF63B4FF),
-                                Color(0xFFFFA6C8)
+                    .fillMaxSize()
+                    .padding(start = 10.dp, end = 24.dp, top = 10.dp, bottom = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // A pearl, not a lens: violet at the crown, blue at the rim and
+                // a blush underside, exactly as the reference's orb reads.
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .background(
+                            Brush.radialGradient(
+                                colors = listOf(
+                                    Color(0xFFFFFFFF),
+                                    Color(0xFFD9C8FF),
+                                    Color(0xFF8E9BFF),
+                                    Color(0xFF63B4FF),
+                                    Color(0xFFFFA6C8)
+                                )
                             )
                         )
+                        .border(1.dp, Color.White.copy(alpha = 0.7f), CircleShape),
+                    contentAlignment = Alignment.TopStart
+                ) {
+                    Box(
+                        Modifier
+                            .padding(7.dp)
+                            .size(7.dp)
+                            .background(Color.White.copy(alpha = 0.65f), CircleShape)
                     )
-                    .border(1.dp, Color.White.copy(alpha = 0.7f), CircleShape),
-                contentAlignment = Alignment.TopStart
-            ) {
-                Box(
-                    Modifier
-                        .padding(9.dp)
-                        .size(9.dp)
-                        .background(Color.White.copy(alpha = 0.65f), CircleShape)
-                )
-            }
-            Spacer(Modifier.width(8.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    text = "Mind Guide",
-                    style = MaterialTheme.typography.titleSmall.copy(
-                        fontSize = 13.5.sp,
-                        fontWeight = FontWeight.SemiBold
-                    ),
-                    color = GsTheme.colors.textPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = "Your personal clarity companion.",
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontSize = 11.5.sp,
-                        lineHeight = 15.sp
-                    ),
-                    color = GsTheme.colors.textSecondary,
-                    maxLines = 2
-                )
+                }
+                Spacer(Modifier.width(7.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = "Mind Guide",
+                        style = MaterialTheme.typography.titleSmall.copy(
+                            fontSize = 12.5.sp,
+                            fontWeight = FontWeight.SemiBold
+                        ),
+                        color = GsTheme.colors.textPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        // The sheet breaks after "personal"; an explicit
+                        // newline keeps the two cards' copy in the same rhythm
+                        // instead of leaving it to the measure.
+                        text = "Your personal\nclarity companion.",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = 10.sp,
+                            lineHeight = 13.sp,
+                            // Poppins is wider than the sheet's face; a hair of
+                            // negative tracking is what keeps "clarity
+                            // companion." on its second line.
+                            letterSpacing = (-0.2).sp
+                        ),
+                        color = GsTheme.colors.textSecondary,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
             Icon(
                 GsIcons.ChevronRight,
                 contentDescription = null,
                 tint = GsTheme.colors.textTertiary,
-                modifier = Modifier.size(18.dp)
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 10.dp)
+                    .size(13.dp)
             )
         }
     }
@@ -546,47 +567,48 @@ private fun MindGuideCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
 private fun ReflectionCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
     GlassPanel(modifier = modifier, onClick = onClick, onClickLabel = "Open today's reflection") {
         Box(Modifier.fillMaxSize()) {
-            Column(Modifier.fillMaxSize().padding(14.dp)) {
+            Column(Modifier.fillMaxSize().padding(12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = "Today's reflection",
                         style = MaterialTheme.typography.titleSmall.copy(
-                            fontSize = 13.5.sp,
+                            fontSize = 12.5.sp,
                             fontWeight = FontWeight.SemiBold
                         ),
                         color = GsTheme.colors.textPrimary,
+                        maxLines = 1,
                         modifier = Modifier.weight(1f)
                     )
                     Icon(
                         GsIcons.ChevronRight,
                         contentDescription = null,
                         tint = GsTheme.colors.textTertiary,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(13.dp)
                     )
                 }
                 Spacer(Modifier.height(2.dp))
                 Text(
                     text = "Take a moment to check in with yourself.",
                     style = MaterialTheme.typography.labelSmall.copy(
-                        fontSize = 11.5.sp,
-                        lineHeight = 15.sp
+                        fontSize = 10.5.sp,
+                        lineHeight = 13.5.sp
                     ),
                     color = GsTheme.colors.textSecondary,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     // The lotus sits under the copy's last line, as in the
                     // sheet; keep an inset so the two never collide.
-                    modifier = Modifier.padding(end = 26.dp)
+                    modifier = Modifier.padding(end = 12.dp)
                 )
             }
-            Box(Modifier.align(Alignment.BottomEnd).offset(x = 10.dp, y = 14.dp)) {
+            Box(Modifier.align(Alignment.BottomEnd).offset(x = 8.dp, y = 12.dp)) {
                 // The sheet's lotus is a rendered photograph; it ships as an
                 // asset with a radial alpha fade so it melts into the card.
                 Image(
                     painter = painterResource(com.grapsee.gsai.R.drawable.gs_home_lotus),
                     contentDescription = "A lotus in bloom",
                     contentScale = ContentScale.Fit,
-                    modifier = Modifier.size(width = 116.dp, height = 84.dp)
+                    modifier = Modifier.size(width = 94.dp, height = 68.dp)
                 )
             }
         }
