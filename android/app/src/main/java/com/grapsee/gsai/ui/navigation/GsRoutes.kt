@@ -47,6 +47,11 @@ object GsRoutes {
     const val ARG_PROMPT = "prompt"
     const val ARG_SEND = "send"
 
+    /** Reference "Chat Details" — info and stats for one conversation. */
+    const val CHAT_INFO = "chat-info/{conversationId}"
+
+    fun chatInfo(conversationId: String): String = "chat-info/${Uri.encode(conversationId)}"
+
     /**
      * Open a conversation. [prompt] prefills the composer; [autoSend] sends it
      * immediately on arrival.

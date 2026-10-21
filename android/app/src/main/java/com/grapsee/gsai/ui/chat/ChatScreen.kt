@@ -373,7 +373,10 @@ fun ChatScreen(
     // never re-sends.
     autoSendInitialPrompt: Boolean = false,
     // Optional voice entry point — the main agent wires this to GsRoutes.VOICE in GsNavHost.
-    onNavigateVoice: (() -> Unit)? = null
+    onNavigateVoice: (() -> Unit)? = null,
+    // Reference "Chat Details" page (info & stats). Null hides the row on
+    // surfaces that are embedded without a navigation host.
+    onOpenChatDetails: ((String) -> Unit)? = null
 ) {
     val scope = rememberCoroutineScope()
     // Critical surface state survives rotation/process death (Bundle saveable):
@@ -1279,14 +1282,71 @@ fun ChatScreen(
                             }
                         }
                     },
-                    onArchive = {
+                    onShare = {
                         chatMenuOpen = false
                         if (activeId != null) {
                             scope.launch {
-                                runCatching { ServiceLocator.chat.setArchived(activeId, true) }
+                                val transcript = runCatching {
+                                    ServiceLocator.chat.history(activeId).joinToString("\n\n") { m ->
+                                        val who = if (m.role == "user") "You" else "Nexly"
+                                        "$who: ${m.content}"
+                                    }
+                                }.getOrDefault("")
+                                val send = Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_SUBJECT, conversationTitle)
+                                    putExtra(Intent.EXTRA_TEXT, transcript.ifBlank { conversationTitle })
+                                }
+                                runCatching {
+                                    context.startActivity(Intent.createChooser(send, "Share chat"))
+                                }
                             }
                         }
-                        onBack()
+                    },
+                    onDetails = if (onOpenChatDetails != null && activeId != null) {
+                        {
+                            chatMenuOpen = false
+                            onOpenChatDetails(activeId)
+                        }
+                    } else {
+                        null
+                    },
+                    onExport = {
+                        chatMenuOpen = false
+                        if (activeId != null) {
+                            scope.launch {
+                                val transcript = runCatching {
+                                    ServiceLocator.chat.history(activeId).joinToString("\n\n") { m ->
+                                        val who = if (m.role == "user") "You" else "Nexly"
+                                        "$who: ${m.content}"
+                                    }
+                                }.getOrDefault("")
+                                val send = Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_SUBJECT, "Nexly — $conversationTitle")
+                                    putExtra(
+                                        Intent.EXTRA_TEXT,
+                                        "# $conversationTitle\n\n" + transcript.ifBlank { "No messages yet." }
+                                    )
+                                }
+                                runCatching {
+                                    context.startActivity(Intent.createChooser(send, "Export chat"))
+                                }
+                            }
+                        }
+                    },
+                    onClear = {
+                        chatMenuOpen = false
+                        if (activeId != null) {
+                            scope.launch {
+                                val first = runCatching {
+                                    ServiceLocator.chat.history(activeId).firstOrNull()
+                                }.getOrNull()
+                                if (first != null) {
+                                    runCatching { ServiceLocator.chat.truncateFrom(activeId, first.id) }
+                                }
+                            }
+                        }
                     },
                     onDelete = {
                         chatMenuOpen = false
@@ -2701,10 +2761,10 @@ private fun AssistantMessage(
 }
 
 /**
- * THE CONVERSATION OPTIONS SHEET (reference sheet 4/5): Rename / Archive /
- * Delete for the active thread — the actions the reference's chat "…" menu
- * carries. Rename and delete take a second tap so neither is a one-tap
- * accident. Every row calls a real repository method; nothing here is inert.
+ * THE CONVERSATION OPTIONS SHEET (reference): Share / Rename / Chat Details /
+ * Export / Clear / Delete, then a full-width Cancel. Rename, Clear and Delete
+ * take a second tap so none is a one-tap accident. Every row calls a real
+ * repository method or a real system intent; nothing here is inert.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -2712,12 +2772,16 @@ private fun ConversationOptionsSheet(
     title: String,
     onDismiss: () -> Unit,
     onRename: (String) -> Unit,
-    onArchive: () -> Unit,
+    onShare: () -> Unit,
+    onDetails: (() -> Unit)?,
+    onExport: () -> Unit,
+    onClear: () -> Unit,
     onDelete: () -> Unit,
 ) {
     var renaming by remember { mutableStateOf(false) }
     var renameDraft by remember { mutableStateOf(title) }
     var confirmingDelete by remember { mutableStateOf(false) }
+    var confirmingClear by remember { mutableStateOf(false) }
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         containerColor = GsTheme.colors.glassSurface,
@@ -2739,13 +2803,24 @@ private fun ConversationOptionsSheet(
             )
             when {
                 confirmingDelete -> {
-                    Text(
-                        text = "Delete this chat? This cannot be undone.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = GsTheme.colors.textSecondary
+                    SheetActionRow(
+                        icon = GsIcons.Trash2,
+                        title = "Delete this chat?",
+                        subtitle = "This action cannot be undone. The conversation will be permanently removed from your history.",
+                        destructive = true,
+                        onClick = onDelete
                     )
-                    OptionRow(GsIcons.Trash2, "Delete chat", destructive = true, onClick = onDelete)
-                    OptionRow(GsIcons.X, "Cancel") { confirmingDelete = false }
+                    SheetActionRow(GsIcons.X, "Cancel", onClick = { confirmingDelete = false })
+                }
+                confirmingClear -> {
+                    SheetActionRow(
+                        icon = GsIcons.Eraser,
+                        title = "Clear all messages?",
+                        subtitle = "The chat stays in your history, but every message in it is removed.",
+                        destructive = true,
+                        onClick = onClear
+                    )
+                    SheetActionRow(GsIcons.X, "Cancel", onClick = { confirmingClear = false })
                 }
                 renaming -> {
                     OutlinedTextField(
@@ -2755,53 +2830,118 @@ private fun ConversationOptionsSheet(
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
-                    OptionRow(GsIcons.Check, "Save name") {
+                    SheetActionRow(GsIcons.Check, "Save", onClick = {
                         val trimmed = renameDraft.trim()
                         if (trimmed.isNotEmpty()) onRename(trimmed)
-                    }
-                    OptionRow(GsIcons.X, "Cancel") { renaming = false }
+                    })
+                    SheetActionRow(GsIcons.X, "Cancel", onClick = { renaming = false })
                 }
                 else -> {
-                    OptionRow(GsIcons.SquarePen, "Rename chat") {
-                        renameDraft = title
-                        renaming = true
+                    SheetActionRow(
+                        icon = GsIcons.Share,
+                        title = "Share Chat",
+                        subtitle = "Share this conversation",
+                        onClick = onShare
+                    )
+                    SheetActionRow(
+                        icon = GsIcons.SquarePen,
+                        title = "Rename Chat",
+                        subtitle = "Give your chat a new name",
+                        onClick = {
+                            renameDraft = title
+                            renaming = true
+                        }
+                    )
+                    if (onDetails != null) {
+                        SheetActionRow(
+                            icon = GsIcons.Info,
+                            title = "Chat Details",
+                            subtitle = "View info & stats",
+                            onClick = onDetails
+                        )
                     }
-                    OptionRow(GsIcons.Archive, "Archive chat", onClick = onArchive)
-                    OptionRow(GsIcons.Trash2, "Delete chat", destructive = true) {
-                        confirmingDelete = true
-                    }
+                    SheetActionRow(
+                        icon = GsIcons.FileText,
+                        title = "Export Chat",
+                        subtitle = "Send the transcript as text",
+                        onClick = onExport
+                    )
+                    SheetActionRow(
+                        icon = GsIcons.Eraser,
+                        title = "Clear Chat",
+                        subtitle = "Remove all messages",
+                        onClick = { confirmingClear = true }
+                    )
+                    SheetActionRow(
+                        icon = GsIcons.Trash2,
+                        title = "Delete Chat",
+                        subtitle = "Permanently delete this chat",
+                        destructive = true,
+                        onClick = { confirmingDelete = true }
+                    )
+                    SheetActionRow(
+                        icon = GsIcons.X,
+                        title = "Cancel",
+                        onClick = onDismiss
+                    )
                 }
             }
         }
     }
 }
 
+/** One reference sheet row: glass icon tile, title, supporting sentence. */
 @Composable
-private fun OptionRow(
+private fun SheetActionRow(
     icon: ImageVector,
-    label: String,
+    title: String,
+    subtitle: String? = null,
     destructive: Boolean = false,
     onClick: () -> Unit,
 ) {
-    val tint = if (destructive) GsTheme.colors.error else GsTheme.colors.textPrimary
+    val colors = GsTheme.colors
+    val tint = if (destructive) colors.error else colors.textPrimary
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 52.dp)
-            .clip(RoundedCornerShape(14.dp))
+            .heightIn(min = if (subtitle == null) 52.dp else 64.dp)
+            .clip(RoundedCornerShape(18.dp))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 role = Role.Button,
-                onClickLabel = label,
+                onClickLabel = title,
                 onClick = onClick
             )
             .padding(horizontal = 8.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
-        Text(label, style = MaterialTheme.typography.bodyMedium, color = tint)
+        Box(
+            modifier = Modifier
+                .size(38.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(colors.glassSurface.copy(alpha = 0.85f))
+                .border(1.dp, colors.glassBorder, RoundedCornerShape(12.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = if (destructive) colors.error else colors.textSecondary,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyMedium, color = tint)
+            if (subtitle != null) {
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (destructive) colors.error.copy(alpha = 0.75f) else colors.textSecondary
+                )
+            }
+        }
     }
 }
 

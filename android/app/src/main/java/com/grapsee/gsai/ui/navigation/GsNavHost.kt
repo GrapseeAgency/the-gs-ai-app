@@ -36,6 +36,7 @@ import com.grapsee.gsai.ui.auth.OnboardingScreen
 import com.grapsee.gsai.ui.auth.ReferenceWelcomeScreen
 import com.grapsee.gsai.ui.billing.BillingScreen
 import com.grapsee.gsai.ui.chat.ArchivedChatsScreen
+import com.grapsee.gsai.ui.chat.ChatInfoScreen
 import com.grapsee.gsai.ui.chat.ChatScreen
 import com.grapsee.gsai.ui.chat.ChatSearchScreen
 import com.grapsee.gsai.ui.chat.ChatsScreen
@@ -423,7 +424,15 @@ fun GsNavHost(modifier: Modifier = Modifier) {
                 },
                 onNewChat = { newChat() },
                 onBack = back,
-                onNavigateVoice = { navController.navigate(GsRoutes.VOICE) }
+                onNavigateVoice = { navController.navigate(GsRoutes.VOICE) },
+                onOpenChatDetails = { chatId -> navController.navigate(GsRoutes.chatInfo(chatId)) }
+            )
+        }
+        // Reference "Chat Details" — a real page with a back arrow, not a sheet.
+        composable(GsRoutes.CHAT_INFO) { entry ->
+            ChatInfoScreen(
+                conversationId = entry.arguments?.getString(GsRoutes.ARG_CONVERSATION).orEmpty(),
+                onBack = back
             )
         }
         }
