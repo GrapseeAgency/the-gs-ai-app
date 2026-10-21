@@ -3,8 +3,8 @@ Here are all the generated files.
 ## Latest release: v0.84.0 — icons that draw, illustrations, tappable charts (versionCode 121)
 
     file    GS-AI-App.apk
-    size    66254468 bytes
-    sha256  79f295f9d338c9a7af028c4856a41b25dafa85ef4e4bbfeb3875add7fa17ccff
+    size    66270852 bytes
+    sha256  39a58db6525fb2a839fbd866e31cb4fa4ef6acbaa5664c3070f81403c998495c
 
 Captured on the emulator from the same revision the release APK builds from
 (`main` at `e35e2f34`).
@@ -46,8 +46,14 @@ What landed in this build:
 - **iOS.** The chat top bar gained the same rename / archive / delete options
   as Android.
 
-Verification: `android-app` 39649476009 (green), `android-screens` 39649480119
-(green, the screenshots above), `android-release` 39649484624 (green, this
+**Reference chat surfaces.** The "…" sheet is the reference list — Share,
+Rename, Chat Details, Export, Clear, Delete, then Cancel — and Chat Details
+opens a real page with measured stats (messages, span, response style, model,
+mode). Home now opens on a glass resume card for the thread you were just in,
+with the last message rendered as prose rather than raw markdown.
+
+Verification: `android-app` 39652806123 (green), `android-screens` 39654037552
+(green, the screenshots above), `android-release` 39656819090 (green, this
 APK).
 
 ## Previous shipped release: v0.82.0 — the glass release (versionCode 119)
