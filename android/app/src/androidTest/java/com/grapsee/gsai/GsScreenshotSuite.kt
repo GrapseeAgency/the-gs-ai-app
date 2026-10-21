@@ -320,6 +320,23 @@ Inline `code` and math ${'$'}a^2 + b^2 = c^2$."""
             ) {
                 SystemClock.sleep(1_500)
                 shot("30-settings")
+                // 7. AI Intelligence (reference tile layout) and the model page.
+                if (tapText("AI Model")) {
+                    SystemClock.sleep(1_500)
+                    shot("31-ai-intelligence")
+                    if (tapText("View model details")) {
+                        SystemClock.sleep(1_500)
+                        shot("32-model-details")
+                        device.pressBack()
+                        device.waitForIdle(1_200)
+                    } else {
+                        shot("32-model-details-MISSING-ROW")
+                    }
+                    device.pressBack()
+                    device.waitForIdle(1_200)
+                } else {
+                    shot("31-ai-intelligence-MISSING-ROW")
+                }
                 device.pressBack()
                 device.waitForIdle(1_500)
             } else {

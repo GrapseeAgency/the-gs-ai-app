@@ -50,6 +50,7 @@ import com.grapsee.gsai.ui.settings.AppearanceSettingsScreen
 import com.grapsee.gsai.ui.settings.ChatSettingsScreen
 import com.grapsee.gsai.ui.settings.HelpSettingsScreen
 import com.grapsee.gsai.ui.settings.MemorySettingsScreen
+import com.grapsee.gsai.ui.settings.ModelDetailsScreen
 import com.grapsee.gsai.ui.settings.NotificationSettingsScreen
 import com.grapsee.gsai.ui.settings.PrivacySettingsScreen
 import com.grapsee.gsai.ui.settings.SettingsHubScreen
@@ -296,6 +297,7 @@ fun GsNavHost(modifier: Modifier = Modifier) {
             AiIntelligenceScreen(
                 onBack = back,
                 onLocalAiRequested = { askLocalConsent = true },
+                onOpenModelDetails = { navController.navigate(GsRoutes.SETTINGS_MODEL) },
                 onTryComponents = {
                     navController.navigate(
                         GsRoutes.chat(
@@ -309,6 +311,16 @@ fun GsNavHost(modifier: Modifier = Modifier) {
                 OnDeviceModelConsentDialog(onDismiss = { askLocalConsent = false })
             }
         }
+        composable(GsRoutes.SETTINGS_MODEL) {
+            ModelDetailsScreen(
+                onBack = back,
+                onDownloadRequested = {
+                    back()
+                    askLocalConsent = true
+                }
+            )
+        }
+
         composable(GsRoutes.SETTINGS_MEMORY) {
             MemorySettingsScreen(onBack = back, onNavigate = open)
         }

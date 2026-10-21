@@ -610,6 +610,7 @@ fun AiIntelligenceScreen(
     onBack: () -> Unit,
     onLocalAiRequested: () -> Unit,
     onTryComponents: () -> Unit,
+    onOpenModelDetails: (() -> Unit)? = null,
 ) {
     val colors = GsTheme.colors
     val installed = ModelStore.installedPath != null
@@ -702,6 +703,18 @@ fun AiIntelligenceScreen(
                 color = colors.textTertiary,
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 12.dp)
             )
+        }
+
+        if (onOpenModelDetails != null) {
+            RefSection(label = "On this device") {
+                RefRow(
+                    title = "View model details",
+                    subtitle = "Size, capability and what installing it changes",
+                    icon = GsIcons.Cpu,
+                    onClick = onOpenModelDetails,
+                    onClickLabel = "View model details"
+                )
+            }
         }
 
         RefSection(label = "Rendering") {

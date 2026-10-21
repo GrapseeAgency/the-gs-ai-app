@@ -18,6 +18,7 @@ object GsRoutes {
     const val SETTINGS_NOTIFICATIONS = "settings/notifications"
     const val SETTINGS_PRIVACY = "settings/privacy"
     const val SETTINGS_AI = "settings/ai"
+    const val SETTINGS_MODEL = "settings/model"
     const val SETTINGS_MEMORY = "settings/memory"
     const val SETTINGS_VOICE = "settings/voice"
     const val SETTINGS_ACCESSIBILITY = "settings/accessibility"
