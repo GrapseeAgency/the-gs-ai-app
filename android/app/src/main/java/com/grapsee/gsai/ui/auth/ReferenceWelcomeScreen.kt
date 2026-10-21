@@ -74,21 +74,21 @@ private data class WelcomePage(
 private val WELCOME_PAGES = listOf(
     WelcomePage(
         art = RefArt.Bloom,
-        eyebrow = "Welcome to GS",
-        title = "A calmer way to think.",
-        body = "Ask in your own words. GS listens, reasons, and answers in whatever shape fits the question."
+        eyebrow = "Welcome to Nexly",
+        title = "Your ideas.\nOur support.",
+        body = "Plan, create, learn, and explore — with an AI that truly understands you."
     ),
     WelcomePage(
         art = RefArt.Conversation,
-        eyebrow = "Answers you can touch",
-        title = "Not just text.",
-        body = "Charts, tables, timelines, maps and working tools — rendered inside the conversation, and interactive down to the last data point."
+        eyebrow = "Built around you",
+        title = "More than\njust chat.",
+        body = "Get personalized help, creative ideas, and smart solutions — anytime."
     ),
     WelcomePage(
         art = RefArt.Privacy,
         eyebrow = "Yours alone",
-        title = "Private by default.",
-        body = "Choose a cloud model, or run one entirely on this device. Your conversations stay yours, and nothing leaves without asking."
+        title = "A smarter tomorrow\nstarts with a conversation.",
+        body = "Private by default — choose a cloud model, or run one entirely on this device. Nothing leaves without asking."
     )
 )
 
@@ -105,14 +105,42 @@ fun ReferenceWelcomeScreen(onExplore: () -> Unit, onSkip: () -> Unit) {
             .statusBarsPadding()
             .navigationBarsPadding()
     ) {
-        // The skip sits alone in the top-right, in tertiary ink: present for
-        // the returning reader, invisible to the first-timer.
+        // Brand lockup on the left (the reference's welcome header), Skip on
+        // the right in tertiary ink: present for the returning reader,
+        // invisible to the first-timer.
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.End
+            verticalAlignment = Alignment.CenterVertically
         ) {
+            Box(
+                modifier = Modifier
+                    .size(38.dp)
+                    .clip(CircleShape)
+                    .background(
+                        Brush.linearGradient(
+                            listOf(Color(0xFFFFE3CE), Color(0xFFFFC9A8), Color(0xFFFFB38F))
+                        )
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                RefArtwork(art = RefArt.Bloom, size = 32.dp, contentDescription = "")
+            }
+            Spacer(Modifier.width(9.dp))
+            Column {
+                Text(
+                    text = "Nexly",
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = colors.textPrimary
+                )
+                Text(
+                    text = "AI Companion",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.textSecondary
+                )
+            }
+            Spacer(Modifier.weight(1f))
             Text(
                 text = "Skip",
                 style = MaterialTheme.typography.labelLarge,
@@ -147,7 +175,7 @@ fun ReferenceWelcomeScreen(onExplore: () -> Unit, onSkip: () -> Unit) {
                 .padding(top = 18.dp, bottom = 20.dp)
         ) {
             RefPrimaryButton(
-                label = if (last) "Get started" else "Continue",
+                label = if (last) "Get Started" else "Next",
                 onClick = {
                     if (last) {
                         onExplore()
