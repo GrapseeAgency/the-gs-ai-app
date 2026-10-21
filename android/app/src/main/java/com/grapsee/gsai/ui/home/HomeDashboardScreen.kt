@@ -409,6 +409,7 @@ private fun VideoCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
                     )
                 )
             )
+            .border(1.dp, Color.White.copy(alpha = 0.45f), shape)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,

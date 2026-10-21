@@ -49,8 +49,8 @@ private fun DrawScope.ambientPearl(
     tint: Color,
     dark: Boolean,
 ) {
-    val bodyAlpha = if (dark) 0.10f else 0.34f
-    val rimAlpha = if (dark) 0.12f else 0.40f
+    val bodyAlpha = if (dark) 0.12f else 0.46f
+    val rimAlpha = if (dark) 0.14f else 0.52f
     drawCircle(
         brush = Brush.radialGradient(
             listOf(
@@ -63,6 +63,16 @@ private fun DrawScope.ambientPearl(
         ),
         radius = radius,
         center = center
+    )
+    // Warm core: the sheet's orbs are lit from inside, not just rimmed.
+    drawCircle(
+        brush = Brush.radialGradient(
+            listOf(tint.copy(alpha = bodyAlpha * 0.85f), Color.Transparent),
+            center = Offset(center.x - radius * 0.10f, center.y - radius * 0.05f),
+            radius = radius * 0.62f
+        ),
+        radius = radius * 0.62f,
+        center = Offset(center.x - radius * 0.10f, center.y - radius * 0.05f)
     )
     drawArc(
         color = Color.White.copy(alpha = rimAlpha),

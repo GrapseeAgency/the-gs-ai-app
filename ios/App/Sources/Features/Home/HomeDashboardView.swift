@@ -533,15 +533,15 @@ private struct PearlBackdrop: View {
             let w = geo.size.width
             ZStack {
                 PearlOrb(size: w * 0.72)
-                    .opacity(0.55)
+                    .opacity(0.62)
                     .blur(radius: 26)
                     .position(x: w * 0.98, y: geo.size.height * 0.16)
                 PearlOrb(size: w * 0.62)
-                    .opacity(0.42)
+                    .opacity(0.50)
                     .blur(radius: 30)
                     .position(x: w * -0.02, y: geo.size.height * 0.60)
                 PearlOrb(size: w * 0.76)
-                    .opacity(0.45)
+                    .opacity(0.52)
                     .blur(radius: 30)
                     .position(x: w * 0.72, y: geo.size.height * 0.98)
             }

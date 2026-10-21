@@ -116,6 +116,27 @@ Rules:
 4. No bitmap illustrations and no generated raster art; if it cannot be drawn
    in the shared language, it does not ship.
 
+### 4b-bis. Home page contract (measured from sheet 3 of the reference set)
+
+Every number below was read off the 1024x1536 sheet, not guessed. Keep them in
+sync across `home/HomeDashboardScreen` and `Features/Home/HomeDashboardView`.
+
+| Element | Value |
+|---|---|
+| Gutter | 20dp |
+| Header | avatar 38, wordmark 18 semibold, subtitle 13, two 40dp glass circles |
+| Greeting | 32 semibold, 36 leading, one four-point sparkle 26 |
+| Subtitle | 15/22, muted |
+| Pills | 12sp, 11dp vertical inset (42dp tall), 8dp horizontal, 5dp gaps |
+| Bento | 200dp tall, 1.22 : 1 columns, 0.64 : 1 right stack (39/61) |
+| Video card | near-white fill `#FDFAF8 -> #F7EAF1 -> #F9EEE5`, title 16/21, body 12/17, pearl art 200dp bleeding bottom-right |
+| Mind Guide | orb 38, title 13.5 semibold, body 11.5/15 |
+| Reflection | title 13.5 semibold, body 11.5/15, lotus 84 bleeding bottom-right |
+| Today's Used | 18 semibold, See All 14 |
+| Suggestions | 32dp lightbulb tile, title 14, body 12, no chevron |
+| Dock | 14dp frame and gaps, 46dp wells, 60dp Generate well around a 48dp pill, 15sp label |
+| Rhythm | 30 before greeting, 30 before pills, 28 before bento, 32 before Today's Used, 8 before suggestions |
+
 ## 4c. Chart interactivity coverage
 
 Every chart resolves a tap to a `ChartDatum`; nothing swallows a gesture and
