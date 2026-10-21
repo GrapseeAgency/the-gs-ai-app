@@ -51,6 +51,12 @@ struct ChatDetailView: View {
     @State private var searchQuery = ""
     @State private var searchIndex = 0
 
+    // Conversation options (reference menu): rename / archive / delete the
+    // open chat from the top bar, mirroring the Android overflow sheet.
+    @State private var showRename = false
+    @State private var renameDraft = ""
+    @State private var showDeleteConfirm = false
+
     // Read-aloud — on-device speech, silent when the device has no voice.
     @StateObject private var speech = SpeechPlayer()
 
@@ -145,7 +151,57 @@ struct ChatDetailView: View {
                     Image(systemName: "magnifyingglass")
                 }
                 .accessibilityLabel("Search in chat")
+
+                // Options only exist once the chat exists.
+                if let id = vm.conversationID {
+                    Menu {
+                        Button {
+                            renameDraft = conversations.conversation(withID: id)?.title ?? ""
+                            showRename = true
+                        } label: {
+                            Label("Rename", systemImage: "pencil")
+                        }
+                        Button {
+                            conversations.setArchived(id: id, true)
+                            leaveConversation()
+                        } label: {
+                            Label("Archive", systemImage: "archivebox")
+                        }
+                        Button(role: .destructive) {
+                            showDeleteConfirm = true
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                    }
+                    .accessibilityLabel("Conversation options")
+                }
             }
+        }
+        .alert("Rename chat", isPresented: $showRename) {
+            TextField("Chat name", text: $renameDraft)
+            Button("Save") {
+                if let id = vm.conversationID {
+                    conversations.rename(id: id, to: renameDraft)
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+        .confirmationDialog(
+            "Delete this chat?",
+            isPresented: $showDeleteConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                if let id = vm.conversationID {
+                    conversations.delete(id: id)
+                }
+                leaveConversation()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This conversation and its messages will be removed from this device.")
         }
         .onDisappear {
             speech.stop()
@@ -688,6 +744,17 @@ struct ChatDetailView: View {
             if toast == message {
                 toast = nil
             }
+        }
+    }
+
+    /// Leave the chat that was just archived or deleted. At the workspace root
+    /// that means opening a fresh workspace; on a pushed chat it means popping
+    /// the stack — never leaving a tombstone on screen.
+    private func leaveConversation() {
+        if let newChat = onNewChat {
+            newChat()
+        } else if !router.path.isEmpty {
+            router.path.removeLast()
         }
     }
 
