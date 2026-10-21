@@ -3,8 +3,8 @@ Here are all the generated files.
 ## Latest release: v0.83.0 — the Nexly reference redesign (versionCode 120)
 
     file    GS-AI-App.apk
-    size    66205316 bytes
-    sha256  7519fdffe6c13c29f8c83026263d6cdee134571fa2d0bb267bce5511fcf12183
+    size    66238084 bytes
+    sha256  59ea1cee74a13084ec6d9d79f7aad2e233e6fcd95c1578593e468930a9e363fc
 
 The reference sheets, now built on `main`. Captured on the emulator from the
 same revision the release APK builds from.
