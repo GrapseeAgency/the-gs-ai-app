@@ -656,6 +656,10 @@ private const val FILTER_PINNED = "Pinned"
 private fun cleanPreviewLine(raw: String): String =
     raw
         .replace(Regex("```[\\s\\S]*?```"), " ")
+        // Markdown table separator rows are pure punctuation: "| :--- | ---: |"
+        // would otherwise survive as a run of dashes and colons.
+        .replace(Regex("(?m)^\\s*\\|?[\\s:|-]{3,}\\|?\\s*$"), " ")
+        .replace(Regex("-{3,}"), " ")
         .replace(Regex("\\|"), " ")
         .replace(Regex("[#*_>`]"), " ")
         .replace(Regex("\\s+"), " ")

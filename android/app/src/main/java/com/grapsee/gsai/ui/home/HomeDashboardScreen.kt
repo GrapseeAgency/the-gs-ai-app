@@ -629,6 +629,8 @@ private fun SuggestionsCard(title: String, subtitle: String, onClick: () -> Unit
 private fun cleanPreview(raw: String, limit: Int = 150): String {
     val text = raw
         .replace(Regex("```[\\s\\S]*?```"), " ")
+        .replace(Regex("(?m)^\\s*\\|?[\\s:|-]{3,}\\|?\\s*$"), " ")
+        .replace(Regex("-{3,}"), " ")
         .replace(Regex("\\|"), " ")
         .replace(Regex("[#*_>`]"), " ")
         .replace(Regex("\\s+"), " ")
