@@ -94,6 +94,10 @@ fun GsNavHost(modifier: Modifier = Modifier) {
     val back: () -> Unit = { navController.popBackStack() }
     val context = LocalContext.current
     val view = LocalView.current
+    // The on-device download consent is hosted once for the whole graph: both
+    // AI Intelligence and Model Details can request it, and the dialog belongs
+    // above whichever page asked.
+    var askLocalConsent by remember { mutableStateOf(false) }
     // Session gate — first launch walks Auth → Onboarding; a signed-in user
     // who has NOT finished onboarding is still inside the gate. Before this,
     // only the session flag was read, so finishing auth (or restoring a
@@ -255,18 +259,11 @@ fun GsNavHost(modifier: Modifier = Modifier) {
         composable(GsRoutes.PROFILE) { ProfileScreen(onNavigate = open, onBack = back) }
 
         composable(GsRoutes.SETTINGS) {
-            // Commit 1(b). The consent dialog is already hosted in MainActivity
-            // above the nav graph; this only asks it to show, so a second host
-            // and a second dialog cannot exist.
-            var askLocalConsent by remember { mutableStateOf(false) }
             SettingsHubScreen(
                 onBack = back,
                 onNavigate = open,
                 onLocalAiRequested = { askLocalConsent = true },
             )
-            if (askLocalConsent) {
-                OnDeviceModelConsentDialog(onDismiss = { askLocalConsent = false })
-            }
         }
 
         // --- Settings sub-pages -------------------------------------------
@@ -300,7 +297,6 @@ fun GsNavHost(modifier: Modifier = Modifier) {
             PrivacySettingsScreen(onBack = back)
         }
         composable(GsRoutes.SETTINGS_AI) {
-            var askLocalConsent by remember { mutableStateOf(false) }
             AiIntelligenceScreen(
                 onBack = back,
                 onLocalAiRequested = { askLocalConsent = true },
@@ -314,9 +310,6 @@ fun GsNavHost(modifier: Modifier = Modifier) {
                     )
                 }
             )
-            if (askLocalConsent) {
-                OnDeviceModelConsentDialog(onDismiss = { askLocalConsent = false })
-            }
         }
         composable(GsRoutes.SETTINGS_MODEL) {
             ModelDetailsScreen(
@@ -454,6 +447,9 @@ fun GsNavHost(modifier: Modifier = Modifier) {
                 onBack = back
             )
         }
+        }
+        if (askLocalConsent) {
+            OnDeviceModelConsentDialog(onDismiss = { askLocalConsent = false })
         }
     }
 }
