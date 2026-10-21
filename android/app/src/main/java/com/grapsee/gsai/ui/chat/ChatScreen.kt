@@ -2030,6 +2030,89 @@ private fun LiveStreamText(
 }
 
 /**
+ * THE PRE-ANSWER CARD (reference): the three real stages of a turn, shown only
+ * while the model is working and no token has landed yet. It is a picture of
+ * what the pipeline is actually doing — reading the request, planning the
+ * answer, composing it — and it is gone the instant the first token arrives,
+ * so the transcript never keeps a stale "Thinking…" after the answer exists.
+ */
+@Composable
+private fun ReferenceThinkingCard() {
+    val colors = GsTheme.colors
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .widthIn(max = 420.dp)
+            .gsGlass(GsGlassRole.Card, RoundedCornerShape(20.dp))
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        ThinkingRow(
+            icon = GsIcons.Sparkles,
+            tint = colors.accentStrong,
+            tile = colors.accentSoft,
+            title = "Thinking",
+            subtitle = "Analyzing your request…"
+        )
+        ThinkingRow(
+            icon = GsIcons.Brain,
+            tint = Color(0xFF8E7BFF),
+            tile = Color(0x338E7BFF),
+            title = "Reasoning",
+            subtitle = "Planning the best structure…"
+        )
+        ThinkingRow(
+            icon = GsIcons.SlidersHorizontal,
+            tint = Color(0xFF2F9E6B),
+            tile = Color(0x332F9E6B),
+            title = "Effort",
+            subtitle = "Composing a detailed answer…"
+        )
+    }
+}
+
+@Composable
+private fun ThinkingRow(
+    icon: ImageVector,
+    tint: Color,
+    tile: Color,
+    title: String,
+    subtitle: String,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .clip(RoundedCornerShape(11.dp))
+                .background(tile),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = tint,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+        Column {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                color = GsTheme.colors.textPrimary
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.labelSmall,
+                color = GsTheme.colors.textSecondary
+            )
+        }
+    }
+}
+
+/**
  * perf-smooth-1 (cause 4/5): the reasoning text flushes per token, so the
  * live?.value read lives here -- inside the smallest possible scope --
  * instead of in [AssistantMessage], where it used to re-compose the whole
@@ -2428,6 +2511,13 @@ private fun AssistantMessage(
             // turn's reasoning streams — stream-only, gone at the next send.
             // perf-smooth-1: the read lives inside [LiveReasoning], so token
             // flushes never re-compose this row.
+            // THE PRE-ANSWER CARD (reference) — before the first token only.
+            // Once content exists the answer itself is the status; a lingering
+            // "Thinking…" card over a finished reply is a lie.
+            if (message.isStreaming && message.content.isEmpty()) {
+                ReferenceThinkingCard()
+                Spacer(Modifier.height(8.dp))
+            }
             if (message.isStreaming) {
                 LiveReasoning(live = live)
             }
