@@ -212,8 +212,14 @@ final class GsNativeTests: XCTestCase {
         // hypothetical: the C layer once appended a temperature stage to a
         // sampler chain that was never reset, so a reused context disagreed
         // with itself while a fresh one was perfect.
-        let a = try GsNative.chat("Name three primary colours.")
-        let b = try GsNative.chat("Name three primary colours.")
+        // A SMALL BUDGET, DELIBERATELY. The default 256-token reply takes
+        // ~80 s per generation on the simulator, so two of them overran
+        // XCTest's 3:00 per-test timeout and reported as a failure — the
+        // harness killing the clock, not the sampler disagreeing with itself.
+        // Sixteen tokens still exercises a reused context and a reset sampler
+        // chain, which is the property this test exists to protect.
+        let a = try GsNative.chat("Name three primary colours.", maxTokens: 16)
+        let b = try GsNative.chat("Name three primary colours.", maxTokens: 16)
         XCTAssertEqual(a, b, "the same prompt must give the same answer on a reused context")
     }
 
