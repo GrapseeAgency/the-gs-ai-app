@@ -47,6 +47,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.grapsee.gsai.data.AccountStore
@@ -174,7 +175,7 @@ fun HomeDashboardScreen(
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 20.dp)
             ) {
-                Spacer(Modifier.height(30.dp))
+                Spacer(Modifier.height(52.dp))
                 // Reference order: the thread you were just in sits ABOVE the
                 // greeting, as a readable glass preview — the fastest way back
                 // into real work. Hidden when nothing has been said yet.
@@ -186,14 +187,14 @@ fun HomeDashboardScreen(
                     Spacer(Modifier.height(16.dp))
                 }
                 GreetingBlock(greeting = greeting, firstName = firstName)
-                Spacer(Modifier.height(30.dp))
+                Spacer(Modifier.height(46.dp))
                 QuickPills(
                     onNewChat = onNewChat,
                     onExplore = onOpenAgent,
                     onCreate = { onStartPrompt(CREATE_PROMPT) },
                     onMore = onOpenDrawer,
                 )
-                Spacer(Modifier.height(28.dp))
+                Spacer(Modifier.height(40.dp))
                 Bento(
                     onVideo = { onStartPrompt(CREATE_PROMPT) },
                     onMindGuide = {
@@ -207,9 +208,9 @@ fun HomeDashboardScreen(
                         )
                     },
                 )
-                Spacer(Modifier.height(32.dp))
+                Spacer(Modifier.height(10.dp))
                 TodayUsedHeader(onSeeAll = onOpenChats)
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(18.dp))
                 SuggestionsCard(
                     title = "Suggestions",
                     subtitle = "Try suggested questions first.",
@@ -383,7 +384,7 @@ private fun Bento(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(200.dp),
+            .height(224.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         // Measured from the sheet: the video card is 196pt of a 356pt row
@@ -425,18 +426,30 @@ private fun VideoCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
                 onClick = onClick
             )
     ) {
-        // The sheet's art is a real 3D render of light through pearl — and
-        // the app already owns one: the authored companion bloom. It bleeds
-        // off the lower-right corner exactly as the mock's mass does.
+        // The sheet lays the pearl mass UNDER the copy and fades it toward
+        // the text edge. The feathered asset is the same authored render with
+        // its rim dissolved, so it reads as light in the card, not a sticker.
         Image(
-            painter = painterResource(com.grapsee.gsai.R.drawable.gs_companion_orb),
+            painter = painterResource(com.grapsee.gsai.R.drawable.gs_home_orb),
             contentDescription = "Pearlescent bloom",
             contentScale = ContentScale.Fit,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .offset(x = 20.dp, y = 34.dp)
-                .size(150.dp)
-                .alpha(0.92f)
+                .offset(x = 26.dp, y = 18.dp)
+                .size(210.dp)
+        )
+        // A left-to-right scrim keeps the copy on paper while the art owns the
+        // right third, exactly as the mock composites it.
+        Box(
+            Modifier
+                .matchParentSize()
+                .background(
+                    Brush.horizontalGradient(
+                        0f to Color(0xE0FBF4F0),
+                        0.55f to Color(0x66FBF6F3),
+                        1f to Color(0x00FBF6F3)
+                    )
+                )
         )
         Column(Modifier.fillMaxSize().padding(14.dp)) {
             ReferenceChip(icon = GsIcons.Play, label = "Video")
@@ -567,7 +580,8 @@ private fun MindGuideCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
 private fun ReflectionCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
     GlassPanel(modifier = modifier, onClick = onClick, onClickLabel = "Open today's reflection") {
         Box(Modifier.fillMaxSize()) {
-            Column(Modifier.fillMaxSize().padding(12.dp)) {
+            // The lotus is painted first; the copy keeps its own z-plane.
+            Column(Modifier.fillMaxSize().padding(12.dp).zIndex(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = "Today's reflection",
@@ -601,14 +615,14 @@ private fun ReflectionCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
                     modifier = Modifier.padding(end = 12.dp)
                 )
             }
-            Box(Modifier.align(Alignment.BottomEnd).offset(x = 8.dp, y = 12.dp)) {
+            Box(Modifier.align(Alignment.BottomEnd).offset(x = 6.dp, y = 10.dp)) {
                 // The sheet's lotus is a rendered photograph; it ships as an
                 // asset with a radial alpha fade so it melts into the card.
                 Image(
                     painter = painterResource(com.grapsee.gsai.R.drawable.gs_home_lotus),
                     contentDescription = "A lotus in bloom",
                     contentScale = ContentScale.Fit,
-                    modifier = Modifier.size(width = 94.dp, height = 68.dp)
+                    modifier = Modifier.size(width = 132.dp, height = 96.dp)
                 )
             }
         }
@@ -1087,7 +1101,7 @@ private fun GlassPill(icon: ImageVector, label: String, onClick: () -> Unit) {
                 onClickLabel = label,
                 onClick = onClick
             )
-            .padding(horizontal = 8.dp, vertical = 11.dp),
+            .padding(horizontal = 8.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(

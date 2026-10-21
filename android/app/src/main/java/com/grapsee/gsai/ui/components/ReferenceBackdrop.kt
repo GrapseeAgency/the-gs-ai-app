@@ -171,12 +171,8 @@ fun ReferenceBackdrop(
                 radius = r,
                 center = c
             )
-            drawCircle(
-                color = Color.White.copy(alpha = a * 0.18f),
-                radius = r * 0.82f,
-                center = c,
-                style = Stroke(width = 1.dp.toPx())
-            )
+            // No ring: the sheet's bokeh is pure soft light, and a stroke
+            // reads as a drawn circle rather than defocus.
         }
 
         // 2b. Pearlescent orbs. The reference's backdrop is not only bloom:

@@ -24,15 +24,19 @@ struct HomeDashboardView: View {
     var body: some View {
         ZStack(alignment: .bottom) {
             ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 30) {
+                // The sheet's rhythm, measured: 52 above the greeting, 46 to
+                // the pills, 40 to the bento, 10 to Today's Used, 18 to its row.
+                VStack(alignment: .leading, spacing: 0) {
                     header
                     resumeCard
+                    Spacer().frame(height: 52)
                     greeting
+                    Spacer().frame(height: 46)
                     pills
+                    Spacer().frame(height: 40)
                     bento
-                    // The sheet puts "Today's Used" 30pt below the bento and
-                    // its card only 8pt under the heading.
-                    VStack(alignment: .leading, spacing: 8) {
+                    Spacer().frame(height: 10)
+                    VStack(alignment: .leading, spacing: 18) {
                         todayUsedHeader
                         suggestionsCard
                     }
@@ -210,7 +214,7 @@ struct HomeDashboardView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
         }
-        .frame(height: 200)
+        .frame(height: 224)
     }
 
     // MARK: Today's Used + suggestions
@@ -323,7 +327,7 @@ private struct HomePill: View {
             }
             .foregroundStyle(Aero.text)
             .padding(.horizontal, 9)
-            .padding(.vertical, 11)
+            .padding(.vertical, 9)
             .gsCapsuleGlass(.floatingControl)
         }
         .buttonStyle(KineticPressStyle())
@@ -343,14 +347,24 @@ private struct VideoCard: View {
                     startPoint: .topLeading, endPoint: .bottomTrailing)
                 // The sheet's art is a real 3D render of light through pearl —
                 // and the app already owns one: the authored companion bloom.
-                Image("GSCompanionOrb")
+                Image("GSHomeOrb")
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 212, height: 212)
+                    .frame(width: 196, height: 196)
                     .frame(maxWidth: .infinity, maxHeight: .infinity,
                            alignment: .bottomTrailing)
-                    .offset(x: 44, y: 38)
+                    .offset(x: 34, y: 30)
                     .allowsHitTesting(false)
+                // The mock fades the art toward the text edge; the same scrim
+                // keeps the copy on paper while the pearl owns the right third.
+                LinearGradient(
+                    stops: [
+                        .init(color: Color(red: 0.984, green: 0.957, blue: 0.941), location: 0),
+                        .init(color: Color(red: 0.984, green: 0.965, blue: 0.953).opacity(0.6), location: 0.55),
+                        .init(color: .clear, location: 1)
+                    ],
+                    startPoint: .leading, endPoint: .trailing
+                )
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 5) {
                         Image(systemName: "play").font(.system(size: 10, weight: .bold))
@@ -419,6 +433,13 @@ private struct ReflectionCard: View {
     var body: some View {
         Button(action: action) {
             ZStack(alignment: .bottomTrailing) {
+                // Lotus first so the copy keeps the top z-plane.
+                Image("GSHomeLotus")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 132, height: 96)
+                    .offset(x: 12, y: 16)
+                    .allowsHitTesting(false)
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Text("Today's reflection")
@@ -434,14 +455,6 @@ private struct ReflectionCard: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.trailing, 26)
                 }
-                // The sheet's lotus is a rendered photograph; it ships as an
-                // asset with a radial alpha fade so it melts into the card.
-                Image("GSHomeLotus")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 116, height: 84)
-                    .offset(x: 12, y: 16)
-                    .allowsHitTesting(false)
             }
             .padding(14)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
