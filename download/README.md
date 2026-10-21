@@ -1,6 +1,10 @@
 Here are all the generated files.
 
-## In progress: v0.83.0 — the Nexly reference redesign (versionCode 120)
+## Latest release: v0.83.0 — the Nexly reference redesign (versionCode 120)
+
+    file    GS-AI-App.apk
+    size    66205316 bytes
+    sha256  7519fdffe6c13c29f8c83026263d6cdee134571fa2d0bb267bce5511fcf12183
 
 The reference sheets, now built on `main`. Captured on the emulator from the
 same revision the release APK builds from.
@@ -22,7 +26,7 @@ pre-answer card. Still to come in this line: the remaining screens (Billing,
 Profile, Voice, Search, Notifications), the extended glass icon set, the
 illustration pass, and per-datum interactivity on the advanced charts.
 
-## Latest shipped release: v0.82.0 — the glass release (versionCode 119)
+## Previous shipped release: v0.82.0 — the glass release (versionCode 119)
 
     file    GS-AI-App.apk
     size    66188932 bytes
