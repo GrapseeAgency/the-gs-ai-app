@@ -61,6 +61,7 @@ class GsScreenshotSuite {
     private var shotFailed = 0
 
     private fun shot(name: String) {
+        dismissSystemAnr()
         val dir = shotDir.apply { mkdirs() }
         val out = File(dir, "$name.png")
         // Direct UiAutomation capture + manual PNG compress. Both
@@ -100,8 +101,9 @@ class GsScreenshotSuite {
         // which is slower than the launch idle. Poll for it instead of looking
         // once: a missed dismissal used to sit over every later shot and
         // cascade the "MISSING" navigation anchors downstream.
-        val deadline = SystemClock.uptimeMillis() + 12_000
+        val deadline = SystemClock.uptimeMillis() + 15_000
         while (SystemClock.uptimeMillis() < deadline) {
+            dismissSystemAnr()
             val notNow = device.findObject(By.textContains("Not now"))
             if (notNow != null) {
                 runCatching { notNow.click() }
@@ -118,12 +120,34 @@ class GsScreenshotSuite {
         }
     }
 
+    /**
+     * The emulator occasionally raises "Pixel Launcher isn't responding" or an
+     * app-ANR dialog that steals input for the rest of the run — every later
+     * anchor then reports MISSING and the artifact looks like a product bug.
+     * "Wait" dismisses it without killing the process under test.
+     */
+    private fun dismissSystemAnr() {
+        val wait = device.findObject(By.textContains("isn't responding"))
+        if (wait != null) {
+            val keepWaiting = device.findObject(By.textContains("Wait"))
+            runCatching { keepWaiting?.click() ?: device.pressBack() }
+            device.waitForIdle(1_000)
+        }
+    }
+
     private fun tapText(text: String, timeout: Long = 8_000): Boolean {
-        val node = device.wait(Until.findObject(By.textContains(text)), timeout) ?: return false
+        dismissSystemAnr()
+        val node = device.wait(Until.findObject(By.textContains(text)), timeout)
+        if (node == null) {
+            dismissSystemAnr()
+            val retry = device.wait(Until.findObject(By.textContains(text)), 4_000) ?: return false
+            return runCatching { retry.click(); device.waitForIdle(2_000); true }.getOrDefault(false)
+        }
         return runCatching { node.click(); device.waitForIdle(2_000); true }.getOrDefault(false)
     }
 
     private fun tapDesc(desc: String, timeout: Long = 8_000): Boolean {
+        dismissSystemAnr()
         val node = device.wait(Until.findObject(By.descContains(desc)), timeout) ?: return false
         return runCatching { node.click(); device.waitForIdle(2_000); true }.getOrDefault(false)
     }
