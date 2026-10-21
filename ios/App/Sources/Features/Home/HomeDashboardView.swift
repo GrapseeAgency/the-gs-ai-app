@@ -24,14 +24,18 @@ struct HomeDashboardView: View {
     var body: some View {
         ZStack(alignment: .bottom) {
             ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 30) {
                     header
                     resumeCard
                     greeting
                     pills
                     bento
-                    todayUsedHeader
-                    suggestionsCard
+                    // The sheet puts "Today's Used" 30pt below the bento and
+                    // its card only 8pt under the heading.
+                    VStack(alignment: .leading, spacing: 8) {
+                        todayUsedHeader
+                        suggestionsCard
+                    }
                     // Clear the floating dock so the last card is reachable.
                     Spacer(minLength: 140)
                 }
@@ -61,17 +65,17 @@ struct HomeDashboardView: View {
     // MARK: Header — brand lockup + assistant + menu
 
     private var header: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 12) {
             // The authored 3D bloom — the sheet's avatar already exists as a
             // real render, so it does not need a vector stand-in.
-            AnimatedGsIllustration(imageName: "GSCompanionOrb", size: 42,
+            AnimatedGsIllustration(imageName: "GSCompanionOrb", size: 38,
                                    breathDuration: 3.4, rotationDegrees: 1.2,
                                    lift: -2, startDelay: 0.08)
             VStack(alignment: .leading, spacing: 2) {
                 Text("Nexly")
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(Aero.text)
-                Text("AI Companion").font(Aero.caption()).foregroundStyle(Aero.textMuted)
+                Text("AI Companion").font(.system(size: 13)).foregroundStyle(Aero.textMuted)
             }
             Spacer()
             GlassCircleButton(system: "sparkles", label: "Assistant", action: onNewChat)
@@ -299,8 +303,8 @@ private struct GlassCircleButton: View {
             Image(systemName: system)
                 .font(.system(size: 16, weight: .medium))
                 .foregroundStyle(Aero.text)
-                .frame(width: 42, height: 42)
-                .gsGlass(.floatingControl, corner: 21)
+                .frame(width: 40, height: 40)
+                .gsGlass(.floatingControl, corner: 20)
         }
         .buttonStyle(KineticPressStyle())
         .accessibilityLabel(label)
@@ -331,10 +335,11 @@ private struct VideoCard: View {
     var body: some View {
         Button(action: action) {
             ZStack(alignment: .topLeading) {
+                // Sampled from the sheet: near-white card, colour from the art.
                 LinearGradient(
-                    colors: [Color(red: 0.91, green: 0.86, blue: 1.0),
-                             Color(red: 1.0, green: 0.85, blue: 0.91),
-                             Color(red: 1.0, green: 0.91, blue: 0.83)],
+                    colors: [Color(red: 0.99, green: 0.98, blue: 0.97),
+                             Color(red: 0.97, green: 0.92, blue: 0.945),
+                             Color(red: 0.98, green: 0.93, blue: 0.90)],
                     startPoint: .topLeading, endPoint: .bottomTrailing)
                 // The reference's artwork is the pearl, bleeding off the
                 // lower-right corner — not a film-strip glyph.
@@ -502,11 +507,22 @@ private struct PearlOrb: View {
 private struct PearlCluster: View {
     var body: some View {
         ZStack {
+            // A haze holds the cluster together, so it reads as one mass of
+            // light rather than three separate balls.
+            Circle()
+                .fill(RadialGradient(
+                    colors: [Color(red: 1, green: 0.85, blue: 0.93).opacity(0.35),
+                             Color(red: 0.81, green: 0.76, blue: 1).opacity(0.18),
+                             .clear],
+                    center: .center, startRadius: 0, endRadius: 110))
+                .frame(width: 220, height: 220)
             PearlOrb(size: 112).offset(x: -10, y: 10)
             PearlOrb(size: 64).offset(x: 56, y: -38)
             PearlOrb(size: 46).offset(x: 20, y: 52)
+            PearlOrb(size: 40).offset(x: -48, y: 58)
+                .opacity(0.85)
         }
-        .frame(width: 200, height: 200)
+        .frame(width: 210, height: 210)
     }
 }
 

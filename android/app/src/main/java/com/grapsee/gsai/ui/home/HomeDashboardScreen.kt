@@ -167,7 +167,7 @@ fun HomeDashboardScreen(
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 20.dp)
             ) {
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(30.dp))
                 // Reference order: the thread you were just in sits ABOVE the
                 // greeting, as a readable glass preview — the fastest way back
                 // into real work. Hidden when nothing has been said yet.
@@ -179,14 +179,14 @@ fun HomeDashboardScreen(
                     Spacer(Modifier.height(16.dp))
                 }
                 GreetingBlock(greeting = greeting, firstName = firstName)
-                Spacer(Modifier.height(26.dp))
+                Spacer(Modifier.height(30.dp))
                 QuickPills(
                     onNewChat = onNewChat,
                     onExplore = onOpenAgent,
                     onCreate = { onStartPrompt(CREATE_PROMPT) },
                     onMore = onOpenDrawer,
                 )
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(28.dp))
                 Bento(
                     onVideo = { onStartPrompt(CREATE_PROMPT) },
                     onMindGuide = {
@@ -200,9 +200,9 @@ fun HomeDashboardScreen(
                         )
                     },
                 )
-                Spacer(Modifier.height(28.dp))
+                Spacer(Modifier.height(32.dp))
                 TodayUsedHeader(onSeeAll = onOpenChats)
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(8.dp))
                 SuggestionsCard(
                     title = "Suggestions",
                     subtitle = "Try suggested questions first.",
@@ -253,7 +253,7 @@ private fun HomeHeader(onAssistant: () -> Unit, onMenu: () -> Unit) {
     ) {
         Box(
             modifier = Modifier
-                .size(42.dp)
+                .size(38.dp)
                 .clip(CircleShape),
             contentAlignment = Alignment.Center
         ) {
@@ -267,7 +267,7 @@ private fun HomeHeader(onAssistant: () -> Unit, onMenu: () -> Unit) {
                 modifier = Modifier.size(42.dp)
             )
         }
-        Spacer(Modifier.width(10.dp))
+        Spacer(Modifier.width(12.dp))
         Column {
             Text(
                 text = "Nexly",
@@ -399,11 +399,13 @@ private fun VideoCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
         modifier = modifier
             .clip(shape)
             .background(
+                // Sampled from the sheet: the card body is near-white; the
+                // lavender and blush come from the art, not the background.
                 Brush.linearGradient(
                     listOf(
-                        Color(0xFFE7DBFF),
-                        Color(0xFFFFD8E7),
-                        Color(0xFFFFE7D3),
+                        Color(0xFFFDFAF8),
+                        Color(0xFFF7EAF1),
+                        Color(0xFFF9EEE5),
                     )
                 )
             )
@@ -1017,7 +1019,7 @@ private fun GlassPanel(
 private fun GlassCircleButton(icon: ImageVector, label: String, onClick: () -> Unit) {
     Box(
         modifier = Modifier
-            .size(42.dp)
+            .size(40.dp)
             .gsGlass(GsGlassRole.FloatingControl, CircleShape)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
@@ -1032,7 +1034,7 @@ private fun GlassCircleButton(icon: ImageVector, label: String, onClick: () -> U
             icon,
             contentDescription = label,
             tint = GsTheme.colors.textPrimary,
-            modifier = Modifier.size(19.dp)
+            modifier = Modifier.size(18.dp)
         )
     }
 }

@@ -741,6 +741,35 @@ private fun DrawScope.drawPearlScene() {
         cool = Color(0xFFD6C4FF),
         blush = Color(0xFFFFCDB9)
     )
+    // Two more lobes and a haze keep the cluster reading as one mass of light
+    // rather than three separate balls.
+    drawPearl(
+        center = Offset(w * 0.63f, h * 0.80f),
+        radius = w * 0.13f,
+        warm = Color(0xFFFFE1D4),
+        cool = Color(0xFFE4CBFF),
+        blush = Color(0xFFFFB9CE)
+    )
+    drawPearl(
+        center = Offset(w * 0.38f, h * 0.30f),
+        radius = w * 0.10f,
+        warm = Color(0xFFFFF4EC),
+        cool = Color(0xFFD9CEFF),
+        blush = Color(0xFFFFD3DE)
+    )
+    drawCircle(
+        brush = Brush.radialGradient(
+            listOf(
+                Color(0xFFFFD9EC).copy(alpha = 0.32f),
+                Color(0xFFCFC2FF).copy(alpha = 0.18f),
+                Color.Transparent
+            ),
+            center = Offset(w * 0.58f, h * 0.52f),
+            radius = w * 0.48f
+        ),
+        radius = w * 0.48f,
+        center = Offset(w * 0.58f, h * 0.52f)
+    )
     // A single silk thread crossing the large pearl, as in the reference.
     val silk = Path().apply {
         moveTo(w * 0.10f, h * 0.30f)
