@@ -1,5 +1,6 @@
 package com.grapsee.gsai.ui.chat
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -102,6 +103,12 @@ fun ChatsScreen(onNavigate: (String) -> Unit) {
     }
 
     LaunchedEffect(Unit) { doRefresh() }
+
+    // System back leaves selection before it leaves the screen.
+    BackHandler(enabled = selectionMode) {
+        selection = emptySet()
+        confirmingBulkDelete = false
+    }
 
     val rows = when (filter) {
         FILTER_PINNED -> conversations.filter { it.conversation.pinned }
