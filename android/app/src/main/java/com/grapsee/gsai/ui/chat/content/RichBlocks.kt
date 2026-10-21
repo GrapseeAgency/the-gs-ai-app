@@ -171,20 +171,21 @@ fun BlocksContent(
     val blocks = remember(parsed, recovered) {
         if (recovered == null) parsed else parsed + recovered
     }
-    // The answer text is SELECTABLE — every native AI app lets you drag a
-    // selection across part of a reply (the whole-answer copy lives in the
-    // action row, but "copy just this sentence" is a different verb and was
-    // impossible). SelectionContainer only governs Text children, so citation
-    // chips, the code-block copy button, mermaid and widget cards keep their
-    // own taps untouched. Selection state is disposable by design: it lives
-    // exactly as long as this composition.
-    SelectionContainer {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (isStreaming && blocks.isEmpty()) {
-                StreamingCaret()
-            }
-            blocks.forEachIndexed { index, block ->
-                key(streamBlockKey(block, index)) {
+    // THE ANSWER TEXT IS SELECTABLE — but ONLY the prose. SelectionContainer
+    // installs its own gesture that competes with (and can win over) a child's
+    // per-datum pointer input, so wrapping the WHOLE column meant tapping a
+    // chart/bar/slice started selecting the entire message instead of reading
+    // the datum. That is the "tapping an interactive renders the whole chat"
+    // defect. Prose blocks keep selection; every interactive block (widgets,
+    // charts, code cards, mermaid, collapsibles, citation chips, tool results)
+    // renders OUTSIDE the container and owns its own taps.
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (isStreaming && blocks.isEmpty()) {
+            StreamingCaret()
+        }
+        blocks.forEachIndexed { index, block ->
+            key(streamBlockKey(block, index)) {
+                val blockContent: @Composable () -> Unit = {
                     BlockView(
                         block = block,
                         isLast = index == blocks.lastIndex,
@@ -194,9 +195,26 @@ fun BlocksContent(
                         onSendPrompt = onSendPrompt
                     )
                 }
+                if (block.isProseBlock()) SelectionContainer { blockContent() } else blockContent()
             }
         }
     }
+}
+
+/**
+ * Whether a block is prose the reader may select. Interactive blocks must be
+ * FALSE: selection and a control's own gesture both want the same pointer, and
+ * a chart that cannot be tapped is worse than text that cannot be selected.
+ */
+private fun Block.isProseBlock(): Boolean = when (this) {
+    is Block.Paragraph,
+    is Block.Heading,
+    is Block.BulletList,
+    is Block.OrderedList,
+    is Block.BlockQuote,
+    is Block.TableBlock,
+    is Block.MathBlock -> true
+    else -> false
 }
 
 /**
