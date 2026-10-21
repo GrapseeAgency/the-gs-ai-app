@@ -25,13 +25,13 @@ struct ReferenceWelcomeView: View {
                     .padding(.vertical, 9)
                     .background(Capsule().fill(Color.white.opacity(0.46)))
                 AnimatedGsIllustration(imageName: "GSCompanionOrb", size: 168, breathDuration: 2.9, rotationDegrees: 1.1, lift: -2, startDelay: 0.12)
-                    .accessibilityLabel("GS AI companion")
+                    .accessibilityLabel("Nexly companion")
                 VStack(spacing: Aero.Spacing.s) {
-                    Text("Your smarter digital assistant")
+                    Text("Your ideas.\nOur support.")
                         .font(Aero.display())
                         .foregroundStyle(Aero.text)
                         .multilineTextAlignment(.center)
-                    Text("A calmer way to think, create, explore, and get things done.")
+                    Text("Plan, create, learn, and explore — with an AI that truly understands you.")
                         .font(Aero.body())
                         .foregroundStyle(Aero.textMuted)
                         .multilineTextAlignment(.center)
@@ -39,7 +39,7 @@ struct ReferenceWelcomeView: View {
             }
             Spacer()
             VStack(spacing: Aero.Spacing.m) {
-                Text("Speak, ask, solve.").font(Aero.label()).foregroundStyle(Aero.text)
+                Text("A smarter tomorrow starts with a conversation.").font(Aero.label()).foregroundStyle(Aero.text)
                 Button("Explore now", action: onExplore)
                     .font(Aero.button())
                     .foregroundStyle(Aero.onAccent)
