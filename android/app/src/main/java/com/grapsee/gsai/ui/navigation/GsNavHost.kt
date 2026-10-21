@@ -94,9 +94,16 @@ fun GsNavHost(modifier: Modifier = Modifier) {
     val back: () -> Unit = { navController.popBackStack() }
     val context = LocalContext.current
     val view = LocalView.current
-    // Session gate — first launch walks Auth → Onboarding; later launches go
-    // straight into the workspace.
-    val start = if (SessionStore.isSessionActive(context)) GsRoutes.HOME else GsRoutes.AUTH
+    // Session gate — first launch walks Auth → Onboarding; a signed-in user
+    // who has NOT finished onboarding is still inside the gate. Before this,
+    // only the session flag was read, so finishing auth (or restoring a
+    // session) dropped the user straight onto Home and the onboarding pages
+    // were never seen in a normal run.
+    val start = when {
+        !SessionStore.isSessionActive(context) -> GsRoutes.AUTH
+        !SessionStore.isOnboarded(context) -> GsRoutes.ONBOARDING
+        else -> GsRoutes.HOME
+    }
 
     // The current destination drives two shell behaviours at once: whether the
     // drawer may exist at all (never inside the session gate) and which row
