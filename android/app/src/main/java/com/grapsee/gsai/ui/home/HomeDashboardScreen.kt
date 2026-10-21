@@ -334,7 +334,7 @@ private fun QuickPills(
         GlassPill(GsIcons.Plus, "New Chat", onNewChat)
         GlassPill(GsIcons.Compass, "Explore", onExplore)
         GlassPill(GsIcons.Sparkles, "Create", onCreate)
-        GlassPill(GsIcons.MoreHorizontal, "More", onMore)
+        GlassPill(GsIcons.Ellipsis, "More", onMore)
     }
 }
 

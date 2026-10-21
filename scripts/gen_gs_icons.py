@@ -200,11 +200,20 @@ TAG_RE = re.compile(r"<(path|line|polyline|polygon|circle|ellipse|rect)\b([^/>]*
 
 def fetch_icon(stem: str) -> list[str] | None:
     url = f"{BASE}/{stem}.svg"
-    try:
-        with urllib.request.urlopen(url, timeout=30) as r:
-            svg = r.read().decode()
-    except Exception as e:  # noqa: BLE001
-        print(f"FAIL {stem}: {e}", file=sys.stderr)
+    svg = None
+    # The CDN intermittently 404s/times-out on random icons; retry so one
+    # transient miss does not drop an icon from the committed set.
+    for attempt in range(4):
+        try:
+            with urllib.request.urlopen(url, timeout=30) as r:
+                svg = r.read().decode()
+            break
+        except Exception as e:  # noqa: BLE001
+            print(f"retry {attempt + 1} {stem}: {e}", file=sys.stderr)
+            import time
+            time.sleep(1.5)
+    if svg is None:
+        print(f"FAIL {stem}", file=sys.stderr)
         return None
     ds = []
     for m in TAG_RE.finditer(svg):
@@ -240,7 +249,15 @@ import androidx.compose.ui.unit.dp
  * app, per the icon-system rule (one family, one weight, one container spec).
  *
  * The set is CURATED: only icons rendered by shipped screens are included.
- * Add to scripts/gen_gs_icons.py ICONS and regenerate; never hand-edit paths.
+ * Add to scripts/gs-icon-stems.txt (one Lucide stem per line) and regenerate;
+ * never hand-edit paths.
+ *
+ * STROKE COLOR IS NOT OPTIONAL — IT MUST BE OPAQUE. Every path stamps
+ * SolidColor(Color.Black) so Icon(tint = ...) has real pixels to recolour (its
+ * ColorFilter is SrcIn: result = tint x source alpha). A transparent source
+ * (Color.Unspecified, alpha 0) renders NOTHING and the tint cannot resurrect
+ * it — that is the whole-family "invisible icons" defect. Never emit an
+ * unspecified/transparent stroke.
  *
  * Lucide ISC license: https://lucide.dev/license
  */'''
@@ -270,10 +287,26 @@ PATH_BLOCK = '''            addPath(
             )'''
 
 
+def load_stems() -> list[str]:
+    """Prefer the committed curated list (scripts/gs-icon-stems.txt); fall back
+    to the inline ICONS dict so the generator still runs without the file."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    path = os.path.join(here, "gs-icon-stems.txt")
+    if os.path.exists(path):
+        with open(path) as f:
+            stems = [ln.strip() for ln in f if ln.strip() and not ln.startswith("#")]
+        if stems:
+            # Keep the inline dict's Kotlin-name intent where it overlaps; the
+            # file is the source of truth for WHICH icons ship.
+            return sorted(set(stems))
+    return list(ICONS.keys())
+
+
 def main() -> int:
     out = [HEADER % VERSION, "\npublic object GsIcons {"]
     missing = []
-    for stem in ICONS:
+    stems = load_stems()
+    for stem in stems:
         ds = fetch_icon(stem)
         if ds is None:
             missing.append(stem)
@@ -285,7 +318,7 @@ def main() -> int:
     os.makedirs(os.path.dirname(target), exist_ok=True)
     with open(target, "w") as f:
         f.write("\n".join(out))
-    print(f"wrote {target}: {len(ICONS) - len(missing)} icons, missing: {missing or 'none'}")
+    print(f"wrote {target}: {len(stems) - len(missing)} icons, missing: {missing or 'none'}")
     return 1 if missing else 0
 
 
