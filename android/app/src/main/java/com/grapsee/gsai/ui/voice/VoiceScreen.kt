@@ -70,6 +70,7 @@ import com.grapsee.gsai.ui.components.RefIconButton
 import com.grapsee.gsai.ui.orbs.OrbSize
 import com.grapsee.gsai.ui.orbs.ThinkingOrb
 import com.grapsee.gsai.ui.orbs.OrbPhase
+import com.grapsee.gsai.ui.orbs.luminance
 import com.grapsee.gsai.ui.orbs.orbStateForVoice
 import com.grapsee.gsai.ui.theme.GsHaptics
 import com.grapsee.gsai.ui.theme.GsMotion

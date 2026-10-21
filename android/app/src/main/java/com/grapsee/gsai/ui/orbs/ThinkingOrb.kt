@@ -168,8 +168,9 @@ fun ThinkingOrb(
         // light without touching the locked geometry. A radial bloom in the
         // phase hue, breathing on the shared clock; a live amplitude lifts the
         // core. Screen blend makes it glow over the atmosphere, not tint it.
-        val glowCenter = Offset(size.width / 2f, size.height / 2f)
-        val glowRadius = size.minDimension / 2f
+        val ds = this.size // DrawScope size — the OrbSize `size` param shadows it here
+        val glowCenter = Offset(ds.width / 2f, ds.height / 2f)
+        val glowRadius = ds.minDimension / 2f
         val breathe = if (profile.pulse) {
             (0.5 + 0.5 * sin(tState.doubleValue * profile.pulseSpeed * PI)).toFloat()
         } else {
