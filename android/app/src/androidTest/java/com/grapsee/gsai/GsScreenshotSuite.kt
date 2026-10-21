@@ -274,6 +274,15 @@ Inline `code` and math ${'$'}a^2 + b^2 = c^2$."""
         if (tapDesc("Open menu") && tapText("Design pass sample")) {
             SystemClock.sleep(2_000)
             shot("41-rich-reply-rendered")
+            // 5b. The reference chat options sheet, opened from the top bar.
+            if (tapDesc("Conversation options")) {
+                SystemClock.sleep(1_200)
+                shot("25-chat-options")
+                device.pressBack()
+                device.waitForIdle(1_200)
+            } else {
+                shot("25-chat-options-MISSING-TRIGGER")
+            }
             device.pressBack()
             device.waitForIdle(1_500)
         } else {
