@@ -74,11 +74,11 @@ struct HomeDashboardView: View {
     private var greeting: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Good morning,")
-                .font(Aero.display())
+                .font(.system(size: 32, weight: .medium))
                 .foregroundStyle(Aero.text)
             HStack(spacing: 8) {
                 Text("there")
-                    .font(Aero.display())
+                    .font(.system(size: 32, weight: .medium))
                     .foregroundStyle(Aero.text)
                 Image(systemName: "sparkles")
                     .font(.system(size: 22, weight: .semibold))

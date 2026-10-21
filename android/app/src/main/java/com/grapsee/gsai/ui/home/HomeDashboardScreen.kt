@@ -275,13 +275,15 @@ private fun GreetingBlock(greeting: String, firstName: String?) {
     Column {
         Text(
             text = greeting + ",",
-            style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.SemiBold),
+            // The reference's greeting is a calm 32pt medium, not a poster:
+            // displaySmall + SemiBold read as a headline shouting over the art.
+            style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Medium),
             color = GsTheme.colors.textPrimary
         )
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = firstName ?: "there",
-                style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.SemiBold),
+                style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Medium),
                 color = GsTheme.colors.textPrimary
             )
             Spacer(Modifier.width(8.dp))
