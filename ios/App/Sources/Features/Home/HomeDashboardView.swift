@@ -171,10 +171,10 @@ struct HomeDashboardView: View {
     // MARK: Quick-action pills
 
     private var pills: some View {
-        // All four pills, one row. At 12pt with 10pt of inset the set measures
-        // ~340pt on a 393pt screen, so "More" is never pushed off the edge and
+        // All four pills, one row. At 12pt with 9pt of inset the set measures
+        // ~300pt, so it fits a 360pt phone as well as the sheet's 393pt and
         // nothing has to be swiped to be discovered.
-        HStack(spacing: 6) {
+        HStack(spacing: 5) {
             HomePill(system: "plus", title: "New Chat", action: onNewChat)
             HomePill(system: "safari", title: "Explore", action: onOpenAgent)
             HomePill(system: "sparkles", title: "Create",
@@ -309,12 +309,12 @@ private struct HomePill: View {
     let action: () -> Void
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 5) {
-                Image(systemName: system).font(.system(size: 13, weight: .medium))
+            HStack(spacing: 4) {
+                Image(systemName: system).font(.system(size: 12.5, weight: .medium))
                 Text(title).font(.system(size: 12, weight: .medium))
             }
             .foregroundStyle(Aero.text)
-            .padding(.horizontal, 10)
+            .padding(.horizontal, 9)
             .padding(.vertical, 9)
             .gsCapsuleGlass(.floatingControl)
         }

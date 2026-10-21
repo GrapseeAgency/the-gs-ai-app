@@ -340,12 +340,12 @@ private fun QuickPills(
     onCreate: () -> Unit,
     onMore: () -> Unit,
 ) {
-    // Four pills, one row, no horizontal scroller. At 12sp type and 9dp of
-    // inset the set measures ~340dp on a 393dp screen — inside the reference's
-    // gutter — so "More" is never parked off-screen.
+    // Four pills, one row, no horizontal scroller. Measured at 12sp with 8dp
+    // of inset the set is ~310dp, so it fits a 360dp phone as well as the
+    // sheet's 393dp — "More" is never parked off-screen.
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         GlassPill(GsIcons.Plus, "New Chat", onNewChat)
@@ -943,16 +943,16 @@ private fun GlassPill(icon: ImageVector, label: String, onClick: () -> Unit) {
                 onClickLabel = label,
                 onClick = onClick
             )
-            .padding(horizontal = 9.dp, vertical = 8.dp),
+            .padding(horizontal = 8.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
             icon,
             contentDescription = null,
             tint = GsTheme.colors.textPrimary,
-            modifier = Modifier.size(15.dp)
+            modifier = Modifier.size(14.dp)
         )
-        Spacer(Modifier.width(5.dp))
+        Spacer(Modifier.width(4.dp))
         Text(
             text = label,
             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium),
