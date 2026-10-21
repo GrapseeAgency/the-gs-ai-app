@@ -35,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -207,7 +208,7 @@ fun HomeDashboardScreen(
                     subtitle = "Try suggested questions first.",
                     onClick = { suggestions.firstOrNull()?.let { onStartPrompt(it.prompt) } },
                 )
-                Spacer(Modifier.height(124.dp))
+                Spacer(Modifier.height(140.dp))
             }
         }
         // Content scrolls under the floating dock. A canvas-coloured fade
@@ -270,12 +271,15 @@ private fun HomeHeader(onAssistant: () -> Unit, onMenu: () -> Unit) {
         Column {
             Text(
                 text = "Nexly",
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold
+                ),
                 color = colors.textPrimary
             )
             Text(
                 text = "AI Companion",
-                style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 13.sp),
                 color = colors.textSecondary
             )
         }
@@ -314,16 +318,20 @@ private fun GreetingBlock(greeting: String, firstName: String?) {
             )
             Spacer(Modifier.width(8.dp))
             Icon(
-                GsIcons.Sparkles,
+                // One four-point star, not the three-star "sparkles" cluster.
+                GsIcons.Sparkle,
                 contentDescription = null,
                 tint = GsTheme.colors.accentStrong,
-                modifier = Modifier.size(24.dp)
+                modifier = Modifier.size(26.dp)
             )
         }
         Spacer(Modifier.height(10.dp))
         Text(
             text = "Your thoughts, questions, ideas —\nI'm here for it all.",
-            style = MaterialTheme.typography.bodyLarge,
+            style = MaterialTheme.typography.bodyMedium.copy(
+                fontSize = 15.sp,
+                lineHeight = 22.sp
+            ),
             color = GsTheme.colors.textSecondary
         )
     }
@@ -422,13 +430,20 @@ private fun VideoCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
             Spacer(Modifier.weight(1f))
             Text(
                 text = "Create Stunning\nVideos with AI",
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontSize = 16.sp,
+                    lineHeight = 21.sp,
+                    fontWeight = FontWeight.SemiBold
+                ),
                 color = GsTheme.colors.textPrimary
             )
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(6.dp))
             Text(
                 text = "Turn your ideas into beautiful videos in minutes.",
-                style = MaterialTheme.typography.labelMedium,
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp
+                ),
                 color = GsTheme.colors.textSecondary
             )
             Spacer(Modifier.height(10.dp))
@@ -489,14 +504,20 @@ private fun MindGuideCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
             Column(Modifier.weight(1f)) {
                 Text(
                     text = "Mind Guide",
-                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                    style = MaterialTheme.typography.titleSmall.copy(
+                        fontSize = 13.5.sp,
+                        fontWeight = FontWeight.SemiBold
+                    ),
                     color = GsTheme.colors.textPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     text = "Your personal clarity companion.",
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 11.5.sp,
+                        lineHeight = 15.sp
+                    ),
                     color = GsTheme.colors.textSecondary,
                     maxLines = 2
                 )
@@ -519,7 +540,10 @@ private fun ReflectionCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = "Today's reflection",
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                        style = MaterialTheme.typography.titleSmall.copy(
+                            fontSize = 13.5.sp,
+                            fontWeight = FontWeight.SemiBold
+                        ),
                         color = GsTheme.colors.textPrimary,
                         modifier = Modifier.weight(1f)
                     )
@@ -533,7 +557,10 @@ private fun ReflectionCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
                 Spacer(Modifier.height(2.dp))
                 Text(
                     text = "Take a moment to check in with yourself.",
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 11.5.sp,
+                        lineHeight = 15.sp
+                    ),
                     color = GsTheme.colors.textSecondary,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
@@ -566,7 +593,7 @@ private fun TodayUsedHeader(onSeeAll: () -> Unit) {
         Text(
             text = "Today's Used",
             style = MaterialTheme.typography.titleLarge.copy(
-                fontSize = 20.sp,
+                fontSize = 18.sp,
                 fontWeight = FontWeight.SemiBold
             ),
             color = GsTheme.colors.textPrimary,
@@ -610,38 +637,35 @@ private fun SuggestionsCard(title: String, subtitle: String, onClick: () -> Unit
         ) {
             Box(
                 modifier = Modifier
-                    .size(34.dp)
-                    .clip(RoundedCornerShape(11.dp))
+                    .size(32.dp)
+                    .clip(RoundedCornerShape(10.dp))
                     .background(Color.White.copy(alpha = 0.55f))
-                    .border(1.dp, GsTheme.colors.glassBorder, RoundedCornerShape(11.dp)),
+                    .border(1.dp, GsTheme.colors.glassBorder, RoundedCornerShape(10.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     GsIcons.Lightbulb,
                     contentDescription = null,
                     tint = GsTheme.colors.textPrimary,
-                    modifier = Modifier.size(17.dp)
+                    modifier = Modifier.size(16.dp)
                 )
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium
+                    ),
                     color = GsTheme.colors.textPrimary
                 )
                 Text(
                     text = subtitle,
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp),
                     color = GsTheme.colors.textSecondary
                 )
             }
-            Icon(
-                GsIcons.ChevronRight,
-                contentDescription = null,
-                tint = GsTheme.colors.textTertiary,
-                modifier = Modifier.size(18.dp)
-            )
         }
     }
 }
@@ -729,9 +753,9 @@ private fun HomeDock(
         modifier = modifier
             .fillMaxWidth()
             .gsGlass(GsGlassRole.FloatingControl, RoundedCornerShape(999.dp))
-            .padding(horizontal = 8.dp, vertical = 8.dp),
+            .padding(horizontal = 14.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
+        horizontalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         DockCircle(FilledHouse, "Home", selected = true, onClick = onHome)
         DockCircle(FilledBook, "Chats", onClick = onChats)
@@ -740,10 +764,10 @@ private fun HomeDock(
         Box(
             modifier = Modifier
                 .weight(1f)
-                .height(54.dp)
+                .height(60.dp)
                 .clip(RoundedCornerShape(999.dp))
                 .background(Color.White.copy(alpha = 0.55f))
-                .padding(4.dp)
+                .padding(6.dp)
         ) {
             Row(
                 modifier = Modifier
@@ -767,18 +791,21 @@ private fun HomeDock(
                 Icon(
                     GsIcons.Sparkles,
                     contentDescription = null,
-                    tint = Color(0xFF4A2415),
-                    modifier = Modifier.size(18.dp)
+                    tint = Color(0xFF3A2116),
+                    modifier = Modifier.size(19.dp)
                 )
-                Spacer(Modifier.width(6.dp))
+                Spacer(Modifier.width(7.dp))
                 Text(
                     text = "Generate",
-                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-                    color = Color(0xFF4A2415)
+                    style = MaterialTheme.typography.labelLarge.copy(
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold
+                    ),
+                    color = Color(0xFF3A2116)
                 )
             }
         }
-        DockCircle(GsIcons.Settings, "Settings", onClick = onSettings)
+        DockCircle(FilledGear, "Settings", onClick = onSettings)
     }
 }
 
@@ -844,6 +871,86 @@ private val FilledBook: ImageVector by lazy {
             curveTo(17.8f, 4.9f, 14.6f, 4.9f, 12f, 6.4f)
             lineTo(12f, 17.4f)
             curveTo(11.8f, 17.4f, 11.4f, 17.3f, 11.2f, 17.2f)
+            close()
+        }
+    }.build()
+}
+
+
+/**
+ * Filled gear. The sheet's settings glyph is a solid cog with a hole; the
+ * generated Lucide set only has the outline, so the silhouette lives here.
+ */
+private val FilledGear: ImageVector by lazy {
+    ImageVector.Builder(
+        name = "FilledGear",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).apply {
+        path(fill = SolidColor(Color.Black), pathFillType = PathFillType.EvenOdd) {
+            moveTo(18.79f, 9.6f)
+            lineTo(19.02f, 10.38f)
+            lineTo(21.28f, 10.53f)
+            lineTo(21.28f, 13.47f)
+            lineTo(19.02f, 13.62f)
+            lineTo(18.79f, 14.4f)
+            lineTo(18.5f, 15.1f)
+            lineTo(18.11f, 15.82f)
+            lineTo(19.6f, 17.53f)
+            lineTo(17.53f, 19.6f)
+            lineTo(15.82f, 18.11f)
+            lineTo(15.1f, 18.5f)
+            lineTo(14.4f, 18.79f)
+            lineTo(13.62f, 19.02f)
+            lineTo(13.47f, 21.28f)
+            lineTo(10.53f, 21.28f)
+            lineTo(10.38f, 19.02f)
+            lineTo(9.6f, 18.79f)
+            lineTo(8.9f, 18.5f)
+            lineTo(8.18f, 18.11f)
+            lineTo(6.47f, 19.6f)
+            lineTo(4.4f, 17.53f)
+            lineTo(5.89f, 15.82f)
+            lineTo(5.5f, 15.1f)
+            lineTo(5.21f, 14.4f)
+            lineTo(4.98f, 13.62f)
+            lineTo(2.72f, 13.47f)
+            lineTo(2.72f, 10.53f)
+            lineTo(4.98f, 10.38f)
+            lineTo(5.21f, 9.6f)
+            lineTo(5.5f, 8.9f)
+            lineTo(5.89f, 8.18f)
+            lineTo(4.4f, 6.47f)
+            lineTo(6.47f, 4.4f)
+            lineTo(8.18f, 5.89f)
+            lineTo(8.9f, 5.5f)
+            lineTo(9.6f, 5.21f)
+            lineTo(10.38f, 4.98f)
+            lineTo(10.53f, 2.72f)
+            lineTo(13.47f, 2.72f)
+            lineTo(13.62f, 4.98f)
+            lineTo(14.4f, 5.21f)
+            lineTo(15.1f, 5.5f)
+            lineTo(15.82f, 5.89f)
+            lineTo(17.53f, 4.4f)
+            lineTo(19.6f, 6.47f)
+            lineTo(18.11f, 8.18f)
+            lineTo(18.5f, 8.9f)
+            close()
+            moveTo(15.1f, 12f)
+            lineTo(14.68f, 10.45f)
+            lineTo(13.55f, 9.32f)
+            lineTo(12f, 8.9f)
+            lineTo(10.45f, 9.32f)
+            lineTo(9.32f, 10.45f)
+            lineTo(8.9f, 12f)
+            lineTo(9.32f, 13.55f)
+            lineTo(10.45f, 14.68f)
+            lineTo(12f, 15.1f)
+            lineTo(13.55f, 14.68f)
+            lineTo(14.68f, 13.55f)
             close()
         }
     }.build()
@@ -943,7 +1050,7 @@ private fun GlassPill(icon: ImageVector, label: String, onClick: () -> Unit) {
                 onClickLabel = label,
                 onClick = onClick
             )
-            .padding(horizontal = 8.dp, vertical = 8.dp),
+            .padding(horizontal = 8.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(

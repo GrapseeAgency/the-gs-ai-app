@@ -33,7 +33,7 @@ struct HomeDashboardView: View {
                     todayUsedHeader
                     suggestionsCard
                     // Clear the floating dock so the last card is reachable.
-                    Spacer(minLength: 120)
+                    Spacer(minLength: 140)
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 8)
@@ -68,7 +68,9 @@ struct HomeDashboardView: View {
                                    breathDuration: 3.4, rotationDegrees: 1.2,
                                    lift: -2, startDelay: 0.08)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Nexly").font(Aero.title()).foregroundStyle(Aero.text)
+                Text("Nexly")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(Aero.text)
                 Text("AI Companion").font(Aero.caption()).foregroundStyle(Aero.textMuted)
             }
             Spacer()
@@ -150,18 +152,20 @@ struct HomeDashboardView: View {
     private var greeting: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("\(greetingWord),")
-                .font(.system(size: 32, weight: .medium))
+                .font(.system(size: 32, weight: .semibold))
                 .foregroundStyle(Aero.text)
             HStack(spacing: 8) {
                 Text(account.firstName.isEmpty ? "there" : account.firstName)
-                    .font(.system(size: 32, weight: .medium))
+                    .font(.system(size: 32, weight: .semibold))
                     .foregroundStyle(Aero.text)
-                Image(systemName: "sparkles")
-                    .font(.system(size: 22, weight: .semibold))
+                // One four-point star, not the three-star cluster.
+                Image(systemName: "sparkle")
+                    .font(.system(size: 24, weight: .semibold))
                     .foregroundStyle(Aero.accent)
             }
             Text("Your thoughts, questions, ideas —\nI'm here for it all.")
-                .font(Aero.body())
+                .font(.system(size: 15))
+                .lineSpacing(4)
                 .foregroundStyle(Aero.textMuted)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -210,7 +214,7 @@ struct HomeDashboardView: View {
     private var todayUsedHeader: some View {
         HStack {
             Text("Today's Used")
-                .font(.system(size: 20, weight: .semibold))
+                .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(Aero.text)
             Spacer()
             Button(action: onOpenChats) {
@@ -229,22 +233,22 @@ struct HomeDashboardView: View {
         Button(action: { onStartPrompt("Suggest a few questions I could ask about ") }) {
             HStack(spacing: 12) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .fill(Color.white.opacity(0.55))
-                        .frame(width: 34, height: 34)
+                        .frame(width: 32, height: 32)
                     Image(systemName: "lightbulb")
                         .font(.system(size: 15, weight: .medium))
                         .foregroundStyle(Aero.text)
                 }
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Suggestions").font(Aero.body()).foregroundStyle(Aero.text)
+                    Text("Suggestions")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(Aero.text)
                     Text("Try suggested questions first.")
-                        .font(Aero.caption()).foregroundStyle(Aero.textMuted)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Aero.textMuted)
                 }
                 Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Aero.textMuted)
             }
             .padding(10)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -256,30 +260,30 @@ struct HomeDashboardView: View {
     // MARK: Floating dock
 
     private var dock: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 14) {
             DockIcon(system: "house.fill", label: "Home", selected: true, action: {})
             DockIcon(system: "book.fill", label: "Chats", action: onOpenChats)
             // The reference seats the peach pill inside a white well, so the
             // dock reads as three glass buttons and one lit action.
             Button(action: onNewChat) {
                 HStack(spacing: 6) {
-                    Image(systemName: "sparkles").font(.system(size: 15, weight: .semibold))
-                    Text("Generate").font(Aero.button())
+                    Image(systemName: "sparkles").font(.system(size: 18, weight: .semibold))
+                    Text("Generate").font(.system(size: 15, weight: .semibold))
                 }
                 .foregroundStyle(Color(red: 0.29, green: 0.14, blue: 0.08))
                 .frame(maxWidth: .infinity)
-                .frame(height: 46)
+                .frame(height: 48)
                 .background(Capsule().fill(LinearGradient(
                     colors: [Color(red: 1, green: 0.83, blue: 0.71),
                              Color(red: 1, green: 0.75, blue: 0.61)],
                     startPoint: .leading, endPoint: .trailing)))
-                .padding(4)
+                .padding(6)
                 .background(Capsule().fill(Color.white.opacity(0.55)))
             }
             .buttonStyle(KineticPressStyle())
-            DockIcon(system: "gearshape", label: "Settings", action: onOpenDrawer)
+            DockIcon(system: "gearshape.fill", label: "Settings", action: onOpenDrawer)
         }
-        .padding(8)
+        .padding(14)
         .gsCapsuleGlass(.floatingControl)
     }
 }
@@ -315,7 +319,7 @@ private struct HomePill: View {
             }
             .foregroundStyle(Aero.text)
             .padding(.horizontal, 9)
-            .padding(.vertical, 9)
+            .padding(.vertical, 11)
             .gsCapsuleGlass(.floatingControl)
         }
         .buttonStyle(KineticPressStyle())
@@ -349,7 +353,8 @@ private struct VideoCard: View {
                     .background(Capsule().fill(Color.white.opacity(0.45)))
                     Spacer()
                     Text("Create Stunning\nVideos with AI")
-                        .font(Aero.title()).foregroundStyle(Aero.text)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(Aero.text)
                         .multilineTextAlignment(.leading)
                     Text("Turn your ideas into beautiful videos in minutes.")
                         .font(Aero.caption()).foregroundStyle(Aero.textMuted)
@@ -380,7 +385,7 @@ private struct MindGuideCard: View {
                 PearlOrb(size: 36)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Mind Guide")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: 13.5, weight: .semibold))
                         .foregroundStyle(Aero.text)
                         .lineLimit(1)
                     Text("Your personal clarity companion.")
@@ -408,13 +413,16 @@ private struct ReflectionCard: View {
             ZStack(alignment: .bottomTrailing) {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
-                        Text("Today's reflection").font(Aero.label()).foregroundStyle(Aero.text)
+                        Text("Today's reflection")
+                            .font(.system(size: 13.5, weight: .semibold))
+                            .foregroundStyle(Aero.text)
                         Spacer()
                         Image(systemName: "chevron.right")
                             .font(.system(size: 12, weight: .semibold)).foregroundStyle(Aero.textMuted)
                     }
                     Text("Take a moment to check in with yourself.")
-                        .font(Aero.caption()).foregroundStyle(Aero.textMuted)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(Aero.textMuted)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.trailing, 26)
                 }
