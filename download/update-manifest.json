@@ -1,10 +1,10 @@
 {
-  "versionCode": 124,
-  "versionName": "0.86.1",
+  "versionCode": 125,
+  "versionName": "0.86.2",
   "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "sha256": "78f559206be84b4b5dd023326afb75530d47c7e0147988fc49b9f0df6d184711",
-  "size": 66270852,
-  "notes": "v0.86.1 (versionCode 124) \u2014 CI android-release run 39671519887 from main at 06416a67. PREVIEWS FULLY CLEAN + DOCK NO LONGER SITS ON TEXT. (1) List previews and the Home resume card now strip markdown table separator rows as well as pipes, headings, emphasis and code fences, so the last message reads as prose instead of \"## \u2026 | Planet | Moons | :--- :---: ---:\". (2) A canvas-coloured gradient now fades content beneath the floating dock: \"Today's Used\" was readable through the glass, and the dock now floats over atmosphere rather than over text. (3) Carried: chats multi-select (long-press \u2192 N selected \u2192 pin/archive/delete), onboarding is reached and unobstructed, the reference AI tiles, the Model Details page, the chat options sheet with Chat Details, and the 32pt greeting. Verified: android-app 39671528911 (green), android-screens 39671524849 (green, screenshots in download/qa-0.86.1-*.png), android-release 39671519887 (green, this APK).",
+  "sha256": "07811e6d38981f64fedd52760d825618d9974554693281062dbecdf9265098b9",
+  "size": 66270856,
+  "notes": "v0.86.2 (versionCode 125) \u2014 CI android-release run 39678530955 from main at 73a40f74. CHAT SHEETS ARE SOLID SURFACES. The options sheet was 80%-opaque glass, so a table and a code block read straight through it and the rows looked like a smear. All three chat sheets now use the opaque sheetSurface; the glass language stays on the cards behind them. Verified on the emulator: Share Chat / Rename Chat / Chat Details / Export Chat render on clean cream. SCREENSHOT SUITE RESILIENCE: the design-pass run now dismisses emulator ANR dialogs (\"Pixel Launcher isn't responding\") before taps, before the consent poll and before each capture \u2014 one ANR had stolen input for a whole run and produced a cascade of false MISSING markers. Carried from v0.86.1: chats multi-select, previews as prose (including table separator rows), the dock fade, onboarding reached and unobstructed, the reference AI tiles, Model Details, and the chat options sheet with Chat Details. iOS on main, still queued on the macOS runner: AI Intelligence page, Home resume card, chats multi-select, and the two XCTest fixes. Verified: android-app 39676536466 (green), android-screens 39676540912 (green, screenshot in download/qa-0.86.2-options.png), android-release 39678530955 (green, this APK).",
   "knownLimitations": [
     "iOS is compile-verified by ios-native device+simulator builds; there is no iOS screenshot harness.",
     "The artwork is vector-only by design \u2014 no raster illustrations ship.",

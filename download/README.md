@@ -1,30 +1,30 @@
 Here are all the generated files.
 
-## Latest release: v0.86.1 — previews as prose, dock over atmosphere (versionCode 124)
+## Latest release: v0.86.2 — chat sheets are solid surfaces (versionCode 125)
 
     file    GS-AI-App.apk
-    size    66270852 bytes
-    sha256  78f559206be84b4b5dd023326afb75530d47c7e0147988fc49b9f0df6d184711
+    size    66270856 bytes
+    sha256  07811e6d38981f64fedd52760d825618d9974554693281062dbecdf9265098b9
 
-| Home — clean resume card, dock fades the content under it | Chats — multi-select |
-|---|---|
-| ![home](qa-0.86.1-home.png) | ![multi-select](qa-0.86.1-multiselect.png) |
+![options sheet](qa-0.86.2-options.png)
 
 What landed in this build:
 
-- **Previews read as prose.** Code fences, table pipes, separator rows,
-  headings and emphasis are stripped before clipping, so a rich reply shows as
-  "The first three planets Planet Moons Orbit days Mercury 0 88 …" instead of
-  raw markdown.
-- **The dock no longer sits on text.** A canvas-coloured gradient beneath the
-  floating dock fades the content that scrolls under it.
-- Carried from v0.86.0: chats multi-select (long-press → N selected →
-  pin/archive/delete), onboarding reached and unobstructed, the reference
-  2-up/3-up AI tiles, Model Details, the chat options sheet with Chat Details,
-  and the 32pt greeting.
+- **The chat options sheet no longer lets the transcript through.** It was
+  80%-opaque glass, so a table and a code block behind it turned the rows into
+  a smear. All three chat sheets now use the opaque `sheetSurface`; the glass
+  language stays on the cards behind them.
+- **The screenshot suite survives emulator ANRs.** A "Pixel Launcher isn't
+  responding" dialog had stolen input for an entire run and produced a cascade
+  of false MISSING markers; the suite now dismisses system ANRs before taps,
+  before the consent poll and before every capture.
+- Carried from v0.86.1: chats multi-select, previews as prose (including table
+  separator rows), the dock fade, onboarding reached and unobstructed, the
+  reference AI tiles, Model Details, and the chat options sheet with Chat
+  Details.
 
-Verification: `android-app` 39671528911 green, `android-screens` 39671524849
-green (the screenshots above), `android-release` 39671519887 green (this APK).
+Verification: `android-app` 39676536466 green, `android-screens` 39676540912
+green (the screenshot above), `android-release` 39678530955 green (this APK).
 
 ## Previous shipped release: v0.82.0 — the glass release (versionCode 119)
 
