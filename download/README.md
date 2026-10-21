@@ -1,60 +1,49 @@
 Here are all the generated files.
 
-## Latest release: v0.84.0 — icons that draw, illustrations, tappable charts (versionCode 121)
+## Latest release: v0.85.0 — onboarding reached, reference AI tiles, Model Details (versionCode 122)
 
     file    GS-AI-App.apk
     size    66270852 bytes
-    sha256  39a58db6525fb2a839fbd866e31cb4fa4ef6acbaa5664c3070f81403c998495c
+    sha256  6cdeb489c628a7b23f8a3a612ebb8273623d4f7c931649f0f9c9b7a3705de911
 
 Captured on the emulator from the same revision the release APK builds from
-(`main` at `e35e2f34`).
+(`main` at `07ae9931`).
 
-| Home — brand lockup, glass pills, illustrated bento, floating dock | Drawer — Nexly header, seven destinations, account footer |
+| Onboarding — the welcome flow, no dialog over it | Home — resume card, illustrated bento, floating dock |
 |---|---|
-| ![home](qa-0.84-home.png) | ![drawer](qa-0.84-drawer.png) |
+| ![onboarding](qa-0.85-onboarding.png) | ![home](qa-0.85-home.png) |
 
-| Onboarding — the reference welcome flow | Attach — mode sheet with real pickers |
+| AI Intelligence — the reference 2-up / 3-up tiles | Model Details — measured, not marketing |
 |---|---|
-| ![onboarding](qa-0.84-onboarding.png) | ![attach](qa-0.84-attach-mode.png) |
+| ![ai](qa-0.85-ai.png) | ![model](qa-0.85-model.png) |
 
 What landed in this build:
 
-- **The invisible-icon root cause.** The icon generator's attribute regex did
-  not accept digits, so `x1/y1/x2/y2` never matched and every `<line>`-based
-  Lucide glyph (menu, sliders, equals, minus, alignment) was emitted as
-  `M0,0 L0,0` — a blank glass tile. The regex now accepts digits, all 540
-  icons were regenerated (zero no-op paths), and the generator fails loudly
-  instead of committing blank geometry. The emulator shots above show the
-  drawer sliders tile and the top-bar menu glyph rendering.
-- **Illustrations.** A fourteen-scene hand-drawn set — Bloom, Conversation,
-  Search, Offline, Error, Library, Voice, Success, Privacy, Archive,
-  Notifications, Video, Clarity, Reflection — sharing one light source (upper
-  left), one material (peach glass, white edge, warm shadow) and one motif
-  (the five-petal bloom). Android draws it from primitives in
-  `ReferenceArt.kt`; iOS has a full SwiftUI `Canvas` port (`GsArtwork.swift`)
-  plus an SF-Symbol→scene map for every empty state. The Home bento now carries
-  real art: silk film cards with a glass aperture, a clarity lens holding a
-  bloom, and a lotus mirrored in still water.
-- **Every chart is tappable.** Box plot, heatmap, treemap, waterfall,
-  candlestick, gantt, sankey, network, force, wordcloud, sunburst, bullet,
-  quadrant, violin, contour, parallel coordinates, dendrogram and depth all
-  resolve a tap to a datum and print it in the readout line under the plot.
-  Selecting a datum never selects the transcript.
-- **Drawer legibility.** The panel's top stop was 55%-alpha, letting the
-  dashboard greeting ghost through the brand lockup; it is now an opaque
-  accent-into-surface veil.
-- **iOS.** The chat top bar gained the same rename / archive / delete options
-  as Android.
+- **Onboarding is actually reached.** The start destination only read the
+  session flag, so signing in dropped the user straight onto Home. It now
+  respects `SessionStore.isOnboarded`, so the welcome pages and the capability
+  setup are part of the normal flow.
+- **The first-run model consent no longer covers the welcome pages.** It was
+  composed above the entire app; it now lives inside the nav host and only
+  outside the session gate.
+- **AI Intelligence** uses the reference's tile language: model source 2-up,
+  reasoning effort 3-up, each with an icon, a title, one supporting line and a
+  check when selected. The tiles write the same `flash/thinking/auto` switch the
+  chat header exposes.
+- **Model Details** is a real page: device tier, measured download size, minimum
+  RAM, parameter count, four honest capabilities, and a Download or
+  Use-this-model action wired to the existing consent flow.
+- **Chat surfaces**: the "…" sheet is the reference list (Share, Rename, Chat
+  Details, Export, Clear, Delete, Cancel) and Chat Details opens a measured
+  stats page. Home opens on a glass resume card for the last thread, with
+  markdown stripped to prose.
+- **Type**: the greeting is a calm 32pt medium on both platforms.
 
-**Reference chat surfaces.** The "…" sheet is the reference list — Share,
-Rename, Chat Details, Export, Clear, Delete, then Cancel — and Chat Details
-opens a real page with measured stats (messages, span, response style, model,
-mode). Home now opens on a glass resume card for the thread you were just in,
-with the last message rendered as prose rather than raw markdown.
+Carried from 0.84.0: the 540-icon parser fix (line-based glyphs were blank),
+the fourteen-scene illustration set, and per-datum taps on every advanced chart.
 
-Verification: `android-app` 39652806123 (green), `android-screens` 39654037552
-(green, the screenshots above), `android-release` 39656819090 (green, this
-APK).
+Verification: `android-app` 39663724799 green, `android-screens` 39663728214
+green (the screenshots above), `android-release` 39663731877 green (this APK).
 
 ## Previous shipped release: v0.82.0 — the glass release (versionCode 119)
 
