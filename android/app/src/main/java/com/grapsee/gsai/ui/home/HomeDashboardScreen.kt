@@ -207,6 +207,20 @@ fun HomeDashboardScreen(
                 Spacer(Modifier.height(124.dp))
             }
         }
+        // Content scrolls under the floating dock. A canvas-coloured fade
+        // below it keeps the last heading ("Today's Used") from being read
+        // through the glass — the dock floats over atmosphere, not over text.
+        Box(
+            Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .height(150.dp)
+                .background(
+                    Brush.verticalGradient(
+                        listOf(Color.Transparent, GsTheme.colors.appBackground)
+                    )
+                )
+        )
         HomeDock(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
