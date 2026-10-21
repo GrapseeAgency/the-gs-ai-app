@@ -434,10 +434,12 @@ private struct ReflectionCard: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.trailing, 26)
                 }
-                GsArtwork(
-                    art: .lotus,
-                    size: 96,
-                    label: "A lotus in bloom")
+                // The sheet's lotus is a rendered photograph; it ships as an
+                // asset with a radial alpha fade so it melts into the card.
+                Image("GSHomeLotus")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 116, height: 84)
                     .offset(x: 12, y: 16)
                     .allowsHitTesting(false)
             }

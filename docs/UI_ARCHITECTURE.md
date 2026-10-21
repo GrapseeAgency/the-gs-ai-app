@@ -101,8 +101,9 @@ scenes from primitives, so both platforms share:
 | `Archive` | Empty archive | `RefArt.Archive` | `.archive` |
 | `Notifications` | Notifications empty | `RefArt.Notifications` | `.notifications` |
 | *authored render* | Home — avatar and video-card art | `R.drawable.gs_companion_orb` | `GSCompanionOrb` |
+| *reference render* | Home — reflection card lotus (alpha-faded crop of sheet 3) | `R.drawable.gs_home_lotus` | `GSHomeLotus` |
 | `Pearl` | available, unused since Home adopted the authored render | `RefArt.Pearl` | — |
-| `Lotus` | Home — Today's reflection card: the flower alone | `RefArt.Lotus` | `.lotus` |
+| `Lotus` | available, unused since the card adopted the reference render | `RefArt.Lotus` | `.lotus` |
 | `Reflection` | empty states: lotus on still water | `RefArt.Reflection` | `.reflection` |
 | `Video` | available, unused since Home adopted `Pearl` | `RefArt.Video` | `.video` |
 | `Clarity` | available, unused since Home adopted the orb | `RefArt.Clarity` | `.clarity` |

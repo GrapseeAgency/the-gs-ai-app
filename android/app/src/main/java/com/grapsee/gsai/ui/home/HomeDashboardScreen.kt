@@ -575,10 +575,13 @@ private fun ReflectionCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
                 )
             }
             Box(Modifier.align(Alignment.BottomEnd).offset(x = 10.dp, y = 14.dp)) {
-                RefArtwork(
-                    art = RefArt.Lotus,
-                    size = 96.dp,
-                    contentDescription = "A lotus resting on still water"
+                // The sheet's lotus is a rendered photograph; it ships as an
+                // asset with a radial alpha fade so it melts into the card.
+                Image(
+                    painter = painterResource(com.grapsee.gsai.R.drawable.gs_home_lotus),
+                    contentDescription = "A lotus in bloom",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.size(width = 116.dp, height = 84.dp)
                 )
             }
         }
