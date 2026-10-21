@@ -1,6 +1,28 @@
 Here are all the generated files.
 
-## Latest release: v0.82.0 — the glass release (versionCode 119)
+## In progress: v0.83.0 — the Nexly reference redesign (versionCode 120)
+
+The reference sheets, now built on `main`. Captured on the emulator from the
+same revision the release APK builds from.
+
+| Home — brand lockup, glass pills, bento, floating dock | Drawer — Nexly header, seven destinations, account footer |
+|---|---|
+| ![home](qa-0.83-home.png) | ![drawer](qa-0.83-drawer.png) |
+
+| Onboarding — the reference welcome flow | Chat — rich reply rendering |
+|---|---|
+| ![onboarding](qa-0.83-onboarding.png) | ![chat](qa-0.83-chat.png) |
+
+What landed: the invisible-icon defect is fixed (all 331 icon strokes were
+transparent — the whole family now renders); interactive artifacts are tappable
+again (charts no longer lose their taps to the message's text-selection
+container); Home, the drawer, the Settings hub and the welcome flow are rebuilt
+to the sheets; and the chat shows the reference's Thinking / Reasoning / Effort
+pre-answer card. Still to come in this line: the remaining screens (Billing,
+Profile, Voice, Search, Notifications), the extended glass icon set, the
+illustration pass, and per-datum interactivity on the advanced charts.
+
+## Latest shipped release: v0.82.0 — the glass release (versionCode 119)
 
     file    GS-AI-App.apk
     size    66188932 bytes
