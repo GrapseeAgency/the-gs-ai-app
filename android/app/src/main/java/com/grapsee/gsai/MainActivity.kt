@@ -19,7 +19,6 @@ import androidx.lifecycle.LifecycleEventObserver
 import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.data.liveupdate.LiveUpdater
 import com.grapsee.gsai.data.notifications.AppForeground
-import com.grapsee.gsai.ui.settings.OnDeviceModelConsentDialog
 import com.grapsee.gsai.ui.components.ReferenceBackdrop
 import com.grapsee.gsai.ui.navigation.GsNavHost
 import com.grapsee.gsai.ui.theme.TheGsAiTheme
@@ -86,8 +85,11 @@ class MainActivity : ComponentActivity() {
                         // paints its own background is a bug in the design
                         // system, not a preference.
                         ReferenceBackdrop()
+                        // The first-run model consent is composed INSIDE the
+                        // nav host, where it can wait for the onboarding gate
+                        // to finish. Hosting it here painted the dialog over
+                        // the welcome pages.
                         GsNavHost()
-                        OnDeviceModelConsentDialog()
                     }
                 }
             }

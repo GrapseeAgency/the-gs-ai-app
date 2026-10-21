@@ -451,6 +451,13 @@ fun GsNavHost(modifier: Modifier = Modifier) {
         if (askLocalConsent) {
             OnDeviceModelConsentDialog(onDismiss = { askLocalConsent = false })
         }
+        // First-run model consent: only inside the workspace. Composing it on
+        // the auth/onboarding routes covered the welcome pages with a dialog
+        // the user has not been introduced to the product for yet.
+        val routeNow = backStackEntry?.destination?.route
+        if (routeNow != null && !GsRoutes.isSessionRoute(routeNow)) {
+            OnDeviceModelConsentDialog()
+        }
     }
 }
 
