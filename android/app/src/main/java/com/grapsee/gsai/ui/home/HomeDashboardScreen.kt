@@ -572,10 +572,10 @@ private fun ReflectionCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
                     modifier = Modifier.padding(end = 26.dp)
                 )
             }
-            Box(Modifier.align(Alignment.BottomEnd).offset(x = 6.dp, y = 8.dp)) {
+            Box(Modifier.align(Alignment.BottomEnd).offset(x = 10.dp, y = 14.dp)) {
                 RefArtwork(
-                    art = RefArt.Reflection,
-                    size = 84.dp,
+                    art = RefArt.Lotus,
+                    size = 96.dp,
                     contentDescription = "A lotus resting on still water"
                 )
             }

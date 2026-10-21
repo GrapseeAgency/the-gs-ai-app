@@ -432,10 +432,10 @@ private struct ReflectionCard: View {
                         .padding(.trailing, 26)
                 }
                 GsArtwork(
-                    art: .reflection,
-                    size: 84,
-                    label: "A lotus resting on still water")
-                    .offset(x: 8, y: 10)
+                    art: .lotus,
+                    size: 96,
+                    label: "A lotus in bloom")
+                    .offset(x: 12, y: 16)
                     .allowsHitTesting(false)
             }
             .padding(14)

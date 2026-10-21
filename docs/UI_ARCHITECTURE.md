@@ -101,7 +101,8 @@ scenes from primitives, so both platforms share:
 | `Archive` | Empty archive | `RefArt.Archive` | `.archive` |
 | `Notifications` | Notifications empty | `RefArt.Notifications` | `.notifications` |
 | `Pearl` | Home — Video card art: three iridescent spheres and a silk thread | `RefArt.Pearl` | `PearlCluster` (SwiftUI gradients) |
-| `Reflection` | Home — Today's reflection: lotus on still water | `RefArt.Reflection` | `.reflection` |
+| `Lotus` | Home — Today's reflection card: the flower alone | `RefArt.Lotus` | `.lotus` |
+| `Reflection` | empty states: lotus on still water | `RefArt.Reflection` | `.reflection` |
 | `Video` | available, unused since Home adopted `Pearl` | `RefArt.Video` | `.video` |
 | `Clarity` | available, unused since Home adopted the orb | `RefArt.Clarity` | `.clarity` |
 

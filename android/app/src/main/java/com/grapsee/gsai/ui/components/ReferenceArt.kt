@@ -121,6 +121,7 @@ fun RefArtwork(
             RefArt.Clarity -> drawClarityScene(accent, strong, pale, ink)
             RefArt.Reflection -> drawReflectionScene(accent, strong, pale)
             RefArt.Pearl -> drawPearlScene()
+            RefArt.Lotus -> drawLotusScene(accent, strong, pale)
         }
     }
 }
@@ -1052,6 +1053,60 @@ private fun DrawScope.drawClarityScene(accent: Color, strong: Color, pale: Color
     drawPath(orbit, accent.copy(alpha = 0.40f), style = Stroke(width = stroke, cap = StrokeCap.Round))
     drawCircle(strong, radius = r * 0.085f, center = Offset(c.x + r * 1.30f, c.y - r * 0.44f))
     drawSparkle(Offset(size.width * 0.18f, size.height * 0.22f), r * 0.16f, Color.White.copy(alpha = 0.80f))
+}
+
+/**
+ * Lotus: three rings of petals opening from one point, lit from above. No
+ * water and no ripples — the hero sheet fills the reflection card with petals,
+ * so this scene is the flower alone.
+ */
+private fun DrawScope.drawLotusScene(accent: Color, strong: Color, pale: Color) {
+    val w = size.width
+    val h = size.height
+    val c = Offset(w * 0.50f, h * 0.78f)
+
+    // Outer ring: seven wide petals, nearly white at the tip.
+    repeat(7) { i ->
+        drawPetal(
+            center = c,
+            angle = (i - 3) * 24f,
+            length = h * 0.50f - kotlin.math.abs(i - 3) * h * 0.035f,
+            width = w * 0.085f,
+            top = Color.White.copy(alpha = 0.92f),
+            bottom = pale.copy(alpha = 0.55f)
+        )
+    }
+    // Middle ring: five petals, warmer.
+    repeat(5) { i ->
+        drawPetal(
+            center = c,
+            angle = (i - 2) * 21f,
+            length = h * 0.40f - kotlin.math.abs(i - 2) * h * 0.030f,
+            width = w * 0.070f,
+            top = Color.White.copy(alpha = 0.96f),
+            bottom = accent.copy(alpha = 0.60f)
+        )
+    }
+    // Inner ring: three upright petals carrying the blush.
+    repeat(3) { i ->
+        drawPetal(
+            center = c,
+            angle = (i - 1) * 15f,
+            length = h * 0.28f,
+            width = w * 0.055f,
+            top = Color.White,
+            bottom = strong.copy(alpha = 0.72f)
+        )
+    }
+    drawCircle(
+        brush = Brush.radialGradient(
+            listOf(Color.White, pale, strong.copy(alpha = 0.55f)),
+            center = Offset(c.x - w * 0.012f, c.y - h * 0.030f),
+            radius = w * 0.085f
+        ),
+        radius = w * 0.085f,
+        center = Offset(c.x, c.y - h * 0.02f)
+    )
 }
 
 /**

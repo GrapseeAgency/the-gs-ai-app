@@ -8,7 +8,7 @@ import SwiftUI
 enum GsArt {
     case bloom, conversation, search, offline, error, library, voice
     case success, privacy, archive, notifications
-    case video, clarity, reflection
+    case video, clarity, reflection, lotus
 }
 
 struct GsArtwork: View {
@@ -51,6 +51,7 @@ enum GsArtDrawing {
         case .video: video(&ctx, size, accent, strong, pale)
         case .clarity: clarity(&ctx, size, accent, strong, pale, ink)
         case .reflection: reflection(&ctx, size, accent, strong, pale)
+        case .lotus: lotus(&ctx, size, accent, strong, pale)
         }
     }
 
@@ -987,6 +988,50 @@ enum GsArtDrawing {
             Path(ellipseIn: CGRect(x: c.x + r * 1.30 - r * 0.085, y: c.y - r * 0.44 - r * 0.085, width: r * 0.17, height: r * 0.17)),
             with: .color(strong))
         sparkle(&ctx, center: CGPoint(x: w * 0.18, y: h * 0.22), radius: r * 0.16, color: Color.white.opacity(0.80))
+    }
+
+    /// The flower alone: three rings of petals, no water — the hero sheet
+    /// fills the reflection card with petals.
+    private static func lotus(
+        _ ctx: inout GraphicsContext,
+        _ size: CGSize,
+        _ accent: Color,
+        _ strong: Color,
+        _ pale: Color
+    ) {
+        let w = size.width
+        let h = size.height
+        let c = CGPoint(x: w * 0.5, y: h * 0.78)
+
+        for i in 0..<7 {
+            let spread = Double(i - 3) * 24
+            petal(&ctx, center: c, angle: spread,
+                  length: h * 0.50 - CGFloat(abs(i - 3)) * h * 0.035,
+                  width: w * 0.085,
+                  top: Color.white.opacity(0.92),
+                  bottom: pale.opacity(0.55))
+        }
+        for i in 0..<5 {
+            let spread = Double(i - 2) * 21
+            petal(&ctx, center: c, angle: spread,
+                  length: h * 0.40 - CGFloat(abs(i - 2)) * h * 0.030,
+                  width: w * 0.070,
+                  top: Color.white.opacity(0.96),
+                  bottom: accent.opacity(0.60))
+        }
+        for i in 0..<3 {
+            petal(&ctx, center: c, angle: Double(i - 1) * 15,
+                  length: h * 0.28,
+                  width: w * 0.055,
+                  top: .white,
+                  bottom: strong.opacity(0.72))
+        }
+        let core = CGRect(x: c.x - w * 0.085, y: c.y - h * 0.02 - w * 0.085,
+                          width: w * 0.17, height: w * 0.17)
+        ctx.fill(Path(ellipseIn: core), with: .radialGradient(
+            Gradient(colors: [.white, pale, strong.opacity(0.55)]),
+            center: CGPoint(x: w * 0.488, y: c.y - h * 0.05),
+            startRadius: 0, endRadius: w * 0.085))
     }
 
     private static func reflection(
