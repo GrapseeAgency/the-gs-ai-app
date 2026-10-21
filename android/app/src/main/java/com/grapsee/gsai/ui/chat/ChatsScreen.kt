@@ -1,7 +1,9 @@
 package com.grapsee.gsai.ui.chat
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,10 +18,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -84,6 +88,10 @@ fun ChatsScreen(onNavigate: (String) -> Unit) {
     var filter by rememberSaveable { mutableStateOf(FILTER_ALL) }
     var actionTarget by remember { mutableStateOf<ConversationEntity?>(null) }
     var refreshing by remember { mutableStateOf(false) }
+    // Reference multi-select: long-press a row, act on the set.
+    var selection by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var confirmingBulkDelete by remember { mutableStateOf(false) }
+    val selectionMode = selection.isNotEmpty()
 
     suspend fun doRefresh() {
         if (refreshing) return
@@ -118,6 +126,33 @@ fun ChatsScreen(onNavigate: (String) -> Unit) {
             )
         }
     ) {
+        if (selectionMode) {
+            SelectionBar(
+                count = selection.size,
+                allSelected = rows.isNotEmpty() && selection.size == rows.size,
+                onToggleAll = {
+                    selection = if (selection.size == rows.size) {
+                        emptySet()
+                    } else {
+                        rows.map { it.conversation.id }.toSet()
+                    }
+                },
+                onClose = { selection = emptySet() },
+                onPin = {
+                    val ids = selection
+                    selection = emptySet()
+                    scope.launch { ids.forEach { runCatching { ServiceLocator.chat.setPinned(it, true) } } }
+                },
+                onArchive = {
+                    val ids = selection
+                    selection = emptySet()
+                    scope.launch { ids.forEach { runCatching { ServiceLocator.chat.setArchived(it, true) } } }
+                },
+                onDelete = { confirmingBulkDelete = true }
+            )
+            Spacer(Modifier.height(12.dp))
+        }
+
         if (offline) {
             InfoCard(
                 icon = GsIcons.WifiOff,
@@ -226,7 +261,16 @@ fun ChatsScreen(onNavigate: (String) -> Unit) {
                     if (index > 0) RefDivider()
                     ChatRow(
                         row = row,
-                        onClick = { onNavigate(GsRoutes.chat(row.conversation.id)) },
+                        selectionMode = selectionMode,
+                        selected = row.conversation.id in selection,
+                        onClick = {
+                            if (selectionMode) {
+                                selection = selection.toggle(row.conversation.id)
+                            } else {
+                                onNavigate(GsRoutes.chat(row.conversation.id))
+                            }
+                        },
+                        onLongClick = { selection = selection + row.conversation.id },
                         onActions = { actionTarget = row.conversation }
                     )
                 }
@@ -262,6 +306,27 @@ fun ChatsScreen(onNavigate: (String) -> Unit) {
             onRename = { name ->
                 actionTarget = null
                 scope.launch { runCatching { ServiceLocator.chat.rename(target.id, name) } }
+            }
+        )
+    }
+
+    if (confirmingBulkDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmingBulkDelete = false },
+            title = { Text("Delete ${selection.size} chat${if (selection.size == 1) "" else "s"}?") },
+            text = { Text("This cannot be undone. Every message in them is removed from this device.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    val ids = selection
+                    confirmingBulkDelete = false
+                    selection = emptySet()
+                    scope.launch { ids.forEach { runCatching { ServiceLocator.chat.delete(it) } } }
+                }) {
+                    Text("Delete", color = GsTheme.colors.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmingBulkDelete = false }) { Text("Cancel") }
             }
         )
     }
@@ -360,22 +425,29 @@ private fun ShelfRow(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ChatRow(
     row: ConversationPreviewRow,
+    selectionMode: Boolean = false,
+    selected: Boolean = false,
     onClick: () -> Unit,
+    onLongClick: () -> Unit = {},
     onActions: () -> Unit,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 72.dp)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
+            .background(
+                if (selected) GsTheme.colors.accentSoft else androidx.compose.ui.graphics.Color.Transparent
+            )
+            .combinedClickable(
                 role = Role.Button,
                 onClickLabel = gsConversationTitle(row.conversation.title),
-                onClick = onClick
+                onLongClickLabel = "Select ${gsConversationTitle(row.conversation.title)}",
+                onClick = onClick,
+                onLongClick = onLongClick
             )
             .padding(start = 14.dp, end = 6.dp, top = 10.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -423,14 +495,106 @@ private fun ChatRow(
                 overflow = TextOverflow.Ellipsis
             )
         }
-        IconButton(onClick = onActions, modifier = Modifier.size(38.dp)) {
-            Icon(
-                GsIcons.EllipsisVertical,
-                contentDescription = "Conversation actions",
-                tint = GsTheme.colors.textTertiary,
-                modifier = Modifier.size(18.dp)
-            )
+        if (selectionMode) {
+            Box(
+                modifier = Modifier
+                    .size(22.dp)
+                    .clip(CircleShape)
+                    .background(
+                        if (selected) GsTheme.colors.accent
+                        else GsTheme.colors.glassSurface.copy(alpha = 0.8f)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                if (selected) {
+                    Icon(
+                        GsIcons.Check,
+                        contentDescription = "Selected",
+                        tint = GsTheme.colors.onAccent,
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
+            }
+        } else {
+            IconButton(onClick = onActions, modifier = Modifier.size(38.dp)) {
+                Icon(
+                    GsIcons.EllipsisVertical,
+                    contentDescription = "Conversation actions",
+                    tint = GsTheme.colors.textTertiary,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
         }
+    }
+}
+
+/** Toggle one id in a selection set. */
+private fun Set<String>.toggle(id: String): Set<String> =
+    if (id in this) this - id else this + id
+
+/**
+ * The reference's "N selected" bar: count, select-all, and the three bulk
+ * actions the store can actually perform — pin, archive, delete.
+ */
+@Composable
+private fun SelectionBar(
+    count: Int,
+    allSelected: Boolean,
+    onToggleAll: () -> Unit,
+    onClose: () -> Unit,
+    onPin: () -> Unit,
+    onArchive: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    RefCard {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onClose, modifier = Modifier.size(38.dp)) {
+                Icon(
+                    GsIcons.X,
+                    contentDescription = "Exit selection",
+                    tint = GsTheme.colors.textSecondary,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            Text(
+                text = "$count selected",
+                style = MaterialTheme.typography.titleSmall,
+                color = GsTheme.colors.textPrimary
+            )
+            Spacer(Modifier.weight(1f))
+            Text(
+                text = if (allSelected) "Clear" else "Select all",
+                style = MaterialTheme.typography.labelMedium,
+                color = GsTheme.colors.accentStrong,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(999.dp))
+                    .clickable(onClick = onToggleAll)
+                    .padding(horizontal = 10.dp, vertical = 8.dp)
+            )
+            SelectionAction(GsIcons.Star, "Pin selected", onPin)
+            SelectionAction(GsIcons.Archive, "Archive selected", onArchive)
+            SelectionAction(GsIcons.Trash2, "Delete selected", onDelete, destructive = true)
+        }
+    }
+}
+
+@Composable
+private fun SelectionAction(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    destructive: Boolean = false,
+) {
+    IconButton(onClick = onClick, modifier = Modifier.size(38.dp)) {
+        Icon(
+            icon,
+            contentDescription = label,
+            tint = if (destructive) GsTheme.colors.error else GsTheme.colors.textSecondary,
+            modifier = Modifier.size(18.dp)
+        )
     }
 }
 
