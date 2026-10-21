@@ -1,6 +1,10 @@
 package com.grapsee.gsai.ui.settings
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -9,16 +13,24 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.data.AccountStore
+import com.grapsee.gsai.ui.components.RefArt
+import com.grapsee.gsai.ui.components.RefArtwork
 import com.grapsee.gsai.ui.components.RefAvatar
 import com.grapsee.gsai.ui.components.RefCard
 import com.grapsee.gsai.ui.components.RefDivider
@@ -60,37 +72,45 @@ fun SettingsHubScreen(
         onBack = onBack,
         largeTitle = true
     ) {
-        RefCard(
-            modifier = Modifier
-                .padding(top = 6.dp)
-                .then(Modifier),
-            padding = androidx.compose.foundation.layout.PaddingValues(16.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                RefAvatar(
-                    initials = initialsOf(name),
-                    size = 56.dp,
-                    onClick = { onNavigate(GsRoutes.SETTINGS_ACCOUNT) }
-                )
-                Spacer(Modifier.width(14.dp))
+        // Identity — the reference's Nexly orb card.
+        RefCard {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        role = Role.Button,
+                        onClickLabel = "Account"
+                    ) { onNavigate(GsRoutes.SETTINGS_ACCOUNT) },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(46.dp)
+                        .clip(CircleShape)
+                        .background(
+                            Brush.linearGradient(
+                                listOf(Color(0xFFFFE3CE), Color(0xFFFFC9A8), Color(0xFFFFB38F))
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    RefArtwork(art = RefArt.Bloom, size = 38.dp, contentDescription = null)
+                }
+                Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
-                        text = name.ifBlank { "GS account" },
+                        text = "Nexly",
                         style = MaterialTheme.typography.titleMedium,
-                        color = colors.textPrimary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        color = colors.textPrimary
                     )
                     Text(
-                        text = email.ifBlank { "Signed in" },
+                        text = "AI Companion",
                         style = MaterialTheme.typography.labelMedium,
-                        color = colors.textSecondary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        color = colors.textSecondary
                     )
                 }
-                RefStatusPill("Early access")
-                Spacer(Modifier.width(6.dp))
                 Icon(
                     GsIcons.ChevronRight,
                     contentDescription = null,
@@ -103,67 +123,128 @@ fun SettingsHubScreen(
         RefSectionLabel("Account")
         RefCard {
             RefRow(
-                title = "Account",
-                subtitle = "Name, email and sign-in",
+                title = "Profile",
+                subtitle = "Manage your profile",
                 icon = GsIcons.UserRound,
-                onClick = { onNavigate(GsRoutes.SETTINGS_ACCOUNT) }
+                onClick = { onNavigate(GsRoutes.PROFILE) }
             )
             RefDivider()
             RefRow(
-                title = "Chat & Conversations",
-                subtitle = "Response mode, history and export",
-                icon = GsIcons.MessageCircle,
-                onClick = { onNavigate(GsRoutes.SETTINGS_CHAT) }
-            )
-            RefDivider()
-            RefRow(
-                title = "Appearance",
-                subtitle = "Theme, accent, type and background",
-                icon = GsIcons.Palette,
-                onClick = { onNavigate(GsRoutes.SETTINGS_APPEARANCE) }
-            )
-            RefDivider()
-            RefRow(
-                title = "Notifications",
-                subtitle = "Replies and haptic feedback",
-                icon = GsIcons.Bell,
-                onClick = { onNavigate(GsRoutes.SETTINGS_NOTIFICATIONS) }
-            )
-            RefDivider()
-            RefRow(
-                title = "Privacy & Security",
-                subtitle = "Your data, exports and local storage",
-                icon = GsIcons.Lock,
-                onClick = { onNavigate(GsRoutes.SETTINGS_PRIVACY) }
+                title = "Subscription",
+                subtitle = "Free Plan",
+                icon = GsIcons.CreditCard,
+                onClick = { onNavigate(GsRoutes.BILLING) }
             )
         }
 
-        RefSectionLabel("Intelligence")
+        RefSectionLabel("Chat Settings")
         RefCard {
             RefRow(
-                title = "AI Intelligence",
-                subtitle = "Where answers run and how they think",
+                title = "AI Model",
+                subtitle = "Nexly Core",
                 icon = GsIcons.Brain,
                 onClick = { onNavigate(GsRoutes.SETTINGS_AI) }
             )
             RefDivider()
             RefRow(
-                title = "Personalisation & Memory",
-                subtitle = "What GS keeps on this device",
+                title = "Response Style",
+                subtitle = "Balanced",
+                icon = GsIcons.Sparkles,
+                onClick = { onNavigate(GsRoutes.SETTINGS_CHAT) }
+            )
+            RefDivider()
+            RefRow(
+                title = "Language",
+                subtitle = "English",
+                icon = GsIcons.Globe,
+                onClick = { onNavigate(GsRoutes.SETTINGS_CHAT) }
+            )
+        }
+
+        RefSectionLabel("Appearance")
+        RefCard {
+            RefRow(
+                title = "Theme",
+                subtitle = "Light",
+                icon = GsIcons.Palette,
+                onClick = { onNavigate(GsRoutes.SETTINGS_THEME) }
+            )
+            RefDivider()
+            RefRow(
+                title = "Chat Background",
+                subtitle = "Default",
+                icon = GsIcons.ImagePlus,
+                onClick = { onNavigate(GsRoutes.SETTINGS_APPEARANCE) }
+            )
+            RefDivider()
+            RefRow(
+                title = "Motion effects",
+                subtitle = "On",
+                icon = GsIcons.Sparkles,
+                onClick = { onNavigate(GsRoutes.SETTINGS_APPEARANCE) }
+            )
+        }
+
+        RefSectionLabel("Privacy & Security")
+        RefCard {
+            RefRow(
+                title = "Data & Privacy",
+                subtitle = "Your data, your control",
+                icon = GsIcons.Lock,
+                onClick = { onNavigate(GsRoutes.SETTINGS_PRIVACY) }
+            )
+            RefDivider()
+            RefRow(
+                title = "Blocked Users",
+                subtitle = "Manage blocked users",
+                icon = GsIcons.UsersRound,
+                onClick = { onNavigate(GsRoutes.SETTINGS_PRIVACY) }
+            )
+            RefDivider()
+            RefRow(
+                title = "Chat History",
+                subtitle = "Manage your conversations",
+                icon = GsIcons.History,
+                onClick = { onNavigate(GsRoutes.SETTINGS_CHAT) }
+            )
+        }
+
+        RefSectionLabel("Notifications")
+        RefCard {
+            RefRow(
+                title = "Responses and updates",
+                subtitle = "New messages and replies",
+                icon = GsIcons.Bell,
+                onClick = { onNavigate(GsRoutes.SETTINGS_NOTIFICATIONS) }
+            )
+            RefDivider()
+            RefRow(
+                title = "Sound & Vibration",
+                subtitle = "Feedback on interactions",
+                icon = GsIcons.AudioLines,
+                onClick = { onNavigate(GsRoutes.SETTINGS_NOTIFICATIONS) }
+            )
+        }
+
+        RefSectionLabel("Memory & Voice")
+        RefCard {
+            RefRow(
+                title = "Saved memories",
+                subtitle = "What Nexly remembers about you",
                 icon = GsIcons.Layers,
                 onClick = { onNavigate(GsRoutes.SETTINGS_MEMORY) }
             )
             RefDivider()
             RefRow(
                 title = "Voice & Speech",
-                subtitle = "Read-aloud and voice mode",
+                subtitle = "Choose your voice and hands-free mode",
                 icon = GsIcons.AudioLines,
                 onClick = { onNavigate(GsRoutes.SETTINGS_VOICE) }
             )
             RefDivider()
             RefRow(
-                title = "Accessibility",
-                subtitle = "Contrast, text size and motion",
+                title = "Accessibility & Reduced Motion",
+                subtitle = "High contrast, larger text, calmer motion",
                 icon = GsIcons.Accessibility,
                 onClick = { onNavigate(GsRoutes.SETTINGS_ACCESSIBILITY) }
             )
@@ -173,23 +254,16 @@ fun SettingsHubScreen(
         RefCard {
             RefRow(
                 title = "Help & Support",
-                subtitle = "Answers, contact and feedback",
+                subtitle = "FAQs, contact and feedback",
                 icon = GsIcons.MessageCircle,
                 onClick = { onNavigate(GsRoutes.SETTINGS_HELP) }
             )
             RefDivider()
             RefRow(
-                title = "About GS AI",
-                subtitle = "Version, credits and legal",
+                title = "About Nexly",
+                subtitle = "Smarter conversations. A brighter you.",
                 icon = GsIcons.Info,
                 onClick = { onNavigate(GsRoutes.SETTINGS_ABOUT) }
-            )
-            RefDivider()
-            RefRow(
-                title = "Plan & Billing",
-                subtitle = "Early access — no payment required",
-                icon = GsIcons.CreditCard,
-                onClick = { onNavigate(GsRoutes.BILLING) }
             )
         }
 
