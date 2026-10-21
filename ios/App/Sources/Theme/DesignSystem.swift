@@ -57,7 +57,9 @@ enum Aero {
         light: UIColor(red: 1.0, green: 0.910, blue: 0.871, alpha: 1),   // FFE8DE
         dark: UIColor(red: 0.165, green: 0.114, blue: 0.102, alpha: 1)) // 2A1D1A
     static let surface = dynamic(             // standard content surface
-        light: UIColor(red: 1.0, green: 0.984, blue: 0.973, alpha: 1),
+        // Warm milk, matched to the sheet's cards (#F5EDE6); pure white read
+        // ten points brighter than the reference render.
+        light: UIColor(red: 0.961, green: 0.929, blue: 0.902, alpha: 1),
         dark: UIColor(red: 0.133, green: 0.090, blue: 0.086, alpha: 1)) // 221716
     static let elevatedSurface = dynamic(     // above-surface content
         light: .white,
