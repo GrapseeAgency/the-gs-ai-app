@@ -113,7 +113,7 @@ struct SettingsView: View {
             Text("Settings")
                 .font(Aero.headline())
                 .foregroundStyle(Aero.text)
-            Text("Tune GS to taste.")
+            Text("Customize your Nexly experience.")
                 .font(Aero.caption())
                 .foregroundStyle(Aero.textMuted)
         }
