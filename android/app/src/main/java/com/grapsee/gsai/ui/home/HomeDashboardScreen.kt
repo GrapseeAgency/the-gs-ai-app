@@ -734,7 +734,7 @@ private fun HomeDock(
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         DockCircle(FilledHouse, "Home", selected = true, onClick = onHome)
-        DockCircle(GsIcons.BookOpen, "Chats", onClick = onChats)
+        DockCircle(FilledBook, "Chats", onClick = onChats)
         // The reference seats the peach pill inside a white well, so the dock
         // reads as three glass buttons and one lit action — not four siblings.
         Box(
@@ -814,6 +814,36 @@ private val FilledHouse: ImageVector by lazy {
             lineTo(19.4f, 11.9f)
             lineTo(20.9f, 11.9f)
             curveTo(21.5f, 11.9f, 21.7f, 11.2f, 21.3f, 10.8f)
+            close()
+        }
+    }.build()
+}
+
+
+/** Filled open book, for the same reason as [FilledHouse]. */
+private val FilledBook: ImageVector by lazy {
+    ImageVector.Builder(
+        name = "FilledBook",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).apply {
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(11.2f, 6.4f)
+            curveTo(8.6f, 4.9f, 5.4f, 4.9f, 2.8f, 6.6f)
+            curveTo(2.5f, 6.8f, 2.4f, 7.1f, 2.4f, 7.4f)
+            lineTo(2.4f, 18.2f)
+            curveTo(2.4f, 18.9f, 3.1f, 19.3f, 3.7f, 19f)
+            curveTo(6f, 17.7f, 8.8f, 17.8f, 11f, 19.2f)
+            curveTo(11.4f, 19.4f, 11.8f, 19.4f, 12.2f, 19.2f)
+            curveTo(14.4f, 17.8f, 17.2f, 17.7f, 19.5f, 19f)
+            curveTo(20.1f, 19.3f, 20.8f, 18.9f, 20.8f, 18.2f)
+            lineTo(20.8f, 7.4f)
+            curveTo(20.8f, 7.1f, 20.7f, 6.8f, 20.4f, 6.6f)
+            curveTo(17.8f, 4.9f, 14.6f, 4.9f, 12f, 6.4f)
+            lineTo(12f, 17.4f)
+            curveTo(11.8f, 17.4f, 11.4f, 17.3f, 11.2f, 17.2f)
             close()
         }
     }.build()
