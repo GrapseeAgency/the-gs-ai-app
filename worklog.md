@@ -5239,3 +5239,20 @@ Work Log:
 - Root causes, fixed: DrawScope lambdas calling @Composable seriesColor/GsTheme (new non-composable seriesInk + static GRID_INK/TEXT_INK); missing imports (layout.size, fillMaxSize, offset, onSizeChanged, mutableStateListOf, Alignment, kotlin.math.max, Color, Size); EditorWidgetData had no nodes/edges (added + EditorNodeData); Map.take() on cells; evalSheetCell trailing lambda after a defaulted param; OkHttp readTimeout property; RowScope align misuse; IntSize vs Size at three sites.
 - Catalogue contract tests updated to the v3 set: 6 new kinds, 12 new chart sub-types, embed, timer.
 - Tests: 235/235 Android. APK gates: com.grapsee.gsai, versionCode 118 / 0.81.17, 4 ABIs, libgs_ffi.so ×4, cert b1ffd75d…8b1a483.
+
+---
+Task ID: restart-latest-v082
+Agent: main
+Task: Pull latest everything from GitHub and restart the server (operator repeat request with fresh PAT).
+
+Work Log:
+- Re-set PAT on origin remote (wiped again by sandbox rollback), fetched --prune: origin/main advanced 4691cd4 → 6b99754 (v0.82.0 glass release + tags v0.71–v0.82).
+- Divergence check: all 5 new arena/* + native-runtime branches = 0 unique commits vs main (already merged upstream); local/benchmark-runner has 13 unique (left alone, local-only).
+- Local-only commit bb099d7 (worklog resume 3) rescued: pushed to GitHub as branch local/sandbox-worklog-backup before reset.
+- git reset --hard origin/main (6b99754) → rolled-back layers repaired: bun install (105 pkgs: three/mermaid), chmod +x watchdog.sh, allowedDevOrigins re-applied to next.config.ts and committed+pushed as 3b561c3 (now HEAD == origin/main).
+- Full stack restart: killed watchdog/next/eval-monitor; double-fork orphan watchdog (PPid=1, pid 2387) spawned fresh next dev (:3000 200 in ~5s) and eval-monitor (:3031 listening).
+- /api/health: status=ok, primary (z-ai) ok=true 368ms — AI answers work. OpenRouter keypool layer=none size=0 — ALL key layers wiped by rollback (no recoverable copy in .secrets/, db/vault.db, /home/z/.gs-vault/, /tmp, worklogs, env).
+
+Stage Summary:
+- Server LIVE on latest origin/main (3b561c3): homepage 200, health ok, eval-monitor up, watchdog orphaned to PID 1.
+- BLOCKER for OpenRouter models: keypool empty — operator must re-paste the 35 sk-or-v1 keys, then: sed/awk dedupe | bun scripts/provision-keys.ts (writes all 3 layers).
