@@ -1,5 +1,6 @@
 package com.grapsee.gsai.ui.home
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -35,12 +36,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.grapsee.gsai.data.AccountStore
 import com.grapsee.gsai.data.OnboardingProfileStore
@@ -174,14 +178,14 @@ fun HomeDashboardScreen(
                     Spacer(Modifier.height(16.dp))
                 }
                 GreetingBlock(greeting = greeting, firstName = firstName)
-                Spacer(Modifier.height(18.dp))
+                Spacer(Modifier.height(26.dp))
                 QuickPills(
                     onNewChat = onNewChat,
                     onExplore = onOpenAgent,
                     onCreate = { onStartPrompt(CREATE_PROMPT) },
                     onMore = onOpenDrawer,
                 )
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(24.dp))
                 Bento(
                     onVideo = { onStartPrompt(CREATE_PROMPT) },
                     onMindGuide = {
@@ -195,7 +199,7 @@ fun HomeDashboardScreen(
                         )
                     },
                 )
-                Spacer(Modifier.height(22.dp))
+                Spacer(Modifier.height(28.dp))
                 TodayUsedHeader(onSeeAll = onOpenChats)
                 Spacer(Modifier.height(10.dp))
                 SuggestionsCard(
@@ -249,12 +253,18 @@ private fun HomeHeader(onAssistant: () -> Unit, onMenu: () -> Unit) {
         Box(
             modifier = Modifier
                 .size(42.dp)
-                .clip(CircleShape)
-                .background(Color.White.copy(alpha = 0.35f)),
+                .clip(CircleShape),
             contentAlignment = Alignment.Center
         ) {
-            // The reference's avatar is the pearl itself, not a bloom on a disc.
-            RefArtwork(art = RefArt.Pearl, size = 42.dp, contentDescription = "Nexly")
+            // The reference's avatar is the authored 3D bloom itself — the
+            // one place the app already owns a real render, so no vector
+            // stand-in belongs on top of it.
+            Image(
+                painter = painterResource(com.grapsee.gsai.R.drawable.gs_companion_orb),
+                contentDescription = "Nexly",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.size(42.dp)
+            )
         }
         Spacer(Modifier.width(10.dp))
         Column {
@@ -285,15 +295,21 @@ private fun GreetingBlock(greeting: String, firstName: String?) {
     Column {
         Text(
             text = greeting + ",",
-            // The reference's greeting is a calm 32pt medium, not a poster:
-            // displaySmall + SemiBold read as a headline shouting over the art.
-            style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Medium),
+            // The sheet sets the greeting at ~34pt semibold with almost no
+            // extra leading — two lines that read as one block, not a poster.
+            style = MaterialTheme.typography.headlineLarge.copy(
+                fontWeight = FontWeight.SemiBold,
+                lineHeight = 36.sp
+            ),
             color = GsTheme.colors.textPrimary
         )
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = firstName ?: "there",
-                style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Medium),
+                style = MaterialTheme.typography.headlineLarge.copy(
+                    fontWeight = FontWeight.SemiBold,
+                    lineHeight = 36.sp
+                ),
                 color = GsTheme.colors.textPrimary
             )
             Spacer(Modifier.width(8.dp))
@@ -307,7 +323,7 @@ private fun GreetingBlock(greeting: String, firstName: String?) {
         Spacer(Modifier.height(10.dp))
         Text(
             text = "Your thoughts, questions, ideas —\nI'm here for it all.",
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodyLarge,
             color = GsTheme.colors.textSecondary
         )
     }
@@ -352,18 +368,17 @@ private fun Bento(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(224.dp),
+            .height(200.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // The reference is not an even split: the video card takes 53% of the
-        // row and the stacked pair takes the rest, with Mind Guide the shorter
-        // of the two (about 37 / 63).
-        VideoCard(onVideo, Modifier.weight(1.13f).fillMaxSize())
+        // Measured from the sheet: the video card is 196pt of a 356pt row
+        // (1.22 : 1), and the stacked pair splits 75 / 117 (0.64 : 1).
+        VideoCard(onVideo, Modifier.weight(1.22f).fillMaxSize())
         Column(
             modifier = Modifier.weight(1f).fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            MindGuideCard(onMindGuide, Modifier.fillMaxWidth().weight(0.62f))
+            MindGuideCard(onMindGuide, Modifier.fillMaxWidth().weight(0.64f))
             ReflectionCard(onReflection, Modifier.fillMaxWidth().weight(1f))
         }
     }
@@ -396,7 +411,7 @@ private fun VideoCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
         // bleeding off the lower-right corner, not a film-strip glyph.
         RefArtwork(
             art = RefArt.Pearl,
-            size = 186.dp,
+            size = 200.dp,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .offset(x = 34.dp, y = 30.dp),
@@ -521,13 +536,16 @@ private fun ReflectionCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
                     style = MaterialTheme.typography.labelSmall,
                     color = GsTheme.colors.textSecondary,
                     maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    // The lotus sits under the copy's last line, as in the
+                    // sheet; keep an inset so the two never collide.
+                    modifier = Modifier.padding(end = 26.dp)
                 )
             }
             Box(Modifier.align(Alignment.BottomEnd).offset(x = 6.dp, y = 8.dp)) {
                 RefArtwork(
                     art = RefArt.Reflection,
-                    size = 96.dp,
+                    size = 84.dp,
                     contentDescription = "A lotus resting on still water"
                 )
             }
@@ -714,38 +732,48 @@ private fun HomeDock(
     ) {
         DockCircle(FilledHouse, "Home", selected = true, onClick = onHome)
         DockCircle(GsIcons.BookOpen, "Chats", onClick = onChats)
-        Row(
+        // The reference seats the peach pill inside a white well, so the dock
+        // reads as three glass buttons and one lit action — not four siblings.
+        Box(
             modifier = Modifier
                 .weight(1f)
-                .height(46.dp)
+                .height(54.dp)
                 .clip(RoundedCornerShape(999.dp))
-                .background(
-                    Brush.horizontalGradient(
-                        listOf(Color(0xFFFFC9A8), Color(0xFFFFB38F))
-                    )
-                )
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    role = Role.Button,
-                    onClickLabel = "Generate",
-                    onClick = onGenerate
-                ),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
+                .background(Color.White.copy(alpha = 0.55f))
+                .padding(4.dp)
         ) {
-            Icon(
-                GsIcons.Sparkles,
-                contentDescription = null,
-                tint = Color(0xFF5A2E1C),
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(Modifier.width(6.dp))
-            Text(
-                text = "Generate",
-                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-                color = Color(0xFF5A2E1C)
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(Color(0xFFFFD3B4), Color(0xFFFFBE9C))
+                        )
+                    )
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        role = Role.Button,
+                        onClickLabel = "Generate",
+                        onClick = onGenerate
+                    ),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    GsIcons.Sparkles,
+                    contentDescription = null,
+                    tint = Color(0xFF4A2415),
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = "Generate",
+                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                    color = Color(0xFF4A2415)
+                )
+            }
         }
         DockCircle(GsIcons.Settings, "Settings", onClick = onSettings)
     }
@@ -799,9 +827,8 @@ private fun DockCircle(
         modifier = Modifier
             .size(46.dp)
             .clip(CircleShape)
-            .background(
-                if (selected) GsTheme.colors.textPrimary.copy(alpha = 0.08f) else Color.Transparent
-            )
+            .background(Color.White.copy(alpha = if (selected) 0.62f else 0.44f))
+            .border(1.dp, Color.White.copy(alpha = 0.55f), CircleShape)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -814,7 +841,7 @@ private fun DockCircle(
         Icon(
             icon,
             contentDescription = label,
-            tint = if (selected) GsTheme.colors.textPrimary else GsTheme.colors.textSecondary,
+            tint = GsTheme.colors.textPrimary.copy(alpha = if (selected) 1f else 0.78f),
             modifier = Modifier.size(21.dp)
         )
     }

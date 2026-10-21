@@ -62,18 +62,11 @@ struct HomeDashboardView: View {
 
     private var header: some View {
         HStack(spacing: 10) {
-            ZStack {
-                Circle()
-                    .fill(LinearGradient(
-                        colors: [Color(red: 1, green: 0.89, blue: 0.81),
-                                 Color(red: 1, green: 0.79, blue: 0.66),
-                                 Color(red: 1, green: 0.70, blue: 0.56)],
-                        startPoint: .top, endPoint: .bottom))
-                    .frame(width: 42, height: 42)
-                AnimatedGsIllustration(imageName: "GSCompanionOrb", size: 34,
-                                       breathDuration: 3.4, rotationDegrees: 1.2,
-                                       lift: -2, startDelay: 0.08)
-            }
+            // The authored 3D bloom — the sheet's avatar already exists as a
+            // real render, so it does not need a vector stand-in.
+            AnimatedGsIllustration(imageName: "GSCompanionOrb", size: 42,
+                                   breathDuration: 3.4, rotationDegrees: 1.2,
+                                   lift: -2, startDelay: 0.08)
             VStack(alignment: .leading, spacing: 2) {
                 Text("Nexly").font(Aero.title()).foregroundStyle(Aero.text)
                 Text("AI Companion").font(Aero.caption()).foregroundStyle(Aero.textMuted)
@@ -193,23 +186,23 @@ struct HomeDashboardView: View {
     // MARK: Bento — Video / Mind Guide / Today's reflection
 
     private var bento: some View {
-        // 53 / 47 with the stacked pair split 37 / 63 — the reference's
-        // proportions. An even split made the reflection card twice as tall as
-        // the sheet's and squeezed the video card's artwork out of frame.
+        // Measured from the sheet: 55 / 45 across, and the stacked pair splits
+        // 39 / 61. An even split made the reflection card half the height it
+        // should be and squeezed the video card's artwork out of frame.
         GeometryReader { geo in
-            let leftWidth = (geo.size.width - 12) * 0.53
+            let leftWidth = (geo.size.width - 12) * 0.55
             HStack(alignment: .top, spacing: 12) {
                 VideoCard(action: { onStartPrompt("Help me create a short video concept: ") })
                     .frame(width: leftWidth)
                 VStack(spacing: 12) {
                     MindGuideCard(action: { onStartPrompt("Help me think this through with clarity: ") })
-                        .frame(height: (geo.size.height - 12) * 0.37)
+                        .frame(height: (geo.size.height - 12) * 0.36)
                     ReflectionCard(action: { onStartPrompt("Let's do today's reflection. ") })
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
         }
-        .frame(height: 224)
+        .frame(height: 200)
     }
 
     // MARK: Today's Used + suggestions
@@ -266,18 +259,22 @@ struct HomeDashboardView: View {
         HStack(spacing: 6) {
             DockIcon(system: "house.fill", label: "Home", selected: true, action: {})
             DockIcon(system: "book.fill", label: "Chats", action: onOpenChats)
+            // The reference seats the peach pill inside a white well, so the
+            // dock reads as three glass buttons and one lit action.
             Button(action: onNewChat) {
                 HStack(spacing: 6) {
                     Image(systemName: "sparkles").font(.system(size: 15, weight: .semibold))
                     Text("Generate").font(Aero.button())
                 }
-                .foregroundStyle(Color(red: 0.35, green: 0.18, blue: 0.10))
+                .foregroundStyle(Color(red: 0.29, green: 0.14, blue: 0.08))
                 .frame(maxWidth: .infinity)
                 .frame(height: 46)
                 .background(Capsule().fill(LinearGradient(
-                    colors: [Color(red: 1, green: 0.79, blue: 0.66),
-                             Color(red: 1, green: 0.70, blue: 0.56)],
+                    colors: [Color(red: 1, green: 0.83, blue: 0.71),
+                             Color(red: 1, green: 0.75, blue: 0.61)],
                     startPoint: .leading, endPoint: .trailing)))
+                .padding(4)
+                .background(Capsule().fill(Color.white.opacity(0.55)))
             }
             .buttonStyle(KineticPressStyle())
             DockIcon(system: "gearshape", label: "Settings", action: onOpenDrawer)
@@ -379,19 +376,24 @@ private struct MindGuideCard: View {
     let action: () -> Void
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 10) {
-                PearlOrb(size: 38)
+            HStack(spacing: 8) {
+                PearlOrb(size: 36)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Mind Guide").font(Aero.label()).foregroundStyle(Aero.text)
+                    Text("Mind Guide")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Aero.text)
+                        .lineLimit(1)
                     Text("Your personal clarity companion.")
-                        .font(Aero.caption()).foregroundStyle(Aero.textMuted)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(Aero.textMuted)
                         .lineLimit(2)
+                        .minimumScaleFactor(0.9)
                 }
-                Spacer()
+                Spacer(minLength: 0)
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .semibold)).foregroundStyle(Aero.textMuted)
+                    .font(.system(size: 11, weight: .semibold)).foregroundStyle(Aero.textMuted)
             }
-            .padding(14)
+            .padding(12)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             .gsGlass(.card, corner: Aero.Radius.card)
         }
@@ -414,10 +416,11 @@ private struct ReflectionCard: View {
                     Text("Take a moment to check in with yourself.")
                         .font(Aero.caption()).foregroundStyle(Aero.textMuted)
                         .fixedSize(horizontal: false, vertical: true)
+                        .padding(.trailing, 26)
                 }
                 GsArtwork(
                     art: .reflection,
-                    size: 96,
+                    size: 84,
                     label: "A lotus resting on still water")
                     .offset(x: 8, y: 10)
                     .allowsHitTesting(false)
@@ -439,9 +442,10 @@ private struct DockIcon: View {
         Button(action: action) {
             Image(systemName: system)
                 .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(selected ? Aero.text : Aero.textMuted)
+                .foregroundStyle(selected ? Aero.text : Aero.text.opacity(0.78))
                 .frame(width: 46, height: 46)
-                .background(Circle().fill(Aero.text.opacity(selected ? 0.08 : 0)))
+                .background(Circle().fill(Color.white.opacity(selected ? 0.62 : 0.44)))
+                .overlay(Circle().strokeBorder(Color.white.opacity(0.55), lineWidth: 1))
         }
         .buttonStyle(KineticPressStyle())
         .accessibilityLabel(label)
