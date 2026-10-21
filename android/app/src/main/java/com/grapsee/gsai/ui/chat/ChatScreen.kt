@@ -2784,7 +2784,11 @@ private fun ConversationOptionsSheet(
     var confirmingClear by remember { mutableStateOf(false) }
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = GsTheme.colors.glassSurface,
+        // A sheet is a SURFACE, not a tint. glassSurface is 80% opaque, and a
+        // transcript of tables and code read straight through it — the sheet
+        // looked broken rather than translucent. The reference's sheets are
+        // solid cream; the glass language lives in the cards behind them.
+        containerColor = GsTheme.colors.sheetSurface,
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
     ) {
         Column(
@@ -3327,7 +3331,11 @@ private fun TranslationSheet(
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = GsTheme.colors.glassSurface,
+        // A sheet is a SURFACE, not a tint. glassSurface is 80% opaque, and a
+        // transcript of tables and code read straight through it — the sheet
+        // looked broken rather than translucent. The reference's sheets are
+        // solid cream; the glass language lives in the cards behind them.
+        containerColor = GsTheme.colors.sheetSurface,
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
     ) {
         Column(
@@ -3417,7 +3425,11 @@ private fun AttachSheet(
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = GsTheme.colors.glassSurface,
+        // A sheet is a SURFACE, not a tint. glassSurface is 80% opaque, and a
+        // transcript of tables and code read straight through it — the sheet
+        // looked broken rather than translucent. The reference's sheets are
+        // solid cream; the glass language lives in the cards behind them.
+        containerColor = GsTheme.colors.sheetSurface,
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
     ) {
         Column(
