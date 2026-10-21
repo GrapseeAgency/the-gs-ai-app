@@ -88,7 +88,8 @@ struct RootView: View {
                         withAnimation(Aero.motion(Aero.spring)) { showDrawer = true }
                     },
                     onOpenChats: { router.path.append(.chats) },
-                    onOpenAgent: { router.path.append(.travelAgent) }
+                    onOpenAgent: { router.path.append(.travelAgent) },
+                    onOpenConversation: { id in router.path.append(.chat(id)) }
                 )
                 .aeroDestinations()
             }

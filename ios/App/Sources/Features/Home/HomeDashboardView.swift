@@ -11,12 +11,17 @@ struct HomeDashboardView: View {
     let onOpenDrawer: () -> Void
     let onOpenChats: () -> Void
     let onOpenAgent: () -> Void
+    /// Reopen a specific thread from the resume card.
+    let onOpenConversation: (String) -> Void
+
+    @ObservedObject private var store = ConversationStore.shared
 
     var body: some View {
         ZStack(alignment: .bottom) {
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 18) {
                     header
+                    resumeCard
                     greeting
                     pills
                     bento
@@ -70,6 +75,62 @@ struct HomeDashboardView: View {
     }
 
     // MARK: Greeting
+
+    // MARK: Resume card
+
+    /// The reference opens on the thread you were just in, as readable prose —
+    /// not a list row and not a truncated preview.
+    @ViewBuilder private var resumeCard: some View {
+        if let conversation = store.conversations.first {
+            Button {
+                onOpenConversation(conversation.id)
+            } label: {
+                AeroCard {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(Self.cleanPreview(store.messages(for: conversation.id).last?.content
+                                               ?? conversation.title))
+                            .font(Aero.body())
+                            .foregroundStyle(Aero.text)
+                            .lineLimit(3)
+                            .multilineTextAlignment(.leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        HStack(spacing: 6) {
+                            Text(conversation.title)
+                                .font(Aero.caption())
+                                .foregroundStyle(Aero.textMuted)
+                                .lineLimit(1)
+                            Spacer(minLength: 0)
+                            Image(systemName: "arrow.right")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(Aero.accent)
+                        }
+                    }
+                    .padding(16)
+                }
+            }
+            .buttonStyle(KineticPressStyle())
+            .accessibilityLabel("Continue \(conversation.title)")
+        }
+    }
+
+    /// Markdown stripped to prose — the same rule the Android card uses, so a
+    /// rich reply never leaks fences, pipes or separator rows into a preview.
+    static func cleanPreview(_ raw: String, limit: Int = 150) -> String {
+        let punctuation = CharacterSet(charactersIn: "|-: ")
+        let kept = raw.components(separatedBy: .newlines).filter { line in
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty else { return false }
+            return !trimmed.unicodeScalars.allSatisfy { punctuation.contains($0) }
+        }
+        var text = kept.joined(separator: " ")
+        for token in ["```", "#", "*", "_", ">", "`", "|"] {
+            text = text.replacingOccurrences(of: token, with: " ")
+        }
+        text = text.replacingOccurrences(of: "-{3,}", with: " ", options: .regularExpression)
+        text = text.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+        text = text.trimmingCharacters(in: .whitespaces)
+        return text.count <= limit ? text : String(text.prefix(limit)).trimmingCharacters(in: .whitespaces) + "…"
+    }
 
     /// The same time-of-day rule the Android dashboard uses — a hardcoded
     /// "Good morning" was wrong for half the day.
