@@ -777,8 +777,10 @@ private fun HomeDock(
                     .fillMaxSize()
                     .clip(RoundedCornerShape(999.dp))
                     .background(
+                        // Sampled from the sheet's Generate pill (#F8D6C0 at
+                        // its centre, warmer at the right edge).
                         Brush.horizontalGradient(
-                            listOf(Color(0xFFFFD3B4), Color(0xFFFFBE9C))
+                            listOf(Color(0xFFFBDAC6), Color(0xFFF6C6AC))
                         )
                     )
                     .clickable(

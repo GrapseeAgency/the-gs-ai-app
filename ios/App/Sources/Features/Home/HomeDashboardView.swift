@@ -278,8 +278,8 @@ struct HomeDashboardView: View {
                 .frame(maxWidth: .infinity)
                 .frame(height: 48)
                 .background(Capsule().fill(LinearGradient(
-                    colors: [Color(red: 1, green: 0.83, blue: 0.71),
-                             Color(red: 1, green: 0.75, blue: 0.61)],
+                    colors: [Color(red: 0.98, green: 0.85, blue: 0.78),
+                             Color(red: 0.96, green: 0.78, blue: 0.67)],
                     startPoint: .leading, endPoint: .trailing)))
                 .padding(6)
                 .background(Capsule().fill(Color.white.opacity(0.55)))
