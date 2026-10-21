@@ -210,7 +210,7 @@ struct HomeDashboardView: View {
     private var todayUsedHeader: some View {
         HStack {
             Text("Today's Used")
-                .font(Aero.headline())
+                .font(.system(size: 20, weight: .semibold))
                 .foregroundStyle(Aero.text)
             Spacer()
             Button(action: onOpenChats) {
@@ -229,11 +229,11 @@ struct HomeDashboardView: View {
         Button(action: { onStartPrompt("Suggest a few questions I could ask about ") }) {
             HStack(spacing: 12) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
                         .fill(Color.white.opacity(0.55))
-                        .frame(width: 40, height: 40)
+                        .frame(width: 34, height: 34)
                     Image(systemName: "lightbulb")
-                        .font(.system(size: 18, weight: .medium))
+                        .font(.system(size: 15, weight: .medium))
                         .foregroundStyle(Aero.text)
                 }
                 VStack(alignment: .leading, spacing: 2) {
@@ -246,7 +246,7 @@ struct HomeDashboardView: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Aero.textMuted)
             }
-            .padding(14)
+            .padding(10)
             .frame(maxWidth: .infinity, alignment: .leading)
             .gsGlass(.card, corner: Aero.Radius.card)
         }

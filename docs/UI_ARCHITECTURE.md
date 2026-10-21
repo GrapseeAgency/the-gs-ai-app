@@ -100,9 +100,10 @@ scenes from primitives, so both platforms share:
 | `Privacy` | Privacy sections | `RefArt.Privacy` | `.privacy` |
 | `Archive` | Empty archive | `RefArt.Archive` | `.archive` |
 | `Notifications` | Notifications empty | `RefArt.Notifications` | `.notifications` |
-| `Video` | Home bento — Video | `RefArt.Video` | `.video` |
-| `Clarity` | Home bento — Mind Guide | `RefArt.Clarity` | `.clarity` |
-| `Reflection` | Home bento — Today's reflection | `RefArt.Reflection` | `.reflection` |
+| `Pearl` | Home — Video card art: three iridescent spheres and a silk thread | `RefArt.Pearl` | `PearlCluster` (SwiftUI gradients) |
+| `Reflection` | Home — Today's reflection: lotus on still water | `RefArt.Reflection` | `.reflection` |
+| `Video` | available, unused since Home adopted `Pearl` | `RefArt.Video` | `.video` |
+| `Clarity` | available, unused since Home adopted the orb | `RefArt.Clarity` | `.clarity` |
 
 Rules:
 

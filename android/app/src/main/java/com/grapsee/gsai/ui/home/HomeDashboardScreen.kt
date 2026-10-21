@@ -565,7 +565,10 @@ private fun TodayUsedHeader(onSeeAll: () -> Unit) {
     ) {
         Text(
             text = "Today's Used",
-            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+            style = MaterialTheme.typography.titleLarge.copy(
+                fontSize = 20.sp,
+                fontWeight = FontWeight.SemiBold
+            ),
             color = GsTheme.colors.textPrimary,
             modifier = Modifier.weight(1f)
         )
@@ -584,7 +587,7 @@ private fun TodayUsedHeader(onSeeAll: () -> Unit) {
         ) {
             Text(
                 text = "See All",
-                style = MaterialTheme.typography.labelMedium,
+                style = MaterialTheme.typography.labelLarge,
                 color = GsTheme.colors.textSecondary
             )
             Spacer(Modifier.width(4.dp))
@@ -602,22 +605,22 @@ private fun TodayUsedHeader(onSeeAll: () -> Unit) {
 private fun SuggestionsCard(title: String, subtitle: String, onClick: () -> Unit) {
     GlassPanel(onClick = onClick, onClickLabel = title) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(14.dp),
+            modifier = Modifier.fillMaxWidth().padding(10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(13.dp))
+                    .size(34.dp)
+                    .clip(RoundedCornerShape(11.dp))
                     .background(Color.White.copy(alpha = 0.55f))
-                    .border(1.dp, GsTheme.colors.glassBorder, RoundedCornerShape(13.dp)),
+                    .border(1.dp, GsTheme.colors.glassBorder, RoundedCornerShape(11.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     GsIcons.Lightbulb,
                     contentDescription = null,
                     tint = GsTheme.colors.textPrimary,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(17.dp)
                 )
             }
             Spacer(Modifier.width(12.dp))

@@ -83,8 +83,6 @@ enum class RefArt {
     /** Pearlescent light: overlapping glass spheres, the reference's hero art. */
     Pearl,
 
-    /** One pearl filling the frame — the brand avatar. */
-    PearlSolo,
 }
 
 @Composable
@@ -123,7 +121,6 @@ fun RefArtwork(
             RefArt.Clarity -> drawClarityScene(accent, strong, pale, ink)
             RefArt.Reflection -> drawReflectionScene(accent, strong, pale)
             RefArt.Pearl -> drawPearlScene()
-            RefArt.PearlSolo -> drawPearlScene(solo = true)
         }
     }
 }
@@ -719,20 +716,9 @@ private fun DrawScope.drawNotificationsScene(accent: Color, strong: Color, pale:
  * through a pearl, not a photograph — and it is drawn from the same primitives
  * as the rest of the set so it never reads as a sticker.
  */
-private fun DrawScope.drawPearlScene(solo: Boolean = false) {
+private fun DrawScope.drawPearlScene() {
     val w = size.width
     val h = size.height
-
-    if (solo) {
-        drawPearl(
-            center = Offset(w * 0.52f, h * 0.54f),
-            radius = w * 0.46f,
-            warm = Color(0xFFFFD8C2),
-            cool = Color(0xFFFFC0D2),
-            blush = Color(0xFFFFB08F)
-        )
-        return
-    }
 
     drawPearl(
         center = Offset(w * 0.54f, h * 0.44f),
