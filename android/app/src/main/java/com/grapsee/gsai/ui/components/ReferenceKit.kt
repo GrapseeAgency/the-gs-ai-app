@@ -822,8 +822,10 @@ fun RefChoiceTile(
         modifier = modifier
             .clip(shape)
             .background(
-                if (selected) colors.accentSoft.copy(alpha = 0.55f)
-                else colors.glassSurface.copy(alpha = 0.55f)
+                // The token is ALREADY a low-alpha tint (0x1F). Overriding its
+                // alpha here turned the selected tile into a solid orange slab;
+                // the reference is a whisper of colour with an accent border.
+                if (selected) colors.accentSoft else colors.glassSurface.copy(alpha = 0.55f)
             )
             .border(1.dp, border, shape)
             .clickable(
