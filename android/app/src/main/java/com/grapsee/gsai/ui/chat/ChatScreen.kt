@@ -409,6 +409,9 @@ fun ChatScreen(
     val clipboard = LocalClipboardManager.current
     val snackbarHostState = remember { SnackbarHostState() }
     var attachSheetOpen by rememberSaveable { mutableStateOf(false) }
+    // Conversation options (reference sheet 4/5): Rename / Archive / Delete for
+    // the ACTIVE thread. Only meaningful once the conversation exists.
+    var chatMenuOpen by rememberSaveable { mutableStateOf(false) }
     // FLASH MODE (Phase 3) — the composer's thinking mode, persisted per
     // conversation in local prefs (SettingsStore), applied to the next send.
     // Default 'flash'; the chip above the composer shows it only when it is
@@ -1256,6 +1259,45 @@ fun ChatScreen(
                 if (newChatAction != null) {
                     ChatTopIconButton(GsIcons.Plus, "New chat", newChatAction)
                 }
+                if (activeConversationId != null) {
+                    ChatTopIconButton(GsIcons.EllipsisVertical, "Conversation options") {
+                        chatMenuOpen = true
+                    }
+                }
+            }
+            if (chatMenuOpen && activeConversationId != null) {
+                val activeId = activeConversationId
+                ConversationOptionsSheet(
+                    title = conversationTitle,
+                    onDismiss = { chatMenuOpen = false },
+                    onRename = { newTitle ->
+                        chatMenuOpen = false
+                        conversationTitle = newTitle
+                        if (activeId != null) {
+                            scope.launch {
+                                runCatching { ServiceLocator.chat.rename(activeId, newTitle) }
+                            }
+                        }
+                    },
+                    onArchive = {
+                        chatMenuOpen = false
+                        if (activeId != null) {
+                            scope.launch {
+                                runCatching { ServiceLocator.chat.setArchived(activeId, true) }
+                            }
+                        }
+                        onBack()
+                    },
+                    onDelete = {
+                        chatMenuOpen = false
+                        if (activeId != null) {
+                            scope.launch {
+                                runCatching { ServiceLocator.chat.delete(activeId) }
+                            }
+                        }
+                        onBack()
+                    }
+                )
             }
             if (transcriptScrolled) {
                 HorizontalDivider(
@@ -2655,6 +2697,111 @@ private fun AssistantMessage(
                 }
             )
         }
+    }
+}
+
+/**
+ * THE CONVERSATION OPTIONS SHEET (reference sheet 4/5): Rename / Archive /
+ * Delete for the active thread — the actions the reference's chat "…" menu
+ * carries. Rename and delete take a second tap so neither is a one-tap
+ * accident. Every row calls a real repository method; nothing here is inert.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ConversationOptionsSheet(
+    title: String,
+    onDismiss: () -> Unit,
+    onRename: (String) -> Unit,
+    onArchive: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    var renaming by remember { mutableStateOf(false) }
+    var renameDraft by remember { mutableStateOf(title) }
+    var confirmingDelete by remember { mutableStateOf(false) }
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = GsTheme.colors.glassSurface,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = GsMotion.spaceM)
+                .padding(bottom = GsMotion.spaceL),
+            verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
+        ) {
+            Text(
+                text = title.ifBlank { "This chat" },
+                style = MaterialTheme.typography.titleMedium,
+                color = GsTheme.colors.textPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            when {
+                confirmingDelete -> {
+                    Text(
+                        text = "Delete this chat? This cannot be undone.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = GsTheme.colors.textSecondary
+                    )
+                    OptionRow(GsIcons.Trash2, "Delete chat", destructive = true, onClick = onDelete)
+                    OptionRow(GsIcons.X, "Cancel") { confirmingDelete = false }
+                }
+                renaming -> {
+                    OutlinedTextField(
+                        value = renameDraft,
+                        onValueChange = { renameDraft = it },
+                        label = { Text("Chat name") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OptionRow(GsIcons.Check, "Save name") {
+                        val trimmed = renameDraft.trim()
+                        if (trimmed.isNotEmpty()) onRename(trimmed)
+                    }
+                    OptionRow(GsIcons.X, "Cancel") { renaming = false }
+                }
+                else -> {
+                    OptionRow(GsIcons.SquarePen, "Rename chat") {
+                        renameDraft = title
+                        renaming = true
+                    }
+                    OptionRow(GsIcons.Archive, "Archive chat", onClick = onArchive)
+                    OptionRow(GsIcons.Trash2, "Delete chat", destructive = true) {
+                        confirmingDelete = true
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OptionRow(
+    icon: ImageVector,
+    label: String,
+    destructive: Boolean = false,
+    onClick: () -> Unit,
+) {
+    val tint = if (destructive) GsTheme.colors.error else GsTheme.colors.textPrimary
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 52.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                role = Role.Button,
+                onClickLabel = label,
+                onClick = onClick
+            )
+            .padding(horizontal = 8.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = tint)
     }
 }
 
