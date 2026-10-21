@@ -129,6 +129,22 @@ nothing selects the whole conversation.
 `ChartInspectBar` is a sibling of the plot, never an overlay: the datum the
 reader selected stays visible while the chart stays readable.
 
+## 4d. Reference sheets without a system behind them
+
+Five reference screens are deliberately unbuilt, because the app has no system
+they would read or write. Copying their pixels would produce convincing lies:
+
+| Reference screen | Why it is not built |
+|---|---|
+| Mentions (@you / @project / @health) | No mention graph exists; nothing to list. |
+| Quick actions (simplify / shorter / longer / change tone) | The chat contract has no transform instruction; every tile would be a no-op. |
+| Usage & Limits | Nothing meters tokens, images or uploads. |
+| Subscription ($12.99 / month) | No billing backend, no SKUs, no purchase path. |
+| Themes (Aurora / Onyx / Forest palettes) | The token set has light/dark plus six accents; there are no alternate palettes. |
+
+When one of those systems lands, its screen goes in against this table — not
+before.
+
 ## 5. Honesty — no fabricated data
 
 A screen renders only what the app actually has. There is no invented usage
@@ -154,6 +170,11 @@ language and offers the one real action that resolves it.
 | Billing / plan | `billing/BillingScreen` | `Features/Billing/BillingView` |
 | Orb | `orbs/OrbPhase.kt` + `orbs/ThinkingOrb.kt` | `Orbs/OrbPhase.swift` + `Orbs/ThinkingOrbView.swift` |
 | Rendered artifacts | `chat/content/Widget*` (200+ widgets) | `Features/Chats/Content/*` |
+| AI Intelligence | `settings/ReferenceSettingsScreens.AiIntelligenceScreen` | `Features/Settings/AiIntelligenceView` |
+| Model Details | `settings/ModelDetailsScreen` | `Features/Settings/AiIntelligenceView` (sheet) |
+| Chat Details | `chat/ChatInfoScreen` | `Features/Chats/ChatDetailView` (sheet) |
+| Chats multi-select | `chat/ChatsScreen` (long-press) | `Features/Chats/ChatsListView` (Select in menu) |
+| Home resume card | `home/HomeDashboardScreen.RecentPreviewCard` | `Features/Home/HomeDashboardView.resumeCard` |
 
 ## 7. Definition of done for a surface
 
