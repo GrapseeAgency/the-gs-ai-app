@@ -202,7 +202,47 @@ internal fun NetworkChart(w: ChartWidget) {
     val links = w.links + w.edges
     val idx = HashMap<String, Int>()
     w.nodes.forEachIndexed { i, n -> idx[n.id] = i }
-    Canvas(Modifier.fillMaxWidth().height(200.dp).padding(top = 8.dp)) {
+    val probe = rememberChartProbe()
+    Canvas(
+        Modifier
+            .fillMaxWidth()
+            .height(200.dp)
+            .padding(top = 8.dp)
+            .pointerInput(w) {
+                detectTapGestures { tap ->
+                    val cx = size.width / 2f
+                    val cy = size.height / 2f
+                    val r = min(cx, cy) * 0.72f
+                    val n = w.nodes.size.coerceAtLeast(1)
+                    var best = -1
+                    var bestDistance = Float.MAX_VALUE
+                    w.nodes.forEachIndexed { i, _ ->
+                        val a = (i.toFloat() / n) * 2f * PI.toFloat()
+                        val px = cx + r * cos(a)
+                        val py = cy + r * sin(a)
+                        val dx = tap.x - px
+                        val dy = tap.y - py
+                        val distance = dx * dx + dy * dy
+                        if (distance < bestDistance) {
+                            bestDistance = distance
+                            best = i
+                        }
+                    }
+                    if (best >= 0 && bestDistance <= 44f * 44f) {
+                        val node = w.nodes[best]
+                        val degree = links.count { it.source == node.id || it.target == node.id }
+                        probe.select(
+                            ChartDatum(
+                                label = node.label.ifEmpty { node.id },
+                                value = degree.toFloat(),
+                                series = "links",
+                                index = best
+                            )
+                        )
+                    }
+                }
+            }
+    ) {
         val cw = size.width
         val ch = size.height
         val cx = cw / 2f
@@ -236,6 +276,7 @@ internal fun NetworkChart(w: ChartWidget) {
             }
         }
     }
+    ChartInspectBar(probe, w.unit, "Tap a node to read its degree", seriesInk(0))
 }
 
 // --- force -------------------------------------------------------------------
@@ -292,11 +333,45 @@ internal fun ForceChart(w: ChartWidget) {
         if (a >= 0 && b >= 0) a to b else null
     }
     var pts by remember(w) { mutableStateOf(runForceLayout(w.nodes.size, links)) }
+    val probe = rememberChartProbe()
     Canvas(
         Modifier
             .fillMaxWidth()
             .height(210.dp)
             .padding(top = 8.dp)
+            .pointerInput(pts) {
+                detectTapGestures { tap ->
+                    val scale = size.width / CHART_LAYOUT_W
+                    val target = Offset(tap.x / scale, tap.y / scale)
+                    val cur = pts
+                    if (cur.isEmpty()) return@detectTapGestures
+                    var best = -1
+                    var bestDistance = Float.MAX_VALUE
+                    cur.forEachIndexed { i, p ->
+                        val dx = p.x - target.x
+                        val dy = p.y - target.y
+                        val d = dx * dx + dy * dy
+                        if (d < bestDistance) {
+                            bestDistance = d
+                            best = i
+                        }
+                    }
+                    if (best >= 0 && bestDistance <= 34f * 34f) {
+                        val node = w.nodes.getOrNull(best)
+                        if (node != null) {
+                            val degree = links.count { it.first == best || it.second == best }
+                            probe.select(
+                                ChartDatum(
+                                    label = node.label.ifEmpty { node.id },
+                                    value = degree.toFloat(),
+                                    series = "links",
+                                    index = best
+                                )
+                            )
+                        }
+                    }
+                }
+            }
             .pointerInput(w) {
                 detectDragGestures { change, dragAmount ->
                     change.consume()
@@ -332,6 +407,7 @@ internal fun ForceChart(w: ChartWidget) {
         color = GsTheme.colors.textTertiary,
         modifier = Modifier.padding(top = 4.dp)
     )
+    ChartInspectBar(probe, w.unit, "Tap a node to read its degree", seriesInk(0))
 }
 
 // --- wordcloud ---------------------------------------------------------------
@@ -340,10 +416,12 @@ internal fun ForceChart(w: ChartWidget) {
 internal fun WordcloudChart(w: ChartWidget) {
     val items = w.items.sortedByDescending { max(it.weight, it.value) }.take(24)
     val maxW = max(1f, items.maxOfOrNull { max(it.weight, it.value) } ?: 1f)
+    val probe = rememberChartProbe()
     Column(Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        items.chunked(3).forEach { row ->
+        items.withIndex().chunked(3).forEach { row ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                row.forEach { item ->
+                row.forEach { entry ->
+                    val item = entry.value
                     val weight = max(item.weight, item.value)
                     val t = item.text.ifEmpty { item.label }
                     if (t.isNotEmpty()) {
@@ -354,12 +432,19 @@ internal fun WordcloudChart(w: ChartWidget) {
                             color = seriesInk((t.hashCode() % 12 + 12) % 12),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                            modifier = Modifier
+                                .padding(horizontal = 4.dp, vertical = 1.dp)
+                                .clickable {
+                                    probe.select(
+                                        ChartDatum(label = t, value = weight, index = entry.index)
+                                    )
+                                }
                         )
                     }
                 }
             }
         }
+        ChartInspectBar(probe, w.unit, "Tap a word to read its weight", seriesInk(0))
     }
 }
 
@@ -673,7 +758,29 @@ internal fun ViolinChart(w: ChartWidget) {
     if (series.isEmpty()) return
     val colors = series.indices.map { seriesInk(it) }
     val usableH = CHART_LAYOUT_H - 24f
-    Canvas(Modifier.fillMaxWidth().height(190.dp).padding(top = 8.dp)) {
+    val probe = rememberChartProbe()
+    Canvas(
+        Modifier
+            .fillMaxWidth()
+            .height(190.dp)
+            .padding(top = 8.dp)
+            .pointerInput(series) {
+                detectTapGestures { tap ->
+                    val colW = size.width.toFloat() / series.size.coerceAtLeast(1)
+                    val index = (tap.x / colW).toInt().coerceIn(0, series.size - 1)
+                    val values = series[index].data.map { it.getOrElse(1) { 0f } }
+                    if (values.isEmpty()) return@detectTapGestures
+                    probe.select(
+                        ChartDatum(
+                            label = series[index].name.ifEmpty { "S${index + 1}" },
+                            value = values.sum() / values.size,
+                            series = "mean",
+                            index = index
+                        )
+                    )
+                }
+            }
+    ) {
         val cw = size.width
         val sy = size.height / CHART_LAYOUT_H
         val colW = cw / series.size
@@ -694,6 +801,7 @@ internal fun ViolinChart(w: ChartWidget) {
             Text(s.name.ifEmpty { "S${i + 1}" }, style = MaterialTheme.typography.labelSmall, color = GsTheme.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
+    ChartInspectBar(probe, w.unit, "Tap a violin to read its mean", colors.firstOrNull() ?: seriesInk(0))
 }
 
 // --- contour -----------------------------------------------------------------
@@ -722,7 +830,32 @@ internal fun ContourChart(w: ChartWidget) {
     val zHi = max(zLo + 1e-4f, grid.flatMap { it.toList() }.maxOrNull() ?: 1f)
     val levels = (if (w.levels in 3..12) w.levels else 6)
     val accent = seriesInk(0)
-    Canvas(Modifier.fillMaxWidth().height(200.dp).padding(top = 8.dp)) {
+    val probe = rememberChartProbe()
+    Canvas(
+        Modifier
+            .fillMaxWidth()
+            .height(200.dp)
+            .padding(top = 8.dp)
+            .pointerInput(grid) {
+                detectTapGestures { tap ->
+                    val cellW = size.width.toFloat() / (K - 1)
+                    val cellH = size.height.toFloat() / (K - 1)
+                    val gx = (tap.x / cellW).toInt().coerceIn(0, K - 1)
+                    val gy = (tap.y / cellH).toInt().coerceIn(0, K - 1)
+                    if (counts[gy][gx] == 0) return@detectTapGestures
+                    val xValue = xLo + (xHi - xLo) * (gx.toFloat() / (K - 1))
+                    val yValue = yLo + (yHi - yLo) * (gy.toFloat() / (K - 1))
+                    probe.select(
+                        ChartDatum(
+                            label = "${"%.2f".format(xValue)}, ${"%.2f".format(yValue)}",
+                            value = grid[gy][gx],
+                            series = "${counts[gy][gx]} pts",
+                            index = gy * K + gx
+                        )
+                    )
+                }
+            }
+    ) {
         val cw = size.width
         val ch = size.height
         val cellW = cw / (K - 1)
@@ -782,6 +915,7 @@ internal fun ContourChart(w: ChartWidget) {
         Text("z: ${"%.2f".format(zLo)} → ${"%.2f".format(zHi)}", style = MaterialTheme.typography.labelSmall, color = GsTheme.colors.textTertiary)
         Text("levels $levels", style = MaterialTheme.typography.labelSmall, color = GsTheme.colors.textTertiary)
     }
+    ChartInspectBar(probe, w.unit, "Tap the field to read a cell", accent)
 }
 
 // --- parallel coordinates ----------------------------------------------------
@@ -793,7 +927,48 @@ internal fun ParallelChart(w: ChartWidget) {
     if (axes.size < 3 || series.isEmpty()) return
     val colors = series.indices.map { seriesInk(it) }
     val axisX = { i: Int, cw: Float -> 24f + (i.toFloat() / (axes.size - 1)) * (cw - 48f) }
-    Canvas(Modifier.fillMaxWidth().height(190.dp).padding(top = 8.dp)) {
+    val probe = rememberChartProbe()
+    Canvas(
+        Modifier
+            .fillMaxWidth()
+            .height(190.dp)
+            .padding(top = 8.dp)
+            .pointerInput(series, axes) {
+                detectTapGestures { tap ->
+                    val cw = size.width.toFloat()
+                    val ch = size.height.toFloat()
+                    val top = 10f
+                    val bottom = ch - 10f
+                    val axis = (0 until axes.size).minByOrNull { i ->
+                        abs(tap.x - axisX(i, cw))
+                    } ?: return@detectTapGestures
+                    var best = -1
+                    var bestDistance = Float.MAX_VALUE
+                    series.forEachIndexed { index, s ->
+                        val column = series.map { it.values.getOrElse(axis) { 0f } }
+                        val lo = column.minOrNull() ?: 0f
+                        val hi = max(lo + 1e-4f, column.maxOrNull() ?: 1f)
+                        val t = ((s.values.getOrElse(axis) { 0f } - lo) / (hi - lo)).coerceIn(0f, 1f)
+                        val y = top + (1f - t) * (bottom - top)
+                        val distance = abs(tap.y - y)
+                        if (distance < bestDistance) {
+                            bestDistance = distance
+                            best = index
+                        }
+                    }
+                    if (best >= 0 && bestDistance <= 44f) {
+                        probe.select(
+                            ChartDatum(
+                                label = series[best].name.ifEmpty { "Series ${best + 1}" },
+                                value = series[best].values.getOrElse(axis) { 0f },
+                                series = axes.getOrNull(axis),
+                                index = best
+                            )
+                        )
+                    }
+                }
+            }
+    ) {
         val cw = size.width
         val ch = size.height
         val top = 10f
@@ -824,6 +999,7 @@ internal fun ParallelChart(w: ChartWidget) {
             Text(axis, style = MaterialTheme.typography.labelSmall, color = GsTheme.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
         }
     }
+    ChartInspectBar(probe, w.unit, "Tap a line to read it", colors.firstOrNull() ?: seriesInk(0))
 }
 
 // --- dendrogram --------------------------------------------------------------
@@ -865,7 +1041,37 @@ internal fun DendrogramChart(w: ChartWidget) {
         buildDendroLayout(root, slot, maxDistOf(root), CHART_LAYOUT_H - 24f, map)
         map
     }
-    Canvas(Modifier.fillMaxWidth().height(190.dp).padding(top = 8.dp)) {
+    val probe = rememberChartProbe()
+    Canvas(
+        Modifier
+            .fillMaxWidth()
+            .height(190.dp)
+            .padding(top = 8.dp)
+            .pointerInput(layout) {
+                detectTapGestures { tap ->
+                    val scale = size.width.toFloat() / CHART_LAYOUT_W
+                    var best: TreeNodeData? = null
+                    var bestDistance = Float.MAX_VALUE
+                    layout.values.filter { it.isLeaf }.forEach { leaf ->
+                        val distance = abs(tap.x - leaf.x * scale)
+                        if (distance < bestDistance) {
+                            bestDistance = distance
+                            best = leavesOf(root).firstOrNull { it.label == leaf.label }
+                        }
+                    }
+                    val node = best ?: return@detectTapGestures
+                    if (bestDistance <= 44f) {
+                        probe.select(
+                            ChartDatum(
+                                label = node.label.ifBlank { "Leaf" },
+                                value = max(node.value, 1f),
+                                index = leavesOf(root).indexOf(node)
+                            )
+                        )
+                    }
+                }
+            }
+    ) {
         val scale = size.width / CHART_LAYOUT_W
         val sy = size.height / CHART_LAYOUT_H
         val baseY = size.height - 22f * sy
@@ -892,6 +1098,7 @@ internal fun DendrogramChart(w: ChartWidget) {
             Text(l.label, style = MaterialTheme.typography.labelSmall, color = GsTheme.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
+    ChartInspectBar(probe, w.unit, "Tap a leaf to read it", seriesInk(0))
 }
 
 // --- depth (order book) ------------------------------------------------------
@@ -910,7 +1117,48 @@ internal fun DepthChart(w: ChartWidget) {
     val spread = if (bestBid != null && bestAsk != null) bestAsk - bestBid else Float.NaN
     val jade = seriesInk(1)
     val crimson = seriesInk(9)
-    Canvas(Modifier.fillMaxWidth().height(190.dp).padding(top = 8.dp)) {
+    val probe = rememberChartProbe()
+    Canvas(
+        Modifier
+            .fillMaxWidth()
+            .height(190.dp)
+            .padding(top = 8.dp)
+            .pointerInput(bids, asks) {
+                detectTapGestures { tap ->
+                    val ch = size.height.toFloat()
+                    val rows = max(bids.size, asks.size).coerceAtMost(16)
+                    val rowH = (ch - 8f) / max(1, rows)
+                    val mid = ch / 2f
+                    if (tap.y < mid) {
+                        val ordered = bids.sortedByDescending { it.first }.take(16)
+                        if (ordered.isEmpty()) return@detectTapGestures
+                        val index = ((mid - tap.y) / rowH).toInt().coerceIn(0, ordered.size - 1)
+                        val entry = ordered[index]
+                        probe.select(
+                            ChartDatum(
+                                label = entry.first.toString(),
+                                value = entry.second,
+                                series = "bid",
+                                index = index
+                            )
+                        )
+                    } else {
+                        val ordered = asks.sortedBy { it.first }.take(16)
+                        if (ordered.isEmpty()) return@detectTapGestures
+                        val index = ((tap.y - mid) / rowH).toInt().coerceIn(0, ordered.size - 1)
+                        val entry = ordered[index]
+                        probe.select(
+                            ChartDatum(
+                                label = entry.first.toString(),
+                                value = entry.second,
+                                series = "ask",
+                                index = index
+                            )
+                        )
+                    }
+                }
+            }
+    ) {
         val cw = size.width
         val ch = size.height
         val midX = cw / 2f
@@ -932,4 +1180,5 @@ internal fun DepthChart(w: ChartWidget) {
         Text(if (spread.isNaN()) "" else "spread ${"%.2f".format(spread)}", style = MaterialTheme.typography.labelSmall, color = GsTheme.colors.textTertiary)
         Text("ask ${bestAsk?.toString() ?: "—"}", style = MaterialTheme.typography.labelSmall, color = crimson)
     }
+    ChartInspectBar(probe, "size", "Tap a level to read its size", jade)
 }
