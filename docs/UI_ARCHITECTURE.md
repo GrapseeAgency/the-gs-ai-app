@@ -75,6 +75,60 @@ glyph, not a bare icon on the canvas.
 - Every tappable surface carries a `Role.Button`, an `onClickLabel`, and a real
   destination. A row that goes nowhere is a bug.
 
+## 4b. Artwork — one illustrator, two platforms
+
+The illustration set is drawn, not imported. `ui/components/ReferenceArt.kt`
+(Android) and `Components/GsArtwork.swift` (iOS) implement the same fourteen
+scenes from primitives, so both platforms share:
+
+- **one light source** — upper left; every highlight and specular sits there;
+- **one material** — peach glass with a white edge and a warm, never grey,
+  shadow;
+- **one motif** — the five-petal bloom, which reappears inside the lens, the
+  water, the library card and the notification bell.
+
+| Scene | Used by | Android | iOS |
+|---|---|---|---|
+| `Bloom` | Welcome, onboarding, empty chat, brand lockup | `RefArt.Bloom` | `.bloom` |
+| `Conversation` | Empty chats list, empty thread | `RefArt.Conversation` | `.conversation` |
+| `Search` | No search results | `RefArt.Search` | `.search` |
+| `Offline` | Network-empty states | `RefArt.Offline` | `.offline` |
+| `Error` | Failed turns | `RefArt.Error` | `.error` |
+| `Library` | Saved responses | `RefArt.Library` | `.library` |
+| `Voice` | Voice empty state | `RefArt.Voice` | `.voice` |
+| `Success` | Plan/billing, confirmations | `RefArt.Success` | `.success` |
+| `Privacy` | Privacy sections | `RefArt.Privacy` | `.privacy` |
+| `Archive` | Empty archive | `RefArt.Archive` | `.archive` |
+| `Notifications` | Notifications empty | `RefArt.Notifications` | `.notifications` |
+| `Video` | Home bento — Video | `RefArt.Video` | `.video` |
+| `Clarity` | Home bento — Mind Guide | `RefArt.Clarity` | `.clarity` |
+| `Reflection` | Home bento — Today's reflection | `RefArt.Reflection` | `.reflection` |
+
+Rules:
+
+1. A new state gets a scene only if the product really has that state; the set
+   is not decoration.
+2. Scenes are composed from `drawPetal`, `drawBurst`, `drawCrescent`,
+   `drawBubble` and `drawSparkle` — no ad-hoc shapes that break the material.
+3. `contentDescription` is a short sentence about the scene, or `""` when the
+   art is decorative and the adjacent text already says it.
+4. No bitmap illustrations and no generated raster art; if it cannot be drawn
+   in the shared language, it does not ship.
+
+## 4c. Chart interactivity coverage
+
+Every chart resolves a tap to a `ChartDatum`; nothing swallows a gesture and
+nothing selects the whole conversation.
+
+| Family | Charts | Hit test |
+|---|---|---|
+| Core | bar, line, area, pie/donut | band / point / slice |
+| Charts 2 | grouped bar, box plot, heatmap, treemap, waterfall, candlestick, gantt | band, cell, tile, row |
+| Charts 3 | sankey, network, force, wordcloud, sunburst, bullet, quadrant, violin, contour, parallel, dendrogram, depth | node, ring, word, line, cell, level |
+
+`ChartInspectBar` is a sibling of the plot, never an overlay: the datum the
+reader selected stays visible while the chart stays readable.
+
 ## 5. Honesty — no fabricated data
 
 A screen renders only what the app actually has. There is no invented usage
