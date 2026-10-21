@@ -100,7 +100,8 @@ scenes from primitives, so both platforms share:
 | `Privacy` | Privacy sections | `RefArt.Privacy` | `.privacy` |
 | `Archive` | Empty archive | `RefArt.Archive` | `.archive` |
 | `Notifications` | Notifications empty | `RefArt.Notifications` | `.notifications` |
-| `Pearl` | Home — Video card art: three iridescent spheres and a silk thread | `RefArt.Pearl` | `PearlCluster` (SwiftUI gradients) |
+| *authored render* | Home — avatar and video-card art | `R.drawable.gs_companion_orb` | `GSCompanionOrb` |
+| `Pearl` | available, unused since Home adopted the authored render | `RefArt.Pearl` | — |
 | `Lotus` | Home — Today's reflection card: the flower alone | `RefArt.Lotus` | `.lotus` |
 | `Reflection` | empty states: lotus on still water | `RefArt.Reflection` | `.reflection` |
 | `Video` | available, unused since Home adopted `Pearl` | `RefArt.Video` | `.video` |

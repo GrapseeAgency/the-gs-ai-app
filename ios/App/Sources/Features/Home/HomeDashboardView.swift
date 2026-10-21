@@ -341,9 +341,12 @@ private struct VideoCard: View {
                              Color(red: 0.97, green: 0.92, blue: 0.945),
                              Color(red: 0.98, green: 0.93, blue: 0.90)],
                     startPoint: .topLeading, endPoint: .bottomTrailing)
-                // The reference's artwork is the pearl, bleeding off the
-                // lower-right corner — not a film-strip glyph.
-                PearlCluster()
+                // The sheet's art is a real 3D render of light through pearl —
+                // and the app already owns one: the authored companion bloom.
+                Image("GSCompanionOrb")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 212, height: 212)
                     .frame(maxWidth: .infinity, maxHeight: .infinity,
                            alignment: .bottomTrailing)
                     .offset(x: 44, y: 38)
@@ -500,29 +503,6 @@ private struct PearlOrb: View {
             }
             .shadow(color: Color(red: 0.88, green: 0.55, blue: 0.62).opacity(0.20),
                     radius: size * 0.18, y: size * 0.10)
-    }
-}
-
-/// Three overlapping pearls for the video card's artwork.
-private struct PearlCluster: View {
-    var body: some View {
-        ZStack {
-            // A haze holds the cluster together, so it reads as one mass of
-            // light rather than three separate balls.
-            Circle()
-                .fill(RadialGradient(
-                    colors: [Color(red: 1, green: 0.85, blue: 0.93).opacity(0.35),
-                             Color(red: 0.81, green: 0.76, blue: 1).opacity(0.18),
-                             .clear],
-                    center: .center, startRadius: 0, endRadius: 110))
-                .frame(width: 220, height: 220)
-            PearlOrb(size: 112).offset(x: -10, y: 10)
-            PearlOrb(size: 64).offset(x: 56, y: -38)
-            PearlOrb(size: 46).offset(x: 20, y: 52)
-            PearlOrb(size: 40).offset(x: -48, y: 58)
-                .opacity(0.85)
-        }
-        .frame(width: 210, height: 210)
     }
 }
 

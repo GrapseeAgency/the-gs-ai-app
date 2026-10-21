@@ -418,15 +418,17 @@ private fun VideoCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
                 onClick = onClick
             )
     ) {
-        // The reference's art is the pearl itself: overlapping glass spheres
-        // bleeding off the lower-right corner, not a film-strip glyph.
-        RefArtwork(
-            art = RefArt.Pearl,
-            size = 200.dp,
+        // The sheet's art is a real 3D render of light through pearl — and
+        // the app already owns one: the authored companion bloom. It bleeds
+        // off the lower-right corner exactly as the mock's mass does.
+        Image(
+            painter = painterResource(com.grapsee.gsai.R.drawable.gs_companion_orb),
+            contentDescription = "Pearlescent bloom",
+            contentScale = ContentScale.Fit,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .offset(x = 34.dp, y = 30.dp),
-            contentDescription = "Pearlescent glass spheres"
+                .offset(x = 36.dp, y = 34.dp)
+                .size(212.dp)
         )
         Column(Modifier.fillMaxSize().padding(14.dp)) {
             ReferenceChip(icon = GsIcons.Play, label = "Video")
