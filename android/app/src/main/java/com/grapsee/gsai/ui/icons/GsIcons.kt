@@ -33,6 +33,126 @@ import androidx.compose.ui.unit.dp
 
 public object GsIcons {
 
+    // ---- Reference pass additions (Nexly sheets) -------------------------
+    // Same 24x24 stroke family, width 2, round caps/joins, opaque source so the
+    // Icon(tint=…) filter can recolor them (see the stroke invariant above).
+
+    /** The sparkle that marks "Create" and the assistant's own identity. */
+    public val Sparkles: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "GsIcons.Sparkles",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f,
+        ).apply {
+            addPath(
+                pathData = PathParser().parsePathString(
+                    "M12 3 L13.912 8.813 A2,2 0 0 0 15.187 10.088 L21 12 L15.187 13.912 A2,2 0 0 0 13.912 15.187 L12 21 L10.088 15.187 A2,2 0 0 0 8.813 13.912 L3 12 L8.813 10.088 A2,2 0 0 0 10.088 8.813 Z"
+                ).toNodes(),
+                fill = null,
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.6f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round,
+            )
+        }.build()
+    }
+
+    /** Horizontal overflow ("More"). */
+    public val MoreHorizontal: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "GsIcons.MoreHorizontal",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f,
+        ).apply {
+            for (x in intArrayOf(5, 12, 19)) {
+                addPath(
+                    pathData = PathParser().parsePathString("M$x 12h.01").toNodes(),
+                    fill = null,
+                    stroke = SolidColor(Color.Black),
+                    strokeLineWidth = 3f,
+                    strokeLineCap = StrokeCap.Round,
+                    strokeLineJoin = StrokeJoin.Round,
+                )
+            }
+        }.build()
+    }
+
+    /** Play — the video card's transport control. */
+    public val Play: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "GsIcons.Play",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f,
+        ).apply {
+            addPath(
+                pathData = PathParser().parsePathString("M6 3 L20 12 L6 21 Z").toNodes(),
+                fill = null,
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 2f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round,
+            )
+        }.build()
+    }
+
+    /** House — the dock's home slot. */
+    public val House: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "GsIcons.House",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f,
+        ).apply {
+            addPath(
+                pathData = PathParser().parsePathString(
+                    "M3 9 L12 2 L21 9 V20 A2,2 0 0 1 19 22 H5 A2,2 0 0 1 3 20 Z"
+                ).toNodes(),
+                fill = null,
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 2f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round,
+            )
+            addPath(
+                pathData = PathParser().parsePathString("M9 22 V12 H15 V22").toNodes(),
+                fill = null,
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 2f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round,
+            )
+        }.build()
+    }
+
+    /** Hamburger menu — the header's drawer affordance. */
+    public val Menu: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "GsIcons.Menu",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f,
+        ).apply {
+            for (y in intArrayOf(6, 12, 18)) {
+                addPath(
+                    pathData = PathParser().parsePathString("M4 ${y}h16").toNodes(),
+                    fill = null,
+                    stroke = SolidColor(Color.Black),
+                    strokeLineWidth = 2f,
+                    strokeLineCap = StrokeCap.Round,
+                    strokeLineJoin = StrokeJoin.Round,
+                )
+            }
+        }.build()
+    }
+
     public val PanelLeft: ImageVector by lazy {
         ImageVector.Builder(
             name = "GsIcons.PanelLeft",

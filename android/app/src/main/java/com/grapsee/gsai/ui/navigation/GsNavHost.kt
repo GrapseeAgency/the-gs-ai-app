@@ -236,6 +236,7 @@ fun GsNavHost(modifier: Modifier = Modifier) {
                 onOpenChats = { open(GsRoutes.CHATS) },
                 onOpenAgent = { open(GsRoutes.TRAVEL_AGENT) },
                 onOpenVoice = { open(GsRoutes.VOICE) },
+                onOpenSettings = { open(GsRoutes.SETTINGS) },
             )
         }
         composable(GsRoutes.TRAVEL_AGENT) {

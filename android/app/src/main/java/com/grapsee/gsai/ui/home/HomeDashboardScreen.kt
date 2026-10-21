@@ -1,19 +1,28 @@
 package com.grapsee.gsai.ui.home
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -29,31 +38,22 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.grapsee.gsai.data.AccountStore
 import com.grapsee.gsai.data.OnboardingProfileStore
 import com.grapsee.gsai.data.local.ConversationPreviewRow
 import com.grapsee.gsai.di.ServiceLocator
+import com.grapsee.gsai.ui.components.GsGlassRole
 import com.grapsee.gsai.ui.components.RefArt
 import com.grapsee.gsai.ui.components.RefArtwork
-import com.grapsee.gsai.ui.components.RefCard
-import com.grapsee.gsai.ui.components.RefDivider
-import com.grapsee.gsai.ui.components.RefEmptyState
-import com.grapsee.gsai.ui.components.RefIconButton
-import com.grapsee.gsai.ui.components.RefIconTile
-import com.grapsee.gsai.ui.components.RefPage
-import com.grapsee.gsai.ui.components.RefPrimaryButton
 import com.grapsee.gsai.ui.components.gsConversationTitle
-import com.grapsee.gsai.ui.components.GsGlassRole
 import com.grapsee.gsai.ui.components.gsGlass
 import com.grapsee.gsai.ui.icons.GsIcons
 import com.grapsee.gsai.ui.theme.GsTheme
-import java.time.LocalDate
 import java.time.LocalTime
-import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 
@@ -112,14 +112,18 @@ private val defaultSuggestions = listOf(
     promptSuggestions[0], promptSuggestions[1], promptSuggestions[5], promptSuggestions[3]
 )
 
+/** The "Create" pill's real dispatch: an image/video-making request. */
+private const val CREATE_PROMPT =
+    "Help me create something visual. Ask what I want to make (image or short video), the mood, and the subject, then build it with me."
+
 /**
- * Home — a real front door, not a dashboard of invented numbers.
+ * Home — the reference front door.
  *
- * The previous screen carried hardcoded usage percentages, a "GS-5 nano"
- * model that does not exist, and a dock whose Settings icon opened a new chat.
- * All of that is gone. What remains is the person's real name, the tools they
- * picked at setup, the conversations actually on this device, and three real
- * destinations. The hero is the app's one bloom, drawn once.
+ * Brand lockup, the person's real name, four quick actions, the bento of real
+ * capabilities, the honest "Today's Used" heading (the app has no invented
+ * usage numbers), the suggestions the setup wizard actually selected, and the
+ * floating dock. Every tap dispatches a real destination; nothing here is a
+ * decorative card.
  */
 @Composable
 fun HomeDashboardScreen(
@@ -130,6 +134,7 @@ fun HomeDashboardScreen(
     onOpenChats: () -> Unit,
     onOpenAgent: () -> Unit,
     onOpenVoice: () -> Unit,
+    onOpenSettings: () -> Unit = onOpenDrawer,
 ) {
     val context = LocalContext.current
     val name = AccountStore.displayName(context)
@@ -138,7 +143,6 @@ fun HomeDashboardScreen(
         val chosen = OnboardingProfileStore.capabilities
         promptSuggestions.filter { it.capability in chosen }.ifEmpty { defaultSuggestions }
     }
-    val interests = OnboardingProfileStore.interests
     val recentFlow = remember { recentConversations() }
     val recent by recentFlow.collectAsStateWithLifecycle(initialValue = emptyList())
 
@@ -148,284 +152,416 @@ fun HomeDashboardScreen(
         in 17..21 -> "Good evening"
         else -> "Still awake"
     }
-    val today = LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE, d MMMM"))
 
-    RefPage(
-        title = if (firstName != null) "$greeting, $firstName" else greeting,
-        subtitle = today,
-        largeTitle = true,
-        leading = {
-            RefIconButton(
-                icon = GsIcons.PanelLeft,
-                label = "Open menu",
-                onClick = onOpenDrawer
-            )
-        },
-        actions = {
-            RefIconButton(
-                icon = GsIcons.History,
-                label = "All chats",
-                onClick = onOpenChats
-            )
-        }
-    ) {
-        HeroCard(onStart = onNewChat)
-
-        Spacer(Modifier.height(20.dp))
-        Text(
-            text = if (interests.isEmpty()) "A few ways to begin" else "Because you chose ${interests.take(3).joinToString(", ").lowercase()}",
-            style = MaterialTheme.typography.titleSmall,
-            color = GsTheme.colors.textPrimary,
-            modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
-        )
-        RefCard {
-            suggestions.take(4).forEachIndexed { index, suggestion ->
-                if (index > 0) RefDivider()
-                SuggestionRow(
-                    title = suggestion.title,
-                    icon = suggestion.icon,
-                    onClick = { onStartPrompt(suggestion.prompt) }
+    Box(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().statusBarsPadding()) {
+            HomeHeader(onAssistant = onOpenVoice, onMenu = onOpenDrawer)
+            Column(
+                Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp)
+            ) {
+                Spacer(Modifier.height(6.dp))
+                GreetingBlock(greeting = greeting, firstName = firstName)
+                Spacer(Modifier.height(18.dp))
+                QuickPills(
+                    onNewChat = onNewChat,
+                    onExplore = onOpenAgent,
+                    onCreate = { onStartPrompt(CREATE_PROMPT) },
+                    onMore = onOpenDrawer,
                 )
-            }
-        }
-
-        Spacer(Modifier.height(20.dp))
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 4.dp, end = 2.dp, bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Pick up where you left off",
-                style = MaterialTheme.typography.titleSmall,
-                color = GsTheme.colors.textPrimary,
-                modifier = Modifier.weight(1f)
-            )
-            Text(
-                text = "See all",
-                style = MaterialTheme.typography.labelMedium,
-                color = GsTheme.colors.accentStrong,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(999.dp))
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        role = Role.Button,
-                        onClickLabel = "See all conversations",
-                        onClick = onOpenChats
+                Spacer(Modifier.height(20.dp))
+                Bento(
+                    onVideo = { onStartPrompt(CREATE_PROMPT) },
+                    onMindGuide = {
+                        onStartPrompt(
+                            "Be my clarity companion. Ask me what's on my mind, then help me find the one next step."
+                        )
+                    },
+                    onReflection = {
+                        onStartPrompt(
+                            "Give me a short daily reflection prompt and sit with my answer without judgement."
+                        )
+                    },
+                )
+                Spacer(Modifier.height(22.dp))
+                TodayUsedHeader(onSeeAll = onOpenChats)
+                Spacer(Modifier.height(10.dp))
+                SuggestionsCard(
+                    title = "Suggestions",
+                    subtitle = "Try suggested questions first.",
+                    onClick = { suggestions.firstOrNull()?.let { onStartPrompt(it.prompt) } },
+                )
+                if (recent.isNotEmpty()) {
+                    Spacer(Modifier.height(18.dp))
+                    Text(
+                        text = "Pick up where you left off",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = GsTheme.colors.textPrimary,
+                        modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
                     )
-                    .padding(horizontal = 10.dp, vertical = 6.dp)
-            )
-        }
-        if (recent.isEmpty()) {
-            RefCard {
-                RefEmptyState(
-                    art = RefArt.Conversation,
-                    title = "No conversation yet",
-                    message = "Your first chat will wait here, with the whole transcript intact."
-                )
-            }
-        } else {
-            RefCard {
-                recent.take(3).forEachIndexed { index, row ->
-                    if (index > 0) RefDivider()
-                    RecentRow(row) { onOpenConversation(row.conversation.id) }
+                    GlassPanel {
+                        recent.take(2).forEachIndexed { index, row ->
+                            if (index > 0) {
+                                Box(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(start = 58.dp)
+                                        .height(1.dp)
+                                        .background(GsTheme.colors.glassBorder.copy(alpha = 0.6f))
+                                )
+                            }
+                            RecentRow(row) { onOpenConversation(row.conversation.id) }
+                        }
+                    }
                 }
+                Spacer(Modifier.height(124.dp))
             }
         }
-
-        Spacer(Modifier.height(20.dp))
-        Text(
-            text = "More from GS",
-            style = MaterialTheme.typography.titleSmall,
-            color = GsTheme.colors.textPrimary,
-            modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
-        )
-        RefCard {
-            ExploreRow(
-                title = "Travel agent",
-                subtitle = "Plan a journey with a companion who asks the right questions",
-                icon = GsIcons.Compass,
-                onClick = onOpenAgent
-            )
-            RefDivider()
-            ExploreRow(
-                title = "Voice",
-                subtitle = "Speak a thought and send the transcript to a new chat",
-                icon = GsIcons.AudioLines,
-                onClick = onOpenVoice
-            )
-            RefDivider()
-            ExploreRow(
-                title = "All chats",
-                subtitle = "Search, pin and tidy your history",
-                icon = GsIcons.Inbox,
-                onClick = onOpenChats
-            )
-        }
-
-        Spacer(Modifier.height(18.dp))
-        RefPrimaryButton(
-            label = "Start a new conversation",
-            onClick = onNewChat,
-            icon = GsIcons.SquarePen
-        )
-        Text(
-            text = "GS can be wrong. Check anything that matters.",
-            style = MaterialTheme.typography.labelSmall,
-            color = GsTheme.colors.textTertiary,
+        HomeDock(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 16.dp),
-            textAlign = TextAlign.Center
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(horizontal = 20.dp, vertical = 12.dp),
+            onHome = {},
+            onChats = onOpenChats,
+            onGenerate = onNewChat,
+            onSettings = onOpenSettings,
         )
     }
 }
 
+// ---------------------------------------------------------------------------
+// Brand header
+// ---------------------------------------------------------------------------
+
 @Composable
-private fun HeroCard(onStart: () -> Unit) {
+private fun HomeHeader(onAssistant: () -> Unit, onMenu: () -> Unit) {
     val colors = GsTheme.colors
-    val shape = RoundedCornerShape(26.dp)
-    Box(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            // The hero is the one Elevated glass panel on Home — the material's
-            // four cues (fill, veil, top-left rim, warm shadow) do the depth, and
-            // the accent wash lives as the bloom echo inside, not as a fake fill.
-            .gsGlass(GsGlassRole.Elevated, shape)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                role = Role.Button,
-                onClickLabel = "Start a conversation",
-                onClick = onStart
-            )
-            .padding(vertical = 18.dp),
-        contentAlignment = Alignment.Center
+            .padding(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        // A second, very quiet wash: the bloom's echo inside the card.
         Box(
             modifier = Modifier
-                .size(210.dp)
+                .size(42.dp)
+                .clip(CircleShape)
                 .background(
-                    Brush.radialGradient(
-                        listOf(colors.aurora.first().copy(alpha = 0.35f), Color.Transparent)
-                    ),
-                    RoundedCornerShape(999.dp)
-                )
-        )
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            RefArtwork(art = RefArt.Bloom, size = 132.dp)
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = "What should we make of today?",
-                style = MaterialTheme.typography.headlineSmall,
-                color = colors.textPrimary,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(horizontal = 20.dp)
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(
-                text = "A thought, a file, or a blank page. All three are a fine place to start.",
-                style = MaterialTheme.typography.bodySmall,
-                color = colors.textSecondary,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(horizontal = 26.dp)
-            )
-        }
-    }
-}
-
-@Composable
-private fun SuggestionRow(title: String, icon: ImageVector, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 62.dp)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                role = Role.Button,
-                onClickLabel = title,
-                onClick = onClick
-            )
-            .padding(horizontal = 14.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        RefIconTile(icon)
-        Text(
-            text = title,
-            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-            color = GsTheme.colors.textPrimary,
-            modifier = Modifier.weight(1f)
-        )
-        Icon(
-            GsIcons.ArrowUp,
-            contentDescription = null,
-            tint = GsTheme.colors.textTertiary,
-            modifier = Modifier
-                .size(16.dp)
-                .background(Color.Transparent)
-        )
-    }
-}
-
-@Composable
-private fun RecentRow(row: ConversationPreviewRow, onClick: () -> Unit) {
-    val preview = row.lastMessage?.trim()?.replace('\n', ' ')?.take(90)
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 66.dp)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                role = Role.Button,
-                onClick = onClick
-            )
-            .padding(horizontal = 14.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Box(
-            modifier = Modifier
-                .size(38.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(GsTheme.colors.accentSoft),
+                    Brush.linearGradient(
+                        listOf(Color(0xFFFFE3CE), Color(0xFFFFC9A8), Color(0xFFFFB38F))
+                    )
+                ),
             contentAlignment = Alignment.Center
         ) {
+            RefArtwork(art = RefArt.Bloom, size = 34.dp, contentDescription = "Nexly")
+        }
+        Spacer(Modifier.width(10.dp))
+        Column {
+            Text(
+                text = "Nexly",
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = colors.textPrimary
+            )
+            Text(
+                text = "AI Companion",
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.textSecondary
+            )
+        }
+        Spacer(Modifier.weight(1f))
+        GlassCircleButton(GsIcons.Sparkles, "Assistant", onAssistant)
+        Spacer(Modifier.width(8.dp))
+        GlassCircleButton(GsIcons.Menu, "Open menu", onMenu)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Greeting
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun GreetingBlock(greeting: String, firstName: String?) {
+    Column {
+        Text(
+            text = greeting + ",",
+            style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.SemiBold),
+            color = GsTheme.colors.textPrimary
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = firstName ?: "there",
+                style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.SemiBold),
+                color = GsTheme.colors.textPrimary
+            )
+            Spacer(Modifier.width(8.dp))
             Icon(
-                GsIcons.MessageCircle,
+                GsIcons.Sparkles,
                 contentDescription = null,
                 tint = GsTheme.colors.accentStrong,
+                modifier = Modifier.size(24.dp)
+            )
+        }
+        Spacer(Modifier.height(10.dp))
+        Text(
+            text = "Your thoughts, questions, ideas —\nI'm here for it all.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = GsTheme.colors.textSecondary
+        )
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Quick action pills
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun QuickPills(
+    onNewChat: () -> Unit,
+    onExplore: () -> Unit,
+    onCreate: () -> Unit,
+    onMore: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        GlassPill(GsIcons.Plus, "New Chat", onNewChat)
+        GlassPill(GsIcons.Compass, "Explore", onExplore)
+        GlassPill(GsIcons.Sparkles, "Create", onCreate)
+        GlassPill(GsIcons.MoreHorizontal, "More", onMore)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Bento — Video / Mind Guide / Today's reflection
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun Bento(
+    onVideo: () -> Unit,
+    onMindGuide: () -> Unit,
+    onReflection: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(206.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        VideoCard(onVideo, Modifier.weight(1.12f).fillMaxSize())
+        Column(
+            modifier = Modifier.weight(1f).fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            MindGuideCard(onMindGuide, Modifier.fillMaxWidth().weight(1f))
+            ReflectionCard(onReflection, Modifier.fillMaxWidth().weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun VideoCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val shape = RoundedCornerShape(24.dp)
+    Box(
+        modifier = modifier
+            .clip(shape)
+            .background(
+                Brush.linearGradient(
+                    listOf(
+                        Color(0xFFE7DBFF),
+                        Color(0xFFFFD8E7),
+                        Color(0xFFFFE7D3),
+                    )
+                )
+            )
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                role = Role.Button,
+                onClickLabel = "Create a video",
+                onClick = onClick
+            )
+    ) {
+        // Soft light pools — the reference's silk-and-bubble art, drawn as
+        // layered radial gradients rather than a stock picture.
+        Box(
+            Modifier
+                .size(150.dp)
+                .align(Alignment.CenterEnd)
+                .background(
+                    Brush.radialGradient(listOf(Color(0x99FFFFFF), Color.Transparent)),
+                    CircleShape
+                )
+        )
+        Box(
+            Modifier
+                .size(110.dp)
+                .align(Alignment.BottomStart)
+                .background(
+                    Brush.radialGradient(listOf(Color(0x66FF9FC2), Color.Transparent)),
+                    CircleShape
+                )
+        )
+        Column(Modifier.fillMaxSize().padding(14.dp)) {
+            ReferenceChip(icon = GsIcons.Play, label = "Video")
+            Spacer(Modifier.weight(1f))
+            Text(
+                text = "Create Stunning\nVideos with AI",
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = GsTheme.colors.textPrimary
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = "Turn your ideas into beautiful videos in minutes.",
+                style = MaterialTheme.typography.labelMedium,
+                color = GsTheme.colors.textSecondary
+            )
+            Spacer(Modifier.height(10.dp))
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = 0.55f))
+                    .border(1.dp, Color.White.copy(alpha = 0.7f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    GsIcons.Play,
+                    contentDescription = "Play preview",
+                    tint = GsTheme.colors.textPrimary,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MindGuideCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    GlassPanel(modifier = modifier, onClick = onClick, onClickLabel = "Open Mind Guide") {
+        Row(
+            modifier = Modifier.fillMaxSize().padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(38.dp)
+                    .clip(CircleShape)
+                    .background(
+                        Brush.radialGradient(
+                            listOf(Color(0xFFB79BFF), Color(0xFFFF9FC2), Color(0xFFFFC48A))
+                        )
+                    )
+                    .border(1.dp, Color.White.copy(alpha = 0.6f), CircleShape)
+            )
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = "Mind Guide",
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = GsTheme.colors.textPrimary
+                )
+                Text(
+                    text = "Your personal clarity companion.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = GsTheme.colors.textSecondary,
+                    maxLines = 2
+                )
+            }
+            Icon(
+                GsIcons.ChevronRight,
+                contentDescription = null,
+                tint = GsTheme.colors.textTertiary,
                 modifier = Modifier.size(18.dp)
             )
         }
-        Column(Modifier.weight(1f)) {
-            Text(
-                gsConversationTitle(row.conversation.title),
-                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-                color = GsTheme.colors.textPrimary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            if (!preview.isNullOrBlank()) {
+    }
+}
+
+@Composable
+private fun ReflectionCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    GlassPanel(modifier = modifier, onClick = onClick, onClickLabel = "Open today's reflection") {
+        Box(Modifier.fillMaxSize()) {
+            Column(Modifier.fillMaxSize().padding(14.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Today's reflection",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = GsTheme.colors.textPrimary,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Icon(
+                        GsIcons.ChevronRight,
+                        contentDescription = null,
+                        tint = GsTheme.colors.textTertiary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Spacer(Modifier.height(2.dp))
                 Text(
-                    preview,
-                    style = MaterialTheme.typography.labelMedium,
+                    text = "Take a moment to check in with yourself.",
+                    style = MaterialTheme.typography.labelSmall,
                     color = GsTheme.colors.textSecondary,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
             }
+            Box(Modifier.align(Alignment.BottomEnd).padding(4.dp)) {
+                RefArtwork(
+                    art = RefArt.Bloom,
+                    size = 56.dp,
+                    contentDescription = "A lotus for today's reflection"
+                )
+            }
         }
-        if (row.conversation.pinned) {
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Today's Used + suggestions
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun TodayUsedHeader(onSeeAll: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "Today's Used",
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+            color = GsTheme.colors.textPrimary,
+            modifier = Modifier.weight(1f)
+        )
+        Row(
+            modifier = Modifier
+                .clip(RoundedCornerShape(999.dp))
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    role = Role.Button,
+                    onClickLabel = "See all conversations",
+                    onClick = onSeeAll
+                )
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "See All",
+                style = MaterialTheme.typography.labelMedium,
+                color = GsTheme.colors.textSecondary
+            )
+            Spacer(Modifier.width(4.dp))
             Icon(
-                GsIcons.Star,
-                contentDescription = "Pinned",
-                tint = GsTheme.colors.accentStrong,
+                GsIcons.ArrowRight,
+                contentDescription = null,
+                tint = GsTheme.colors.textSecondary,
                 modifier = Modifier.size(14.dp)
             )
         }
@@ -433,46 +569,294 @@ private fun RecentRow(row: ConversationPreviewRow, onClick: () -> Unit) {
 }
 
 @Composable
-private fun ExploreRow(
-    title: String,
-    subtitle: String,
-    icon: ImageVector,
-    onClick: () -> Unit,
-) {
+private fun SuggestionsCard(title: String, subtitle: String, onClick: () -> Unit) {
+    GlassPanel(onClick = onClick, onClickLabel = title) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(13.dp))
+                    .background(Color.White.copy(alpha = 0.55f))
+                    .border(1.dp, GsTheme.colors.glassBorder, RoundedCornerShape(13.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    GsIcons.Lightbulb,
+                    contentDescription = null,
+                    tint = GsTheme.colors.textPrimary,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                    color = GsTheme.colors.textPrimary
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = GsTheme.colors.textSecondary
+                )
+            }
+            Icon(
+                GsIcons.ChevronRight,
+                contentDescription = null,
+                tint = GsTheme.colors.textTertiary,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun RecentRow(row: ConversationPreviewRow, onClick: () -> Unit) {
+    val preview = row.lastMessage?.trim()?.replace('\n', ' ')?.take(64)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 66.dp)
+            .heightIn(min = 58.dp)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 role = Role.Button,
-                onClickLabel = title,
                 onClick = onClick
             )
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        RefIconTile(icon)
-        Column(Modifier.weight(1f)) {
-            Text(
-                title,
-                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-                color = GsTheme.colors.textPrimary
-            )
-            Text(
-                subtitle,
-                style = MaterialTheme.typography.labelMedium,
-                color = GsTheme.colors.textSecondary,
-                maxLines = 2
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .clip(RoundedCornerShape(11.dp))
+                .background(GsTheme.colors.accentSoft),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                GsIcons.MessageCircle,
+                contentDescription = null,
+                tint = GsTheme.colors.accentStrong,
+                modifier = Modifier.size(17.dp)
             )
         }
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = gsConversationTitle(row.conversation.title),
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                color = GsTheme.colors.textPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (!preview.isNullOrBlank()) {
+                Text(
+                    text = preview,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = GsTheme.colors.textSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Floating dock
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun HomeDock(
+    modifier: Modifier = Modifier,
+    onHome: () -> Unit,
+    onChats: () -> Unit,
+    onGenerate: () -> Unit,
+    onSettings: () -> Unit,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .gsGlass(GsGlassRole.FloatingControl, RoundedCornerShape(999.dp))
+            .padding(horizontal = 8.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        DockCircle(GsIcons.House, "Home", selected = true, onClick = onHome)
+        DockCircle(GsIcons.MessageCircle, "Chats", onClick = onChats)
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .height(46.dp)
+                .clip(RoundedCornerShape(999.dp))
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(Color(0xFFFFC9A8), Color(0xFFFFB38F))
+                    )
+                )
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    role = Role.Button,
+                    onClickLabel = "Generate",
+                    onClick = onGenerate
+                ),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                GsIcons.Sparkles,
+                contentDescription = null,
+                tint = Color(0xFF5A2E1C),
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = "Generate",
+                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                color = Color(0xFF5A2E1C)
+            )
+        }
+        DockCircle(GsIcons.Settings, "Settings", onClick = onSettings)
+    }
+}
+
+@Composable
+private fun DockCircle(
+    icon: ImageVector,
+    label: String,
+    selected: Boolean = false,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .size(46.dp)
+            .clip(CircleShape)
+            .background(
+                if (selected) GsTheme.colors.textPrimary.copy(alpha = 0.08f) else Color.Transparent
+            )
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                role = Role.Button,
+                onClickLabel = label,
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center
+    ) {
         Icon(
-            GsIcons.ChevronRight,
+            icon,
+            contentDescription = label,
+            tint = if (selected) GsTheme.colors.textPrimary else GsTheme.colors.textSecondary,
+            modifier = Modifier.size(21.dp)
+        )
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Shared surfaces
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun GlassPanel(
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+    onClickLabel: String? = null,
+    content: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit,
+) {
+    val shape = RoundedCornerShape(22.dp)
+    val base = if (onClick != null) {
+        modifier.clickable(
+            interactionSource = remember { MutableInteractionSource() },
+            indication = null,
+            role = Role.Button,
+            onClickLabel = onClickLabel,
+            onClick = onClick
+        )
+    } else {
+        modifier
+    }
+    Box(modifier = base.gsGlass(GsGlassRole.Card, shape), content = content)
+}
+
+@Composable
+private fun GlassCircleButton(icon: ImageVector, label: String, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(42.dp)
+            .gsGlass(GsGlassRole.FloatingControl, CircleShape)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                role = Role.Button,
+                onClickLabel = label,
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            icon,
+            contentDescription = label,
+            tint = GsTheme.colors.textPrimary,
+            modifier = Modifier.size(19.dp)
+        )
+    }
+}
+
+@Composable
+private fun GlassPill(icon: ImageVector, label: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .heightIn(min = 40.dp)
+            .gsGlass(GsGlassRole.FloatingControl, RoundedCornerShape(999.dp))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                role = Role.Button,
+                onClickLabel = label,
+                onClick = onClick
+            )
+            .padding(horizontal = 12.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            icon,
             contentDescription = null,
-            tint = GsTheme.colors.textTertiary,
-            modifier = Modifier.size(18.dp)
+            tint = GsTheme.colors.textPrimary,
+            modifier = Modifier.size(17.dp)
+        )
+        Spacer(Modifier.width(7.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            color = GsTheme.colors.textPrimary
+        )
+    }
+}
+
+@Composable
+private fun ReferenceChip(icon: ImageVector, label: String) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(Color.White.copy(alpha = 0.45f))
+            .padding(horizontal = 9.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = GsTheme.colors.textPrimary,
+            modifier = Modifier.size(13.dp)
+        )
+        Spacer(Modifier.width(5.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = GsTheme.colors.textPrimary
         )
     }
 }
