@@ -96,7 +96,7 @@ fun SettingsHubScreen(
                         ),
                     contentAlignment = Alignment.Center
                 ) {
-                    RefArtwork(art = RefArt.Bloom, size = 38.dp, contentDescription = null)
+                    RefArtwork(art = RefArt.Bloom, size = 38.dp, contentDescription = "")
                 }
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {

@@ -155,7 +155,7 @@ fun GsDrawerContent(
                     ),
                 contentAlignment = Alignment.Center
             ) {
-                RefArtwork(art = RefArt.Bloom, size = 36.dp, contentDescription = null)
+                RefArtwork(art = RefArt.Bloom, size = 36.dp, contentDescription = "")
             }
             Spacer(Modifier.width(10.dp))
             Text(
