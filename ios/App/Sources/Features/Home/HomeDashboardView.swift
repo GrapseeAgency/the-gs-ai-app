@@ -71,9 +71,21 @@ struct HomeDashboardView: View {
 
     // MARK: Greeting
 
+    /// The same time-of-day rule the Android dashboard uses — a hardcoded
+    /// "Good morning" was wrong for half the day.
+    private var greetingWord: String {
+        let hour = Calendar.current.component(.hour, from: Date())
+        switch hour {
+        case 5...11: return "Good morning"
+        case 12...16: return "Good afternoon"
+        case 17...21: return "Good evening"
+        default: return "Still awake"
+        }
+    }
+
     private var greeting: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Good morning,")
+            Text("\(greetingWord),")
                 .font(.system(size: 32, weight: .medium))
                 .foregroundStyle(Aero.text)
             HStack(spacing: 8) {
