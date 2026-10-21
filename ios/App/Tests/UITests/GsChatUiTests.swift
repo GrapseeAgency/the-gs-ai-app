@@ -91,9 +91,26 @@ final class GsChatUiTests: XCTestCase {
                                 "-gs_test_local_model", model]
         app.launch()
 
+        // The app opens on Home since the reference redesign (the composer
+        // lives inside a conversation), so reach a chat first. Without this the
+        // suite looked for the composer on the dashboard and failed at 15 s —
+        // which is what kept the whole iOS gate red.
+        let composer = app.textFields["Ask anything…"].firstMatch
+        if !composer.waitForExistence(timeout: 6) {
+            let newChat = app.buttons["New Chat"].firstMatch
+            if newChat.waitForExistence(timeout: 5) {
+                newChat.tap()
+            } else {
+                let generate = app.buttons["Generate"].firstMatch
+                XCTAssertTrue(generate.waitForExistence(timeout: 5),
+                              "Home exposed neither New Chat nor Generate, so no chat can be opened")
+                generate.tap()
+            }
+        }
+
         // 1. tap the chat input, 2. type "hello".
         let field = app.textFields["Ask anything…"].firstMatch
-        XCTAssertTrue(field.waitForExistence(timeout: 15),
+        XCTAssertTrue(field.waitForExistence(timeout: 20),
                       "composer field never appeared")
         // THE TAP CAN BE DROPPED WHILE THE APP IS STILL LOADING THE MODEL.
         // GSApp.init initialises the GGUF synchronously, so the composer is in
