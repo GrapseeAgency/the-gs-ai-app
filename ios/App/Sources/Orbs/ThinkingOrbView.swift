@@ -112,37 +112,39 @@ public struct ThinkingOrbView: View {
         let glow = min(1, profile.glowAlpha * (0.55 + 0.45 * breathe) + 0.20 * boost)
         let core = min(1, profile.coreAlpha * (0.55 + 0.45 * breathe) + 0.45 * boost)
 
-        var layered = context
-        layered.blendMode = .plusLighter
-        layered.fillLayer { layer in
-            layer.fill(
-                Path(ellipseIn: CGRect(x: 0, y: 0, width: side, height: side)),
-                with: .radialGradient(
-                    Gradient(colors: [profile.color.opacity(glow * 0.85), .clear]),
-                    center: center,
-                    startRadius: 0,
-                    endRadius: side * 0.5
-                )
+        // Additive pass: the glow lightens what is under it (the atmosphere),
+        // never tints. GraphicsContext has no fillLayer — a copy with its
+        // blendMode set composites every fill/stroke below with .plusLighter,
+        // the SwiftUI Canvas equivalent of Android's BlendMode.Screen.
+        var g = context
+        g.blendMode = .plusLighter
+        g.fill(
+            Path(ellipseIn: CGRect(x: 0, y: 0, width: side, height: side)),
+            with: .radialGradient(
+                Gradient(colors: [profile.color.opacity(glow * 0.85), .clear]),
+                center: center,
+                startRadius: 0,
+                endRadius: side * 0.5
             )
-            if iridescent, let wash = Aero.aurora.last {
-                let ring = side * 0.46
-                layer.stroke(
-                    Path(ellipseIn: CGRect(x: (side - ring) / 2, y: (side - ring) / 2, width: ring, height: ring)),
-                    with: .color(wash.opacity(glow * 0.35)),
-                    lineWidth: side * 0.055
-                )
-            }
-            let spot = side * 0.30
-            layer.fill(
-                Path(ellipseIn: CGRect(x: (side - spot) / 2, y: (side - spot) / 2, width: spot, height: spot)),
-                with: .radialGradient(
-                    Gradient(colors: [profile.color.opacity(core), .clear]),
-                    center: center,
-                    startRadius: 0,
-                    endRadius: spot / 2
-                )
+        )
+        if iridescent, let wash = Aero.aurora.last {
+            let ring = side * 0.46
+            g.stroke(
+                Path(ellipseIn: CGRect(x: (side - ring) / 2, y: (side - ring) / 2, width: ring, height: ring)),
+                with: .color(wash.opacity(glow * 0.35)),
+                lineWidth: side * 0.055
             )
         }
+        let spot = side * 0.30
+        g.fill(
+            Path(ellipseIn: CGRect(x: (side - spot) / 2, y: (side - spot) / 2, width: spot, height: spot)),
+            with: .radialGradient(
+                Gradient(colors: [profile.color.opacity(core), .clear]),
+                center: center,
+                startRadius: 0,
+                endRadius: spot / 2
+            )
+        )
     }
 }
 
