@@ -215,6 +215,29 @@ struct SettingsView: View {
     /// Personalisation stay — they are honest preferences.
     private var aiSection: some View {
         section("AI") {
+            // The reference's AI Intelligence page: model source and reasoning
+            // effort as tiles, both writing the settings the chat already reads.
+            NavigationLink {
+                AiIntelligenceView()
+            } label: {
+                AeroListRow(
+                    title: "AI Intelligence",
+                    subtitle: "Model source and reasoning effort",
+                    leading: {
+                        Image(systemName: "cpu")
+                            .font(.system(size: 14))
+                            .foregroundStyle(Aero.accent)
+                            .frame(width: 34, height: 34)
+                            .background(Circle().fill(Aero.container))
+                    },
+                    trailing: {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12))
+                            .foregroundStyle(Aero.textMuted)
+                    })
+            }
+            .buttonStyle(.plain)
+
             toggleRow("Memory", isOn: $settings.memory)
             toggleRow("Personalisation", isOn: $settings.personalisation)
             // Commit 1(b). One row in the existing AI section with the existing

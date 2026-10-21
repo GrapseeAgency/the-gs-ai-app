@@ -663,3 +663,56 @@ func gsConversationTitle(_ raw: String?) -> String {
     let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     return trimmed.isEmpty ? "Untitled chat" : trimmed
 }
+
+// MARK: - Choice tiles (reference: model source / reasoning effort)
+
+/// The reference's choice tile: icon, title, one supporting line, a check when
+/// selected. The reference uses this 3-up for reasoning effort and 2-up for
+/// model source — tall tiles read faster than a stack of rows when the options
+/// are few and mutually exclusive.
+struct GsChoiceTile: View {
+    let icon: String
+    let title: String
+    let subtitle: String
+    let selected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 0) {
+                    Image(systemName: icon)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(selected ? Aero.accent : Aero.textSecondary)
+                    Spacer(minLength: 0)
+                    if selected {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(Aero.accent)
+                    }
+                }
+                Text(title)
+                    .font(Aero.label())
+                    .foregroundStyle(Aero.text)
+                    .lineLimit(1)
+                Text(subtitle)
+                    .font(Aero.caption())
+                    .foregroundStyle(Aero.textMuted)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(selected ? Aero.accentSoft : Aero.surface.opacity(0.55))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(selected ? Aero.accent.opacity(0.6) : Aero.outline, lineWidth: 1)
+            )
+        }
+        .buttonStyle(KineticPressStyle())
+        .accessibilityAddTraits(selected ? [.isSelected] : [])
+    }
+}
