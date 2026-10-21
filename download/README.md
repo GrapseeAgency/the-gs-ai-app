@@ -1,49 +1,30 @@
 Here are all the generated files.
 
-## Latest release: v0.85.0 — onboarding reached, reference AI tiles, Model Details (versionCode 122)
+## Latest release: v0.86.0 — chats multi-select, previews as prose (versionCode 123)
 
     file    GS-AI-App.apk
-    size    66270852 bytes
-    sha256  6cdeb489c628a7b23f8a3a612ebb8273623d4f7c931649f0f9c9b7a3705de911
+    size    66270856 bytes
+    sha256  ceed8ec21398770f215e74faaae24d9b3668428b315b6c13f1abda239df1e200
 
-Captured on the emulator from the same revision the release APK builds from
-(`main` at `07ae9931`).
-
-| Onboarding — the welcome flow, no dialog over it | Home — resume card, illustrated bento, floating dock |
+| Chats — long-press, N selected, pin / archive / delete | Home — resume card + illustrated bento |
 |---|---|
-| ![onboarding](qa-0.85-onboarding.png) | ![home](qa-0.85-home.png) |
-
-| AI Intelligence — the reference 2-up / 3-up tiles | Model Details — measured, not marketing |
-|---|---|
-| ![ai](qa-0.85-ai.png) | ![model](qa-0.85-model.png) |
+| ![multi-select](qa-0.86-multiselect.png) | ![home](qa-0.86-home.png) |
 
 What landed in this build:
 
-- **Onboarding is actually reached.** The start destination only read the
-  session flag, so signing in dropped the user straight onto Home. It now
-  respects `SessionStore.isOnboarded`, so the welcome pages and the capability
-  setup are part of the normal flow.
-- **The first-run model consent no longer covers the welcome pages.** It was
-  composed above the entire app; it now lives inside the nav host and only
-  outside the session gate.
-- **AI Intelligence** uses the reference's tile language: model source 2-up,
-  reasoning effort 3-up, each with an icon, a title, one supporting line and a
-  check when selected. The tiles write the same `flash/thinking/auto` switch the
-  chat header exposes.
-- **Model Details** is a real page: device tier, measured download size, minimum
-  RAM, parameter count, four honest capabilities, and a Download or
-  Use-this-model action wired to the existing consent flow.
-- **Chat surfaces**: the "…" sheet is the reference list (Share, Rename, Chat
-  Details, Export, Clear, Delete, Cancel) and Chat Details opens a measured
-  stats page. Home opens on a glass resume card for the last thread, with
-  markdown stripped to prose.
-- **Type**: the greeting is a calm 32pt medium on both platforms.
+- **Multi-select in Chats** (reference row-2 screen): long-press or "Select"
+  enters selection; the contextual bar shows the count, select-all, and the
+  three bulk actions the store can perform. Delete confirms; system back exits
+  selection before the screen.
+- **Previews read as prose**: code fences, table pipes, headings and emphasis
+  are stripped before clipping, so a rich reply no longer shows as
+  `## … | … | …` in the list or on the Home resume card.
+- Carried from v0.85.0: onboarding is reached and unobstructed, the reference
+  2-up / 3-up AI tiles, the Model Details page, the chat options sheet with a
+  Chat Details page, and the 32pt greeting.
 
-Carried from 0.84.0: the 540-icon parser fix (line-based glyphs were blank),
-the fourteen-scene illustration set, and per-datum taps on every advanced chart.
-
-Verification: `android-app` 39663724799 green, `android-screens` 39663728214
-green (the screenshots above), `android-release` 39663731877 green (this APK).
+Verification: `android-app` 39669879201 green, `android-screens` 39669883308
+green (the screenshots above), `android-release` 39669874799 green (this APK).
 
 ## Previous shipped release: v0.82.0 — the glass release (versionCode 119)
 
