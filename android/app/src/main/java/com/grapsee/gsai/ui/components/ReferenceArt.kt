@@ -79,6 +79,9 @@ enum class RefArt {
 
     /** Today's reflection: a lotus resting on still water, mirrored below. */
     Reflection,
+
+    /** Pearlescent light: overlapping glass spheres, the reference's hero art. */
+    Pearl,
 }
 
 @Composable
@@ -116,6 +119,7 @@ fun RefArtwork(
             RefArt.Video -> drawVideoScene(accent, strong, pale)
             RefArt.Clarity -> drawClarityScene(accent, strong, pale, ink)
             RefArt.Reflection -> drawReflectionScene(accent, strong, pale)
+            RefArt.Pearl -> drawPearlScene()
         }
     }
 }
@@ -704,6 +708,102 @@ private fun DrawScope.drawNotificationsScene(accent: Color, strong: Color, pale:
 // ---------------------------------------------------------------------------
 // Bento scenes — the three product tools, drawn with the same light
 // ---------------------------------------------------------------------------
+
+/**
+ * Pearl: overlapping glass spheres lit from the upper left, with an iridescent
+ * wash and a silk thread. This is the reference's hero material — the light
+ * through a pearl, not a photograph — and it is drawn from the same primitives
+ * as the rest of the set so it never reads as a sticker.
+ */
+private fun DrawScope.drawPearlScene() {
+    val w = size.width
+    val h = size.height
+
+    drawPearl(
+        center = Offset(w * 0.54f, h * 0.44f),
+        radius = w * 0.30f,
+        warm = Color(0xFFFFD3BC),
+        cool = Color(0xFFC9B6FF),
+        blush = Color(0xFFFFB3C7)
+    )
+    drawPearl(
+        center = Offset(w * 0.80f, h * 0.68f),
+        radius = w * 0.17f,
+        warm = Color(0xFFFFE6D6),
+        cool = Color(0xFFB9C8FF),
+        blush = Color(0xFFFFC4D8)
+    )
+    drawPearl(
+        center = Offset(w * 0.27f, h * 0.71f),
+        radius = w * 0.12f,
+        warm = Color(0xFFFFF0E5),
+        cool = Color(0xFFD6C4FF),
+        blush = Color(0xFFFFCDB9)
+    )
+    // A single silk thread crossing the large pearl, as in the reference.
+    val silk = Path().apply {
+        moveTo(w * 0.10f, h * 0.30f)
+        cubicTo(w * 0.42f, h * 0.12f, w * 0.58f, h * 0.78f, w * 0.94f, h * 0.56f)
+    }
+    drawPath(
+        silk,
+        Brush.linearGradient(
+            listOf(Color.White.copy(alpha = 0.55f), Color(0xFFFFD9E4).copy(alpha = 0.35f)),
+            start = Offset(w * 0.1f, h * 0.3f),
+            end = Offset(w * 0.94f, h * 0.56f)
+        ),
+        style = Stroke(width = w * 0.018f, cap = StrokeCap.Round)
+    )
+}
+
+/** One pearl: soft contact shadow, iridescent body, rim and specular. */
+private fun DrawScope.drawPearl(
+    center: Offset,
+    radius: Float,
+    warm: Color,
+    cool: Color,
+    blush: Color,
+) {
+    drawOval(
+        brush = Brush.radialGradient(
+            listOf(Color(0x1C6B3B2E), Color.Transparent),
+            center = Offset(center.x, center.y + radius * 1.05f),
+            radius = radius * 1.1f
+        ),
+        topLeft = Offset(center.x - radius * 0.95f, center.y + radius * 0.82f),
+        size = Size(radius * 1.9f, radius * 0.5f)
+    )
+    drawCircle(
+        brush = Brush.radialGradient(
+            listOf(
+                Color.White.copy(alpha = 0.92f),
+                warm,
+                blush,
+                cool,
+                cool.copy(alpha = 0.55f)
+            ),
+            center = Offset(center.x - radius * 0.34f, center.y - radius * 0.40f),
+            radius = radius * 1.55f
+        ),
+        radius = radius,
+        center = center
+    )
+    // Rim: strongest where the light leaves the sphere.
+    drawArc(
+        color = Color.White.copy(alpha = 0.55f),
+        startAngle = 150f,
+        sweepAngle = 150f,
+        useCenter = false,
+        topLeft = Offset(center.x - radius * 0.94f, center.y - radius * 0.94f),
+        size = Size(radius * 1.88f, radius * 1.88f),
+        style = Stroke(width = radius * 0.045f, cap = StrokeCap.Round)
+    )
+    drawOval(
+        color = Color.White.copy(alpha = 0.60f),
+        topLeft = Offset(center.x - radius * 0.46f, center.y - radius * 0.62f),
+        size = Size(radius * 0.46f, radius * 0.26f)
+    )
+}
 
 /**
  * Video: silk ribbons thread a stack of translucent film cards. The aperture

@@ -13,8 +13,13 @@ struct HomeDashboardView: View {
     let onOpenAgent: () -> Void
     /// Reopen a specific thread from the resume card.
     let onOpenConversation: (String) -> Void
+    /// Open a new chat with the prompt already written. The reference's cards
+    /// are four different doors, not four copies of "blank chat".
+    let onStartPrompt: (String) -> Void
 
     @ObservedObject private var store = ConversationStore.shared
+    /// The signed-in name. The reference greets a person, not "there".
+    @ObservedObject private var account = AccountStore.shared
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -38,11 +43,16 @@ struct HomeDashboardView: View {
                 .padding(.bottom, 10)
         }
         .background(
-            LinearGradient(
-                colors: [Color(red: 1, green: 0.70, blue: 0.43).opacity(0.30), Aero.background],
-                startPoint: .topLeading,
-                endPoint: .center
-            )
+            ZStack {
+                LinearGradient(
+                    colors: [Color(red: 1, green: 0.70, blue: 0.43).opacity(0.30), Aero.background],
+                    startPoint: .topLeading,
+                    endPoint: .center
+                )
+                // The sheet's backdrop is made of light through glass, not a
+                // flat wash: three huge, out-of-focus pearls sit behind it.
+                PearlBackdrop()
+            }
             .ignoresSafeArea()
         )
         .toolbar(.hidden, for: .navigationBar)
@@ -150,7 +160,7 @@ struct HomeDashboardView: View {
                 .font(.system(size: 32, weight: .medium))
                 .foregroundStyle(Aero.text)
             HStack(spacing: 8) {
-                Text("there")
+                Text(account.firstName.isEmpty ? "there" : account.firstName)
                     .font(.system(size: 32, weight: .medium))
                     .foregroundStyle(Aero.text)
                 Image(systemName: "sparkles")
@@ -168,29 +178,38 @@ struct HomeDashboardView: View {
     // MARK: Quick-action pills
 
     private var pills: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                HomePill(system: "plus", title: "New Chat", action: onNewChat)
-                HomePill(system: "safari", title: "Explore", action: onOpenAgent)
-                HomePill(system: "sparkles", title: "Create", action: onNewChat)
-                HomePill(system: "ellipsis", title: "More", action: onOpenDrawer)
-            }
+        // All four pills, one row. At 12pt with 10pt of inset the set measures
+        // ~340pt on a 393pt screen, so "More" is never pushed off the edge and
+        // nothing has to be swiped to be discovered.
+        HStack(spacing: 6) {
+            HomePill(system: "plus", title: "New Chat", action: onNewChat)
+            HomePill(system: "safari", title: "Explore", action: onOpenAgent)
+            HomePill(system: "sparkles", title: "Create",
+                     action: { onStartPrompt("Help me create a short video concept: ") })
+            HomePill(system: "ellipsis", title: "More", action: onOpenDrawer)
         }
     }
 
     // MARK: Bento — Video / Mind Guide / Today's reflection
 
     private var bento: some View {
-        HStack(alignment: .top, spacing: 12) {
-            VideoCard(action: onNewChat)
-                .frame(maxWidth: .infinity)
-            VStack(spacing: 12) {
-                MindGuideCard(action: onNewChat)
-                ReflectionCard(action: onNewChat)
+        // 53 / 47 with the stacked pair split 37 / 63 — the reference's
+        // proportions. An even split made the reflection card twice as tall as
+        // the sheet's and squeezed the video card's artwork out of frame.
+        GeometryReader { geo in
+            let leftWidth = (geo.size.width - 12) * 0.53
+            HStack(alignment: .top, spacing: 12) {
+                VideoCard(action: { onStartPrompt("Help me create a short video concept: ") })
+                    .frame(width: leftWidth)
+                VStack(spacing: 12) {
+                    MindGuideCard(action: { onStartPrompt("Help me think this through with clarity: ") })
+                        .frame(height: (geo.size.height - 12) * 0.37)
+                    ReflectionCard(action: { onStartPrompt("Let's do today's reflection. ") })
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
-            .frame(maxWidth: .infinity)
         }
-        .frame(height: 208)
+        .frame(height: 224)
     }
 
     // MARK: Today's Used + suggestions
@@ -214,7 +233,7 @@ struct HomeDashboardView: View {
     }
 
     private var suggestionsCard: some View {
-        Button(action: onNewChat) {
+        Button(action: { onStartPrompt("Suggest a few questions I could ask about ") }) {
             HStack(spacing: 12) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 13, style: .continuous)
@@ -246,7 +265,7 @@ struct HomeDashboardView: View {
     private var dock: some View {
         HStack(spacing: 6) {
             DockIcon(system: "house.fill", label: "Home", selected: true, action: {})
-            DockIcon(system: "bubble.left", label: "Chats", action: onOpenChats)
+            DockIcon(system: "book.fill", label: "Chats", action: onOpenChats)
             Button(action: onNewChat) {
                 HStack(spacing: 6) {
                     Image(systemName: "sparkles").font(.system(size: 15, weight: .semibold))
@@ -293,13 +312,13 @@ private struct HomePill: View {
     let action: () -> Void
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 7) {
-                Image(systemName: system).font(.system(size: 14, weight: .medium))
-                Text(title).font(Aero.label())
+            HStack(spacing: 5) {
+                Image(systemName: system).font(.system(size: 13, weight: .medium))
+                Text(title).font(.system(size: 12, weight: .medium))
             }
             .foregroundStyle(Aero.text)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 11)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 9)
             .gsCapsuleGlass(.floatingControl)
         }
         .buttonStyle(KineticPressStyle())
@@ -316,17 +335,13 @@ private struct VideoCard: View {
                              Color(red: 1.0, green: 0.85, blue: 0.91),
                              Color(red: 1.0, green: 0.91, blue: 0.83)],
                     startPoint: .topLeading, endPoint: .bottomTrailing)
-                VStack {
-                    HStack {
-                        Spacer()
-                        GsArtwork(
-                            art: .video,
-                            size: 70,
-                            label: "Translucent film cards with a glass lens")
-                            .offset(x: 10, y: -8)
-                    }
-                    Spacer()
-                }
+                // The reference's artwork is the pearl, bleeding off the
+                // lower-right corner — not a film-strip glyph.
+                PearlCluster()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity,
+                           alignment: .bottomTrailing)
+                    .offset(x: 44, y: 38)
+                    .allowsHitTesting(false)
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 5) {
                         Image(systemName: "play").font(.system(size: 10, weight: .bold))
@@ -365,10 +380,10 @@ private struct MindGuideCard: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 10) {
-                GsArtwork(art: .clarity, size: 34, label: "A clarity lens holding a bloom")
+                PearlOrb(size: 38)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Mind Guide").font(Aero.label()).foregroundStyle(Aero.text)
-                    Text("Your personal clarity")
+                    Text("Your personal clarity companion.")
                         .font(Aero.caption()).foregroundStyle(Aero.textMuted)
                         .lineLimit(2)
                 }
@@ -402,8 +417,9 @@ private struct ReflectionCard: View {
                 }
                 GsArtwork(
                     art: .reflection,
-                    size: 58,
+                    size: 96,
                     label: "A lotus resting on still water")
+                    .offset(x: 8, y: 10)
                     .allowsHitTesting(false)
             }
             .padding(14)
@@ -429,5 +445,79 @@ private struct DockIcon: View {
         }
         .buttonStyle(KineticPressStyle())
         .accessibilityLabel(label)
+    }
+}
+
+
+// MARK: - Pearlescent material
+
+/// One glass sphere: white crown, violet shoulder, blue rim, blush underside,
+/// and a specular highlight — the reference's hero material.
+private struct PearlOrb: View {
+    var size: CGFloat = 44
+
+    var body: some View {
+        Circle()
+            .fill(
+                RadialGradient(
+                    colors: [
+                        Color.white,
+                        Color(red: 0.85, green: 0.78, blue: 1.00),
+                        Color(red: 0.56, green: 0.61, blue: 1.00),
+                        Color(red: 0.39, green: 0.71, blue: 1.00),
+                        Color(red: 1.00, green: 0.65, blue: 0.78)
+                    ],
+                    center: UnitPoint(x: 0.34, y: 0.28),
+                    startRadius: 0,
+                    endRadius: size * 0.78
+                )
+            )
+            .frame(width: size, height: size)
+            .overlay(Circle().strokeBorder(Color.white.opacity(0.65), lineWidth: 0.8))
+            .overlay(alignment: .topLeading) {
+                Circle()
+                    .fill(Color.white.opacity(0.7))
+                    .frame(width: size * 0.24, height: size * 0.24)
+                    .padding(.leading, size * 0.22)
+                    .padding(.top, size * 0.18)
+            }
+            .shadow(color: Color(red: 0.88, green: 0.55, blue: 0.62).opacity(0.20),
+                    radius: size * 0.18, y: size * 0.10)
+    }
+}
+
+/// Three overlapping pearls for the video card's artwork.
+private struct PearlCluster: View {
+    var body: some View {
+        ZStack {
+            PearlOrb(size: 112).offset(x: -10, y: 10)
+            PearlOrb(size: 64).offset(x: 56, y: -38)
+            PearlOrb(size: 46).offset(x: 20, y: 52)
+        }
+        .frame(width: 200, height: 200)
+    }
+}
+
+/// The ambient backdrop: very large, very soft pearls behind the content.
+private struct PearlBackdrop: View {
+    var body: some View {
+        GeometryReader { geo in
+            let w = geo.size.width
+            ZStack {
+                PearlOrb(size: w * 0.72)
+                    .opacity(0.55)
+                    .blur(radius: 26)
+                    .position(x: w * 0.98, y: geo.size.height * 0.16)
+                PearlOrb(size: w * 0.62)
+                    .opacity(0.42)
+                    .blur(radius: 30)
+                    .position(x: w * -0.02, y: geo.size.height * 0.60)
+                PearlOrb(size: w * 0.76)
+                    .opacity(0.45)
+                    .blur(radius: 30)
+                    .position(x: w * 0.72, y: geo.size.height * 0.98)
+            }
+        }
+        .allowsHitTesting(false)
     }
 }

@@ -89,7 +89,8 @@ struct RootView: View {
                     },
                     onOpenChats: { router.path.append(.chats) },
                     onOpenAgent: { router.path.append(.travelAgent) },
-                    onOpenConversation: { id in router.path.append(.chat(id)) }
+                    onOpenConversation: { id in router.path.append(.chat(id)) },
+                    onStartPrompt: { prompt in router.path.append(.chatPrefill(prompt)) }
                 )
                 .aeroDestinations()
             }

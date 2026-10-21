@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -41,6 +42,39 @@ import kotlin.math.sin
  * Settings → Appearance → Background style chooses how much of this is
  * painted (Blurred = all, Gradient = wash + light, Solid = wash only).
  */
+/** One background pearl: contact glow, iridescent body, rim, specular. */
+private fun DrawScope.ambientPearl(
+    center: Offset,
+    radius: Float,
+    tint: Color,
+    dark: Boolean,
+) {
+    val bodyAlpha = if (dark) 0.10f else 0.34f
+    val rimAlpha = if (dark) 0.12f else 0.40f
+    drawCircle(
+        brush = Brush.radialGradient(
+            listOf(
+                Color.White.copy(alpha = bodyAlpha),
+                tint.copy(alpha = bodyAlpha * 0.55f),
+                Color.Transparent
+            ),
+            center = Offset(center.x - radius * 0.3f, center.y - radius * 0.35f),
+            radius = radius * 1.35f
+        ),
+        radius = radius,
+        center = center
+    )
+    drawArc(
+        color = Color.White.copy(alpha = rimAlpha),
+        startAngle = 140f,
+        sweepAngle = 160f,
+        useCenter = false,
+        topLeft = Offset(center.x - radius * 0.96f, center.y - radius * 0.96f),
+        size = Size(radius * 1.92f, radius * 1.92f),
+        style = Stroke(width = radius * 0.035f, cap = StrokeCap.Round)
+    )
+}
+
 @Composable
 fun ReferenceBackdrop(modifier: Modifier = Modifier) {
     val colors = GsTheme.colors
@@ -124,6 +158,29 @@ fun ReferenceBackdrop(modifier: Modifier = Modifier) {
                 style = Stroke(width = 1.dp.toPx())
             )
         }
+
+        // 2b. Pearlescent orbs. The reference's backdrop is not only bloom:
+        //     three out-of-focus glass spheres hang behind the content, lit
+        //     from the upper left. They sit between the bokeh and the blossom
+        //     so the branches still read on top.
+        ambientPearl(
+            center = Offset(size.width * 1.02f, size.height * 0.16f),
+            radius = size.width * 0.34f,
+            tint = Color(0xFFFFC7B4),
+            dark = dark
+        )
+        ambientPearl(
+            center = Offset(size.width * -0.06f, size.height * 0.60f),
+            radius = size.width * 0.30f,
+            tint = Color(0xFFD9C6FF),
+            dark = dark
+        )
+        ambientPearl(
+            center = Offset(size.width * 0.74f, size.height * 0.99f),
+            radius = size.width * 0.36f,
+            tint = Color(0xFFFFC2D6),
+            dark = dark
+        )
 
         if (style == "Gradient") return@Canvas
 

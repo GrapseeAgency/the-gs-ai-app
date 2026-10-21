@@ -292,9 +292,9 @@ enum Aero {
         return .system(size: dynamic * GSAccessibilityFlags.shared.fontScale, weight: weight, design: design)
     }
 
-    static func displayTitle() -> Font { scaledFont(34, .semibold, .serif, relativeTo: .largeTitle) }
-    static func display() -> Font { scaledFont(28, .semibold, .serif, relativeTo: .title) }
-    static func headline() -> Font { scaledFont(22, .semibold, .serif, relativeTo: .title2) }
+    static func displayTitle() -> Font { scaledFont(34, .semibold, .default, relativeTo: .largeTitle) }
+    static func display() -> Font { scaledFont(28, .semibold, .default, relativeTo: .title) }
+    static func headline() -> Font { scaledFont(22, .semibold, .default, relativeTo: .title2) }
     static func title() -> Font { scaledFont(17, .semibold, .default, relativeTo: .headline) }
     static func body() -> Font { scaledFont(15, .regular, .default, relativeTo: .body) }
     static func bodyMedium() -> Font { scaledFont(14, .regular, .default, relativeTo: .body) }

@@ -3,7 +3,6 @@ package com.grapsee.gsai.ui.home
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -35,12 +34,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.grapsee.gsai.data.AccountStore
@@ -251,14 +250,11 @@ private fun HomeHeader(onAssistant: () -> Unit, onMenu: () -> Unit) {
             modifier = Modifier
                 .size(42.dp)
                 .clip(CircleShape)
-                .background(
-                    Brush.linearGradient(
-                        listOf(Color(0xFFFFE3CE), Color(0xFFFFC9A8), Color(0xFFFFB38F))
-                    )
-                ),
+                .background(Color.White.copy(alpha = 0.35f)),
             contentAlignment = Alignment.Center
         ) {
-            RefArtwork(art = RefArt.Bloom, size = 34.dp, contentDescription = "Nexly")
+            // The reference's avatar is the pearl itself, not a bloom on a disc.
+            RefArtwork(art = RefArt.Pearl, size = 42.dp, contentDescription = "Nexly")
         }
         Spacer(Modifier.width(10.dp))
         Column {
@@ -328,11 +324,12 @@ private fun QuickPills(
     onCreate: () -> Unit,
     onMore: () -> Unit,
 ) {
+    // Four pills, one row, no horizontal scroller. At 12sp type and 9dp of
+    // inset the set measures ~340dp on a 393dp screen — inside the reference's
+    // gutter — so "More" is never parked off-screen.
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         GlassPill(GsIcons.Plus, "New Chat", onNewChat)
@@ -355,15 +352,18 @@ private fun Bento(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(206.dp),
+            .height(224.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        VideoCard(onVideo, Modifier.weight(1.12f).fillMaxSize())
+        // The reference is not an even split: the video card takes 53% of the
+        // row and the stacked pair takes the rest, with Mind Guide the shorter
+        // of the two (about 37 / 63).
+        VideoCard(onVideo, Modifier.weight(1.13f).fillMaxSize())
         Column(
             modifier = Modifier.weight(1f).fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            MindGuideCard(onMindGuide, Modifier.fillMaxWidth().weight(1f))
+            MindGuideCard(onMindGuide, Modifier.fillMaxWidth().weight(0.62f))
             ReflectionCard(onReflection, Modifier.fillMaxWidth().weight(1f))
         }
     }
@@ -392,37 +392,18 @@ private fun VideoCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
                 onClick = onClick
             )
     ) {
-        // Soft light pools — the reference's silk-and-bubble art, drawn as
-        // layered radial gradients rather than a stock picture.
-        Box(
-            Modifier
-                .size(150.dp)
-                .align(Alignment.CenterEnd)
-                .background(
-                    Brush.radialGradient(listOf(Color(0x99FFFFFF), Color.Transparent)),
-                    CircleShape
-                )
-        )
-        Box(
-            Modifier
-                .size(110.dp)
-                .align(Alignment.BottomStart)
-                .background(
-                    Brush.radialGradient(listOf(Color(0x66FF9FC2), Color.Transparent)),
-                    CircleShape
-                )
+        // The reference's art is the pearl itself: overlapping glass spheres
+        // bleeding off the lower-right corner, not a film-strip glyph.
+        RefArtwork(
+            art = RefArt.Pearl,
+            size = 186.dp,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .offset(x = 34.dp, y = 30.dp),
+            contentDescription = "Pearlescent glass spheres"
         )
         Column(Modifier.fillMaxSize().padding(14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                ReferenceChip(icon = GsIcons.Play, label = "Video")
-                Spacer(Modifier.weight(1f))
-                RefArtwork(
-                    art = RefArt.Video,
-                    size = 58.dp,
-                    modifier = Modifier.offset(x = 6.dp, y = (-6).dp),
-                    contentDescription = "Translucent film cards with a glass lens"
-                )
-            }
+            ReferenceChip(icon = GsIcons.Play, label = "Video")
             Spacer(Modifier.weight(1f))
             Text(
                 text = "Create Stunning\nVideos with AI",
@@ -462,22 +443,31 @@ private fun MindGuideCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
             modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // A pearl, not a lens: violet at the crown, blue at the rim and a
+            // blush underside, exactly as the reference's orb reads.
             Box(
                 modifier = Modifier
-                    .size(34.dp)
+                    .size(38.dp)
                     .clip(CircleShape)
                     .background(
                         Brush.radialGradient(
-                            listOf(Color(0x22B79BFF), Color(0x14FF9FC2), Color.Transparent)
+                            colors = listOf(
+                                Color(0xFFFFFFFF),
+                                Color(0xFFD9C8FF),
+                                Color(0xFF8E9BFF),
+                                Color(0xFF63B4FF),
+                                Color(0xFFFFA6C8)
+                            )
                         )
                     )
-                    .border(1.dp, Color.White.copy(alpha = 0.55f), CircleShape),
-                contentAlignment = Alignment.Center
+                    .border(1.dp, Color.White.copy(alpha = 0.7f), CircleShape),
+                contentAlignment = Alignment.TopStart
             ) {
-                RefArtwork(
-                    art = RefArt.Clarity,
-                    size = 30.dp,
-                    contentDescription = "A clarity lens holding a bloom"
+                Box(
+                    Modifier
+                        .padding(9.dp)
+                        .size(9.dp)
+                        .background(Color.White.copy(alpha = 0.65f), CircleShape)
                 )
             }
             Spacer(Modifier.width(8.dp))
@@ -534,10 +524,10 @@ private fun ReflectionCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            Box(Modifier.align(Alignment.BottomEnd).padding(4.dp)) {
+            Box(Modifier.align(Alignment.BottomEnd).offset(x = 6.dp, y = 8.dp)) {
                 RefArtwork(
                     art = RefArt.Reflection,
-                    size = 62.dp,
+                    size = 96.dp,
                     contentDescription = "A lotus resting on still water"
                 )
             }
@@ -557,7 +547,7 @@ private fun TodayUsedHeader(onSeeAll: () -> Unit) {
     ) {
         Text(
             text = "Today's Used",
-            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
             color = GsTheme.colors.textPrimary,
             modifier = Modifier.weight(1f)
         )
@@ -722,8 +712,8 @@ private fun HomeDock(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        DockCircle(GsIcons.House, "Home", selected = true, onClick = onHome)
-        DockCircle(GsIcons.MessageCircle, "Chats", onClick = onChats)
+        DockCircle(FilledHouse, "Home", selected = true, onClick = onHome)
+        DockCircle(GsIcons.BookOpen, "Chats", onClick = onChats)
         Row(
             modifier = Modifier
                 .weight(1f)
@@ -759,6 +749,43 @@ private fun HomeDock(
         }
         DockCircle(GsIcons.Settings, "Settings", onClick = onSettings)
     }
+}
+
+/**
+ * The dock's Home glyph is FILLED in the reference — a solid little house, not
+ * an outline. The generated Lucide set is stroke-only by contract (every glyph
+ * must inherit its tint through SrcIn), so this one silhouette is drawn as an
+ * explicit filled path rather than bending the generator's rule.
+ */
+private val FilledHouse: ImageVector by lazy {
+    ImageVector.Builder(
+        name = "FilledHouse",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).apply {
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(12f, 3.1f)
+            lineTo(2.7f, 10.8f)
+            curveTo(2.3f, 11.2f, 2.5f, 11.9f, 3.1f, 11.9f)
+            lineTo(4.6f, 11.9f)
+            lineTo(4.6f, 19.3f)
+            curveTo(4.6f, 20f, 5.1f, 20.5f, 5.8f, 20.5f)
+            lineTo(9.5f, 20.5f)
+            lineTo(9.5f, 15.5f)
+            curveTo(9.5f, 15f, 9.9f, 14.6f, 10.4f, 14.6f)
+            lineTo(13.6f, 14.6f)
+            curveTo(14.1f, 14.6f, 14.5f, 15f, 14.5f, 15.5f)
+            lineTo(14.5f, 20.5f)
+            lineTo(18.2f, 20.5f)
+            curveTo(18.9f, 20.5f, 19.4f, 20f, 19.4f, 19.3f)
+            lineTo(19.4f, 11.9f)
+            lineTo(20.9f, 11.9f)
+            curveTo(21.5f, 11.9f, 21.7f, 11.2f, 21.3f, 10.8f)
+            close()
+        }
+    }.build()
 }
 
 @Composable
@@ -856,19 +883,19 @@ private fun GlassPill(icon: ImageVector, label: String, onClick: () -> Unit) {
                 onClickLabel = label,
                 onClick = onClick
             )
-            .padding(horizontal = 12.dp, vertical = 9.dp),
+            .padding(horizontal = 9.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
             icon,
             contentDescription = null,
             tint = GsTheme.colors.textPrimary,
-            modifier = Modifier.size(17.dp)
+            modifier = Modifier.size(15.dp)
         )
-        Spacer(Modifier.width(7.dp))
+        Spacer(Modifier.width(5.dp))
         Text(
             text = label,
-            style = MaterialTheme.typography.labelLarge,
+            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium),
             color = GsTheme.colors.textPrimary
         )
     }
