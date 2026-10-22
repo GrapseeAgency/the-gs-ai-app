@@ -349,6 +349,7 @@ private fun NexlyAssistantBlocks(
                                 statusCard()
                             }
                         }
+                        }
                     }
                 }
             }
