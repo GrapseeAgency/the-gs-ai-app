@@ -270,7 +270,7 @@ struct HomeDashboardView: View {
     private var dock: some View {
         HStack(spacing: 14) {
             DockIcon(system: "house.fill", label: "Home", selected: true, action: {})
-            DockIcon(system: "book.fill", label: "Chats", action: onOpenChats)
+            DockIcon(book: true, label: "Chats", action: onOpenChats)
             // The reference seats the peach pill inside a white well, so the
             // dock reads as three glass buttons and one lit action.
             Button(action: onNewChat) {
@@ -476,21 +476,58 @@ private struct ReflectionCard: View {
 }
 
 private struct DockIcon: View {
-    let system: String
+    var system: String = ""
+    /// The sheet's Chats glyph is a filled OPEN book; SF only offers an open
+    /// outline or a closed fill, so the Android silhouette is drawn here too.
+    var book: Bool = false
     let label: String
     var selected = false
     let action: () -> Void
+
     var body: some View {
         Button(action: action) {
-            Image(systemName: system)
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(selected ? Aero.text : Aero.text.opacity(0.78))
-                .frame(width: 46, height: 46)
-                .background(Circle().fill(Color.white.opacity(selected ? 0.62 : 0.44)))
-                .overlay(Circle().strokeBorder(Color.white.opacity(0.55), lineWidth: 1))
+            Group {
+                if book {
+                    OpenBookGlyph()
+                        .fill(selected ? Aero.text : Aero.text.opacity(0.78))
+                        .frame(width: 20, height: 20)
+                } else {
+                    Image(systemName: system)
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(selected ? Aero.text : Aero.text.opacity(0.78))
+                }
+            }
+            .frame(width: 46, height: 46)
+            .background(Circle().fill(Color.white.opacity(selected ? 0.62 : 0.44)))
+            .overlay(Circle().strokeBorder(Color.white.opacity(0.55), lineWidth: 1))
         }
         .buttonStyle(KineticPressStyle())
         .accessibilityLabel(label)
+    }
+}
+
+/// Filled open book, same silhouette as Android's `FilledBook`.
+private struct OpenBookGlyph: Shape {
+    func path(in rect: CGRect) -> Path {
+        let s = rect.width / 24
+        func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * s, y: y * s) }
+        var path = Path()
+        path.move(to: p(11.2, 6.4))
+        path.addCurve(to: p(2.8, 6.6), control1: p(8.6, 4.9), control2: p(5.4, 4.9))
+        path.addCurve(to: p(2.4, 7.4), control1: p(2.5, 6.8), control2: p(2.4, 7.1))
+        path.addLine(to: p(2.4, 18.2))
+        path.addCurve(to: p(3.7, 19.0), control1: p(2.4, 18.9), control2: p(3.1, 19.3))
+        path.addCurve(to: p(11.0, 19.2), control1: p(6.0, 17.7), control2: p(8.8, 17.8))
+        path.addCurve(to: p(12.2, 19.2), control1: p(11.4, 19.4), control2: p(11.8, 19.4))
+        path.addCurve(to: p(19.5, 19.0), control1: p(14.4, 17.8), control2: p(17.2, 17.7))
+        path.addCurve(to: p(20.8, 18.2), control1: p(20.1, 19.3), control2: p(20.8, 18.9))
+        path.addLine(to: p(20.8, 7.4))
+        path.addCurve(to: p(20.4, 6.6), control1: p(20.8, 7.1), control2: p(20.7, 6.8))
+        path.addCurve(to: p(12.0, 6.4), control1: p(17.8, 4.9), control2: p(14.6, 4.9))
+        path.addLine(to: p(12.0, 17.4))
+        path.addCurve(to: p(11.2, 17.2), control1: p(11.8, 17.4), control2: p(11.4, 17.3))
+        path.closeSubpath()
+        return path
     }
 }
 
