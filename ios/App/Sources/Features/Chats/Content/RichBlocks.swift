@@ -109,7 +109,7 @@ struct NexlyAssistantBlocksView: View {
             }
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 12)
+        .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .gsGlass(.card, corner: 24)
         .padding(.top, isFirst ? 0 : 2)

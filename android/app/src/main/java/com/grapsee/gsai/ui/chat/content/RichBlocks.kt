@@ -287,7 +287,7 @@ private fun NexlyAssistantBlocks(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .gsGlass(GsGlassRole.Card, RoundedCornerShape(24.dp))
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             if (group.blocks.isEmpty() && isStreaming) {

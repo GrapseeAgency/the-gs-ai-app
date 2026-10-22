@@ -115,8 +115,8 @@ class NexlyChatScreenshotTest {
                     modifier = Modifier
                         .weight(1f)
                         .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     UserMessage(
                         message = ChatUiMessage(
@@ -135,7 +135,7 @@ class NexlyChatScreenshotTest {
                         planTimestamp = "2026-10-22T21:45:00Z"
                     )
                 }
-                Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
                     ComposerRow(
                         draftText = { "" },
                         onDraftChange = {},

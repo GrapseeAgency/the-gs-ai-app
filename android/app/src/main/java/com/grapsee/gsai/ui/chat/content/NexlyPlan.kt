@@ -488,7 +488,7 @@ fun NexlyPlanCard(
         modifier = modifier
             .fillMaxWidth()
             .gsGlass(GsGlassRole.Card, RoundedCornerShape(24.dp))
-            .padding(horizontal = 14.dp, vertical = 10.dp),
+            .padding(horizontal = 14.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         NexlyInlineRichText(
@@ -526,7 +526,7 @@ fun NexlyPlanCard(
                 }
             }
         } else {
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
                 plan.rows.forEach { row ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         NexlyGlassGlyphTile(
@@ -540,8 +540,8 @@ fun NexlyPlanCard(
                             Text(
                                 text = row.time,
                                 style = MaterialTheme.typography.labelSmall.copy(
-                                    fontSize = 11.sp,
-                                    lineHeight = 14.sp,
+                                    fontSize = 10.5.sp,
+                                    lineHeight = 13.sp,
                                     fontWeight = FontWeight.SemiBold
                                 ),
                                 color = colors.textSecondary,
@@ -550,8 +550,8 @@ fun NexlyPlanCard(
                             NexlyInlineRichText(
                                 text = row.text,
                                 color = colors.textPrimary,
-                                fontSize = 13.5.sp,
-                                glyphSize = 16.dp,
+                                fontSize = 13.sp,
+                                glyphSize = 15.dp,
                                 weight = FontWeight.Medium
                             )
                         }
@@ -569,8 +569,8 @@ fun NexlyPlanCard(
                     NexlyInlineRichText(
                         text = closing,
                         color = colors.textPrimary,
-                        fontSize = 14.5.sp,
-                        glyphSize = 17.dp
+                        fontSize = 14.sp,
+                        glyphSize = 16.dp
                     )
                     if (plan.closingIcon != null &&
                         !Regex(":([a-z0-9][a-z0-9-]{1,42}):").containsMatchIn(closing)
