@@ -178,7 +178,10 @@ struct HomeDashboardView: View {
             guard !trimmed.isEmpty else { return false }
             return !trimmed.unicodeScalars.allSatisfy { punctuation.contains($0) }
         }
-        var text = kept.joined(separator: " ")
+        // Plain assignment, not a second `var`: the fenced-block strip above
+        // already introduced `text` in this scope. Declaring it twice is an
+        // invalid redeclaration that failed the whole App target's compile.
+        text = kept.joined(separator: " ")
         for token in ["```", "#", "*", "_", ">", "`", "|"] {
             text = text.replacingOccurrences(of: token, with: " ")
         }
