@@ -130,11 +130,20 @@ catalogue, validator and web registry also know the `plan` kind.
   phase follows the real stream (thinking → reasoning → answering); the active
   row gets a halo; plan turns keep the reference copy, other turns use
   task-neutral copy; flash turns with no reasoning hide the card.
+- The full reference screen is now rendered from production pieces on both
+  platforms: the shared brand header, the real user message bubble/avatar/
+  ticks, the assistant blocks, and the shared composer capsule. At 411×914 the
+  header, user turn, preamble, Thinking card, all nine plan rows, closing,
+  timestamp and composer fit without scrolling. The 393×852 variant scrolls the
+  last row, matching a narrow device.
+- The user timestamp is 12-hour (`9:41 PM`) on both; the disabled send control
+  stays peach rather than turning gray; plan/thinking spacing was compacted to
+  the sheet's density.
 - Tests added: `android/.../NexlyPlanTest.kt`,
   `ios/App/Tests/AppTests/NexlyPlanTests.swift`, expanded
   `scripts/test-nexly-plan.ts`, `F26_NEXLY_PLAN` fixtures on both parsers, and
-  a non-plan `*thinking*` render on both platforms.
-- Native verification is green: Android CI run `39827601611` (compile, Home
-  render, Nexly plan + adaptive render, 267 unit tests) and iOS CI run
-  `39827605900` (Xcode build, XCTest, Home render, Nexly plan + adaptive
-  render).
+  plan, adaptive-thinking and full-screen renders on both platforms.
+- Native verification is green: Android CI run `39836410886` (compile, Home
+  render, Nexly response + adaptive + full-screen renders, 267 unit tests) and
+  iOS CI run `39836414880` (Xcode build, XCTest, Home render, the same three
+  Nexly renders). The final iOS composer-inset run is `1d0632fc`.

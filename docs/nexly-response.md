@@ -110,11 +110,14 @@ All four steps are now implemented:
    glyph tiles, time over activity, a closing line and a timestamp.
 4. The native clients bundle the same Tabler outline font and codepoint map;
    the web proof uses the matching SVG sprite.
+5. The full reference screen is rendered in CI from production pieces on both
+   platforms (shared header, real user message bubble, assistant blocks and
+   shared composer). The 411×914 renders show all nine plan rows, closing,
+   timestamp and composer without scrolling.
 
-The remaining verification is a real native build/render in the final CI pass.
-No Xcode/Swift or Android SDK is installed in this environment, and the local
-Gradle is 8.9 while the project requires 8.13, so this pass is static plus the
-JS contract tests and the native XCTest/JUnit suites added for CI.
+Verification is no longer static-only: the Android and iOS CI gates compile the
+apps, run the native test suites and upload the plan, adaptive-thinking and
+full-screen renders. See `docs/reference/nexly/ci/`.
 
 ## Icon provenance
 
