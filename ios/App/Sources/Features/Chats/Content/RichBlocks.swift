@@ -41,6 +41,9 @@ struct NexlyAssistantBlocksView: View {
     var thinkingEffort: String? = nil
     var thinkingReasoningHint: String? = nil
     var isPlanTurn: Bool = false
+    /// Plan turns place the status card after the whole preamble; a non-plan
+    /// answer places it after the first paragraph.
+    var statusAtEnd: Bool = true
     var citations: [Int: String] = [:]
     var planTimestamp: String? = nil
 
@@ -95,12 +98,16 @@ struct NexlyAssistantBlocksView: View {
 
     @ViewBuilder
     private func proseCard(_ prose: [Block], isStatusHost: Bool, isFirst: Bool) -> some View {
+        let statusHostIndex = statusAtEnd ? prose.count - 1 : 0
         VStack(alignment: .leading, spacing: 8) {
             ForEach(Array(prose.enumerated()), id: \.offset) { index, block in
                 BlockView(block: block, isLast: index == prose.count - 1, citations: citations)
+                if isStatusHost && showStatus && index == statusHostIndex {
+                    if !prose.isEmpty { Spacer().frame(height: 2) }
+                    NexlyThinkingCard(phase: thinkingPhase, effort: thinkingEffort, isPlan: isPlanTurn, reasoningHint: thinkingReasoningHint)
+                }
             }
-            if isStatusHost && showStatus {
-                if !prose.isEmpty { Spacer().frame(height: 2) }
+            if isStatusHost && showStatus && prose.isEmpty {
                 NexlyThinkingCard(phase: thinkingPhase, effort: thinkingEffort, isPlan: isPlanTurn, reasoningHint: thinkingReasoningHint)
             } else if prose.isEmpty && isStreaming {
                 Text("…")

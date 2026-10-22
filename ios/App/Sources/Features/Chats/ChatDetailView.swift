@@ -1422,6 +1422,7 @@ struct MessageBubble: View, Equatable {
                 thinkingEffort: thinkingEffort,
                 thinkingReasoningHint: thinkingReasoningHint,
                 isPlanTurn: hasPlan,
+                statusAtEnd: hasPlan,
                 citations: citationLinks,
                 planTimestamp: message.createdAt
             )

@@ -166,6 +166,12 @@ fun BlocksContent(
      */
     glassAssistant: Boolean = false,
     statusCard: (@Composable () -> Unit)? = null,
+    /**
+     * Plan turns put the status card after the whole preamble (the reference).
+     * A non-plan answer puts it after the first paragraph, so a long answer
+     * cannot push the card under the composer.
+     */
+    statusAtEnd: Boolean = true,
     planTimestamp: String? = null
 ) {
     val cache = remember { StreamBlockCache() }
@@ -198,6 +204,7 @@ fun BlocksContent(
             citationUrls = citationUrls,
             onSendPrompt = onSendPrompt,
             statusCard = statusCard,
+            statusAtEnd = statusAtEnd,
             planTimestamp = planTimestamp
         )
     } else {
@@ -242,6 +249,7 @@ private fun NexlyAssistantBlocks(
     citationUrls: Map<Int, String>,
     onSendPrompt: ((String) -> Unit)?,
     statusCard: (@Composable () -> Unit)?,
+    statusAtEnd: Boolean,
     planTimestamp: String?
 ) {
     val groups = remember(blocks, statusCard != null) {
@@ -293,6 +301,11 @@ private fun NexlyAssistantBlocks(
                             if (group.blocks.isEmpty() && isStreaming) {
                                 if (statusCard == null) StreamingCaret()
                             }
+                            val statusHostIndex = if (statusAtEnd) {
+                                group.blocks.lastIndex
+                            } else {
+                                0
+                            }
                             group.blocks.forEachIndexed { index, block ->
                                 key(streamBlockKey(block, index)) {
                                     val blockContent: @Composable () -> Unit = {
@@ -307,10 +320,14 @@ private fun NexlyAssistantBlocks(
                                     }
                                     if (block.isProseBlock()) SelectionContainer { blockContent() } else blockContent()
                                 }
+                                if (!statusPlaced && statusCard != null && index == statusHostIndex) {
+                                    statusPlaced = true
+                                    Spacer(Modifier.height(2.dp))
+                                    statusCard()
+                                }
                             }
-                            if (!statusPlaced && statusCard != null) {
+                            if (!statusPlaced && statusCard != null && group.blocks.isEmpty()) {
                                 statusPlaced = true
-                                Spacer(Modifier.height(2.dp))
                                 statusCard()
                             }
                         }

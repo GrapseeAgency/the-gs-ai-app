@@ -2195,6 +2195,7 @@ private fun LiveStreamText(
     priorContext: String = "",
     glassAssistant: Boolean = false,
     statusCard: (@Composable () -> Unit)? = null,
+    statusAtEnd: Boolean = true,
     planTimestamp: String? = null
 ) {
     CompositionLocalProvider(LocalVoiceLauncher provides onNavigateVoice) {
@@ -2208,6 +2209,7 @@ private fun LiveStreamText(
             priorContext = priorContext,
             glassAssistant = glassAssistant,
             statusCard = statusCard,
+            statusAtEnd = statusAtEnd,
             planTimestamp = planTimestamp
         )
     }
@@ -2842,6 +2844,10 @@ private fun AssistantMessage(
                     } else {
                         null
                     },
+                    // Plan turns keep the reference placement (after the whole
+                    // preamble); a non-plan answer puts the card after its first
+                    // paragraph so a long answer cannot bury it.
+                    statusAtEnd = planVisible,
                     planTimestamp = message.createdAt
                 )
             }

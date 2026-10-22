@@ -84,6 +84,7 @@ class NexlyChatScreenshotTest {
                     isStreaming = false,
                     onCopyCode = {},
                     glassAssistant = true,
+                    statusAtEnd = false,
                     statusCard = {
                         ReferenceThinkingCard(
                             phase = NexlyThinkingPhase.REASONING,
@@ -110,8 +111,8 @@ class NexlyChatScreenshotTest {
             Column(
                 modifier = Modifier
                     .fillMaxHeight()
-                    .fillMaxWidth()
                     .widthIn(max = 640.dp)
+                    .fillMaxWidth()
             ) {
                 NexlyChatHeader(
                     sparkleLabel = "New chat",
@@ -177,8 +178,8 @@ class NexlyChatScreenshotTest {
             Column(
                 modifier = Modifier
                     .fillMaxHeight()
-                    .fillMaxWidth()
                     .widthIn(max = 640.dp)
+                    .fillMaxWidth()
             ) {
                 NexlyChatHeader(
                     sparkleLabel = "New chat",
@@ -209,6 +210,7 @@ class NexlyChatScreenshotTest {
                         isStreaming = false,
                         onCopyCode = {},
                         glassAssistant = true,
+                        statusAtEnd = false,
                         statusCard = {
                             ReferenceThinkingCard(
                                 phase = NexlyThinkingPhase.REASONING,

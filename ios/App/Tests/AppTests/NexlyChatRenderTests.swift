@@ -300,7 +300,8 @@ private struct NexlyFullProseView: View {
                             showStatus: true,
                             thinkingPhase: .reasoning,
                             thinkingEffort: "high",
-                            isPlanTurn: false
+                            isPlanTurn: false,
+                            statusAtEnd: false
                         )
                     }
                     .padding(.horizontal, 16)
@@ -341,7 +342,8 @@ private struct NexlyAdaptiveThinkingView: View {
                         showStatus: true,
                         thinkingPhase: .reasoning,
                         thinkingEffort: "high",
-                        isPlanTurn: false
+                        isPlanTurn: false,
+                        statusAtEnd: false
                     )
                 }
                 .padding(.horizontal, 16)
