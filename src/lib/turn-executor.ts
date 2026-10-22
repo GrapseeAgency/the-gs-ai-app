@@ -853,9 +853,17 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
   // as plain strings); unknown events are ignored by every parser (web
   // else-if chain, Android `when` without else, iOS switch without default).
   if (push) {
+    const effort = prep.thinking.config?.mode === 'thinking'
+      ? (prep.thinking.config?.effort ?? null)
+      : null
     push(
       'mode',
-      JSON.stringify({ state: 'streaming', effectiveMode: prep.thinking.effective, requested: prep.requestedMode })
+      JSON.stringify({
+        state: 'streaming',
+        effectiveMode: prep.thinking.effective,
+        requested: prep.requestedMode,
+        effort,
+      })
     )
   }
 

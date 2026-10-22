@@ -63,14 +63,50 @@ class NexlyChatScreenshotTest {
         }
     }
 
+    @Composable
+    private fun adaptiveThinkingResponse() {
+        Box(modifier = Modifier.fillMaxSize().nexlyPearlBackdrop()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp, vertical = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                BlocksContent(
+                    content = NEXLY_THINKING_WIRE,
+                    isStreaming = false,
+                    onCopyCode = {},
+                    glassAssistant = true,
+                    statusCard = {
+                        ReferenceThinkingCard(
+                            phase = NexlyThinkingPhase.REASONING,
+                            effort = "high",
+                            isPlan = false
+                        )
+                    }
+                )
+            }
+        }
+    }
+
     private fun shoot(path: String) {
         compose.setContent { TheGsAiTheme(darkTheme = false) { referenceResponse() } }
+        compose.onRoot().captureRoboImage(path)
+    }
+
+    private fun shootAdaptive(path: String) {
+        compose.setContent { TheGsAiTheme(darkTheme = false) { adaptiveThinkingResponse() } }
         compose.onRoot().captureRoboImage(path)
     }
 
     @Test
     @Config(sdk = [34], qualifiers = "w393dp-h852dp-xxhdpi")
     fun nexlyResponseAtSheetSize() = shoot("build/screenshots/nexly-chat-393x852.png")
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w393dp-h852dp-xxhdpi")
+    fun nexlyAdaptiveThinkingAtSheetSize() =
+        shootAdaptive("build/screenshots/nexly-chat-thinking-393x852.png")
 
     @Test
     @Config(sdk = [34], qualifiers = "w411dp-h914dp-xxhdpi")
@@ -110,4 +146,13 @@ private val NEXLY_REFERENCE_WIRE = """
       "timestamp": "9:45 PM"
     }
     ```
+""".trimIndent()
+
+/** A non-plan thinking turn: the card copy and active row must adapt. */
+private val NEXLY_THINKING_WIRE = """
+    Quantum entanglement links two particles so their measured states stay
+    correlated, no matter how far apart they are.
+
+    The important part is that the correlation is not a signal: you cannot use
+    it to send information faster than light.
 """.trimIndent()

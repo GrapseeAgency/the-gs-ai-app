@@ -266,6 +266,8 @@ jobs:
             test -s "$DIR/nexly-chat-ios-$w.png" \
               || { echo "::error::nexly-chat-ios-$w.png missing — the chat render harness did not produce it"; exit 1; }
           done
+          test -s "$DIR/nexly-chat-ios-thinking-393x852.png" \
+            || { echo "::error::the adaptive-thinking render was not produced"; exit 1; }
 
       - name: Upload the Nexly chat response render
         if: always()

@@ -203,6 +203,7 @@ private struct ModeEventPayload: Decodable {
     var state: String?
     var effectiveMode: String?
     var requested: String?
+    var effort: String?
 }
 
 /// REASONING TRACE wire frame: `{"delta":"..."}`.
@@ -435,6 +436,9 @@ final class ChatViewModel: ObservableObject {
     /// ("flash"|"thinking"; nil = no mode event — pre-v0.70 backend). The
     /// word "Thinking…" renders ONLY while this is "thinking".
     @Published private(set) var effectiveMode: String?
+    /// The backend's real effort for this turn ("low"|"medium"|"high"; nil =
+    /// provider default or flash). The Effort row renders this, never a guess.
+    @Published private(set) var effectiveEffort: String?
     // REASONING TRACE (chat-reasoning panel): the model's thinking stream for
     // the LIVE turn. Stream-only by contract (never persisted): reset at send,
     // the measured start/end dates freeze when the first answer delta lands.
@@ -542,6 +546,7 @@ final class ChatViewModel: ObservableObject {
         clarifyPrompt = nil
         searchPhase = .idle
         effectiveMode = nil
+        effectiveEffort = nil
         streamSink = SearchEventSink()
 
         messages.append(ChatMessage(
@@ -691,6 +696,7 @@ final class ChatViewModel: ObservableObject {
         clarifyPrompt = nil
         searchPhase = .idle
         effectiveMode = nil
+        effectiveEffort = nil
         streamSink = SearchEventSink()
         if appendUserMessage {
             messages.append(ChatMessage(
@@ -857,6 +863,7 @@ final class ChatViewModel: ObservableObject {
             if let obj = try? JSONDecoder().decode(ModeEventPayload.self, from: Data(data.utf8)),
                obj.effectiveMode == "flash" || obj.effectiveMode == "thinking" {
                 effectiveMode = obj.effectiveMode
+                effectiveEffort = obj.effort
             }
         case "search":
             guard let payload = try? JSONDecoder().decode(SearchEventPayload.self, from: Data(data.utf8)) else { return }

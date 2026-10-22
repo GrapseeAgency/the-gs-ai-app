@@ -409,12 +409,22 @@ fun NexlyGlassGlyphTile(
     toneName: String? = null,
     size: Dp = 30.dp,
     glyphSize: Dp = 15.dp,
+    active: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val c = tone(toneName ?: NexlyIcons.toneFor(name))
     Box(
         modifier = modifier
             .size(size)
+            .drawBehind {
+                if (active) {
+                    drawCircle(
+                        color = c.halo.copy(alpha = 0.70f),
+                        radius = this.size.minDimension / 2f + 2.dp.toPx(),
+                        style = Stroke(width = 1.5.dp.toPx())
+                    )
+                }
+            }
             .shadow(
                 elevation = 5.dp,
                 shape = CircleShape,

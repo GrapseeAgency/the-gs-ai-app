@@ -46,11 +46,37 @@ final class NexlyChatRenderTests: XCTestCase {
         }
     }
 
+    func testAdaptiveThinkingRenders() async throws {
+        let dir = Self.outputDirectory()
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let size = CGSize(width: 393, height: 852)
+        guard let image = try await Self.renderAdaptive(size: size) else {
+            return XCTFail("the adaptive-thinking render did not composite")
+        }
+        guard let data = image.pngData() else {
+            return XCTFail("no PNG data for the adaptive-thinking render")
+        }
+        XCTAssertGreaterThan(data.count, 20_000)
+        let url = dir.appendingPathComponent("nexly-chat-ios-thinking-393x852.png")
+        FileManager.default.createFile(atPath: url.path, contents: data)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+    }
+
     private static func render(size: CGSize) async throws -> UIImage? {
         let view = NexlyChatReferenceView(wire: NEXLY_REFERENCE_WIRE)
             .frame(width: size.width, height: size.height)
             .environment(\.layoutDirection, .leftToRight)
+        return try await capture(view: view, size: size)
+    }
 
+    private static func renderAdaptive(size: CGSize) async throws -> UIImage? {
+        let view = NexlyAdaptiveThinkingView()
+            .frame(width: size.width, height: size.height)
+            .environment(\.layoutDirection, .leftToRight)
+        return try await capture(view: view, size: size)
+    }
+
+    private static func capture<V: View>(view: V, size: CGSize) async throws -> UIImage? {
         let host = UIHostingController(rootView: view)
         host.view.frame = CGRect(origin: .zero, size: size)
 
@@ -100,7 +126,34 @@ private struct NexlyChatReferenceView: View {
                         blocks: parseBlocks(wire),
                         isStreaming: false,
                         showStatus: true,
+                        thinkingPhase: .done,
+                        thinkingEffort: "high",
+                        isPlanTurn: true,
                         planTimestamp: "2026-10-22T21:45:00Z"
+                    )
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 24)
+            }
+        }
+    }
+}
+
+/// A non-plan thinking turn: the card copy and active row must adapt instead
+/// of repeating the schedule copy for every question.
+private struct NexlyAdaptiveThinkingView: View {
+    var body: some View {
+        ZStack {
+            NexlyChatBackdrop()
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 12) {
+                    NexlyAssistantBlocksView(
+                        blocks: parseBlocks(NEXLY_THINKING_WIRE),
+                        isStreaming: true,
+                        showStatus: true,
+                        thinkingPhase: .reasoning,
+                        thinkingEffort: "high",
+                        isPlanTurn: false
                     )
                 }
                 .padding(.horizontal, 16)
@@ -135,4 +188,13 @@ Let me think for a moment...
   "timestamp": "9:45 PM"
 }
 ```
+"""
+
+/// A non-plan thinking turn, written in the wire contract.
+private let NEXLY_THINKING_WIRE = """
+Quantum entanglement links two particles so their measured states stay
+correlated, no matter how far apart they are.
+
+The important part is that the correlation is not a signal: you cannot use
+it to send information faster than light.
 """

@@ -347,6 +347,7 @@ struct NexlyGlassGlyphTile: View {
     var tone: NexlyGlassTone? = nil
     var size: CGFloat = 30
     var glyphSize: CGFloat = 15
+    var active: Bool = false
 
     var body: some View {
         let palette = tone ?? NexlyIcons.tone(for: name)
@@ -376,6 +377,11 @@ struct NexlyGlassGlyphTile: View {
                 .offset(x: -size * 0.18, y: -size * 0.25)
             NexlyGlyph(name: name, size: glyphSize, color: palette.ink)
         }
+        .overlay(
+            Circle()
+                .strokeBorder(palette.halo.opacity(active ? 0.75 : 0), lineWidth: 1.5)
+                .scaleEffect(1.16)
+        )
         .frame(width: size, height: size)
         .shadow(color: palette.halo.opacity(0.24), radius: 5, x: 0, y: 2)
         .accessibilityHidden(true)
@@ -450,27 +456,55 @@ struct NexlyInlineText: View {
 // The three-stage status card
 // ---------------------------------------------------------------------------
 
+enum NexlyThinkingPhase {
+    case thinking, reasoning, effort, done
+}
+
 /// Thinking / Reasoning / Effort. It is a sibling of the preamble INSIDE the
 /// assistant card and stays mounted while the plan streams — not a
-/// pre-first-token placeholder.
+/// pre-first-token placeholder. The copy is the reference copy for a plan
+/// turn; every other turn uses honest, task-neutral copy and the backend's
+/// real effort. The active row gets a thin halo ring.
 struct NexlyThinkingCard: View {
-    var active: Bool = true
+    var phase: NexlyThinkingPhase = .done
+    var effort: String? = nil
+    var isPlan: Bool = true
+
+    private var thinkingSubtitle: String {
+        isPlan ? "Analyzing your goals and priorities..." : "Understanding your request..."
+    }
+
+    private var reasoningSubtitle: String {
+        isPlan ? "Planning the best structure and balance..." : "Working through the best approach..."
+    }
+
+    private var effortSubtitle: String {
+        if isPlan { return "Creating a detailed, realistic schedule..." }
+        if let effort, !effort.isEmpty {
+            let label = effort.prefix(1).uppercased() + String(effort.dropFirst())
+            return "\(label) effort · composing the answer..."
+        }
+        return "Composing a detailed answer..."
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
             row(icon: "sparkles", tone: .peach,
-                title: "Thinking", subtitle: "Analyzing your goals and priorities...")
+                title: "Thinking", subtitle: thinkingSubtitle,
+                active: phase == .thinking)
             row(icon: "brain", tone: .lavender,
-                title: "Reasoning", subtitle: "Planning the best structure and balance...")
+                title: "Reasoning", subtitle: reasoningSubtitle,
+                active: phase == .reasoning)
             row(icon: "settings", tone: .mint,
-                title: "Effort", subtitle: "Creating a detailed, realistic schedule...")
+                title: "Effort", subtitle: effortSubtitle,
+                active: phase == .effort)
         }
         .padding(.horizontal, 5)
         .padding(.vertical, 5)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 19, style: .continuous)
-                .fill(Aero.elevatedSurface.opacity(active ? 0.38 : 0.26))
+                .fill(Aero.elevatedSurface.opacity(phase == .done ? 0.30 : 0.38))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 19, style: .continuous)
@@ -478,9 +512,15 @@ struct NexlyThinkingCard: View {
         )
     }
 
-    private func row(icon: String, tone: NexlyGlassTone, title: String, subtitle: String) -> some View {
+    private func row(
+        icon: String,
+        tone: NexlyGlassTone,
+        title: String,
+        subtitle: String,
+        active: Bool
+    ) -> some View {
         HStack(spacing: 9) {
-            NexlyGlassGlyphTile(name: icon, tone: tone, size: 32, glyphSize: 16)
+            NexlyGlassGlyphTile(name: icon, tone: tone, size: 32, glyphSize: 16, active: active)
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
                     .font(.system(size: 13, weight: .semibold))

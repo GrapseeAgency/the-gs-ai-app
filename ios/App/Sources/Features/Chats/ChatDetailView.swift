@@ -541,6 +541,8 @@ struct ChatDetailView: View {
                     reasoning: message.isStreaming ? vm.reasoningText : nil,
                     reasoningStart: message.isStreaming ? vm.reasoningStart : nil,
                     reasoningEnd: message.isStreaming ? vm.reasoningEnd : nil,
+                    effectiveMode: message.isStreaming ? vm.effectiveMode : nil,
+                    effectiveEffort: message.isStreaming ? vm.effectiveEffort : nil,
                     onRegenerate: {
                         userIsReading = false
                         vm.regenerate()
@@ -1348,6 +1350,11 @@ private struct MessageBubble: View, Equatable {
     var reasoning: String? = nil
     var reasoningStart: Date? = nil
     var reasoningEnd: Date? = nil
+    /// The backend's real mode/effort for the live turn. Stream-only; the
+    /// card remembers what it saw so a thinking turn does not lose its
+    /// status the instant the answer finalizes.
+    var effectiveMode: String? = nil
+    var effectiveEffort: String? = nil
     var onRegenerate: () -> Void = {}
     var onReadAloud: () -> Void = {}
     var onTranslate: () -> Void = {}
@@ -1356,6 +1363,8 @@ private struct MessageBubble: View, Equatable {
     var onBranch: () -> Void = {}
 
     @State private var copied = false
+    @State private var sawThinking = false
+    @State private var lastEffort: String? = nil
     @Environment(\.colorScheme) private var colorScheme
 
     /**
@@ -1374,7 +1383,9 @@ private struct MessageBubble: View, Equatable {
         lhs.orbState == rhs.orbState &&
         lhs.reasoning == rhs.reasoning &&
         lhs.reasoningStart == rhs.reasoningStart &&
-        lhs.reasoningEnd == rhs.reasoningEnd
+        lhs.reasoningEnd == rhs.reasoningEnd &&
+        lhs.effectiveMode == rhs.effectiveMode &&
+        lhs.effectiveEffort == rhs.effectiveEffort
     }
 
     /// Benchmark copy feedback: the icon answers with a brief checkmark —
@@ -1389,10 +1400,21 @@ private struct MessageBubble: View, Equatable {
     }
 
     var body: some View {
-        if message.role == "user" {
-            userBubble
-        } else {
-            assistantBubble
+        Group {
+            if message.role == "user" {
+                userBubble
+            } else {
+                assistantBubble
+            }
+        }
+        .onChange(of: effectiveMode) { value in
+            if value == "thinking" { sawThinking = true }
+        }
+        .onChange(of: reasoning) { value in
+            if let value = value, !value.isEmpty { sawThinking = true }
+        }
+        .onChange(of: effectiveEffort) { value in
+            if let value = value, !value.isEmpty { lastEffort = value }
         }
     }
 
@@ -1477,12 +1499,32 @@ private struct MessageBubble: View, Equatable {
         ]
     }
 
+    /// A plan turn always keeps the card (the timetable is the proof of the
+    /// work). A thinking-mode turn keeps it for the session; a flash turn with
+    /// no reasoning never pretends it thought.
+    private var showThinkingCard: Bool {
+        if hasPlan || sawThinking || effectiveMode == "thinking" { return true }
+        return !(reasoning ?? "").isEmpty
+    }
+
+    private var thinkingPhase: NexlyThinkingPhase {
+        guard message.isStreaming else { return .done }
+        if !message.content.isEmpty { return .effort }
+        if let reasoning, !reasoning.isEmpty { return .reasoning }
+        return .thinking
+    }
+
+    private var thinkingEffort: String? { effectiveEffort ?? lastEffort }
+
     private var assistantBubble: some View {
         VStack(alignment: .leading, spacing: 6) {
             NexlyAssistantBlocksView(
                 blocks: message.isStreaming ? streamingBlocks : finalizedBlocks,
                 isStreaming: message.isStreaming,
-                showStatus: message.isStreaming || hasPlan,
+                showStatus: showThinkingCard,
+                thinkingPhase: thinkingPhase,
+                thinkingEffort: thinkingEffort,
+                isPlanTurn: hasPlan,
                 citations: citationLinks,
                 planTimestamp: message.createdAt
             )

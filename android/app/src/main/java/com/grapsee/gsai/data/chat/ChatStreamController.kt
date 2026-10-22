@@ -14,8 +14,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 
 /**
  * App-scoped owner of THE chat stream (Task 86-d, closing the 85-d deferred item).
@@ -133,6 +134,10 @@ class ChatStreamController(private val chat: ChatRepository) {
          *  Drives the honest indicator: the "Thinking…" label renders ONLY
          *  while this is "thinking". */
         val effectiveMode: String? = null,
+        /** The real reasoning effort resolved by the backend for this turn
+         *  ("low"|"medium"|"high"; null when the provider used its default or
+         *  the turn was flash). Drives the Effort row, never a guessed label. */
+        val effectiveEffort: String? = null,
         /** REASONING TRACE (chat-reasoning panel): the model's thinking stream
          *  for THIS turn (null = none arrived — flash turns, buffered paths).
          *  Stream-only by design: never persisted, the panel lives with the
@@ -214,12 +219,15 @@ class ChatStreamController(private val chat: ChatRepository) {
                     // backend's resolved effective mode. Parsed tolerantly; a
                     // malformed payload never disturbs the stream.
                     onMode = { payload ->
-                        val mode = runCatching {
-                            GsApiJson.parseToJsonElement(payload).jsonObject["effectiveMode"]
-                                ?.jsonPrimitive?.content
+                        val obj = runCatching {
+                            GsApiJson.parseToJsonElement(payload).jsonObject
                         }.getOrNull()
+                        val mode = (obj?.get("effectiveMode") as? JsonPrimitive)?.contentOrNull
+                        val effort = (obj?.get("effort") as? JsonPrimitive)?.contentOrNull
                         if (mode == "flash" || mode == "thinking") {
-                            publishIfMine(token) { it.copy(effectiveMode = mode) }
+                            publishIfMine(token) {
+                                it.copy(effectiveMode = mode, effectiveEffort = effort)
+                            }
                         }
                     },
                     onSearchEvent = { payload ->

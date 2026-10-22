@@ -2194,8 +2194,30 @@ private fun LiveStreamText(
  * first assistant card, after the preamble, and stays visible while the plan
  * streams — not just before the first token.
  */
+enum class NexlyThinkingPhase { THINKING, REASONING, EFFORT, DONE }
+
 @Composable
-internal fun ReferenceThinkingCard() {
+internal fun ReferenceThinkingCard(
+    phase: NexlyThinkingPhase = NexlyThinkingPhase.DONE,
+    effort: String? = null,
+    isPlan: Boolean = true,
+) {
+    val thinkingSubtitle = if (isPlan) {
+        "Analyzing your goals and priorities..."
+    } else {
+        "Understanding your request..."
+    }
+    val reasoningSubtitle = if (isPlan) {
+        "Planning the best structure and balance..."
+    } else {
+        "Working through the best approach..."
+    }
+    val effortSubtitle = when {
+        isPlan -> "Creating a detailed, realistic schedule..."
+        !effort.isNullOrBlank() ->
+            "${effort.replaceFirstChar { it.uppercase() }} effort · composing the answer..."
+        else -> "Composing a detailed answer..."
+    }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -2208,19 +2230,22 @@ internal fun ReferenceThinkingCard() {
             icon = "sparkles",
             tone = "peach",
             title = "Thinking",
-            subtitle = "Analyzing your goals and priorities..."
+            subtitle = thinkingSubtitle,
+            active = phase == NexlyThinkingPhase.THINKING
         )
         ThinkingRow(
             icon = "brain",
             tone = "lavender",
             title = "Reasoning",
-            subtitle = "Planning the best structure and balance..."
+            subtitle = reasoningSubtitle,
+            active = phase == NexlyThinkingPhase.REASONING
         )
         ThinkingRow(
             icon = "settings",
             tone = "mint",
             title = "Effort",
-            subtitle = "Creating a detailed, realistic schedule..."
+            subtitle = effortSubtitle,
+            active = phase == NexlyThinkingPhase.EFFORT
         )
     }
 }
@@ -2231,6 +2256,7 @@ private fun ThinkingRow(
     tone: String,
     title: String,
     subtitle: String,
+    active: Boolean = false,
 ) {
     Row(
         modifier = Modifier
@@ -2243,7 +2269,8 @@ private fun ThinkingRow(
             name = icon,
             toneName = tone,
             size = 32.dp,
-            glyphSize = 16.dp
+            glyphSize = 16.dp,
+            active = active
         )
         Column {
             Text(
@@ -2593,6 +2620,21 @@ private fun AssistantMessage(
     val liveResearchNotes by remember(live) { derivedStateOf { live?.value?.researchPhaseNotes } }
     val liveUsedCitations by remember(live) { derivedStateOf { live?.value?.usedCitations } }
     val liveLedgerView by remember(live) { derivedStateOf { live?.value?.ledgerView } }
+    // The Thinking / Reasoning / Effort card is driven by the REAL turn:
+    // the backend's mode + effort, the reasoning stream, and whether the
+    // answer has started. Boolean derivations keep the card out of the
+    // per-token recomposition path.
+    val liveMode by remember(live) { derivedStateOf { live?.value?.effectiveMode } }
+    val liveEffort by remember(live) { derivedStateOf { live?.value?.effectiveEffort } }
+    val liveReasoningActive by remember(live) {
+        derivedStateOf { !live?.value?.reasoning.isNullOrEmpty() }
+    }
+    val liveAnswerStarted by remember(live) {
+        derivedStateOf { !live?.value?.streamText.isNullOrEmpty() }
+    }
+    val livePlanStarted by remember(live) {
+        derivedStateOf { live?.value?.streamText?.contains("```plan", ignoreCase = true) == true }
+    }
     val turnSources = if (message.isStreaming) liveSources.orEmpty() else message.sources
     val turnClarify = if (message.isStreaming) null else message.clarify
     val turnTraceItems = liveTraceItems ?: message.traceItems
@@ -2617,10 +2659,27 @@ private fun AssistantMessage(
     }
     // The reference keeps Thinking/Reasoning/Effort visible through the answer,
     // not just before the first token. A plan turn is the clearest case: the
-    // timetable is the proof that planning happened, so the panel stays. Non-
-    // plan turns lose it at finalize, when the answer itself is the status.
+    // timetable is the proof that planning happened, so the panel stays.
+    // Thinking-mode turns keep the real card too; a flash turn with no
+    // reasoning never pretends it thought.
     val hasPlan = remember(message.content) { containsNexlyPlan(message.content) }
-    val showStatus = message.isStreaming || hasPlan
+    val planVisible = hasPlan || livePlanStarted
+    var sawThinking by remember(message.id) { mutableStateOf(false) }
+    var lastEffort by remember(message.id) { mutableStateOf<String?>(null) }
+    LaunchedEffect(liveMode, liveReasoningActive) {
+        if (liveMode == "thinking" || liveReasoningActive) sawThinking = true
+    }
+    LaunchedEffect(liveEffort) {
+        if (!liveEffort.isNullOrBlank()) lastEffort = liveEffort
+    }
+    val cardEffort = liveEffort ?: lastEffort
+    val thinkingPhase = when {
+        !message.isStreaming -> NexlyThinkingPhase.DONE
+        liveAnswerStarted -> NexlyThinkingPhase.EFFORT
+        liveReasoningActive -> NexlyThinkingPhase.REASONING
+        else -> NexlyThinkingPhase.THINKING
+    }
+    val showStatus = planVisible || sawThinking || liveMode == "thinking" || liveReasoningActive
     Box(modifier = Modifier.fillMaxWidth()) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
             if (showIdentity) {
@@ -2718,7 +2777,13 @@ private fun AssistantMessage(
                     priorContext = priorContext,
                     glassAssistant = true,
                     statusCard = if (showStatus) {
-                        { ReferenceThinkingCard() }
+                        {
+                            ReferenceThinkingCard(
+                                phase = thinkingPhase,
+                                effort = cardEffort,
+                                isPlan = planVisible
+                            )
+                        }
                     } else {
                         null
                     },

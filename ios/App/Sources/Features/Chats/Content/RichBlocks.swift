@@ -37,6 +37,9 @@ struct NexlyAssistantBlocksView: View {
     let blocks: [Block]
     var isStreaming: Bool = false
     var showStatus: Bool = false
+    var thinkingPhase: NexlyThinkingPhase = .done
+    var thinkingEffort: String? = nil
+    var isPlanTurn: Bool = false
     var citations: [Int: String] = [:]
     var planTimestamp: String? = nil
 
@@ -56,7 +59,7 @@ struct NexlyAssistantBlocksView: View {
                 HStack(alignment: .top, spacing: 9) {
                     NexlyAssistantOrb()
                     if showStatus {
-                        NexlyThinkingCard(active: isStreaming)
+                        NexlyThinkingCard(phase: thinkingPhase, effort: thinkingEffort, isPlan: isPlanTurn)
                     } else {
                         Text("…")
                             .font(Aero.body())
@@ -97,7 +100,7 @@ struct NexlyAssistantBlocksView: View {
             }
             if isStatusHost && showStatus {
                 if !prose.isEmpty { Spacer().frame(height: 2) }
-                NexlyThinkingCard(active: isStreaming)
+                NexlyThinkingCard(phase: thinkingPhase, effort: thinkingEffort, isPlan: isPlanTurn)
             } else if prose.isEmpty && isStreaming {
                 Text("…")
                     .font(Aero.body())
