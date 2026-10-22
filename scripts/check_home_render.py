@@ -61,13 +61,15 @@ lit hairline is 3px tall — so there is no y that is on both cards' glass, let
 alone a rim_y that measures both hairlines. It gets its own rect per platform
 (`--probe-set`), each verified with --debug-out rather than assumed.
 
-TWO PROBES BECAUSE ONE IS NOT THE MATERIAL
-------------------------------------------
-The sheet's Suggestions card sits on flat cream and its glass only moves the
-page 2.79 L; the bento card sits over the bloom and its glass moves it 10.94 L.
-Same glass, different ground. Gating only the weak case is what let a surface
-with no visible material at all print OK for three rounds, so both are gated,
-each against its own measured anchor.
+TWO PROBES, AND NOT THE SAME METRIC ON BOTH
+-------------------------------------------
+The sheet's Suggestions card sits on flat cream and its glass only moves the page
+2.79 L; the bento card sits over the bloom and moves it 10.94 L. Same glass,
+different ground. Gating only the weak case is what let a surface with no visible
+material at all print OK for three rounds, so both are gated, each against its own
+measured anchor — and each on the number that isolates the glass at that spot:
+the row on flat cream is measured against the page beside it, the card over the
+bloom against the backdrop actually under it (see BANDS for why).
 
 Usage:
   check_home_render.py --render path/to/home.png --probe-set android [--label android-393]
@@ -151,17 +153,29 @@ SPREAD_MAX = 5.0                  # real 0.21 / 2.36 | boundary-straddling 7.4..
 # band's +3.0 upper bound admitted a zero delta, which is why "no glass at all"
 # and "correct glass" both printed OK.
 #
-#   suggestions  tint -2.79, rim +2.58   (Android -2.93 correct to 0.14; iOS -4.64)
-#   bento        tint -10.94, rim +19.46 (Android -5.86 / +0.31; iOS -1.18 / +0.92)
+#   suggestions  tint vs its page -2.79, rim +2.58
+#                (Android -2.93 correct to 0.14; iOS -4.64)
+#   bento        lift over its own ground +2.79, rim +19.94
+#                (Android +3.57 / +18.94; iOS +2.58 / +18.42)
 #
-# The bento band is the sampled range the plan set (-8..-12 L, rim ~+17 L); the
-# sheet's own hairline measures +19.46 through this window, so the band spans
-# both readings rather than quietly picking one. The suggestions probe keeps the
-# 1.0 L extra room on its dark side that the old band had, so the iOS card that
-# is 1.85 L too dark stays a known, printed gap instead of a new red.
+# The two probes do not gate the same luminance metric, because the page will not
+# let them. The bento sits on a bloom that swings 13 L across the few points the
+# card moves, so "card minus page" there measures WHERE the card is as much as
+# what the glass does — and the two platforms currently place it 17pt apart, which
+# is a real defect belonging to the bento geometry, not to the material. Subtract
+# the backdrop PNG from under the card instead and the number is the material
+# alone: coverage. That the sheet's +2.79, Android's +3.57 and iOS's +2.58 agree
+# to 1 L is the evidence the metric is the right one; on the page-relative number
+# the same two renders read -10.09 and -7.44, and only 0.5 L of that spread is
+# glass.
+#
+# The suggestions row is on flat cream, where the ground does not move, so it
+# keeps the page-relative number — including the 1.0 L extra room on its dark
+# side that the old band had, so the iOS card that is 1.85 L too dark stays a
+# known, printed gap instead of a new red.
 BANDS = {
     "suggestions": {"tint": (-5.49, -1.09), "rim": (-1.50, 8.00)},
-    "bento":       {"tint": (-12.00, -8.00), "rim": (15.00, 22.50)},
+    "bento":       {"lift": (1.00, 4.50), "rim": (15.00, 22.50)},
 }
 
 
@@ -202,8 +216,14 @@ def rim_excess(l, probe):
     return float(np.median(win.max(axis=0))) - surround
 
 
-def measure(path, kind, crop=None, debug_out=None):
-    """Every probe of `kind`'s set, measured on one decoded frame."""
+def measure(path, kind, crop=None, debug_out=None, ground=None):
+    """Every probe of `kind`'s set, measured on one decoded frame.
+
+    `ground` is the luminance of the backdrop PNG the page draws its atmosphere
+    from. Where a probe gates on `lift`, the card's interior is compared with the
+    same rectangle of that image — the ground actually under the glass — because
+    that isolates the material from where the card happens to sit.
+    """
     l = load_luma(path, crop)
     got = []
     for p in PROBES[kind]:
@@ -213,10 +233,12 @@ def measure(path, kind, crop=None, debug_out=None):
         # A3: how flat the interior rect is. A box straddling a card boundary has
         # row medians that jump; a box on clean glass does not.
         spread = float(np.ptp(np.median(ins, axis=1)))
+        lift = interior - float(np.median(rect_of(ground, p["interior"]))) if ground is not None else None
         got.append({
             "probe": p["name"], "interior": interior, "page_outside": page,
             "interior_minus_page": interior - page, "interior_spread": spread,
             "rim_minus_interior": rim_excess(l, p),
+            "lift_over_ground": lift,
         })
     if debug_out:
         src = Image.open(path).convert("RGB")
@@ -242,9 +264,15 @@ def fmt(v):
 
 
 def row(r):
+    lift = f" lift={fmt(r['lift_over_ground'])}" if r["lift_over_ground"] is not None else ""
     return (f"  {r['probe']:14s} interior={fmt(r['interior'])} page={fmt(r['page_outside'])} "
-            f"Δtint={fmt(r['interior_minus_page'])} spread={fmt(r['interior_spread'])} "
+            f"Δtint={fmt(r['interior_minus_page'])}{lift} spread={fmt(r['interior_spread'])} "
             f"Δrim={fmt(r['rim_minus_interior'])}")
+
+
+# Which number each gated metric reads off a measurement row.
+METRICS = {"tint": "interior_minus_page", "lift": "lift_over_ground",
+           "rim": "rim_minus_interior", "spread": "interior_spread"}
 
 
 def main() -> int:
@@ -252,6 +280,10 @@ def main() -> int:
     ap.add_argument("--reference", default="assets/reference/home-reference.png")
     ap.add_argument("--render")
     ap.add_argument("--label", default="render")
+    ap.add_argument("--backdrop",
+                    default="android/app/src/main/res/drawable-nodpi/gs_home_backdrop.png",
+                    help="the page atmosphere PNG the cards sit on, read as the ground "
+                         "under them for the lift metric (both platforms ship this file)")
     ap.add_argument("--probe-set", default="android", choices=["android", "ios"],
                     help="which platform's render rects to use")
     ap.add_argument("--probes", help="JSON overriding the built-in probe sets")
@@ -263,8 +295,17 @@ def main() -> int:
         with open(args.probes) as fh:
             PROBES.update(json.load(fh))
 
+    # The backdrop is only needed by probes that gate on lift, but loading it is
+    # cheap and doing it unconditionally means a probe switched to lift cannot
+    # silently start measuring nothing because the file went missing.
     try:
-        ref = measure(args.reference, "reference", SCREEN)
+        ground = load_luma(args.backdrop)
+    except (OSError, ValueError) as exc:
+        print(f"::error::could not read the backdrop ground {args.backdrop}: {exc}")
+        return 2
+
+    try:
+        ref = measure(args.reference, "reference", SCREEN, ground=ground)
     except (OSError, ValueError) as exc:
         print(f"::error::could not read the reference sheet: {exc}")
         return 2
@@ -278,12 +319,10 @@ def main() -> int:
     # its own anchor cannot be right about a render. Checked, not assumed.
     stale = []
     for r in ref:
-        b = BANDS[r["probe"]]
-        if not b["tint"][0] <= r["interior_minus_page"] <= b["tint"][1]:
-            stale.append(f"{r['probe']} tint {r['interior_minus_page']:.2f} vs band {b['tint']}")
-        rim = r["rim_minus_interior"]
-        if not (rim == rim and b["rim"][0] <= rim <= b["rim"][1]):
-            stale.append(f"{r['probe']} rim {fmt(rim)} vs band {b['rim']}")
+        for metric, band in BANDS[r["probe"]].items():
+            v = r[METRICS[metric]]
+            if v is None or v != v or not band[0] <= v <= band[1]:
+                stale.append(f"{r['probe']} {metric} {fmt(v)} vs band {band}")
     if stale:
         print("\n::error::the recorded band no longer contains the sheet itself:")
         for s in stale:
@@ -298,7 +337,7 @@ def main() -> int:
         print("::error::--render is required unless --report-only")
         return 2
     try:
-        got = measure(args.render, args.probe_set, None, args.debug_out)
+        got = measure(args.render, args.probe_set, None, args.debug_out, ground=ground)
     except (OSError, ValueError) as exc:
         # A5: an unreadable capture is "cannot measure", not "glass drifted".
         print(f"::error::could not read {args.render}: {exc}")
@@ -320,17 +359,16 @@ def main() -> int:
         return 2
 
     failures = []
-    print("\n--- assertions (presence + tint + purity + rim, all local) ---")
+    print("\n--- assertions (presence + material + purity + rim, all local) ---")
     for r in got:
-        b = BANDS[r["probe"]]
-        checks = [
-            ("A1 page present",   r["page_outside"],        PAGE_LUMA_BAND),
-            ("A2 glass tint",     r["interior_minus_page"], b["tint"]),
-            ("A3 probe on glass", r["interior_spread"],     (0.0, SPREAD_MAX)),
-            ("A4 rim highlight",  r["rim_minus_interior"],  b["rim"]),
-        ]
+        checks = [("A1 page present",   r["page_outside"],    PAGE_LUMA_BAND),
+                  ("A3 probe on glass", r["interior_spread"], (0.0, SPREAD_MAX))]
+        for metric, band in BANDS[r["probe"]].items():
+            label = "A2 glass tint" if metric == "tint" else (
+                "A2 glass lift" if metric == "lift" else "A4 rim highlight")
+            checks.append((label, r[METRICS[metric]], band))
         print(f"  [{r['probe']}]")
-        for name, value, (lo, hi) in checks:
+        for name, value, (lo, hi) in sorted(checks):
             ok = lo <= value <= hi
             if not ok:
                 failures.append(f"{r['probe']}/{name}: {value:.2f} outside [{lo}, {hi}]")
@@ -344,7 +382,7 @@ def main() -> int:
             print(f"  (if A3 failed, open {args.debug_out}: the red box must sit "
                   f"entirely on blank card glass)")
         return 1
-    print("\nOK: both cards are present, each darkens its page as the sheet's "
+    print("\nOK: both cards are present, each moves its own ground as the sheet's "
           "does, both probes are on clean glass, and both hairlines are lit")
     return 0
 
