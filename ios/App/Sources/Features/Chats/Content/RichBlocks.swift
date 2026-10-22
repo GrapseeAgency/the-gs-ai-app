@@ -79,7 +79,6 @@ struct NexlyAssistantBlocksView: View {
                                 isFirst: index == 0
                             )
                         }
-                        Spacer(minLength: 0)
                     }
                 }
             }

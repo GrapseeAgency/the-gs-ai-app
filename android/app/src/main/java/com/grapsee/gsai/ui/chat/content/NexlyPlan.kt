@@ -33,6 +33,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
@@ -483,8 +484,8 @@ fun NexlyPlanCard(
         NexlyInlineRichText(
             text = cleanPlanText(plan.title, 160),
             color = colors.textPrimary,
-            fontSize = 15.sp,
-            glyphSize = 18.dp,
+            fontSize = 14.sp,
+            glyphSize = 17.dp,
             weight = FontWeight.SemiBold
         )
         if (plan.rows.isEmpty()) {
@@ -674,8 +675,8 @@ fun Modifier.nexlyPearlBackdrop(): Modifier {
                 brush = Brush.radialGradient(
                     colors = listOf(
                         Color.White.copy(alpha = alpha),
-                        Color(0xFFFFD8C4).copy(alpha = alpha * 0.36f),
-                        Color(0xFFDCD4FF).copy(alpha = alpha * 0.18f),
+                        Color(0xFFFFD8C4).copy(alpha = alpha * 0.58f),
+                        Color(0xFFDCD4FF).copy(alpha = alpha * 0.34f),
                         Color.Transparent
                     ),
                     center = Offset(cx - radius * 0.22f, cy - radius * 0.28f),
@@ -684,11 +685,19 @@ fun Modifier.nexlyPearlBackdrop(): Modifier {
                 radius = radius,
                 center = Offset(cx, cy)
             )
+            // A real rim, not a flat tint: the first render proved the bodies
+            // washed into the cream wash when they had no edge.
+            drawCircle(
+                color = Color.White.copy(alpha = (alpha * 0.72f).coerceAtMost(0.75f)),
+                radius = radius,
+                center = Offset(cx, cy),
+                style = Stroke(width = 1.4.dp.toPx())
+            )
         }
-        bubble(w * 0.94f, h * 0.08f, w * 0.44f, if (dark) 0.10f else 0.52f)
-        bubble(w * -0.06f, h * 0.30f, w * 0.38f, if (dark) 0.07f else 0.34f)
-        bubble(w * 0.16f, h * 0.86f, w * 0.46f, if (dark) 0.07f else 0.30f)
-        bubble(w * 0.96f, h * 0.78f, w * 0.30f, if (dark) 0.06f else 0.24f)
+        bubble(w * 0.94f, h * 0.08f, w * 0.44f, if (dark) 0.18f else 0.68f)
+        bubble(w * -0.06f, h * 0.30f, w * 0.38f, if (dark) 0.14f else 0.52f)
+        bubble(w * 0.16f, h * 0.86f, w * 0.46f, if (dark) 0.15f else 0.55f)
+        bubble(w * 0.96f, h * 0.78f, w * 0.30f, if (dark) 0.10f else 0.42f)
         lotus?.let { image ->
             if (image.width > 0 && image.height > 0) {
                 val targetW = w * 1.15f
@@ -700,7 +709,7 @@ fun Modifier.nexlyPearlBackdrop(): Modifier {
                         (h * 0.88f - targetH / 2f).roundToInt()
                     ),
                     dstSize = IntSize(targetW.roundToInt(), targetH.roundToInt()),
-                    alpha = if (dark) 0.08f else 0.20f,
+                    alpha = if (dark) 0.12f else 0.32f,
                     filterQuality = FilterQuality.Medium
                 )
             }
