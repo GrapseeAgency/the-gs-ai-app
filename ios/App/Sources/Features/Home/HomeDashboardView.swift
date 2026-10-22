@@ -16,6 +16,13 @@ struct HomeDashboardView: View {
     /// Open a new chat with the prompt already written. The reference's cards
     /// are four different doors, not four copies of "blank chat".
     let onStartPrompt: (String) -> Void
+    /// Frozen clock hour for the greeting. nil means "use the real clock".
+    ///
+    /// Only the render harness sets this. A golden image whose words change at
+    /// noon cannot be diffed against anything — the first iOS capture proved it
+    /// by rendering "Good afternoon" while the sheet says "Good morning", which
+    /// looks like a design defect in a screenshot and is actually a clock.
+    var greetingHour: Int? = nil
 
     @ObservedObject private var store = ConversationStore.shared
     /// The signed-in name. The reference greets a person, not "there".
@@ -170,7 +177,11 @@ struct HomeDashboardView: View {
     /// The same time-of-day rule the Android dashboard uses — a hardcoded
     /// "Good morning" was wrong for half the day.
     private var greetingWord: String {
-        let hour = Calendar.current.component(.hour, from: Date())
+        Self.greetingWord(forHour: greetingHour ?? Calendar.current.component(.hour, from: Date()))
+    }
+
+    /// Pure so both the view and a deterministic render can use it.
+    static func greetingWord(forHour hour: Int) -> String {
         switch hour {
         case 5...11: return "Good morning"
         case 12...16: return "Good afternoon"

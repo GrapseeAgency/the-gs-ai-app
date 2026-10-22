@@ -45,13 +45,19 @@ final class HomeRenderTests: XCTestCase {
         // The reference greets a person; pin the identity so the hero renders
         // the same words the sheet shows instead of the "there" fallback.
         AccountStore.shared.setDisplayName("Arafat")
+        // Determinism: the greeting follows the wall clock and every type role
+        // follows the Settings font-scale multiplier, so a capture taken at
+        // 14:00 with the slider at 1.2 is not the same image as one taken at
+        // 09:00 at 1.0. Freezing both is what makes the artifact diffable.
+        GSAccessibilityFlags.shared.fontScale = 1.0
+        let hour = 9
 
         let dir = Self.outputDirectory()
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
 
         for target in Self.targets {
             let size = CGSize(width: target.width, height: target.height)
-            guard let image = try await Self.renderHome(size: size) else {
+            guard let image = try await Self.renderHome(size: size, greetingHour: hour) else {
                 XCTFail("drawHierarchy reported failure at \(target.name) — nothing was composited")
                 continue
             }
@@ -86,14 +92,15 @@ final class HomeRenderTests: XCTestCase {
     /// show every glass surface as empty and look perfectly fine while proving
     /// nothing. Drawing the live window goes through the same compositing path
     /// the device uses.
-    private static func renderHome(size: CGSize) async throws -> UIImage? {
+    private static func renderHome(size: CGSize, greetingHour: Int) async throws -> UIImage? {
         let view = HomeDashboardView(
             onNewChat: {},
             onOpenDrawer: {},
             onOpenChats: {},
             onOpenAgent: {},
             onOpenConversation: { _ in },
-            onStartPrompt: { _ in }
+            onStartPrompt: { _ in },
+            greetingHour: greetingHour
         )
         .frame(width: size.width, height: size.height)
         .environment(\.layoutDirection, .leftToRight)

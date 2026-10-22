@@ -197,8 +197,7 @@ def main() -> int:
         print("::error::--debug-out needs --render")
         return 2
 
-    ref = measure(args.reference, "reference", SCREEN,
-                  None)
+    ref = measure(args.reference, "reference", SCREEN, None)
     print("=== reference sheet, measured at declared probes ===")
     for r in ref:
         print(f"  {r['probe']:14s} interior={fmt(r['interior'])} page={fmt(r['page_outside'])} "
@@ -218,8 +217,20 @@ def main() -> int:
               f"rim={fmt(r['rim'])}  Δ(interior-page)={fmt(r['interior_minus_page'])} "
               f"Δ(rim-interior)={fmt(r['rim_minus_interior'])}")
 
+    # NO VERTICAL-RHYTHM GATE, and no half-built one printed either.
+    # The idea was to compare where the brand row, greeting and dock sit.
+    # It cannot work between these two kinds of image: the reference sheet has
+    # a drawn-in "9:41" status bar that our captures do not, so the first text
+    # band measured 0.03 on the reference (the status bar) against 0.14/0.17 on
+    # the renders (the brand) — the comparison was silently ranking different
+    # elements, and its "greeting-brand gap 0.15 vs 0.00" was pure artefact.
+    # On top of that, Robolectric reports a zero status bar and the simulator
+    # window reports zero safe-area insets, so real 47pt and 34pt insets are
+    # missing from both renders while present in the sheet. Absolute vertical
+    # position is therefore not a comparable quantity here, and printing a
+    # confident-looking number for it would be worse than printing nothing.
     failures = []
-    print("\n--- assertions (local, scale-invariant) ---")
+    print("\n--- assertions (local, scale-invariant, inset-independent) ---")
     # GEOMETRY IS NOT GATED HERE, and there is no flag that pretends otherwise.
     # Two attempts to auto-detect the cards (luminance thresholding, gradient
     # contours) both failed their own self-test — the first returned different
