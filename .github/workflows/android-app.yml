@@ -473,6 +473,39 @@ jobs:
           # commit is the result XML, so the task is forced to execute.
           ./gradlew --no-daemon --console=plain --stacktrace :app:testDebugUnitTest --rerun
 
+      - name: Home renders (real Compose tree, JVM) + archive the PNGs
+        working-directory: android
+        run: |
+          set -euo pipefail
+          # HomeScreenshotTest is gated on the `gs.screenshots` SYSTEM PROPERTY,
+          # and build.gradle.kts populates that property from the Gradle PROJECT
+          # property `gsShots` (`-PgsShots=true`). Passing `-Dgs.screenshots=true`
+          # on the CLI sets it on the Gradle client JVM, never on the forked test
+          # JVM, so the test ASSUMES OUT and the job still goes green. The -P
+          # form is the one that reaches the test; the PNG-existence check below
+          # is what makes a silent skip impossible to miss.
+          rm -rf app/build/screenshots
+          ./gradlew --no-daemon --console=plain --stacktrace :app:testDebugUnitTest \
+            --rerun --tests "com.grapsee.gsai.ui.home.HomeScreenshotTest" \
+            -PgsShots=true
+          SHOTS=app/build/screenshots
+          MISSING=0
+          for w in 393x852 411x914 360x780; do
+            if [ -s "$SHOTS/home-$w.png" ]; then
+              echo "rendered home-$w.png ($(wc -c < "$SHOTS/home-$w.png") bytes)"
+            else
+              echo "::error::home-$w.png was not produced"; MISSING=1
+            fi
+          done
+          [ "$MISSING" -eq 0 ] || exit 1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: home-renders
+          path: android/app/build/screenshots/*.png
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Report
         if: always()
         run: |
