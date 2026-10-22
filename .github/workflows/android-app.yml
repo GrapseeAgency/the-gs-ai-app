@@ -380,6 +380,11 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
+            # Robolectric fetches its ~130 MB android-all jar into the local m2
+            # tree, which is NOT under ~/.gradle. Without this the render step
+            # re-downloads it on every run just to draw a screen that never
+            # changed.
+            ~/.m2/repository/org/robolectric
           key: gradle-${{ runner.os }}-${{ hashFiles('android/**/*.kts', 'android/gradle/libs.versions.toml') }}
           restore-keys: gradle-${{ runner.os }}-
 
@@ -458,21 +463,14 @@ jobs:
           # re-enabled by android-native.yml's own build.
           GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx3g
 
-      - name: Unit tests
-        working-directory: android
-        run: |
-          set -euo pipefail
-          # THE WRAPPER, NOT THE RUNNER'S GRADLE. This step used to call bare
-          # `gradle` (9.8.x on the image) and carried `continue-on-error: true`.
-          # AGP 8.13 dies during configuration on Gradle 9.6+, so the step
-          # failed in ~40s and the JOB STILL WENT GREEN: no unit test ever ran.
-          # The compile step above generates the pinned 8.13 wrapper in this
-          # same workspace, so use it and let a test failure fail the job.
-          # --rerun: a Gradle cache hit on this task means "the same inputs
-          # passed earlier", not "tests ran in THIS run". The evidence for this
-          # commit is the result XML, so the task is forced to execute.
-          ./gradlew --no-daemon --console=plain --stacktrace :app:testDebugUnitTest --rerun
-
+      # ORDER MATTERS. A Gradle `Test` task cleans its own results directory
+      # before executing, so whichever invocation runs LAST owns
+      # app/build/test-results/testDebugUnitTest -- the directory `Report` below
+      # counts. The filtered render pass used to sit AFTER the full suite, which
+      # replaced the suite's XMLs with three screenshot XMLs and let `Report`
+      # print "unit tests: 3 run" for a job that had executed hundreds. The
+      # evidence step was destroying the evidence of the step it followed.
+      # Renders first, full suite last: the suite is what Report sees.
       - name: Home renders (real Compose tree, JVM) + archive the PNGs
         working-directory: android
         run: |
@@ -498,13 +496,33 @@ jobs:
             fi
           done
           [ "$MISSING" -eq 0 ] || exit 1
-      - uses: actions/upload-artifact@v4
-        if: always()
+
+      - name: Upload the Home renders
+        # not `always()`: if a step above failed there are no renders, and
+        # `if-no-files-found: error` would turn one failure into two and bury
+        # the real one under a red upload step.
+        uses: actions/upload-artifact@v4
         with:
           name: home-renders
           path: android/app/build/screenshots/*.png
           if-no-files-found: error
           retention-days: 30
+
+      - name: Unit tests
+        working-directory: android
+        run: |
+          set -euo pipefail
+          # THE WRAPPER, NOT THE RUNNER'S GRADLE. This step used to call bare
+          # `gradle` (9.8.x on the image) and carried `continue-on-error: true`.
+          # AGP 8.13 dies during configuration on Gradle 9.6+, so the step
+          # failed in ~40s and the JOB STILL WENT GREEN: no unit test ever ran.
+          # The compile step above generates the pinned 8.13 wrapper in this
+          # same workspace, so use it and let a test failure fail the job.
+          # --rerun: a Gradle cache hit on this task means "the same inputs
+          # passed earlier", not "tests ran in THIS run". The evidence for this
+          # commit is the result XML, so the task is forced to execute.
+          # Runs last so its full-suite XML is what Report counts.
+          ./gradlew --no-daemon --console=plain --stacktrace :app:testDebugUnitTest --rerun
 
       - name: Report
         if: always()

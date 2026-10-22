@@ -87,9 +87,11 @@ struct HomeDashboardView: View {
                 .frame(width: 42, height: 42)
             VStack(alignment: .leading, spacing: 2) {
                 Text("Nexly")
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(Aero.responsive(18, .semibold, relativeTo: .headline))
                     .foregroundStyle(Aero.text)
-                Text("AI Companion").font(.system(size: 13)).foregroundStyle(Aero.textMuted)
+                Text("AI Companion")
+                    .font(Aero.responsive(13, .regular, relativeTo: .subheadline))
+                    .foregroundStyle(Aero.textMuted)
             }
             Spacer()
             GlassCircleButton(system: "sparkles", label: "Assistant", action: onNewChat)
@@ -104,13 +106,23 @@ struct HomeDashboardView: View {
     /// The reference opens on the thread you were just in, as readable prose —
     /// not a list row and not a truncated preview.
     @ViewBuilder private var resumeCard: some View {
-        if let conversation = store.conversations.first {
+        // Inbox ordering, not the raw array. `conversations` has no ordering
+        // contract — it is append-only from the bootstrap — so `.first` pinned
+        // the OLDEST chat ever created, never updated as newer work happened,
+        // and could deep-link into an archived thread. `activeConversations`
+        // is the documented ordering (archived hidden, pins float, newest
+        // first) and is what Android's resume card reads.
+        if let conversation = store.activeConversations.first {
             Button {
                 onOpenConversation(conversation.id)
             } label: {
                 AeroCard {
                     VStack(alignment: .leading, spacing: 10) {
-                        Text(Self.cleanPreview(store.messages(for: conversation.id).last?.content
+                        // O(1) index read. `messages(for:).last` filters and
+                        // sorts the entire message table on every Home render
+                        // — the exact per-row pattern ConversationStore
+                        // documents as its fixed performance defect.
+                        Text(Self.cleanPreview(store.lastMessage(for: conversation.id)?.content
                                                ?? conversation.title))
                             .font(Aero.body())
                             .foregroundStyle(Aero.text)
@@ -124,7 +136,7 @@ struct HomeDashboardView: View {
                                 .lineLimit(1)
                             Spacer(minLength: 0)
                             Image(systemName: "arrow.right")
-                                .font(.system(size: 13, weight: .semibold))
+                                .font(Aero.responsive(13, .semibold, relativeTo: .caption))
                                 .foregroundStyle(Aero.accent)
                         }
                     }
@@ -169,20 +181,26 @@ struct HomeDashboardView: View {
 
     private var greeting: some View {
         VStack(alignment: .leading, spacing: 8) {
+            // Every Home role goes through Aero.responsive, not .system(size:).
+            // .system is an absolute font: it ignores the system content-size
+            // category and the Settings font-scale multiplier that every other
+            // screen honours, so the page silently opted out of the app's
+            // accessibility contract. responsive() keeps the exact spec size at
+            // the default category and scales on the role's real curve beyond it.
             Text("\(greetingWord),")
-                .font(.system(size: 26, weight: .semibold))
+                .font(Aero.responsive(26, .semibold, relativeTo: .title))
                 .foregroundStyle(Aero.text)
             HStack(spacing: 8) {
                 Text(account.firstName.isEmpty ? "there" : account.firstName)
-                    .font(.system(size: 26, weight: .semibold))
+                    .font(Aero.responsive(26, .semibold, relativeTo: .title))
                     .foregroundStyle(Aero.text)
                 // One four-point star, not the three-star cluster.
                 Image(systemName: "sparkle")
-                    .font(.system(size: 22, weight: .semibold))
+                    .font(Aero.responsive(22, .semibold, relativeTo: .title2))
                     .foregroundStyle(Aero.accent)
             }
             Text("Your thoughts, questions, ideas —\nI'm here for it all.")
-                .font(.system(size: 15))
+                .font(Aero.responsive(15, .regular, relativeTo: .body))
                 .lineSpacing(4)
                 .foregroundStyle(Aero.textMuted)
                 .fixedSize(horizontal: false, vertical: true)
@@ -208,13 +226,18 @@ struct HomeDashboardView: View {
                 HomePill(system: "ellipsis", title: "More", compact: compact, action: onOpenDrawer)
             }
         }
-        .frame(height: 46)
+        // Height derived from the pill's own text curve, not pinned: a literal
+        // 46 keeps the row fixed while scaled type grows past it.
+        .frame(height: Aero.scaledLength(46, relativeTo: .caption))
     }
 
     // MARK: Bento — Video / Mind Guide / Today's reflection
 
     private var bento: some View {
-        // Reference: left card 55.6% of content width, right column 37/63 split.
+        // Measured from the sheet's card rims: 54.5 / 45.5 across, 10dp gutter,
+        // 214dp row, right column 37.7 / 62.3. The values below are the ones
+        // currently shipped on BOTH platforms; they are within a point of the
+        // measurement except the column split, which is corrected in Wave 3.
         GeometryReader { geo in
             let leftWidth = (geo.size.width - 12) * 0.556
             HStack(alignment: .top, spacing: 12) {
@@ -228,7 +251,7 @@ struct HomeDashboardView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
         }
-        .frame(height: 224)
+        .frame(height: Aero.scaledLength(224, relativeTo: .body))
     }
 
     // MARK: Today's Used + suggestions
@@ -236,13 +259,14 @@ struct HomeDashboardView: View {
     private var todayUsedHeader: some View {
         HStack {
             Text("Today's Used")
-                .font(.system(size: 18, weight: .semibold))
+                .font(Aero.responsive(18, .semibold, relativeTo: .headline))
                 .foregroundStyle(Aero.text)
             Spacer()
             Button(action: onOpenChats) {
                 HStack(spacing: 4) {
                     Text("See All").font(Aero.label())
-                    Image(systemName: "arrow.right").font(.system(size: 11, weight: .semibold))
+                    Image(systemName: "arrow.right")
+                        .font(Aero.responsive(11, .semibold, relativeTo: .caption))
                 }
                 .foregroundStyle(Aero.textMuted)
             }
@@ -265,15 +289,15 @@ struct HomeDashboardView: View {
                         .fill(Color.white.opacity(0.55))
                         .frame(width: 32, height: 32)
                     Image(systemName: "lightbulb")
-                        .font(.system(size: 15, weight: .medium))
+                        .font(Aero.responsive(15, .medium, relativeTo: .body))
                         .foregroundStyle(Aero.text)
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Suggestions")
-                        .font(.system(size: 15, weight: .medium))
+                        .font(Aero.responsive(15, .medium, relativeTo: .body))
                         .foregroundStyle(Aero.text)
                     Text("Try suggested questions first.")
-                        .font(.system(size: 12.5))
+                        .font(Aero.responsive(12.5, .regular, relativeTo: .footnote))
                         .foregroundStyle(Aero.textMuted)
                 }
                 Spacer()
@@ -295,9 +319,10 @@ struct HomeDashboardView: View {
             // dock reads as three glass buttons and one lit action.
             Button(action: onNewChat) {
                 HStack(spacing: 6) {
-                    Image(systemName: "sparkles").font(.system(size: 18, weight: .semibold))
+                    Image(systemName: "sparkles")
+                        .font(Aero.responsive(18, .semibold, relativeTo: .body))
                     Text("Generate")
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(Aero.responsive(15, .semibold, relativeTo: .callout))
                         .lineLimit(1)
                         .minimumScaleFactor(0.9)
                 }
@@ -328,9 +353,10 @@ private struct GlassCircleButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: system)
-                .font(.system(size: 17, weight: .medium))
+                .font(Aero.responsive(17, .medium, relativeTo: .body))
                 .foregroundStyle(Aero.text)
-                .frame(width: 46, height: 46)
+                .frame(width: Aero.scaledLength(46, relativeTo: .body),
+                       height: Aero.scaledLength(46, relativeTo: .body))
                 .gsGlass(.floatingControl, corner: 23)
         }
         .buttonStyle(KineticPressStyle())
@@ -346,9 +372,10 @@ private struct HomePill: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: compact ? 3 : 4) {
-                Image(systemName: system).font(.system(size: compact ? 11 : 13, weight: .medium))
+                Image(systemName: system)
+                    .font(Aero.responsive(compact ? 11 : 13, .medium, relativeTo: .caption))
                 Text(title)
-                    .font(.system(size: compact ? 11.5 : 13, weight: .medium))
+                    .font(Aero.responsive(compact ? 11.5 : 13, .medium, relativeTo: .caption))
                     .lineLimit(1)
             }
             .foregroundStyle(Aero.text)
@@ -391,7 +418,8 @@ private struct VideoCard: View {
                     // Copy stacks from the top exactly as the sheet does; only
                     // the play control is pinned to the bottom of the card.
                     HStack(spacing: 5) {
-                        Image(systemName: "play").font(.system(size: 10, weight: .bold))
+                        Image(systemName: "play")
+                            .font(Aero.responsive(10, .bold, relativeTo: .caption2))
                         Text("Video").font(Aero.caption())
                     }
                     .foregroundStyle(Aero.text)
@@ -399,7 +427,7 @@ private struct VideoCard: View {
                     .background(Capsule().fill(Color.white.opacity(0.45)))
                     Spacer().frame(height: 5)
                     Text("Create Stunning\nVideos with AI")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(Aero.responsive(16, .semibold, relativeTo: .title3))
                         .lineSpacing(-1)
                         .foregroundStyle(Aero.text)
                         .multilineTextAlignment(.leading)
@@ -409,7 +437,9 @@ private struct VideoCard: View {
                     Spacer()
                     ZStack {
                         Circle().fill(Color.white.opacity(0.55)).frame(width: 44, height: 44)
-                        Image(systemName: "play.fill").font(.system(size: 15)).foregroundStyle(Aero.text)
+                        Image(systemName: "play.fill")
+                            .font(Aero.responsive(15, .regular, relativeTo: .body))
+                            .foregroundStyle(Aero.text)
                     }
                 }
                 .padding(14)
@@ -436,14 +466,15 @@ private struct MindGuideCard: View {
                     Image("GSHomeMindOrb")
                         .resizable()
                         .scaledToFit()
-                        .frame(width: 30, height: 30)
+                        .frame(width: Aero.scaledLength(30, relativeTo: .caption),
+                               height: Aero.scaledLength(30, relativeTo: .caption))
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Mind Guide")
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(Aero.responsive(13, .semibold, relativeTo: .subheadline))
                             .foregroundStyle(Aero.text)
                             .lineLimit(1)
                         Text("Your personal\nclarity companion.")
-                            .font(.system(size: 10))
+                            .font(Aero.responsive(10, .regular, relativeTo: .caption))
                             .lineSpacing(1.5)
                             .foregroundStyle(Aero.textMuted)
                             // Three lines so a 360pt phone wraps "companion."
@@ -458,7 +489,7 @@ private struct MindGuideCard: View {
                 HStack {
                     Spacer()
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(Aero.responsive(11, .semibold, relativeTo: .caption2))
                         .foregroundStyle(Aero.textMuted)
                         .padding(.trailing, 10)
                 }
@@ -474,43 +505,54 @@ private struct ReflectionCard: View {
     let action: () -> Void
     var body: some View {
         Button(action: action) {
-            ZStack(alignment: .bottomTrailing) {
-                // The authored lotus from the reference — feathered edges.
-                Image("GSHomeLotusNew")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 150, height: 100)
-                    .offset(x: 4, y: 8)
-                    .allowsHitTesting(false)
-                VStack(alignment: .leading, spacing: 4) {
-                    // Title and chevron share a row: overlaying the glyph made
-                    // it graze the final "n" at 360pt. A 10pt inset leaves
-                    // 112.5pt at 393pt, and the sheet's 12.5pt title measures
-                    // 112.2pt, so it keeps the sheet's size there; 360pt takes
-                    // the 10pt step.
-                    HStack(spacing: 6) {
-                        Text("Today's reflection")
-                            .font(.system(size: 12.5, weight: .semibold))
-                            .foregroundStyle(Aero.text)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.8)
-                        Spacer(minLength: 0)
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 12, weight: .semibold)).foregroundStyle(Aero.textMuted)
-                    }
-                    Text("Take a moment to check in with yourself.")
-                        .font(.system(size: 10.5))
-                        .lineSpacing(1.5)
+            // Copy owns the layout and sits top-leading, exactly as the sheet
+            // draws it; the lotus is a BACKGROUND of that copy rather than a
+            // ZStack sibling. It used to be `ZStack(alignment: .bottomTrailing)`,
+            // and that alignment applies to every child — so the title and body
+            // were shoved into the bottom-trailing corner on top of the flower.
+            VStack(alignment: .leading, spacing: 4) {
+                // Title and chevron share a row: overlaying the glyph made it
+                // graze the final "n" at 360pt. A 10pt inset leaves 112.5pt at
+                // 393pt, and the sheet's 12.5pt title measures 112.2pt, so it
+                // keeps the sheet's size there; 360pt takes the 10pt step.
+                HStack(spacing: 6) {
+                    Text("Today's reflection")
+                        .font(Aero.responsive(12.5, .semibold, relativeTo: .subheadline))
+                        .foregroundStyle(Aero.text)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right")
+                        .font(Aero.responsive(12, .semibold, relativeTo: .caption))
                         .foregroundStyle(Aero.textMuted)
-                        .lineLimit(3)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
+                Text("Take a moment to check in with yourself.")
+                    .font(Aero.responsive(10.5, .regular, relativeTo: .caption))
+                    .lineSpacing(1.5)
+                    .foregroundStyle(Aero.textMuted)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             // 10pt horizontal, matching Android, so the title keeps the sheet's
             // 12.5pt at 393pt instead of being scaled down by a 14pt inset.
             .padding(.horizontal, 10)
             .padding(.vertical, 14)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .background(alignment: .bottomTrailing) {
+                // The authored lotus from the reference — feathered edges.
+                Image("GSHomeLotusNew")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: Aero.scaledLength(150, relativeTo: .body),
+                           height: Aero.scaledLength(100, relativeTo: .body))
+                    .offset(x: 4, y: 8)
+                    .allowsHitTesting(false)
+            }
+            // gsGlass only backgrounds and overlays — it never clips. Without
+            // this the lotus' +4/+8 offset drew square corners outside the
+            // rounded card, over the "Today's Used" heading below.
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .gsGlass(.card, corner: 16)
         }
         .buttonStyle(KineticPressStyle())
@@ -532,14 +574,16 @@ private struct DockIcon: View {
                 if book {
                     OpenBookGlyph()
                         .fill(selected ? Aero.text : Aero.text.opacity(0.78))
-                        .frame(width: 20, height: 20)
+                        .frame(width: Aero.scaledLength(20, relativeTo: .body),
+                               height: Aero.scaledLength(20, relativeTo: .body))
                 } else {
                     Image(systemName: system)
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(Aero.responsive(18, .semibold, relativeTo: .body))
                         .foregroundStyle(selected ? Aero.text : Aero.text.opacity(0.78))
                 }
             }
-            .frame(width: 46, height: 46)
+            .frame(width: Aero.scaledLength(46, relativeTo: .body),
+                   height: Aero.scaledLength(46, relativeTo: .body))
             .background(Circle().fill(Color.white.opacity(selected ? 0.62 : 0.44)))
             .overlay(Circle().strokeBorder(Color.white.opacity(0.55), lineWidth: 1))
         }

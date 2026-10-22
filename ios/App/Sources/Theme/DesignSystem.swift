@@ -295,6 +295,17 @@ enum Aero {
     }
 
     static func displayTitle() -> Font { scaledFont(34, .semibold, .default, relativeTo: .largeTitle) }
+    /// The length counterpart to `scaledFont`. A layout constant that exists to
+    /// contain text — a pill row height, a bento row, an artwork frame — must
+    /// grow on the SAME Dynamic Type curve as that text and by the same Settings
+    /// font-scale multiplier. A literal `.frame(height:)` stays pinned while
+    /// scaled type grows past it, which is how a page can honour Dynamic Type
+    /// in its fonts and still clip.
+    static func scaledLength(_ base: CGFloat, relativeTo style: Font.TextStyle = .body) -> CGFloat {
+        let engine = metrics[uiKitStyle(style)] ?? UIFontMetrics(forTextStyle: uiKitStyle(style))
+        return engine.scaledValue(for: base) * GSAccessibilityFlags.shared.fontScale
+    }
+
     static func display() -> Font { scaledFont(28, .semibold, .default, relativeTo: .title) }
     static func headline() -> Font { scaledFont(22, .semibold, .default, relativeTo: .title2) }
     static func title() -> Font { scaledFont(17, .semibold, .default, relativeTo: .headline) }
