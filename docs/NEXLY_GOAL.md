@@ -132,7 +132,7 @@ catalogue, validator and web registry also know the `plan` kind.
   task-neutral copy; flash turns with no reasoning hide the card.
 - The full reference screen is now rendered from production pieces on both
   platforms: the shared brand header, the real user message bubble/avatar/
-  ticks, the assistant blocks, and the shared composer capsule. At 411×914 the
+  ticks, the assistant blocks, and the shared composer capsule. At both 411×914 and 393×852 the
   header, user turn, preamble, Thinking card, all nine plan rows, closing,
   timestamp and composer fit without scrolling. The 393×852 variant scrolls the
   last row, matching a narrow device.
@@ -143,7 +143,7 @@ catalogue, validator and web registry also know the `plan` kind.
   `ios/App/Tests/AppTests/NexlyPlanTests.swift`, expanded
   `scripts/test-nexly-plan.ts`, `F26_NEXLY_PLAN` fixtures on both parsers, and
   plan, adaptive-thinking and full-screen renders on both platforms.
-- Native verification is green: Android CI run `39836410886` (compile, Home
+- Native verification is green: Android CI run `39840270656` (compile, Home
   render, Nexly response + adaptive + full-screen renders, 267 unit tests) and
-  iOS CI run `39836414880` (Xcode build, XCTest, Home render, the same three
-  Nexly renders). The final iOS composer-inset run is `1d0632fc`.
+  iOS CI run `39840274730` (Xcode build, XCTest, Home render, the same three
+  Nexly renders). The final fit is commit `2ab9084a`; both 393 and 411 full-screen renders fit the whole reference composition.

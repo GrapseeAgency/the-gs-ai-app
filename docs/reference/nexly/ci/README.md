@@ -34,10 +34,10 @@ from production pieces:
 - the shared `ComposerRow` / `NexlyComposerBar` capsule with the peach
   paper-plane.
 
-At 411×914 the complete composition — header, user turn, preamble, Thinking
-card, all nine timetable rows, closing line, timestamp and composer — fits
-without scrolling. The 393×852 images are the narrow-width variant; the last
-row is below the fold there, which is the honest narrow-device behaviour.
+At both 411×914 and 393×852 the complete composition — header, user turn,
+preamble, Thinking card, all nine timetable rows, closing line, timestamp and
+composer — fits without scrolling. The density was tuned to the sheet; the
+393 variant is the tighter fit.
 
 ## Adaptive thinking / effort
 
@@ -64,14 +64,13 @@ Artifacts on the run: `nexly-chat-render-android`, `nexly-chat-render-ios`.
 
 Both render/test gates completed green:
 
-- Android: https://github.com/GrapseeAgency/the-gs-ai-app/actions/runs/39836410886
-- iOS: https://github.com/GrapseeAgency/the-gs-ai-app/actions/runs/39836414880
+- Android: https://github.com/GrapseeAgency/the-gs-ai-app/actions/runs/39840270656
+- iOS: https://github.com/GrapseeAgency/the-gs-ai-app/actions/runs/39840274730
 
 Android passes the full unit suite (267 tests, including the new
 `NexlyPlanTest`); the screenshot tests are gated behind `-PgsShots=true` and are
 excluded from the ordinary suite, exactly like `HomeScreenshotTest`.
 
-The screenshots here are from commit `f8932fe0` on
-`nexly/chat-reference-verify`. The iOS full-chat image in this folder predates
-the final composer bottom inset (`1d0632fc`); that run changes only the
-floating margin, not the composition.
+The screenshots here are from commit `2ab9084a` on
+`nexly/chat-reference-verify`, the green run where the complete composition
+fits at both widths.
