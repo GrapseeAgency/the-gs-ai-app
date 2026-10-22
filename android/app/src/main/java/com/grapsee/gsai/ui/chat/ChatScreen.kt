@@ -1766,7 +1766,7 @@ internal fun NexlyChatHeader(
                 painter = painterResource(com.grapsee.gsai.R.drawable.gs_companion_orb),
                 contentDescription = "Nexly",
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(38.dp)
                     .shadow(3.dp, CircleShape)
                     .clip(CircleShape)
                     .border(1.dp, Color.White.copy(alpha = 0.55f), CircleShape)
@@ -1776,8 +1776,8 @@ internal fun NexlyChatHeader(
                 Text(
                     text = "Nexly",
                     style = MaterialTheme.typography.titleMedium.copy(
-                        fontSize = 18.sp,
-                        lineHeight = 21.sp,
+                        fontSize = 16.5.sp,
+                        lineHeight = 20.sp,
                         fontWeight = FontWeight.SemiBold
                     ),
                     color = GsTheme.colors.textPrimary,
@@ -1786,8 +1786,8 @@ internal fun NexlyChatHeader(
                 Text(
                     text = "AI Companion",
                     style = MaterialTheme.typography.labelSmall.copy(
-                        fontSize = 10.5.sp,
-                        lineHeight = 13.sp
+                        fontSize = 10.sp,
+                        lineHeight = 12.sp
                     ),
                     color = GsTheme.colors.textSecondary,
                     maxLines = 1
@@ -1978,8 +1978,8 @@ internal fun UserMessage(
                                 Text(
                                     text = message.content,
                                     style = MaterialTheme.typography.bodyMedium.copy(
-                                        fontSize = 13.sp,
-                                        lineHeight = 18.sp
+                                        fontSize = 12.5.sp,
+                                        lineHeight = 17.5.sp
                                     ),
                                     color = colors.textPrimary
                                 )
@@ -2135,7 +2135,7 @@ internal fun ComposerRow(
         onValueChange = onDraftChange,
         modifier = Modifier
             .weight(1f)
-            .padding(vertical = 9.dp),
+            .padding(vertical = 8.dp),
         textStyle = MaterialTheme.typography.bodyLarge.copy(
             color = GsTheme.colors.textPrimary,
             fontSize = 14.sp

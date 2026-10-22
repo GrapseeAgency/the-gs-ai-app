@@ -17,7 +17,7 @@ struct NexlyBrandHeader<SparkleMenu: View, MenuMenu: View>: View {
         HStack(spacing: 10) {
             AnimatedGsIllustration(
                 imageName: "GSCompanionOrb",
-                size: 40,
+                size: 38,
                 breathDuration: 3.2,
                 rotationDegrees: 0.8,
                 lift: -1,
@@ -28,11 +28,11 @@ struct NexlyBrandHeader<SparkleMenu: View, MenuMenu: View>: View {
 
             VStack(alignment: .leading, spacing: 1) {
                 Text("Nexly")
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(.system(size: 16.5, weight: .semibold))
                     .foregroundStyle(Aero.text)
                     .lineLimit(1)
                 Text("AI Companion")
-                    .font(.system(size: 10.5, weight: .regular))
+                    .font(.system(size: 10, weight: .regular))
                     .foregroundStyle(Aero.textSecondary)
                     .lineLimit(1)
             }
@@ -140,7 +140,7 @@ struct NexlyComposerBar: View {
                     text = String(newValue.dropLast())
                     onSubmit()
                 }
-                .padding(.vertical, 9)
+                .padding(.vertical, 8)
 
             if isStreaming {
                 Button(action: onStop) {

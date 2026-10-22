@@ -367,11 +367,12 @@ private struct ParagraphView: View {
                 monoBackground: Aero.container,
                 linkColor: Aero.accentDeep,
                 textColor: Aero.text,
-                baseSize: compact ? 13 : 15,
+                baseSize: compact ? 12.5 : 15,
                 citations: citations
             )
             Text(attributed(from: spans, theme: theme))
-                .font(compact ? .system(size: 13, weight: .regular) : Aero.body())
+                .font(compact ? .system(size: 12.5, weight: .regular) : Aero.body())
+                .lineSpacing(compact ? 2 : 0)
                 .foregroundStyle(Aero.text)
                 .textSelection(.enabled)
         }

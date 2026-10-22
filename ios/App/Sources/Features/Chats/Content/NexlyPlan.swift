@@ -654,13 +654,13 @@ struct NexlyPlanCard: View {
                             )
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(row.time)
-                                    .font(.system(size: 9, weight: .regular))
+                                    .font(.system(size: 8.5, weight: .regular))
                                     .foregroundColor(Aero.textTertiary)
                                     .lineLimit(1)
                                 NexlyInlineText(
                                     text: row.text,
-                                    fontSize: 12,
-                                    glyphSize: 14,
+                                    fontSize: 11.5,
+                                    glyphSize: 13.5,
                                     color: Aero.text,
                                     weight: .regular
                                 )
@@ -675,8 +675,8 @@ struct NexlyPlanCard: View {
                     if let closing = plan.closing {
                         NexlyInlineText(
                             text: closing,
-                            fontSize: 12.5,
-                            glyphSize: 14,
+                            fontSize: 12,
+                            glyphSize: 13.5,
                             color: Aero.text,
                             weight: .regular
                         )
@@ -821,17 +821,20 @@ struct NexlyChatBackdrop: View {
                 )
             )
             .overlay(
+                Circle().strokeBorder(Color.white.opacity(0.10), lineWidth: 7)
+            )
+            .overlay(
                 Circle().strokeBorder(
                     LinearGradient(
                         colors: [
-                            Color.white.opacity(1.0),
-                            Color(red: 1.0, green: 0.72, blue: 0.80).opacity(0.62),
-                            Color(red: 0.72, green: 0.85, blue: 1.0).opacity(0.45),
+                            Color.white.opacity(0.90),
+                            Color(red: 1.0, green: 0.78, blue: 0.84).opacity(0.36),
+                            Color(red: 0.77, green: 0.87, blue: 1.0).opacity(0.24),
                         ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     ),
-                    lineWidth: 2
+                    lineWidth: 1.2
                 )
             )
             .overlay(

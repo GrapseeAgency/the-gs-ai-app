@@ -581,8 +581,8 @@ fun NexlyPlanCard(
                             Text(
                                 text = row.time,
                                 style = MaterialTheme.typography.labelSmall.copy(
-                                    fontSize = 9.sp,
-                                    lineHeight = 11.sp,
+                                    fontSize = 8.5.sp,
+                                    lineHeight = 10.5.sp,
                                     fontWeight = FontWeight.Normal
                                 ),
                                 color = colors.textTertiary,
@@ -591,8 +591,8 @@ fun NexlyPlanCard(
                             NexlyInlineRichText(
                                 text = row.text,
                                 color = colors.textPrimary,
-                                fontSize = 12.sp,
-                                glyphSize = 14.dp,
+                                fontSize = 11.5.sp,
+                                glyphSize = 13.5.dp,
                                 weight = FontWeight.Normal
                             )
                         }
@@ -610,8 +610,8 @@ fun NexlyPlanCard(
                     NexlyInlineRichText(
                         text = closing,
                         color = colors.textPrimary,
-                        fontSize = 12.5.sp,
-                        glyphSize = 14.dp
+                        fontSize = 12.sp,
+                        glyphSize = 13.5.dp
                     )
                     if (plan.closingIcon != null &&
                         !Regex(":([a-z0-9][a-z0-9-]{1,42}):").containsMatchIn(closing)
@@ -751,16 +751,22 @@ fun Modifier.nexlyPearlBackdrop(): Modifier {
                 center = Offset(cx, cy)
             )
             drawCircle(
+                color = Color.White.copy(alpha = alpha * 0.09f),
+                radius = radius,
+                center = Offset(cx, cy),
+                style = Stroke(width = 7.dp.toPx())
+            )
+            drawCircle(
                 brush = Brush.linearGradient(
                     listOf(
-                        Color.White.copy(alpha = (alpha * 1.00f).coerceAtMost(0.98f)),
-                        Color(0xFFFFB9CB).copy(alpha = alpha * 0.66f),
-                        Color(0xFFB8D8FF).copy(alpha = alpha * 0.48f)
+                        Color.White.copy(alpha = (alpha * 0.90f).coerceAtMost(0.90f)),
+                        Color(0xFFFFC8D5).copy(alpha = alpha * 0.36f),
+                        Color(0xFFC4DEFF).copy(alpha = alpha * 0.24f)
                     )
                 ),
                 radius = radius,
                 center = Offset(cx, cy),
-                style = Stroke(width = 2.dp.toPx())
+                style = Stroke(width = 1.2.dp.toPx())
             )
             drawCircle(
                 color = Color.White.copy(alpha = alpha * 0.22f),
