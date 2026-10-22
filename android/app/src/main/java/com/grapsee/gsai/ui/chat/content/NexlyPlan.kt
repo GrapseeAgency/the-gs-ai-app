@@ -35,7 +35,6 @@ import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -49,7 +48,6 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.grapsee.gsai.R
 import com.grapsee.gsai.ui.components.GsGlassRole
 import com.grapsee.gsai.ui.components.gsGlass
 import com.grapsee.gsai.ui.theme.GsTheme
@@ -177,7 +175,7 @@ data class NexlyInlinePart(val value: String, val isIcon: Boolean)
  * row from doing any per-icon work beyond a map lookup.
  */
 object NexlyIcons {
-    val family: FontFamily = FontFamily(Font(R.font.tabler_icons))
+    val family: FontFamily = FontFamily(Font(com.grapsee.gsai.R.font.tabler_icons))
 
     private val aliases = mapOf(
         "study" to "book-2", "studying" to "book-2", "class" to "book-2", "classes" to "book-2",
@@ -366,7 +364,7 @@ fun NexlyGlyph(
 @Composable
 fun NexlyAssistantOrb(size: Dp = 30.dp) {
     Image(
-        painter = painterResource(R.drawable.gs_companion_orb),
+        painter = painterResource(com.grapsee.gsai.R.drawable.gs_companion_orb),
         contentDescription = "Nexly",
         modifier = Modifier
             .size(size)
@@ -647,7 +645,7 @@ fun Modifier.nexlyPearlBackdrop(): Modifier {
     val context = LocalContext.current
     val lotus = remember(context) {
         runCatching {
-            BitmapFactory.decodeResource(context.resources, R.drawable.gs_home_lotus_new)
+            BitmapFactory.decodeResource(context.resources, com.grapsee.gsai.R.drawable.gs_home_lotus_new)
                 .asImageBitmap()
         }.getOrNull()
     }

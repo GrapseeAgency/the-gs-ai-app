@@ -116,7 +116,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.isSystemInDarkTheme
-import com.grapsee.gsai.R
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -1244,7 +1243,7 @@ fun ChatScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Image(
-                    painter = painterResource(R.drawable.gs_companion_orb),
+                    painter = painterResource(com.grapsee.gsai.R.drawable.gs_companion_orb),
                     contentDescription = "Nexly",
                     modifier = Modifier
                         .size(42.dp)
@@ -3042,7 +3041,7 @@ private fun SheetActionRow(
 @Composable
 private fun AssistantAvatar() {
     Image(
-        painter = painterResource(R.drawable.gs_companion_orb),
+        painter = painterResource(com.grapsee.gsai.R.drawable.gs_companion_orb),
         contentDescription = "Nexly",
         modifier = Modifier
             .size(38.dp)
