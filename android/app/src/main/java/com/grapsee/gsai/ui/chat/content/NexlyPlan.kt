@@ -581,8 +581,8 @@ fun NexlyPlanCard(
                             Text(
                                 text = row.time,
                                 style = MaterialTheme.typography.labelSmall.copy(
-                                    fontSize = 8.5.sp,
-                                    lineHeight = 10.5.sp,
+                                    fontSize = 9.sp,
+                                    lineHeight = 11.sp,
                                     fontWeight = FontWeight.Normal
                                 ),
                                 color = colors.textTertiary,
@@ -796,16 +796,16 @@ fun Modifier.nexlyPearlBackdrop(): Modifier {
         bubble(w * 0.78f, h * 0.22f, w * 0.10f, if (dark) 0.14f else 0.55f)
         lotus?.let { image ->
             if (image.width > 0 && image.height > 0) {
-                val targetW = w * 1.42f
+                val targetW = w * 1.18f
                 val targetH = targetW * (image.height.toFloat() / image.width.toFloat())
                 drawImage(
                     image = image,
                     dstOffset = IntOffset(
-                        (w * 0.14f - targetW / 2f).roundToInt(),
+                        (w * 0.16f - targetW / 2f).roundToInt(),
                         (h * 0.90f - targetH / 2f).roundToInt()
                     ),
                     dstSize = IntSize(targetW.roundToInt(), targetH.roundToInt()),
-                    alpha = if (dark) 0.16f else 0.58f,
+                    alpha = if (dark) 0.16f else 0.72f,
                     filterQuality = FilterQuality.Medium
                 )
             }

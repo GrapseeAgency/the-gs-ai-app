@@ -654,7 +654,7 @@ struct NexlyPlanCard: View {
                             )
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(row.time)
-                                    .font(.system(size: 8.5, weight: .regular))
+                                    .font(.system(size: 9, weight: .regular))
                                     .foregroundColor(Aero.textTertiary)
                                     .lineLimit(1)
                                 NexlyInlineText(
@@ -787,10 +787,9 @@ struct NexlyChatBackdrop: View {
                 Image("GSHomeLotusNew")
                     .resizable()
                     .scaledToFit()
-                    .frame(width: w * 1.42)
-                    .opacity(scheme == .dark ? 0.16 : 0.58)
-                    .blur(radius: 0.4)
-                    .offset(x: -w * 0.36, y: h * 0.40)
+                    .frame(width: w * 1.18)
+                    .opacity(scheme == .dark ? 0.16 : 0.72)
+                    .offset(x: -w * 0.34, y: h * 0.40)
                     .allowsHitTesting(false)
             }
             .frame(width: w, height: h)
