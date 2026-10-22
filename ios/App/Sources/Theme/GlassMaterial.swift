@@ -175,13 +175,18 @@ private struct GsGlassModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .background(glassShape)
-            // The label and the parameter type are both load-bearing: `overlay`
-            // also takes an unlabeled ShapeStyle, and a bare trailing closure
-            // with one parameter resolves against that overload first and fails
-            // the conformance check — "type '(_) -> some View' cannot conform to
-            // 'ShapeStyle'" — which is exactly what the first version of this line
-            // did on the CI compiler.
-            .overlay(content: { (geometry: GeometryProxy) in rim(in: geometry.size) })
+            // A GeometryReader in the overlay, not `overlay { proxy in … }`:
+            // `overlay(content:)` has BOTH a zero-parameter and a
+            // GeometryProxy-parameter overload, and the labelled closure picks
+            // the zero-parameter one — the CI compiler answered the second with
+            // "contextual closure type '() -> some View' expects 0 arguments".
+            // The size is needed because the rim's lean is a fraction of the
+            // card's height, and only the drawn card knows its height.
+            .overlay {
+                GeometryReader { geometry in
+                    rim(in: geometry.size)
+                }
+            }
             // Cue: warm, non-grey shadow — this is depth, not darkness.
             .shadow(
                 color: Color(red: 0.35, green: 0.16, blue: 0.10).opacity(role.elevation > 0 ? 0.14 : 0),
