@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -63,6 +65,7 @@ import com.grapsee.gsai.ui.components.RefArtwork
 import com.grapsee.gsai.ui.components.gsConversationTitle
 import com.grapsee.gsai.ui.components.gsGlass
 import com.grapsee.gsai.ui.icons.GsIcons
+import com.grapsee.gsai.ui.theme.GsRadius
 import com.grapsee.gsai.ui.theme.GsTheme
 import com.grapsee.gsai.ui.theme.LocalGsIsDark
 import java.time.LocalTime
@@ -202,6 +205,13 @@ internal fun HomeContent(
     onOpenSettings: () -> Unit,
 ) {
     Box(Modifier.fillMaxSize()) {
+        // Hoisted so the dock's Home button can scroll this page back to its top.
+        // It used to be `onHome = {}` — a labelled, focusable, accessibility-
+        // announced control whose action was an empty lambda, which is worse than
+        // no control at all: VoiceOver tells a person the button exists and then
+        // does nothing. Tapping the tab you are already on means "go to the top".
+        val scrollState = rememberScrollState()
+        val scrollScope = rememberCoroutineScope()
         // The reference's backdrop is a photograph of light through pearl.
         // The authored render ships as a full-bleed image; the procedural
         // gradient is kept only for Solid background style and dark mode.
@@ -224,7 +234,7 @@ internal fun HomeContent(
             Column(
                 Modifier
                     .weight(1f)
-                    .verticalScroll(rememberScrollState())
+                    .verticalScroll(scrollState)
                     .padding(horizontal = 20.dp)
             ) {
                 Spacer(Modifier.height(52.dp))
@@ -290,7 +300,7 @@ internal fun HomeContent(
                 .align(Alignment.BottomCenter)
                 .navigationBarsPadding()
                 .padding(horizontal = 20.dp, vertical = 12.dp),
-            onHome = {},
+            onHome = { scrollScope.launch { scrollState.animateScrollTo(0) } },
             onChats = onOpenChats,
             onGenerate = onNewChat,
             onSettings = onOpenSettings,
@@ -461,7 +471,7 @@ private fun Bento(
 
 @Composable
 private fun VideoCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val shape = RoundedCornerShape(16.dp)
+    val shape = GsRadius.homeCardShape()
     Box(
         modifier = modifier
             .clip(shape)
@@ -818,8 +828,8 @@ private fun RecentPreviewCard(row: ConversationPreviewRow, onClick: () -> Unit) 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(22.dp))
-            .gsGlass(GsGlassRole.Card, RoundedCornerShape(22.dp))
+            .clip(GsRadius.homeCardShape())
+            .gsGlass(GsGlassRole.Card, GsRadius.homeCardShape())
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -871,7 +881,7 @@ private fun HomeDock(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .gsGlass(GsGlassRole.FloatingControl, RoundedCornerShape(999.dp))
+            .gsGlass(GsGlassRole.FloatingControl, GsRadius.pill)
             .padding(horizontal = 14.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp)
@@ -1122,7 +1132,7 @@ private fun GlassPanel(
     onClickLabel: String? = null,
     content: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit,
 ) {
-    val shape = RoundedCornerShape(16.dp)
+    val shape = GsRadius.homeCardShape()
     val base = if (onClick != null) {
         modifier.clickable(
             interactionSource = remember { MutableInteractionSource() },
@@ -1172,7 +1182,7 @@ private fun GlassPill(
     Row(
         modifier = Modifier
             .heightIn(min = 46.dp)
-            .gsGlass(GsGlassRole.FloatingControl, RoundedCornerShape(999.dp))
+            .gsGlass(GsGlassRole.FloatingControl, GsRadius.pill)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,

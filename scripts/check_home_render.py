@@ -79,6 +79,7 @@ Exit: 0 within tolerance, 1 drift, 2 could not measure.
 """
 
 import argparse
+import hashlib
 import json
 import sys
 
@@ -86,6 +87,14 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 SCREEN = (172, 56, 852, 1460)          # the phone screen inside the mock
+
+# Every band in BANDS is a measurement OF THIS FILE. If the sheet is replaced,
+# the numbers in it are still printed as "the reference" and a render can pass or
+# fail against an anchor nobody re-derived — so the asset is checksummed before
+# anything is measured, and a changed sheet is a stop, not a silent re-baseline.
+# Update it in the same commit as the new sheet, after re-measuring every probe
+# with --report-only and --debug-out.
+REFERENCE_SHA256 = "bd47f5b6c2b47226e22cf188ff297e98f3418b9b38ed0fa4d25c157eac4925a5"
 
 # interior/outside are normalised rects (x, y, w, h); rim_y is the card's top
 # edge, from which rim_excess searches a small window in both directions.
@@ -298,6 +307,14 @@ def main() -> int:
     # The backdrop is only needed by probes that gate on lift, but loading it is
     # cheap and doing it unconditionally means a probe switched to lift cannot
     # silently start measuring nothing because the file went missing.
+    digest = hashlib.sha256(open(args.reference, "rb").read()).hexdigest()
+    if digest != REFERENCE_SHA256:
+        print(f"::error::{args.reference} is not the sheet these bands were measured "
+              f"from.\n  expected {REFERENCE_SHA256}\n  found    {digest}")
+        print("  re-measure every probe (--report-only, --debug-out) and update "
+              "REFERENCE_SHA256 and BANDS in the same commit.")
+        return 2
+
     try:
         ground = load_luma(args.backdrop)
     except (OSError, ValueError) as exc:

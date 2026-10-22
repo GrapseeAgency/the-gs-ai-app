@@ -280,6 +280,34 @@ enum Aero {
         .caption2: UIFontMetrics(forTextStyle: .caption2)
     ]
 
+    /// The product's one typeface, resolved once per process.
+    ///
+    /// Android sets `fontFamily = GsFonts.Poppins` on all sixteen roles in
+    /// ui/theme/Type.kt ("One family (Poppins) across the whole product"). iOS
+    /// had no UIAppFonts entry at all until this change, so every word on this
+    /// screen rendered in SF Pro while the reference — and Android — set it in a
+    /// geometric sans, and mandate b10 ("a surface reads identically on both
+    /// platforms") was false for typography specifically.
+    ///
+    /// The flag exists because `Font.custom` falls back to the system font
+    /// *silently* when a name does not resolve: the source would say Poppins,
+    /// the screen would say SF Pro, and nothing would fail. HomeRenderTests
+    /// asserts this is true, so a bundle that lost its fonts is a red test
+    /// rather than a design regression someone has to notice in a screenshot.
+    static let poppinsLoaded: Bool = UIFont(name: "Poppins-SemiBold", size: 12) != nil
+
+    /// SwiftUI weight → the bundled Poppins face. Four weights ship (400/500/600/
+    /// 700); the remaining cases snap to the nearest one, exactly as Android's
+    /// font resource does, which is why `.medium` and `.semibold` are distinct.
+    static func poppinsName(_ weight: Font.Weight) -> String {
+        switch weight {
+        case .ultraLight, .thin, .light, .regular: return "Poppins-Regular"
+        case .medium:                              return "Poppins-Medium"
+        case .semibold:                            return "Poppins-SemiBold"
+        default:                                   return "Poppins-Bold"
+        }
+    }
+
     /// The real "custom point size that scales with Dynamic Type": exact
     /// spec size at the default category, the role's own Dynamic Type curve
     /// beyond it, then the Settings font-scale multiplier on top.
@@ -291,7 +319,18 @@ enum Aero {
     ) -> Font {
         let engine = metrics[uiKitStyle(style)] ?? UIFontMetrics(forTextStyle: uiKitStyle(style))
         let dynamic = engine.scaledValue(for: size)
-        return .system(size: dynamic * GSAccessibilityFlags.shared.fontScale, weight: weight, design: design)
+        let resolved = dynamic * GSAccessibilityFlags.shared.fontScale
+        // `.custom(_:size:)` rather than `.custom(_:size:relativeTo:)`: the
+        // Dynamic Type curve has already been applied above by UIFontMetrics, and
+        // passing the style again would scale the scaled value twice.
+        //
+        // A designed fallback (monospaced code, serif quotes) keeps the system
+        // face — Poppins has neither, and Android's per-role fontFamily override
+        // leaves those two alone for the same reason.
+        if design == .default, poppinsLoaded {
+            return .custom(poppinsName(weight), size: resolved)
+        }
+        return .system(size: resolved, weight: weight, design: design)
     }
 
     static func displayTitle() -> Font { scaledFont(34, .semibold, .default, relativeTo: .largeTitle) }
@@ -301,9 +340,27 @@ enum Aero {
     /// font-scale multiplier. A literal `.frame(height:)` stays pinned while
     /// scaled type grows past it, which is how a page can honour Dynamic Type
     /// in its fonts and still clip.
+    /// Growth cap for chrome geometry: 1.6x the base, whatever the curve says.
+    ///
+    /// A container that holds text has to grow with the text or it clips — that
+    /// is why this function exists at all. But a WHOLE PAGE of such containers
+    /// grows without bound, and the page is not only containers: the horizontal
+    /// inset, the bento gutter and the dock clearance are fixed points. At
+    /// Larger Accessibility Sizes the `.body` curve is ~3.1x, which turns the
+    /// 214pt bento row into ~700pt, pushes everything below the fold and lets the
+    /// floating dock sit on top of the last card — a layout that honours Dynamic
+    /// Type in its fonts and is unusable in its page.
+    ///
+    /// 1.6x is chosen so that chrome still outgrows the *body* copy it contains
+    /// at the top of the range (body's own curve is what the text follows), while
+    /// the page stays recognisably the designed page. Capping here rather than at
+    /// each call site means no new scaled constant can forget the rule.
+    static let chromeGrowthCap: CGFloat = 1.6
+
     static func scaledLength(_ base: CGFloat, relativeTo style: Font.TextStyle = .body) -> CGFloat {
         let engine = metrics[uiKitStyle(style)] ?? UIFontMetrics(forTextStyle: uiKitStyle(style))
-        return engine.scaledValue(for: base) * GSAccessibilityFlags.shared.fontScale
+        let scaled = engine.scaledValue(for: base) * GSAccessibilityFlags.shared.fontScale
+        return min(scaled, base * chromeGrowthCap)
     }
 
     static func display() -> Font { scaledFont(28, .semibold, .default, relativeTo: .title) }

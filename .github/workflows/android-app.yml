@@ -518,30 +518,16 @@ jobs:
         with:
           name: home-renders
           path: android/app/build/screenshots/*.png
-          # `if-no-files-found: error` still holds: a step above that produced no
-          # PNGs fails before this runs, and this ordering is what makes the
-          # gate's own red debuggable. Uploading AFTER the measurement skipped
-          # the upload whenever the measurement failed — so the one run that most
-          # needed the pixels was the one that shipped none. The renders exist by
-          # then whether or not they passed, so they go up first.
+          # Uploaded BEFORE the gate that judges them. `if-no-files-found: error`
+          # still does real work: the render step above asserts each PNG exists,
+          # so a missing file is already a red by the time this runs. What the
+          # ordering buys is evidence — an upload ordered after a blocking gate is
+          # skipped by exactly the failures that have to be read.
           if-no-files-found: error
           retention-days: 30
 
-      - name: Measure the Android render against the reference
-        run: |
-          set -euo pipefail
-          # Runs from the repository root: both paths below are repo-relative,
-          # unlike the gradle steps which set working-directory: android.
-          # The same instrument iOS is held to, so "it looks right on my
-          # platform" cannot be the standard. Asserts the scale-invariant glass
-          # relationships measured from the sheet, not absolute positions — the
-          # mock is a non-rectified render and its pixels are not a spec.
-          python3 scripts/check_home_render.py \
-            --reference assets/reference/home-reference.png \
-            --render android/app/build/screenshots/home-393x852.png \
-            --probe-set android --label android-393
-
       - name: Unit tests
+        id: unit
         working-directory: android
         run: |
           set -euo pipefail
@@ -557,6 +543,27 @@ jobs:
           # Runs last so its full-suite XML is what Report counts.
           ./gradlew --no-daemon --console=plain --stacktrace :app:testDebugUnitTest --rerun
 
+      # The pixel gate runs AFTER the suite on purpose. It used to sit before it,
+      # which meant a probe drift — a layout shift, a safe-area change, anything
+      # that moves a rect without breaking a test — stopped the unit suite from
+      # running at all, so the job reported one symptom and hid the other. The
+      # render PASS still happens first (above), because a Gradle Test task wipes
+      # its own results directory and the full suite must be the last writer;
+      # only the measurement moved.
+      - name: Measure the Android render against the reference
+        run: |
+          set -euo pipefail
+          # Runs from the repository root: both paths below are repo-relative,
+          # unlike the gradle steps which set working-directory: android.
+          # The same instrument iOS is held to, so "it looks right on my
+          # platform" cannot be the standard. Asserts the scale-invariant glass
+          # relationships measured from the sheet, not absolute positions — the
+          # mock is a non-rectified render and its pixels are not a spec.
+          python3 scripts/check_home_render.py \
+            --reference assets/reference/home-reference.png \
+            --render android/app/build/screenshots/home-393x852.png \
+            --probe-set android --label android-393
+
       - name: Report
         if: always()
         run: |
@@ -568,8 +575,18 @@ jobs:
           # an empty/missing result is a FAILURE, not a shrug.
           RESULTS=android/app/build/test-results/testDebugUnitTest
           if [ ! -d "$RESULTS" ]; then
-            echo "::error::no test result XML at $RESULTS -- the test task did not run"
-            exit 1
+            # Only fatal when the suite actually ran. If a compile step above
+            # already failed, the tests never executed and this step exiting 1
+            # would add a second red for the same cause — the pattern this repo
+            # keeps paying for. The job is already failed; say what is missing and
+            # let the real failure be the one that is read.
+            if [ "${{ steps.unit.outcome }}" = "success" ]; then
+              echo "::error::the Unit tests step reported success but left no result XML at $RESULTS"
+              exit 1
+            fi
+            echo "::warning::no test result XML at $RESULTS (the suite did not run: unit outcome '${{ steps.unit.outcome }}')"
+            echo "unit tests: did not run" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
           fi
           COUNT=$(python3 -c "import glob,xml.etree.ElementTree as E; rs=[E.parse(p).getroot() for p in glob.glob('$RESULTS/*.xml')]; t=sum(int(r.get('tests',0)) for r in rs); f=sum(int(r.get('failures',0))+int(r.get('errors',0)) for r in rs); print(f'{t} {f}')")
           TESTS=${COUNT%% *}

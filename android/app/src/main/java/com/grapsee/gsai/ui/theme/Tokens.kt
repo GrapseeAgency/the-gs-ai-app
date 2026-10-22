@@ -320,6 +320,16 @@ object GsRadius {
     /** Cards and tiles. */
     val card: Dp = 20.dp
     fun cardShape(): Shape = RoundedCornerShape(card)
+    /**
+     * The reference sheet's own card radius. iOS names the same number
+     * `Aero.Radius.homeCard`; check_home_type_parity.py fails if the two drift
+     * or if a Home glass surface goes back to a literal. Home was authored
+     * against the render (25px of a 680px screen = 14.4pt, rounded to 16), not
+     * against `card`, and repeating the number at four call sites is what let
+     * `card` drift away from the page.
+     */
+    val homeCard: Dp = 16.dp
+    fun homeCardShape(): Shape = RoundedCornerShape(homeCard)
     /** Sheets, dialogs and other large surfaces. */
     val sheet: Dp = 24.dp
     fun sheetShape(): Shape = RoundedCornerShape(topStart = sheet, topEnd = sheet)

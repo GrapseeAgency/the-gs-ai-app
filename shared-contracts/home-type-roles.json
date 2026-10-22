@@ -1,0 +1,33 @@
+{
+  "_readme": [
+    "Home's type roles, one row per element, keyed by the literal string BOTH",
+    "platforms render. .github/scripts/check_home_type_parity.py reads this file",
+    "and the two sources, and fails if either platform's call site has moved off",
+    "the value here. Two reviews each listed a different set of 'N type roles",
+    "disagree between platforms'; hand-reconciling a number in two languages is",
+    "not a fix, because nothing stops the next edit moving one side. This table",
+    "is the thing that stops it.",
+    "",
+    "size is the point size at the DEFAULT font scale (the compact/narrow-screen",
+    "branches are call-site fallbacks and are not gated). weight is the shared",
+    "name: Android's FontWeight.SemiBold and SwiftUI's .semibold are both",
+    "'semibold'.",
+    "",
+    "What is NOT here, and why: the greeting, the resume-card preview and the",
+    "suggestions row take their copy as parameters, so neither source has a",
+    "literal to pair on. The lint prints that gap on every run instead of",
+    "quietly reporting fewer checks."
+  ],
+  "AI Companion": { "size": 13.0, "weight": "medium" },
+  "Create Stunning\\nVideos with AI": { "size": 16.0, "weight": "semibold" },
+  "Generate": { "size": 15.0, "weight": "semibold" },
+  "Mind Guide": { "size": 13.0, "weight": "semibold" },
+  "Nexly": { "size": 18.0, "weight": "semibold" },
+  "See All": { "size": 14.0, "weight": "semibold" },
+  "Take a moment to check in with yourself.": { "size": 10.5, "weight": "medium" },
+  "Today's Used": { "size": 18.0, "weight": "semibold" },
+  "Today's reflection": { "size": 12.5, "weight": "semibold" },
+  "Turn your ideas into beautiful videos in minutes.": { "size": 12.0, "weight": "medium" },
+  "Your personal\\nclarity companion.": { "size": 9.5, "weight": "medium" },
+  "Your thoughts, questions, ideas —\\nI'm here for it all.": { "size": 15.0, "weight": "regular" }
+}

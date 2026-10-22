@@ -6,6 +6,27 @@ import SwiftUI
 /// bento, "Today's Used", a suggestions card, and a floating glass dock.
 /// Presentation is native SwiftUI; every action hands off to the Router and
 /// nothing here fabricates backend data.
+/// The page's own numbers, in one place.
+///
+/// These were literals repeated across the view: 20 spelled twice (the content
+/// inset and the dock's), and a 140pt clearance standing in for "taller than the
+/// dock". A change to the dock's height then silently un-changed the clearance,
+/// and the last card slid under it. Anything that describes the same physical
+/// thing is now derived from the same source.
+enum HomeMetrics {
+    /// Horizontal inset for the scroll content AND the dock. Two literals that
+    /// had to agree and had nothing making them.
+    static let margin: CGFloat = 20
+    /// The dock's own height, from the numbers that draw it: one scaled icon
+    /// button, the capsule's 14pt padding top and bottom, and the 10pt the view
+    /// adds below it.
+    static var dockHeight: CGFloat {
+        Aero.scaledLength(46, relativeTo: .body) + 14 * 2 + 10
+    }
+    /// Air between the last card and the top of the dock.
+    static let dockClearance: CGFloat = 24
+}
+
 struct HomeDashboardView: View {
     let onNewChat: () -> Void
     let onOpenDrawer: () -> Void
@@ -31,41 +52,52 @@ struct HomeDashboardView: View {
     /// looks like a design defect in a screenshot and is actually a clock.
     var greetingHour: Int? = nil
 
-    @ObservedObject private var store = ConversationStore.shared
     /// The signed-in name. The reference greets a person, not "there".
     @ObservedObject private var account = AccountStore.shared
     /// The skills the setup wizard actually pinned — they choose the suggestion.
     @ObservedObject private var profile = OnboardingProfileStore.shared
     @Environment(\.colorScheme) private var colorScheme
 
+    /// Anchor for the dock's Home button. See `dock(scrollToTop:)`.
+    private static let topAnchorID = "home-top"
+
     var body: some View {
-        ZStack(alignment: .bottom) {
-            ScrollView(showsIndicators: false) {
-                // The sheet's rhythm, measured: 52 above the greeting, 46 to
-                // the pills, 40 to the bento, 10 to Today's Used, 18 to its row.
-                VStack(alignment: .leading, spacing: 0) {
-                    header
-                    resumeCard
-                    Spacer().frame(height: 52)
-                    greeting
-                    Spacer().frame(height: 46)
-                    pills
-                    Spacer().frame(height: 40)
-                    bento
-                    Spacer().frame(height: 10)
-                    VStack(alignment: .leading, spacing: 18) {
-                        todayUsedHeader
-                        suggestionsCard
+        ScrollViewReader { proxy in
+            ZStack(alignment: .bottom) {
+                ScrollView(showsIndicators: false) {
+                    // The sheet's rhythm, measured: 52 above the greeting, 46 to
+                    // the pills, 40 to the bento, 10 to Today's Used, 18 to its row.
+                    VStack(alignment: .leading, spacing: 0) {
+                        header
+                        HomeResumeCard(onOpenConversation: onOpenConversation)
+                        Spacer().frame(height: 52)
+                        greeting
+                        Spacer().frame(height: 46)
+                        pills
+                        Spacer().frame(height: 40)
+                        bento
+                        Spacer().frame(height: 10)
+                        VStack(alignment: .leading, spacing: 18) {
+                            todayUsedHeader
+                            suggestionsCard
+                        }
+                        // Clear the floating dock so the last card is reachable —
+                        // derived from the dock's own height, not a 140 that
+                        // happened to be enough the day it was written.
+                        Spacer(minLength: HomeMetrics.dockHeight + HomeMetrics.dockClearance)
                     }
-                    // Clear the floating dock so the last card is reachable.
-                    Spacer(minLength: 140)
+                    .padding(.horizontal, HomeMetrics.margin)
+                    .padding(.top, 8)
+                    .id(Self.topAnchorID)
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 8)
-            }
-            dock
-                .padding(.horizontal, 20)
+                dock(scrollToTop: {
+                    withAnimation(.easeOut(duration: 0.25)) {
+                        proxy.scrollTo(Self.topAnchorID, anchor: .top)
+                    }
+                })
+                .padding(.horizontal, HomeMetrics.margin)
                 .padding(.bottom, 10)
+            }
         }
         .background(
             ZStack {
@@ -104,7 +136,12 @@ struct HomeDashboardView: View {
                     .font(Aero.responsive(18, .semibold, relativeTo: .headline))
                     .foregroundStyle(Aero.text)
                 Text("AI Companion")
-                    .font(Aero.responsive(13, .regular, relativeTo: .subheadline))
+                    // .medium, not .regular: Android renders this role as
+                    // labelSmall, and labelSmall is Medium 500 in Type.kt. The
+                    // pair was one of the type-role mismatches the last review
+                    // listed; check_home_type_parity.py now fails if either side
+                    // moves off the shared contract again.
+                    .font(Aero.responsive(13, .medium, relativeTo: .subheadline))
                     .foregroundStyle(Aero.textMuted)
             }
             Spacer()
@@ -119,48 +156,63 @@ struct HomeDashboardView: View {
 
     /// The reference opens on the thread you were just in, as readable prose —
     /// not a list row and not a truncated preview.
-    @ViewBuilder private var resumeCard: some View {
-        // Inbox ordering, not the raw array. `conversations` has no ordering
-        // contract — it is append-only from the bootstrap — so `.first` pinned
-        // the OLDEST chat ever created, never updated as newer work happened,
-        // and could deep-link into an archived thread. `activeConversations`
-        // is the documented ordering (archived hidden, pins float, newest
-        // first) and is what Android's resume card reads.
-        if let conversation = store.activeConversations.first {
-            Button {
-                onOpenConversation(conversation.id)
-            } label: {
-                AeroCard {
-                    VStack(alignment: .leading, spacing: 10) {
-                        // O(1) index read. `messages(for:).last` filters and
-                        // sorts the entire message table on every Home render
-                        // — the exact per-row pattern ConversationStore
-                        // documents as its fixed performance defect.
-                        Text(Self.cleanPreview(store.lastMessage(for: conversation.id)?.content
-                                               ?? conversation.title))
-                            .font(Aero.body())
-                            .foregroundStyle(Aero.text)
-                            .lineLimit(3)
-                            .multilineTextAlignment(.leading)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        HStack(spacing: 6) {
-                            Text(conversation.title)
-                                .font(Aero.caption())
-                                .foregroundStyle(Aero.textMuted)
-                                .lineLimit(1)
-                            Spacer(minLength: 0)
-                            Image(systemName: "arrow.right")
-                                .font(Aero.responsive(13, .semibold, relativeTo: .caption))
-                                .foregroundStyle(Aero.accent)
+    private struct HomeResumeCard: View {
+        let onOpenConversation: (String) -> Void
+        /// The store is observed HERE, not on HomeDashboardView.
+        ///
+        /// ConversationStore is the app's hottest object — every message write,
+        /// pin and archive publishes through it — and Home is the NavigationStack
+        /// root, so it stays mounted for the whole session. While the page's own
+        /// body observed the store, every keystroke in a chat invalidated a view
+        /// containing three nested GeometryReaders, a full-bleed raster and a
+        /// blurred glass card per surface. Only this card reads the store, so only
+        /// this card re-renders.
+        @ObservedObject private var store = ConversationStore.shared
+
+        var body: some View {
+            // Inbox ordering, not the raw array. `conversations` has no ordering
+            // contract — it is append-only from the bootstrap — so `.first` pinned
+            // the OLDEST chat ever created, never updated as newer work happened,
+            // and could deep-link into an archived thread. `activeConversations`
+            // is the documented ordering (archived hidden, pins float, newest
+            // first) and is what Android's resume card reads.
+            if let conversation = store.activeConversations.first {
+                Button {
+                    onOpenConversation(conversation.id)
+                } label: {
+                    AeroCard {
+                        VStack(alignment: .leading, spacing: 10) {
+                            // O(1) index read. `messages(for:).last` filters and
+                            // sorts the entire message table on every Home render
+                            // — the exact per-row pattern ConversationStore
+                            // documents as its fixed performance defect.
+                            Text(HomeDashboardView.cleanPreview(store.lastMessage(for: conversation.id)?.content
+                                                   ?? conversation.title))
+                                .font(Aero.body())
+                                .foregroundStyle(Aero.text)
+                                .lineLimit(3)
+                                .multilineTextAlignment(.leading)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            HStack(spacing: 6) {
+                                Text(conversation.title)
+                                    .font(Aero.caption())
+                                    .foregroundStyle(Aero.textMuted)
+                                    .lineLimit(1)
+                                Spacer(minLength: 0)
+                                Image(systemName: "arrow.right")
+                                    .font(Aero.responsive(13, .semibold, relativeTo: .caption))
+                                    .foregroundStyle(Aero.accent)
+                            }
                         }
+                        .padding(16)
                     }
-                    .padding(16)
                 }
+                .buttonStyle(KineticPressStyle())
+                .accessibilityLabel("Continue \(conversation.title)")
             }
-            .buttonStyle(KineticPressStyle())
-            .accessibilityLabel("Continue \(conversation.title)")
-        }
+            }
     }
+
 
     /// Markdown stripped to prose — the same rule the Android card uses, so a
     /// rich reply never leaks fences, pipes or separator rows into a preview.
@@ -327,7 +379,7 @@ struct HomeDashboardView: View {
                         .font(Aero.responsive(14, .medium, relativeTo: .body))
                         .foregroundStyle(Aero.text)
                     Text("Try suggested questions first.")
-                        .font(Aero.responsive(12, .regular, relativeTo: .footnote))
+                        .font(Aero.responsive(12, .medium, relativeTo: .footnote))
                         .foregroundStyle(Aero.textMuted)
                 }
                 Spacer()
@@ -343,9 +395,12 @@ struct HomeDashboardView: View {
 
     // MARK: Floating dock
 
-    private var dock: some View {
+    private func dock(scrollToTop: @escaping () -> Void) -> some View {
         HStack(spacing: 14) {
-            DockIcon(system: "house.fill", label: "Home", selected: true, action: {})
+            // Tapping the tab you are already on means "go back to the top".
+            // It used to be `action: {}`, which leaves a labelled, focusable,
+            // VoiceOver-announced control that does nothing when used.
+            DockIcon(system: "house.fill", label: "Home", selected: true, action: scrollToTop)
             DockIcon(book: true, label: "Chats", action: onOpenChats)
             // The reference seats the peach pill inside a white well, so the
             // dock reads as three glass buttons and one lit action.
@@ -389,7 +444,11 @@ private struct GlassCircleButton: View {
                 .foregroundStyle(Aero.text)
                 .frame(width: Aero.scaledLength(46, relativeTo: .body),
                        height: Aero.scaledLength(46, relativeTo: .body))
-                .gsGlass(.floatingControl, corner: 23)
+                // Half the button, whatever size it scaled to. The literal 23 it
+                // used to carry is 46/2 at the default font scale only: at 1.4x
+                // the frame grows to 64pt and the "circle" became a rounded
+                // square, which is a defect the corner can cause alone.
+                .gsGlass(.floatingControl, corner: Aero.scaledLength(46, relativeTo: .body) / 2)
         }
         .buttonStyle(KineticPressStyle())
         .accessibilityLabel(label)
@@ -464,7 +523,7 @@ private struct VideoCard: View {
                         .foregroundStyle(Aero.text)
                         .multilineTextAlignment(.leading)
                     Text("Turn your ideas into beautiful videos in minutes.")
-                        .font(Aero.responsive(12, .regular, relativeTo: .footnote))
+                        .font(Aero.responsive(12, .medium, relativeTo: .footnote))
                         .foregroundStyle(Aero.textMuted)
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer()
@@ -507,7 +566,7 @@ private struct MindGuideCard: View {
                             .foregroundStyle(Aero.text)
                             .lineLimit(1)
                         Text("Your personal\nclarity companion.")
-                            .font(Aero.responsive(9.5, .regular, relativeTo: .caption))
+                            .font(Aero.responsive(9.5, .medium, relativeTo: .caption))
                             .lineSpacing(1.5)
                             .foregroundStyle(Aero.textMuted)
                             // Three lines so a 360pt phone wraps "companion."
@@ -560,7 +619,7 @@ private struct ReflectionCard: View {
                         .foregroundStyle(Aero.textMuted)
                 }
                 Text("Take a moment to check in with yourself.")
-                    .font(Aero.responsive(10.5, .regular, relativeTo: .caption))
+                    .font(Aero.responsive(10.5, .medium, relativeTo: .caption))
                     .lineSpacing(1.5)
                     .foregroundStyle(Aero.textMuted)
                     .lineLimit(3)

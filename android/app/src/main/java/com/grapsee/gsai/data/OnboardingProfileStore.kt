@@ -17,13 +17,20 @@ import androidx.compose.runtime.setValue
  *
  *  - Home + the chat empty state choose their suggestion cards from
  *    [interests] / [capabilities].
- *  - The on-device responder and the native prompt prefix shape tone and
- *    length from [responseStyle] / [personality].
- *  - Profile shows the answers, and "Retake setup" re-opens the wizard
- *    prefilled.
  *
- * Only fields listed there are stored; a value with no consumer would be the
- * dead-toggle problem again.
+ * What is READ today, honestly: [capabilities] is read by Home and the chat
+ * empty state, which is the whole reason this store exists. [interests],
+ * [responseStyle] and [personality] are written by the wizard and have NO
+ * reader on either platform yet — the responder/prompt-prefix that would shape
+ * tone from them is not built, and there is no Profile screen showing them or
+ * "Retake setup" re-opening the wizard prefilled. They are persisted because
+ * the alternative is throwing a person's answers away on exit, which is the bug
+ * this file was written to fix. The three bullets above described consumers that
+ * do not exist; a contract comment nobody can execute is not a contract, so the
+ * claim is replaced by the gap.
+ *
+ * Tracked as a follow-up, not silently dropped: land the readers or delete the
+ * fields. iOS twin: Networking/OnboardingProfileStore.swift, same wording.
  */
 object OnboardingProfileStore {
     private const val PREFS = "gs_profile"

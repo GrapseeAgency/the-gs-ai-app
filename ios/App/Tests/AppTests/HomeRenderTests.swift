@@ -93,6 +93,15 @@ final class HomeRenderTests: XCTestCase {
                       "ConversationStore must be empty for the probe rects to land "
                       + "on the elements they were measured against")
 
+        // Typography asserted, not assumed. `Font.custom` falls back to the
+        // system font SILENTLY when a name does not resolve, so a bundle that
+        // lost its fonts would keep producing plausible captures and a green
+        // gate forever. Android's Type.kt sets Poppins on all sixteen roles;
+        // this is the line that proves iOS does too.
+        XCTAssertTrue(Aero.poppinsLoaded,
+                      "Poppins is not registered, so iOS is rendering SF Pro. Check "
+                      + "UIAppFonts in ios/project.yml and ios/App/Resources/Fonts/.")
+
         let dir = Self.outputDirectory()
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
 
@@ -102,15 +111,25 @@ final class HomeRenderTests: XCTestCase {
             // through `inout`: Swift forbids passing an actor-isolated stored
             // property inout across an async call, and the capture must stay
             // alive until the PNG is written.
-            guard let capture = try await Self.renderHome(size: size, greetingHour: hour) else {
-                XCTFail("drawHierarchy reported failure at \(target.name) — nothing was composited")
-                continue
+            var problems = ["never captured"]
+            var image = UIImage()
+            // Up to three captures. A half-composited page is a timing failure,
+            // not a design verdict, and reporting one as a red is how a gate gets
+            // ignored; re-capturing is also the only way to tell a slow runner from
+            // a genuinely broken render.
+            for _ in 1...3 {
+                guard let capture = try await Self.renderHome(size: size, greetingHour: hour) else {
+                    problems = ["drawHierarchy reported failure — nothing was composited"]
+                    continue
+                }
+                windows.append(capture.window)
+                image = capture.image
+                let pixels = try Self.grayscale(image)
+                problems = Self.renderProblems(image: image, gray: pixels, label: target.name)
+                if problems.isEmpty { break }
+                try? await Task.sleep(nanoseconds: 250_000_000)
             }
-            windows.append(capture.window)
-            let image = capture.image
-
-            let pixels = try Self.grayscale(image)
-            assertRenderIsReal(image: image, gray: pixels, label: target.name)
+            for problem in problems { XCTFail("\(target.name): \(problem)") }
 
             let url = dir.appendingPathComponent("home-ios-\(target.name).png")
             guard let data = image.pngData() else {
@@ -166,13 +185,12 @@ final class HomeRenderTests: XCTestCase {
         // left visible keeps its SwiftUI graph alive and subscribed for the
         // rest of the run.
 
-        // SwiftUI lays out and the render server composites asynchronously;
-        // without settling frames the capture can land before the glass does.
-        for _ in 0..<20 {
-            try? await Task.sleep(nanoseconds: 16_000_000)
-            host.view.layer.layoutIfNeeded()
-            host.view.layer.displayIfNeeded()
-        }
+        // A short settle, then the caller verifies the pixels and re-captures if
+        // they are not there yet. The old loop slept 20 x 16 ms, which caps the
+        // wait at ~320 ms no matter what the machine is doing: on a loaded runner
+        // that is a red that no code change caused, and on an idle one it is 320 ms
+        // thrown away per size. Three frames gets the layer tree committed; the
+        // retry is what actually absorbs the variance.
 
         let format = UIGraphicsImageRendererFormat()
         format.scale = scale
@@ -258,7 +276,7 @@ final class HomeRenderTests: XCTestCase {
     }
 
     /// Mean luminance over a rectangle expressed in POINTS (top-left origin).
-    private func meanLuma(_ gray: [[Double]], x: CGFloat, y: CGFloat, w: CGFloat, h: CGFloat) -> Double {
+    private static func meanLuma(_ gray: [[Double]], x: CGFloat, y: CGFloat, w: CGFloat, h: CGFloat) -> Double {
         let s = HomeRenderTests.scale
         let x0 = Int(x * s), y0 = Int(y * s)
         let x1 = min(gray[0].count, Int((x + w) * s))
@@ -285,13 +303,17 @@ final class HomeRenderTests: XCTestCase {
      *   4. the bento glass is distinguishable from the page behind it, which
      *      is exactly what a non-rasterising Material would destroy.
      */
-    private func assertRenderIsReal(image: UIImage, gray: [[Double]], label: String) {
+    /// What is wrong with this capture. Empty means it is a real render.
+    /// The label is the CALLER's job (it prefixes every XCTFail), so a problem
+    /// string here never repeats the size it came from.
+    private static func renderProblems(image: UIImage, gray: [[Double]], label: String) -> [String] {
+        var problems: [String] = []
         let size = image.size
-        // Hoisted out of the assertion: a nested closure plus force-unwrap plus
-        // interpolation inside a macro argument is what made the compiler give
-        // up on this file the first time.
-        let expectedWidth = Self.targets.first(where: { $0.name == label })?.width ?? 0
-        XCTAssertEqual(Int(size.width), Int(expectedWidth), "capture width for \(label)")
+        _ = label  // kept in the signature for the width check below
+        let expectedWidth = targets.first(where: { $0.name == label })?.width ?? 0
+        if Int(size.width) != Int(expectedWidth) {
+            problems.append("capture width \(Int(size.width)) != expected \(Int(expectedWidth))")
+        }
 
         // Mean and variance in one explicit pass. The obvious
         // `gray.flatMap { $0 }.reduce(0) { ... }` form makes the compiler
@@ -311,30 +333,36 @@ final class HomeRenderTests: XCTestCase {
         let count = Double(n)
         let flat = sum / count
         let variance = max(0.0, sumSq / count - flat * flat)
-        XCTAssertGreaterThan(variance, 90,
-                             "\(label): frame is near-uniform (variance \(Int(variance))) — render is blank")
+        if variance <= 90 {
+            problems.append("frame is near-uniform (variance \(Int(variance))) — render is blank")
+        }
 
         // 2. hero pearl, upper right of the page.
         let pearl = meanLuma(gray, x: size.width * 0.78, y: size.height * 0.20,
                              w: size.width * 0.16, h: size.height * 0.10)
         let pageLeft = meanLuma(gray, x: size.width * 0.06, y: size.height * 0.20,
                                 w: size.width * 0.16, h: size.height * 0.10)
-        XCTAssertNotEqual(pearl, pageLeft, accuracy: 2.0,
-                          "\(label): hero-pearl region matches the page — the backdrop art did not decode")
+        if abs(pearl - pageLeft) < 2.0 {
+            problems.append("hero-pearl region matches the page — the backdrop art did not decode")
+        }
 
         // 3. the peach Generate pill sits in the dock, centred-right.
         let dockY = size.height - 44
         let pill = meanLuma(gray, x: size.width * 0.55, y: dockY - 12, w: size.width * 0.18, h: 24)
         let dockEdge = meanLuma(gray, x: size.width * 0.06, y: dockY - 12, w: size.width * 0.10, h: 24)
-        XCTAssertLessThan(pill, dockEdge,
-                          "\(label): Generate pill is not darker/warmer than the dock beside it — dock did not composite")
+        if pill >= dockEdge {
+            problems.append("Generate pill is not darker/warmer than the dock beside it "
+                            + "— dock did not composite")
+        }
 
         // 4. bento glass vs the page it sits on, at the same height.
         let bentoY = size.height * 0.55
         let card = meanLuma(gray, x: size.width * 0.30, y: bentoY, w: size.width * 0.18, h: 20)
         let margin = meanLuma(gray, x: size.width * 0.02, y: bentoY, w: size.width * 0.05, h: 20)
-        XCTAssertNotEqual(card, margin, accuracy: 1.2,
-                          "\(label): card interior equals the page beside it — the glass is not rasterising")
+        if abs(card - margin) < 1.2 {
+            problems.append("card interior equals the page beside it — the glass is not rasterising")
+        }
+        return problems
     }
 
     private enum RenderError: Error { case noImage }

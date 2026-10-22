@@ -27,10 +27,41 @@ final class DesignSystemTests: XCTestCase {
         XCTAssertLessThan(Aero.Spacing.l, Aero.Spacing.xl)
     }
 
-    func testCardRadiusToken() {
-        // Tracks Aero.Radius.card (source of truth = 20, Android parity via
-        // GsRadius.card). It asserts the token equals its documented value, so
-        // it still fails if the token drifts away from 20 unintentionally.
-        XCTAssertEqual(Aero.Radius.card, 20)
+    /// The old version of this test was `XCTAssertEqual(Aero.Radius.card, 20)`
+    /// against a token declared as 20. It could not fail, and while it was
+    /// passing every Home card was hardcoding a corner the token did not
+    /// describe — a green assertion that certifies a number against itself is
+    /// worse than no assertion, because it is quoted in reviews as proof.
+    ///
+    /// What is asserted instead is the RELATIONSHIP, which can genuinely break:
+    /// the sheet's card is tighter than the app's standard card, the scale is
+    /// monotonic, and the pill is not a corner anyone can round by accident.
+    /// The call-site rule ("no Home glass surface may pass a literal corner,
+    /// and both platforms must name the same number") lives in
+    /// .github/scripts/check_home_type_parity.py, because a test in one
+    /// language cannot see the other platform's source.
+    func testRadiusScaleIsOrderedAndHomeCardsAreTighter() {
+        XCTAssertLessThan(Aero.Radius.sm, Aero.Radius.md)
+        // The sheet's card is the medium control radius, on both platforms
+        // (GsRadius.homeCard = 16.dp = GsRadius.md) — named separately because
+        // it is measured from the render, not inherited from the scale.
+        XCTAssertEqual(Aero.Radius.homeCard, Aero.Radius.md)
+        XCTAssertLessThan(Aero.Radius.homeCard, Aero.Radius.card)
+        XCTAssertLessThan(Aero.Radius.card, Aero.Radius.sheet)
+        XCTAssertLessThan(Aero.Radius.sheet, Aero.Radius.input)
+        XCTAssertEqual(Aero.Radius.chip, 999)
+    }
+
+    /// Poppins is the product's one typeface on both platforms. Asserted here so
+    /// the claim is checked against the running binary rather than against
+    /// project.yml, which can say UIAppFonts while the bundle ships nothing.
+    func testPoppinsIsRegistered() {
+        XCTAssertTrue(Aero.poppinsLoaded,
+                      "Poppins did not resolve, so every Aero.responsive call is "
+                      + "silently falling back to SF Pro")
+        XCTAssertEqual(Aero.poppinsName(.semibold), "Poppins-SemiBold")
+        XCTAssertEqual(Aero.poppinsName(.medium), "Poppins-Medium")
+        XCTAssertEqual(Aero.poppinsName(.regular), "Poppins-Regular")
+        XCTAssertEqual(Aero.poppinsName(.bold), "Poppins-Bold")
     }
 }
