@@ -122,6 +122,10 @@ struct ChatDetailView: View {
 
                 composerZone
             }
+            // Pin the column to the proposed height so the transcript absorbs
+            // the slack. Without this the VStack can keep its content height
+            // and push the composer past the bottom edge in landscape.
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
         .toolbar(.hidden, for: .navigationBar)
         .alert("Rename chat", isPresented: $showRename) {

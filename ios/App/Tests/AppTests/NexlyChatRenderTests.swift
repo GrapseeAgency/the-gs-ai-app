@@ -261,7 +261,10 @@ private struct NexlyFullChatView: View {
                 .padding(.top, 3)
                 .padding(.bottom, 10)
             }
-            .frame(maxWidth: 640)
+            // The window proposes the real device size. Without an explicit
+            // height the VStack keeps its content height and the composer
+            // slides below the screen edge on short/landscape sizes.
+            .frame(maxWidth: 640, maxHeight: .infinity, alignment: .top)
         }
     }
 }
@@ -323,7 +326,7 @@ private struct NexlyFullProseView: View {
                 .padding(.top, 3)
                 .padding(.bottom, 10)
             }
-            .frame(maxWidth: 640)
+            .frame(maxWidth: 640, maxHeight: .infinity, alignment: .top)
         }
     }
 }
