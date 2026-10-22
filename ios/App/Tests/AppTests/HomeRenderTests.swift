@@ -26,7 +26,10 @@ import UIKit
  *
  * OUTPUT
  * ------
- * `GS_RENDER_DIR` (set by .github/workflows/ios.yml) or the temp directory.
+ * /tmp/gs-home-renders, or `GS_RENDER_DIR` if a caller sets it. Note that a
+ * workflow *step*-level env var never reaches the simulator-launched test
+ * host, which is why the default is a shared absolute path rather than an
+ * injected one — see `outputDirectory()`.
  * Files: home-ios-393x852.png, home-ios-411x914.png, home-ios-360x780.png.
  */
 @MainActor
@@ -95,11 +98,16 @@ final class HomeRenderTests: XCTestCase {
 
         for target in Self.targets {
             let size = CGSize(width: target.width, height: target.height)
-            guard let image = try await Self.renderHome(size: size, greetingHour: hour,
-                                                        keeping: &windows) else {
+            // The window comes back as a value rather than being appended
+            // through `inout`: Swift forbids passing an actor-isolated stored
+            // property inout across an async call, and the capture must stay
+            // alive until the PNG is written.
+            guard let capture = try await Self.renderHome(size: size, greetingHour: hour) else {
                 XCTFail("drawHierarchy reported failure at \(target.name) — nothing was composited")
                 continue
             }
+            windows.append(capture.window)
+            let image = capture.image
 
             let pixels = try Self.grayscale(image)
             assertRenderIsReal(image: image, gray: pixels, label: target.name)
@@ -131,8 +139,8 @@ final class HomeRenderTests: XCTestCase {
     /// show every glass surface as empty and look perfectly fine while proving
     /// nothing. Drawing the live window goes through the same compositing path
     /// the device uses.
-    private static func renderHome(size: CGSize, greetingHour: Int,
-                                   keeping windows: inout [UIWindow]) async throws -> UIImage? {
+    private static func renderHome(size: CGSize, greetingHour: Int)
+        async throws -> (image: UIImage, window: UIWindow)? {
         let view = HomeDashboardView(
             onNewChat: {},
             onOpenDrawer: {},
@@ -154,9 +162,9 @@ final class HomeRenderTests: XCTestCase {
         window.rootViewController = host
         window.layoutIfNeeded()
         window.makeKeyAndVisible()
-        // Handed back so tearDown can dismantle it; a key window left visible
-        // keeps its SwiftUI graph alive and subscribed for the rest of the run.
-        windows.append(window)
+        // Returned to the caller so tearDown can dismantle it; a key window
+        // left visible keeps its SwiftUI graph alive and subscribed for the
+        // rest of the run.
 
         // SwiftUI lays out and the render server composites asynchronously;
         // without settling frames the capture can land before the glass does.
@@ -175,7 +183,7 @@ final class HomeRenderTests: XCTestCase {
             drew = host.view.drawHierarchy(in: CGRect(origin: .zero, size: size),
                                            afterScreenUpdates: true)
         }
-        return drew ? image : nil
+        return drew ? (image, window) : nil
     }
 
     private static func outputDirectory() -> URL {
