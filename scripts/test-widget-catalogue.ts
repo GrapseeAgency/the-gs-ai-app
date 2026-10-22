@@ -119,6 +119,7 @@ const kindSamples: Record<string, string> = {
   chart: chartPayload('line'), stat: '{"cards":[{"label":"Revenue","value":"120"}]}',
   table: '{"columns":["a"],"rows":[["1"]]}', compare: '{"left":{"items":["a"]},"right":{"items":["b"]}}',
   progress: '{"items":[{"label":"x","value":50}]}', timeline: '{"entries":[{"date":"2026-01-01","title":"a"}]}',
+  plan: '{"title":"Tomorrow","rows":[{"time":"8:00 AM","icon":"sunrise","text":"Morning routine"}],"closing":"You got this!","closingIcon":"flame"}',
   gauge: '{"items":[{"label":"a","value":4,"max":10}]}', quiz: '{"questions":[{"q":"a?","options":["x","y"],"answer":1}]}',
   form: fieldPayload('text'), calc: calcPayload('unit'),
   rating: '{"title":"a","prompt":"b","style":"star","max":5}', poll: '{"question":"a?","options":["x","y"]}',

@@ -48,6 +48,7 @@ const WIDGET_LANGS = new Set([
   'wizard', 'onboarding', 'kanban', 'calendar', 'sheet', 'tasks', 'dashboard', 'config',
   'configurator', 'booking', 'schedule', 'filter', 'analytics', 'report', 'files',
   'connected', 'decision', 'scenario', 'timer', 'map', 'mermaid', 'html', 'svg',
+  'plan',
 ])
 
 const CANON: Record<string, string> = {

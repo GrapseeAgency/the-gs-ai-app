@@ -204,6 +204,21 @@ enum ContentFixtures {
                 blockMath + "\n\n" +
                 "```mermaid\nflowchart LR\n    A --> B --> C\n```",
             metadata: nil
+        ),
+        ContentFixture(
+            id: "F26_NEXLY_PLAN",
+            content: "Got it! Here is your day.\n\n```plan\n" +
+                "{\n" +
+                "  \"title\": \"Here's your personalized plan for tomorrow:\",\n" +
+                "  \"rows\": [\n" +
+                "    {\"time\": \"8:00 – 8:30 AM\", \"icon\": \"sunrise\", \"text\": \"Morning routine + light exercise\"},\n" +
+                "    {\"time\": \"9:00 – 11:00 AM\", \"icon\": \"book-2\", \"text\": \"Classes\"}\n" +
+                "  ],\n" +
+                "  \"closing\": \"You got this!\",\n" +
+                "  \"closingIcon\": \"flame\",\n" +
+                "  \"timestamp\": \"9:45 PM\"\n" +
+                "}\n```",
+            metadata: nil
         )
     ]
 }
@@ -232,6 +247,7 @@ private func summarize(_ blocks: [Block]) -> FixtureSummary {
         case .image: return "ImageBlock"
         case .collapsible: return "Collapsible"
         case .citations: return "Citations"
+        case .plan: return "Plan"
         case .toolResult: return "ToolResult"
         }
     }

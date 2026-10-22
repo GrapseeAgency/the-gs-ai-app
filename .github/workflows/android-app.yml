@@ -530,6 +530,34 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      - name: Nexly chat response renders (real Compose tree, JVM)
+        if: always()
+        working-directory: android
+        run: |
+          set -euo pipefail
+          # Same Roborazzi harness as Home, pointed at the REAL model-response
+          # composition: BlocksContent + Thinking card + Plan card + glass.
+          ./gradlew --no-daemon --console=plain --stacktrace :app:testDebugUnitTest \
+            --rerun --tests "com.grapsee.gsai.ui.chat.NexlyChatScreenshotTest" \
+            -PgsShots=true
+          SHOTS=app/build/screenshots
+          for w in 393x852 411x914 360x780; do
+            if [ -s "$SHOTS/nexly-chat-$w.png" ]; then
+              echo "rendered nexly-chat-$w.png ($(wc -c < "$SHOTS/nexly-chat-$w.png") bytes)"
+            else
+              echo "::error::nexly-chat-$w.png was not produced"; exit 1
+            fi
+          done
+
+      - name: Upload the Nexly chat response renders
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexly-chat-render-android
+          path: android/app/build/screenshots/nexly-chat-*.png
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Unit tests
         working-directory: android
         run: |

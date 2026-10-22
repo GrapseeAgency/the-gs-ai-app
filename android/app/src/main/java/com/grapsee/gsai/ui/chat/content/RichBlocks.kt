@@ -66,6 +66,8 @@ import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.data.SettingsStore
+import com.grapsee.gsai.ui.components.GsGlassRole
+import com.grapsee.gsai.ui.components.gsGlass
 import com.grapsee.gsai.ui.theme.GsMotion
 import com.grapsee.gsai.ui.theme.GsTheme
 import kotlinx.coroutines.Dispatchers
@@ -155,7 +157,16 @@ fun BlocksContent(
      * answer already stated. Empty strings disable recovery.
      */
     userPrompt: String = "",
-    priorContext: String = ""
+    priorContext: String = "",
+    /**
+     * Nexly glass transcript: consecutive prose blocks become one glass card,
+     * a plan block becomes its own sibling card, and [statusCard] is appended
+     * inside the first prose card (the reference's Thinking/Reasoning/Effort
+     * panel below the preamble). Other call sites keep the document surface.
+     */
+    glassAssistant: Boolean = false,
+    statusCard: (@Composable () -> Unit)? = null,
+    planTimestamp: String? = null
 ) {
     val cache = remember { StreamBlockCache() }
     // Recovery must be decided BEFORE parsing, because a successful recovery
@@ -179,24 +190,136 @@ fun BlocksContent(
     // defect. Prose blocks keep selection; every interactive block (widgets,
     // charts, code cards, mermaid, collapsibles, citation chips, tool results)
     // renders OUTSIDE the container and owns its own taps.
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (isStreaming && blocks.isEmpty()) {
-            StreamingCaret()
-        }
-        blocks.forEachIndexed { index, block ->
-            key(streamBlockKey(block, index)) {
-                val blockContent: @Composable () -> Unit = {
-                    BlockView(
-                        block = block,
-                        isLast = index == blocks.lastIndex,
-                        isStreaming = isStreaming,
-                        onCopyCode = onCopyCode,
-                        citationUrls = citationUrls,
-                        onSendPrompt = onSendPrompt
-                    )
-                }
-                if (block.isProseBlock()) SelectionContainer { blockContent() } else blockContent()
+    if (glassAssistant) {
+        NexlyAssistantBlocks(
+            blocks = blocks,
+            isStreaming = isStreaming,
+            onCopyCode = onCopyCode,
+            citationUrls = citationUrls,
+            onSendPrompt = onSendPrompt,
+            statusCard = statusCard,
+            planTimestamp = planTimestamp
+        )
+    } else {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (isStreaming && blocks.isEmpty()) {
+                StreamingCaret()
             }
+            blocks.forEachIndexed { index, block ->
+                key(streamBlockKey(block, index)) {
+                    val blockContent: @Composable () -> Unit = {
+                        BlockView(
+                            block = block,
+                            isLast = index == blocks.lastIndex,
+                            isStreaming = isStreaming,
+                            onCopyCode = onCopyCode,
+                            citationUrls = citationUrls,
+                            onSendPrompt = onSendPrompt
+                        )
+                    }
+                    if (block.isProseBlock()) SelectionContainer { blockContent() } else blockContent()
+                }
+            }
+        }
+    }
+}
+
+private sealed interface NexlyGroup {
+    data class Prose(val blocks: List<Block>) : NexlyGroup
+    data class Plan(val block: Block.PlanBlock) : NexlyGroup
+}
+
+/**
+ * Compose the assistant turn the way the reference does: one glass card for
+ * the preamble (with the live Thinking panel nested after it), then one glass
+ * card for the timetable. A plan card is never nested inside the prose card.
+ */
+@Composable
+private fun NexlyAssistantBlocks(
+    blocks: List<Block>,
+    isStreaming: Boolean,
+    onCopyCode: (String) -> Unit,
+    citationUrls: Map<Int, String>,
+    onSendPrompt: ((String) -> Unit)?,
+    statusCard: (@Composable () -> Unit)?,
+    planTimestamp: String?
+) {
+    val groups = remember(blocks, statusCard != null) {
+        val out = mutableListOf<NexlyGroup>()
+        val prose = mutableListOf<Block>()
+        fun flush() {
+            if (prose.isNotEmpty()) {
+                out += NexlyGroup.Prose(prose.toList())
+                prose.clear()
+            }
+        }
+        for (block in blocks) {
+            if (block is Block.PlanBlock) {
+                flush()
+                out += NexlyGroup.Plan(block)
+            } else {
+                prose += block
+            }
+        }
+        flush()
+        if (statusCard != null && out.firstOrNull() !is NexlyGroup.Prose) {
+            out.add(0, NexlyGroup.Prose(emptyList()))
+        }
+        out
+    }
+    var statusPlaced = false
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        groups.forEach { group ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top
+            ) {
+                NexlyAssistantOrb(size = 30.dp)
+                Spacer(Modifier.width(9.dp))
+                Box(Modifier.weight(1f)) {
+                    when (group) {
+                        is NexlyGroup.Plan -> NexlyPlanCard(
+                            plan = group.block.plan,
+                            open = group.block.open,
+                            fallbackTimestamp = planTimestamp
+                        )
+                        is NexlyGroup.Prose -> Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .gsGlass(GsGlassRole.Card, RoundedCornerShape(24.dp))
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            if (group.blocks.isEmpty() && isStreaming) {
+                                if (statusCard == null) StreamingCaret()
+                            }
+                            group.blocks.forEachIndexed { index, block ->
+                                key(streamBlockKey(block, index)) {
+                                    val blockContent: @Composable () -> Unit = {
+                                        BlockView(
+                                            block = block,
+                                            isLast = index == group.blocks.lastIndex,
+                                            isStreaming = isStreaming,
+                                            onCopyCode = onCopyCode,
+                                            citationUrls = citationUrls,
+                                            onSendPrompt = onSendPrompt
+                                        )
+                                    }
+                                    if (block.isProseBlock()) SelectionContainer { blockContent() } else blockContent()
+                                }
+                            }
+                            if (!statusPlaced && statusCard != null) {
+                                statusPlaced = true
+                                Spacer(Modifier.height(2.dp))
+                                statusCard()
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (isStreaming && blocks.isEmpty() && groups.isEmpty()) {
+            StreamingCaret()
         }
     }
 }
@@ -282,6 +405,7 @@ private fun BlockView(
         is Block.MermaidBlock -> MermaidBlockView(block, streaming = isStreaming, onCopyCode = onCopyCode)
         is Block.HtmlBlock -> HtmlBlockView(block, streaming = isStreaming)
         is Block.WidgetBlock -> WidgetBlockView(block, streaming = isStreaming, onSendPrompt = onSendPrompt)
+        is Block.PlanBlock -> NexlyPlanCard(block.plan, open = block.open)
         is Block.ImageBlock -> ImageBlockView(block)
         is Block.CollapsibleBlock -> CollapsibleBlockView(block, citationUrls)
         is Block.CitationsBlock -> CitationsBlockView(block)
@@ -314,6 +438,7 @@ private fun rememberSpanTheme(
     citationUrls: Map<Int, String> = emptyMap()
 ): SpanTheme {
     val context = androidx.compose.ui.platform.LocalContext.current
+    remember(context) { NexlyIcons.ensureLoaded(context.applicationContext) }
     return SpanTheme(
         codeBg = MaterialTheme.colorScheme.surfaceContainerHighest,
         linkColor = MaterialTheme.colorScheme.primary,
@@ -325,10 +450,30 @@ private fun rememberSpanTheme(
     )
 }
 
+private fun appendNexlyText(
+    builder: AnnotatedString.Builder,
+    text: String,
+    theme: SpanTheme
+) {
+    for (part in NexlyIcons.inlineParts(text)) {
+        if (part.isIcon) {
+            builder.withStyle(
+                SpanStyle(
+                    fontFamily = NexlyIcons.family,
+                    fontSize = theme.fontSize * 1.14f,
+                    color = theme.textColor
+                )
+            ) { append(NexlyIcons.glyph(part.value)) }
+        } else {
+            builder.append(part.value)
+        }
+    }
+}
+
 private fun appendSpans(builder: AnnotatedString.Builder, spans: List<InlineSpan>, theme: SpanTheme) {
     for (span in spans) {
         when (span) {
-            is InlineSpan.TextSpan -> builder.append(span.text)
+            is InlineSpan.TextSpan -> appendNexlyText(builder, span.text, theme)
             is InlineSpan.BoldSpan -> builder.withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
                 appendSpans(builder, span.children, theme)
             }

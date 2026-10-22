@@ -66,6 +66,7 @@ struct ChatDetailView: View {
     // Task 85-e: platform wiring.
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.dismiss) private var dismiss
     @FocusState private var composerFocused: Bool
     @ObservedObject private var conversations = ConversationStore.shared
     // Voice entry (Step 4): the same shared Router every pushed surface reads
@@ -99,74 +100,30 @@ struct ChatDetailView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            if let error = vm.errorMessage {
-                ErrorStateView(message: error, retry: {
-                    vm.errorMessage = nil
-                    vm.retry()
-                })
-                .padding(.horizontal, Aero.Spacing.m)
-                .padding(.top, Aero.Spacing.s)
-            }
+        ZStack {
+            NexlyChatBackdrop()
+            VStack(spacing: 0) {
+                brandHeader
 
-            if network.isOffline {
-                offlinePill
-            }
-
-            transcript
-
-            Divider().overlay(Aero.outline)
-            composerZone
-        }
-        .background(Aero.background.ignoresSafeArea())
-        .navigationBarTitleDisplayMode(.inline)
-        .navigationTitle(conversationTitle)
-        .navigationBarBackButtonHidden(isWorkspaceRoot)
-        .toolbar {
-            // Workspace root: the drawer menu lives where back would be —
-            // this screen IS the app, there is nothing to go back to.
-            ToolbarItemGroup(placement: .navigationBarLeading) {
-                if isWorkspaceRoot, let openDrawer = onOpenDrawer {
-                    Button(action: openDrawer) {
-                        Image(systemName: "line.3.horizontal")
-                    }
-                    .accessibilityLabel("Open menu")
-                }
-            }
-            // "+" resets to a fresh workspace (root only).
-            ToolbarItemGroup(placement: .navigationBarTrailing) {
-                if let newChat = onNewChat {
-                    Button {
-                        newChat()
-                    } label: {
-                        Image(systemName: "square.and.pencil")
-                    }
-                    .accessibilityLabel("New chat")
+                if let error = vm.errorMessage {
+                    ErrorStateView(message: error, retry: {
+                        vm.errorMessage = nil
+                        vm.retry()
+                    })
+                    .padding(.horizontal, Aero.Spacing.m)
+                    .padding(.top, Aero.Spacing.s)
                 }
 
-                Button {
-                    searchActive.toggle()
-                    if !searchActive {
-                        searchQuery = ""
-                        searchIndex = 0
-                    }
-                } label: {
-                    Image(systemName: "magnifyingglass")
+                if network.isOffline {
+                    offlinePill
                 }
-                .accessibilityLabel("Search in chat")
 
-                // Options only exist once the chat exists. The reference
-                // presents them as a sheet, not a menu.
-                if vm.conversationID != nil {
-                    Button {
-                        showOptions = true
-                    } label: {
-                        Image(systemName: "ellipsis")
-                    }
-                    .accessibilityLabel("Conversation options")
-                }
+                transcript
+
+                composerZone
             }
         }
+        .toolbar(.hidden, for: .navigationBar)
         .alert("Rename chat", isPresented: $showRename) {
             TextField("Chat name", text: $renameDraft)
             Button("Save") {
@@ -280,6 +237,131 @@ struct ChatDetailView: View {
         .gsInAppBrowserHost()
     }
 
+    /// The reference brand header: the companion orb, the product identity,
+    /// and two quiet glass controls. The old navigation bar (inline title,
+    /// back chevron, ellipsis) is gone — this screen owns its chrome.
+    private var brandHeader: some View {
+        HStack(spacing: 10) {
+            AnimatedGsIllustration(
+                imageName: "GSCompanionOrb",
+                size: 42,
+                breathDuration: 3.2,
+                rotationDegrees: 0.8,
+                lift: -1,
+                startDelay: 0.1
+            )
+            .overlay(Circle().strokeBorder(Color.white.opacity(0.55), lineWidth: 1))
+            .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Nexly")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(Aero.text)
+                    .lineLimit(1)
+                Text("AI Companion")
+                    .font(.system(size: 10.5, weight: .regular))
+                    .foregroundStyle(Aero.textSecondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+
+            headerIconButton(
+                glyph: "sparkles",
+                label: onNewChat != nil ? "New chat" : "Search in chat",
+                action: {
+                    if let newChat = onNewChat {
+                        newChat()
+                    } else {
+                        toggleSearch()
+                    }
+                }
+            )
+            .contextMenu {
+                if let newChat = onNewChat {
+                    Button(action: newChat) {
+                        Label("New chat", systemImage: "square.and.pencil")
+                    }
+                }
+                Button {
+                    toggleSearch()
+                } label: {
+                    Label("Search in chat", systemImage: "magnifyingglass")
+                }
+                Button {
+                    router.path.append(.voice)
+                } label: {
+                    Label("Voice input", systemImage: "mic")
+                }
+            }
+
+            headerIconButton(
+                glyph: isWorkspaceRoot && onOpenDrawer != nil ? "menu-2" : "chevron-left",
+                label: isWorkspaceRoot && onOpenDrawer != nil ? "Open menu" : "Back",
+                action: {
+                    if isWorkspaceRoot, let openDrawer = onOpenDrawer {
+                        openDrawer()
+                    } else {
+                        dismiss()
+                    }
+                }
+            )
+            .contextMenu {
+                if vm.conversationID != nil {
+                    Button {
+                        showOptions = true
+                    } label: {
+                        Label("Chat options", systemImage: "ellipsis")
+                    }
+                }
+                Button {
+                    toggleSearch()
+                } label: {
+                    Label("Search in chat", systemImage: "magnifyingglass")
+                }
+                if let newChat = onNewChat {
+                    Button(action: newChat) {
+                        Label("New chat", systemImage: "square.and.pencil")
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, Aero.Spacing.m)
+        .padding(.vertical, 9)
+        .background(
+            LinearGradient(
+                colors: [Aero.surface.opacity(0.56), Aero.surface.opacity(0.30)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        )
+    }
+
+    private func headerIconButton(
+        glyph: String,
+        label: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            NexlyGlyph(name: glyph, size: 19, color: Aero.text)
+                .frame(width: 40, height: 40)
+                .background(Circle().fill(.clear))
+                .gsGlass(.sunken, corner: 20)
+        }
+        .buttonStyle(KineticPressStyle())
+        .accessibilityLabel(label)
+    }
+
+    private func toggleSearch() {
+        withAnimation(.easeOut(duration: 0.18)) {
+            searchActive.toggle()
+        }
+        if !searchActive {
+            searchQuery = ""
+            searchIndex = 0
+        }
+    }
+
     /// Real Translate: streams the tapped turn into the sheet, targeted at the
     /// device language. Offline the sheet closes quietly with a soft note —
     /// no error surfaces, the thread stays untouched.
@@ -326,7 +408,7 @@ struct ChatDetailView: View {
                         .transition(.opacity)
                 }
                 ScrollView {
-                LazyVStack(spacing: 12) {
+                LazyVStack(spacing: 20) {
                     // One search-match resolution per body pass — read per-row
                     // it was O(visible rows × messages) contains() scans on
                     // every keystroke while find-in-chat is open.
@@ -556,16 +638,13 @@ struct ChatDetailView: View {
 
     // MARK: Composer (Step 4 unified zone)
 
-    /// One composer zone replaces the old three-row stack (attachRow above
-    /// the bar + a separate streamingBar above the divider): a generating
-    /// line and the attach toast live here, then (PHASE 5, additive) the
-    /// attachment chips row, then a single input row —
-    /// [+] [expanding field with the send/stop slot] [mic]. During a stream
-    /// the send slot becomes Stop (real vm.stop()) and the field stays live:
-    /// the draft remains editable, vm.send(attachments:) itself gates on
-    /// !isStreaming, so nothing sends and nothing stops by accident.
+    /// The reference composer: ONE capsule, a lilac sparkle at the leading
+    /// edge, the field, and the peach paper-plane send control at the trailing
+    /// edge. Attach, mode, and voice all remain reachable from the sparkle
+    /// (tap = attachments/modes sheet, long-press = voice/search/new chat), so
+    /// no capability was traded for the single-pill composition.
     private var composerZone: some View {
-        VStack(spacing: Aero.Spacing.s) {
+        VStack(spacing: 6) {
             if let message = toast {
                 HStack(spacing: Aero.Spacing.xs) {
                     Image(systemName: "checkmark.circle")
@@ -579,52 +658,13 @@ struct ChatDetailView: View {
                 }
                 .accessibilityElement(children: .combine)
             }
-            // PHASE 6/7: the pending turn's real attachments drive the honest
-            // mapping — image requests wait on genuine vision analysis and
-            // document requests wait on genuine server-side extraction before
-            // the first token (.working), text-only requests keep .breathing.
-            // PHASE 8.1: real search turns override from wire events —
-            // searching while the search runs, working while pages are being
-            // read, composing on synthesis start. Never a fabricated state.
-            if let orbState = orbStateForChatStreaming(
-                isStreaming: vm.isStreaming,
-                liveContentEmpty: vm.messages.last?.content.isEmpty ?? true,
-                requestHasAttachments: pendingTurnHasAttachments,
-                searchPhase: vm.searchPhase
-            ) {
-                // Phase 4: the activity orb — the REAL stream phase drives it:
-                // "Working…" while attachments are with the vision/extraction
-                // pipeline, "Thinking…" before the first text token,
-                // "Composing…" while tokens flow. Never a fabricated state.
-                // FLASH-MODE BUG 1: the word "Thinking…" (and "Composing…")
-                // renders ONLY when the wire's `mode` event resolved this turn
-                // to effectiveMode="thinking" — a Flash turn shows the bare
-                // orb. Search/Working keep their honest labels in every mode.
-                HStack(spacing: Aero.Spacing.s) {
-                    ThinkingOrbView(state: orbState, size: .inline)
-                    if vm.effectiveMode == "thinking" ||
-                        (orbState != .breathing && orbState != .composing) {
-                        Text(orbState.label)
-                            .font(Aero.label())
-                            .foregroundStyle(Aero.textMuted)
-                    }
-                    Spacer()
-                }
-                .accessibilityElement(children: .combine)
-            }
-            // FLASH-MODE BUG 2 — the mode chip now lives INSIDE the composer
-            // row, LEFT of the input (Kimi's pattern); tapping it opens the
-            // options sheet. Flash — the silent default — shows nothing.
             if !attachments.drafts.isEmpty {
-                // PHASE 5: chips row ABOVE the field, inside the existing
-                // zone — additive only, the composer architecture is unchanged.
                 AttachmentChipRow(
                     drafts: attachments.drafts,
                     onRetry: { attachments.retry(id: $0) },
                     onRemove: { attachments.remove(id: $0) })
             }
             if let reason = attachments.sendBlockReason {
-                // The visible send-block reason — honest, per spec §5.
                 HStack(spacing: Aero.Spacing.xs) {
                     Image(systemName: "info.circle")
                         .font(.system(size: 12))
@@ -637,74 +677,111 @@ struct ChatDetailView: View {
                 }
                 .accessibilityElement(children: .combine)
             }
-            HStack(spacing: Aero.Spacing.s) {
+
+            HStack(alignment: .bottom, spacing: 4) {
                 Button {
                     showingAttachments = true
                 } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Aero.text)
-                        .frame(width: 30, height: 30)
-                        .background(Circle().fill(Aero.container))
-                        .overlay(Circle().stroke(Aero.outline, lineWidth: 1))
+                    NexlyGlyph(
+                        name: "sparkles",
+                        size: 21,
+                        color: Color(red: 0.56, green: 0.48, blue: 1.0)
+                    )
+                    .frame(width: 40, height: 40)
                 }
                 .buttonStyle(KineticPressStyle())
-                .disabled(attachments.remainingSlots <= 0)
-                .accessibilityLabel(attachments.remainingSlots <= 0
-                    ? "Attachments full, six per message"
-                    : "Add attachment")
-
-                // FLASH-MODE BUG 2: the mode chip — left of the input, opens
-                // the options sheet. Rendered only for non-flash modes.
-                if vm.chatMode != "flash" {
+                .accessibilityLabel("Nexly tools, attachments and modes")
+                .contextMenu {
                     Button {
                         showingAttachments = true
                     } label: {
-                        Text(vm.chatMode == "thinking" ? "Thinking ▾" : "Auto ▾")
-                            .font(Aero.caption())
-                            .foregroundStyle(Aero.text)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 7)
-                            // Mode chip = a floating pill control — glass, not a
-                            // flat container fill.
-                            .gsCapsuleGlass(.floatingControl)
+                        Label("Attachments & modes", systemImage: "paperclip")
+                    }
+                    Button {
+                        router.path.append(.voice)
+                    } label: {
+                        Label("Voice input", systemImage: "mic")
+                    }
+                    Button {
+                        toggleSearch()
+                    } label: {
+                        Label("Search in chat", systemImage: "magnifyingglass")
+                    }
+                }
+
+                TextField("Ask me anything...", text: $vm.draft, axis: .vertical)
+                    .font(.system(size: 15.5))
+                    .foregroundStyle(Aero.text)
+                    .lineLimit(1...6)
+                    .focused($composerFocused)
+                    .submitLabel(.send)
+                    .onSubmit(submitComposer)
+                    .onChange(of: vm.draft) { newValue in
+                        guard SettingsStore.shared.enterToSend, newValue.hasSuffix("\n") else { return }
+                        vm.draft = String(newValue.dropLast())
+                        submitComposer()
+                    }
+                    .padding(.vertical, 11)
+
+                if vm.isStreaming {
+                    Button {
+                        vm.stop()
+                    } label: {
+                        NexlyGlyph(name: "player-stop", size: 18, color: Aero.text)
+                            .frame(width: 38, height: 38)
+                            .background(Circle().fill(Aero.surface.opacity(0.55)))
+                            .overlay(Circle().strokeBorder(Color.white.opacity(0.7), lineWidth: 1))
                     }
                     .buttonStyle(KineticPressStyle())
-                    .accessibilityLabel("Current mode \(vm.chatMode). Open options sheet")
-                }
-
-                AeroInputBar(
-                    text: $vm.draft,
-                    action: {
+                    .accessibilityLabel("Stop generating")
+                } else {
+                    Button {
                         userIsReading = false
                         sendAndClearDraft()
-                    },
-                    focus: $composerFocused,
-                    busy: vm.isStreaming,
-                    onStop: { vm.stop() },
-                    allowEmptyText: attachments.hasDrafts && attachments.canSend)
-
-                Button {
-                    router.path.append(.voice)
-                } label: {
-                    Image(systemName: "mic")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Aero.text)
-                        .frame(width: 30, height: 30)
-                        .background(Circle().fill(Aero.container))
-                        .overlay(Circle().stroke(Aero.outline, lineWidth: 1))
+                    } label: {
+                        NexlyGlyph(name: "send-2", size: 18, color: .white)
+                            .frame(width: 38, height: 38)
+                            .background(
+                                Circle().fill(
+                                    LinearGradient(
+                                        colors: [Color(red: 1.0, green: 0.78, blue: 0.58),
+                                                 Color(red: 0.95, green: 0.53, blue: 0.27)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                            )
+                            .overlay(Circle().strokeBorder(Color.white.opacity(0.55), lineWidth: 1))
+                            .shadow(color: Color(red: 0.86, green: 0.42, blue: 0.20).opacity(0.30), radius: 6, y: 2)
+                            .opacity(canSendFromComposer ? 1 : 0.45)
+                    }
+                    .buttonStyle(KineticPressStyle())
+                    .disabled(!canSendFromComposer)
+                    .accessibilityLabel("Send")
                 }
-                .buttonStyle(KineticPressStyle())
-                .accessibilityLabel("Voice input")
             }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 5)
+            .gsCapsuleGlass(.floatingControl)
         }
         .padding(.horizontal, Aero.Spacing.m)
-        .padding(.vertical, Aero.Spacing.s)
+        .padding(.top, 6)
+        .padding(.bottom, 6)
         .frame(maxWidth: columnMaxWidth)
-        .background(
-            LinearGradient(colors: [Aero.surface, Aero.background], startPoint: .top, endPoint: .bottom)
-                .ignoresSafeArea(edges: .bottom)
-        )
+    }
+
+    private var canSendFromComposer: Bool {
+        !vm.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+            (attachments.hasDrafts && attachments.canSend)
+    }
+
+    /// Enter-to-send reads the same setting as the shared input bar and uses a
+    /// short debounce so the onSubmit + trailing-newline paths can never
+    /// double-fire one keypress.
+    private func submitComposer() {
+        guard SettingsStore.shared.enterToSend, canSendFromComposer, !vm.isStreaming else { return }
+        userIsReading = false
+        sendAndClearDraft()
     }
 
     /// Slim honest offline line (Step 4): shown only while the system reports
@@ -1255,45 +1332,6 @@ private struct TranslationSheet: View {
 
 // MARK: - Bubble
 
-/// THE PRE-ANSWER CARD (reference, iOS twin of Android's ReferenceThinkingCard):
-/// the three real stages of a turn, shown only while the model is working and
-/// no token has landed. Gone the instant content exists.
-private struct ReferenceThinkingCard: View {
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            row(icon: "sparkles", tint: Aero.accentDeep, tile: Aero.accentSoft,
-                title: "Thinking", subtitle: "Analyzing your request…")
-            row(icon: "brain", tint: Color(red: 0.56, green: 0.48, blue: 1.0),
-                tile: Color(red: 0.56, green: 0.48, blue: 1.0).opacity(0.20),
-                title: "Reasoning", subtitle: "Planning the best structure…")
-            row(icon: "slider.horizontal.3", tint: Color(red: 0.18, green: 0.62, blue: 0.42),
-                tile: Color(red: 0.18, green: 0.62, blue: 0.42).opacity(0.18),
-                title: "Effort", subtitle: "Composing a detailed answer…")
-        }
-        .padding(14)
-        .frame(maxWidth: 420, alignment: .leading)
-        .gsGlass(.card, corner: Aero.Radius.card)
-    }
-
-    private func row(icon: String, tint: Color, tile: Color, title: String, subtitle: String) -> some View {
-        HStack(spacing: 10) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 11, style: .continuous)
-                    .fill(tile)
-                    .frame(width: 34, height: 34)
-                Image(systemName: icon)
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(tint)
-            }
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title).font(Aero.label()).foregroundStyle(Aero.text)
-                Text(subtitle).font(Aero.caption()).foregroundStyle(Aero.textMuted)
-            }
-            Spacer(minLength: 0)
-        }
-    }
-}
-
 private struct MessageBubble: View, Equatable {
 
     let message: ChatViewModel.ChatMessage
@@ -1318,6 +1356,7 @@ private struct MessageBubble: View, Equatable {
     var onBranch: () -> Void = {}
 
     @State private var copied = false
+    @Environment(\.colorScheme) private var colorScheme
 
     /**
      * Deep-perf pass 80-b: equality covers the body's visible inputs only —
@@ -1358,54 +1397,60 @@ private struct MessageBubble: View, Equatable {
     }
 
     private var userBubble: some View {
-        VStack(alignment: .trailing, spacing: 4) {
+        VStack(alignment: .trailing, spacing: 5) {
             // PHASE 5: attachment chips render ABOVE/with the text — the
             // message anatomy is otherwise unchanged (additive only).
             if let sentAttachments = message.attachments, !sentAttachments.isEmpty {
                 MessageAttachmentChips(attachments: sentAttachments)
             }
-            HStack(alignment: .bottom, spacing: 0) {
-                Spacer(minLength: 56)
-                Text(message.content)
-                    .font(Aero.body())
-                    .foregroundStyle(Aero.text)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(
-                        RoundedRectangle(cornerRadius: 18).fill(
-                            LinearGradient(
-                                colors: [Aero.accent.opacity(highlight ? 0.34 : 0.18), Aero.accentSoft],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
+            HStack(alignment: .top, spacing: 8) {
+                Spacer(minLength: 44)
+                VStack(alignment: .trailing, spacing: 5) {
+                    Text(message.content)
+                        .font(.system(size: 15.5))
+                        .foregroundStyle(Aero.text)
+                        .lineSpacing(3)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 11)
+                        .background(
+                            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                                .fill(
+                                    LinearGradient(
+                                        colors: userBubbleColors,
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    )
+                                )
                         )
-                    )
-                    .frame(maxWidth: 280, alignment: .trailing)
-                    .textSelection(.enabled)
-            }
-            HStack(spacing: 10) {
-                if let stamp = timeLabel(message.createdAt) {
-                    Text(stamp)
-                        .font(Aero.responsive(11, relativeTo: .caption2))
-                        .foregroundStyle(Aero.textMuted)
-                }
-                Button {
-                    copyAndConfirm(message.content)
-                } label: {
-                    Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                        .foregroundStyle(copied ? Aero.accent : Aero.textMuted)
-                }
-                .accessibilityLabel(copied ? "Copied" : "Copy message")
-                if editEnabled {
-                    Button(action: onEditStart) {
-                        Image(systemName: "pencil")
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                                .strokeBorder(
+                                    highlight ? Aero.accent : Color.white.opacity(0.72),
+                                    lineWidth: highlight ? 2 : 1
+                                )
+                        )
+                        .shadow(color: Color(red: 0.55, green: 0.32, blue: 0.24).opacity(0.12),
+                                radius: 6, y: 3)
+                        .frame(maxWidth: 300, alignment: .trailing)
+                        .textSelection(.enabled)
+
+                    // Reference delivery receipt: time, then the double tick.
+                    HStack(spacing: 4) {
+                        if let stamp = timeLabel(message.createdAt) {
+                            Text(stamp)
+                                .font(.system(size: 10.5, weight: .regular))
+                                .foregroundStyle(Aero.textTertiary)
+                        }
+                        NexlyGlyph(
+                            name: "checks",
+                            size: 13,
+                            color: Aero.textSecondary.opacity(0.78)
+                        )
                     }
-                    .accessibilityLabel("Edit message")
+                    .padding(.trailing, 2)
                 }
+                NexlyUserAvatar(size: 34)
             }
-            .font(Aero.responsive(13, relativeTo: .footnote))
-            .foregroundStyle(Aero.textMuted)
-            .buttonStyle(KineticPressStyle())
         }
         .contextMenu {
             // Same idiom as the assistant bubble's long-press menu.
@@ -1422,73 +1467,54 @@ private struct MessageBubble: View, Equatable {
         }
     }
 
+    private var userBubbleColors: [Color] {
+        if colorScheme == .dark {
+            return [Aero.surface.opacity(0.62), Aero.accentSoft.opacity(0.34)]
+        }
+        return [
+            Color(red: 1.0, green: 0.929, blue: 0.886).opacity(0.78),
+            Color(red: 1.0, green: 0.867, blue: 0.792).opacity(0.64),
+        ]
+    }
+
     private var assistantBubble: some View {
-        HStack(alignment: .top, spacing: 8) {
-            assistantAvatar
-            VStack(alignment: .leading, spacing: 8) {
-                if message.isStreaming {
-                    // REASONING TRACE (chat-reasoning): the collapsible quiet
-                    // panel rides ABOVE the answer while this turn's thinking
-                    // streams; auto-collapses at the first answer paint.
-                    if let reasoning, !reasoning.isEmpty {
-                        ReasoningTracePanel(
-                            text: reasoning,
-                            start: reasoningStart,
-                            end: reasoningEnd
-                        )
-                    }
-                    // TASK 1b (2026-10-14 directive): the reply streams THROUGH
-                    // the block renderer. The old live bubble was one plain
-                    // Text that re-rendered wholesale at finalize — the exact
-                    // "everything arrives as plain paragraphs" the operator
-                    // called out. The incremental parser (parseStreamingBlocks)
-                    // freezes every completed line-run and re-parses only the
-                    // live tail, so the per-flush cost is tail-shaped, not
-                    // message-shaped. Selection: enabled as at finalize — the
-                    // parser freezes completed blocks, so a reader dragging
-                    // inside settled text no longer fights the live tail.
-                    if message.content.isEmpty {
-                        // Reference pre-answer card — before the first token.
-                        ReferenceThinkingCard()
-                    } else {
-                        BlocksView(blocks: streamingBlocks, citations: citationLinks)
-                    }
-                    // Phase 4 + PHASE 8.1: the live bubble's activity orb —
-                    // the honest mapping the caller computed from the REAL
-                    // stream phase (searching/working/composing/…).
-                    ThinkingOrbView(
-                        state: orbState ?? (message.content.isEmpty ? .breathing : .composing),
-                        size: .inline
-                    )
-                } else {
-                    BlocksView(blocks: finalizedBlocks, citations: citationLinks)
-                    if !message.content.isEmpty {
-                        actionRow
-                    }
-                }
-            }
-            // Step 4 de-card: assistant prose sits straight on the canvas
-            // background at the transcript's reading column (no 320pt cap, no
-            // card padding/fill/stroke) — chrome stays only on content that
-            // earns it (code blocks). The find-in-chat tint remains as a soft
-            // accent wash instead of a permanent outline.
+        VStack(alignment: .leading, spacing: 6) {
+            NexlyAssistantBlocksView(
+                blocks: message.isStreaming ? streamingBlocks : finalizedBlocks,
+                isStreaming: message.isStreaming,
+                showStatus: message.isStreaming || hasPlan,
+                citations: citationLinks,
+                planTimestamp: message.createdAt
+            )
             .background {
                 if highlight {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Aero.accentSoft)
-                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Aero.accent, lineWidth: 1))
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .fill(Aero.accentSoft.opacity(0.7))
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
             .contextMenu { bubbleMenu }
-            Spacer(minLength: 40)
+
+            // The reference's assistant footer is the timestamp alone; copy,
+            // read aloud, regenerate, translate, save and branch all live in
+            // the long-press menu. A plan card carries its own timestamp.
+            if !message.isStreaming && !hasPlan, let stamp = timeLabel(message.createdAt) {
+                Text(stamp)
+                    .font(.system(size: 10.5, weight: .regular))
+                    .foregroundStyle(Aero.textMuted.opacity(0.85))
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .padding(.trailing, 2)
+            }
         }
     }
 
-    /// Small assistant badge — mirrors the Android companion identity mark.
-    private var assistantAvatar: some View {
-        AnimatedGsIllustration(imageName: "GSCompanionOrb", size: 28, breathDuration: 3.2, rotationDegrees: 0.8, lift: -1, startDelay: 0.16)
-            .accessibilityLabel("GS assistant")
+    /// True once the turn carries (or is streaming) a `plan` fence. The
+    /// Thinking/Reasoning/Effort panel survives finalize for these turns.
+    private var hasPlan: Bool {
+        if message.content.range(of: "```plan", options: .caseInsensitive) != nil { return true }
+        return finalizedBlocks.contains { block in
+            if case .plan(_, _, _) = block { return true }
+            return false
+        }
     }
 
     /// Finalized content → ordered blocks (STEP 5). Empty content renders the
@@ -1571,47 +1597,19 @@ private struct MessageBubble: View, Equatable {
         }
     }
 
-    /// Step 4 hierarchy: the visible row carries the three high-frequency
-    /// actions (Copy · Read aloud/Stop · Regenerate); everything else lives in
-    /// the long-press menu — Translate (real streaming sheet), Save to
-    /// Library, Branch new chat, Share. No dead entries: every item fires a
-    /// real closure verified against ChatDetailView's wiring. Edit is a
-    /// USER-turn action and stays on the user bubble (its row + menu).
-    private var actionRow: some View {
-        HStack(spacing: 18) {
-            if let stamp = timeLabel(message.createdAt) {
-                Text(stamp)
-                    .font(Aero.responsive(11, relativeTo: .caption2))
-                    .foregroundStyle(Aero.textMuted)
-            }
-            Button {
-                copyAndConfirm(message.content)
-            } label: {
-                Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                    .foregroundStyle(copied ? Aero.accent : Aero.textMuted)
-            }
-            .accessibilityLabel(copied ? "Copied" : "Copy reply")
-            Button(action: onReadAloud) {
-                Image(systemName: isSpeaking ? "stop.fill" : "speaker.wave.2")
-                    .foregroundStyle(isSpeaking ? Aero.accent : Aero.textMuted)
-            }
-            .accessibilityLabel(isSpeaking ? "Stop reading aloud" : "Read reply aloud")
-            Button(action: onRegenerate) {
-                Image(systemName: "arrow.clockwise")
-            }
-            .accessibilityLabel("Regenerate reply")
-        }
-        .font(Aero.responsive(13, relativeTo: .footnote))
-        .foregroundStyle(Aero.textMuted)
-        .buttonStyle(KineticPressStyle())
-    }
-
     private var bubbleMenu: some View {
         Group {
             Button {
                 copyAndConfirm(message.content)
             } label: {
                 Label("Copy", systemImage: "doc.on.doc")
+            }
+            Button(action: onReadAloud) {
+                Label(isSpeaking ? "Stop reading" : "Read aloud",
+                      systemImage: isSpeaking ? "stop.fill" : "speaker.wave.2")
+            }
+            Button(action: onRegenerate) {
+                Label("Regenerate", systemImage: "arrow.clockwise")
             }
             Button(action: onTranslate) {
                 Label("Translate", systemImage: "translate")

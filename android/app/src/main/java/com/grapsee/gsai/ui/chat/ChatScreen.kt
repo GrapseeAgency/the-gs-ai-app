@@ -30,6 +30,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
@@ -81,7 +82,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -110,9 +110,13 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.isSystemInDarkTheme
+import com.grapsee.gsai.R
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -184,6 +188,11 @@ import androidx.compose.foundation.clickable
 import com.grapsee.gsai.ui.theme.kineticPress
 import com.grapsee.gsai.ui.chat.content.BlocksContent
 import com.grapsee.gsai.ui.chat.content.LocalVoiceLauncher
+import com.grapsee.gsai.ui.chat.content.NexlyGlassGlyphTile
+import com.grapsee.gsai.ui.chat.content.NexlyGlyph
+import com.grapsee.gsai.ui.chat.content.NexlyUserAvatar
+import com.grapsee.gsai.ui.chat.content.containsNexlyPlan
+import com.grapsee.gsai.ui.chat.content.nexlyPearlBackdrop
 import com.grapsee.gsai.ui.orbs.OrbSize
 import com.grapsee.gsai.ui.orbs.OrbState
 import com.grapsee.gsai.ui.orbs.ThinkingOrb
@@ -573,15 +582,6 @@ fun ChatScreen(
             val info = listState.layoutInfo
             val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: -1
             lastVisible >= info.totalItemsCount - 1
-        }
-    }
-    // Top-bar scroll signal (design-3-b): the 1dp outlineVariant divider under
-    // the header exists only while the transcript is actually displaced from
-    // its top — an empty surface (no messages, nothing scrolled) never raises it.
-    val transcriptScrolled by remember {
-        derivedStateOf {
-            messages.isNotEmpty() &&
-                (listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0)
         }
     }
     // The banner tracks the phone's actual connectivity (see GsComponents).
@@ -1221,52 +1221,93 @@ fun ChatScreen(
         modifier = Modifier
             .fillMaxWidth()
             .gsContentWidth()
+            .nexlyPearlBackdrop()
             .statusBarsPadding()
             .navigationBarsPadding()
-            .padding(top = GsMotion.spaceM)
     ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            GsTheme.colors.surface.copy(alpha = 0.56f),
+                            GsTheme.colors.surface.copy(alpha = 0.30f)
+                        )
+                    )
+                )
+        ) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = GsMotion.spaceM),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = GsMotion.spaceM, vertical = 9.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (atWorkspaceRoot) {
-                    if (menuAction != null) {
-                        ChatTopIconButton(GsIcons.PanelLeft, "Open menu", menuAction)
-                    }
-                } else {
-                    ChatTopIconButton(GsIcons.ChevronLeft, "Back", onBack)
-                }
-                Text(
-                    text = conversationTitle,
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        fontSize = 20.sp,
-                        lineHeight = 26.sp,
-                        fontWeight = FontWeight.SemiBold
-                    ),
-                    color = GsTheme.colors.textPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f).padding(start = 8.dp)
+                Image(
+                    painter = painterResource(R.drawable.gs_companion_orb),
+                    contentDescription = "Nexly",
+                    modifier = Modifier
+                        .size(42.dp)
+                        .shadow(5.dp, CircleShape)
+                        .clip(CircleShape)
+                        .border(1.dp, Color.White.copy(alpha = 0.55f), CircleShape)
                 )
+                Spacer(Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Nexly",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontSize = 18.sp,
+                            lineHeight = 21.sp,
+                            fontWeight = FontWeight.SemiBold
+                        ),
+                        color = GsTheme.colors.textPrimary,
+                        maxLines = 1
+                    )
+                    Text(
+                        text = "AI Companion",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = 10.5.sp,
+                            lineHeight = 13.sp
+                        ),
+                        color = GsTheme.colors.textSecondary,
+                        maxLines = 1
+                    )
+                }
                 ChatTopIconButton(
-                    GsIcons.Search,
-                    if (searchOpen) "Close search" else "Search in chat"
-                ) {
-                    searchOpen = !searchOpen
-                    if (!searchOpen) {
-                        searchQuery = ""
-                        searchActiveIndex = 0
+                    GsIcons.Sparkles,
+                    "New chat",
+                    onClick = {
+                        if (newChatAction != null) newChatAction()
+                        else {
+                            searchOpen = !searchOpen
+                            if (!searchOpen) {
+                                searchQuery = ""
+                                searchActiveIndex = 0
+                            }
+                        }
+                    },
+                    onLongClick = {
+                        searchOpen = !searchOpen
+                        if (!searchOpen) {
+                            searchQuery = ""
+                            searchActiveIndex = 0
+                        }
                     }
-                }
-                if (newChatAction != null) {
-                    ChatTopIconButton(GsIcons.Plus, "New chat", newChatAction)
-                }
-                if (activeConversationId != null) {
-                    ChatTopIconButton(GsIcons.EllipsisVertical, "Conversation options") {
-                        chatMenuOpen = true
-                    }
-                }
+                )
+                Spacer(Modifier.width(6.dp))
+                ChatTopIconButton(
+                    if (atWorkspaceRoot && menuAction != null) GsIcons.Menu else GsIcons.ChevronLeft,
+                    if (atWorkspaceRoot && menuAction != null) "Open menu" else "Back",
+                    onClick = {
+                        if (atWorkspaceRoot && menuAction != null) menuAction()
+                        else if (activeConversationId != null) chatMenuOpen = true
+                        else onBack()
+                    },
+                    onLongClick = if (activeConversationId != null) {
+                        { chatMenuOpen = true }
+                    } else null
+                )
             }
             if (chatMenuOpen && activeConversationId != null) {
                 val activeId = activeConversationId
@@ -1359,14 +1400,8 @@ fun ChatScreen(
                     }
                 )
             }
-            if (transcriptScrolled) {
-                HorizontalDivider(
-                    thickness = 1.dp,
-                    color = GsTheme.colors.divider
-                )
-            }
         }
-        Spacer(Modifier.height(GsMotion.spaceS))
+        Spacer(Modifier.height(10.dp))
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1464,7 +1499,7 @@ fun ChatScreen(
                         // hide-on-drag below already gives the reading-first
                         // behaviour, with none of that.
                         modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                        verticalArrangement = Arrangement.spacedBy(20.dp)
                     ) {
                         itemsIndexed(
                             messages,
@@ -1567,7 +1602,7 @@ fun ChatScreen(
                                         message = message,
                                         isSpeaking = speakingMessageId == message.id,
                                         highlight = index == activeMatchIndex,
-                                        showIdentity = assistantGroupStart,
+                                        showIdentity = false,
                                         // The growing answer is read inside the bubble
                                         // (controller State), so mid-stream flushes
                                         // touch exactly one item instead of the whole
@@ -1644,18 +1679,10 @@ fun ChatScreen(
                 drafts = attachDrafts,
                 onRemoveAttachment = { attachStore.remove(it) },
                 onRetryAttachment = { attachStore.retry(it) },
-                // FLASH-MODE BUG 2 — compact chip inside the composer row;
-                // flash (the clean default) shows nothing.
-                modeLabel = when (chatMode) {
-                    "thinking" -> "Thinking ▾"
-                    "auto" -> "Auto ▾"
-                    else -> null
-                },
-                onModeChipClick = { attachSheetOpen = true },
-                // Real voice entry right in the composer; hidden — never
-                // disabled-dead — when no voice route was wired, and the attach
-                // sheet keeps its own honest Voice option as the fallback path.
-                onMic = onNavigateVoice,
+                // One-capsule reference: mode and voice live inside the
+                // sparkle's attach/mode sheet, not as extra chrome beside the
+                // field. The field and send slot stay exactly where the thumb
+                // expects them.
                 isStreaming = isStreaming,
                 // The honest phase, already derived from the real stream state
                 // at the screen scope — the orb in the send slot renders it.
@@ -1758,19 +1785,36 @@ fun ChatScreen(
  * from the existing kineticPress pattern (reduce-motion gated internally);
  * the label doubles as the content description for TalkBack.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ChatTopIconButton(icon: ImageVector, label: String, onClick: () -> Unit) {
+private fun ChatTopIconButton(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null
+) {
+    val haptics = LocalHapticFeedback.current
     Box(
         modifier = Modifier
             .size(40.dp)
             .kineticPress()
             .gsGlass(GsGlassRole.Sunken, CircleShape)
-            .clickable(
+            .combinedClickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 role = Role.Button,
-                onClickLabel = label
-            ) { onClick() }
+                onClickLabel = label,
+                onLongClickLabel = onLongClick?.let { "$label (more)" },
+                onLongClick = onLongClick?.let {
+                    {
+                        if (GsHaptics.enabled()) {
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        }
+                        it()
+                    }
+                },
+                onClick = onClick
+            )
             .semantics { contentDescription = label },
         contentAlignment = Alignment.Center
     ) {
@@ -1838,93 +1882,134 @@ private fun UserMessage(
                 }
             }
         } else {
-            // PHASE 5: the turn's real attachments render as read-only chips
-            // above the text bubble (spec §7 — message anatomy otherwise
-            // unchanged). An attachments-only turn shows chips alone.
-            if (message.attachments.isNotEmpty()) {
-                AttachmentChipRow(
-                    drafts = message.attachments.map { it.asDisplayDraft() },
-                    editable = false,
-                    horizontalArrangement = Arrangement.End
-                )
-            }
-            if (message.content.isNotEmpty()) {
-                // design-3-b identity: the user turn is the screen's ONE accent
-                // fill — solid primary with onPrimary text (the tonal gray is
-                // gone), the 20dp corner family with a 4dp bottom-right tail
-                // corner, hard cap at 85% of the row width. The find-in-chat
-                // hit keeps the fill and lifts with a 2dp onPrimary ring.
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    Box(
-                        modifier = Modifier.fillMaxWidth(0.85f),
-                        contentAlignment = Alignment.CenterEnd
-                    ) {
-                        Surface(
-                            modifier = Modifier.combinedClickable(
-                                onClick = {},
-                                onLongClick = {
-                                    if (GsHaptics.enabled()) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    onCopy(message.content)
-                                }
-                            ),
-                            shape = RoundedCornerShape(
-                                topStart = 20.dp,
-                                topEnd = 20.dp,
-                                bottomStart = 20.dp,
-                                bottomEnd = 4.dp
-                            ),
-                            color = GsTheme.colors.accent,
-                            border = if (highlight) {
-                                BorderStroke(2.dp, GsTheme.colors.onAccent)
-                            } else null
-                        ) {
-                            Text(
-                                text = message.content,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = GsTheme.colors.onAccent,
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
-                            )
-                        }
-                    }
-                }
-            }
-            val stamp = remember(message.createdAt) { timeLabel(message.createdAt) }
+            // The reference user turn: a pale translucent peach bubble on the
+            // right, a glass avatar beside it, and the delivered time + double
+            // ticks underneath. Copy and Edit live in the long-press menu so
+            // the resting surface has no action chrome.
+            val dark = isSystemInDarkTheme()
+            val colors = GsTheme.colors
+            var userMenu by remember { mutableStateOf(false) }
+            val bubbleTop = if (dark) colors.surface.copy(alpha = 0.62f)
+            else Color(0xFFFFEDE2).copy(alpha = 0.78f)
+            val bubbleBottom = if (dark) colors.accentSoft.copy(alpha = 0.34f)
+            else Color(0xFFFFDDCA).copy(alpha = 0.64f)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.Top
             ) {
-                if (stamp.isNotEmpty()) {
-                    Text(
-                        text = stamp,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.outline,
-                        modifier = Modifier.padding(end = 6.dp)
-                    )
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.End
+                ) {
+                    if (message.attachments.isNotEmpty()) {
+                        AttachmentChipRow(
+                            drafts = message.attachments.map { it.asDisplayDraft() },
+                            editable = false,
+                            horizontalArrangement = Arrangement.End
+                        )
+                    }
+                    if (message.content.isNotEmpty()) {
+                        Box {
+                            Box(
+                                modifier = Modifier
+                                    .widthIn(max = 300.dp)
+                                    .shadow(4.dp, RoundedCornerShape(24.dp))
+                                    .clip(RoundedCornerShape(24.dp))
+                                    .background(
+                                        Brush.verticalGradient(listOf(bubbleTop, bubbleBottom))
+                                    )
+                                    .border(
+                                        width = if (highlight) 2.dp else 1.dp,
+                                        color = if (highlight) colors.accentStrong
+                                        else Color.White.copy(alpha = 0.72f),
+                                        shape = RoundedCornerShape(24.dp)
+                                    )
+                                    .combinedClickable(
+                                        onClick = {},
+                                        onLongClick = {
+                                            if (GsHaptics.enabled()) {
+                                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            }
+                                            userMenu = true
+                                        }
+                                    )
+                                    .padding(horizontal = 16.dp, vertical = 11.dp)
+                            ) {
+                                Text(
+                                    text = message.content,
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontSize = 15.5.sp,
+                                        lineHeight = 22.sp
+                                    ),
+                                    color = colors.textPrimary
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = userMenu,
+                                onDismissRequest = { userMenu = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Copy") },
+                                    onClick = {
+                                        userMenu = false
+                                        onCopy(message.content)
+                                    }
+                                )
+                                if (editEnabled) {
+                                    DropdownMenuItem(
+                                        text = { Text("Edit") },
+                                        onClick = {
+                                            userMenu = false
+                                            onEditStart()
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    val stamp = remember(message.createdAt) { timeLabel(message.createdAt) }
+                    if (stamp.isNotEmpty() || !message.failed) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier.padding(top = 5.dp, end = 2.dp)
+                        ) {
+                            if (stamp.isNotEmpty()) {
+                                Text(
+                                    text = stamp,
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp),
+                                    color = colors.textTertiary
+                                )
+                            }
+                            if (!message.failed) {
+                                NexlyGlyph(
+                                    name = "checks",
+                                    size = 13.dp,
+                                    color = colors.textSecondary.copy(alpha = 0.78f)
+                                )
+                            }
+                        }
+                    }
                 }
-                BubbleAction(GsIcons.Copy, "Copy") { onCopy(message.content) }
-                if (editEnabled) {
-                    BubbleAction(GsIcons.SquarePen, "Edit", onEditStart)
-                }
+                Spacer(Modifier.width(8.dp))
+                NexlyUserAvatar(size = 34.dp)
             }
         }
     }
 }
 
 /**
- * DESIGN PHASE 2 composer — one calm pill, nothing competing (the Dola bar,
- * humbler; layout studied from 21st.dev ai-prompt-box). Structure:
+ * The reference composer — ONE glass capsule, nothing competing:
  *
- *   [+] [mode chip?] [ field ] [mic?] (send | stop)
+ *   [sparkle/attach] [ field ] [queue?] (paper-plane send | stop orb)
  *
- * The pill is a raised neutral surface with NO outline border; the field is
- * borderless inside it, grows to six lines, then scrolls internally. Send is
- * the ink circle with the up arrow (the production AI chat pattern, per the
- * assistant-ui comparison: every shipping app uses it; the paper-plane is the
- * odd one out) with a layered press (uiverse dull-ladybug-18 intent: the
- * icon lifts as the container scales). uiverse dangerous-dolphin-47's ring
- * was evaluated and dropped deliberately: in monochrome its glow reads as
- * decoration, and the pill plus cursor are affordance enough.
+ * The pill carries the floating-control glass; the field is borderless inside
+ * it, grows to six lines, then scrolls internally. The leading sparkle opens
+ * the attach/mode sheet the old plus and mic used to reach, so no capability
+ * was traded for the simpler chrome. Send is the peach paper-plane with the
+ * layered press (uiverse dull-ladybug-18 intent: the icon lifts as the
+ * container scales); the stop orb owns the slot while a turn runs.
  */
 @Composable
 private fun ComposerRow(
@@ -1932,7 +2017,6 @@ private fun ComposerRow(
     onDraftChange: (String) -> Unit,
     onSend: (String) -> Unit,
     onAttach: () -> Unit,
-    onMic: (() -> Unit)?,
     isStreaming: Boolean,
     onStop: () -> Unit,
     // The message parked by the queue affordance while the current turn runs
@@ -1949,8 +2033,8 @@ private fun ComposerRow(
     drafts: List<AttachmentDraft> = emptyList(),
     onRemoveAttachment: (String) -> Unit = {},
     onRetryAttachment: (String) -> Unit = {},
-    // FLASH-MODE BUG 2 — the mode chip sits INSIDE the pill, LEFT of the text
-    // input; tapping it opens the options sheet. null = the silent flash default.
+    // FLASH-MODE BUG 2 — the mode chip sat INSIDE the pill, LEFT of the text
+    // input; the one-capsule reference moved it into the sparkle's sheet.
     modeLabel: String? = null,
     onModeChipClick: () -> Unit = {}
 ) {
@@ -1980,45 +2064,22 @@ private fun ComposerRow(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .gsGlass(GsGlassRole.FloatingControl, RoundedCornerShape(28.dp))
+                .gsGlass(GsGlassRole.FloatingControl, RoundedCornerShape(30.dp))
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 5.dp),
                 verticalAlignment = Alignment.Bottom
             ) {
-                // Add — opens the attach sheet (gallery, camera, files, voice).
+                // The reference has one leading sparkle. It opens the same
+                // attach/mode sheet the removed plus and mic used to reach, so
+                // no capability disappeared with the chrome.
                 IconButton(onClick = onAttach) {
                     Icon(
-                        GsIcons.Plus,
-                        contentDescription = "Attach",
-                        tint = GsTheme.colors.textSecondary
+                        GsIcons.Sparkles,
+                        contentDescription = "Nexly tools and attachments",
+                        tint = Color(0xFF8E7BFF),
+                        modifier = Modifier.size(21.dp)
                     )
-                }
-                if (modeLabel != null) {
-                    Surface(
-                        onClick = onModeChipClick,
-                        shape = RoundedCornerShape(999.dp),
-                        color = GsTheme.colors.accentSoft,
-                        modifier = Modifier.padding(end = 4.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(start = 10.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(2.dp)
-                        ) {
-                            Text(
-                                text = modeLabel.removeSuffix(" \u25BE"),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Icon(
-                                GsIcons.ChevronDown,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(12.dp)
-                            )
-                        }
-                    }
                 }
     // The field is LIVE during a turn. It used to be `enabled = !isStreaming`,
     // and the effect was exactly opposite to native: while the AI was
@@ -2048,8 +2109,8 @@ private fun ComposerRow(
                         Box {
                             if (draftText().isEmpty()) {
                                 Text(
-                                    text = "Ask anything\u2026",
-                                    style = MaterialTheme.typography.bodyLarge,
+                                    text = "Ask me anything...",
+                                    style = MaterialTheme.typography.bodyLarge.copy(fontSize = 15.5.sp),
                                     color = GsTheme.colors.textPlaceholder
                                 )
                             }
@@ -2057,15 +2118,6 @@ private fun ComposerRow(
                         }
                     }
                 )
-                if (onMic != null) {
-                    IconButton(onClick = onMic) {
-                        Icon(
-                            GsIcons.Mic,
-                            contentDescription = "Dictate with voice",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
                 // While a turn runs the slot belongs to the stop orb — but a
                 // drafted next message must still be able to GO. The queue
                 // arrow sits left of the orb: it parks the draft and sends it
@@ -2116,7 +2168,10 @@ private fun LiveStreamText(
     onSendPrompt: ((String) -> Unit)? = null,
     onNavigateVoice: (() -> Unit)? = null,
     userPrompt: String = "",
-    priorContext: String = ""
+    priorContext: String = "",
+    glassAssistant: Boolean = false,
+    statusCard: (@Composable () -> Unit)? = null,
+    planTimestamp: String? = null
 ) {
     CompositionLocalProvider(LocalVoiceLauncher provides onNavigateVoice) {
         BlocksContent(
@@ -2126,89 +2181,90 @@ private fun LiveStreamText(
             citationUrls = citationUrls,
             onSendPrompt = onSendPrompt,
             userPrompt = userPrompt,
-            priorContext = priorContext
+            priorContext = priorContext,
+            glassAssistant = glassAssistant,
+            statusCard = statusCard,
+            planTimestamp = planTimestamp
         )
     }
 }
 
 /**
- * THE PRE-ANSWER CARD (reference): the three real stages of a turn, shown only
- * while the model is working and no token has landed yet. It is a picture of
- * what the pipeline is actually doing — reading the request, planning the
- * answer, composing it — and it is gone the instant the first token arrives,
- * so the transcript never keeps a stale "Thinking…" after the answer exists.
+ * THE THINKING / REASONING / EFFORT CARD (reference): the same three stages,
+ * with circular glass glyph tiles and the reference copy. It lives INSIDE the
+ * first assistant card, after the preamble, and stays visible while the plan
+ * streams — not just before the first token.
  */
 @Composable
-private fun ReferenceThinkingCard() {
-    val colors = GsTheme.colors
+internal fun ReferenceThinkingCard() {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .widthIn(max = 420.dp)
-            .gsGlass(GsGlassRole.Card, RoundedCornerShape(20.dp))
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+            .widthIn(max = 460.dp)
+            .gsGlass(GsGlassRole.FloatingControl, RoundedCornerShape(20.dp))
+            .padding(horizontal = 6.dp, vertical = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(1.dp)
     ) {
         ThinkingRow(
-            icon = GsIcons.Sparkles,
-            tint = colors.accentStrong,
-            tile = colors.accentSoft,
+            icon = "sparkles",
+            tone = "peach",
             title = "Thinking",
-            subtitle = "Analyzing your request…"
+            subtitle = "Analyzing your goals and priorities..."
         )
         ThinkingRow(
-            icon = GsIcons.Brain,
-            tint = Color(0xFF8E7BFF),
-            tile = Color(0x338E7BFF),
+            icon = "brain",
+            tone = "lavender",
             title = "Reasoning",
-            subtitle = "Planning the best structure…"
+            subtitle = "Planning the best structure and balance..."
         )
         ThinkingRow(
-            icon = GsIcons.SlidersHorizontal,
-            tint = Color(0xFF2F9E6B),
-            tile = Color(0x332F9E6B),
+            icon = "settings",
+            tone = "mint",
             title = "Effort",
-            subtitle = "Composing a detailed answer…"
+            subtitle = "Creating a detailed, realistic schedule..."
         )
     }
 }
 
 @Composable
 private fun ThinkingRow(
-    icon: ImageVector,
-    tint: Color,
-    tile: Color,
+    icon: String,
+    tone: String,
     title: String,
     subtitle: String,
 ) {
     Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 5.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Box(
-            modifier = Modifier
-                .size(34.dp)
-                .clip(RoundedCornerShape(11.dp))
-                .background(tile),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                icon,
-                contentDescription = null,
-                tint = tint,
-                modifier = Modifier.size(18.dp)
-            )
-        }
+        NexlyGlassGlyphTile(
+            name = icon,
+            toneName = tone,
+            size = 32.dp,
+            glyphSize = 16.dp
+        )
         Column {
             Text(
                 text = title,
-                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontSize = 13.sp,
+                    lineHeight = 16.sp,
+                    fontWeight = FontWeight.SemiBold
+                ),
                 color = GsTheme.colors.textPrimary
             )
             Text(
                 text = subtitle,
-                style = MaterialTheme.typography.labelSmall,
-                color = GsTheme.colors.textSecondary
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = 10.5.sp,
+                    lineHeight = 13.sp
+                ),
+                color = GsTheme.colors.textSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }
@@ -2256,8 +2312,8 @@ private fun GsSendButton(enabled: Boolean, onSend: () -> Unit) {
     )
     Box(
         modifier = Modifier
-            .padding(end = 4.dp, bottom = 2.dp)
-            .size(36.dp)
+            .padding(end = 3.dp, bottom = 1.dp)
+            .size(40.dp)
             .graphicsLayer {
                 val scale = 1f - 0.04f * press
                 scaleX = scale
@@ -2265,7 +2321,14 @@ private fun GsSendButton(enabled: Boolean, onSend: () -> Unit) {
                 translationY = press * 1.dp.toPx()
             }
             .clip(CircleShape)
-            .background(if (enabled) colors.textPrimary else colors.raisedSurface)
+            .background(
+                if (enabled) {
+                    Brush.linearGradient(listOf(Color(0xFFFFC08D), Color(0xFFF0813F)))
+                } else {
+                    Brush.linearGradient(listOf(colors.raisedSurface, colors.raisedSurface))
+                }
+            )
+            .border(1.dp, Color.White.copy(alpha = 0.55f), CircleShape)
             .clickable(
                 interactionSource = interaction,
                 indication = null,
@@ -2276,11 +2339,10 @@ private fun GsSendButton(enabled: Boolean, onSend: () -> Unit) {
             .semantics { contentDescription = "Send" },
         contentAlignment = Alignment.Center
     ) {
-        Icon(
-            GsIcons.ArrowUp,
-            contentDescription = null,
-            tint = if (enabled) colors.appBackground else colors.textSecondary,
-            modifier = Modifier.size(20.dp)
+        NexlyGlyph(
+            name = "send-2",
+            size = 18.dp,
+            color = if (enabled) Color.White else colors.textSecondary
         )
     }
 }
@@ -2554,20 +2616,19 @@ private fun AssistantMessage(
             .filter { it.url.startsWith("https://") || it.url.startsWith("http://") }
             .associate { it.ordinal to it.url }
     }
+    // The reference keeps Thinking/Reasoning/Effort visible through the answer,
+    // not just before the first token. A plan turn is the clearest case: the
+    // timetable is the proof that planning happened, so the panel stays. Non-
+    // plan turns lose it at finalize, when the answer itself is the status.
+    val hasPlan = remember(message.content) { containsNexlyPlan(message.content) }
+    val showStatus = message.isStreaming || hasPlan
     Box(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.fillMaxWidth()) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
             if (showIdentity) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    AssistantAvatar()
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = "GS",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Spacer(Modifier.height(6.dp))
+                AssistantAvatar()
+                Spacer(Modifier.width(9.dp))
             }
+            Column(modifier = Modifier.weight(1f)) {
             // PHASE 8.1: the search trace, ABOVE the bubble — expanded while
             // the stream runs, collapsed to the one-line summary after done
             // (protocol honest-state rule). Rendered only when a real search
@@ -2609,26 +2670,11 @@ private fun AssistantMessage(
                     Spacer(Modifier.height(8.dp))
                 }
             }
-            // REASONING TRACE (chat-reasoning): above the answer while THIS
-            // turn's reasoning streams — stream-only, gone at the next send.
-            // perf-smooth-1: the read lives inside [LiveReasoning], so token
-            // flushes never re-compose this row.
-            // THE PRE-ANSWER CARD (reference) — before the first token only.
-            // Once content exists the answer itself is the status; a lingering
-            // "Thinking…" card over a finished reply is a lie.
-            if (message.isStreaming && message.content.isEmpty()) {
-                ReferenceThinkingCard()
-                Spacer(Modifier.height(8.dp))
-            }
-            if (message.isStreaming) {
-                LiveReasoning(live = live)
-            }
-            // Document-style content: no card container, no border — just the
-            // answer on the app background at the bodyLarge measure (16sp /
-            // 24sp, the BlocksContent base style), hard-capped at the 640dp
-            // reading width the shell centers. The content column carries the
-            // long-press context menu and (when this turn is the active search
-            // hit) a soft accent field instead of the old card border.
+            // THE NEXLY GLASS TRANSCRIPT. The Thinking panel now lives INSIDE
+            // the first prose card, after the preamble, and stays there while
+            // the plan streams. The raw reasoning panel is intentionally not
+            // rendered here: the reference has one three-stage card, not a
+            // second competing trace.
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -2638,7 +2684,7 @@ private fun AssistantMessage(
                         else androidx.compose.ui.graphics.Color.Transparent,
                         shape = GsRadius.smShape()
                     )
-                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                    .padding(vertical = 2.dp)
                     // Long-press only. There used to be `onClick = {}` here,
                     // which made every non-interactive pixel of an answer a
                     // button that did nothing — the exact "taps are swallowed"
@@ -2670,7 +2716,14 @@ private fun AssistantMessage(
                     onSendPrompt = onSendPrompt,
                     onNavigateVoice = onNavigateVoice,
                     userPrompt = userPrompt,
-                    priorContext = priorContext
+                    priorContext = priorContext,
+                    glassAssistant = true,
+                    statusCard = if (showStatus) {
+                        { ReferenceThinkingCard() }
+                    } else {
+                        null
+                    },
+                    planTimestamp = message.createdAt
                 )
             }
             // PHASE 8.1: the turn's real sources — live while streaming (as
@@ -2687,45 +2740,78 @@ private fun AssistantMessage(
                 ClarifyChips(prompt = turnClarify, onPick = onClarifyOption)
             }
             if (!message.isStreaming) {
-                Spacer(Modifier.height(2.dp))
-                // Quiet per-turn action row: timestamp folded in, compact icon
-                // actions below the content — per-turn capabilities stay
-                // per-turn, without card chrome.
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(2.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    val stamp = remember(message.createdAt) { timeLabel(message.createdAt) }
-                    if (stamp.isNotEmpty()) {
-                        Text(
-                            text = stamp,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.outline,
-                            modifier = Modifier.padding(end = 4.dp)
-                        )
-                    }
-                    BubbleAction(GsIcons.Copy, "Copy") { onCopy(message.content) }
-                    BubbleAction(GsIcons.RefreshCw, "Regenerate", onRegenerate)
-                    BubbleAction(
-                        if (isSpeaking) GsIcons.VolumeX else GsIcons.Volume2,
-                        if (isSpeaking) "Stop reading" else "Read aloud",
-                        onReadAloud
-                    )
-                    BubbleAction(GsIcons.Share, "Share", onShare)
-                }
                 if (message.failed) {
                     Spacer(Modifier.height(6.dp))
                     FailedTurnNotice(
                         hasPartial = message.content.isNotBlank(),
                         onRegenerate = onRegenerate
                     )
+                } else if (!hasPlan) {
+                    // The reference shows only the timestamp under an assistant
+                    // turn. Copy / regenerate / read / share remain reachable
+                    // from the long-press menu, so no capability is lost.
+                    val stamp = remember(message.createdAt) { timeLabel(message.createdAt) }
+                    if (stamp.isNotEmpty()) {
+                        Spacer(Modifier.height(3.dp))
+                        Text(
+                            text = stamp,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline,
+                            modifier = Modifier.align(Alignment.End).padding(end = 2.dp)
+                        )
+                    }
                 }
+            }
             }
         }
         DropdownMenu(
             expanded = menuExpanded,
             onDismissRequest = { menuExpanded = false }
         ) {
+            DropdownMenuItem(
+                text = { Text("Copy") },
+                leadingIcon = {
+                    Icon(GsIcons.Copy, contentDescription = null, modifier = Modifier.size(18.dp))
+                },
+                onClick = {
+                    menuExpanded = false
+                    onCopy(message.content)
+                }
+            )
+            DropdownMenuItem(
+                text = { Text(if (isSpeaking) "Stop reading" else "Read aloud") },
+                leadingIcon = {
+                    Icon(
+                        if (isSpeaking) GsIcons.VolumeX else GsIcons.Volume2,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                },
+                onClick = {
+                    menuExpanded = false
+                    onReadAloud()
+                }
+            )
+            DropdownMenuItem(
+                text = { Text("Regenerate") },
+                leadingIcon = {
+                    Icon(GsIcons.RefreshCw, contentDescription = null, modifier = Modifier.size(18.dp))
+                },
+                onClick = {
+                    menuExpanded = false
+                    onRegenerate()
+                }
+            )
+            DropdownMenuItem(
+                text = { Text("Share") },
+                leadingIcon = {
+                    Icon(GsIcons.Share, contentDescription = null, modifier = Modifier.size(18.dp))
+                },
+                onClick = {
+                    menuExpanded = false
+                    onShare()
+                }
+            )
             DropdownMenuItem(
                 text = { Text("Translate") },
                 leadingIcon = {
@@ -2949,15 +3035,20 @@ private fun SheetActionRow(
     }
 }
 
-/** Compact assistant identity mark beside the first assistant block of a turn. */
+/**
+ * The assistant identity mark: the real companion orb, outside the glass card,
+ * exactly as the reference frames it. No "GS" monogram and no second logo.
+ */
 @Composable
 private fun AssistantAvatar() {
-    // The same hand-drawn bloom that greets the reader on the empty surface —
-    // one motif, used consistently, never a second logo.
-    RefArtwork(
-        art = RefArt.Bloom,
-        size = 30.dp,
-        contentDescription = "GS assistant"
+    Image(
+        painter = painterResource(R.drawable.gs_companion_orb),
+        contentDescription = "Nexly",
+        modifier = Modifier
+            .size(38.dp)
+            .shadow(5.dp, CircleShape)
+            .clip(CircleShape)
+            .border(1.dp, Color.White.copy(alpha = 0.55f), CircleShape)
     )
 }
 

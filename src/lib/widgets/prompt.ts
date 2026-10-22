@@ -14,6 +14,7 @@
  */
 
 import { DESIGN_REMINDER, DESIGN_RULEBOOK, PALETTES, SURFACES } from '../design/rulebook'
+import { NEXLY_PLAN_PROMPT } from '../nexly/plan'
 import { APP_TYPES, CALC_TYPES, CANVAS_TYPES, CHART_TYPES, EDITOR_TYPES, FORM_FIELD_TYPES, MEDIA_TYPES, SIM_TYPES, STAGE3D_TYPES, WIDGET_KINDS } from './catalog'
 
 /**
@@ -90,6 +91,7 @@ DATA
 - compare: {"title":"...","left":{"title":"...","items":["..."]},"right":{"title":"...","items":["..."]}}
 - progress: {"title":"...","items":[{"label":"...","percent":0-100}]}
 - timeline: {"title":"...","entries":[{"date":"...","title":"...","detail":"..."}]}
+- plan: {"title":"...","rows":[{"time":"8:00 – 8:30 AM","icon":"sunrise","text":"Morning routine + light exercise","tone":"amber"}],"closing":"You got this!","closingIcon":"flame","timestamp":"9:45 PM"}  (the Nexly timetable: one glass card, per-row glass glyph, time stacked over text, closing line + timestamp. Use this for any daily schedule, routine, itinerary or timetable — NOT timeline, markdown bullets or a table.)
 - gauge: {"title":"...","items":[{"label":"...","value":N,"max":M,"unit":"%"}]}  (radial meters for a handful of metrics; use progress when the list is longer or the values are percentages of a whole)
 
 INTERACTIVE INPUTS
@@ -180,6 +182,7 @@ the first row that fits, and stop:
   detail the user will scan    -> table (numbers right-aligned by the renderer)
   progress toward a target     -> progress; one metric only -> gauge
   a sequence of events         -> timeline
+  a daily schedule/timetable   -> plan (one glass card, icon-led rows)
   steps the user must follow   -> timeline or steps; a guided flow -> app wizard
   change a value, see a result -> calc (never html)
   a form to fill in            -> form; a multi-step flow -> app wizard
@@ -200,6 +203,9 @@ the first row that fits, and stop:
   a picture, icon or bespoke   -> svg
   anything else interactive    -> html
 If two rows fit, prefer the one that shows the data rather than describing it.
+
+THE NEXLY PLAN GRAMMAR
+${NEXLY_PLAN_PROMPT}
 
 PRE-FLIGHT, before you finish the reply
 1. Does every fence body parse as JSON? No trailing comma, no comment, no

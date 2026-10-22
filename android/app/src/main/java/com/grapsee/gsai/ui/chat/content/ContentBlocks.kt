@@ -113,6 +113,18 @@ sealed interface Block {
         override val sourceStart: Int
     ) : Block
 
+    /**
+     * The Nexly timetable. Unlike a generic widget this is a first-class block:
+     * it renders outside the prose card, owns its own glass surface, and its
+     * glass glyphs are resolved from the shared Tabler font. An open fence is
+     * the mid-stream skeleton.
+     */
+    data class PlanBlock(
+        val plan: NexlyPlanData,
+        val open: Boolean,
+        override val sourceStart: Int
+    ) : Block
+
     data class ImageBlock(val url: String, val alt: String, override val sourceStart: Int) : Block
     data class CollapsibleBlock(
         val summary: String,
@@ -161,8 +173,28 @@ fun parseBlocks(content: String, metadata: RichMetadata? = null): List<Block> {
     return toolBlocks + blocks + citationBlock
 }
 
+/**
+ * True when a settled reply owns a timetable, whether it arrived as a
+ * ```plan fence or as a bare/JSON-wrapped payload the parser promoted. The
+ * chat shell uses this to keep the Thinking card mounted and to suppress the
+ * duplicate footer timestamp; a plain substring check missed promoted plans.
+ */
+fun containsNexlyPlan(content: String): Boolean {
+    if (content.isBlank()) return false
+    if (content.contains("```plan", ignoreCase = true)) return true
+    if (!content.contains("\"rows\"", ignoreCase = true)) return false
+    return parseBlocks(content).any { it is Block.PlanBlock }
+}
+
 /** Languages whose body is plausibly a bare widget payload. */
 private val JSONISH_LANGUAGES = setOf("json", "jsonc", "widget", "genui", "data")
+
+/**
+ * Fence languages a model naturally reaches for when it means the Nexly
+ * timetable. `schedule` is also a real interactive app type, so it only becomes
+ * a plan when the body actually has timed rows.
+ */
+private val PLAN_FENCE_LANGUAGES = setOf("plan", "schedule", "timetable", "itinerary", "routine", "day")
 
 /**
  * Promote a BARE widget payload to a real widget block.
@@ -189,6 +221,10 @@ private fun promoteBarePayload(block: Block): Block {
     if (trimmed.length < 2 || trimmed.length > 64 * 1024) return block
     if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) return block
     val kind = inferWidgetKind(trimmed) ?: return block
+    if (kind == "plan") {
+        val plan = parseNexlyPlanData(trimmed) ?: return block
+        return Block.PlanBlock(plan = plan, open = false, sourceStart = block.sourceStart)
+    }
     return Block.WidgetBlock(kind = kind, json = trimmed, open = false, sourceStart = block.sourceStart)
 }
 
@@ -375,6 +411,16 @@ private fun parseFence(lines: List<Line>, start: Int): Pair<Block, Int> {
     // Unterminated trailing fence — mid-stream. Widget fences become an OPEN
     // widget block so the UI shows a skeleton instead of scrolling raw JSON;
     // everything else renders what arrived as open code.
+    if (language.equals("plan", ignoreCase = true)) {
+        return Pair(
+            Block.PlanBlock(
+                plan = parseNexlyPlanData(body.toString().trimEnd('\n')) ?: placeholderPlanData(),
+                open = true,
+                sourceStart = lines[start].offset
+            ),
+            lines.size
+        )
+    }
     val openKind = widgetKindOf(language)
     if (openKind != null) {
         return Pair(
@@ -400,7 +446,7 @@ private fun parseFence(lines: List<Line>, start: Int): Pair<Block, Int> {
 
 /** Fence languages that carry a GENUI widget payload (JSON body). */
 val WIDGET_LANGUAGES = setOf(
-    "chart", "stat", "table", "compare", "progress", "timeline",
+    "chart", "stat", "table", "compare", "progress", "timeline", "plan",
     "gauge", "quiz", "form", "carousel", "cards", "followups",
     "media", "actions", "panel", "voice", "calc", "app",
     // v3 kinds
@@ -535,6 +581,11 @@ private fun fenceToBlock(language: String?, code: String, open: Boolean, offset:
     val lang = language?.lowercase()
     val kind = widgetKindOf(lang)
     val isJson = code.trimStart().startsWith("{")
+    val parsedPlan = if (!open && lang != null && lang in PLAN_FENCE_LANGUAGES) {
+        parseNexlyPlanData(code)
+    } else {
+        null
+    }
     return when {
         // A mind map in a ```mindmap fence is mermaid syntax — the live model
         // sends exactly that. Same for a ```gantt fence that holds mermaid's
@@ -545,6 +596,11 @@ private fun fenceToBlock(language: String?, code: String, open: Boolean, offset:
             (language.equals("gantt", ignoreCase = true) && !isJson)) && !open ->
             Block.MermaidBlock(code, offset)
         lang == "map" -> Block.HtmlBlock("map", code, open, offset)
+        // `schedule`, `timetable`, `itinerary`, `routine` and `day` are natural
+        // fence names for this card. Only a payload with timed rows becomes a
+        // plan; a real interactive ```schedule app still routes to its widget.
+        parsedPlan != null -> Block.PlanBlock(parsedPlan, open = false, sourceStart = offset)
+        lang == "plan" && !open -> Block.CodeBlock(language, code, open, offset)
         // Widget fences are JSON. A JSON-looking fence in a widget language wins
         // over the html fallback, so ```app can be either a widget payload or a
         // full document without ambiguity. Chart sub-type fences (```funnel,
@@ -875,6 +931,7 @@ private fun Block.withShiftedSource(delta: Int): Block = when (this) {
     is Block.MermaidBlock -> copy(sourceStart = sourceStart + delta)
     is Block.HtmlBlock -> copy(sourceStart = sourceStart + delta)
     is Block.WidgetBlock -> copy(sourceStart = sourceStart + delta)
+    is Block.PlanBlock -> copy(sourceStart = sourceStart + delta)
     is Block.ImageBlock -> copy(sourceStart = sourceStart + delta)
     is Block.CollapsibleBlock -> copy(
         sourceStart = sourceStart + delta,

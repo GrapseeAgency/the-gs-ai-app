@@ -252,6 +252,30 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      - name: Collect the Nexly chat response render
+        if: always()
+        run: |
+          set -euo pipefail
+          # NexlyChatRenderTests uses the same simulator-visible /tmp channel as
+          # HomeRenderTests. A missing PNG is a build failure, not a shrug.
+          SRC=/tmp/gs-nexly-renders
+          DIR=ios/build/nexly-renders
+          mkdir -p "$DIR"
+          if [ -d "$SRC" ]; then cp "$SRC"/nexly-chat-ios-*.png "$DIR/" 2>/dev/null || true; fi
+          for w in 393x852 411x914 360x780; do
+            test -s "$DIR/nexly-chat-ios-$w.png" \
+              || { echo "::error::nexly-chat-ios-$w.png missing — the chat render harness did not produce it"; exit 1; }
+          done
+
+      - name: Upload the Nexly chat response render
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexly-chat-render-ios
+          path: ios/build/nexly-renders/*.png
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Package — zip unsigned simulator .app
         run: |
           # XcodeGen's default PRODUCT_NAME = target name → the built bundle

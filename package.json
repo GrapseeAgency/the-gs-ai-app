@@ -15,7 +15,9 @@
     "eval:graders": "bun scripts/test-eval-graders.ts",
     "eval:run": "bun scripts/run-eval-suite.ts --origin http://localhost:3000 --delay 12000 --merge-baseline tests/baseline-v1.json",
     "eval:run:ci": "bun scripts/run-eval-suite.ts --strict --github-annotations --jsonl eval-run.jsonl",
-    "test:widgets": "tsc scripts/test-widget-compiler.ts --outDir /tmp/wt --module commonjs --target es2020 --moduleResolution node --esModuleInterop --skipLibCheck && node /tmp/wt/scripts/test-widget-compiler.js",
+    "test:widgets": "tsc scripts/test-widget-compiler.ts --outDir /tmp/wt --module commonjs --target es2020 --moduleResolution node --esModuleInterop --resolveJsonModule --skipLibCheck && node /tmp/wt/scripts/test-widget-compiler.js",
+    "icons:nexly": "node scripts/build-nexly-icons.mjs",
+    "test:nexly": "bun scripts/test-nexly-plan.ts",
     "probe:widgets": "tsc scripts/live-widget-probe.ts --outDir /tmp/wp --module commonjs --target es2020 --moduleResolution node --esModuleInterop --skipLibCheck --lib es2020,dom && node /tmp/wp/scripts/live-widget-probe.js"
   },
   "dependencies": {
@@ -92,6 +94,7 @@
     "zustand": "^5.0.6"
   },
   "devDependencies": {
+    "@tabler/icons": "^3.49.0",
     "@tailwindcss/postcss": "^4",
     "@types/leaflet": "^1.9.22",
     "@types/react": "^19",

@@ -83,6 +83,10 @@ targets:
     sources:
       - path: App/Sources
       - path: App/Assets.xcassets
+      # Nexly glass vocabulary: one 3.49.0 outline font + the class-to-
+      # codepoint table. Both clients bundle the identical pair so a plan
+      # emitted once resolves to the same glyph on Android and iOS.
+      - path: App/Resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.grapsee.gsai
@@ -154,6 +158,8 @@ targets:
       properties:
         UILaunchScreen: {}
         CFBundleDisplayName: GS AI
+        UIAppFonts:
+          - TablerIcons.ttf
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
         NSSpeechRecognitionUsageDescription: GS turns your voice into text for your prompts when you use voice mode.
         NSMicrophoneUsageDescription: GS uses the microphone when you talk in voice mode.

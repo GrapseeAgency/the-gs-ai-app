@@ -29,6 +29,7 @@ export const WIDGET_KINDS = [
   'compare',
   'progress',
   'timeline',
+  'plan',
   'gauge',
   // -- interactive inputs ----------------------------------------------------
   'quiz',

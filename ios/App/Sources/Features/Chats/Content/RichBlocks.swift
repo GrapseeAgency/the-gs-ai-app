@@ -25,8 +25,136 @@ struct BlocksView: View {
     }
 }
 
+// MARK: - Nexly glass transcript
+
+/// The reference composition, iOS twin of Android's `NexlyAssistantBlocks`:
+/// consecutive prose becomes one milky glass card, a `plan` fence becomes its
+/// own sibling card, and every card carries the companion orb outside it. The
+/// Thinking/Reasoning/Effort panel sits after the preamble inside the first
+/// prose card and survives finalize for plan turns (the timetable is the proof
+/// that planning happened), exactly like the reference.
+struct NexlyAssistantBlocksView: View {
+    let blocks: [Block]
+    var isStreaming: Bool = false
+    var showStatus: Bool = false
+    var citations: [Int: String] = [:]
+    var planTimestamp: String? = nil
+
+    private enum Group {
+        case prose([Block])
+        case plan(NexlyPlanData, Bool)
+    }
+
+    var body: some View {
+        let groups = grouped()
+        let statusIndex = groups.firstIndex { group in
+            if case .prose = group { return true }
+            return false
+        }
+        VStack(alignment: .leading, spacing: 12) {
+            if groups.isEmpty {
+                HStack(alignment: .top, spacing: 9) {
+                    NexlyAssistantOrb()
+                    if showStatus {
+                        NexlyThinkingCard(active: isStreaming)
+                    } else {
+                        Text("…")
+                            .font(Aero.body())
+                            .foregroundStyle(Aero.text)
+                            .padding(.vertical, 8)
+                    }
+                    Spacer(minLength: 0)
+                }
+            } else {
+                ForEach(Array(groups.enumerated()), id: \.offset) { index, group in
+                    HStack(alignment: .top, spacing: 9) {
+                        NexlyAssistantOrb()
+                        switch group {
+                        case .plan(let plan, let open):
+                            NexlyPlanCard(plan: plan, open: open, fallbackTimestamp: planTimestamp)
+                        case .prose(let prose):
+                            proseCard(
+                                prose,
+                                isStatusHost: index == statusIndex,
+                                isFirst: index == 0
+                            )
+                        }
+                        Spacer(minLength: 0)
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func proseCard(_ prose: [Block], isStatusHost: Bool, isFirst: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(Array(prose.enumerated()), id: \.offset) { index, block in
+                BlockView(block: block, isLast: index == prose.count - 1, citations: citations)
+            }
+            if isStatusHost && showStatus {
+                if !prose.isEmpty { Spacer().frame(height: 2) }
+                NexlyThinkingCard(active: isStreaming)
+            } else if prose.isEmpty && isStreaming {
+                Text("…")
+                    .font(Aero.body())
+                    .foregroundStyle(Aero.text)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .gsGlass(.card, corner: 24)
+        .padding(.top, isFirst ? 0 : 2)
+    }
+
+    private func grouped() -> [Group] {
+        var out: [Group] = []
+        var prose: [Block] = []
+        func flush() {
+            if !prose.isEmpty {
+                out.append(.prose(prose))
+                prose.removeAll()
+            }
+        }
+        for block in blocks {
+            if case .plan(let plan, let open, _) = block {
+                flush()
+                out.append(.plan(plan, open))
+            } else {
+                prose.append(block)
+            }
+        }
+        flush()
+        // Status must lead the turn. When the model opened with the timetable
+        // (no preamble yet), give the thinking panel its own prose card before
+        // the plan instead of hiding it inside a later paragraph.
+        if showStatus, let first = out.first, case .plan(_, _) = first {
+            out.insert(.prose([]), at: 0)
+        }
+        return out
+    }
+}
+
+/// Companion orb beside each assistant card — the reference keeps identity
+/// outside the glass, never as an avatar inside the text.
+private struct NexlyAssistantOrb: View {
+    var body: some View {
+        AnimatedGsIllustration(
+            imageName: "GSCompanionOrb",
+            size: 30,
+            breathDuration: 3.2,
+            rotationDegrees: 0.8,
+            lift: -1,
+            startDelay: 0.16
+        )
+        .accessibilityLabel("Nexly")
+    }
+}
+
 @ViewBuilder
-private func BlockView(block: Block, isLast: Bool, citations: [Int: String]) -> some View {
+func BlockView(block: Block, isLast: Bool, citations: [Int: String]) -> some View {
     switch block {
     case .paragraph(let spans, _):
         ParagraphView(spans: spans, showCaret: false, citations: citations)
@@ -42,6 +170,8 @@ private func BlockView(block: Block, isLast: Bool, citations: [Int: String]) -> 
         CodeBlockCardView(language: language, code: code, open: open)
     case .table(let headers, let aligns, let rows, _):
         TableBlockView(headers: headers, aligns: aligns, rows: rows, citations: citations)
+    case .plan(let plan, let open, _):
+        NexlyPlanCard(plan: plan, open: open)
     case .divider:
         DividerBlockView()
     case .mathBlock(let latex, _):
@@ -71,33 +201,37 @@ private struct SpanTheme {
     var citations: [Int: String] = [:]
 }
 
-private func attributed(from spans: [InlineSpan], theme: SpanTheme) -> AttributedString {
+private func attributed(
+    from spans: [InlineSpan],
+    theme: SpanTheme,
+    style: InlinePresentationIntent = []
+) -> AttributedString {
     var result = AttributedString()
-    append(spans: spans, into: &result, theme: theme)
+    append(spans: spans, into: &result, theme: theme, style: style)
     return result
 }
 
-private func append(spans: [InlineSpan], into result: inout AttributedString, theme: SpanTheme) {
+private func append(
+    spans: [InlineSpan],
+    into result: inout AttributedString,
+    theme: SpanTheme,
+    style: InlinePresentationIntent = []
+) {
     for span in spans {
         switch span {
         case .text(let text):
-            appendText(text, into: &result, theme: theme)
+            appendText(text, into: &result, theme: theme, style: style)
         case .bold(let children):
-            var inner = attributed(from: children, theme: theme)
-            inner.inlinePresentationIntent = .stronglyEmphasized
-            result.append(inner)
+            result.append(attributed(from: children, theme: theme, style: style.union(.stronglyEmphasized)))
         case .italic(let children):
-            var inner = attributed(from: children, theme: theme)
-            inner.inlinePresentationIntent = .emphasized
-            result.append(inner)
+            result.append(attributed(from: children, theme: theme, style: style.union(.emphasized)))
         case .strike(let children):
-            var inner = attributed(from: children, theme: theme)
-            inner.inlinePresentationIntent = .strikethrough
-            result.append(inner)
+            result.append(attributed(from: children, theme: theme, style: style.union(.strikethrough)))
         case .code(let code):
             var run = AttributedString(code)
             run.font = .system(size: theme.baseSize * 0.88, weight: .regular, design: .monospaced)
             run.backgroundColor = theme.monoBackground
+            if !style.isEmpty { run.inlinePresentationIntent = style }
             result.append(run)
         case .link(let text, let url):
             if let url = URL(string: url) {
@@ -126,9 +260,42 @@ private let citationMarkerRegex = try! NSRegularExpression(pattern: "\\[(\\d{1,3
 /// Splits a plain-text run on `[N]` markers: matched ordinals become tappable
 /// superscript chips linking the real source URL; unmatched markers stay
 /// literal text (the protocol's strip rule, applied in the renderer).
-private func appendText(_ text: String, into result: inout AttributedString, theme: SpanTheme) {
+/// Inline `:icon:` tokens and any emoji the model slipped through become real
+/// Tabler glass glyphs instead of text — the native twin of the web renderer.
+private func appendText(
+    _ text: String,
+    into result: inout AttributedString,
+    theme: SpanTheme,
+    style: InlinePresentationIntent = []
+) {
+    for part in NexlyIcons.inlineParts(text) {
+        switch part {
+        case .text(let run):
+            appendCitations(run, into: &result, theme: theme, style: style)
+        case .icon(let name):
+            var glyph = AttributedString(NexlyIcons.glyph(name))
+            glyph.font = .custom(NexlyIcons.family, size: theme.baseSize * 1.14)
+            glyph.foregroundColor = theme.textColor
+            glyph.baselineOffset = -theme.baseSize * 0.09
+            result.append(glyph)
+        }
+    }
+}
+
+private func styledRun(_ text: String, style: InlinePresentationIntent) -> AttributedString {
+    var run = AttributedString(text)
+    if !style.isEmpty { run.inlinePresentationIntent = style }
+    return run
+}
+
+private func appendCitations(
+    _ text: String,
+    into result: inout AttributedString,
+    theme: SpanTheme,
+    style: InlinePresentationIntent
+) {
     guard !theme.citations.isEmpty, text.contains("[") else {
-        result.append(AttributedString(text))
+        result.append(styledRun(text, style: style))
         return
     }
     let ns = text as NSString
@@ -136,11 +303,14 @@ private func appendText(_ text: String, into result: inout AttributedString, the
     while index < ns.length {
         let range = NSRange(location: index, length: ns.length - index)
         guard let match = citationMarkerRegex.firstMatch(in: text, range: range) else {
-            result.append(AttributedString(ns.substring(from: index)))
+            result.append(styledRun(ns.substring(from: index), style: style))
             return
         }
         if match.range.location > index {
-            result.append(AttributedString(ns.substring(with: NSRange(location: index, length: match.range.location - index))))
+            result.append(styledRun(
+                ns.substring(with: NSRange(location: index, length: match.range.location - index)),
+                style: style
+            ))
         }
         if let ordinal = Int(ns.substring(with: match.range(at: 1))),
            let urlString = theme.citations[ordinal],
@@ -155,7 +325,7 @@ private func appendText(_ text: String, into result: inout AttributedString, the
             chip.backgroundColor = theme.monoBackground
             result.append(chip)
         } else {
-            result.append(AttributedString(ns.substring(with: match.range)))
+            result.append(styledRun(ns.substring(with: match.range), style: style))
         }
         index = match.range.location + match.range.length
     }

@@ -13,6 +13,7 @@ import { TableWidget } from './widgets/TableWidget'
 import { CompareWidget } from './widgets/CompareWidget'
 import { ProgressWidget } from './widgets/ProgressWidget'
 import { TimelineWidget } from './widgets/TimelineWidget'
+import { PlanWidget } from './widgets/PlanWidget'
 import { GaugeWidget } from './widgets/GaugeWidget'
 import { QuizWidget } from './widgets/QuizWidget'
 import { FormWidget } from './widgets/FormWidget'
@@ -59,6 +60,7 @@ export const REGISTRY: Record<string, WidgetComponent> = {
   compare: CompareWidget,
   progress: ProgressWidget,
   timeline: TimelineWidget,
+  plan: PlanWidget,
   gauge: GaugeWidget,
   quiz: QuizWidget,
   form: FormWidget,
