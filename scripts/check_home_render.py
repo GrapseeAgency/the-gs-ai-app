@@ -120,7 +120,15 @@ SUGGESTIONS_RENDER = {
 # (0.72 and 1.42 L, i.e. noise), which is the same "a gate that cannot fail"
 # defect this script was rewritten for, hiding in the one check added last.
 SUGGESTIONS_ANDROID = dict(SUGGESTIONS_RENDER, rim_y=0.7582)
-SUGGESTIONS_IOS = dict(SUGGESTIONS_RENDER, rim_y=0.7707)
+# iOS re-measured after Poppins landed: the geometric face is taller than SF Pro
+# at the same point size, so every text block grew and the cards below the
+# greeting moved down ~50px. The old rect (interior 0.7900, rim_y 0.7707) now
+# straddles the card's top edge — which is what A3 purity exists to catch, and
+# did: it reported spread 9.29 rather than passing a page sample as glass.
+SUGGESTIONS_IOS = {"name": "suggestions",
+                   "interior": [0.66, 0.7970, 0.26, 0.0200],
+                   "outside":  [0.004, 0.7970, 0.022, 0.0200],
+                   "rim_y": 0.7935}
 
 # The bento's Mind Guide card — the sheet's purest glass, sitting on the bloom
 # where the material has something to do. x 0.62..0.92 is inside the card on all
@@ -141,10 +149,13 @@ BENTO_ANDROID = {
     "rim_y": 0.4374,
 }
 BENTO_IOS = {
+    # Re-measured on the post-Poppins capture (run 39860471181): the Mind Guide
+    # card's lit top edge is at row 1212 and its clean glass runs 1218..1245,
+    # above where the title now sits.
     "name": "bento",
-    "interior": [0.62, 0.4576, 0.30, 0.0078],
-    "outside":  [0.004, 0.4576, 0.022, 0.0078],
-    "rim_y": 0.4550,
+    "interior": [0.62, 0.4773, 0.30, 0.0094],
+    "outside":  [0.004, 0.4773, 0.022, 0.0094],
+    "rim_y": 0.4742,
 }
 
 PROBES = {
