@@ -540,8 +540,8 @@ fun NexlyPlanCard(
                             Text(
                                 text = row.time,
                                 style = MaterialTheme.typography.labelSmall.copy(
-                                    fontSize = 10.sp,
-                                    lineHeight = 12.sp,
+                                    fontSize = 10.5.sp,
+                                    lineHeight = 13.sp,
                                     fontWeight = FontWeight.SemiBold
                                 ),
                                 color = colors.textSecondary,
@@ -550,8 +550,8 @@ fun NexlyPlanCard(
                             NexlyInlineRichText(
                                 text = row.text,
                                 color = colors.textPrimary,
-                                fontSize = 12.5.sp,
-                                glyphSize = 14.dp,
+                                fontSize = 13.sp,
+                                glyphSize = 15.dp,
                                 weight = FontWeight.Medium
                             )
                         }
@@ -714,10 +714,10 @@ fun Modifier.nexlyPearlBackdrop(): Modifier {
                 center = Offset(cx - radius * 0.35f, cy - radius * 0.38f)
             )
         }
-        bubble(w * 0.94f, h * 0.08f, w * 0.44f, if (dark) 0.20f else 0.72f)
-        bubble(w * -0.06f, h * 0.30f, w * 0.38f, if (dark) 0.16f else 0.58f)
-        bubble(w * 0.16f, h * 0.86f, w * 0.46f, if (dark) 0.17f else 0.62f)
-        bubble(w * 0.96f, h * 0.78f, w * 0.30f, if (dark) 0.12f else 0.48f)
+        bubble(w * 0.94f, h * 0.08f, w * 0.44f, if (dark) 0.22f else 0.80f)
+        bubble(w * -0.06f, h * 0.30f, w * 0.38f, if (dark) 0.18f else 0.66f)
+        bubble(w * 0.16f, h * 0.86f, w * 0.46f, if (dark) 0.19f else 0.70f)
+        bubble(w * 0.96f, h * 0.78f, w * 0.30f, if (dark) 0.14f else 0.56f)
         lotus?.let { image ->
             if (image.width > 0 && image.height > 0) {
                 val targetW = w * 1.15f
@@ -729,7 +729,7 @@ fun Modifier.nexlyPearlBackdrop(): Modifier {
                         (h * 0.88f - targetH / 2f).roundToInt()
                     ),
                     dstSize = IntSize(targetW.roundToInt(), targetH.roundToInt()),
-                    alpha = if (dark) 0.12f else 0.32f,
+                    alpha = if (dark) 0.14f else 0.36f,
                     filterQuality = FilterQuality.Medium
                 )
             }

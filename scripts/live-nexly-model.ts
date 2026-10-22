@@ -19,9 +19,10 @@ import { WIDGET_PROMPT } from '../src/lib/widgets/prompt'
 import { ensureWidgets } from '../src/lib/widgets/compile'
 import { parseNexlyReply } from '../src/lib/nexly/plan'
 
-const USER =
+const REFERENCE_USER =
   'Can you help me plan a productive day tomorrow? I have classes, ' +
   'assignments and also want to stay healthy and get some rest.'
+const USER = process.env.NEXLY_USER?.trim() || REFERENCE_USER
 
 const key = process.env.OPENROUTER_API_KEY
 if (!key) {
@@ -79,9 +80,10 @@ if (typeof raw !== 'string' || !raw.trim()) {
 const compiled = ensureWidgets(raw, { userPrompt: USER })
 const parsed = parseNexlyReply(compiled.text)
 const outDir = path.join(process.cwd(), 'docs/reference/nexly')
+const prefix = process.env.NEXLY_OUT?.trim() || 'live-model'
 fs.mkdirSync(outDir, { recursive: true })
-fs.writeFileSync(path.join(outDir, 'live-model-raw.md'), raw.trim() + '\n')
-fs.writeFileSync(path.join(outDir, 'live-model-final.md'), compiled.text.trim() + '\n')
+fs.writeFileSync(path.join(outDir, `${prefix}-raw.md`), raw.trim() + '\n')
+fs.writeFileSync(path.join(outDir, `${prefix}-final.md`), compiled.text.trim() + '\n')
 
 const emoji = /\p{Extended_Pictographic}/u.test(compiled.text)
 const rows = parsed.plan?.rows ?? []
@@ -95,10 +97,10 @@ console.log(`closing: ${parsed.plan?.closing ?? '-'}`)
 console.log(`closingIcon: ${parsed.plan?.closingIcon ?? '-'}`)
 console.log(`timestamp: ${parsed.plan?.timestamp ?? '-'}`)
 console.log(`emoji in final: ${emoji ? 'YES' : 'NO'}`)
-console.log(`wrote: docs/reference/nexly/live-model-raw.md`)
-console.log(`wrote: docs/reference/nexly/live-model-final.md`)
+console.log(`wrote: docs/reference/nexly/${prefix}-raw.md`)
+console.log(`wrote: docs/reference/nexly/${prefix}-final.md`)
 
-if (!parsed.plan || rows.length < 2) {
+if ((process.env.NEXLY_EXPECT?.trim() || 'plan') === 'plan' && (!parsed.plan || rows.length < 2)) {
   console.error('LIVE MODEL DID NOT EMIT A RENDERABLE PLAN')
   process.exit(1)
 }

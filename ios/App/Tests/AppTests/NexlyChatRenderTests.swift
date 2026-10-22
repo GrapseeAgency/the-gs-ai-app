@@ -52,6 +52,12 @@ final class NexlyChatRenderTests: XCTestCase {
         let targets: [(CGFloat, CGFloat, String)] = [
             (411, 914, "411x914"),
             (393, 852, "393x852"),
+            (320, 568, "320x568"),
+            (360, 640, "360x640"),
+            (375, 667, "375x667"),
+            (430, 932, "430x932"),
+            (768, 1024, "768x1024"),
+            (1024, 768, "1024x768"),
         ]
         for target in targets {
             let size = CGSize(width: target.0, height: target.1)
@@ -65,6 +71,26 @@ final class NexlyChatRenderTests: XCTestCase {
             }
             XCTAssertGreaterThan(data.count, 20_000)
             let url = dir.appendingPathComponent("nexly-chat-ios-full-\(target.2).png")
+            FileManager.default.createFile(atPath: url.path, contents: data)
+            XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+        }
+    }
+
+    func testFullProseChatRenders() async throws {
+        let dir = Self.outputDirectory()
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        for target in [(393, 852, "393x852"), (411, 914, "411x914")] {
+            let size = CGSize(width: target.0, height: target.1)
+            guard let image = try await Self.renderFullProse(size: size) else {
+                XCTFail("full prose chat did not composite at \(target.2)")
+                continue
+            }
+            guard let data = image.pngData() else {
+                XCTFail("no PNG data for the full prose chat at \(target.2)")
+                continue
+            }
+            XCTAssertGreaterThan(data.count, 20_000)
+            let url = dir.appendingPathComponent("nexly-chat-ios-full-prose-\(target.2).png")
             FileManager.default.createFile(atPath: url.path, contents: data)
             XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
         }
@@ -102,6 +128,13 @@ final class NexlyChatRenderTests: XCTestCase {
 
     private static func renderFull(size: CGSize) async throws -> UIImage? {
         let view = NexlyFullChatView()
+            .frame(width: size.width, height: size.height)
+            .environment(\.layoutDirection, .leftToRight)
+        return try await capture(view: view, size: size)
+    }
+
+    private static func renderFullProse(size: CGSize) async throws -> UIImage? {
+        let view = NexlyFullProseView()
             .frame(width: size.width, height: size.height)
             .environment(\.layoutDirection, .leftToRight)
         return try await capture(view: view, size: size)
@@ -190,7 +223,7 @@ private struct NexlyFullChatView: View {
                     menuMenu: { EmptyView() }
                 )
                 ScrollView(.vertical, showsIndicators: false) {
-                    VStack(spacing: 10) {
+                    VStack(spacing: 14) {
                         MessageBubble(
                             message: ChatViewModel.ChatMessage(
                                 role: "user",
@@ -210,7 +243,7 @@ private struct NexlyFullChatView: View {
                         )
                     }
                     .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
+                    .padding(.vertical, 12)
                 }
                 NexlyComposerBar(
                     text: .constant(""),
@@ -228,6 +261,68 @@ private struct NexlyFullChatView: View {
                 .padding(.top, 3)
                 .padding(.bottom, 10)
             }
+            .frame(maxWidth: 640)
+        }
+    }
+}
+
+/// The whole screen for the DIFFERENT real-life prose question: a real user
+/// turn and the real model answer, no plan card, with the adaptive status card.
+private struct NexlyFullProseView: View {
+    @FocusState private var composerFocused: Bool
+
+    var body: some View {
+        ZStack {
+            NexlyChatBackdrop()
+            VStack(spacing: 0) {
+                NexlyBrandHeader(
+                    sparkleLabel: "New chat",
+                    menuGlyph: "menu-2",
+                    menuLabel: "Open menu",
+                    onSparkle: {},
+                    onMenu: {},
+                    sparkleMenu: { EmptyView() },
+                    menuMenu: { EmptyView() }
+                )
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(spacing: 14) {
+                        MessageBubble(
+                            message: ChatViewModel.ChatMessage(
+                                role: "user",
+                                content: NEXLY_PROSE_USER,
+                                createdAt: "2026-10-22T21:41:00Z"
+                            ),
+                            editEnabled: false
+                        )
+                        NexlyAssistantBlocksView(
+                            blocks: parseBlocks(NEXLY_THINKING_WIRE),
+                            isStreaming: false,
+                            showStatus: true,
+                            thinkingPhase: .reasoning,
+                            thinkingEffort: "high",
+                            isPlanTurn: false
+                        )
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                }
+                NexlyComposerBar(
+                    text: .constant(""),
+                    isStreaming: false,
+                    canSend: false,
+                    focused: $composerFocused,
+                    onAttach: {},
+                    onVoice: {},
+                    onSearch: {},
+                    onSend: {},
+                    onStop: {},
+                    onSubmit: {}
+                )
+                .padding(.horizontal, Aero.Spacing.m)
+                .padding(.top, 3)
+                .padding(.bottom, 10)
+            }
+            .frame(maxWidth: 640)
         }
     }
 }
@@ -246,7 +341,6 @@ private struct NexlyAdaptiveThinkingView: View {
                         showStatus: true,
                         thinkingPhase: .reasoning,
                         thinkingEffort: "high",
-                        thinkingReasoningHint: "Checking that the correlation cannot carry a signal.",
                         isPlanTurn: false
                     )
                 }
@@ -258,26 +352,27 @@ private struct NexlyAdaptiveThinkingView: View {
 }
 
 /// Captured from a REAL OpenRouter call (scripts/live-nexly-model.ts)
-/// using the production SYSTEM_PROMPT + WIDGET_PROMPT and the reference user
-/// message. No hand-authored plan rows.
+/// using the production SYSTEM_PROMPT + WIDGET_PROMPT and a DIFFERENT
+/// real-life question, not the sheet's sample. No hand-authored plan rows.
 private let NEXLY_REFERENCE_WIRE = """
-Here's a balanced schedule for a productive tomorrow:
+Here’s a balanced schedule that fits your 9–5 shift, a gym session, meal prep, and two solid hours of study.
 
 ```plan
-{"title":"Here's a balanced schedule for a productive tomorrow:","rows":[{"time":"7:00 – 8:00 AM","text":"Wake up, stretch, breakfast","icon":"sunrise","tone":"amber"},{"time":"8:00 – 11:00 AM","text":"Morning classes","icon":"book-2","tone":"lavender"},{"time":"11:00 – 11:30 AM","text":"Break & snack","icon":"apple","tone":"green"},{"time":"11:30 – 1:30 PM","text":"Assignments & focused study","icon":"notebook","tone":"lavender"},{"time":"1:30 – 2:30 PM","text":"Lunch + walk","icon":"salad","tone":"green"},{"time":"2:30 – 4:30 PM","text":"Afternoon classes / project work","icon":"device-laptop","tone":"blue"},{"time":"4:30 – 5:30 PM","text":"Exercise / workout","icon":"run","tone":"pink"},{"time":"5:30 – 7:30 PM","text":"Dinner + free time","icon":"tools-kitchen-2","tone":"green"},{"time":"7:30 – 10:00 PM","text":"Review, wind down, sleep","icon":"moon","tone":"lilac"}],"closing":"You've got this — make it count!","closingIcon":"flame","timestamp":"9:45 PM","palette":"meadow","accent":"#0b7285","variant":"editorial"}
+{"title":"Here's your balanced schedule for tomorrow:","rows":[{"time":"6:30 – 7:00 AM","text":"Wake up + light stretch","icon":"sunrise","tone":"amber"},{"time":"7:00 – 7:30 AM","text":"Breakfast & coffee","icon":"coffee","tone":"amber"},{"time":"7:30 – 8:15 AM","text":"Commute to work","icon":"bus","tone":"blue"},{"time":"8:15 – 9:00 AM","text":"Prep for shift","icon":"briefcase","tone":"blue"},{"time":"9:00 – 5:00 PM","text":"Work shift","icon":"device-laptop","tone":"blue"},{"time":"5:15 – 6:15 PM","text":"Gym session","icon":"activity","tone":"pink"},{"time":"6:30 – 7:15 PM","text":"Meal prep for tomorrow","icon":"tools-kitchen-2","tone":"green"},{"time":"7:30 – 9:30 PM","text":"Exam study (2 hrs)","icon":"book-2","tone":"lavender"},{"time":"9:45 – 10:15 PM","text":"Wind down & sleep prep","icon":"moon","tone":"lilac"}],"closing":"You've got this! :flame:","closingIcon":"flame","timestamp":"10:00 PM","accent":"#66a80f","variant":"tinted","palette":"meadow"}
 ```
 """
 
 /// A non-plan thinking turn, written in the wire contract.
 private let NEXLY_THINKING_WIRE = """
-Quantum entanglement links two particles so their measured states stay
-correlated, no matter how far apart they are.
+Procrastination on a thesis usually isn't laziness — it's a response to the scale and ambiguity of the work. A thesis is an open-ended, high-stakes project with no daily deadlines, so your brain treats it as a threat and steers you toward tasks that feel finishable (email, formatting, reading one more paper). Perfectionism, fear of evaluation, and the lack of immediate feedback all reinforce the loop.
 
-The important part is that the correlation is not a signal: you cannot use
-it to send information faster than light.
+**One realistic change this week:** pick a *tiny*, time-boxed writing window — 30 minutes, same time each day — and commit to producing *bad* words only. No editing, no research, no formatting. Just move the cursor forward. The goal isn't quality; it's breaking the avoidance signal. After seven sessions you'll have 3.5 hours of raw material and, more importantly, proof that you can show up without the project collapsing.
 """
 
-/// The exact user turn from the reference sheet.
+/// A real-life question, deliberately different from the sheet's sample.
 private let NEXLY_REFERENCE_USER =
-    "Can you help me plan a productive day tomorrow? I have classes, " +
-    "assignments and also want to stay healthy and get some rest."
+    "I work a 9–5 shift tomorrow and need to fit in a gym session, meal prep, and two hours of study for an exam. Can you plan my day?"
+
+/// The real-life non-plan question rendered by the prose harness.
+private let NEXLY_PROSE_USER =
+    "I keep procrastinating on my thesis. Why does that happen and what is one realistic change I can make this week?"

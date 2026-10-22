@@ -554,7 +554,9 @@ jobs:
           for w in 411x914 393x852; do
             test -s "$SHOTS/nexly-chat-full-$w.png" \
               || { echo "::error::nexly-chat-full-$w.png was not produced"; exit 1; }
-            echo "rendered nexly-chat-full-$w.png"
+            test -s "$SHOTS/nexly-chat-full-prose-$w.png" \
+              || { echo "::error::nexly-chat-full-prose-$w.png was not produced"; exit 1; }
+            echo "rendered nexly-chat-full-$w.png + prose"
           done
 
       - name: Upload the Nexly chat response renders

@@ -581,13 +581,13 @@ struct NexlyPlanCard: View {
                             )
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(row.time)
-                                    .font(.system(size: 10, weight: .semibold))
+                                    .font(.system(size: 10.5, weight: .semibold))
                                     .foregroundColor(Aero.textMuted)
                                     .lineLimit(1)
                                 NexlyInlineText(
                                     text: row.text,
-                                    fontSize: 12.5,
-                                    glyphSize: 14,
+                                    fontSize: 13,
+                                    glyphSize: 15,
                                     color: Aero.text,
                                     weight: .medium
                                 )
@@ -697,18 +697,18 @@ struct NexlyChatBackdrop: View {
                     endPoint: .bottomTrailing
                 )
                 bubble(size: w * 0.86, x: w * 0.94, y: h * 0.06,
-                       opacity: scheme == .dark ? 0.20 : 0.75)
+                       opacity: scheme == .dark ? 0.22 : 0.85)
                 bubble(size: w * 0.74, x: w * -0.06, y: h * 0.28,
-                       opacity: scheme == .dark ? 0.16 : 0.60)
+                       opacity: scheme == .dark ? 0.18 : 0.70)
                 bubble(size: w * 0.94, x: w * 0.14, y: h * 0.86,
-                       opacity: scheme == .dark ? 0.17 : 0.65)
+                       opacity: scheme == .dark ? 0.19 : 0.75)
                 bubble(size: w * 0.56, x: w * 0.94, y: h * 0.78,
-                       opacity: scheme == .dark ? 0.12 : 0.50)
+                       opacity: scheme == .dark ? 0.14 : 0.60)
                 Image("GSHomeLotusNew")
                     .resizable()
                     .scaledToFit()
                     .frame(width: w * 1.15)
-                    .opacity(scheme == .dark ? 0.12 : 0.32)
+                    .opacity(scheme == .dark ? 0.14 : 0.36)
                     .blur(radius: 0.5)
                     .offset(x: -w * 0.28, y: h * 0.38)
                     .allowsHitTesting(false)

@@ -111,6 +111,10 @@ struct NexlyAssistantBlocksView: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(Color(red: 1.0, green: 0.945, blue: 0.915).opacity(0.30))
+        )
         .gsGlass(.card, corner: 24)
         .padding(.top, isFirst ? 0 : 2)
     }

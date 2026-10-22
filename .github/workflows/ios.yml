@@ -271,6 +271,8 @@ jobs:
           for w in 411x914 393x852; do
             test -s "$DIR/nexly-chat-ios-full-$w.png" \
               || { echo "::error::nexly-chat-ios-full-$w.png missing — the full-chat render did not run"; exit 1; }
+            test -s "$DIR/nexly-chat-ios-full-prose-$w.png" \
+              || { echo "::error::nexly-chat-ios-full-prose-$w.png missing — the prose render did not run"; exit 1; }
           done
 
       - name: Upload the Nexly chat response render

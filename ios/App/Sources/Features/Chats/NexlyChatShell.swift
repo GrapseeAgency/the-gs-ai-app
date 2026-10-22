@@ -56,7 +56,10 @@ struct NexlyBrandHeader<SparkleMenu: View, MenuMenu: View>: View {
         .padding(.vertical, 5)
         .background(
             LinearGradient(
-                colors: [Aero.surface.opacity(0.56), Aero.surface.opacity(0.30)],
+                colors: [
+                    Color(red: 1.0, green: 0.95, blue: 0.92).opacity(0.62),
+                    Color(red: 1.0, green: 0.93, blue: 0.90).opacity(0.34),
+                ],
                 startPoint: .top,
                 endPoint: .bottom
             )
