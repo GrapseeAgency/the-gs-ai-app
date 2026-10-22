@@ -34,6 +34,7 @@ struct BlocksView: View {
 /// prose card and survives finalize for plan turns (the timetable is the proof
 /// that planning happened), exactly like the reference.
 struct NexlyAssistantBlocksView: View {
+    @Environment(\.horizontalSizeClass) private var sizeClass
     let blocks: [Block]
     var isStreaming: Bool = false
     var showStatus: Bool = false
@@ -58,12 +59,16 @@ struct NexlyAssistantBlocksView: View {
             if case .prose = group { return true }
             return false
         }
+        // The sheet keeps assistant cards at about 69% of the phone width,
+        // leaving the pearl field visible to the right of the glass.
+        let cardMax: CGFloat = sizeClass == .regular ? 340 : 280
         VStack(alignment: .leading, spacing: 12) {
             if groups.isEmpty {
                 HStack(alignment: .top, spacing: 9) {
                     NexlyAssistantOrb()
                     if showStatus {
                         NexlyThinkingCard(phase: thinkingPhase, effort: thinkingEffort, isPlan: isPlanTurn, reasoningHint: thinkingReasoningHint)
+                            .frame(maxWidth: cardMax, alignment: .leading)
                     } else {
                         Text("…")
                             .font(Aero.body())
@@ -79,6 +84,7 @@ struct NexlyAssistantBlocksView: View {
                         switch group {
                         case .plan(let plan, let open):
                             NexlyPlanCard(plan: plan, open: open, fallbackTimestamp: planTimestamp)
+                                .frame(maxWidth: cardMax, alignment: .leading)
                                 .layoutPriority(1)
                         case .prose(let prose):
                             proseCard(
@@ -86,6 +92,7 @@ struct NexlyAssistantBlocksView: View {
                                 isStatusHost: index == statusIndex,
                                 isFirst: index == 0
                             )
+                            .frame(maxWidth: cardMax, alignment: .leading)
                             .layoutPriority(1)
                         }
                     }
@@ -116,13 +123,14 @@ struct NexlyAssistantBlocksView: View {
             }
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 8)
+        .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(Color(red: 1.0, green: 0.945, blue: 0.915).opacity(0.30))
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(Color(red: 1.0, green: 0.945, blue: 0.915).opacity(0.22))
         )
-        .gsGlass(.card, corner: 24)
+        .gsGlass(.card, corner: 20)
+        .environment(\.nexlyProseCompact, true)
         .padding(.top, isFirst ? 0 : 2)
     }
 
@@ -351,6 +359,7 @@ private func appendCitations(
 // MARK: - Paragraph & heading
 
 private struct ParagraphView: View {
+    @Environment(\.nexlyProseCompact) private var compact
     let spans: [InlineSpan]
     var showCaret: Bool = false
     var citations: [Int: String] = [:]
@@ -361,11 +370,11 @@ private struct ParagraphView: View {
                 monoBackground: Aero.container,
                 linkColor: Aero.accentDeep,
                 textColor: Aero.text,
-                baseSize: 15,
+                baseSize: compact ? 13 : 15,
                 citations: citations
             )
             Text(attributed(from: spans, theme: theme))
-                .font(Aero.body())
+                .font(compact ? .system(size: 13, weight: .regular) : Aero.body())
                 .foregroundStyle(Aero.text)
                 .textSelection(.enabled)
         }

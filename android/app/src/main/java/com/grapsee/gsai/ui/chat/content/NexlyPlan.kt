@@ -29,9 +29,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
@@ -386,22 +388,28 @@ data class NexlyTone(
     val halo: Color
 )
 
+/**
+ * The Nexly assistant card runs one step smaller than the app's default body
+ * copy, matching the sheet's airy preamble. Null keeps every other chat surface
+ * on its normal typography.
+ */
+internal val LocalNexlyProseStyle = androidx.compose.runtime.staticCompositionLocalOf<androidx.compose.ui.text.TextStyle?> { null }
+
 private fun tone(name: String): NexlyTone = when (name) {
-    "amber" -> NexlyTone(Color(0xFFFFE7BE), Color(0xFFF6B96F), Color.White, Color(0x30C9823A))
-    "lavender" -> NexlyTone(Color(0xFFE7DCFF), Color(0xFFC3A9F7), Color.White, Color(0x306F53C9))
-    "blue" -> NexlyTone(Color(0xFFD9EDFF), Color(0xFFA5CEF8), Color.White, Color(0x303E83BE))
-    "green" -> NexlyTone(Color(0xFFD9F6E1), Color(0xFF9DE1B1), Color.White, Color(0x30388F54))
-    "pink" -> NexlyTone(Color(0xFFFFE0E9), Color(0xFFF7B2C6), Color.White, Color(0x30BB5875))
-    "peach" -> NexlyTone(Color(0xFFFFE7D5), Color(0xFFF7B98E), Color.White, Color(0x30C4713E))
-    "mint" -> NexlyTone(Color(0xFFDDF7EE), Color(0xFF9FE2CF), Color.White, Color(0x30328C74))
-    else -> NexlyTone(Color(0xFFEDE2FF), Color(0xFFCDB1F8), Color.White, Color(0x307A56CC))
+    "amber" -> NexlyTone(Color(0xFFFFF7E8), Color(0xFFFBE5C2), Color(0xFFE09A35), Color(0x55C9823A))
+    "lavender" -> NexlyTone(Color(0xFFF7F1FF), Color(0xFFE8DDFB), Color(0xFF7863D4), Color(0x55705AD0))
+    "blue" -> NexlyTone(Color(0xFFF0F8FF), Color(0xFFDCEBFB), Color(0xFF4D8DCF), Color(0x553E83BE))
+    "green" -> NexlyTone(Color(0xFFF0FBF3), Color(0xFFDDF3E4), Color(0xFF4DA568), Color(0x55388F54))
+    "pink" -> NexlyTone(Color(0xFFFFF3F7), Color(0xFFFBE1E9), Color(0xFFD6678A), Color(0x55BB5875))
+    "peach" -> NexlyTone(Color(0xFFFFF6ED), Color(0xFFFBE4D2), Color(0xFFD57F4C), Color(0x55C4713E))
+    "mint" -> NexlyTone(Color(0xFFF0FBF7), Color(0xFFDDF3EC), Color(0xFF46A58A), Color(0x55328C74))
+    else -> NexlyTone(Color(0xFFF7F1FF), Color(0xFFE9DFFA), Color(0xFF8065D8), Color(0x557A56CC))
 }
 
 /**
- * A circular pastel glass tile with a real Tabler outline glyph. The optical
- * cues match the app's glass language: a white top rim, a soft tone-coloured
- * halo, a radial airlight wash entering from the top-left, and a WHITE glyph —
- * the reference puts the colour in the glass, never in the ink.
+ * A circular pastel glass tile with a real Tabler outline glyph. The sheet
+ * uses a very pale tone wash with the glyph itself carrying the saturated
+ * colour — not a saturated chip with white ink, which reads as a heavy badge.
  */
 @Composable
 fun NexlyGlassGlyphTile(
@@ -426,14 +434,14 @@ fun NexlyGlassGlyphTile(
                 }
             }
             .shadow(
-                elevation = 5.dp,
+                elevation = 2.dp,
                 shape = CircleShape,
-                ambientColor = c.halo.copy(alpha = 0.38f),
-                spotColor = c.halo.copy(alpha = 0.46f)
+                ambientColor = c.halo.copy(alpha = 0.22f),
+                spotColor = c.halo.copy(alpha = 0.26f)
             )
             .clip(CircleShape)
             .background(Brush.linearGradient(listOf(c.top, c.bottom)))
-            .border(1.dp, Color.White.copy(alpha = 0.82f), CircleShape),
+            .border(1.dp, Color.White.copy(alpha = 0.92f), CircleShape),
         contentAlignment = Alignment.Center
     ) {
         Box(
@@ -487,16 +495,16 @@ fun NexlyPlanCard(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .gsGlass(GsGlassRole.Card, RoundedCornerShape(24.dp))
-            .padding(horizontal = 14.dp, vertical = 6.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+            .gsGlass(GsGlassRole.Card, RoundedCornerShape(20.dp))
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
         NexlyInlineRichText(
             text = cleanPlanText(plan.title, 160),
             color = colors.textPrimary,
-            fontSize = 13.5.sp,
-            glyphSize = 16.dp,
-            weight = FontWeight.SemiBold
+            fontSize = 12.5.sp,
+            glyphSize = 14.dp,
+            weight = FontWeight.Normal
         )
         if (plan.rows.isEmpty()) {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -532,27 +540,27 @@ fun NexlyPlanCard(
                         NexlyGlassGlyphTile(
                             name = row.icon,
                             toneName = row.tone,
-                            size = 30.dp,
-                            glyphSize = 15.dp
+                            size = 28.dp,
+                            glyphSize = 14.dp
                         )
-                        Spacer(Modifier.width(11.dp))
-                        Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                        Spacer(Modifier.width(10.dp))
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(
                                 text = row.time,
                                 style = MaterialTheme.typography.labelSmall.copy(
-                                    fontSize = 10.5.sp,
-                                    lineHeight = 13.sp,
-                                    fontWeight = FontWeight.SemiBold
+                                    fontSize = 9.sp,
+                                    lineHeight = 11.sp,
+                                    fontWeight = FontWeight.Normal
                                 ),
-                                color = colors.textSecondary,
+                                color = colors.textTertiary,
                                 maxLines = 1
                             )
                             NexlyInlineRichText(
                                 text = row.text,
                                 color = colors.textPrimary,
-                                fontSize = 13.sp,
-                                glyphSize = 15.dp,
-                                weight = FontWeight.Medium
+                                fontSize = 12.sp,
+                                glyphSize = 14.dp,
+                                weight = FontWeight.Normal
                             )
                         }
                     }
@@ -569,18 +577,17 @@ fun NexlyPlanCard(
                     NexlyInlineRichText(
                         text = closing,
                         color = colors.textPrimary,
-                        fontSize = 13.5.sp,
-                        glyphSize = 15.dp
+                        fontSize = 12.5.sp,
+                        glyphSize = 14.dp
                     )
                     if (plan.closingIcon != null &&
                         !Regex(":([a-z0-9][a-z0-9-]{1,42}):").containsMatchIn(closing)
                     ) {
                         Spacer(Modifier.width(4.dp))
-                        NexlyGlassGlyphTile(
+                        NexlyGlyph(
                             name = plan.closingIcon,
-                            toneName = "peach",
-                            size = 23.dp,
-                            glyphSize = 12.dp
+                            size = 14.dp,
+                            color = tone("peach").ink
                         )
                     }
                 }
@@ -588,7 +595,7 @@ fun NexlyPlanCard(
                 if (stamp != null) {
                     Text(
                         text = stamp,
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp),
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                         color = colors.textTertiary
                     )
                 }
@@ -673,26 +680,39 @@ fun Modifier.nexlyPearlBackdrop(): Modifier {
                     )
                 } else {
                     listOf(
-                        Color(0xFFFAF0EA),
-                        Color(0xFFF7E7E0),
-                        Color(0xFFF8EEF0)
+                        Color(0xFFFFFBF6),
+                        Color(0xFFFDF2EA),
+                        Color(0xFFFFF8F3)
                     )
                 }
             )
         )
+        // Broad daylight from the top-left, as in the sheet's pearl field.
+        drawRect(
+            Brush.radialGradient(
+                colors = [
+                    Color.White.copy(alpha = if (dark) 0.05f else 0.42f),
+                    Color.Transparent
+                ],
+                center = Offset(w * 0.12f, h * 0.02f),
+                radius = w * 0.9f
+            )
+        )
         fun bubble(cx: Float, cy: Float, radius: Float, alpha: Float) {
-            // Glass reads from a transparent body, a thin refraction band and
-            // a bright rim; a white centre at high alpha is a sticker.
+            // Defined pearl: clear body, a warm/cool refraction band, a crisp
+            // white rim and a specular crescent. The previous wash was so soft
+            // it read as a flat pink field.
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(
-                        Color.White.copy(alpha = alpha * 0.04f),
-                        Color(0xFFFFD8C4).copy(alpha = alpha * 0.28f),
-                        Color(0xFFDCD4FF).copy(alpha = alpha * 0.16f),
+                        Color.White.copy(alpha = alpha * 0.16f),
+                        Color(0xFFFFD6C2).copy(alpha = alpha * 0.34f),
+                        Color(0xFFE6DAFF).copy(alpha = alpha * 0.24f),
+                        Color(0xFFC8E8FF).copy(alpha = alpha * 0.12f),
                         Color.Transparent
                     ),
-                    center = Offset(cx, cy),
-                    radius = radius * 0.52f
+                    center = Offset(cx - radius * 0.12f, cy - radius * 0.10f),
+                    radius = radius * 0.95f
                 ),
                 radius = radius,
                 center = Offset(cx, cy)
@@ -700,36 +720,53 @@ fun Modifier.nexlyPearlBackdrop(): Modifier {
             drawCircle(
                 brush = Brush.linearGradient(
                     listOf(
-                        Color.White.copy(alpha = (alpha * 0.95f).coerceAtMost(0.95f)),
-                        Color(0xFFFFB8C8).copy(alpha = alpha * 0.55f)
+                        Color.White.copy(alpha = (alpha * 1.00f).coerceAtMost(0.98f)),
+                        Color(0xFFFFB9CB).copy(alpha = alpha * 0.66f),
+                        Color(0xFFB8D8FF).copy(alpha = alpha * 0.48f)
                     )
                 ),
                 radius = radius,
                 center = Offset(cx, cy),
-                style = Stroke(width = 1.5.dp.toPx())
+                style = Stroke(width = 2.dp.toPx())
             )
             drawCircle(
-                color = Color.White.copy(alpha = alpha * 0.65f),
-                radius = radius * 0.10f,
-                center = Offset(cx - radius * 0.35f, cy - radius * 0.38f)
+                color = Color.White.copy(alpha = alpha * 0.22f),
+                radius = radius * 0.88f,
+                center = Offset(cx + radius * 0.04f, cy + radius * 0.02f),
+                style = Stroke(width = 0.8.dp.toPx())
+            )
+            // Specular crescent and its hot spot.
+            drawArc(
+                color = Color.White.copy(alpha = (alpha * 0.92f).coerceAtMost(0.92f)),
+                startAngle = 205f,
+                sweepAngle = 92f,
+                useCenter = false,
+                topLeft = Offset(cx - radius * 0.78f, cy - radius * 0.82f),
+                size = Size(radius * 1.32f, radius * 1.32f),
+                style = Stroke(width = radius * 0.06f, cap = StrokeCap.Round)
+            )
+            drawCircle(
+                color = Color.White.copy(alpha = (alpha * 0.88f).coerceAtMost(0.88f)),
+                radius = radius * 0.055f,
+                center = Offset(cx - radius * 0.48f, cy - radius * 0.52f)
             )
         }
-        bubble(w * 0.94f, h * 0.08f, w * 0.44f, if (dark) 0.22f else 0.80f)
-        bubble(w * -0.06f, h * 0.30f, w * 0.38f, if (dark) 0.18f else 0.66f)
-        bubble(w * 0.16f, h * 0.86f, w * 0.46f, if (dark) 0.19f else 0.70f)
-        bubble(w * 0.96f, h * 0.78f, w * 0.30f, if (dark) 0.14f else 0.56f)
+        bubble(w * 0.93f, h * 0.09f, w * 0.46f, if (dark) 0.26f else 0.95f)
+        bubble(w * -0.03f, h * 0.33f, w * 0.40f, if (dark) 0.22f else 0.82f)
+        bubble(w * 0.98f, h * 0.80f, w * 0.31f, if (dark) 0.18f else 0.72f)
+        bubble(w * 0.78f, h * 0.22f, w * 0.10f, if (dark) 0.14f else 0.55f)
         lotus?.let { image ->
             if (image.width > 0 && image.height > 0) {
-                val targetW = w * 1.15f
+                val targetW = w * 1.42f
                 val targetH = targetW * (image.height.toFloat() / image.width.toFloat())
                 drawImage(
                     image = image,
                     dstOffset = IntOffset(
-                        (w * 0.22f - targetW / 2f).roundToInt(),
-                        (h * 0.88f - targetH / 2f).roundToInt()
+                        (w * 0.14f - targetW / 2f).roundToInt(),
+                        (h * 0.90f - targetH / 2f).roundToInt()
                     ),
                     dstSize = IntSize(targetW.roundToInt(), targetH.roundToInt()),
-                    alpha = if (dark) 0.14f else 0.36f,
+                    alpha = if (dark) 0.16f else 0.58f,
                     filterQuality = FilterQuality.Medium
                 )
             }

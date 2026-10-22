@@ -112,6 +112,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
@@ -1765,8 +1766,8 @@ internal fun NexlyChatHeader(
                 painter = painterResource(com.grapsee.gsai.R.drawable.gs_companion_orb),
                 contentDescription = "Nexly",
                 modifier = Modifier
-                    .size(42.dp)
-                    .shadow(5.dp, CircleShape)
+                    .size(40.dp)
+                    .shadow(3.dp, CircleShape)
                     .clip(CircleShape)
                     .border(1.dp, Color.White.copy(alpha = 0.55f), CircleShape)
             )
@@ -1806,6 +1807,14 @@ internal fun NexlyChatHeader(
                 onLongClick = onMenuLong
             )
         }
+        // The sheet closes the header with a hairline instead of letting it
+        // dissolve into the backdrop.
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(0.75.dp)
+                .background(Color.White.copy(alpha = 0.42f))
+        )
     }
 }
 
@@ -1820,7 +1829,7 @@ private fun ChatTopIconButton(
     val haptics = LocalHapticFeedback.current
     Box(
         modifier = Modifier
-            .size(40.dp)
+            .size(36.dp)
             .kineticPress()
             .gsGlass(GsGlassRole.Sunken, CircleShape)
             .combinedClickable(
@@ -1846,7 +1855,7 @@ private fun ChatTopIconButton(
             icon,
             contentDescription = null,
             tint = GsTheme.colors.textPrimary,
-            modifier = Modifier.size(21.dp)
+            modifier = Modifier.size(19.dp)
         )
     }
 }
@@ -1913,10 +1922,16 @@ internal fun UserMessage(
             val dark = isSystemInDarkTheme()
             val colors = GsTheme.colors
             var userMenu by remember { mutableStateOf(false) }
-            val bubbleTop = if (dark) colors.surface.copy(alpha = 0.62f)
-            else Color(0xFFFFEDE2).copy(alpha = 0.78f)
-            val bubbleBottom = if (dark) colors.accentSoft.copy(alpha = 0.34f)
-            else Color(0xFFFFDDCA).copy(alpha = 0.64f)
+            // The sheet's user turn is a narrow column (about half the device),
+            // not a full-width slab: the pearl field stays visible beside it.
+            val maxBubble = minOf(
+                210.dp,
+                (LocalConfiguration.current.screenWidthDp * 0.5f).dp
+            )
+            val bubbleTop = if (dark) colors.surface.copy(alpha = 0.54f)
+            else Color(0xFFFFF1E8).copy(alpha = 0.62f)
+            val bubbleBottom = if (dark) colors.accentSoft.copy(alpha = 0.28f)
+            else Color(0xFFFFDFCE).copy(alpha = 0.50f)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
@@ -1937,17 +1952,17 @@ internal fun UserMessage(
                         Box {
                             Box(
                                 modifier = Modifier
-                                    .widthIn(max = 320.dp)
-                                    .shadow(4.dp, RoundedCornerShape(24.dp))
-                                    .clip(RoundedCornerShape(24.dp))
+                                    .widthIn(max = maxBubble)
+                                    .shadow(2.dp, RoundedCornerShape(18.dp))
+                                    .clip(RoundedCornerShape(18.dp))
                                     .background(
                                         Brush.verticalGradient(listOf(bubbleTop, bubbleBottom))
                                     )
                                     .border(
-                                        width = if (highlight) 2.dp else 1.dp,
+                                        width = if (highlight) 2.dp else 0.5.dp,
                                         color = if (highlight) colors.accentStrong
-                                        else Color.White.copy(alpha = 0.72f),
-                                        shape = RoundedCornerShape(24.dp)
+                                        else Color.White.copy(alpha = 0.58f),
+                                        shape = RoundedCornerShape(18.dp)
                                     )
                                     .combinedClickable(
                                         onClick = {},
@@ -1958,13 +1973,13 @@ internal fun UserMessage(
                                             userMenu = true
                                         }
                                     )
-                                    .padding(horizontal = 16.dp, vertical = 7.dp)
+                                    .padding(horizontal = 12.dp, vertical = 6.dp)
                             ) {
                                 Text(
                                     text = message.content,
                                     style = MaterialTheme.typography.bodyMedium.copy(
-                                        fontSize = 15.sp,
-                                        lineHeight = 21.sp
+                                        fontSize = 13.sp,
+                                        lineHeight = 18.sp
                                     ),
                                     color = colors.textPrimary
                                 )
@@ -2002,22 +2017,22 @@ internal fun UserMessage(
                             if (stamp.isNotEmpty()) {
                                 Text(
                                     text = stamp,
-                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp),
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.5.sp),
                                     color = colors.textTertiary
                                 )
                             }
                             if (!message.failed) {
                                 NexlyGlyph(
                                     name = "checks",
-                                    size = 13.dp,
+                                    size = 12.dp,
                                     color = colors.textSecondary.copy(alpha = 0.78f)
                                 )
                             }
                         }
                     }
                 }
-                Spacer(Modifier.width(8.dp))
-                NexlyUserAvatar(size = 34.dp)
+                Spacer(Modifier.width(12.dp))
+                NexlyUserAvatar(size = 30.dp)
             }
         }
     }
@@ -2088,7 +2103,7 @@ internal fun ComposerRow(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .gsGlass(GsGlassRole.FloatingControl, RoundedCornerShape(30.dp))
+                .gsGlass(GsGlassRole.FloatingControl, RoundedCornerShape(26.dp))
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
@@ -2102,7 +2117,7 @@ internal fun ComposerRow(
                         GsIcons.Sparkles,
                         contentDescription = "Nexly tools and attachments",
                         tint = Color(0xFF8E7BFF),
-                        modifier = Modifier.size(21.dp)
+                        modifier = Modifier.size(19.dp)
                     )
                 }
     // The field is LIVE during a turn. It used to be `enabled = !isStreaming`,
@@ -2120,9 +2135,10 @@ internal fun ComposerRow(
         onValueChange = onDraftChange,
         modifier = Modifier
             .weight(1f)
-            .padding(vertical = 12.dp),
+            .padding(vertical = 9.dp),
         textStyle = MaterialTheme.typography.bodyLarge.copy(
-            color = GsTheme.colors.textPrimary
+            color = GsTheme.colors.textPrimary,
+            fontSize = 14.sp
         ),
         cursorBrush = SolidColor(GsTheme.colors.accentStrong),
         keyboardOptions = KeyboardOptions(
@@ -2134,7 +2150,7 @@ internal fun ComposerRow(
                             if (draftText().isEmpty()) {
                                 Text(
                                     text = "Ask me anything...",
-                                    style = MaterialTheme.typography.bodyLarge.copy(fontSize = 15.5.sp),
+                                    style = MaterialTheme.typography.bodyLarge.copy(fontSize = 14.sp),
                                     color = GsTheme.colors.textPlaceholder
                                 )
                             }
@@ -2260,9 +2276,9 @@ internal fun ReferenceThinkingCard(
         modifier = Modifier
             .fillMaxWidth()
             .widthIn(max = 460.dp)
-            .gsGlass(GsGlassRole.FloatingControl, RoundedCornerShape(20.dp))
+            .gsGlass(GsGlassRole.FloatingControl, RoundedCornerShape(16.dp))
             .padding(horizontal = 4.dp, vertical = 2.dp),
-        verticalArrangement = Arrangement.spacedBy(1.dp)
+        verticalArrangement = Arrangement.spacedBy(0.dp)
     ) {
         ThinkingRow(
             icon = "sparkles",
@@ -2301,30 +2317,30 @@ private fun ThinkingRow(
             .fillMaxWidth()
             .padding(horizontal = 4.dp, vertical = 0.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
+        horizontalArrangement = Arrangement.spacedBy(9.dp)
     ) {
         NexlyGlassGlyphTile(
             name = icon,
             toneName = tone,
-            size = 32.dp,
-            glyphSize = 16.dp,
+            size = 28.dp,
+            glyphSize = 14.dp,
             active = active
         )
         Column {
             Text(
                 text = title,
                 style = MaterialTheme.typography.bodyMedium.copy(
-                    fontSize = 13.sp,
-                    lineHeight = 16.sp,
-                    fontWeight = FontWeight.SemiBold
+                    fontSize = 12.sp,
+                    lineHeight = 15.sp,
+                    fontWeight = FontWeight.Medium
                 ),
                 color = GsTheme.colors.textPrimary
             )
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.labelSmall.copy(
-                    fontSize = 10.5.sp,
-                    lineHeight = 13.sp
+                    fontSize = 9.5.sp,
+                    lineHeight = 12.sp
                 ),
                 color = GsTheme.colors.textSecondary,
                 maxLines = 1,
@@ -2377,7 +2393,7 @@ private fun GsSendButton(enabled: Boolean, onSend: () -> Unit) {
     Box(
         modifier = Modifier
             .padding(end = 3.dp, bottom = 1.dp)
-            .size(40.dp)
+            .size(36.dp)
             .graphicsLayer {
                 val scale = 1f - 0.04f * press
                 scaleX = scale

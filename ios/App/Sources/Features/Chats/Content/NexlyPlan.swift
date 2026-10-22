@@ -120,39 +120,63 @@ func cleanNexlyText(_ value: String?, max: Int, fallback: String = "") -> String
 // Icon registry
 // ---------------------------------------------------------------------------
 
+/// The Nexly assistant card runs one step smaller than the app's default body
+/// copy, matching the sheet's airy preamble. False keeps every other chat
+/// surface on its normal typography.
+private struct NexlyProseCompactKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var nexlyProseCompact: Bool {
+        get { self[NexlyProseCompactKey.self] }
+        set { self[NexlyProseCompactKey.self] = newValue }
+    }
+}
+
 enum NexlyGlassTone: String, CaseIterable {
     case amber, lavender, blue, green, pink, peach, mint, lilac
 
     var top: Color {
         switch self {
-        case .amber: return Color(red: 1.00, green: 0.898, blue: 0.722)
-        case .lavender: return Color(red: 0.886, green: 0.839, blue: 1.00)
-        case .blue: return Color(red: 0.827, green: 0.918, blue: 1.00)
-        case .green: return Color(red: 0.831, green: 0.965, blue: 0.875)
-        case .pink: return Color(red: 1.00, green: 0.863, blue: 0.898)
-        case .peach: return Color(red: 1.00, green: 0.898, blue: 0.820)
-        case .mint: return Color(red: 0.847, green: 0.961, blue: 0.922)
-        case .lilac: return Color(red: 0.918, green: 0.875, blue: 1.00)
+        case .amber: return Color(red: 1.000, green: 0.969, blue: 0.906)
+        case .lavender: return Color(red: 0.969, green: 0.945, blue: 1.000)
+        case .blue: return Color(red: 0.941, green: 0.976, blue: 1.000)
+        case .green: return Color(red: 0.941, green: 0.984, blue: 0.953)
+        case .pink: return Color(red: 1.000, green: 0.953, blue: 0.969)
+        case .peach: return Color(red: 1.000, green: 0.965, blue: 0.929)
+        case .mint: return Color(red: 0.941, green: 0.984, blue: 0.969)
+        case .lilac: return Color(red: 0.969, green: 0.945, blue: 1.000)
         }
     }
 
     var bottom: Color {
         switch self {
-        case .amber: return Color(red: 0.965, green: 0.698, blue: 0.408)
-        case .lavender: return Color(red: 0.718, green: 0.612, blue: 0.953)
-        case .blue: return Color(red: 0.588, green: 0.776, blue: 0.973)
-        case .green: return Color(red: 0.580, green: 0.859, blue: 0.659)
-        case .pink: return Color(red: 0.957, green: 0.659, blue: 0.741)
-        case .peach: return Color(red: 0.961, green: 0.690, blue: 0.514)
-        case .mint: return Color(red: 0.573, green: 0.871, blue: 0.776)
-        case .lilac: return Color(red: 0.776, green: 0.663, blue: 0.965)
+        case .amber: return Color(red: 0.984, green: 0.898, blue: 0.761)
+        case .lavender: return Color(red: 0.910, green: 0.863, blue: 0.984)
+        case .blue: return Color(red: 0.863, green: 0.922, blue: 0.984)
+        case .green: return Color(red: 0.863, green: 0.953, blue: 0.894)
+        case .pink: return Color(red: 0.984, green: 0.882, blue: 0.914)
+        case .peach: return Color(red: 0.984, green: 0.894, blue: 0.824)
+        case .mint: return Color(red: 0.863, green: 0.953, blue: 0.925)
+        case .lilac: return Color(red: 0.914, green: 0.875, blue: 0.980)
         }
     }
 
-    /// The reference glyph is white on every pastel tile. The tile itself
-    /// carries the tone; darkening the glyph both ignored the sheet and made
-    /// the row read as a flat app icon instead of a lit glass chip.
-    var ink: Color { Color.white }
+    /// The sheet's chips are a whisper of tone with the saturated colour in
+    /// the glyph. White ink on saturated chips reads as a heavy badge.
+    var ink: Color {
+        switch self {
+        case .amber: return Color(red: 0.878, green: 0.604, blue: 0.208)
+        case .lavender: return Color(red: 0.471, green: 0.388, blue: 0.831)
+        case .blue: return Color(red: 0.302, green: 0.553, blue: 0.812)
+        case .green: return Color(red: 0.302, green: 0.647, blue: 0.408)
+        case .pink: return Color(red: 0.839, green: 0.404, blue: 0.541)
+        case .peach: return Color(red: 0.835, green: 0.498, blue: 0.298)
+        case .mint: return Color(red: 0.275, green: 0.647, blue: 0.541)
+        case .lilac: return Color(red: 0.502, green: 0.396, blue: 0.847)
+        }
+    }
 
     var halo: Color {
         switch self {
@@ -345,8 +369,8 @@ enum NexlyIcons {
 struct NexlyGlassGlyphTile: View {
     let name: String
     var tone: NexlyGlassTone? = nil
-    var size: CGFloat = 30
-    var glyphSize: CGFloat = 15
+    var size: CGFloat = 28
+    var glyphSize: CGFloat = 14
     var active: Bool = false
 
     var body: some View {
@@ -370,7 +394,7 @@ struct NexlyGlassGlyphTile: View {
                     )
                 )
             Circle()
-                .strokeBorder(Color.white.opacity(0.82), lineWidth: 1)
+                .strokeBorder(Color.white.opacity(0.92), lineWidth: 1)
             Circle()
                 .fill(Color.white.opacity(0.38))
                 .frame(width: size * 0.22, height: size * 0.16)
@@ -383,7 +407,7 @@ struct NexlyGlassGlyphTile: View {
                 .scaleEffect(1.16)
         )
         .frame(width: size, height: size)
-        .shadow(color: palette.halo.opacity(0.24), radius: 5, x: 0, y: 2)
+        .shadow(color: palette.halo.opacity(0.16), radius: 2, x: 0, y: 1)
         .accessibilityHidden(true)
     }
 }
@@ -491,7 +515,7 @@ struct NexlyThinkingCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 1) {
+        VStack(alignment: .leading, spacing: 0) {
             row(icon: "sparkles", tone: .peach,
                 title: "Thinking", subtitle: thinkingSubtitle,
                 active: phase == .thinking)
@@ -506,11 +530,11 @@ struct NexlyThinkingCard: View {
         .padding(.vertical, 2)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 19, style: .continuous)
-                .fill(Aero.elevatedSurface.opacity(phase == .done ? 0.30 : 0.38))
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Aero.elevatedSurface.opacity(phase == .done ? 0.24 : 0.32))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 19, style: .continuous)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .strokeBorder(Color.white.opacity(0.58), lineWidth: 1)
         )
     }
@@ -523,13 +547,13 @@ struct NexlyThinkingCard: View {
         active: Bool
     ) -> some View {
         HStack(spacing: 9) {
-            NexlyGlassGlyphTile(name: icon, tone: tone, size: 32, glyphSize: 16, active: active)
+            NexlyGlassGlyphTile(name: icon, tone: tone, size: 28, glyphSize: 14, active: active)
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundColor(Aero.text)
                 Text(subtitle)
-                    .font(.system(size: 10.5))
+                    .font(.system(size: 9.5))
                     .foregroundColor(Aero.textMuted)
                     .lineLimit(1)
             }
@@ -559,39 +583,40 @@ struct NexlyPlanCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 5) {
             NexlyInlineText(
                 text: plan.title,
-                fontSize: 13.5,
-                glyphSize: 16,
+                fontSize: 12.5,
+                glyphSize: 14,
                 color: Aero.text,
-                // Matches the sheet's medium title, and keeps a one-line title
-                // at 393pt where semibold wrapped one word onto a second line.
-                weight: .medium
+                // The sheet's title is only a hair larger than the rows; at the
+                // narrower card width a bold title wrapped where the reference
+                // stays on one line.
+                weight: .regular
             )
             if plan.rows.isEmpty {
                 skeleton
             } else {
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(plan.rows) { row in
-                        HStack(alignment: .center, spacing: 11) {
+                        HStack(alignment: .center, spacing: 10) {
                             NexlyGlassGlyphTile(
                                 name: row.icon,
                                 tone: row.tone,
-                                size: 30,
-                                glyphSize: 15
+                                size: 28,
+                                glyphSize: 14
                             )
-                            VStack(alignment: .leading, spacing: 1) {
+                            VStack(alignment: .leading, spacing: 2) {
                                 Text(row.time)
-                                    .font(.system(size: 10.5, weight: .semibold))
-                                    .foregroundColor(Aero.textMuted)
+                                    .font(.system(size: 9, weight: .regular))
+                                    .foregroundColor(Aero.textTertiary)
                                     .lineLimit(1)
                                 NexlyInlineText(
                                     text: row.text,
-                                    fontSize: 13,
-                                    glyphSize: 15,
+                                    fontSize: 12,
+                                    glyphSize: 14,
                                     color: Aero.text,
-                                    weight: .medium
+                                    weight: .regular
                                 )
                             }
                             Spacer(minLength: 0)
@@ -604,34 +629,33 @@ struct NexlyPlanCard: View {
                     if let closing = plan.closing {
                         NexlyInlineText(
                             text: closing,
-                            fontSize: 13.5,
-                            glyphSize: 15,
+                            fontSize: 12.5,
+                            glyphSize: 14,
                             color: Aero.text,
-                            weight: .medium
+                            weight: .regular
                         )
                         if let closingIcon = plan.closingIcon,
                            !closing.contains(where: { $0 == ":" }) {
-                            NexlyGlassGlyphTile(
+                            NexlyGlyph(
                                 name: closingIcon,
-                                tone: .peach,
-                                size: 23,
-                                glyphSize: 12
+                                size: 14,
+                                color: NexlyGlassTone.peach.ink
                             )
                         }
                     }
                     Spacer(minLength: 0)
                     if let stamp {
                         Text(stamp)
-                            .font(.system(size: 10.5, weight: .medium))
-                            .foregroundColor(Aero.textMuted.opacity(0.85))
+                            .font(.system(size: 9, weight: .regular))
+                            .foregroundColor(Aero.textTertiary)
                     }
                 }
             }
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .gsGlass(.card, corner: 24)
+        .gsGlass(.card, corner: 20)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(plan.title)
     }
@@ -692,27 +716,35 @@ struct NexlyChatBackdrop: View {
                         ? [Color(red: 0.10, green: 0.07, blue: 0.065),
                            Color(red: 0.15, green: 0.10, blue: 0.09),
                            Color(red: 0.11, green: 0.075, blue: 0.07)]
-                        : [Color(red: 0.98, green: 0.94, blue: 0.91),
-                           Color(red: 0.97, green: 0.90, blue: 0.86),
-                           Color(red: 0.95, green: 0.87, blue: 0.83)],
+                        : [Color(red: 1.000, green: 0.985, blue: 0.965),
+                           Color(red: 0.992, green: 0.949, blue: 0.918),
+                           Color(red: 1.000, green: 0.973, blue: 0.953)],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
-                bubble(size: w * 0.86, x: w * 0.94, y: h * 0.06,
-                       opacity: scheme == .dark ? 0.22 : 0.85)
-                bubble(size: w * 0.74, x: w * -0.06, y: h * 0.28,
-                       opacity: scheme == .dark ? 0.18 : 0.70)
-                bubble(size: w * 0.94, x: w * 0.14, y: h * 0.86,
-                       opacity: scheme == .dark ? 0.19 : 0.75)
-                bubble(size: w * 0.56, x: w * 0.94, y: h * 0.78,
-                       opacity: scheme == .dark ? 0.14 : 0.60)
+                // Daylight entering from the upper-left, as in the sheet.
+                RadialGradient(
+                    colors: [Color.white.opacity(scheme == .dark ? 0.05 : 0.52),
+                             Color.clear],
+                    center: UnitPoint(x: 0.12, y: 0.02),
+                    startRadius: 0,
+                    endRadius: w * 0.9
+                )
+                bubble(size: w * 0.92, x: w * 0.96, y: h * 0.10,
+                       opacity: scheme == .dark ? 0.26 : 0.95)
+                bubble(size: w * 0.80, x: w * -0.03, y: h * 0.33,
+                       opacity: scheme == .dark ? 0.22 : 0.82)
+                bubble(size: w * 0.60, x: w * 0.99, y: h * 0.80,
+                       opacity: scheme == .dark ? 0.18 : 0.72)
+                bubble(size: w * 0.20, x: w * 0.78, y: h * 0.22,
+                       opacity: scheme == .dark ? 0.14 : 0.55)
                 Image("GSHomeLotusNew")
                     .resizable()
                     .scaledToFit()
-                    .frame(width: w * 1.15)
-                    .opacity(scheme == .dark ? 0.14 : 0.36)
-                    .blur(radius: 0.5)
-                    .offset(x: -w * 0.28, y: h * 0.38)
+                    .frame(width: w * 1.42)
+                    .opacity(scheme == .dark ? 0.16 : 0.58)
+                    .blur(radius: 0.4)
+                    .offset(x: -w * 0.36, y: h * 0.40)
                     .allowsHitTesting(false)
             }
             .frame(width: w, height: h)
@@ -731,51 +763,73 @@ struct NexlyChatBackdrop: View {
             .fill(
                 RadialGradient(
                     colors: [
-                        Color.white.opacity(0.03),
-                        Color(red: 1.0, green: 0.88, blue: 0.90).opacity(0.14),
-                        Color(red: 0.95, green: 0.76, blue: 0.86).opacity(0.28),
+                        Color.white.opacity(0.16),
+                        Color(red: 1.0, green: 0.84, blue: 0.76).opacity(0.34),
+                        Color(red: 0.90, green: 0.85, blue: 1.0).opacity(0.24),
+                        Color(red: 0.78, green: 0.91, blue: 1.0).opacity(0.12),
+                        Color.clear,
                     ],
-                    center: .center,
+                    center: UnitPoint(x: 0.40, y: 0.40),
                     startRadius: 0,
-                    endRadius: size * 0.50
+                    endRadius: size * 0.52
                 )
             )
             .overlay(
                 Circle().strokeBorder(
                     LinearGradient(
                         colors: [
-                            Color.white.opacity(0.95),
-                            Color(red: 1.0, green: 0.72, blue: 0.80).opacity(0.55),
+                            Color.white.opacity(1.0),
+                            Color(red: 1.0, green: 0.72, blue: 0.80).opacity(0.62),
+                            Color(red: 0.72, green: 0.85, blue: 1.0).opacity(0.45),
                         ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     ),
-                    lineWidth: 1.6
+                    lineWidth: 2
                 )
             )
             .overlay(
                 Circle()
-                    .fill(Color.white.opacity(0.75))
-                    .frame(width: size * 0.30, height: size * 0.17)
-                    .blur(radius: 3)
+                    .strokeBorder(Color.white.opacity(0.20), lineWidth: 0.8)
+                    .padding(size * 0.055)
+            )
+            .overlay(
+                Circle()
+                    .trim(from: 0.60, to: 0.86)
+                    .stroke(Color.white.opacity(0.85),
+                            style: StrokeStyle(lineWidth: size * 0.028, lineCap: .round))
+                    .padding(size * 0.10)
+                    .rotationEffect(.degrees(8))
+            )
+            .overlay(
+                Circle()
+                    .fill(Color.white.opacity(0.80))
+                    .frame(width: size * 0.22, height: size * 0.13)
+                    .blur(radius: 2)
                     .offset(x: -size * 0.12, y: -size * 0.30)
+            )
+            .overlay(
+                Circle()
+                    .fill(Color.white.opacity(0.88))
+                    .frame(width: size * 0.055, height: size * 0.055)
+                    .offset(x: -size * 0.26, y: -size * 0.34)
             )
             .overlay(
                 Circle().fill(
                     RadialGradient(
                         colors: [
                             Color.clear,
-                            Color(red: 1.0, green: 0.80, blue: 0.88).opacity(0.22),
+                            Color(red: 1.0, green: 0.80, blue: 0.88).opacity(0.20),
                         ],
                         center: .center,
-                        startRadius: size * 0.22,
+                        startRadius: size * 0.24,
                         endRadius: size * 0.50
                     )
                 )
             )
             .frame(width: size, height: size)
-            .shadow(color: Color(red: 0.95, green: 0.68, blue: 0.74).opacity(0.18),
-                    radius: 14, y: 5)
+            .shadow(color: Color(red: 0.95, green: 0.68, blue: 0.74).opacity(0.20),
+                    radius: 12, y: 4)
             .position(x: x, y: y)
             .opacity(opacity)
     }

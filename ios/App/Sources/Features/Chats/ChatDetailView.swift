@@ -1247,6 +1247,7 @@ struct MessageBubble: View, Equatable {
     @State private var lastEffort: String? = nil
     @State private var lastReasoningHint: String? = nil
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.horizontalSizeClass) private var sizeClass
 
     /**
      * Deep-perf pass 80-b: equality covers the body's visible inputs only —
@@ -1307,17 +1308,17 @@ struct MessageBubble: View, Equatable {
             if let sentAttachments = message.attachments, !sentAttachments.isEmpty {
                 MessageAttachmentChips(attachments: sentAttachments)
             }
-            HStack(alignment: .top, spacing: 8) {
+            HStack(alignment: .top, spacing: 12) {
                 Spacer(minLength: 44)
                 VStack(alignment: .trailing, spacing: 5) {
                     Text(message.content)
-                        .font(.system(size: 15))
+                        .font(.system(size: 13))
                         .foregroundStyle(Aero.text)
                         .lineSpacing(2)
-                        .padding(.horizontal, 15)
-                        .padding(.vertical, 7)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
                         .background(
-                            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
                                 .fill(
                                     LinearGradient(
                                         colors: userBubbleColors,
@@ -1327,33 +1328,34 @@ struct MessageBubble: View, Equatable {
                                 )
                         )
                         .overlay(
-                            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
                                 .strokeBorder(
-                                    highlight ? Aero.accent : Color.white.opacity(0.72),
-                                    lineWidth: highlight ? 2 : 1
+                                    highlight ? Aero.accent : Color.white.opacity(0.58),
+                                    lineWidth: highlight ? 2 : 0.5
                                 )
                         )
-                        .shadow(color: Color(red: 0.55, green: 0.32, blue: 0.24).opacity(0.12),
-                                radius: 6, y: 3)
-                        .frame(maxWidth: 320, alignment: .trailing)
+                        .shadow(color: Color(red: 0.55, green: 0.32, blue: 0.24).opacity(0.08),
+                                radius: 3, y: 1)
+                        .frame(maxWidth: sizeClass == .regular ? 260 : 210,
+                               alignment: .trailing)
                         .textSelection(.enabled)
 
                     // Reference delivery receipt: time, then the double tick.
                     HStack(spacing: 4) {
                         if let stamp = timeLabel(message.createdAt) {
                             Text(stamp)
-                                .font(.system(size: 10.5, weight: .regular))
+                                .font(.system(size: 9.5, weight: .regular))
                                 .foregroundStyle(Aero.textTertiary)
                         }
                         NexlyGlyph(
                             name: "checks",
-                            size: 13,
+                            size: 12,
                             color: Aero.textSecondary.opacity(0.78)
                         )
                     }
                     .padding(.trailing, 2)
                 }
-                NexlyUserAvatar(size: 34)
+                NexlyUserAvatar(size: 30)
             }
         }
         .contextMenu {
@@ -1376,8 +1378,8 @@ struct MessageBubble: View, Equatable {
             return [Aero.surface.opacity(0.62), Aero.accentSoft.opacity(0.34)]
         }
         return [
-            Color(red: 1.0, green: 0.929, blue: 0.886).opacity(0.78),
-            Color(red: 1.0, green: 0.867, blue: 0.792).opacity(0.64),
+            Color(red: 1.0, green: 0.945, blue: 0.910).opacity(0.62),
+            Color(red: 1.0, green: 0.875, blue: 0.808).opacity(0.50),
         ]
     }
 

@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -32,6 +33,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -47,6 +49,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
@@ -55,6 +58,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
@@ -65,6 +69,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.ui.components.GsGlassRole
 import com.grapsee.gsai.ui.components.gsGlass
@@ -276,26 +281,39 @@ private fun NexlyAssistantBlocks(
         out
     }
     var statusPlaced = false
+    // The sheet keeps the assistant cards narrower than the phone: about 69%
+    // of the device width, so the pearl backdrop stays visible at the right.
+    val wide = LocalConfiguration.current.screenWidthDp >= 600
+    val cardMax = if (wide) 340.dp else 280.dp
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         groups.forEach { group ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.Top
             ) {
-                NexlyAssistantOrb(size = 30.dp)
+                NexlyAssistantOrb(size = 28.dp)
                 Spacer(Modifier.width(9.dp))
                 Box(Modifier.weight(1f)) {
                     when (group) {
                         is NexlyGroup.Plan -> NexlyPlanCard(
                             plan = group.block.plan,
                             open = group.block.open,
-                            fallbackTimestamp = planTimestamp
+                            fallbackTimestamp = planTimestamp,
+                            modifier = Modifier.widthIn(max = cardMax)
                         )
-                        is NexlyGroup.Prose -> Column(
+                        is NexlyGroup.Prose -> CompositionLocalProvider(
+                            LocalNexlyProseStyle provides TextStyle(
+                                fontSize = 13.sp,
+                                lineHeight = 18.5.sp,
+                                fontWeight = FontWeight.Normal
+                            )
+                        ) {
+                        Column(
                             modifier = Modifier
+                                .widthIn(max = cardMax)
                                 .fillMaxWidth()
-                                .gsGlass(GsGlassRole.Card, RoundedCornerShape(24.dp))
-                                .padding(horizontal = 16.dp, vertical = 10.dp),
+                                .gsGlass(GsGlassRole.Card, RoundedCornerShape(20.dp))
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             if (group.blocks.isEmpty() && isStreaming) {
@@ -608,14 +626,16 @@ private fun ParagraphBlock(
     citationUrls: Map<Int, String>
 ) {
     if (block.spans.isEmpty()) return
-    val theme = rememberSpanTheme(MaterialTheme.typography.bodyMedium.fontSize, citationUrls)
+    val compact = LocalNexlyProseStyle.current
+    val bodyStyle = compact ?: MaterialTheme.typography.bodyMedium
+    val theme = rememberSpanTheme(bodyStyle.fontSize, citationUrls)
     val styled = remember(block.spans, theme, showCaret) {
         spansToAnnotatedString(block.spans, theme, showCaret)
     }
     val text = @Composable {
         Text(
             text = styled,
-            style = MaterialTheme.typography.bodyMedium,
+            style = bodyStyle,
             color = MaterialTheme.colorScheme.onSurface
         )
     }

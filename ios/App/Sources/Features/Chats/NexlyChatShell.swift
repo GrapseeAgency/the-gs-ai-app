@@ -17,7 +17,7 @@ struct NexlyBrandHeader<SparkleMenu: View, MenuMenu: View>: View {
         HStack(spacing: 10) {
             AnimatedGsIllustration(
                 imageName: "GSCompanionOrb",
-                size: 42,
+                size: 40,
                 breathDuration: 3.2,
                 rotationDegrees: 0.8,
                 lift: -1,
@@ -57,13 +57,18 @@ struct NexlyBrandHeader<SparkleMenu: View, MenuMenu: View>: View {
         .background(
             LinearGradient(
                 colors: [
-                    Color(red: 1.0, green: 0.95, blue: 0.92).opacity(0.62),
-                    Color(red: 1.0, green: 0.93, blue: 0.90).opacity(0.34),
+                    Color(red: 1.0, green: 0.96, blue: 0.935).opacity(0.66),
+                    Color(red: 1.0, green: 0.94, blue: 0.915).opacity(0.30),
                 ],
                 startPoint: .top,
                 endPoint: .bottom
             )
         )
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(Color.white.opacity(0.42))
+                .frame(height: 0.75)
+        }
     }
 
     private func headerIconButton<Menu: View>(
@@ -73,8 +78,8 @@ struct NexlyBrandHeader<SparkleMenu: View, MenuMenu: View>: View {
         @ViewBuilder menu: () -> Menu
     ) -> some View {
         Button(action: action) {
-            NexlyGlyph(name: glyph, size: 19, color: Aero.text)
-                .frame(width: 40, height: 40)
+            NexlyGlyph(name: glyph, size: 18, color: Aero.text)
+                .frame(width: 36, height: 36)
                 .background(Circle().fill(.clear))
                 .gsGlass(.sunken, corner: 20)
         }
@@ -104,10 +109,10 @@ struct NexlyComposerBar: View {
             Button(action: onAttach) {
                 NexlyGlyph(
                     name: "sparkles",
-                    size: 21,
+                    size: 19,
                     color: Color(red: 0.56, green: 0.48, blue: 1.0)
                 )
-                .frame(width: 40, height: 40)
+                .frame(width: 38, height: 38)
             }
             .buttonStyle(KineticPressStyle())
             .accessibilityLabel("Nexly tools, attachments and modes")
@@ -124,7 +129,7 @@ struct NexlyComposerBar: View {
             }
 
             TextField("Ask me anything...", text: $text, axis: .vertical)
-                .font(.system(size: 15.5))
+                .font(.system(size: 14))
                 .foregroundStyle(Aero.text)
                 .lineLimit(1...6)
                 .focused(focused)
@@ -135,12 +140,12 @@ struct NexlyComposerBar: View {
                     text = String(newValue.dropLast())
                     onSubmit()
                 }
-                .padding(.vertical, 11)
+                .padding(.vertical, 9)
 
             if isStreaming {
                 Button(action: onStop) {
-                    NexlyGlyph(name: "player-stop", size: 18, color: Aero.text)
-                        .frame(width: 38, height: 38)
+                    NexlyGlyph(name: "player-stop", size: 17, color: Aero.text)
+                        .frame(width: 36, height: 36)
                         .background(Circle().fill(Aero.surface.opacity(0.55)))
                         .overlay(Circle().strokeBorder(Color.white.opacity(0.7), lineWidth: 1))
                 }
@@ -148,8 +153,8 @@ struct NexlyComposerBar: View {
                 .accessibilityLabel("Stop generating")
             } else {
                 Button(action: onSend) {
-                    NexlyGlyph(name: "send-2", size: 18, color: .white)
-                        .frame(width: 38, height: 38)
+                    NexlyGlyph(name: "send-2", size: 17, color: .white)
+                        .frame(width: 36, height: 36)
                         .background(
                             Circle().fill(
                                 LinearGradient(
