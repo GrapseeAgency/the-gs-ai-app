@@ -127,7 +127,7 @@ struct NexlyComposerBar: View {
                 .focused(focused)
                 .submitLabel(.send)
                 .onSubmit(onSubmit)
-                .onChange(of: text) { newValue in
+                .onChange(of: text.wrappedValue) { newValue in
                     guard SettingsStore.shared.enterToSend, newValue.hasSuffix("\n") else { return }
                     text = String(newValue.dropLast())
                     onSubmit()
