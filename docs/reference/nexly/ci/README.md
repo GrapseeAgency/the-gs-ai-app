@@ -84,13 +84,13 @@ Artifacts on the run: `nexly-chat-render-android`, `nexly-chat-render-ios`.
 
 Both render/test gates completed green:
 
-- Android: https://github.com/GrapseeAgency/the-gs-ai-app/actions/runs/39840270656
-- iOS: https://github.com/GrapseeAgency/the-gs-ai-app/actions/runs/39840274730
+- Android: https://github.com/GrapseeAgency/the-gs-ai-app/actions/runs/39844943944
+- iOS: https://github.com/GrapseeAgency/the-gs-ai-app/actions/runs/39844947532
 
 Android passes the full unit suite (267 tests, including the new
 `NexlyPlanTest`); the screenshot tests are gated behind `-PgsShots=true` and are
 excluded from the ordinary suite, exactly like `HomeScreenshotTest`.
 
-The screenshots here are from commit `2ab9084a` on
+The screenshots here are from commit `bc8dbcfa` on
 `nexly/chat-reference-verify`, the green run where the complete composition
 fits at both widths.
