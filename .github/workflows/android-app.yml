@@ -513,6 +513,20 @@ jobs:
           # numbers a blocking gate compares against.
           python3 -m pip install --quiet --disable-pip-version-check "numpy==2.1.3" "pillow==11.0.0"
 
+      - name: Upload the Home renders
+        uses: actions/upload-artifact@v4
+        with:
+          name: home-renders
+          path: android/app/build/screenshots/*.png
+          # `if-no-files-found: error` still holds: a step above that produced no
+          # PNGs fails before this runs, and this ordering is what makes the
+          # gate's own red debuggable. Uploading AFTER the measurement skipped
+          # the upload whenever the measurement failed — so the one run that most
+          # needed the pixels was the one that shipped none. The renders exist by
+          # then whether or not they passed, so they go up first.
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Measure the Android render against the reference
         run: |
           set -euo pipefail
@@ -526,17 +540,6 @@ jobs:
             --reference assets/reference/home-reference.png \
             --render android/app/build/screenshots/home-393x852.png \
             --probe-set android --label android-393
-
-      - name: Upload the Home renders
-        # not `always()`: if a step above failed there are no renders, and
-        # `if-no-files-found: error` would turn one failure into two and bury
-        # the real one under a red upload step.
-        uses: actions/upload-artifact@v4
-        with:
-          name: home-renders
-          path: android/app/build/screenshots/*.png
-          if-no-files-found: error
-          retention-days: 30
 
       - name: Unit tests
         working-directory: android

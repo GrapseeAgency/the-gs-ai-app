@@ -234,7 +234,7 @@ jobs:
           # with no change on our side.
           python3 -m pip install --quiet --disable-pip-version-check "numpy==2.1.3" "pillow==11.0.0"
 
-      - name: Measure the iOS render against the reference
+      - name: Collect the iOS renders into the workspace
         run: |
           set -euo pipefail
           # iOS had no pixel evidence at all, which is why three of Wave 0's
@@ -256,17 +256,26 @@ jobs:
             test -s "$DIR/home-ios-$w.png" \
               || { echo "::error::home-ios-$w.png missing — the render harness did not produce it"; exit 1; }
           done
-          python3 scripts/check_home_render.py \
-            --reference assets/reference/home-reference.png \
-            --render "$DIR/home-ios-393x852.png" --probe-set ios --label ios-393
 
       - name: Upload the iOS Home renders
+        # BEFORE the measurement, for the same reason android-app.yml now does
+        # it: the step that fails is the one whose pixels are needed, and an
+        # upload ordered after a blocking gate is skipped by exactly the reds
+        # that have to be read.
         uses: actions/upload-artifact@v4
         with:
           name: home-renders-ios
           path: ios/build/home-renders/*.png
           if-no-files-found: error
           retention-days: 30
+
+      - name: Measure the iOS render against the reference
+        run: |
+          set -euo pipefail
+          DIR=ios/build/home-renders
+          python3 scripts/check_home_render.py \
+            --reference assets/reference/home-reference.png \
+            --render "$DIR/home-ios-393x852.png" --probe-set ios --label ios-393
 
       - name: Package — zip unsigned simulator .app
         run: |

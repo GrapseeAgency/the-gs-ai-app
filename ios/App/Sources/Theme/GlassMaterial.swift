@@ -187,13 +187,37 @@ private struct GsGlassModifier: ViewModifier {
                     rim(in: geometry.size)
                 }
             }
-            // Cue: warm, non-grey shadow — this is depth, not darkness.
-            .shadow(
-                color: Color(red: 0.35, green: 0.16, blue: 0.10).opacity(role.elevation > 0 ? 0.14 : 0),
-                radius: role.elevation * 0.6,
-                x: 0,
-                y: role.elevation * 0.28
-            )
+            // Cue: warm, non-grey shadow — this is depth, not darkness. Cast
+            // from outside the glass rather than through it; see `castShadow`.
+            .background {
+                if role.elevation > 0 {
+                    castShadow
+                }
+            }
+    }
+
+    /// The card's shadow, with the card's own footprint punched out of it.
+    ///
+    /// SwiftUI's `.shadow` paints the blur behind whatever casts it, and a glass
+    /// at 45% coverage is see-through: the card's own shadow came back up through
+    /// it and took 7.9 L out of the interior. That 7.9 L is not a coincidence —
+    /// it is the size of the shadow the sheet puts on the PAGE below its card
+    /// (-7.2 L measured), while the sheet's glass interior is a +2.8 L LIFT over
+    /// its ground. A real card's shadow falls on the table, not on the inside of
+    /// the glass, so the silhouette is erased from the layer that casts it.
+    ///
+    /// `.offset` is applied before the punch because it does not move the layout
+    /// frame: the erased footprint therefore lands where the card is, not where
+    /// its shadow is, which is the whole point.
+    private var castShadow: some View {
+        let shape = RoundedRectangle(cornerRadius: corner, style: .continuous)
+        return shape
+            .fill(Color(red: 0.35, green: 0.16, blue: 0.10))
+            .opacity(0.14)
+            .blur(radius: role.elevation * 0.6)
+            .offset(y: role.elevation * 0.28)
+            .overlay(shape.fill(Color.black).blendMode(.destinationOut))
+            .compositingGroup()
     }
 
     /// The backdrop blur, or nothing where the role has no material.
