@@ -129,6 +129,7 @@ final class NexlyChatRenderTests: XCTestCase {
     private static func renderFull(size: CGSize) async throws -> UIImage? {
         let view = NexlyFullChatView()
             .frame(width: size.width, height: size.height)
+            .ignoresSafeArea()
             .environment(\.layoutDirection, .leftToRight)
         return try await capture(view: view, size: size)
     }
@@ -136,6 +137,7 @@ final class NexlyChatRenderTests: XCTestCase {
     private static func renderFullProse(size: CGSize) async throws -> UIImage? {
         let view = NexlyFullProseView()
             .frame(width: size.width, height: size.height)
+            .ignoresSafeArea()
             .environment(\.layoutDirection, .leftToRight)
         return try await capture(view: view, size: size)
     }
@@ -210,41 +212,50 @@ private struct NexlyFullChatView: View {
     @FocusState private var composerFocused: Bool
 
     var body: some View {
-        ZStack {
-            NexlyChatBackdrop()
-            VStack(spacing: 0) {
-                NexlyBrandHeader(
-                    sparkleLabel: "New chat",
-                    menuGlyph: "menu-2",
-                    menuLabel: "Open menu",
-                    onSparkle: {},
-                    onMenu: {},
-                    sparkleMenu: { EmptyView() },
-                    menuMenu: { EmptyView() }
-                )
-                ScrollView(.vertical, showsIndicators: false) {
-                    VStack(spacing: 14) {
-                        MessageBubble(
-                            message: ChatViewModel.ChatMessage(
-                                role: "user",
-                                content: NEXLY_REFERENCE_USER,
-                                createdAt: "2026-10-22T21:41:00Z"
-                            ),
-                            editEnabled: false
-                        )
-                        NexlyAssistantBlocksView(
-                            blocks: parseBlocks(NEXLY_REFERENCE_WIRE),
-                            isStreaming: false,
-                            showStatus: true,
-                            thinkingPhase: .done,
-                            thinkingEffort: "high",
-                            isPlanTurn: true,
-                            planTimestamp: "2026-10-22T21:45:00Z"
-                        )
+        GeometryReader { geo in
+            let column = min(640, geo.size.width)
+            ZStack(alignment: .bottom) {
+                NexlyChatBackdrop()
+                VStack(spacing: 0) {
+                    NexlyBrandHeader(
+                        sparkleLabel: "New chat",
+                        menuGlyph: "menu-2",
+                        menuLabel: "Open menu",
+                        onSparkle: {},
+                        onMenu: {},
+                        sparkleMenu: { EmptyView() },
+                        menuMenu: { EmptyView() }
+                    )
+                    ScrollView(.vertical, showsIndicators: false) {
+                        VStack(spacing: 14) {
+                            MessageBubble(
+                                message: ChatViewModel.ChatMessage(
+                                    role: "user",
+                                    content: NEXLY_REFERENCE_USER,
+                                    createdAt: "2026-10-22T21:41:00Z"
+                                ),
+                                editEnabled: false
+                            )
+                            NexlyAssistantBlocksView(
+                                blocks: parseBlocks(NEXLY_REFERENCE_WIRE),
+                                isStreaming: false,
+                                showStatus: true,
+                                thinkingPhase: .done,
+                                thinkingEffort: "high",
+                                isPlanTurn: true,
+                                planTimestamp: "2026-10-22T21:45:00Z"
+                            )
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .padding(.bottom, 82)
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
                 }
+                .frame(width: column, height: geo.size.height, alignment: .top)
+
+                // Anchor the composer to the geometry's bottom edge, not to
+                // the scroll content. The transcript then absorbs the slack and
+                // the capsule cannot be pushed below the screen.
                 NexlyComposerBar(
                     text: .constant(""),
                     isStreaming: false,
@@ -258,13 +269,10 @@ private struct NexlyFullChatView: View {
                     onSubmit: {}
                 )
                 .padding(.horizontal, Aero.Spacing.m)
-                .padding(.top, 3)
-                .padding(.bottom, 10)
+                .padding(.bottom, 14)
+                .frame(width: column)
             }
-            // The window proposes the real device size. Without an explicit
-            // height the VStack keeps its content height and the composer
-            // slides below the screen edge on short/landscape sizes.
-            .frame(maxWidth: 640, maxHeight: .infinity, alignment: .top)
+            .frame(width: geo.size.width, height: geo.size.height)
         }
     }
 }
@@ -275,41 +283,47 @@ private struct NexlyFullProseView: View {
     @FocusState private var composerFocused: Bool
 
     var body: some View {
-        ZStack {
-            NexlyChatBackdrop()
-            VStack(spacing: 0) {
-                NexlyBrandHeader(
-                    sparkleLabel: "New chat",
-                    menuGlyph: "menu-2",
-                    menuLabel: "Open menu",
-                    onSparkle: {},
-                    onMenu: {},
-                    sparkleMenu: { EmptyView() },
-                    menuMenu: { EmptyView() }
-                )
-                ScrollView(.vertical, showsIndicators: false) {
-                    VStack(spacing: 14) {
-                        MessageBubble(
-                            message: ChatViewModel.ChatMessage(
-                                role: "user",
-                                content: NEXLY_PROSE_USER,
-                                createdAt: "2026-10-22T21:41:00Z"
-                            ),
-                            editEnabled: false
-                        )
-                        NexlyAssistantBlocksView(
-                            blocks: parseBlocks(NEXLY_THINKING_WIRE),
-                            isStreaming: false,
-                            showStatus: true,
-                            thinkingPhase: .reasoning,
-                            thinkingEffort: "high",
-                            isPlanTurn: false,
-                            statusAtEnd: false
-                        )
+        GeometryReader { geo in
+            let column = min(640, geo.size.width)
+            ZStack(alignment: .bottom) {
+                NexlyChatBackdrop()
+                VStack(spacing: 0) {
+                    NexlyBrandHeader(
+                        sparkleLabel: "New chat",
+                        menuGlyph: "menu-2",
+                        menuLabel: "Open menu",
+                        onSparkle: {},
+                        onMenu: {},
+                        sparkleMenu: { EmptyView() },
+                        menuMenu: { EmptyView() }
+                    )
+                    ScrollView(.vertical, showsIndicators: false) {
+                        VStack(spacing: 14) {
+                            MessageBubble(
+                                message: ChatViewModel.ChatMessage(
+                                    role: "user",
+                                    content: NEXLY_PROSE_USER,
+                                    createdAt: "2026-10-22T21:41:00Z"
+                                ),
+                                editEnabled: false
+                            )
+                            NexlyAssistantBlocksView(
+                                blocks: parseBlocks(NEXLY_THINKING_WIRE),
+                                isStreaming: false,
+                                showStatus: true,
+                                thinkingPhase: .reasoning,
+                                thinkingEffort: "high",
+                                isPlanTurn: false,
+                                statusAtEnd: false
+                            )
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .padding(.bottom, 82)
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
                 }
+                .frame(width: column, height: geo.size.height, alignment: .top)
+
                 NexlyComposerBar(
                     text: .constant(""),
                     isStreaming: false,
@@ -323,10 +337,10 @@ private struct NexlyFullProseView: View {
                     onSubmit: {}
                 )
                 .padding(.horizontal, Aero.Spacing.m)
-                .padding(.top, 3)
-                .padding(.bottom, 10)
+                .padding(.bottom, 14)
+                .frame(width: column)
             }
-            .frame(maxWidth: 640, maxHeight: .infinity, alignment: .top)
+            .frame(width: geo.size.width, height: geo.size.height)
         }
     }
 }
