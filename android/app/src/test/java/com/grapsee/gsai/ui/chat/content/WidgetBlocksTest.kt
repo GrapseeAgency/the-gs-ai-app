@@ -307,12 +307,20 @@ class WidgetBlocksTest {
             "terminal" to """{"commands":[{"name":"help","description":"list commands"}]}""",
             "collab" to """{"surface":"counter","room":"lobby"}"""
         )
-        // The routing set is exactly the parser set — no orphan language, no
-        // parser branch reachable only by a hand-written call.
-        assertEquals(minimal.keys, WIDGET_LANGUAGES)
+        // The routing set is exactly the generic widget parser set — no
+        // orphan language and no parser branch reachable only by a hand-written
+        // call. `plan` is deliberately not a `parseWidget` kind: it is the
+        // first-class Nexly timetable (`Block.PlanBlock`), with its own parser
+        // and renderer, so it is asserted against parseNexlyPlanData below.
+        assertEquals(minimal.keys, WIDGET_LANGUAGES - "plan")
         for ((kind, json) in minimal) {
             assertNotNull("kind '$kind' is routed but not parsed", parseWidget(kind, json))
         }
+        assertTrue("plan" in WIDGET_LANGUAGES)
+        assertNotNull(
+            "the plan route must parse a timed payload",
+            parseNexlyPlanData("""{"rows":[{"time":"9:00 AM","text":"Classes"}]}""")
+        )
     }
 
     @Test

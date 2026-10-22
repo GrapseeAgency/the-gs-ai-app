@@ -80,6 +80,7 @@ struct NexlyAssistantBlocksView: View {
                             )
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
         }

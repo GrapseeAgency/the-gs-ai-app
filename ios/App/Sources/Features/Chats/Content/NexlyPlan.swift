@@ -654,19 +654,19 @@ struct NexlyChatBackdrop: View {
                     endPoint: .bottomTrailing
                 )
                 bubble(size: w * 0.86, x: w * 0.94, y: h * 0.06,
-                       opacity: scheme == .dark ? 0.18 : 0.68)
+                       opacity: scheme == .dark ? 0.16 : 0.56)
                 bubble(size: w * 0.74, x: w * -0.06, y: h * 0.28,
-                       opacity: scheme == .dark ? 0.14 : 0.52)
+                       opacity: scheme == .dark ? 0.12 : 0.42)
                 bubble(size: w * 0.94, x: w * 0.14, y: h * 0.86,
-                       opacity: scheme == .dark ? 0.15 : 0.55)
+                       opacity: scheme == .dark ? 0.13 : 0.46)
                 bubble(size: w * 0.56, x: w * 0.94, y: h * 0.78,
-                       opacity: scheme == .dark ? 0.10 : 0.42)
+                       opacity: scheme == .dark ? 0.09 : 0.34)
                 Image("GSHomeLotusNew")
                     .resizable()
                     .scaledToFit()
                     .frame(width: w * 1.15)
-                    .opacity(scheme == .dark ? 0.12 : 0.32)
-                    .blur(radius: 2)
+                    .opacity(scheme == .dark ? 0.10 : 0.28)
+                    .blur(radius: 1)
                     .offset(x: -w * 0.28, y: h * 0.38)
                     .allowsHitTesting(false)
             }
@@ -677,51 +677,60 @@ struct NexlyChatBackdrop: View {
         .accessibilityHidden(true)
     }
 
-    /// A pearlescent sphere, not a flat tint: bright airlight on the upper
-    /// left, a pink/lilac refraction body, a crisp white rim and a warm
-    /// lower-right falloff. The sheet's orbs are the dominant background
-    /// object; the first render proved a 0.38 body washed out to nothing on
-    /// the cream wash, so the body and rim carry real weight now.
+    /// A glass sphere, not a flat pastel disc: the body stays almost
+    /// transparent, the colour lives in a thin refraction band, and a crisp
+    /// white rim plus a specular crescent carry the read. The first render
+    /// proved that a bright centre at high opacity looks like a sticker.
     private func bubble(size: CGFloat, x: CGFloat, y: CGFloat, opacity: Double) -> some View {
         Circle()
             .fill(
                 RadialGradient(
                     colors: [
-                        Color.white.opacity(0.98),
-                        Color(red: 1.0, green: 0.80, blue: 0.82).opacity(0.58),
-                        Color(red: 0.84, green: 0.78, blue: 1.0).opacity(0.34),
-                        Color.clear,
+                        Color.white.opacity(0.02),
+                        Color(red: 1.0, green: 0.88, blue: 0.90).opacity(0.10),
+                        Color(red: 0.95, green: 0.76, blue: 0.86).opacity(0.20),
                     ],
-                    center: UnitPoint(x: 0.30, y: 0.24),
+                    center: .center,
                     startRadius: 0,
-                    endRadius: size * 0.66
+                    endRadius: size * 0.50
                 )
             )
             .overlay(
-                Circle().fill(
+                Circle().strokeBorder(
                     LinearGradient(
                         colors: [
-                            Color.clear,
-                            Color(red: 0.96, green: 0.72, blue: 0.78).opacity(0.20),
+                            Color.white.opacity(0.90),
+                            Color(red: 1.0, green: 0.72, blue: 0.80).opacity(0.42),
                         ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
-                    )
+                    ),
+                    lineWidth: 1.6
                 )
             )
             .overlay(
-                Circle().strokeBorder(Color.white.opacity(0.72), lineWidth: 1.4)
+                Circle()
+                    .fill(Color.white.opacity(0.60))
+                    .frame(width: size * 0.30, height: size * 0.17)
+                    .blur(radius: 3)
+                    .offset(x: -size * 0.12, y: -size * 0.30)
             )
             .overlay(
-                Circle()
-                    .fill(Color.white.opacity(0.55))
-                    .frame(width: size * 0.28, height: size * 0.16)
-                    .blur(radius: 2.5)
-                    .offset(x: -size * 0.10, y: -size * 0.30)
+                Circle().fill(
+                    RadialGradient(
+                        colors: [
+                            Color.clear,
+                            Color(red: 1.0, green: 0.80, blue: 0.88).opacity(0.16),
+                        ],
+                        center: .center,
+                        startRadius: size * 0.22,
+                        endRadius: size * 0.50
+                    )
+                )
             )
             .frame(width: size, height: size)
-            .shadow(color: Color(red: 0.95, green: 0.68, blue: 0.74).opacity(0.18),
-                    radius: 18, y: 6)
+            .shadow(color: Color(red: 0.95, green: 0.68, blue: 0.74).opacity(0.14),
+                    radius: 12, y: 4)
             .position(x: x, y: y)
             .opacity(opacity)
     }

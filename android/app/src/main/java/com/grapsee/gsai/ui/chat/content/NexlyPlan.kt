@@ -671,33 +671,43 @@ fun Modifier.nexlyPearlBackdrop(): Modifier {
             )
         )
         fun bubble(cx: Float, cy: Float, radius: Float, alpha: Float) {
+            // Glass reads from a transparent body, a thin refraction band and
+            // a bright rim; a white centre at high alpha is a sticker.
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(
-                        Color.White.copy(alpha = alpha),
-                        Color(0xFFFFD8C4).copy(alpha = alpha * 0.58f),
-                        Color(0xFFDCD4FF).copy(alpha = alpha * 0.34f),
+                        Color.White.copy(alpha = alpha * 0.04f),
+                        Color(0xFFFFD8C4).copy(alpha = alpha * 0.22f),
+                        Color(0xFFDCD4FF).copy(alpha = alpha * 0.12f),
                         Color.Transparent
                     ),
-                    center = Offset(cx - radius * 0.22f, cy - radius * 0.28f),
-                    radius = radius
+                    center = Offset(cx, cy),
+                    radius = radius * 0.52f
                 ),
                 radius = radius,
                 center = Offset(cx, cy)
             )
-            // A real rim, not a flat tint: the first render proved the bodies
-            // washed into the cream wash when they had no edge.
             drawCircle(
-                color = Color.White.copy(alpha = (alpha * 0.72f).coerceAtMost(0.75f)),
+                brush = Brush.linearGradient(
+                    listOf(
+                        Color.White.copy(alpha = (alpha * 0.90f).coerceAtMost(0.90f)),
+                        Color(0xFFFFB8C8).copy(alpha = alpha * 0.45f)
+                    )
+                ),
                 radius = radius,
                 center = Offset(cx, cy),
-                style = Stroke(width = 1.4.dp.toPx())
+                style = Stroke(width = 1.5.dp.toPx())
+            )
+            drawCircle(
+                color = Color.White.copy(alpha = alpha * 0.55f),
+                radius = radius * 0.10f,
+                center = Offset(cx - radius * 0.35f, cy - radius * 0.38f)
             )
         }
-        bubble(w * 0.94f, h * 0.08f, w * 0.44f, if (dark) 0.18f else 0.68f)
-        bubble(w * -0.06f, h * 0.30f, w * 0.38f, if (dark) 0.14f else 0.52f)
-        bubble(w * 0.16f, h * 0.86f, w * 0.46f, if (dark) 0.15f else 0.55f)
-        bubble(w * 0.96f, h * 0.78f, w * 0.30f, if (dark) 0.10f else 0.42f)
+        bubble(w * 0.94f, h * 0.08f, w * 0.44f, if (dark) 0.16f else 0.56f)
+        bubble(w * -0.06f, h * 0.30f, w * 0.38f, if (dark) 0.12f else 0.42f)
+        bubble(w * 0.16f, h * 0.86f, w * 0.46f, if (dark) 0.13f else 0.46f)
+        bubble(w * 0.96f, h * 0.78f, w * 0.30f, if (dark) 0.09f else 0.34f)
         lotus?.let { image ->
             if (image.width > 0 && image.height > 0) {
                 val targetW = w * 1.15f
