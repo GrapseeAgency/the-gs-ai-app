@@ -17,12 +17,13 @@ import androidx.compose.ui.graphics.Color
  */
 object Aeruo {
     // ---- light appearance ---------------------------------------------------
-    val Paper = Color(0xFFFDF4EF)
-    val SurfaceLight = Color(0xFFFFFCFA)
+    // Sampled from the sheet: cream paper, neutral ink — not warm-on-warm.
+    val Paper = Color(0xFFF8F1EA)
+    val SurfaceLight = Color(0xFFFBF5EF)
     val SurfaceRaisedLight = Color(0xFFFFF6F0)
-    val Ink = Color(0xFF3A2723)
-    val InkMuted = Color(0xFF8A6B62)
-    val InkTertiary = Color(0xFFAC9188)
+    val Ink = Color(0xFF1A2026)
+    val InkMuted = Color(0xFF6D7077)
+    val InkTertiary = Color(0xFF8E9198)
     val OutlineLight = Color(0xFFF2D9CF)
     val DividerLight = Color(0xFFF7E7DF)
     val ContainerLowLight = Color(0xFFFFF1EA)
