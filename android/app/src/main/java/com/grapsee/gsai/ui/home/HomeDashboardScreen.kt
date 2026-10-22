@@ -623,19 +623,31 @@ private fun ReflectionCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val compact = maxWidth < 148.dp
             // Lotus painted first; copy keeps its own z-plane.
-            Column(Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 10.dp).zIndex(1f)) {
-                // The chevron overlays the corner instead of eating 13+4dp of
-                // the title's measure: "Today's reflection" is 112dp at 12.5sp
-                // and a 360dp card only offers 113dp.
-                Text(
-                    text = "Today's reflection",
-                    style = MaterialTheme.typography.titleSmall.copy(
-                        fontSize = if (compact) 12.sp else 12.5.sp,
-                        fontWeight = FontWeight.SemiBold
-                    ),
-                    color = GsTheme.colors.textPrimary,
-                    maxLines = 1
-                )
+            Column(Modifier.fillMaxSize().padding(horizontal = 10.dp, vertical = 10.dp).zIndex(1f)) {
+                // Title and chevron share a row again: overlaying the glyph
+                // made it graze the final "n" at 360dp. Measured against the
+                // bundled Poppins, a 10dp inset leaves 112.5dp at 393dp — the
+                // sheet's 12.5sp title is 112.2dp, so it fits at the sheet's
+                // size — and 98dp at 360dp, which needs the 10sp step.
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Today's reflection",
+                        style = MaterialTheme.typography.titleSmall.copy(
+                            fontSize = if (compact) 10.sp else 12.5.sp,
+                            fontWeight = FontWeight.SemiBold
+                        ),
+                        color = GsTheme.colors.textPrimary,
+                        maxLines = 1,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Icon(
+                        GsIcons.ChevronRight,
+                        contentDescription = null,
+                        tint = GsTheme.colors.textTertiary,
+                        modifier = Modifier.size(13.dp)
+                    )
+                }
                 Spacer(Modifier.height(2.dp))
                 Text(
                     text = "Take a moment to check in with yourself.",
@@ -648,16 +660,6 @@ private fun ReflectionCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
                     maxLines = 3
                 )
             }
-            Icon(
-                GsIcons.ChevronRight,
-                contentDescription = null,
-                tint = GsTheme.colors.textTertiary,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 13.dp, end = 10.dp)
-                    .size(13.dp)
-                    .zIndex(2f)
-            )
             Box(Modifier.align(Alignment.BottomEnd).offset(x = 4.dp, y = 8.dp)) {
                 // The authored lotus from the reference — feathered so it
                 // melts into the card surface rather than sitting on top.

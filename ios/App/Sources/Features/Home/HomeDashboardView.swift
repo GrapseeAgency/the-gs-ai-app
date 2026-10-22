@@ -483,13 +483,21 @@ private struct ReflectionCard: View {
                     .offset(x: 4, y: 8)
                     .allowsHitTesting(false)
                 VStack(alignment: .leading, spacing: 4) {
-                    // The chevron overlays the corner: "Today's reflection" is
-                    // 112pt at 12.5pt and a 360pt card only offers ~113pt, so
-                    // sharing the row with a Spacer+glyph clipped the title.
-                    Text("Today's reflection")
-                        .font(.system(size: 12.5, weight: .semibold))
-                        .foregroundStyle(Aero.text)
-                        .lineLimit(1)
+                    // Title and chevron share a row: overlaying the glyph made
+                    // it graze the final "n" at 360pt. A 10pt inset leaves
+                    // 112.5pt at 393pt, and the sheet's 12.5pt title measures
+                    // 112.2pt, so it keeps the sheet's size there; 360pt takes
+                    // the 10pt step.
+                    HStack(spacing: 6) {
+                        Text("Today's reflection")
+                            .font(.system(size: 12.5, weight: .semibold))
+                            .foregroundStyle(Aero.text)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                        Spacer(minLength: 0)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12, weight: .semibold)).foregroundStyle(Aero.textMuted)
+                    }
                     Text("Take a moment to check in with yourself.")
                         .font(.system(size: 10.5))
                         .lineSpacing(1.5)
@@ -497,14 +505,11 @@ private struct ReflectionCard: View {
                         .lineLimit(3)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding(.trailing, 18)
-                HStack {
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 12, weight: .semibold)).foregroundStyle(Aero.textMuted)
-                }
             }
-            .padding(14)
+            // 10pt horizontal, matching Android, so the title keeps the sheet's
+            // 12.5pt at 393pt instead of being scaled down by a 14pt inset.
+            .padding(.horizontal, 10)
+            .padding(.vertical, 14)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             .gsGlass(.card, corner: 16)
         }
