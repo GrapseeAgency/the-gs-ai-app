@@ -87,12 +87,12 @@ enum Aero {
         lightHC: .black,
         darkHC: .white)
     static let textSecondary = dynamic(
-        light: UIColor(red: 0.427, green: 0.439, blue: 0.467, alpha: 1),   // 6D7077
+        light: UIColor(red: 0.392, green: 0.408, blue: 0.435, alpha: 1),   // 64686F
         dark: UIColor(red: 0.780, green: 0.631, blue: 0.592, alpha: 1), // C7A197
         lightHC: UIColor(red: 0.278, green: 0.298, blue: 0.329, alpha: 1), // 474C54
         darkHC: UIColor(red: 0.780, green: 0.800, blue: 0.827, alpha: 1))  // C7CCD3
     static let textTertiary = dynamic(
-        light: UIColor(red: 0.573, green: 0.596, blue: 0.631, alpha: 1),   // 9298A1
+        light: UIColor(red: 0.522, green: 0.533, blue: 0.561, alpha: 1),   // 85888F
         dark: UIColor(red: 0.659, green: 0.518, blue: 0.471, alpha: 1)) // A88478
     static let textDisabled = dynamic(
         light: UIColor(red: 0.769, green: 0.780, blue: 0.800, alpha: 1),   // C4C7CC
