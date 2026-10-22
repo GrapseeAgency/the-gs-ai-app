@@ -555,13 +555,17 @@ private fun MindGuideCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val compact = maxWidth < 148.dp
             Row(
+                // Measured: in a 151dp card the text column needs every point
+                // it can get — "clarity companion." is 93dp at 10sp — so the
+                // orb is 30dp, the insets are tight, and the chevron stays an
+                // overlay instead of a reserved 24dp gutter.
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(
-                        start = if (compact) 8.dp else 10.dp,
-                        end = if (compact) 18.dp else 24.dp,
-                        top = 10.dp,
-                        bottom = 10.dp
+                        start = if (compact) 5.dp else 6.dp,
+                        end = if (compact) 12.dp else 14.dp,
+                        top = 8.dp,
+                        bottom = 8.dp
                     ),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -571,14 +575,14 @@ private fun MindGuideCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
                     painter = painterResource(com.grapsee.gsai.R.drawable.gs_home_mind_orb),
                     contentDescription = null,
                     contentScale = ContentScale.Fit,
-                    modifier = Modifier.size(if (compact) 28.dp else 36.dp)
+                    modifier = Modifier.size(if (compact) 26.dp else 30.dp)
                 )
-                Spacer(Modifier.width(if (compact) 5.dp else 8.dp))
+                Spacer(Modifier.width(if (compact) 5.dp else 6.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
                         text = "Mind Guide",
                         style = MaterialTheme.typography.titleSmall.copy(
-                            fontSize = if (compact) 12.sp else 13.5.sp,
+                            fontSize = if (compact) 12.sp else 13.sp,
                             fontWeight = FontWeight.SemiBold
                         ),
                         color = GsTheme.colors.textPrimary,
@@ -586,17 +590,17 @@ private fun MindGuideCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        // Reference breaks after "personal"; explicit newline
-                        // keeps "clarity companion." on line two in full.
+                        // Reference breaks after "personal". Three lines are
+                        // allowed so a 360dp card wraps "companion." onto a
+                        // third line instead of clipping it to "personal…".
                         text = "Your personal\nclarity companion.",
                         style = MaterialTheme.typography.labelSmall.copy(
-                            fontSize = if (compact) 9.5.sp else 11.sp,
-                            lineHeight = if (compact) 12.sp else 14.sp,
+                            fontSize = if (compact) 9.5.sp else 10.sp,
+                            lineHeight = if (compact) 11.5.sp else 12.5.sp,
                             letterSpacing = 0.sp
                         ),
                         color = GsTheme.colors.textSecondary,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
+                        maxLines = 3
                     )
                 }
             }
@@ -619,39 +623,41 @@ private fun ReflectionCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val compact = maxWidth < 148.dp
             // Lotus painted first; copy keeps its own z-plane.
-            Column(Modifier.fillMaxSize().padding(12.dp).zIndex(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "Today's reflection",
-                        style = MaterialTheme.typography.titleSmall.copy(
-                            fontSize = if (compact) 12.sp else 13.5.sp,
-                            fontWeight = FontWeight.SemiBold
-                        ),
-                        color = GsTheme.colors.textPrimary,
-                        maxLines = 1,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Icon(
-                        GsIcons.ChevronRight,
-                        contentDescription = null,
-                        tint = GsTheme.colors.textTertiary,
-                        modifier = Modifier.size(13.dp)
-                    )
-                }
+            Column(Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 10.dp).zIndex(1f)) {
+                // The chevron overlays the corner instead of eating 13+4dp of
+                // the title's measure: "Today's reflection" is 112dp at 12.5sp
+                // and a 360dp card only offers 113dp.
+                Text(
+                    text = "Today's reflection",
+                    style = MaterialTheme.typography.titleSmall.copy(
+                        fontSize = if (compact) 12.sp else 12.5.sp,
+                        fontWeight = FontWeight.SemiBold
+                    ),
+                    color = GsTheme.colors.textPrimary,
+                    maxLines = 1
+                )
                 Spacer(Modifier.height(2.dp))
                 Text(
                     text = "Take a moment to check in with yourself.",
                     style = MaterialTheme.typography.labelSmall.copy(
-                        fontSize = if (compact) 9.5.sp else 11.sp,
-                        lineHeight = if (compact) 12.sp else 14.sp,
+                        fontSize = if (compact) 9.5.sp else 10.5.sp,
+                        lineHeight = if (compact) 11.5.sp else 13.sp,
                         letterSpacing = 0.sp
                     ),
                     color = GsTheme.colors.textSecondary,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(end = if (compact) 6.dp else 12.dp)
+                    maxLines = 3
                 )
             }
+            Icon(
+                GsIcons.ChevronRight,
+                contentDescription = null,
+                tint = GsTheme.colors.textTertiary,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 13.dp, end = 10.dp)
+                    .size(13.dp)
+                    .zIndex(2f)
+            )
             Box(Modifier.align(Alignment.BottomEnd).offset(x = 4.dp, y = 8.dp)) {
                 // The authored lotus from the reference — feathered so it
                 // melts into the card surface rather than sitting on top.

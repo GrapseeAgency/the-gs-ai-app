@@ -428,28 +428,41 @@ private struct MindGuideCard: View {
     let action: () -> Void
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 8) {
-                // The authored pearl orb from the reference render.
-                Image("GSHomeMindOrb")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 36, height: 36)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Mind Guide")
-                        .font(.system(size: 13.5, weight: .semibold))
-                        .foregroundStyle(Aero.text)
-                        .lineLimit(1)
-                    Text("Your personal\nclarity companion.")
-                        .font(.system(size: 11))
-                        .foregroundStyle(Aero.textMuted)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
+            ZStack {
+                // "clarity companion." measures 93pt at 10pt, so the text
+                // column keeps every point: a 30pt orb, tight insets, and the
+                // chevron overlaid in the corner rather than reserving a gutter.
+                HStack(spacing: 6) {
+                    Image("GSHomeMindOrb")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 30, height: 30)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Mind Guide")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Aero.text)
+                            .lineLimit(1)
+                        Text("Your personal\nclarity companion.")
+                            .font(.system(size: 10))
+                            .lineSpacing(1.5)
+                            .foregroundStyle(Aero.textMuted)
+                            // Three lines so a 360pt phone wraps "companion."
+                            // rather than clipping it to "personal…".
+                            .lineLimit(3)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 0)
                 }
-                Spacer(minLength: 0)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .semibold)).foregroundStyle(Aero.textMuted)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 8)
+                HStack {
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Aero.textMuted)
+                        .padding(.trailing, 10)
+                }
             }
-            .padding(12)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             .gsGlass(.card, corner: 16)
         }
@@ -470,21 +483,25 @@ private struct ReflectionCard: View {
                     .offset(x: 4, y: 8)
                     .allowsHitTesting(false)
                 VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text("Today's reflection")
-                            .font(.system(size: 13.5, weight: .semibold))
-                            .foregroundStyle(Aero.text)
-                            .lineLimit(1)
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 12, weight: .semibold)).foregroundStyle(Aero.textMuted)
-                    }
+                    // The chevron overlays the corner: "Today's reflection" is
+                    // 112pt at 12.5pt and a 360pt card only offers ~113pt, so
+                    // sharing the row with a Spacer+glyph clipped the title.
+                    Text("Today's reflection")
+                        .font(.system(size: 12.5, weight: .semibold))
+                        .foregroundStyle(Aero.text)
+                        .lineLimit(1)
                     Text("Take a moment to check in with yourself.")
-                        .font(.system(size: 11))
+                        .font(.system(size: 10.5))
+                        .lineSpacing(1.5)
                         .foregroundStyle(Aero.textMuted)
-                        .lineLimit(2)
+                        .lineLimit(3)
                         .fixedSize(horizontal: false, vertical: true)
-                        .padding(.trailing, 20)
+                }
+                .padding(.trailing, 18)
+                HStack {
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold)).foregroundStyle(Aero.textMuted)
                 }
             }
             .padding(14)
