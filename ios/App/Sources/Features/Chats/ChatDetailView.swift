@@ -241,43 +241,25 @@ struct ChatDetailView: View {
     /// and two quiet glass controls. The old navigation bar (inline title,
     /// back chevron, ellipsis) is gone — this screen owns its chrome.
     private var brandHeader: some View {
-        HStack(spacing: 10) {
-            AnimatedGsIllustration(
-                imageName: "GSCompanionOrb",
-                size: 42,
-                breathDuration: 3.2,
-                rotationDegrees: 0.8,
-                lift: -1,
-                startDelay: 0.1
-            )
-            .overlay(Circle().strokeBorder(Color.white.opacity(0.55), lineWidth: 1))
-            .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Nexly")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(Aero.text)
-                    .lineLimit(1)
-                Text("AI Companion")
-                    .font(.system(size: 10.5, weight: .regular))
-                    .foregroundStyle(Aero.textSecondary)
-                    .lineLimit(1)
-            }
-
-            Spacer(minLength: 8)
-
-            headerIconButton(
-                glyph: "sparkles",
-                label: onNewChat != nil ? "New chat" : "Search in chat",
-                action: {
-                    if let newChat = onNewChat {
-                        newChat()
-                    } else {
-                        toggleSearch()
-                    }
+        NexlyBrandHeader(
+            sparkleLabel: onNewChat != nil ? "New chat" : "Search in chat",
+            menuGlyph: isWorkspaceRoot && onOpenDrawer != nil ? "menu-2" : "chevron-left",
+            menuLabel: isWorkspaceRoot && onOpenDrawer != nil ? "Open menu" : "Back",
+            onSparkle: {
+                if let newChat = onNewChat {
+                    newChat()
+                } else {
+                    toggleSearch()
                 }
-            )
-            .contextMenu {
+            },
+            onMenu: {
+                if isWorkspaceRoot, let openDrawer = onOpenDrawer {
+                    openDrawer()
+                } else {
+                    dismiss()
+                }
+            },
+            sparkleMenu: {
                 if let newChat = onNewChat {
                     Button(action: newChat) {
                         Label("New chat", systemImage: "square.and.pencil")
@@ -293,20 +275,8 @@ struct ChatDetailView: View {
                 } label: {
                     Label("Voice input", systemImage: "mic")
                 }
-            }
-
-            headerIconButton(
-                glyph: isWorkspaceRoot && onOpenDrawer != nil ? "menu-2" : "chevron-left",
-                label: isWorkspaceRoot && onOpenDrawer != nil ? "Open menu" : "Back",
-                action: {
-                    if isWorkspaceRoot, let openDrawer = onOpenDrawer {
-                        openDrawer()
-                    } else {
-                        dismiss()
-                    }
-                }
-            )
-            .contextMenu {
+            },
+            menuMenu: {
                 if vm.conversationID != nil {
                     Button {
                         showOptions = true
@@ -325,31 +295,7 @@ struct ChatDetailView: View {
                     }
                 }
             }
-        }
-        .padding(.horizontal, Aero.Spacing.m)
-        .padding(.vertical, 9)
-        .background(
-            LinearGradient(
-                colors: [Aero.surface.opacity(0.56), Aero.surface.opacity(0.30)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
         )
-    }
-
-    private func headerIconButton(
-        glyph: String,
-        label: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            NexlyGlyph(name: glyph, size: 19, color: Aero.text)
-                .frame(width: 40, height: 40)
-                .background(Circle().fill(.clear))
-                .gsGlass(.sunken, corner: 20)
-        }
-        .buttonStyle(KineticPressStyle())
-        .accessibilityLabel(label)
     }
 
     private func toggleSearch() {
@@ -680,92 +626,21 @@ struct ChatDetailView: View {
                 .accessibilityElement(children: .combine)
             }
 
-            HStack(alignment: .bottom, spacing: 4) {
-                Button {
-                    showingAttachments = true
-                } label: {
-                    NexlyGlyph(
-                        name: "sparkles",
-                        size: 21,
-                        color: Color(red: 0.56, green: 0.48, blue: 1.0)
-                    )
-                    .frame(width: 40, height: 40)
-                }
-                .buttonStyle(KineticPressStyle())
-                .accessibilityLabel("Nexly tools, attachments and modes")
-                .contextMenu {
-                    Button {
-                        showingAttachments = true
-                    } label: {
-                        Label("Attachments & modes", systemImage: "paperclip")
-                    }
-                    Button {
-                        router.path.append(.voice)
-                    } label: {
-                        Label("Voice input", systemImage: "mic")
-                    }
-                    Button {
-                        toggleSearch()
-                    } label: {
-                        Label("Search in chat", systemImage: "magnifyingglass")
-                    }
-                }
-
-                TextField("Ask me anything...", text: $vm.draft, axis: .vertical)
-                    .font(.system(size: 15.5))
-                    .foregroundStyle(Aero.text)
-                    .lineLimit(1...6)
-                    .focused($composerFocused)
-                    .submitLabel(.send)
-                    .onSubmit(submitComposer)
-                    .onChange(of: vm.draft) { newValue in
-                        guard SettingsStore.shared.enterToSend, newValue.hasSuffix("\n") else { return }
-                        vm.draft = String(newValue.dropLast())
-                        submitComposer()
-                    }
-                    .padding(.vertical, 11)
-
-                if vm.isStreaming {
-                    Button {
-                        vm.stop()
-                    } label: {
-                        NexlyGlyph(name: "player-stop", size: 18, color: Aero.text)
-                            .frame(width: 38, height: 38)
-                            .background(Circle().fill(Aero.surface.opacity(0.55)))
-                            .overlay(Circle().strokeBorder(Color.white.opacity(0.7), lineWidth: 1))
-                    }
-                    .buttonStyle(KineticPressStyle())
-                    .accessibilityLabel("Stop generating")
-                } else {
-                    Button {
-                        userIsReading = false
-                        sendAndClearDraft()
-                    } label: {
-                        NexlyGlyph(name: "send-2", size: 18, color: .white)
-                            .frame(width: 38, height: 38)
-                            .background(
-                                Circle().fill(
-                                    LinearGradient(
-                                        colors: [Color(red: 1.0, green: 0.78, blue: 0.58),
-                                                 Color(red: 0.95, green: 0.53, blue: 0.27)],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                            )
-                            .overlay(Circle().strokeBorder(Color.white.opacity(0.55), lineWidth: 1))
-                            .shadow(color: Color(red: 0.86, green: 0.42, blue: 0.20).opacity(0.30), radius: 6, y: 2)
-                            .opacity(canSendFromComposer ? 1 : 0.45)
-                    }
-                    .buttonStyle(KineticPressStyle())
-                    .disabled(!canSendFromComposer)
-                    .accessibilityLabel("Send")
-                }
-            }
-            .padding(.horizontal, 6)
-            .padding(.vertical, 5)
-            .gsCapsuleGlass(.floatingControl)
-        }
+            NexlyComposerBar(
+                text: $vm.draft,
+                isStreaming: vm.isStreaming,
+                canSend: canSendFromComposer,
+                focused: $composerFocused,
+                onAttach: { showingAttachments = true },
+                onVoice: { router.path.append(.voice) },
+                onSearch: { toggleSearch() },
+                onSend: {
+                    userIsReading = false
+                    sendAndClearDraft()
+                },
+                onStop: { vm.stop() },
+                onSubmit: submitComposer
+            )
         .padding(.horizontal, Aero.Spacing.m)
         .padding(.top, 6)
         .padding(.bottom, 6)
@@ -1334,7 +1209,7 @@ private struct TranslationSheet: View {
 
 // MARK: - Bubble
 
-private struct MessageBubble: View, Equatable {
+struct MessageBubble: View, Equatable {
 
     let message: ChatViewModel.ChatMessage
     var isSpeaking: Bool = false

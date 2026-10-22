@@ -46,6 +46,30 @@ final class NexlyChatRenderTests: XCTestCase {
         }
     }
 
+    func testFullChatRenders() async throws {
+        let dir = Self.outputDirectory()
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let targets: [(CGFloat, CGFloat, String)] = [
+            (411, 914, "411x914"),
+            (393, 852, "393x852"),
+        ]
+        for target in targets {
+            let size = CGSize(width: target.0, height: target.1)
+            guard let image = try await Self.renderFull(size: size) else {
+                XCTFail("full chat did not composite at \(target.2)")
+                continue
+            }
+            guard let data = image.pngData() else {
+                XCTFail("no PNG data for the full chat at \(target.2)")
+                continue
+            }
+            XCTAssertGreaterThan(data.count, 20_000)
+            let url = dir.appendingPathComponent("nexly-chat-ios-full-\(target.2).png")
+            FileManager.default.createFile(atPath: url.path, contents: data)
+            XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+        }
+    }
+
     func testAdaptiveThinkingRenders() async throws {
         let dir = Self.outputDirectory()
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -71,6 +95,13 @@ final class NexlyChatRenderTests: XCTestCase {
 
     private static func renderAdaptive(size: CGSize) async throws -> UIImage? {
         let view = NexlyAdaptiveThinkingView()
+            .frame(width: size.width, height: size.height)
+            .environment(\.layoutDirection, .leftToRight)
+        return try await capture(view: view, size: size)
+    }
+
+    private static func renderFull(size: CGSize) async throws -> UIImage? {
+        let view = NexlyFullChatView()
             .frame(width: size.width, height: size.height)
             .environment(\.layoutDirection, .leftToRight)
         return try await capture(view: view, size: size)
@@ -139,6 +170,68 @@ private struct NexlyChatReferenceView: View {
     }
 }
 
+/// The WHOLE reference screen built from production pieces: the shared brand
+/// header, the real MessageBubble user turn, the real assistant block view and
+/// the shared composer capsule.
+private struct NexlyFullChatView: View {
+    @FocusState private var composerFocused: Bool
+
+    var body: some View {
+        ZStack {
+            NexlyChatBackdrop()
+            VStack(spacing: 0) {
+                NexlyBrandHeader(
+                    sparkleLabel: "New chat",
+                    menuGlyph: "menu-2",
+                    menuLabel: "Open menu",
+                    onSparkle: {},
+                    onMenu: {},
+                    sparkleMenu: { EmptyView() },
+                    menuMenu: { EmptyView() }
+                )
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(spacing: 20) {
+                        MessageBubble(
+                            message: ChatViewModel.ChatMessage(
+                                role: "user",
+                                content: NEXLY_REFERENCE_USER,
+                                createdAt: "2026-10-22T21:41:00Z"
+                            ),
+                            editEnabled: false
+                        )
+                        NexlyAssistantBlocksView(
+                            blocks: parseBlocks(NEXLY_REFERENCE_WIRE),
+                            isStreaming: false,
+                            showStatus: true,
+                            thinkingPhase: .done,
+                            thinkingEffort: "high",
+                            isPlanTurn: true,
+                            planTimestamp: "2026-10-22T21:45:00Z"
+                        )
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 20)
+                }
+                NexlyComposerBar(
+                    text: .constant(""),
+                    isStreaming: false,
+                    canSend: false,
+                    focused: $composerFocused,
+                    onAttach: {},
+                    onVoice: {},
+                    onSearch: {},
+                    onSend: {},
+                    onStop: {},
+                    onSubmit: {}
+                )
+                .padding(.horizontal, Aero.Spacing.m)
+                .padding(.top, 6)
+                .padding(.bottom, 6)
+            }
+        }
+    }
+}
+
 /// A non-plan thinking turn: the card copy and active row must adapt instead
 /// of repeating the schedule copy for every question.
 private struct NexlyAdaptiveThinkingView: View {
@@ -199,3 +292,8 @@ correlated, no matter how far apart they are.
 The important part is that the correlation is not a signal: you cannot use
 it to send information faster than light.
 """
+
+/// The exact user turn from the reference sheet.
+private let NEXLY_REFERENCE_USER =
+    "Can you help me plan a productive day tomorrow? I have classes, " +
+    "assignments and also want to stay healthy and get some rest."
