@@ -187,12 +187,30 @@ final class HomeRenderTests: XCTestCase {
      */
     private func assertRenderIsReal(image: UIImage, gray: [[Double]], label: String) {
         let size = image.size
-        XCTAssertEqual(Int(size.width), Int(Self.targets.first(where: { $0.name == label })!.width),
-                       "capture width for \(label)")
+        // Hoisted out of the assertion: a nested closure plus force-unwrap plus
+        // interpolation inside a macro argument is what made the compiler give
+        // up on this file the first time.
+        let expectedWidth = Self.targets.first(where: { $0.name == label })?.width ?? 0
+        XCTAssertEqual(Int(size.width), Int(expectedWidth), "capture width for \(label)")
 
-        let flat = gray.flatMap { $0 }.reduce(0, +) / Double(gray.count * gray[0].count)
-        let variance = gray.flatMap { $0 }.reduce(0) { $0 + ($1 - flat) * ($1 - flat) }
-            / Double(gray.count * gray[0].count)
+        // Mean and variance in one explicit pass. The obvious
+        // `gray.flatMap { $0 }.reduce(0) { ... }` form makes the compiler
+        // time out — it cannot infer the accumulator type through the closure
+        // and the string interpolation at the call site — and it also builds two
+        // three-million-element arrays for a 1179x2556 capture.
+        var sum = 0.0
+        var sumSq = 0.0
+        var n = 0
+        for row in gray {
+            for v in row {
+                sum += v
+                sumSq += v * v
+                n += 1
+            }
+        }
+        let count = Double(n)
+        let flat = sum / count
+        let variance = max(0.0, sumSq / count - flat * flat)
         XCTAssertGreaterThan(variance, 90,
                              "\(label): frame is near-uniform (variance \(Int(variance))) — render is blank")
 
