@@ -197,12 +197,6 @@ jobs:
             2>&1 | tee ios/build/xcodebuild-build.log
 
       - name: Test (XCTest unit tests on iOS simulator)
-        env:
-          # HomeRenderTests writes its captures here. Without the variable it
-          # falls back to the simulator's temp dir and the evidence evaporates
-          # with the job — the same failure mode as an archived-but-never-
-          # produced render, so the upload step below asserts on it.
-          GS_RENDER_DIR: ${{ github.workspace }}/ios/build/home-renders
         run: |
           set -o pipefail
           RESULT_BUNDLE="ios/build/GSApp-tests-$(date +%Y%m%dT%H%M%S).xcresult"
@@ -229,13 +223,22 @@ jobs:
           set -euo pipefail
           # iOS had no pixel evidence at all, which is why three of Wave 0's
           # four criticals — a card's copy rendered into the wrong corner, a
-          # page that silently opted out of the app's font-scale contract, a
+          # page that silently opted out of the app's font-scale contract, and a
           # resume card pinned to the oldest thread — shipped green. This is the
           # gate that would have caught them, and it is the same instrument
           # Android is held to, so the two platforms cannot drift apart quietly.
+          #
+          # HomeRenderTests writes to /tmp/gs-home-renders: an env var set on
+          # this step never reaches the simulator-launched test host, so the
+          # shared /tmp is the channel. Collect it into the workspace before
+          # asserting, so a missing render is a build failure and not a shrug.
+          SRC=/tmp/gs-home-renders
           DIR=ios/build/home-renders
+          mkdir -p "$DIR"
+          if [ -d "$SRC" ]; then cp "$SRC"/home-ios-*.png "$DIR/" 2>/dev/null || true; fi
           for w in 393x852 411x914 360x780; do
-            test -s "$DIR/home-ios-$w.png" || { echo "::error::home-ios-$w.png missing — the render harness did not run"; exit 1; }
+            test -s "$DIR/home-ios-$w.png" \
+              || { echo "::error::home-ios-$w.png missing — the render harness did not produce it"; exit 1; }
           done
           python3 scripts/check_home_render.py \
             --reference assets/reference/home-reference.png \

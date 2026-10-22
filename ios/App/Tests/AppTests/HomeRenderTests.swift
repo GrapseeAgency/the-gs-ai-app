@@ -127,10 +127,20 @@ final class HomeRenderTests: XCTestCase {
     }
 
     private static func outputDirectory() -> URL {
+        // A workflow env var does NOT reach here: xcodebuild launches the test
+        // host through the simulator with its own environment, so a
+        // GS_RENDER_DIR set on the CI step is invisible to the process and the
+        // first version of this harness silently wrote its PNGs into the
+        // simulator container's tmp dir and CI found nothing.
+        //
+        // Simulator processes are not sandboxed and share the host filesystem,
+        // so /tmp is the same directory on both sides of the boundary — the one
+        // location the test can write to that the job can then read from
+        // without plumbing an environment variable through Xcode.
         if let custom = ProcessInfo.processInfo.environment["GS_RENDER_DIR"], !custom.isEmpty {
             return URL(fileURLWithPath: custom, isDirectory: true)
         }
-        return URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+        return URL(fileURLWithPath: "/tmp/gs-home-renders", isDirectory: true)
     }
 
     // MARK: - Pixel helpers
