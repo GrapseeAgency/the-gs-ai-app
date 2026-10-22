@@ -226,7 +226,7 @@ private struct NexlyFullChatView: View {
                 )
                 .padding(.horizontal, Aero.Spacing.m)
                 .padding(.top, 4)
-                .padding(.bottom, 4)
+                .padding(.bottom, 12)
             }
         }
     }
