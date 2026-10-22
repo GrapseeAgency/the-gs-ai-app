@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.grapsee.gsai.data.AccountStore
 import com.grapsee.gsai.data.OnboardingProfileStore
+import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.data.local.ConversationPreviewRow
 import com.grapsee.gsai.di.ServiceLocator
 import com.grapsee.gsai.ui.components.GsGlassRole
@@ -63,11 +64,12 @@ import com.grapsee.gsai.ui.components.gsConversationTitle
 import com.grapsee.gsai.ui.components.gsGlass
 import com.grapsee.gsai.ui.icons.GsIcons
 import com.grapsee.gsai.ui.theme.GsTheme
+import com.grapsee.gsai.ui.theme.LocalGsIsDark
 import java.time.LocalTime
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 
-private data class PromptSuggestion(
+internal data class PromptSuggestion(
     val capability: String,
     val title: String,
     val prompt: String,
@@ -163,15 +165,60 @@ fun HomeDashboardScreen(
         else -> "Still awake"
     }
 
+    HomeContent(
+        firstName = firstName,
+        greeting = greeting,
+        suggestions = suggestions,
+        recent = recent,
+        onNewChat = onNewChat,
+        onStartPrompt = onStartPrompt,
+        onOpenConversation = onOpenConversation,
+        onOpenDrawer = onOpenDrawer,
+        onOpenChats = onOpenChats,
+        onOpenAgent = onOpenAgent,
+        onOpenVoice = onOpenVoice,
+        onOpenSettings = onOpenSettings,
+    )
+}
+
+/**
+ * Home as state in, UI out. Nothing here touches the service locator or the
+ * clock, which is what lets a screenshot test render the real page at any
+ * width without an emulator.
+ */
+@Composable
+internal fun HomeContent(
+    firstName: String?,
+    greeting: String,
+    suggestions: List<PromptSuggestion>,
+    recent: List<ConversationPreviewRow>,
+    onNewChat: () -> Unit,
+    onStartPrompt: (String) -> Unit,
+    onOpenConversation: (String) -> Unit,
+    onOpenDrawer: () -> Unit,
+    onOpenChats: () -> Unit,
+    onOpenAgent: () -> Unit,
+    onOpenVoice: () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
     Box(Modifier.fillMaxSize()) {
-        // The sheet's backdrop is pearls and silk — no blossom. Repaint the
-        // shared backdrop here without its branches so Home matches the hero
-        // sheet while the rest of the app keeps the bloom.
-        ReferenceBackdrop(
-            Modifier.matchParentSize(),
-            showBlossom = false,
-            bokeh = false
-        )
+        // The reference's backdrop is a photograph of light through pearl.
+        // The authored render ships as a full-bleed image; the procedural
+        // gradient is kept only for Solid background style and dark mode.
+        if (LocalGsIsDark.current || SettingsStore.backgroundStyle == "Solid") {
+            ReferenceBackdrop(
+                Modifier.matchParentSize(),
+                showBlossom = false,
+                bokeh = false
+            )
+        } else {
+            Image(
+                painter = painterResource(com.grapsee.gsai.R.drawable.gs_home_backdrop),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.matchParentSize()
+            )
+        }
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             HomeHeader(onAssistant = onOpenVoice, onMenu = onOpenDrawer)
             Column(
@@ -270,13 +317,12 @@ private fun HomeHeader(onAssistant: () -> Unit, onMenu: () -> Unit) {
                 .clip(CircleShape),
             contentAlignment = Alignment.Center
         ) {
-            // The reference's avatar is the authored 3D bloom itself — the
-            // one place the app already owns a real render, so no vector
-            // stand-in belongs on top of it.
+            // The reference avatar is the authored 3D pearl — the one place
+            // the app already owns a real render of the companion.
             Image(
-                painter = painterResource(com.grapsee.gsai.R.drawable.gs_companion_orb),
+                painter = painterResource(com.grapsee.gsai.R.drawable.gs_home_avatar),
                 contentDescription = "Nexly",
-                contentScale = ContentScale.Crop,
+                contentScale = ContentScale.Fit,
                 modifier = Modifier.size(42.dp)
             )
         }
@@ -361,13 +407,12 @@ private fun QuickPills(
     onCreate: () -> Unit,
     onMore: () -> Unit,
 ) {
-    // Four pills, one row, no horizontal scroller. Measured at 12sp with 8dp
-    // of inset the set is ~310dp, so it fits a 360dp phone as well as the
-    // sheet's 393dp — "More" is never parked off-screen.
+    // Four pills, one row, no horizontal scroller. Measured against the
+    // bundled Poppins metrics: the wide tier is 336dp and the compact tier
+    // 313dp, so the set clears the 353dp row on the sheet's 393dp phone AND
+    // the 320dp row on a 360dp one. "More" is never parked off-screen — the
+    // exact defect the review flagged when the wide tier measured 360dp.
     BoxWithConstraints(Modifier.fillMaxWidth()) {
-        // The sheet is 393pt wide; a 360pt phone gives the row 12dp less. The
-        // pills step down one notch rather than letting "More" wrap or slide
-        // off-screen — that was the exact defect in the review.
         val compact = maxWidth < 340.dp
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -392,39 +437,37 @@ private fun Bento(
     onMindGuide: () -> Unit,
     onReflection: () -> Unit,
 ) {
+    // Reference: left card 338px of 680px screen = 55.6% of content width.
+    // Right column: Mind Guide 142px / (142+225) = 38.6% ≈ 37/63 split.
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .height(224.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Measured from the sheet: the video card is 196pt of a 356pt row
-        // (1.22 : 1), and the stacked pair splits 75 / 117 (0.64 : 1).
-        VideoCard(onVideo, Modifier.weight(1.22f).fillMaxSize())
+        VideoCard(onVideo, Modifier.weight(55.6f).fillMaxSize())
         Column(
-            modifier = Modifier.weight(1f).fillMaxSize(),
+            modifier = Modifier.weight(44.4f).fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            MindGuideCard(onMindGuide, Modifier.fillMaxWidth().weight(0.64f))
-            ReflectionCard(onReflection, Modifier.fillMaxWidth().weight(1f))
+            MindGuideCard(onMindGuide, Modifier.fillMaxWidth().weight(0.375f))
+            ReflectionCard(onReflection, Modifier.fillMaxWidth().weight(0.625f))
         }
     }
 }
 
 @Composable
 private fun VideoCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val shape = RoundedCornerShape(24.dp)
+    val shape = RoundedCornerShape(16.dp)
     Box(
         modifier = modifier
             .clip(shape)
             .background(
-                // Sampled from the sheet: the card body is near-white; the
-                // lavender and blush come from the art, not the background.
                 Brush.linearGradient(
                     listOf(
                         Color(0xFFFDFAF8),
-                        Color(0xFFF7EAF1),
-                        Color(0xFFF9EEE5),
+                        Color(0xFFF3EBF5),
+                        Color(0xFFF8EBE3),
                     )
                 )
             )
@@ -437,39 +480,42 @@ private fun VideoCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
                 onClick = onClick
             )
     ) {
-        // The sheet lays the pearl mass UNDER the copy and fades it toward
-        // the text edge. The feathered asset is the same authored render with
-        // its rim dissolved, so it reads as light in the card, not a sticker.
+        // The authored pearl render from the reference — placed at the
+        // bottom-right of the card exactly as the mock composites it.
         Image(
-            painter = painterResource(com.grapsee.gsai.R.drawable.gs_home_orb),
+            painter = painterResource(com.grapsee.gsai.R.drawable.gs_home_video_art),
             contentDescription = "Pearlescent bloom",
             contentScale = ContentScale.Fit,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .offset(x = 26.dp, y = 18.dp)
-                .size(210.dp)
+                .offset(x = 16.dp, y = 12.dp)
+                .size(200.dp)
         )
-        // A left-to-right scrim keeps the copy on paper while the art owns the
+        // Left-to-right scrim keeps the copy on paper while the art owns the
         // right third, exactly as the mock composites it.
         Box(
             Modifier
                 .matchParentSize()
                 .background(
                     Brush.horizontalGradient(
-                        0f to Color(0xE0FBF4F0),
-                        0.55f to Color(0x66FBF6F3),
+                        0f to Color(0xE6FBF6F3),
+                        0.55f to Color(0x80FBF6F3),
                         1f to Color(0x00FBF6F3)
                     )
                 )
         )
         Column(Modifier.fillMaxSize().padding(14.dp)) {
+            // The sheet stacks copy from the TOP: chip, then headline, then
+            // body, and only the play control is pinned to the bottom. A
+            // flexible spacer above the headline pushed the copy into the
+            // middle of the card instead.
             ReferenceChip(icon = GsIcons.Play, label = "Video")
-            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.height(10.dp))
             Text(
                 text = "Create Stunning\nVideos with AI",
                 style = MaterialTheme.typography.titleMedium.copy(
                     fontSize = 16.sp,
-                    lineHeight = 21.sp,
+                    lineHeight = 20.sp,
                     fontWeight = FontWeight.SemiBold
                 ),
                 color = GsTheme.colors.textPrimary
@@ -483,7 +529,7 @@ private fun VideoCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
                 ),
                 color = GsTheme.colors.textSecondary
             )
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.weight(1f))
             Box(
                 modifier = Modifier
                     .size(44.dp)
@@ -509,9 +555,6 @@ private fun MindGuideCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val compact = maxWidth < 148.dp
             Row(
-                // The chevron is an overlay, not a third column: the copy needs
-                // every point of width to keep "clarity companion." on line two
-                // exactly as the sheet does.
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(
@@ -522,39 +565,20 @@ private fun MindGuideCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
                     ),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // A pearl, not a lens: violet at the crown, blue at the rim and
-                // a blush underside, exactly as the reference's orb reads.
-                Box(
-                    modifier = Modifier
-                        .size(if (compact) 24.dp else 28.dp)
-                        .clip(CircleShape)
-                        .background(
-                            Brush.radialGradient(
-                                colors = listOf(
-                                    Color(0xFFFFFFFF),
-                                    Color(0xFFD9C8FF),
-                                    Color(0xFF8E9BFF),
-                                    Color(0xFF63B4FF),
-                                    Color(0xFFFFA6C8)
-                                )
-                            )
-                        )
-                        .border(1.dp, Color.White.copy(alpha = 0.7f), CircleShape),
-                    contentAlignment = Alignment.TopStart
-                ) {
-                    Box(
-                        Modifier
-                            .padding(7.dp)
-                            .size(7.dp)
-                            .background(Color.White.copy(alpha = 0.65f), CircleShape)
-                    )
-                }
-                Spacer(Modifier.width(if (compact) 4.dp else 7.dp))
+                // The authored pearl orb from the reference — the same render
+                // the mock uses, not a gradient approximation.
+                Image(
+                    painter = painterResource(com.grapsee.gsai.R.drawable.gs_home_mind_orb),
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.size(if (compact) 28.dp else 36.dp)
+                )
+                Spacer(Modifier.width(if (compact) 5.dp else 8.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
                         text = "Mind Guide",
                         style = MaterialTheme.typography.titleSmall.copy(
-                            fontSize = if (compact) 11.sp else 12.5.sp,
+                            fontSize = if (compact) 12.sp else 13.5.sp,
                             fontWeight = FontWeight.SemiBold
                         ),
                         color = GsTheme.colors.textPrimary,
@@ -562,17 +586,13 @@ private fun MindGuideCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        // The sheet breaks after "personal"; an explicit
-                        // newline keeps the two cards' copy in the same rhythm
-                        // instead of leaving it to the measure.
+                        // Reference breaks after "personal"; explicit newline
+                        // keeps "clarity companion." on line two in full.
                         text = "Your personal\nclarity companion.",
                         style = MaterialTheme.typography.labelSmall.copy(
-                            fontSize = if (compact) 9.sp else 10.sp,
-                            lineHeight = if (compact) 11.5.sp else 13.sp,
-                            // Poppins is wider than the sheet's face; a hair of
-                            // negative tracking is what keeps "clarity
-                            // companion." on its second line.
-                            letterSpacing = if (compact) (-0.3).sp else (-0.2).sp
+                            fontSize = if (compact) 9.5.sp else 11.sp,
+                            lineHeight = if (compact) 12.sp else 14.sp,
+                            letterSpacing = 0.sp
                         ),
                         color = GsTheme.colors.textSecondary,
                         maxLines = 2,
@@ -598,13 +618,13 @@ private fun ReflectionCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
     GlassPanel(modifier = modifier, onClick = onClick, onClickLabel = "Open today's reflection") {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val compact = maxWidth < 148.dp
-            // The lotus is painted first; the copy keeps its own z-plane.
+            // Lotus painted first; copy keeps its own z-plane.
             Column(Modifier.fillMaxSize().padding(12.dp).zIndex(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = "Today's reflection",
                         style = MaterialTheme.typography.titleSmall.copy(
-                            fontSize = if (compact) 11.sp else 12.5.sp,
+                            fontSize = if (compact) 12.sp else 13.5.sp,
                             fontWeight = FontWeight.SemiBold
                         ),
                         color = GsTheme.colors.textPrimary,
@@ -622,28 +642,26 @@ private fun ReflectionCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
                 Text(
                     text = "Take a moment to check in with yourself.",
                     style = MaterialTheme.typography.labelSmall.copy(
-                        fontSize = if (compact) 9.sp else 10.5.sp,
-                        lineHeight = if (compact) 11.5.sp else 13.5.sp,
-                        letterSpacing = if (compact) (-0.2).sp else 0.sp
+                        fontSize = if (compact) 9.5.sp else 11.sp,
+                        lineHeight = if (compact) 12.sp else 14.sp,
+                        letterSpacing = 0.sp
                     ),
                     color = GsTheme.colors.textSecondary,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
-                    // The lotus sits under the copy's last line, as in the
-                    // sheet; keep an inset so the two never collide.
                     modifier = Modifier.padding(end = if (compact) 6.dp else 12.dp)
                 )
             }
-            Box(Modifier.align(Alignment.BottomEnd).offset(x = 6.dp, y = 10.dp)) {
-                // The sheet's lotus is a rendered photograph; it ships as an
-                // asset with a radial alpha fade so it melts into the card.
+            Box(Modifier.align(Alignment.BottomEnd).offset(x = 4.dp, y = 8.dp)) {
+                // The authored lotus from the reference — feathered so it
+                // melts into the card surface rather than sitting on top.
                 Image(
-                    painter = painterResource(com.grapsee.gsai.R.drawable.gs_home_lotus),
+                    painter = painterResource(com.grapsee.gsai.R.drawable.gs_home_lotus_new),
                     contentDescription = "A lotus in bloom",
                     contentScale = ContentScale.Fit,
                     modifier = Modifier.size(
-                        width = if (compact) 116.dp else 132.dp,
-                        height = if (compact) 84.dp else 96.dp
+                        width = if (compact) 120.dp else 150.dp,
+                        height = if (compact) 80.dp else 100.dp
                     )
                 )
             }
@@ -1073,7 +1091,7 @@ private fun GlassPanel(
     onClickLabel: String? = null,
     content: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit,
 ) {
-    val shape = RoundedCornerShape(22.dp)
+    val shape = RoundedCornerShape(16.dp)
     val base = if (onClick != null) {
         modifier.clickable(
             interactionSource = remember { MutableInteractionSource() },
@@ -1090,9 +1108,10 @@ private fun GlassPanel(
 
 @Composable
 private fun GlassCircleButton(icon: ImageVector, label: String, onClick: () -> Unit) {
+    // Reference measures 80px of a 680px screen = 46pt at 393.
     Box(
         modifier = Modifier
-            .size(40.dp)
+            .size(46.dp)
             .gsGlass(GsGlassRole.FloatingControl, CircleShape)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
@@ -1107,7 +1126,7 @@ private fun GlassCircleButton(icon: ImageVector, label: String, onClick: () -> U
             icon,
             contentDescription = label,
             tint = GsTheme.colors.textPrimary,
-            modifier = Modifier.size(18.dp)
+            modifier = Modifier.size(20.dp)
         )
     }
 }
@@ -1121,7 +1140,7 @@ private fun GlassPill(
 ) {
     Row(
         modifier = Modifier
-            .heightIn(min = 40.dp)
+            .heightIn(min = 46.dp)
             .gsGlass(GsGlassRole.FloatingControl, RoundedCornerShape(999.dp))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
@@ -1130,20 +1149,20 @@ private fun GlassPill(
                 onClickLabel = label,
                 onClick = onClick
             )
-            .padding(horizontal = if (compact) 6.dp else 8.dp, vertical = 9.dp),
+            .padding(horizontal = 8.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
             icon,
             contentDescription = null,
             tint = GsTheme.colors.textPrimary,
-            modifier = Modifier.size(if (compact) 13.dp else 14.dp)
+            modifier = Modifier.size(13.dp)
         )
         Spacer(Modifier.width(if (compact) 3.dp else 4.dp))
         Text(
             text = label,
             style = MaterialTheme.typography.labelMedium.copy(
-                fontSize = if (compact) 11.5.sp else 12.sp,
+                fontSize = if (compact) 12.sp else 13.sp,
                 fontWeight = FontWeight.Medium
             ),
             color = GsTheme.colors.textPrimary,

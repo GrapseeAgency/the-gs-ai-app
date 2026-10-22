@@ -266,6 +266,14 @@ android {
         jvmTarget = "17"
     }
 
+    testOptions {
+        unitTests {
+            // Robolectric + Roborazzi render the real Compose tree on the JVM,
+            // so Home can be screenshotted without an emulator.
+            isIncludeAndroidResources = true
+        }
+    }
+
     buildFeatures {
         compose = true
         buildConfig = true
@@ -367,4 +375,24 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-test-manifest")
     androidTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     testImplementation("io.ktor:ktor-client-mock:2.3.12")
+
+    // Screenshot harness: Roborazzi drives Compose under Robolectric's native
+    // graphics, so a real 411dp Home render is available on any host.
+    testImplementation(platform(libs.androidx.compose.bom))
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    testImplementation("org.robolectric:robolectric:4.13")
+    testImplementation("androidx.test:core:1.6.1")
+    testImplementation("io.github.takahirom.roborazzi:roborazzi:1.26.0")
+    testImplementation("io.github.takahirom.roborazzi:roborazzi-compose:1.26.0")
+}
+
+
+// Roborazzi records PNGs for the screenshot harness by default. Verification
+// runs can flip this off in CI if baselines are added later.
+tasks.withType<Test>().configureEach {
+    systemProperty("roborazzi.test.record", "true")
+    // The screenshot tests need Robolectric's native graphics and a ~130 MB
+    // android-all jar; they run on demand (`-PgsShots=true`), not on every
+    // unit-test pass.
+    systemProperty("gs.screenshots", providers.gradleProperty("gsShots").getOrElse("false"))
 }

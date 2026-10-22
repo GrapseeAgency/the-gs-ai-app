@@ -20,6 +20,9 @@ struct HomeDashboardView: View {
     @ObservedObject private var store = ConversationStore.shared
     /// The signed-in name. The reference greets a person, not "there".
     @ObservedObject private var account = AccountStore.shared
+    /// The skills the setup wizard actually pinned — they choose the suggestion.
+    @ObservedObject private var profile = OnboardingProfileStore.shared
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -52,14 +55,21 @@ struct HomeDashboardView: View {
         }
         .background(
             ZStack {
-                LinearGradient(
-                    colors: [Color(red: 1, green: 0.70, blue: 0.43).opacity(0.30), Aero.background],
-                    startPoint: .topLeading,
-                    endPoint: .center
-                )
-                // The sheet's backdrop is made of light through glass, not a
-                // flat wash: three huge, out-of-focus pearls sit behind it.
-                PearlBackdrop()
+                // The authored pearl backdrop from the reference render.
+                // In dark mode, fall back to the warm gradient + pearls.
+                if colorScheme == .dark {
+                    LinearGradient(
+                        colors: [Color(red: 1, green: 0.70, blue: 0.43).opacity(0.30), Aero.background],
+                        startPoint: .topLeading,
+                        endPoint: .center
+                    )
+                    PearlBackdrop()
+                } else {
+                    Image("GSHomeBackdrop")
+                        .resizable()
+                        .scaledToFill()
+                        .ignoresSafeArea()
+                }
             }
             .ignoresSafeArea()
         )
@@ -70,11 +80,11 @@ struct HomeDashboardView: View {
 
     private var header: some View {
         HStack(spacing: 12) {
-            // The authored 3D bloom — the sheet's avatar already exists as a
-            // real render, so it does not need a vector stand-in.
-            AnimatedGsIllustration(imageName: "GSCompanionOrb", size: 38,
-                                   breathDuration: 3.4, rotationDegrees: 1.2,
-                                   lift: -2, startDelay: 0.08)
+            // The authored pearl avatar from the reference render.
+            Image("GSHomeAvatar")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 42, height: 42)
             VStack(alignment: .leading, spacing: 2) {
                 Text("Nexly")
                     .font(.system(size: 18, weight: .semibold))
@@ -160,15 +170,15 @@ struct HomeDashboardView: View {
     private var greeting: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("\(greetingWord),")
-                .font(.system(size: 32, weight: .semibold))
+                .font(.system(size: 26, weight: .semibold))
                 .foregroundStyle(Aero.text)
             HStack(spacing: 8) {
                 Text(account.firstName.isEmpty ? "there" : account.firstName)
-                    .font(.system(size: 32, weight: .semibold))
+                    .font(.system(size: 26, weight: .semibold))
                     .foregroundStyle(Aero.text)
                 // One four-point star, not the three-star cluster.
                 Image(systemName: "sparkle")
-                    .font(.system(size: 24, weight: .semibold))
+                    .font(.system(size: 22, weight: .semibold))
                     .foregroundStyle(Aero.accent)
             }
             Text("Your thoughts, questions, ideas —\nI'm here for it all.")
@@ -183,33 +193,37 @@ struct HomeDashboardView: View {
     // MARK: Quick-action pills
 
     private var pills: some View {
-        // All four pills, one row. At 12pt with 9pt of inset the set measures
-        // ~300pt, so it fits a 360pt phone as well as the sheet's 393pt and
-        // nothing has to be swiped to be discovered.
-        HStack(spacing: 5) {
-            HomePill(system: "plus", title: "New Chat", action: onNewChat)
-            HomePill(system: "safari", title: "Explore", action: onOpenAgent)
-            HomePill(system: "sparkles", title: "Create",
-                     action: { onStartPrompt("Help me create a short video concept: ") })
-            HomePill(system: "ellipsis", title: "More", action: onOpenDrawer)
+        // All four pills, one row, never scrolled. Measured against a font
+        // wider than SF Pro (a conservative bound): the wide tier is 322pt so
+        // it clears a 375pt iPhone's 335pt row, and the compact tier is 271pt
+        // for the 320pt classes. The old single tier measured 345pt and clipped
+        // "More" on any standard iPhone — the defect the review flagged.
+        GeometryReader { geo in
+            let compact = geo.size.width < 330
+            HStack(spacing: compact ? 3 : 4) {
+                HomePill(system: "plus", title: "New Chat", compact: compact, action: onNewChat)
+                HomePill(system: "safari", title: "Explore", compact: compact, action: onOpenAgent)
+                HomePill(system: "sparkles", title: "Create", compact: compact,
+                         action: { onStartPrompt(HomeDispatch.createPrompt) })
+                HomePill(system: "ellipsis", title: "More", compact: compact, action: onOpenDrawer)
+            }
         }
+        .frame(height: 46)
     }
 
     // MARK: Bento — Video / Mind Guide / Today's reflection
 
     private var bento: some View {
-        // Measured from the sheet: 55 / 45 across, and the stacked pair splits
-        // 39 / 61. An even split made the reflection card half the height it
-        // should be and squeezed the video card's artwork out of frame.
+        // Reference: left card 55.6% of content width, right column 37/63 split.
         GeometryReader { geo in
-            let leftWidth = (geo.size.width - 12) * 0.55
+            let leftWidth = (geo.size.width - 12) * 0.556
             HStack(alignment: .top, spacing: 12) {
-                VideoCard(action: { onStartPrompt("Help me create a short video concept: ") })
+                VideoCard(action: { onStartPrompt(HomeDispatch.createPrompt) })
                     .frame(width: leftWidth)
                 VStack(spacing: 12) {
-                    MindGuideCard(action: { onStartPrompt("Help me think this through with clarity: ") })
-                        .frame(height: (geo.size.height - 12) * 0.36)
-                    ReflectionCard(action: { onStartPrompt("Let's do today's reflection. ") })
+                    MindGuideCard(action: { onStartPrompt(HomeDispatch.mindGuidePrompt) })
+                        .frame(height: (geo.size.height - 12) * 0.375)
+                    ReflectionCard(action: { onStartPrompt(HomeDispatch.reflectionPrompt) })
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
@@ -238,7 +252,13 @@ struct HomeDashboardView: View {
     }
 
     private var suggestionsCard: some View {
-        Button(action: { onStartPrompt("Suggest a few questions I could ask about ") }) {
+        // Same rule as Android: dispatch the first suggestion the wizard's
+        // pinned capabilities actually selected, not a generic stub.
+        Button(action: {
+            if let first = HomeDispatch.selectedSuggestions(for: profile.capabilities).first {
+                onStartPrompt(first.prompt)
+            }
+        }) {
             HStack(spacing: 12) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -250,17 +270,17 @@ struct HomeDashboardView: View {
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Suggestions")
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.system(size: 15, weight: .medium))
                         .foregroundStyle(Aero.text)
                     Text("Try suggested questions first.")
-                        .font(.system(size: 12))
+                        .font(.system(size: 12.5))
                         .foregroundStyle(Aero.textMuted)
                 }
                 Spacer()
             }
             .padding(10)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .gsGlass(.card, corner: Aero.Radius.card)
+            .gsGlass(.card, corner: 16)
         }
         .buttonStyle(KineticPressStyle())
     }
@@ -308,10 +328,10 @@ private struct GlassCircleButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: system)
-                .font(.system(size: 16, weight: .medium))
+                .font(.system(size: 17, weight: .medium))
                 .foregroundStyle(Aero.text)
-                .frame(width: 40, height: 40)
-                .gsGlass(.floatingControl, corner: 20)
+                .frame(width: 46, height: 46)
+                .gsGlass(.floatingControl, corner: 23)
         }
         .buttonStyle(KineticPressStyle())
         .accessibilityLabel(label)
@@ -321,19 +341,19 @@ private struct GlassCircleButton: View {
 private struct HomePill: View {
     let system: String
     let title: String
+    var compact = false
     let action: () -> Void
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 4) {
-                Image(systemName: system).font(.system(size: 12.5, weight: .medium))
+            HStack(spacing: compact ? 3 : 4) {
+                Image(systemName: system).font(.system(size: compact ? 11 : 13, weight: .medium))
                 Text(title)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: compact ? 11.5 : 13, weight: .medium))
                     .lineLimit(1)
-                    .minimumScaleFactor(0.85)
             }
             .foregroundStyle(Aero.text)
-            .padding(.horizontal, 9)
-            .padding(.vertical, 9)
+            .padding(.horizontal, compact ? 6 : 8)
+            .padding(.vertical, 10)
             .gsCapsuleGlass(.floatingControl)
         }
         .buttonStyle(KineticPressStyle())
@@ -345,24 +365,20 @@ private struct VideoCard: View {
     var body: some View {
         Button(action: action) {
             ZStack(alignment: .topLeading) {
-                // Sampled from the sheet: near-white card, colour from the art.
                 LinearGradient(
                     colors: [Color(red: 0.99, green: 0.98, blue: 0.97),
-                             Color(red: 0.97, green: 0.92, blue: 0.945),
-                             Color(red: 0.98, green: 0.93, blue: 0.90)],
+                             Color(red: 0.95, green: 0.92, blue: 0.96),
+                             Color(red: 0.97, green: 0.92, blue: 0.89)],
                     startPoint: .topLeading, endPoint: .bottomTrailing)
-                // The sheet's art is a real 3D render of light through pearl —
-                // and the app already owns one: the authored companion bloom.
-                Image("GSHomeOrb")
+                // The authored pearl render from the reference.
+                Image("GSHomeVideoArt")
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 196, height: 196)
+                    .frame(width: 200, height: 200)
                     .frame(maxWidth: .infinity, maxHeight: .infinity,
                            alignment: .bottomTrailing)
-                    .offset(x: 34, y: 30)
+                    .offset(x: 16, y: 12)
                     .allowsHitTesting(false)
-                // The mock fades the art toward the text edge; the same scrim
-                // keeps the copy on paper while the pearl owns the right third.
                 LinearGradient(
                     stops: [
                         .init(color: Color(red: 0.984, green: 0.957, blue: 0.941), location: 0),
@@ -372,6 +388,8 @@ private struct VideoCard: View {
                     startPoint: .leading, endPoint: .trailing
                 )
                 VStack(alignment: .leading, spacing: 6) {
+                    // Copy stacks from the top exactly as the sheet does; only
+                    // the play control is pinned to the bottom of the card.
                     HStack(spacing: 5) {
                         Image(systemName: "play").font(.system(size: 10, weight: .bold))
                         Text("Video").font(Aero.caption())
@@ -379,24 +397,25 @@ private struct VideoCard: View {
                     .foregroundStyle(Aero.text)
                     .padding(.horizontal, 9).padding(.vertical, 5)
                     .background(Capsule().fill(Color.white.opacity(0.45)))
-                    Spacer()
+                    Spacer().frame(height: 5)
                     Text("Create Stunning\nVideos with AI")
                         .font(.system(size: 16, weight: .semibold))
+                        .lineSpacing(-1)
                         .foregroundStyle(Aero.text)
                         .multilineTextAlignment(.leading)
                     Text("Turn your ideas into beautiful videos in minutes.")
                         .font(Aero.caption()).foregroundStyle(Aero.textMuted)
                         .fixedSize(horizontal: false, vertical: true)
+                    Spacer()
                     ZStack {
                         Circle().fill(Color.white.opacity(0.55)).frame(width: 44, height: 44)
                         Image(systemName: "play.fill").font(.system(size: 15)).foregroundStyle(Aero.text)
                     }
-                    .padding(.top, 4)
                 }
                 .padding(14)
             }
-            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(Color.white.opacity(0.35), lineWidth: 1))
             .aeroCardShadow()
         }
@@ -410,18 +429,21 @@ private struct MindGuideCard: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 8) {
-                PearlOrb(size: 36)
+                // The authored pearl orb from the reference render.
+                Image("GSHomeMindOrb")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 36, height: 36)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Mind Guide")
                         .font(.system(size: 13.5, weight: .semibold))
                         .foregroundStyle(Aero.text)
                         .lineLimit(1)
-                        .minimumScaleFactor(0.85)
-                    Text("Your personal clarity companion.")
-                        .font(.system(size: 11.5))
+                    Text("Your personal\nclarity companion.")
+                        .font(.system(size: 11))
                         .foregroundStyle(Aero.textMuted)
                         .lineLimit(2)
-                        .minimumScaleFactor(0.8)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.right")
@@ -429,7 +451,7 @@ private struct MindGuideCard: View {
             }
             .padding(12)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-            .gsGlass(.card, corner: Aero.Radius.card)
+            .gsGlass(.card, corner: 16)
         }
         .buttonStyle(KineticPressStyle())
     }
@@ -440,12 +462,12 @@ private struct ReflectionCard: View {
     var body: some View {
         Button(action: action) {
             ZStack(alignment: .bottomTrailing) {
-                // Lotus first so the copy keeps the top z-plane.
-                Image("GSHomeLotus")
+                // The authored lotus from the reference — feathered edges.
+                Image("GSHomeLotusNew")
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 132, height: 96)
-                    .offset(x: 12, y: 16)
+                    .frame(width: 150, height: 100)
+                    .offset(x: 4, y: 8)
                     .allowsHitTesting(false)
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
@@ -453,23 +475,21 @@ private struct ReflectionCard: View {
                             .font(.system(size: 13.5, weight: .semibold))
                             .foregroundStyle(Aero.text)
                             .lineLimit(1)
-                            .minimumScaleFactor(0.85)
                         Spacer()
                         Image(systemName: "chevron.right")
                             .font(.system(size: 12, weight: .semibold)).foregroundStyle(Aero.textMuted)
                     }
                     Text("Take a moment to check in with yourself.")
-                        .font(.system(size: 11.5))
+                        .font(.system(size: 11))
                         .foregroundStyle(Aero.textMuted)
                         .lineLimit(2)
-                        .minimumScaleFactor(0.85)
                         .fixedSize(horizontal: false, vertical: true)
-                        .padding(.trailing, 26)
+                        .padding(.trailing, 20)
                 }
             }
             .padding(14)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-            .gsGlass(.card, corner: Aero.Radius.card)
+            .gsGlass(.card, corner: 16)
         }
         .buttonStyle(KineticPressStyle())
     }

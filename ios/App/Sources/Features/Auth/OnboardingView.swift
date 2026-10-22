@@ -23,7 +23,9 @@ struct OnboardingView: View {
 
     // AI preferences (sensible defaults pre-selected). PHASE 2 parity with
     // Android: the "Reasoning effort" card is gone — reasoning-mode vocabulary
-    // is not ordinary-user configuration, and none of these picks is persisted.
+    // is not ordinary-user configuration. The answers that DO have a consumer
+    // (Home's suggestions read the pinned capabilities; the greeting reads the
+    // name) are committed by `commit()` on the way out.
     @State private var responseStyle = "Balanced"
     @State private var personality = "Professional"
 
@@ -418,7 +420,7 @@ struct OnboardingView: View {
             }
             StaggerIn(index: 2) {
                 Button {
-                    onComplete()
+                    commit()
                 } label: {
                     Text("Enter GS AI")
                         .font(Aero.title())
@@ -445,6 +447,27 @@ struct OnboardingView: View {
         }
     }
 
+    /// Persist everything the wizard collected, then hand back to the host.
+    ///
+    /// Before this, the name typed on the personalisation step lived only in
+    /// `@State` and fed the local "You're all set" line, so Home kept greeting
+    /// that person as "there" even though they had just told the app their
+    /// name — only the sign-up form wrote to AccountStore. Both stores are now
+    /// written on every exit path, mirroring Android's `OnboardingProfileStore.save`.
+    private func commit() {
+        let trimmedName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedName.isEmpty {
+            AccountStore.shared.setDisplayName(trimmedName)
+        }
+        OnboardingProfileStore.shared.save(
+            interests: selectedInterests,
+            capabilities: selectedCapabilities,
+            responseStyle: responseStyle,
+            personality: personality
+        )
+        onComplete()
+    }
+
     // MARK: Bottom bar
 
     private var continueDisabled: Bool {
@@ -459,7 +482,7 @@ struct OnboardingView: View {
         Button {
             GSHaptics.tap()   // committed — the wizard advances
             guard let next = OnboardingStep(rawValue: step.rawValue + 1) else {
-                onComplete()
+                commit()
                 return
             }
             withAnimation(Aero.spring) { step = next }
