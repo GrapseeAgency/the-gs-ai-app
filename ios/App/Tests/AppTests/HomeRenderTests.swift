@@ -35,6 +35,10 @@ import UIKit
 @MainActor
 final class HomeRenderTests: XCTestCase {
 
+    /// The status-bar height the reference sheet and the Android harness both
+    /// render with (the mock's clock ink starts at 20pt).
+    static let mockTopInset: CGFloat = 24
+
     /// The identity the sheet greets. Restored after the run — see `tearDown`.
     private static let fixtureName = "Arafat"
 
@@ -177,8 +181,23 @@ final class HomeRenderTests: XCTestCase {
         let host = UIHostingController(rootView: view)
         host.view.frame = CGRect(origin: .zero, size: size)
 
+        // The capture's top inset is forced to the mock's, and this is the
+        // honest reason: the iPhone 16 Pro simulator reports a 59pt status bar
+        // and its clock ink starts at 46pt, while the sheet's starts at 20pt and
+        // Android's Robolectric harness at 24pt. The page is laid out from the
+        // safe area, so on this simulator every card sits ~22pt lower than the
+        // same page in the mock — and the bento's ground, read from the backdrop
+        // PNG, is 5 L brighter where it lands. That is a difference in the
+        // CAPTURE CONDITIONS, not in the design: on a real iPhone the taller
+        // status bar is correct and the page should sit lower. Clamping it here
+        // is what makes the three images comparable at all; the alternative —
+        // widening the band to absorb a 5 L ground shift — would spend a design
+        // tolerance on a harness artefact.
+        let container = HomeRenderRootController(topInset: Self.mockTopInset)
+        container.embed(host, size: size)
+
         let window = UIWindow(frame: CGRect(origin: .zero, size: size))
-        window.rootViewController = host
+        window.rootViewController = container
         window.layoutIfNeeded()
         window.makeKeyAndVisible()
         // Returned to the caller so tearDown can dismantle it; a key window
@@ -366,4 +385,36 @@ final class HomeRenderTests: XCTestCase {
     }
 
     private enum RenderError: Error { case noImage }
+
+    /// A view whose top safe-area inset is clamped, so the capture is measured
+    /// under the same conditions as the sheet it is compared with.
+    final class HomeRenderRootView: UIView {
+        var topInset: CGFloat = 24
+        override var safeAreaInsets: UIEdgeInsets {
+            let inherited = super.safeAreaInsets
+            return UIEdgeInsets(top: min(inherited.top, topInset), left: inherited.left,
+                                bottom: inherited.bottom, right: inherited.right)
+        }
+    }
+
+    final class HomeRenderRootController: UIViewController {
+        private let topInset: CGFloat
+        init(topInset: CGFloat) {
+            self.topInset = topInset
+            super.init(nibName: nil, bundle: nil)
+        }
+        required init?(coder: NSCoder) { fatalError("not used") }
+        override func loadView() {
+            let root = HomeRenderRootView()
+            root.topInset = topInset
+            view = root
+        }
+        func embed(_ child: UIViewController, size: CGSize) {
+            addChild(child)
+            child.view.frame = CGRect(origin: .zero, size: size)
+            child.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            view.addSubview(child.view)
+            child.didMove(toParent: self)
+        }
+    }
 }
