@@ -573,8 +573,8 @@ fun NexlyPlanCard(
                         NexlyGlassGlyphTile(
                             name = row.icon,
                             toneName = row.tone,
-                            size = 28.dp,
-                            glyphSize = 14.dp
+                            size = 30.dp,
+                            glyphSize = 15.dp
                         )
                         Spacer(Modifier.width(10.dp))
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {

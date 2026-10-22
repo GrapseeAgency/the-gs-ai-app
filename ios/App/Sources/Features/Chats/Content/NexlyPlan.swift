@@ -649,8 +649,8 @@ struct NexlyPlanCard: View {
                             NexlyGlassGlyphTile(
                                 name: row.icon,
                                 tone: row.tone,
-                                size: 28,
-                                glyphSize: 14
+                                size: 30,
+                                glyphSize: 15
                             )
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(row.time)
