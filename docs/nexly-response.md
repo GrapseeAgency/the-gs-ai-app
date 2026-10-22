@@ -100,8 +100,11 @@ All four steps are now implemented:
 1. `plan` is in the shared catalogue (`src/lib/widgets/catalog.ts`), validator
    (`validate.ts`), prompt (`NEXLY_PLAN_PROMPT` inside `WIDGET_PROMPT`) and web
    stream registry (`registry.ts`, `stream.ts`).
-2. The Thinking card is driven by `isStreaming || hasPlan` on both platforms;
-   it is no longer gated on `content.isEmpty`.
+2. The Thinking card is driven by the real turn on both platforms: the
+   backend `mode` event (effective mode + effort), the reasoning stream and the
+   answer phase. Plan turns keep the reference copy; other turns use adaptive
+   copy, and a flash turn with no reasoning does not show the card. It is no
+   longer gated on `content.isEmpty`.
 3. Android and iOS both parse validated `plan` payloads into first-class blocks
    (`Block.PlanBlock` / `Block.plan`) and render a glass timetable with circular
    glyph tiles, time over activity, a closing line and a timestamp.

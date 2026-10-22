@@ -24,7 +24,10 @@ page; do not edit Home.
 - Thinking card: a three-row glass panel after the preamble —
   Thinking / Reasoning / Effort with the reference subtitles and **circular**
   pastel glass tiles. It stays visible through reasoning and the answer, not
-  only before the first token.
+  only before the first token. The reference copy is for plan turns; every
+  other turn uses honest, task-neutral copy and the backend's real effort,
+  with a thin halo on the active row. A flash turn with no reasoning does not
+  show a fake thinking card.
 - Plan card: one glass card with a title, 5–9 timed rows (time over activity),
   a circular pastel glass icon on every row, a closing encouragement and a
   timestamp at the trailing edge.
@@ -122,7 +125,16 @@ catalogue, validator and web registry also know the `plan` kind.
   amber, study lavender, work blue, food green, movement pink, sleep lilac);
   the prompt now teaches the same mapping.
 - Android backdrop now carries the lower-left lotus like iOS.
+- The Thinking card is state-driven on both platforms: the backend mode event
+  now carries `effort`; clients parse `effectiveMode` + `effectiveEffort`; the
+  phase follows the real stream (thinking → reasoning → answering); the active
+  row gets a halo; plan turns keep the reference copy, other turns use
+  task-neutral copy; flash turns with no reasoning hide the card.
 - Tests added: `android/.../NexlyPlanTest.kt`,
   `ios/App/Tests/AppTests/NexlyPlanTests.swift`, expanded
-  `scripts/test-nexly-plan.ts`, and `F26_NEXLY_PLAN` fixtures on both parsers.
-- Native build/render verification remains for the final CI pass.
+  `scripts/test-nexly-plan.ts`, `F26_NEXLY_PLAN` fixtures on both parsers, and
+  a non-plan `*thinking*` render on both platforms.
+- Native verification is green: Android CI run `39827601611` (compile, Home
+  render, Nexly plan + adaptive render, 267 unit tests) and iOS CI run
+  `39827605900` (Xcode build, XCTest, Home render, Nexly plan + adaptive
+  render).
