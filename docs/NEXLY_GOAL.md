@@ -130,20 +130,31 @@ catalogue, validator and web registry also know the `plan` kind.
   phase follows the real stream (thinking → reasoning → answering); the active
   row gets a halo; plan turns keep the reference copy, other turns use
   task-neutral copy; flash turns with no reasoning hide the card.
-- The full reference screen is now rendered from production pieces on both
+- The full reference screen is rendered from production pieces on both
   platforms: the shared brand header, the real user message bubble/avatar/
-  ticks, the assistant blocks, and the shared composer capsule. At both 411×914 and 393×852 the
-  header, user turn, preamble, Thinking card, all nine plan rows, closing,
-  timestamp and composer fit without scrolling. The 393×852 variant scrolls the
-  last row, matching a narrow device.
+  ticks, the assistant blocks, and the shared composer capsule.
+- The rendered wire is a **real OpenRouter response** to a different real-life
+  question (“I work a 9–5 shift tomorrow…”), captured with the production
+  `SYSTEM_PROMPT + WIDGET_PROMPT`. It produced 9 timed rows, valid icons and no
+  emoji. The prose render uses a second real question (thesis procrastination).
+  Raw/final captures live in `docs/reference/nexly/live-*-real*.md`.
+- The whole phone screen (header, user turn, preamble, Thinking card, all nine
+  plan rows, closing, timestamp and composer) is visible at 393×852 and
+  411×914. The column is capped at 640 and centered on tablets; the
+  transcript scrolls on shorter devices while the composer stays on screen.
+- iOS landscape no longer pushes the composer below the screen edge: the
+  harness pins the column to the geometry height, ignores the simulator safe
+  area, and keeps the composer in flow. The plan title uses the sheet's medium
+  weight and stays on one line at 393pt.
 - The user timestamp is 12-hour (`9:41 PM`) on both; the disabled send control
   stays peach rather than turning gray; plan/thinking spacing was compacted to
   the sheet's density.
 - Tests added: `android/.../NexlyPlanTest.kt`,
   `ios/App/Tests/AppTests/NexlyPlanTests.swift`, expanded
   `scripts/test-nexly-plan.ts`, `F26_NEXLY_PLAN` fixtures on both parsers, and
-  plan, adaptive-thinking and full-screen renders on both platforms.
-- Native verification is green: Android CI run `39840270656` (compile, Home
-  render, Nexly response + adaptive + full-screen renders, 267 unit tests) and
-  iOS CI run `39840274730` (Xcode build, XCTest, Home render, the same three
-  Nexly renders). The final fit is commit `2ab9084a`; both 393 and 411 full-screen renders fit the whole reference composition.
+  plan, adaptive-thinking, prose and full-screen renders on both platforms.
+- Native verification is green on commit `32e168b1`: Android CI run
+  `39857096987` (compile, Home render, Nexly response + adaptive + full-screen
+  renders at the full size matrix, 267 unit tests) and iOS CI run
+  `39857063229` (Xcode build, XCTest, Home render, the same Nexly renders).
+  Evidence and run links are in `docs/reference/nexly/ci/README.md`.

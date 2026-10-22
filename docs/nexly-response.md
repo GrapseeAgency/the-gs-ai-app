@@ -112,8 +112,11 @@ All four steps are now implemented:
    the web proof uses the matching SVG sprite.
 5. The full reference screen is rendered in CI from production pieces on both
    platforms (shared header, real user message bubble, assistant blocks and
-   shared composer). The 411×914 renders show all nine plan rows, closing,
-   timestamp and composer without scrolling.
+   shared composer), using a live model answer to a different real-life
+   question. The 393×852 and 411×914 renders show all nine plan rows, closing,
+   timestamp and composer; the 320–430 phone range and the 768/1024 tablet and
+   landscape sizes are also rendered, with a 640pt centered column above phone
+   width.
 
 Verification is no longer static-only: the Android and iOS CI gates compile the
 apps, run the native test suites and upload the plan, adaptive-thinking and

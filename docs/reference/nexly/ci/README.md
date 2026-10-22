@@ -1,96 +1,115 @@
-# Nexly chat response — CI pixel evidence
+# Nexly chat response — native CI evidence
 
 These PNGs are real native renders from the verification branch
-`nexly/chat-reference-verify`, not mockups and not web screenshots.
+`nexly/chat-reference-verify`, not mockups and not web screenshots. The data in
+them is a **live model response**, not a hand-authored demo fixture.
+
+## The live model input/output
+
+Both content sets were captured with `scripts/live-nexly-model.ts`, which sends
+the production `SYSTEM_PROMPT + WIDGET_PROMPT` to OpenRouter
+(`nvidia/nemotron-3-ultra-550b-a55b:free`) with a real key, then runs the
+server-side `ensureWidgets` / `parseNexlyReply` path. No key is written to the
+repository.
+
+| Render | Real question | Captured model output |
+| --- | --- | --- |
+| Plan + whole screen | “I work a 9–5 shift tomorrow and need to fit in a gym session, meal prep, and two hours of study for an exam. Can you plan my day?” | [`live-plan-real2-final.md`](../live-plan-real2-final.md) (raw: [`live-plan-real2-raw.md`](../live-plan-real2-raw.md)) |
+| Prose + adaptive status card | “I keep procrastinating on my thesis. Why does that happen and what is one realistic change I can make this week?” | [`live-prose-real1-final.md`](../live-prose-real1-final.md) (raw: [`live-prose-real1-raw.md`](../live-prose-real1-raw.md)) |
+
+The plan answer contains **9 timed rows**, includes the requested work, gym,
+meal prep and exam study, uses only valid Tabler icon names (no emoji), and the
+compiler path is `model` with zero validation errors. Its title, closing and
+timestamp are the model's own, which is why they differ from the sample sheet.
+The question is deliberately **not** the reference's sample question, so the
+render also proves the card adapts to fresh content.
+
+## What is mounted
 
 - **Android:** `NexlyChatScreenshotTest` (Roborazzi + Robolectric native
-  graphics) mounts the real `BlocksContent` composition with
-  `glassAssistant = true`, `ReferenceThinkingCard`, `NexlyPlanCard`, the real
-  orb and `nexlyPearlBackdrop`. It is the same renderer path the chat screen
-  uses.
-- **iOS:** `NexlyChatRenderTests` hosts the real `NexlyAssistantBlocksView`
-  (Thinking card + Plan card + glass cards + orb) over `NexlyChatBackdrop` in a
-  keyed `UIWindow` and captures the composited layer tree with
-  `drawHierarchy(afterScreenUpdates:)`, so `UIVisualEffectView` glass is
-  included.
+  graphics) mounts the real Compose tree: `NexlyChatHeader`, `UserMessage`,
+  `BlocksContent` with `glassAssistant = true`, `ReferenceThinkingCard`,
+  `NexlyPlanCard`, `NexlyAssistantOrb`, `ComposerRow` and
+  `nexlyPearlBackdrop`.
+- **iOS:** `NexlyChatRenderTests` hosts the real
+  `NexlyBrandHeader` / `MessageBubble` / `NexlyAssistantBlocksView` /
+  `NexlyComposerBar` / `NexlyChatBackdrop` in a keyed `UIWindow` and captures
+  the composited layer tree with `drawHierarchy(afterScreenUpdates:)`, so
+  `UIVisualEffectView` glass is included.
 
-The wire is the exact nine-row plan from
-[`chat-plan-reference.png`](../chat-plan-reference.png), including the
-reference tones, closing line and 9:45 PM timestamp.
+The full-screen harness uses the same internal production views as the chat
+screen. The assistant turn contains one prose glass card (preamble + Thinking
+card) and one separate plan glass card with its own orb, exactly as the
+reference does.
 
-Targets: 393×852, 411×914, 360×780 at 3× (Android Roborazzi outputs the same
-pixel sizes).
+## Size matrix
 
-## Full reference screen
+Every row is rendered from the same production components; there is no
+width-specific mock.
 
-`nexly-chat-full-411x914.png` (and the iOS twin) is the WHOLE screen, built
-from production pieces:
+| Target | Plan screen | Prose screen |
+| --- | --- | --- |
+| 320×568 | ✓ | — |
+| 360×640 | ✓ | — |
+| 375×667 | ✓ | — |
+| 393×852 | ✓ | ✓ |
+| 411×914 | ✓ | ✓ |
+| 430×932 | ✓ | — |
+| 768×1024 (tablet) | ✓ | — |
+| 1024×768 (landscape) | ✓ | — |
 
-- the shared `NexlyChatHeader` / `NexlyBrandHeader`;
-- the real `UserMessage` / `MessageBubble` user turn, including the peach
-  bubble, avatar, 9:41 PM timestamp and delivery ticks;
-- the real assistant `BlocksContent` / `NexlyAssistantBlocksView` with the
-  Thinking card and all nine plan rows;
-- the shared `ComposerRow` / `NexlyComposerBar` capsule with the peach
-  paper-plane.
+- The conversation column is capped at **640pt** and centered, so tablet and
+  landscape renders do not stretch the phone composition.
+- The brand header, user bubble, assistant cards, plan rows and composer all
+  reflow to the available width; nothing is clipped horizontally at 320pt.
+- The composer stays on screen at every target, including landscape. On short
+  devices the transcript scrolls; that is a chat surface, not a clipped layout.
+- At 393×852 and 411×914 the complete plan (title, nine rows, closing and
+  timestamp) is visible above the composer.
 
-At both 411×914 and 393×852 the complete composition — header, user turn,
-preamble, Thinking card, all nine timetable rows, closing line, timestamp and
-composer — fits without scrolling. The density was tuned to the sheet; the
-393 variant is the tighter fit.
+## Adaptive Thinking / Reasoning / Effort
 
-## Live model capture (no mock wire)
-
-The plan and full-screen renders now use a **real OpenRouter response**, not a
-hand-authored demo. `scripts/live-nexly-model.ts` sends the production
-`SYSTEM_PROMPT + WIDGET_PROMPT` and the reference user message to
-`nvidia/nemotron-3-ultra-550b-a55b:free` with the real key pool, saves the raw
-answer and the server-compiled final wire under
-`docs/reference/nexly/live-model-{raw,final}.md`, and the native tests render
-that exact output.
-
-The captured answer contains **9 rows**, all icons valid, no emoji, and the
-compiler path is `model` with zero errors. It is content the model wrote, not
-the sample's rows: its title and closing differ from the sheet, which is the
-expected difference between a live generation and a static reference.
-
-The first live attempt (14 rows) and the nine-row retry are kept as
-`live-model-*-attempt1.md` / `live-model-*-nemotron9.md`. `z-ai/glm-4.6` was
-tried once and rejected with HTTP 402 (the OpenRouter account has no paid
-credits); no paid model was used.
-
-## Adaptive thinking / effort
-
-The `*thinking*` images are a deterministic component state render of a non-plan question (“Quantum entanglement…”), not a model call. They prove the card’s adaptive copy/active row; the live model render above proves the real plan wire.
-They prove the card is not fixed reference copy:
+`nexly-chat-*thinking-393x852.png` is a deterministic component state render of
+the real prose answer with the Reasoning row active. It proves the card is not
+fixed reference copy:
 
 - “Understanding your request…”
 - “Working through the best approach…” with the active Reasoning halo
 - “High effort · composing the answer…”
 
-The live card derives its phase from the real turn: the backend's `mode`
-event (`effectiveMode`, `effort`), the reasoning stream, and whether the
-answer has started. Plan turns keep the exact reference copy. A flash turn
-with no reasoning does not show a fake thinking card.
-
-Produced by:
-
-- `.github/workflows/android-app.yml` → step “Nexly chat response renders”
-- `.github/workflows/ios.yml` → step “Collect the Nexly chat response render”
-
-Artifacts on the run: `nexly-chat-render-android`, `nexly-chat-render-ios`.
+In production the card is driven by the backend `mode` event
+(`effectiveMode`, `requested`, `effort`), the reasoning stream and whether the
+answer has started. Plan turns keep the reference copy; every other turn uses
+task-neutral copy and the real effort. A flash turn with no reasoning does not
+show the card. The free model used for the capture returns a final answer
+without a chain-of-thought trace, so the live screenshots show the settled
+`done` state; the adaptive state render is labeled as a component state, not
+as a fabricated model transcript.
 
 ## Verified runs
 
-Both render/test gates completed green:
+Both workflows completed green on commit `32e168b1`:
 
-- Android: https://github.com/GrapseeAgency/the-gs-ai-app/actions/runs/39844943944
-- iOS: https://github.com/GrapseeAgency/the-gs-ai-app/actions/runs/39844947532
+- Android: https://github.com/GrapseeAgency/the-gs-ai-app/actions/runs/39857096987
+  (run `39857096987`)
+- iOS: https://github.com/GrapseeAgency/the-gs-ai-app/actions/runs/39857063229
+  (run `39857063229`)
 
-Android passes the full unit suite (267 tests, including the new
-`NexlyPlanTest`); the screenshot tests are gated behind `-PgsShots=true` and are
-excluded from the ordinary suite, exactly like `HomeScreenshotTest`.
+Android runs the full unit suite (267 tests, including `NexlyPlanTest`); the
+screenshot tests are gated behind `-PgsShots=true` and are excluded from the
+ordinary suite, exactly like `HomeScreenshotTest`. The workflows also assert
+that every expected PNG exists before uploading.
 
-The screenshots here are from commit `bc8dbcfa` on
-`nexly/chat-reference-verify`, the green run where the complete composition
-fits at both widths.
+Artifacts on the runs: `nexly-chat-render-android` and
+`nexly-chat-render-ios` (retained for 30 days). The stable copies of the full
+matrix live in `/home/arafat/nexly-evidence/`.
+
+## Honest limits
+
+- The mock's photographic pearl/flower backdrop is approximated with native
+  gradients, glass orbs and the app's lotus asset. The reference image is not
+  shipped as an asset.
+- The system status bar is OS chrome, not part of the app's view hierarchy, so
+  it is absent from these app-only captures. A device shows it normally.
+- The live model's wording differs from the sheet by design. The structure,
+  density, tones, icon treatment, glass composition and rows match.
