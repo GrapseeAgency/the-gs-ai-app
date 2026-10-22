@@ -1758,7 +1758,7 @@ internal fun NexlyChatHeader(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = GsMotion.spaceM, vertical = 9.dp),
+                .padding(horizontal = GsMotion.spaceM, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Image(
@@ -1958,7 +1958,7 @@ internal fun UserMessage(
                                             userMenu = true
                                         }
                                     )
-                                    .padding(horizontal = 16.dp, vertical = 11.dp)
+                                    .padding(horizontal = 16.dp, vertical = 9.dp)
                             ) {
                                 Text(
                                     text = message.content,
@@ -2091,7 +2091,7 @@ internal fun ComposerRow(
                 .gsGlass(GsGlassRole.FloatingControl, RoundedCornerShape(30.dp))
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 6.dp, vertical = 5.dp),
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.Bottom
             ) {
                 // The reference has one leading sparkle. It opens the same
@@ -2259,7 +2259,7 @@ internal fun ReferenceThinkingCard(
             .fillMaxWidth()
             .widthIn(max = 460.dp)
             .gsGlass(GsGlassRole.FloatingControl, RoundedCornerShape(20.dp))
-            .padding(horizontal = 6.dp, vertical = 6.dp),
+            .padding(horizontal = 4.dp, vertical = 4.dp),
         verticalArrangement = Arrangement.spacedBy(1.dp)
     ) {
         ThinkingRow(
@@ -2297,7 +2297,7 @@ private fun ThinkingRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 5.dp, vertical = 4.dp),
+            .padding(horizontal = 4.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {

@@ -502,8 +502,8 @@ struct NexlyThinkingCard: View {
                 title: "Effort", subtitle: effortSubtitle,
                 active: phase == .effort)
         }
-        .padding(.horizontal, 5)
-        .padding(.vertical, 5)
+        .padding(.horizontal, 4)
+        .padding(.vertical, 4)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 19, style: .continuous)
@@ -535,8 +535,8 @@ struct NexlyThinkingCard: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 5)
-        .padding(.vertical, 4)
+        .padding(.horizontal, 4)
+        .padding(.vertical, 2)
     }
 }
 
@@ -559,7 +559,7 @@ struct NexlyPlanCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 6) {
             NexlyInlineText(
                 text: plan.title,
                 fontSize: 13.5,
@@ -570,7 +570,7 @@ struct NexlyPlanCard: View {
             if plan.rows.isEmpty {
                 skeleton
             } else {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 2) {
                     ForEach(plan.rows) { row in
                         HStack(alignment: .center, spacing: 11) {
                             NexlyGlassGlyphTile(
@@ -626,8 +626,8 @@ struct NexlyPlanCard: View {
                 }
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 15)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .gsGlass(.card, corner: 24)
         .accessibilityElement(children: .combine)

@@ -190,7 +190,7 @@ private struct NexlyFullChatView: View {
                     menuMenu: { EmptyView() }
                 )
                 ScrollView(.vertical, showsIndicators: false) {
-                    VStack(spacing: 20) {
+                    VStack(spacing: 14) {
                         MessageBubble(
                             message: ChatViewModel.ChatMessage(
                                 role: "user",
@@ -210,7 +210,7 @@ private struct NexlyFullChatView: View {
                         )
                     }
                     .padding(.horizontal, 16)
-                    .padding(.vertical, 20)
+                    .padding(.vertical, 12)
                 }
                 NexlyComposerBar(
                     text: .constant(""),
@@ -225,8 +225,8 @@ private struct NexlyFullChatView: View {
                     onSubmit: {}
                 )
                 .padding(.horizontal, Aero.Spacing.m)
-                .padding(.top, 6)
-                .padding(.bottom, 6)
+                .padding(.top, 4)
+                .padding(.bottom, 4)
             }
         }
     }

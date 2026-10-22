@@ -488,8 +488,8 @@ fun NexlyPlanCard(
         modifier = modifier
             .fillMaxWidth()
             .gsGlass(GsGlassRole.Card, RoundedCornerShape(24.dp))
-            .padding(horizontal = 16.dp, vertical = 15.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         NexlyInlineRichText(
             text = cleanPlanText(plan.title, 160),
@@ -499,7 +499,7 @@ fun NexlyPlanCard(
             weight = FontWeight.SemiBold
         )
         if (plan.rows.isEmpty()) {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 repeat(3) { index ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
@@ -526,7 +526,7 @@ fun NexlyPlanCard(
                 }
             }
         } else {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 plan.rows.forEach { row ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         NexlyGlassGlyphTile(

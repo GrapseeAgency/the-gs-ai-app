@@ -108,8 +108,8 @@ struct NexlyAssistantBlocksView: View {
                     .foregroundStyle(Aero.text)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .gsGlass(.card, corner: 24)
         .padding(.top, isFirst ? 0 : 2)
