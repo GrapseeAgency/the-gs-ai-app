@@ -519,8 +519,8 @@ struct NexlyPlanCard: View {
         VStack(alignment: .leading, spacing: 13) {
             NexlyInlineText(
                 text: plan.title,
-                fontSize: 14,
-                glyphSize: 17,
+                fontSize: 13.5,
+                glyphSize: 16,
                 color: Aero.text,
                 weight: .semibold
             )
@@ -654,19 +654,19 @@ struct NexlyChatBackdrop: View {
                     endPoint: .bottomTrailing
                 )
                 bubble(size: w * 0.86, x: w * 0.94, y: h * 0.06,
-                       opacity: scheme == .dark ? 0.16 : 0.56)
+                       opacity: scheme == .dark ? 0.20 : 0.75)
                 bubble(size: w * 0.74, x: w * -0.06, y: h * 0.28,
-                       opacity: scheme == .dark ? 0.12 : 0.42)
+                       opacity: scheme == .dark ? 0.16 : 0.60)
                 bubble(size: w * 0.94, x: w * 0.14, y: h * 0.86,
-                       opacity: scheme == .dark ? 0.13 : 0.46)
+                       opacity: scheme == .dark ? 0.17 : 0.65)
                 bubble(size: w * 0.56, x: w * 0.94, y: h * 0.78,
-                       opacity: scheme == .dark ? 0.09 : 0.34)
+                       opacity: scheme == .dark ? 0.12 : 0.50)
                 Image("GSHomeLotusNew")
                     .resizable()
                     .scaledToFit()
                     .frame(width: w * 1.15)
-                    .opacity(scheme == .dark ? 0.10 : 0.28)
-                    .blur(radius: 1)
+                    .opacity(scheme == .dark ? 0.12 : 0.32)
+                    .blur(radius: 0.5)
                     .offset(x: -w * 0.28, y: h * 0.38)
                     .allowsHitTesting(false)
             }
@@ -686,9 +686,9 @@ struct NexlyChatBackdrop: View {
             .fill(
                 RadialGradient(
                     colors: [
-                        Color.white.opacity(0.02),
-                        Color(red: 1.0, green: 0.88, blue: 0.90).opacity(0.10),
-                        Color(red: 0.95, green: 0.76, blue: 0.86).opacity(0.20),
+                        Color.white.opacity(0.03),
+                        Color(red: 1.0, green: 0.88, blue: 0.90).opacity(0.14),
+                        Color(red: 0.95, green: 0.76, blue: 0.86).opacity(0.28),
                     ],
                     center: .center,
                     startRadius: 0,
@@ -699,8 +699,8 @@ struct NexlyChatBackdrop: View {
                 Circle().strokeBorder(
                     LinearGradient(
                         colors: [
-                            Color.white.opacity(0.90),
-                            Color(red: 1.0, green: 0.72, blue: 0.80).opacity(0.42),
+                            Color.white.opacity(0.95),
+                            Color(red: 1.0, green: 0.72, blue: 0.80).opacity(0.55),
                         ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
@@ -710,7 +710,7 @@ struct NexlyChatBackdrop: View {
             )
             .overlay(
                 Circle()
-                    .fill(Color.white.opacity(0.60))
+                    .fill(Color.white.opacity(0.75))
                     .frame(width: size * 0.30, height: size * 0.17)
                     .blur(radius: 3)
                     .offset(x: -size * 0.12, y: -size * 0.30)
@@ -720,7 +720,7 @@ struct NexlyChatBackdrop: View {
                     RadialGradient(
                         colors: [
                             Color.clear,
-                            Color(red: 1.0, green: 0.80, blue: 0.88).opacity(0.16),
+                            Color(red: 1.0, green: 0.80, blue: 0.88).opacity(0.22),
                         ],
                         center: .center,
                         startRadius: size * 0.22,
@@ -729,8 +729,8 @@ struct NexlyChatBackdrop: View {
                 )
             )
             .frame(width: size, height: size)
-            .shadow(color: Color(red: 0.95, green: 0.68, blue: 0.74).opacity(0.14),
-                    radius: 12, y: 4)
+            .shadow(color: Color(red: 0.95, green: 0.68, blue: 0.74).opacity(0.18),
+                    radius: 14, y: 5)
             .position(x: x, y: y)
             .opacity(opacity)
     }

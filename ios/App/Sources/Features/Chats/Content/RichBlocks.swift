@@ -72,12 +72,14 @@ struct NexlyAssistantBlocksView: View {
                         switch group {
                         case .plan(let plan, let open):
                             NexlyPlanCard(plan: plan, open: open, fallbackTimestamp: planTimestamp)
+                                .layoutPriority(1)
                         case .prose(let prose):
                             proseCard(
                                 prose,
                                 isStatusHost: index == statusIndex,
                                 isFirst: index == 0
                             )
+                            .layoutPriority(1)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)

@@ -484,8 +484,8 @@ fun NexlyPlanCard(
         NexlyInlineRichText(
             text = cleanPlanText(plan.title, 160),
             color = colors.textPrimary,
-            fontSize = 14.sp,
-            glyphSize = 17.dp,
+            fontSize = 13.5.sp,
+            glyphSize = 16.dp,
             weight = FontWeight.SemiBold
         )
         if (plan.rows.isEmpty()) {
@@ -677,8 +677,8 @@ fun Modifier.nexlyPearlBackdrop(): Modifier {
                 brush = Brush.radialGradient(
                     colors = listOf(
                         Color.White.copy(alpha = alpha * 0.04f),
-                        Color(0xFFFFD8C4).copy(alpha = alpha * 0.22f),
-                        Color(0xFFDCD4FF).copy(alpha = alpha * 0.12f),
+                        Color(0xFFFFD8C4).copy(alpha = alpha * 0.28f),
+                        Color(0xFFDCD4FF).copy(alpha = alpha * 0.16f),
                         Color.Transparent
                     ),
                     center = Offset(cx, cy),
@@ -690,8 +690,8 @@ fun Modifier.nexlyPearlBackdrop(): Modifier {
             drawCircle(
                 brush = Brush.linearGradient(
                     listOf(
-                        Color.White.copy(alpha = (alpha * 0.90f).coerceAtMost(0.90f)),
-                        Color(0xFFFFB8C8).copy(alpha = alpha * 0.45f)
+                        Color.White.copy(alpha = (alpha * 0.95f).coerceAtMost(0.95f)),
+                        Color(0xFFFFB8C8).copy(alpha = alpha * 0.55f)
                     )
                 ),
                 radius = radius,
@@ -699,15 +699,15 @@ fun Modifier.nexlyPearlBackdrop(): Modifier {
                 style = Stroke(width = 1.5.dp.toPx())
             )
             drawCircle(
-                color = Color.White.copy(alpha = alpha * 0.55f),
+                color = Color.White.copy(alpha = alpha * 0.65f),
                 radius = radius * 0.10f,
                 center = Offset(cx - radius * 0.35f, cy - radius * 0.38f)
             )
         }
-        bubble(w * 0.94f, h * 0.08f, w * 0.44f, if (dark) 0.16f else 0.56f)
-        bubble(w * -0.06f, h * 0.30f, w * 0.38f, if (dark) 0.12f else 0.42f)
-        bubble(w * 0.16f, h * 0.86f, w * 0.46f, if (dark) 0.13f else 0.46f)
-        bubble(w * 0.96f, h * 0.78f, w * 0.30f, if (dark) 0.09f else 0.34f)
+        bubble(w * 0.94f, h * 0.08f, w * 0.44f, if (dark) 0.20f else 0.72f)
+        bubble(w * -0.06f, h * 0.30f, w * 0.38f, if (dark) 0.16f else 0.58f)
+        bubble(w * 0.16f, h * 0.86f, w * 0.46f, if (dark) 0.17f else 0.62f)
+        bubble(w * 0.96f, h * 0.78f, w * 0.30f, if (dark) 0.12f else 0.48f)
         lotus?.let { image ->
             if (image.width > 0 && image.height > 0) {
                 val targetW = w * 1.15f
