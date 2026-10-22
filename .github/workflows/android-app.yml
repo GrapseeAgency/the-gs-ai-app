@@ -497,6 +497,28 @@ jobs:
           done
           [ "$MISSING" -eq 0 ] || exit 1
 
+      - name: Set up Python for the render probe
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install render-probe dependencies
+        run: python3 -m pip install --quiet --disable-pip-version-check numpy pillow
+
+      - name: Measure the Android render against the reference
+        run: |
+          set -euo pipefail
+          # Runs from the repository root: both paths below are repo-relative,
+          # unlike the gradle steps which set working-directory: android.
+          # The same instrument iOS is held to, so "it looks right on my
+          # platform" cannot be the standard. Asserts the scale-invariant glass
+          # relationships measured from the sheet, not absolute positions — the
+          # mock is a non-rectified render and its pixels are not a spec.
+          python3 scripts/check_home_render.py \
+            --reference assets/reference/home-reference.png \
+            --render android/app/build/screenshots/home-393x852.png \
+            --label android-393
+
       - name: Upload the Home renders
         # not `always()`: if a step above failed there are no renders, and
         # `if-no-files-found: error` would turn one failure into two and bury
