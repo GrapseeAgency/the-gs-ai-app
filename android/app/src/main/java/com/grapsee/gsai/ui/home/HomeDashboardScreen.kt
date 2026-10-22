@@ -555,14 +555,16 @@ private fun MindGuideCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val compact = maxWidth < 148.dp
             Row(
-                // Measured: in a 151dp card the text column needs every point
-                // it can get — "clarity companion." is 93dp at 10sp — so the
-                // orb is 30dp, the insets are tight, and the chevron stays an
-                // overlay instead of a reserved 24dp gutter.
+                // The sheet's orb is 70px of a 680px screen = 40dp. Shrinking
+                // it to 30dp stopped the truncation but traded one defect for
+                // another — a pale, undersized pearl. The width comes back from
+                // the insets instead: 5dp start, a 6dp gap, and a 14dp gutter
+                // for the overlaid chevron leaves ~88dp of text column, and the
+                // body drops to 9.5sp to match what the sheet actually sets.
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(
-                        start = if (compact) 5.dp else 6.dp,
+                        start = if (compact) 4.dp else 5.dp,
                         end = if (compact) 12.dp else 14.dp,
                         top = 8.dp,
                         bottom = 8.dp
@@ -575,7 +577,7 @@ private fun MindGuideCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
                     painter = painterResource(com.grapsee.gsai.R.drawable.gs_home_mind_orb),
                     contentDescription = null,
                     contentScale = ContentScale.Fit,
-                    modifier = Modifier.size(if (compact) 26.dp else 30.dp)
+                    modifier = Modifier.size(if (compact) 32.dp else 38.dp)
                 )
                 Spacer(Modifier.width(if (compact) 5.dp else 6.dp))
                 Column(Modifier.weight(1f)) {
@@ -595,8 +597,8 @@ private fun MindGuideCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
                         // third line instead of clipping it to "personal…".
                         text = "Your personal\nclarity companion.",
                         style = MaterialTheme.typography.labelSmall.copy(
-                            fontSize = if (compact) 9.5.sp else 10.sp,
-                            lineHeight = if (compact) 11.5.sp else 12.5.sp,
+                            fontSize = if (compact) 9.sp else 9.5.sp,
+                            lineHeight = if (compact) 11.sp else 12.sp,
                             letterSpacing = 0.sp
                         ),
                         color = GsTheme.colors.textSecondary,

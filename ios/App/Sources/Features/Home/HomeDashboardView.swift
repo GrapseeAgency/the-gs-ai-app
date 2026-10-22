@@ -477,15 +477,15 @@ private struct MindGuideCard: View {
                     Image("GSHomeMindOrb")
                         .resizable()
                         .scaledToFit()
-                        .frame(width: Aero.scaledLength(30, relativeTo: .caption),
-                               height: Aero.scaledLength(30, relativeTo: .caption))
+                        .frame(width: Aero.scaledLength(38, relativeTo: .caption),
+                               height: Aero.scaledLength(38, relativeTo: .caption))
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Mind Guide")
                             .font(Aero.responsive(13, .semibold, relativeTo: .subheadline))
                             .foregroundStyle(Aero.text)
                             .lineLimit(1)
                         Text("Your personal\nclarity companion.")
-                            .font(Aero.responsive(10, .regular, relativeTo: .caption))
+                            .font(Aero.responsive(9.5, .regular, relativeTo: .caption))
                             .lineSpacing(1.5)
                             .foregroundStyle(Aero.textMuted)
                             // Three lines so a 360pt phone wraps "companion."
@@ -495,7 +495,7 @@ private struct MindGuideCard: View {
                     }
                     Spacer(minLength: 0)
                 }
-                .padding(.horizontal, 6)
+                .padding(.horizontal, 5)
                 .padding(.vertical, 8)
                 HStack {
                     Spacer()
