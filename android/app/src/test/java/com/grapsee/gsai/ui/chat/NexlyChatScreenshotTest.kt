@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -13,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.grapsee.gsai.ui.chat.content.BlocksContent
 import com.grapsee.gsai.ui.chat.content.nexlyPearlBackdrop
+import com.grapsee.gsai.ui.icons.GsIcons
 import com.grapsee.gsai.ui.theme.TheGsAiTheme
 import org.junit.Assume.assumeTrue
 import org.junit.Before
@@ -90,10 +93,82 @@ class NexlyChatScreenshotTest {
         }
     }
 
+    /**
+     * The WHOLE reference screen built from the production pieces: the real
+     * brand header, the real UserMessage (peach bubble, avatar, ticks), the
+     * real assistant BlocksContent, and the real ComposerRow capsule.
+     */
+    @Composable
+    private fun fullChat() {
+        Box(modifier = Modifier.fillMaxSize().nexlyPearlBackdrop()) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                NexlyChatHeader(
+                    sparkleLabel = "New chat",
+                    onSparkle = {},
+                    onSparkleLong = null,
+                    menuIcon = GsIcons.Menu,
+                    menuLabel = "Open menu",
+                    onMenu = {},
+                    onMenuLong = null
+                )
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp, vertical = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(20.dp)
+                ) {
+                    UserMessage(
+                        message = ChatUiMessage(
+                            id = "reference-user",
+                            role = "user",
+                            content = NEXLY_REFERENCE_USER,
+                            createdAt = "2026-10-22T21:41:00Z"
+                        )
+                    )
+                    BlocksContent(
+                        content = NEXLY_REFERENCE_WIRE,
+                        isStreaming = false,
+                        onCopyCode = {},
+                        glassAssistant = true,
+                        statusCard = { ReferenceThinkingCard() },
+                        planTimestamp = "2026-10-22T21:45:00Z"
+                    )
+                }
+                Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    ComposerRow(
+                        draftText = { "" },
+                        onDraftChange = {},
+                        onSend = {},
+                        onAttach = {},
+                        isStreaming = false,
+                        onStop = {},
+                        queuedText = { "" },
+                        onQueue = {},
+                        onUnqueue = {}
+                    )
+                }
+            }
+        }
+    }
+
     private fun shoot(path: String) {
         compose.setContent { TheGsAiTheme(darkTheme = false) { referenceResponse() } }
         compose.onRoot().captureRoboImage(path)
     }
+
+    private fun shootFull(path: String) {
+        compose.setContent { TheGsAiTheme(darkTheme = false) { fullChat() } }
+        compose.onRoot().captureRoboImage(path)
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w411dp-h914dp-xxhdpi")
+    fun nexlyFullChatAtPixel6() = shootFull("build/screenshots/nexly-chat-full-411x914.png")
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w393dp-h852dp-xxhdpi")
+    fun nexlyFullChatAtSheetSize() = shootFull("build/screenshots/nexly-chat-full-393x852.png")
 
     private fun shootAdaptive(path: String) {
         compose.setContent { TheGsAiTheme(darkTheme = false) { adaptiveThinkingResponse() } }
@@ -148,6 +223,11 @@ private val NEXLY_REFERENCE_WIRE = """
     }
     ```
 """.trimIndent()
+
+/** The exact user turn from the reference sheet. */
+private const val NEXLY_REFERENCE_USER =
+    "Can you help me plan a productive day tomorrow? I have classes, " +
+        "assignments and also want to stay healthy and get some rest."
 
 /** A non-plan thinking turn: the card copy and active row must adapt. */
 private val NEXLY_THINKING_WIRE = """

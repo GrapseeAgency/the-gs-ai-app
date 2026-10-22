@@ -215,7 +215,7 @@ import kotlinx.coroutines.launch
  *  stay skippable — every field is a val of a stable or immutable type; the
  *  DTO list element types carry @Immutable themselves. */
 @Immutable
-private data class ChatUiMessage(
+internal data class ChatUiMessage(
     val id: String,
     val role: String,
     val content: String,
@@ -1224,90 +1224,36 @@ fun ChatScreen(
             .statusBarsPadding()
             .navigationBarsPadding()
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    Brush.verticalGradient(
-                        listOf(
-                            GsTheme.colors.surface.copy(alpha = 0.56f),
-                            GsTheme.colors.surface.copy(alpha = 0.30f)
-                        )
-                    )
-                )
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = GsMotion.spaceM, vertical = 9.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Image(
-                    painter = painterResource(com.grapsee.gsai.R.drawable.gs_companion_orb),
-                    contentDescription = "Nexly",
-                    modifier = Modifier
-                        .size(42.dp)
-                        .shadow(5.dp, CircleShape)
-                        .clip(CircleShape)
-                        .border(1.dp, Color.White.copy(alpha = 0.55f), CircleShape)
-                )
-                Spacer(Modifier.width(10.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Nexly",
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontSize = 18.sp,
-                            lineHeight = 21.sp,
-                            fontWeight = FontWeight.SemiBold
-                        ),
-                        color = GsTheme.colors.textPrimary,
-                        maxLines = 1
-                    )
-                    Text(
-                        text = "AI Companion",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontSize = 10.5.sp,
-                            lineHeight = 13.sp
-                        ),
-                        color = GsTheme.colors.textSecondary,
-                        maxLines = 1
-                    )
-                }
-                ChatTopIconButton(
-                    GsIcons.Sparkles,
-                    "New chat",
-                    onClick = {
-                        if (newChatAction != null) newChatAction()
-                        else {
-                            searchOpen = !searchOpen
-                            if (!searchOpen) {
-                                searchQuery = ""
-                                searchActiveIndex = 0
-                            }
-                        }
-                    },
-                    onLongClick = {
-                        searchOpen = !searchOpen
-                        if (!searchOpen) {
-                            searchQuery = ""
-                            searchActiveIndex = 0
-                        }
+        NexlyChatHeader(
+            sparkleLabel = "New chat",
+            onSparkle = {
+                if (newChatAction != null) newChatAction()
+                else {
+                    searchOpen = !searchOpen
+                    if (!searchOpen) {
+                        searchQuery = ""
+                        searchActiveIndex = 0
                     }
-                )
-                Spacer(Modifier.width(6.dp))
-                ChatTopIconButton(
-                    if (atWorkspaceRoot && menuAction != null) GsIcons.Menu else GsIcons.ChevronLeft,
-                    if (atWorkspaceRoot && menuAction != null) "Open menu" else "Back",
-                    onClick = {
-                        if (atWorkspaceRoot && menuAction != null) menuAction()
-                        else if (activeConversationId != null) chatMenuOpen = true
-                        else onBack()
-                    },
-                    onLongClick = if (activeConversationId != null) {
-                        { chatMenuOpen = true }
-                    } else null
-                )
-            }
+                }
+            },
+            onSparkleLong = {
+                searchOpen = !searchOpen
+                if (!searchOpen) {
+                    searchQuery = ""
+                    searchActiveIndex = 0
+                }
+            },
+            menuIcon = if (atWorkspaceRoot && menuAction != null) GsIcons.Menu else GsIcons.ChevronLeft,
+            menuLabel = if (atWorkspaceRoot && menuAction != null) "Open menu" else "Back",
+            onMenu = {
+                if (atWorkspaceRoot && menuAction != null) menuAction()
+                else if (activeConversationId != null) chatMenuOpen = true
+                else onBack()
+            },
+            onMenuLong = if (activeConversationId != null) {
+                { chatMenuOpen = true }
+            } else null
+        )
             if (chatMenuOpen && activeConversationId != null) {
                 val activeId = activeConversationId
                 ConversationOptionsSheet(
@@ -1399,7 +1345,6 @@ fun ChatScreen(
                     }
                 )
             }
-        }
         Spacer(Modifier.height(10.dp))
         Column(
             modifier = Modifier
@@ -1784,6 +1729,86 @@ fun ChatScreen(
  * from the existing kineticPress pattern (reduce-motion gated internally);
  * the label doubles as the content description for TalkBack.
  */
+/**
+ * The reference brand header, shared by the chat screen and the render
+ * harness: orb, “Nexly / AI Companion”, and two quiet glass controls.
+ */
+@Composable
+internal fun NexlyChatHeader(
+    sparkleLabel: String,
+    onSparkle: () -> Unit,
+    onSparkleLong: (() -> Unit)?,
+    menuIcon: ImageVector,
+    menuLabel: String,
+    onMenu: () -> Unit,
+    onMenuLong: (() -> Unit)?
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        GsTheme.colors.surface.copy(alpha = 0.56f),
+                        GsTheme.colors.surface.copy(alpha = 0.30f)
+                    )
+                )
+            )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = GsMotion.spaceM, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Image(
+                painter = painterResource(com.grapsee.gsai.R.drawable.gs_companion_orb),
+                contentDescription = "Nexly",
+                modifier = Modifier
+                    .size(42.dp)
+                    .shadow(5.dp, CircleShape)
+                    .clip(CircleShape)
+                    .border(1.dp, Color.White.copy(alpha = 0.55f), CircleShape)
+            )
+            Spacer(Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Nexly",
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontSize = 18.sp,
+                        lineHeight = 21.sp,
+                        fontWeight = FontWeight.SemiBold
+                    ),
+                    color = GsTheme.colors.textPrimary,
+                    maxLines = 1
+                )
+                Text(
+                    text = "AI Companion",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 10.5.sp,
+                        lineHeight = 13.sp
+                    ),
+                    color = GsTheme.colors.textSecondary,
+                    maxLines = 1
+                )
+            }
+            ChatTopIconButton(
+                icon = GsIcons.Sparkles,
+                label = sparkleLabel,
+                onClick = onSparkle,
+                onLongClick = onSparkleLong
+            )
+            Spacer(Modifier.width(6.dp))
+            ChatTopIconButton(
+                icon = menuIcon,
+                label = menuLabel,
+                onClick = onMenu,
+                onLongClick = onMenuLong
+            )
+        }
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ChatTopIconButton(
@@ -1830,7 +1855,7 @@ private fun ChatTopIconButton(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun UserMessage(
+internal fun UserMessage(
     message: ChatUiMessage,
     highlight: Boolean = false,
     isEditing: Boolean = false,
@@ -2011,7 +2036,7 @@ private fun UserMessage(
  * container scales); the stop orb owns the slot while a turn runs.
  */
 @Composable
-private fun ComposerRow(
+internal fun ComposerRow(
     draftText: () -> String,
     onDraftChange: (String) -> Unit,
     onSend: (String) -> Unit,

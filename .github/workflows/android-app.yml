@@ -551,6 +551,11 @@ jobs:
           test -s "$SHOTS/nexly-chat-thinking-393x852.png" \
             || { echo "::error::the adaptive-thinking render was not produced"; exit 1; }
           echo "rendered nexly-chat-thinking-393x852.png"
+          for w in 411x914 393x852; do
+            test -s "$SHOTS/nexly-chat-full-$w.png" \
+              || { echo "::error::nexly-chat-full-$w.png was not produced"; exit 1; }
+            echo "rendered nexly-chat-full-$w.png"
+          done
 
       - name: Upload the Nexly chat response renders
         if: always()
