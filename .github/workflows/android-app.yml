@@ -46,6 +46,9 @@ on:
       - '.github/scripts/**'
       - 'native/cpp/**'
       - 'native/crates/**'
+      # The render step below blocks on this script's verdict, so the script is
+      # as much a part of this job as the Kotlin it compiles.
+      - 'scripts/check_home_render.py'
   pull_request:
     branches: [native-runtime]
     paths:
@@ -54,6 +57,7 @@ on:
       - '.github/scripts/**'
       - 'native/cpp/**'
       - 'native/crates/**'
+      - 'scripts/check_home_render.py'
 
 concurrency:
   group: android-app-${{ github.ref }}
@@ -521,7 +525,7 @@ jobs:
           python3 scripts/check_home_render.py \
             --reference assets/reference/home-reference.png \
             --render android/app/build/screenshots/home-393x852.png \
-            --label android-393
+            --probe-set android --label android-393
 
       - name: Upload the Home renders
         # not `always()`: if a step above failed there are no renders, and

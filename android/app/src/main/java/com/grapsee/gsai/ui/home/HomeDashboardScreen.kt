@@ -554,7 +554,16 @@ private fun VideoCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
 
 @Composable
 private fun MindGuideCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
-    GlassPanel(modifier = modifier, onClick = onClick, onClickLabel = "Open Mind Guide") {
+    // CardLight, not Card: this card sits on the bloom, where the sheet's glass
+    // is thin and its hairline is lit at +17.2 L. The Suggestions card below the
+    // fold sits on flat cream, where the same sheet shows a thick fill and an
+    // almost invisible edge. One material, two grounds, two roles.
+    GlassPanel(
+        modifier = modifier,
+        role = GsGlassRole.CardLight,
+        onClick = onClick,
+        onClickLabel = "Open Mind Guide",
+    ) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val compact = maxWidth < 148.dp
             Row(
@@ -624,7 +633,12 @@ private fun MindGuideCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
 
 @Composable
 private fun ReflectionCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
-    GlassPanel(modifier = modifier, onClick = onClick, onClickLabel = "Open today's reflection") {
+    GlassPanel(
+        modifier = modifier,
+        role = GsGlassRole.CardLight,
+        onClick = onClick,
+        onClickLabel = "Open today's reflection",
+    ) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val compact = maxWidth < 148.dp
             // Lotus painted first; copy keeps its own z-plane.
@@ -732,7 +746,10 @@ private fun TodayUsedHeader(onSeeAll: () -> Unit) {
 
 @Composable
 private fun SuggestionsCard(title: String, subtitle: String, onClick: () -> Unit) {
-    GlassPanel(onClick = onClick, onClickLabel = title) {
+    // CardDim: same 30% glass as the bento above it, dim edge, because this card
+    // sits on flat cream where the sheet's own hairline measures +2.6 L instead
+    // of +19.9 L.
+    GlassPanel(role = GsGlassRole.CardDim, onClick = onClick, onClickLabel = title) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(10.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -1100,6 +1117,7 @@ private fun DockCircle(
 @Composable
 private fun GlassPanel(
     modifier: Modifier = Modifier,
+    role: GsGlassRole = GsGlassRole.Card,
     onClick: (() -> Unit)? = null,
     onClickLabel: String? = null,
     content: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit,
@@ -1116,7 +1134,7 @@ private fun GlassPanel(
     } else {
         modifier
     }
-    Box(modifier = base.gsGlass(GsGlassRole.Card, shape), content = content)
+    Box(modifier = base.gsGlass(role, shape), content = content)
 }
 
 @Composable

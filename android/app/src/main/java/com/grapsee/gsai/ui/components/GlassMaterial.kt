@@ -24,7 +24,7 @@ import com.grapsee.gsai.ui.theme.GsColors
 import com.grapsee.gsai.ui.theme.GsTheme
 
 /*
- * THE GLASS — one material, five semantic roles.
+ * THE GLASS — one material, seven semantic roles.
  *
  * The reference is a photograph of light through blossom, seen through frosted
  * glass, and the material carries four optical cues at once. Only the first was
@@ -34,10 +34,15 @@ import com.grapsee.gsai.ui.theme.GsTheme
  *  1. a translucent fill (the old `glassSurface` + `.copy(alpha = …)`);
  *  2. **in-scattered light** — glass adds airlight back, raising the black
  *     floor and lowering local contrast. [GsGlassRole.veilingAlpha];
- *  3. **a directional rim** — the light is above and slightly left in every
- *     source screen, so the top-left edge is bright and the bottom-right edge
- *     falls away. One uniform hairline erases the strongest depth cue in the
- *     artwork, and this is the fix for it;
+ *  3. **a lit rim, strongest at the top** — measured off the sheet, not
+ *     eyeballed. Its Mind Guide card's hairline reads +17.2 L above its own
+ *     glass along the whole top edge (253 at the left corner, 247 at the right,
+ *     against a 233.8 interior) and +4.6 L along the bottom. So the axis is
+ *     vertical with a slight lean, and both ends are BRIGHTER than the fill.
+ *     The previous brush ran top-left to bottom-right through a warm mid-stop
+ *     that is 11 L DARKER than the fill, which is why a wide card's top edge —
+ *     the one edge the eye reads as the light — measured +0.35 L of rim on the
+ *     render, i.e. no rim at all;
  *  4. **interior luminance fall** — the fill is lighter at the top of a panel
  *     than at the bottom.
  *
@@ -51,7 +56,7 @@ import com.grapsee.gsai.ui.theme.GsTheme
  * same "card" looked subtly different in ten places.
  */
 
-/** The five material roles of the shared contract; rationale in the note above. */
+/** The material roles of the shared contract; rationale in the note above. */
 enum class GsGlassRole(
     /** How opaque the fill is over the bloom. Thicker glass scatters more. */
     val fillAlpha: Float,
@@ -64,6 +69,33 @@ enum class GsGlassRole(
 ) {
     /** Content on the canvas — the everyday card, chip and row. */
     Card(fillAlpha = 1f, veilingAlpha = 0.05f, rimStrength = 0.55f, elevation = 10.dp),
+
+    /**
+     * The sheet's own glass, over the bloom. iOS calls this `.cardLight`; the
+     * two are the same measured material and must stay that way (mandate b10).
+     *
+     * Two cards on the sheet pin it down, because a fill is only observable
+     * against what it covers. Over the flat cream page the sheet's Suggestions
+     * card drops 242.05 to 239.06; over the bloom its Mind Guide card lifts
+     * 229.25 to 232.05. Two equations, two unknowns: a fill of 235.2 — the
+     * token's own value — laid down at **45% coverage**. Solving only the first
+     * card, which is all the old gate could see, is what let an 80% fill look
+     * correct: over flat cream 45% and 80% land 2 L apart.
+     *
+     * `fillAlpha` is the multiplier on `glassSurface`'s own 0xCC alpha, so
+     * 0.80 × 0.565 = the measured 0.45.
+     */
+    CardLight(fillAlpha = 0.565f, veilingAlpha = 0.05f, rimStrength = 1f, elevation = 10.dp),
+
+    /**
+     * The same 45% glass with a DIM edge — the sheet's rows on flat cream. This
+     * is not a fudge to make a second probe pass: the sheet's own Suggestions
+     * hairline stands +2.6 L off its glass where its Mind Guide stands +19.9 L.
+     * An edge glow is light escaping through a frosted rim, so a card with bright
+     * bloom behind it carries more of it than a card on flat cream, and the
+     * renderer cannot be told that — the role says it.
+     */
+    CardDim(fillAlpha = 0.565f, veilingAlpha = 0.05f, rimStrength = 0.20f, elevation = 10.dp),
 
     /** Popovers and cards lifted above other content. */
     Elevated(fillAlpha = 1f, veilingAlpha = 0.08f, rimStrength = 0.75f, elevation = 16.dp),
@@ -78,6 +110,13 @@ enum class GsGlassRole(
     /** Wells and inset fields — glass seen from the shadowed side. */
     Sunken(fillAlpha = 0.62f, veilingAlpha = 0f, rimStrength = 0.3f, elevation = 0.dp),
 }
+
+/**
+ * How far the unlit end of the rim falls below the lit end. The sheet's Mind
+ * Guide hairline is +17.2 L over its glass at the top and +4.6 L at the bottom,
+ * and 4.6 / 17.2 is this number.
+ */
+private const val RIM_FALL = 0.27f
 
 /**
  * The reference glass as a [Modifier]. Shadow, clip, then the four cues in
@@ -127,13 +166,21 @@ fun Modifier.gsGlass(
             } else {
                 null
             }
-            // 3. Directional rim — top-left catches the light, bottom-right falls.
+            // 3. The lit rim — vertical with a slight lean, because that is what
+            //    the sheet measures: +17.2 L along its whole top edge, +4.6 L
+            //    along the bottom, so BOTH ends are brighter than the fill. The
+            //    lean is a fraction of the HEIGHT rather than the width so a wide
+            //    flat card keeps a lit top edge across all of it, not only at its
+            //    left corner; the old brush ran corner to corner through
+            //    glassBorder, which is 11 L DARKER than the fill and so painted a
+            //    shadow line along the one edge that carries the material.
+            val lean = size.height * 0.075f
+            val lit = rim.alpha * role.rimStrength
             val rimBrush = Brush.linearGradient(
-                0f to rim.copy(alpha = rim.alpha * role.rimStrength),
-                0.42f to colors.glassBorder,
-                1f to colors.glassRimShadow,
-                start = Offset(size.width * 0.06f, 0f),
-                end = Offset(size.width * 0.94f, size.height),
+                0f to rim.copy(alpha = lit),
+                1f to rim.copy(alpha = lit * RIM_FALL),
+                start = Offset(size.width * 0.5f - lean, 0f),
+                end = Offset(size.width * 0.5f + lean, size.height),
             )
             // Stroked as a path rather than drawOutline so the brush overload is
             // not required, and built once per size change — never per frame.

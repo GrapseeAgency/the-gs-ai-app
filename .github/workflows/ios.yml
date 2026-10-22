@@ -22,6 +22,11 @@ on:
       - ".github/workflows/ios.yml"
       - "scripts/ios_static_gates.py"
       - "scripts/swift_structure_gate.py"
+      # The pixel gate below runs this script and blocks on its verdict, so a
+      # commit that changes the measurement has to run it. Without this line the
+      # gate could be made stricter or looser in total silence — the same defect
+      # `check_workflow_trigger_covers_scripts.py` exists for, one directory over.
+      - "scripts/check_home_render.py"
 
 permissions:
   contents: read
@@ -253,7 +258,7 @@ jobs:
           done
           python3 scripts/check_home_render.py \
             --reference assets/reference/home-reference.png \
-            --render "$DIR/home-ios-393x852.png" --label ios-393
+            --render "$DIR/home-ios-393x852.png" --probe-set ios --label ios-393
 
       - name: Upload the iOS Home renders
         uses: actions/upload-artifact@v4

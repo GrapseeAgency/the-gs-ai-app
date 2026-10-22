@@ -334,7 +334,9 @@ struct HomeDashboardView: View {
             }
             .padding(10)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .gsGlass(.cardLight, corner: Aero.Radius.homeCard)
+            // cardDim, not cardLight: this row sits on flat cream, where the
+            // sheet's own hairline measures +2.6 L instead of the bento's +19.9.
+            .gsGlass(.cardDim, corner: Aero.Radius.homeCard)
         }
         .buttonStyle(KineticPressStyle())
     }

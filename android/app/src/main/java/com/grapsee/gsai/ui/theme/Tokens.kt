@@ -40,14 +40,21 @@ data class GsColors(
 
     // ---- Glass (the reference's signature material) --------------------------
     // The reference light is a large soft source above and slightly LEFT, in
-    // every one of the source screens. That single fact is what makes these
-    // surfaces read as glass rather than plastic, so the rim is split into a
-    // lit end and an unlit end rather than being one uniform hairline: the
-    // top-left edge catches the light, the bottom-right edge falls away.
+    // every one of the source screens. Measured off the sheet's Mind Guide card,
+    // that makes the hairline +17.2 L over its own glass along the whole top
+    // edge and +4.6 L along the bottom — bright at both ends, brightest at the
+    // top. There is no dark end to the rim, which is why there is no token for
+    // one: the brush that had it painted a shadow line along the one edge the
+    // eye reads as the light.
+    // F5EDE6 is what the sheet's cards LOOK like; this is what its fill IS.
+    // Solved from the two cards the sheet shows the same glass over: it lifts the
+    // bloom 229.25 to 232.05 and drops the flat cream 242.05 to 239.06, which is
+    // one fill of 235.2 at 45% coverage and nothing else. Painting F5EDE6 at 80%
+    // gets the first card wrong by 5 L, because it double-counts the page the old
+    // value was sampled from.
     val glassSurface: Color,         // translucent card fill over the bloom
     val glassBorder: Color,          // warm hairline around glass (unlit reference)
-    val glassHighlight: Color,       // top-edge inner light / lit end of the rim
-    val glassRimShadow: Color,       // unlit end of the directional rim
+    val glassHighlight: Color,       // top-edge inner light / the lit rim itself
     // Glass casts light through itself, so its shadow is never neutral grey:
     // it carries the warm hue of the scene and is far wider than its offset.
     val glassShadowAmbient: Color,   // warm, wide, low-contrast contact shadow
@@ -132,10 +139,9 @@ fun lightGsColors(highContrast: Boolean = false, accentId: String = "apricot"): 
         dialogSurface = Color(0xFFFFFCFA),
         navSurface = Color(0xFFFFFBF8),
 
-        glassSurface = Color(0xCCF5EDE6),
+        glassSurface = Color(0xCCF2EAE3),   // #F2EAE3 at 80% — see the note above
         glassBorder = Color(0xCCF4DBD0),
         glassHighlight = Color(0xE6FFFFFF),
-        glassRimShadow = Color(0x30D9A08A),
         glassShadowAmbient = Color(0x14A65A38),
         glassShadowSpot = Color(0x1FA65A38),
 
@@ -211,7 +217,6 @@ fun darkGsColors(highContrast: Boolean = false, accentId: String = "apricot"): G
         glassSurface = Color(0xD92A1C19),
         glassBorder = Color(0xCC51362F),
         glassHighlight = Color(0x33FFE7DE),
-        glassRimShadow = Color(0x4A150B08),
         glassShadowAmbient = Color(0x590B0504),
         glassShadowSpot = Color(0x73150A07),
 
