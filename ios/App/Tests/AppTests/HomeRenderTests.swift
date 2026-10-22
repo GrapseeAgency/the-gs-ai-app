@@ -240,6 +240,10 @@ final class HomeRenderTests: XCTestCase {
         // so /tmp is the same directory on both sides of the boundary — the one
         // location the test can write to that the job can then read from
         // without plumbing an environment variable through Xcode.
+        // GS_RENDER_DIR is the developer's escape hatch, not a CI channel: run
+        // the harness from Xcode's scheme editor, where environment variables DO
+        // reach the process, and the PNGs land wherever you ask. No workflow sets
+        // it — the line above is why one could not.
         if let custom = ProcessInfo.processInfo.environment["GS_RENDER_DIR"], !custom.isEmpty {
             return URL(fileURLWithPath: custom, isDirectory: true)
         }

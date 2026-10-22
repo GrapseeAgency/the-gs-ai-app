@@ -522,6 +522,17 @@ private struct VideoCard: View {
                         .lineSpacing(-1)
                         .foregroundStyle(Aero.text)
                         .multilineTextAlignment(.leading)
+                        // Both lines, always. The card is a fixed 214pt and the
+                        // body copy below it already refuses to compress
+                        // (`.fixedSize`), so when the row ran out of room SwiftUI
+                        // took it out of whichever text would yield — and the
+                        // headline yielded: the capture rendered "Create
+                        // Stunning…" where the sheet and Android both read
+                        // "Create Stunning / Videos with AI". A headline that
+                        // truncates its own second line is the defect, not the
+                        // space; the body can wrap to three lines, this cannot.
+                        .fixedSize(horizontal: false, vertical: true)
+                        .layoutPriority(1)
                     Text("Turn your ideas into beautiful videos in minutes.")
                         .font(Aero.responsive(12, .medium, relativeTo: .footnote))
                         .foregroundStyle(Aero.textMuted)

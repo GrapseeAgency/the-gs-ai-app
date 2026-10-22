@@ -9,7 +9,16 @@ import androidx.compose.ui.unit.sp
 /**
  * REFERENCE TYPE RAMP.
  *
- * One family (Poppins) across the whole product, three voices inside it:
+ * One family (Poppins) across the whole product, three voices inside it.
+ *
+ * MEASURED, NOT ASSUMED, AND IT CUTS AGAINST THE MOCK: the sheet's greeting is
+ * set in a narrower grotesque with a DOUBLE-STOREY 'g' (SF Pro / Inter shape),
+ * not Poppins' single-storey one — at matched cap height "Good morning," spans
+ * 159pt in the mock, 193pt in Poppins and 171pt in SF Pro. So Poppins is the
+ * product's family by decision, and the mock's face is not it; the sizes and
+ * weights below are still taken from the mock's metrics, but nobody should
+ * claim the letterforms match. Poppins is also the only face bundled for both
+ * platforms, which is what makes it the parity choice (mandate b10).
  *  · display / headline — SemiBold, tight tracking, generous line height;
  *  · body — Regular, 15sp, 23sp leading (a reading measure, not a label);
  *  · label / metadata — Medium, tracked +0.2sp so small text stays crisp.

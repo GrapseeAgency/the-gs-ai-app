@@ -158,10 +158,35 @@ BENTO_IOS = {
     "rim_y": 0.4742,
 }
 
+# The quick-action pills. This probe exists because a previous pass reported the
+# pill's lit edge as missing (+6.9 L against the sheet's +14.7) from a window that
+# was not on the pill's edge at all — the same self-inflicted reading that made
+# the Suggestions rim check unable to fail. Measured properly, the sheet's New
+# Chat pill carries +14.7 L, Android's +15.5 and iOS's +19, so FloatingControl is
+# right; the probe is what stops that being re-litigated by eye.
+PILL_REF = {
+    "name": "pill",
+    "interior": [0.105, 0.3568, 0.045, 0.0085],   # rows 500..512, left of the label
+    "outside":  [0.004, 0.3568, 0.022, 0.0085],
+    "rim_y": 0.3540,                               # row 497, the bright hairline
+}
+PILL_ANDROID = {
+    "name": "pill",
+    "interior": [0.105, 0.3372, 0.045, 0.0110],   # rows 862..890
+    "outside":  [0.004, 0.3372, 0.022, 0.0110],
+    "rim_y": 0.3353,                               # row 857
+}
+PILL_IOS = {
+    "name": "pill",
+    "interior": [0.105, 0.3767, 0.045, 0.0110],   # rows 963..991
+    "outside":  [0.004, 0.3767, 0.022, 0.0110],
+    "rim_y": 0.3744,                               # row 957
+}
+
 PROBES = {
-    "reference": [SUGGESTIONS_REF, BENTO_REF],
-    "android": [SUGGESTIONS_ANDROID, BENTO_ANDROID],
-    "ios": [SUGGESTIONS_IOS, BENTO_IOS],
+    "reference": [SUGGESTIONS_REF, BENTO_REF, PILL_REF],
+    "android": [SUGGESTIONS_ANDROID, BENTO_ANDROID, PILL_ANDROID],
+    "ios": [SUGGESTIONS_IOS, BENTO_IOS, PILL_IOS],
 }
 
 # A1/A3 thresholds, each derived from measured data with the margin stated.
@@ -196,6 +221,9 @@ SPREAD_MAX = 5.0                  # real 0.21 / 2.36 | boundary-straddling 7.4..
 BANDS = {
     "suggestions": {"tint": (-5.49, -1.09), "rim": (-1.50, 8.00)},
     "bento":       {"lift": (1.00, 4.50), "rim": (15.00, 22.50)},
+    # The pill's fill is within 2 L of the page behind it, so its lift says
+    # nothing; its edge is the whole cue, and the sheet's is +14.7 L.
+    "pill":        {"rim": (10.00, 22.00)},
 }
 
 # A band per (probe, capture) where the same number cannot be read at all.
@@ -437,8 +465,8 @@ def main() -> int:
             print(f"  (if A3 failed, open {args.debug_out}: the red box must sit "
                   f"entirely on blank card glass)")
         return 1
-    print("\nOK: both cards are present, each moves its own ground as the sheet's "
-          "does, both probes are on clean glass, and both hairlines are lit")
+    print(f"\nOK: {len(got)} surfaces present, each moving its own ground as the "
+          f"sheet's does, all probes on clean glass, all hairlines lit")
     return 0
 
 

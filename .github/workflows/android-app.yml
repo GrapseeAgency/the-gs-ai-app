@@ -384,13 +384,24 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-            # Robolectric fetches its ~130 MB android-all jar into the local m2
-            # tree, which is NOT under ~/.gradle. Without this the render step
-            # re-downloads it on every run just to draw a screen that never
-            # changed.
-            ~/.m2/repository/org/robolectric
           key: gradle-${{ runner.os }}-${{ hashFiles('android/**/*.kts', 'android/gradle/libs.versions.toml') }}
           restore-keys: gradle-${{ runner.os }}-
+
+      # ITS OWN CACHE, WITH ITS OWN KEY. Robolectric's ~130 MB android-all jar
+      # lives in ~/.m2, not under ~/.gradle, so it has to be listed to be saved
+      # at all — but listing it inside the Gradle cache above does not work
+      # either: actions/cache commits one archive per key and never updates an
+      # existing one, so the first run that saved under this key WITHOUT the m2
+      # directory (any run that failed before the render step) poisoned it
+      # forever, and every later run restored a jar-less archive and skipped
+      # re-saving. Separate key, separate archive, and the jar can be cached by
+      # a run whose Gradle cache was already warm.
+      - name: Cache the Robolectric android-all jar
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository/org/robolectric
+          key: robolectric-${{ runner.os }}-${{ hashFiles('android/gradle/libs.versions.toml') }}
+          restore-keys: robolectric-${{ runner.os }}-
 
       - name: Compile the Kotlin
         working-directory: android
