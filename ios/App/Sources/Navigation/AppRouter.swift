@@ -90,7 +90,11 @@ struct RootView: View {
                     onOpenChats: { router.path.append(.chats) },
                     onOpenAgent: { router.path.append(.travelAgent) },
                     onOpenConversation: { id in router.path.append(.chat(id)) },
-                    onStartPrompt: { prompt in router.path.append(.chatPrefill(prompt)) }
+                    onStartPrompt: { prompt in router.path.append(.chatPrefill(prompt)) },
+                    // Both routes already existed; the Home controls that name
+                    // them just were not wired to them.
+                    onOpenVoice: { router.path.append(.voice) },
+                    onOpenSettings: { router.path.append(.settings) }
                 )
                 .aeroDestinations()
             }

@@ -385,6 +385,11 @@ enum Aero {
         static let sm: CGFloat = 10     // small controls: banners, skeletons
         static let md: CGFloat = 16     // medium controls: list rows, buttons
         static let card: CGFloat = 20   // cards, tiles
+        /// The sheet's own card radius: 25px of a 680px screen = 14.4pt, rounded
+        /// up to 16. Home authored against the render, not against `card`, so
+        /// the number is named rather than repeated as a literal at four call
+        /// sites — which is what let `Aero.Radius.card` drift from the page.
+        static let homeCard: CGFloat = 16
         static let sheet: CGFloat = 24  // sheets, dialogs, large surfaces
         static let input: CGFloat = 26  // composer / input bars
         static let chip: CGFloat = 999  // full pill: chips & status only

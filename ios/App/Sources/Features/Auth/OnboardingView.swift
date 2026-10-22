@@ -26,7 +26,7 @@ struct OnboardingView: View {
     // is not ordinary-user configuration. The answers that DO have a consumer
     // (Home's suggestions read the pinned capabilities; the greeting reads the
     // name) are committed by `commit()` on the way out.
-    @State private var responseStyle = "Balanced"
+    @State private var responseStyle = "Standard"
     @State private var personality = "Professional"
 
     // Capabilities (multi-select, >= 1 to continue)
@@ -197,7 +197,7 @@ struct OnboardingView: View {
                 AeroCard {
                     VStack(alignment: .leading, spacing: Aero.Spacing.s + 4) {
                         SectionHeader(title: "Response style")
-                        chipRow(["Concise", "Balanced", "Detailed"], selection: $responseStyle)
+                        chipRow(["Concise", "Standard", "Detailed"], selection: $responseStyle)
                     }
                 }
             }

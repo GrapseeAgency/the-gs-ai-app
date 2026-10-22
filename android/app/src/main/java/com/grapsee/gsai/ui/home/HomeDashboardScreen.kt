@@ -437,18 +437,21 @@ private fun Bento(
     onMindGuide: () -> Unit,
     onReflection: () -> Unit,
 ) {
-    // Reference: left card 338px of 680px screen = 55.6% of content width.
-    // Right column: Mind Guide 142px / (142+225) = 38.6% ≈ 37/63 split.
+    // Measured off the sheet's card rims: left card x 207..538 and right card
+    // 555..831 of a 680px screen, i.e. 54.5 / 45.5 with a 10dp gutter, and the
+    // row spans y 704..1075 = 214dp. The previous 55.6 / 12 / 224 came from a
+    // comment that divided 338 by 680 and called the result 55.6% — it is
+    // 49.7%, so the shipped number had no measurement behind it.
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(224.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+            .height(214.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        VideoCard(onVideo, Modifier.weight(55.6f).fillMaxSize())
+        VideoCard(onVideo, Modifier.weight(54.5f).fillMaxSize())
         Column(
-            modifier = Modifier.weight(44.4f).fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            modifier = Modifier.weight(45.5f).fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             MindGuideCard(onMindGuide, Modifier.fillMaxWidth().weight(0.375f))
             ReflectionCard(onReflection, Modifier.fillMaxWidth().weight(0.625f))

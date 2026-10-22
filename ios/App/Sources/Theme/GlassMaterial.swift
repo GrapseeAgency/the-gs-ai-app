@@ -24,15 +24,50 @@ import SwiftUI
  */
 enum GsGlassRole {
     case card
+    /// The reference sheet's own card glass, measured rather than eyeballed.
+    ///
+    /// `.card`'s fill is `Aero.surface` (luminance ~238) laid over
+    /// `.regularMaterial`, and the material floor drags the composite down to
+    /// ~235 — 7.1 L below the page. The sheet's card sits only 2.79 L below its
+    /// page, so on the Home reference `.card` reads visibly too dark. This role
+    /// is additive: every existing `.card` call site keeps its current look and
+    /// only the surfaces that were authored against the sheet opt in.
+    case cardLight
     case elevated
     case floatingControl
     case modal
     case sunken
 
+    /// The colour the fill is painted with. `.cardLight` uses a lighter warm
+    /// white because `Aero.surface` cannot reach the measured target however
+    /// its alpha is set — the material underneath is already darker than the
+    /// surface itself, so raising alpha moves the composite the wrong way.
+    var tintColor: Color {
+        switch self {
+        case .cardLight: return Color(red: 0.984, green: 0.961, blue: 0.941)
+        default:         return Aero.surface
+        }
+    }
+
+    /// Top / bottom of the interior luminance fall, per role.
+    var tintAlphaTop: Double {
+        switch self {
+        case .cardLight: return 0.62
+        default:         return fillAlpha * 0.55
+        }
+    }
+    var tintAlphaBottom: Double {
+        switch self {
+        case .cardLight: return 0.40
+        default:         return fillAlpha * 0.28
+        }
+    }
+
     /// How opaque the tinted fill sits over the material. Thicker glass scatters more.
     var fillAlpha: Double {
         switch self {
         case .card: return 1
+        case .cardLight: return 1
         case .elevated: return 1
         case .floatingControl: return 0.86
         case .modal: return 1
@@ -44,6 +79,7 @@ enum GsGlassRole {
     var veilingAlpha: Double {
         switch self {
         case .card: return 0.05
+        case .cardLight: return 0.05
         case .elevated: return 0.08
         case .floatingControl: return 0.06
         case .modal: return 0.12
@@ -55,6 +91,7 @@ enum GsGlassRole {
     var rimStrength: Double {
         switch self {
         case .card: return 0.55
+        case .cardLight: return 0.55
         case .elevated: return 0.75
         case .floatingControl: return 1.0
         case .modal: return 0.8
@@ -66,6 +103,7 @@ enum GsGlassRole {
     var elevation: CGFloat {
         switch self {
         case .card: return 10
+        case .cardLight: return 10
         case .elevated: return 16
         case .floatingControl: return 20
         case .modal: return 28
@@ -78,7 +116,7 @@ enum GsGlassRole {
     /// thickest, so a sheet reads as a slab over the transcript.
     var material: Material {
         switch self {
-        case .card, .elevated: return .regularMaterial
+        case .card, .cardLight, .elevated: return .regularMaterial
         case .floatingControl: return .thinMaterial
         case .modal: return .thickMaterial
         case .sunken: return .ultraThinMaterial
@@ -114,8 +152,8 @@ private struct GsGlassModifier: ViewModifier {
                     .fill(
                         LinearGradient(
                             colors: [
-                                Aero.surface.opacity(role.fillAlpha * 0.55),
-                                Aero.surface.opacity(role.fillAlpha * 0.28)
+                                role.tintColor.opacity(role.tintAlphaTop),
+                                role.tintColor.opacity(role.tintAlphaBottom)
                             ],
                             startPoint: .top,
                             endPoint: .bottom

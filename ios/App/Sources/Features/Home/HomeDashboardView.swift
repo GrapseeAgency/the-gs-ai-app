@@ -16,6 +16,13 @@ struct HomeDashboardView: View {
     /// Open a new chat with the prompt already written. The reference's cards
     /// are four different doors, not four copies of "blank chat".
     let onStartPrompt: (String) -> Void
+    /// The header sparkle opens voice mode, matching Android's `onOpenVoice`.
+    /// It used to open a blank chat, so a control labelled "Assistant" did the
+    /// same thing as the one labelled "New Chat".
+    let onOpenVoice: () -> Void
+    /// The dock gear opens Settings, matching Android's `GsRoutes.SETTINGS`.
+    /// It used to open the drawer, which the hamburger already does.
+    let onOpenSettings: () -> Void
     /// Frozen clock hour for the greeting. nil means "use the real clock".
     ///
     /// Only the render harness sets this. A golden image whose words change at
@@ -101,7 +108,7 @@ struct HomeDashboardView: View {
                     .foregroundStyle(Aero.textMuted)
             }
             Spacer()
-            GlassCircleButton(system: "sparkles", label: "Assistant", action: onNewChat)
+            GlassCircleButton(system: "sparkles", label: "Assistant", action: onOpenVoice)
             GlassCircleButton(system: "line.3.horizontal", label: "Open menu", action: onOpenDrawer)
         }
     }
@@ -158,8 +165,15 @@ struct HomeDashboardView: View {
     /// Markdown stripped to prose — the same rule the Android card uses, so a
     /// rich reply never leaks fences, pipes or separator rows into a preview.
     static func cleanPreview(_ raw: String, limit: Int = 150) -> String {
+        // Delete fenced code blocks outright before anything else. Android's
+        // twin strips the whole block with a dotall regex; replacing only the
+        // fence markers left every line of the code intact, so a code-heavy
+        // last message rendered as a raw code dump in the card — the exact
+        // "reads as garbage" case this function exists to prevent.
+        var text = raw.replacingOccurrences(of: "```[\\s\\S]*?```", with: " ",
+                                           options: .regularExpression)
         let punctuation = CharacterSet(charactersIn: "|-: ")
-        let kept = raw.components(separatedBy: .newlines).filter { line in
+        let kept = text.components(separatedBy: .newlines).filter { line in
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             guard !trimmed.isEmpty else { return false }
             return !trimmed.unicodeScalars.allSatisfy { punctuation.contains($0) }
@@ -168,6 +182,8 @@ struct HomeDashboardView: View {
         for token in ["```", "#", "*", "_", ">", "`", "|"] {
             text = text.replacingOccurrences(of: token, with: " ")
         }
+        // Markdown horizontal rules (`---`) are a separate case from fenced
+        // blocks and must survive as its own strip.
         text = text.replacingOccurrences(of: "-{3,}", with: " ", options: .regularExpression)
         text = text.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
         text = text.trimmingCharacters(in: .whitespaces)
@@ -250,19 +266,19 @@ struct HomeDashboardView: View {
         // currently shipped on BOTH platforms; they are within a point of the
         // measurement except the column split, which is corrected in Wave 3.
         GeometryReader { geo in
-            let leftWidth = (geo.size.width - 12) * 0.556
-            HStack(alignment: .top, spacing: 12) {
+            let leftWidth = (geo.size.width - 10) * 0.545
+            HStack(alignment: .top, spacing: 10) {
                 VideoCard(action: { onStartPrompt(HomeDispatch.createPrompt) })
                     .frame(width: leftWidth)
-                VStack(spacing: 12) {
+                VStack(spacing: 10) {
                     MindGuideCard(action: { onStartPrompt(HomeDispatch.mindGuidePrompt) })
-                        .frame(height: (geo.size.height - 12) * 0.375)
+                        .frame(height: (geo.size.height - 10) * 0.375)
                     ReflectionCard(action: { onStartPrompt(HomeDispatch.reflectionPrompt) })
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
         }
-        .frame(height: Aero.scaledLength(224, relativeTo: .body))
+        .frame(height: Aero.scaledLength(214, relativeTo: .body))
     }
 
     // MARK: Today's Used + suggestions
@@ -275,7 +291,7 @@ struct HomeDashboardView: View {
             Spacer()
             Button(action: onOpenChats) {
                 HStack(spacing: 4) {
-                    Text("See All").font(Aero.label())
+                    Text("See All").font(Aero.responsive(14, .semibold, relativeTo: .callout))
                     Image(systemName: "arrow.right")
                         .font(Aero.responsive(11, .semibold, relativeTo: .caption))
                 }
@@ -305,17 +321,17 @@ struct HomeDashboardView: View {
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Suggestions")
-                        .font(Aero.responsive(15, .medium, relativeTo: .body))
+                        .font(Aero.responsive(14, .medium, relativeTo: .body))
                         .foregroundStyle(Aero.text)
                     Text("Try suggested questions first.")
-                        .font(Aero.responsive(12.5, .regular, relativeTo: .footnote))
+                        .font(Aero.responsive(12, .regular, relativeTo: .footnote))
                         .foregroundStyle(Aero.textMuted)
                 }
                 Spacer()
             }
             .padding(10)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .gsGlass(.card, corner: 16)
+            .gsGlass(.cardLight, corner: Aero.Radius.homeCard)
         }
         .buttonStyle(KineticPressStyle())
     }
@@ -348,7 +364,7 @@ struct HomeDashboardView: View {
                 .background(Capsule().fill(Color.white.opacity(0.55)))
             }
             .buttonStyle(KineticPressStyle())
-            DockIcon(system: "gearshape.fill", label: "Settings", action: onOpenDrawer)
+            DockIcon(system: "gearshape.fill", label: "Settings", action: onOpenSettings)
         }
         .padding(14)
         .gsCapsuleGlass(.floatingControl)
@@ -443,7 +459,8 @@ private struct VideoCard: View {
                         .foregroundStyle(Aero.text)
                         .multilineTextAlignment(.leading)
                     Text("Turn your ideas into beautiful videos in minutes.")
-                        .font(Aero.caption()).foregroundStyle(Aero.textMuted)
+                        .font(Aero.responsive(12, .regular, relativeTo: .footnote))
+                        .foregroundStyle(Aero.textMuted)
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer()
                     ZStack {
@@ -455,8 +472,8 @@ private struct VideoCard: View {
                 }
                 .padding(14)
             }
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .clipShape(RoundedRectangle(cornerRadius: Aero.Radius.homeCard, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: Aero.Radius.homeCard, style: .continuous)
                 .stroke(Color.white.opacity(0.35), lineWidth: 1))
             .aeroCardShadow()
         }
@@ -506,7 +523,7 @@ private struct MindGuideCard: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-            .gsGlass(.card, corner: 16)
+            .gsGlass(.cardLight, corner: Aero.Radius.homeCard)
         }
         .buttonStyle(KineticPressStyle())
     }
@@ -563,8 +580,8 @@ private struct ReflectionCard: View {
             // gsGlass only backgrounds and overlays — it never clips. Without
             // this the lotus' +4/+8 offset drew square corners outside the
             // rounded card, over the "Today's Used" heading below.
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .gsGlass(.card, corner: 16)
+            .clipShape(RoundedRectangle(cornerRadius: Aero.Radius.homeCard, style: .continuous))
+            .gsGlass(.cardLight, corner: Aero.Radius.homeCard)
         }
         .buttonStyle(KineticPressStyle())
     }

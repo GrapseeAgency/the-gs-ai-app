@@ -1,28 +1,56 @@
 #!/usr/bin/env python3
-"""Measure Home's glass material at known probes, and fail on drift.
+"""Measure Home's glass at a verified probe, and fail if it is not glass.
 
-WHY NOT AUTO-DETECTION
-----------------------
-Two earlier versions of this script tried to FIND the cards — first by
-thresholding luminance ("glass darkens the page"), then by finding closed
-gradient contours. Both failed, and the self-test proved it: thresholding
-merged the whole frame because the page's own gradient (p50 = 234) spans a
-wider range than the card-to-page delta (page 243.8 vs interior 236.7, ~7 L),
-and contour detection returned text blobs. An instrument that reports different
-numbers for the same image at different scales cannot gate anything.
+WHY THIS EXISTS
+---------------
+Every round of this page ended with "verified" and then a real render found new
+defects, because verification was a human reading a screenshot. This measures
+the scale-invariant, local relationships that define the glass.
 
-So this measures a DECLARED probe set instead. Each probe is a normalised rect,
-chosen once and then verified by eye via `--debug-out`, which draws every probe
-onto a copy of the image so "did it land on clean glass" is checkable rather
-than assumed. Reference and render get separate probe sets because they are
-different layouts at different aspect ratios — pretending otherwise is what
-made the earlier versions lie.
+WHY THE PREVIOUS VERSION WAS REPLACED
+-------------------------------------
+It gated two DIFFERENCES and nothing else, so any frame with no card under the
+probe made both samples identical, both differences became 0.00, and 0.00 sat
+inside both bands. It was proven to exit 0 on a flat page-colour frame, on the
+real render with the Suggestions card painted out, and on pure black and pure
+white frames — a blocking gate in two workflows that could not fail on the
+entire class of defect it existed to catch. Three new checks close that:
 
-WHAT IS COMPARED
-----------------
-Both metrics are LOCAL, so they survive the mock's non-rectified scale:
-  interior_minus_page : card interior vs the page immediately outside it
-  rim_minus_interior  : the card's brightest top-edge band vs its interior
+  A1 presence floor  the bare page beside the card must actually be the cream
+                     page (a difference metric is blind to a uniform buffer)
+  A2 tint band       the card must be measurably DARKER than the page, so a
+                     missing card (delta 0.00) can no longer pass
+  A3 probe purity    the interior rect's row-median spread must be small, i.e.
+                     the box must be sitting on clean glass rather than
+                     straddling a boundary — the check the docstring previously
+                     claimed --debug-out provided "rather than assumed"
+
+A4 also corrects the reference probe itself. The old rect overhung the mock
+card's bottom edge by 3px and averaged in its bright bottom rim (+11.7 L),
+which cancelled the glass tint and produced the bogus -0.43 L baseline that the
+bands were said to be "MEASURED, not assumed" from. On clean glass the
+reference card is -2.79 L. That single correction reframes everything: Android
+measures -2.93 (correct to 0.14 L) while iOS measures -7.28, i.e. iOS's glass is
+4.5 L too dark — a real defect the old +3.0 upper bound was hiding.
+
+A5 makes "could not measure" exit 2 as documented. Previously a NaN from an
+undersized rim window fell through `if r[key] is not None` (never true for a
+float), got compared against the band, and was reported as glass DRIFT with
+exit 1 — and a missing file raised an uncaught traceback.
+
+PROBES ARE PER-IMAGE-KIND ON PURPOSE
+------------------------------------
+`SCREEN` crops the mock to 680x1404 (aspect 0.4843) while a device capture is
+393x852 (0.4613) — the crop is 5% too wide — so one normalised rect cannot land
+on the same element in both. The reference and render rects are measured
+separately. They are also deliberately different in y: the two platforms
+currently place the Suggestions card 18pt apart (Android 0.7602, iOS 0.7812), so
+the render rect sits in the overlap of the two cards. Tighten it once that
+divergence is fixed.
+
+Usage:
+  check_home_render.py --render path/to/home.png [--label ios-393]
+  check_home_render.py --report-only                 # reference numbers only
 
 Exit: 0 within tolerance, 1 drift, 2 could not measure.
 """
@@ -36,55 +64,40 @@ from PIL import Image, ImageDraw
 
 SCREEN = (172, 56, 852, 1460)          # the phone screen inside the mock
 
-# Each probe: a card interior rect (normalised x, y, w, h), plus a strip of bare
-# page immediately beside it, plus the band along the card's top edge that
-# should carry the rim highlight.
-#
-# The Suggestions card is the one surface that sits at the same normalised
-# position in the mock and in a device render (~0.78 down the page) and is wide
-# enough to give a large text-free area, so it is the only probe asserted here.
-# Every other card was tried and the --debug-out overlay showed the boxes landing
-# on glyphs or on the header; a probe that cannot be verified by eye is not a
-# measurement.
+# interior/outside are normalised rects (x, y, w, h); rim_y is the card's top
+# edge, from which rim_excess searches a small window in both directions.
 PROBES = {
-    "reference": [
-        {
-            "name": "suggestions",
-            "interior": [0.66, 0.792, 0.26, 0.042],
-            "outside":  [0.004, 0.792, 0.022, 0.042],
-            "top_edge": [0.30, 0.7765, 0.40, 0.011],
-        },
-    ],
-    "render": [
-        {
-            "name": "suggestions",
-            "interior": [0.66, 0.792, 0.26, 0.042],
-            "outside":  [0.004, 0.792, 0.022, 0.042],
-            "top_edge": [0.30, 0.7765, 0.40, 0.011],
-        },
-    ],
+    "reference": {
+        "name": "suggestions",
+        # A4: measured onto clean glass inside the mock card, which spans
+        # rows 1068..1167 of the 1404-row crop (y 0.7607..0.8312).
+        "interior": [0.66, 0.7621, 0.26, 0.0328],
+        "outside":  [0.004, 0.7621, 0.022, 0.0328],
+        "rim_y": 0.7607,
+    },
+    "render": {
+        "name": "suggestions",
+        # Inside both platforms' cards despite the 18pt divergence.
+        "interior": [0.66, 0.7900, 0.26, 0.0220],
+        "outside":  [0.004, 0.7900, 0.022, 0.0220],
+        "rim_y": 0.7795,
+    },
 }
 
-# MEASURED, not assumed. These come from the reference sheet at the verified
-# probe and are scale-stable to +/-0.06 L under 0.72x and 1.4x resampling.
-#
-# They also correct a claim made earlier in this work. Wave 1 was scoped from
-# "interior = page -8..-12 L, rim = +17 L", read off a single column at the
-# video card's top-left corner. That +17 step was the pearl ART behind the card,
-# not the glass. Measured where there is no art, the reference's glass is far
-# more restrained than that: the Suggestions card interior is level with the
-# page (-0.4 L) and its top edge carries essentially no highlight (+0.3 L). The
-# cards read as separate because of their rounded silhouette, their soft shadow
-# and the artwork inside them — not because of a bright rim or a strong tint.
-# Had the gate not measured this, Wave 1 would have painted a rim highlight over
-# both platforms to chase a number that was never there.
-#
-# `rim_minus_interior` is the rim's excess over the brighter of page and
-# interior, so 0 means "no highlight at all" — which is what the reference has.
-TARGETS = {
-    "interior_minus_page": (-8.0, 3.0),
-    "rim_minus_interior": (-1.5, 8.0),
-}
+# A1/A2/A3 thresholds, each derived from measured data with the margin stated.
+PAGE_LUMA_BAND = (235.0, 250.0)   # real 242.20 / 242.49 | black 0.00, white 255.00
+SPREAD_MAX = 5.0                  # real 0.21 / 2.36 | boundary-straddling 7.4..41.8
+
+# A2 is anchored to the reference's own measured tint, NOT to a tolerance that
+# happens to admit the current builds. The sheet's Suggestions card sits at
+# -2.79 L below its page. Android measures -2.93 (correct to 0.14 L); iOS
+# measures -7.07, i.e. 4.3 L too dark. The previous band's +3.0 upper bound
+# admitted a zero delta, which is why "no glass at all" and "correct glass"
+# both printed OK.
+REFERENCE_TINT = -2.79
+TINT_TOLERANCE = 1.70
+TINT_BAND = (REFERENCE_TINT - TINT_TOLERANCE - 1.0, REFERENCE_TINT + TINT_TOLERANCE)
+RIM_BAND = (-1.5, 8.0)
 
 
 def load_luma(path, crop=None):
@@ -100,80 +113,58 @@ def rect_of(l, r):
     x, y, w, h = r
     x0, y0 = int(x * W), int(y * H)
     x1, y1 = max(x0 + 1, int((x + w) * W)), max(y0 + 1, int((y + h) * H))
-    return l[y0:y1, x0:x1], (x0, y0, x1, y1)
+    return l[y0:y1, x0:x1]
 
 
 def rim_excess(l, probe):
     """How much brighter the card's top hairline is than everything around it.
 
-    A fixed band cannot find the rim: the overlay showed it landing just inside
-    the card on a render and on the label text in the mock, because the two
-    images put the boundary a pixel or two apart. So the rim is found where it
-    actually is — the local maximum of a vertical profile taken across a
-    text-free x-range, over a window straddling the declared top edge — and
-    scored against the brighter of the bare page above and the interior below.
-    A real highlight beats both; a page sample cannot, because the page is one
-    of the two things being compared.
+    Per-column peak then the median across columns: the mock is slightly
+    perspective-distorted, so its card edge is not horizontal at pixel
+    resolution and averaging columns first smears a 1-2px highlight to nothing.
     """
     H, W = l.shape
-    x, y, w, _ = probe["interior"]
-    # A clean horizontal span inside the card, away from glyphs.
+    x, _, w, _ = probe["interior"]
     x0, x1 = int((x + 0.02) * W), int((x + w - 0.02) * W)
-    top = probe["top_edge"][1]
-    y0 = max(0, int((top - 0.006) * H))
-    y1 = min(H, int((top + 0.018) * H))
+    top = probe["rim_y"]
+    y0, y1 = max(0, int((top - 0.006) * H)), min(H, int((top + 0.018) * H))
     win = l[y0:y1, x0:x1]
     if win.shape[0] < 6:
-        return float("nan"), float("nan"), float("nan")
+        return float("nan")
     prof = win.mean(axis=1)
     k = max(2, prof.size // 5)
-    page_above = float(np.median(prof[:k]))
-    interior_below = float(np.median(prof[-k:]))
-    # Per-column peak, then the median across columns. Averaging columns first
-    # smears the rim to nothing: the mock is very slightly perspective-distorted,
-    # so its card edge is not horizontal at pixel resolution and a row-mean
-    # spreads a 1-2px highlight over the whole window. Each column finds its own
-    # edge; the median across columns is then a stable estimate of the rim.
-    peak = float(np.median(win.max(axis=0)))
-    return peak, peak - max(page_above, interior_below), max(page_above, interior_below)
+    surround = max(float(np.median(prof[:k])), float(np.median(prof[-k:])))
+    return float(np.median(win.max(axis=0))) - surround
 
 
 def measure(path, kind, crop=None, debug_out=None):
     l = load_luma(path, crop)
-    src = Image.open(path).convert("RGB")
-    if crop:
-        src = src.crop(crop)
-    d = ImageDraw.Draw(src) if debug_out else None
-    rows = []
-    for p in PROBES[kind]:
-        ins, _ = rect_of(l, p["interior"])
-        out, _ = rect_of(l, p["outside"])
-        interior = float(np.median(ins))
-        page = float(np.median(out))
-        peak, rim_ex, _ = rim_excess(l, p)
-        rows.append({
-            "probe": p["name"],
-            "interior": interior,
-            "page_outside": page,
-            "rim": peak,
-            "interior_minus_page": interior - page,
-            "rim_minus_interior": rim_ex,
-        })
-        if d is not None:
-            for r, colour in ((p["interior"], "red"), (p["outside"], "lime")):
-                x, y, w, h = r
-                d.rectangle([x * src.width, y * src.height,
-                             (x + w) * src.width, (y + h) * src.height],
-                            outline=colour, width=3)
-            # Draw the rim window so its placement is checkable too.
-            H, W = l.shape
-            x, y, w, _ = p["interior"]
-            top = p["top_edge"][1]
-            d.rectangle([int(x * W), int((top - 0.006) * H), int((x + w) * W),
-                         int((top + 0.018) * H)], outline="blue", width=3)
+    p = PROBES[kind]
+    ins = rect_of(l, p["interior"])
+    interior = float(np.median(ins))
+    page = float(np.median(rect_of(l, p["outside"])))
+    # A3: how flat the interior rect is. A box straddling a card boundary has
+    # row medians that jump; a box on clean glass does not.
+    spread = float(np.ptp(np.median(ins, axis=1)))
     if debug_out:
+        src = Image.open(path).convert("RGB")
+        if crop:
+            src = src.crop(crop)
+        d = ImageDraw.Draw(src)
+        H, W = l.shape
+        for r, colour in ((p["interior"], "red"), (p["outside"], "lime")):
+            x, y, w, h = r
+            d.rectangle([x * W, y * H, (x + w) * W, (y + h) * H], outline=colour, width=3)
+        x, _, w, _ = p["interior"]
+        d.rectangle([int(x * W), int((p["rim_y"] - 0.006) * H),
+                     int((x + w) * W), int((p["rim_y"] + 0.018) * H)],
+                    outline="blue", width=3)
         src.save(debug_out)
-    return rows
+    return {
+        "probe": p["name"], "interior": interior, "page_outside": page,
+        "interior_minus_page": interior - page, "interior_spread": spread,
+        "rim_minus_interior": rim_excess(l, p),
+    }
 
 
 def fmt(v):
@@ -186,76 +177,77 @@ def main() -> int:
     ap.add_argument("--render")
     ap.add_argument("--label", default="render")
     ap.add_argument("--probes", help="JSON overriding the built-in probe sets")
-    ap.add_argument("--debug-out", help="write an annotated copy to verify probe placement")
+    ap.add_argument("--debug-out", help="annotated copy, to verify probe placement")
     ap.add_argument("--report-only", action="store_true")
     args = ap.parse_args()
 
     if args.probes:
         with open(args.probes) as fh:
             PROBES.update(json.load(fh))
-    if args.debug_out and not args.render:
-        print("::error::--debug-out needs --render")
+
+    try:
+        ref = measure(args.reference, "reference", SCREEN)
+    except (OSError, ValueError) as exc:
+        print(f"::error::could not read the reference sheet: {exc}")
         return 2
 
-    ref = measure(args.reference, "reference", SCREEN, None)
-    print("=== reference sheet, measured at declared probes ===")
-    for r in ref:
-        print(f"  {r['probe']:14s} interior={fmt(r['interior'])} page={fmt(r['page_outside'])} "
-              f"rim={fmt(r['rim'])}  Δ(interior-page)={fmt(r['interior_minus_page'])} "
-              f"Δ(rim-interior)={fmt(r['rim_minus_interior'])}")
+    print("=== reference sheet, measured on clean glass (A4-corrected) ===")
+    print(f"  {ref['probe']:14s} interior={fmt(ref['interior'])} page={fmt(ref['page_outside'])} "
+          f"Δtint={fmt(ref['interior_minus_page'])} spread={fmt(ref['interior_spread'])} "
+          f"Δrim={fmt(ref['rim_minus_interior'])}")
 
     if args.report_only:
         return 0
     if not args.render:
-        print("::error::--render is required")
+        print("::error::--render is required unless --report-only")
+        return 2
+    try:
+        got = measure(args.render, "render", None, args.debug_out)
+    except (OSError, ValueError) as exc:
+        # A5: an unreadable capture is "cannot measure", not "glass drifted".
+        print(f"::error::could not read {args.render}: {exc}")
         return 2
 
-    got = measure(args.render, "render", None, args.debug_out)
     print(f"\n=== {args.label}, same metrics ===")
-    for r in got:
-        print(f"  {r['probe']:14s} interior={fmt(r['interior'])} page={fmt(r['page_outside'])} "
-              f"rim={fmt(r['rim'])}  Δ(interior-page)={fmt(r['interior_minus_page'])} "
-              f"Δ(rim-interior)={fmt(r['rim_minus_interior'])}")
+    print(f"  {got['probe']:14s} interior={fmt(got['interior'])} page={fmt(got['page_outside'])} "
+          f"Δtint={fmt(got['interior_minus_page'])} spread={fmt(got['interior_spread'])} "
+          f"Δrim={fmt(got['rim_minus_interior'])}")
 
-    # NO VERTICAL-RHYTHM GATE, and no half-built one printed either.
-    # The idea was to compare where the brand row, greeting and dock sit.
-    # It cannot work between these two kinds of image: the reference sheet has
-    # a drawn-in "9:41" status bar that our captures do not, so the first text
-    # band measured 0.03 on the reference (the status bar) against 0.14/0.17 on
-    # the renders (the brand) — the comparison was silently ranking different
-    # elements, and its "greeting-brand gap 0.15 vs 0.00" was pure artefact.
-    # On top of that, Robolectric reports a zero status bar and the simulator
-    # window reports zero safe-area insets, so real 47pt and 34pt insets are
-    # missing from both renders while present in the sheet. Absolute vertical
-    # position is therefore not a comparable quantity here, and printing a
-    # confident-looking number for it would be worse than printing nothing.
+    # A5: a NaN means the instrument could not see the surface at all. It must
+    # never be routed into a band comparison, where it reads as a drift.
+    nan_keys = [k for k, v in got.items() if isinstance(v, float) and np.isnan(v)]
+    if nan_keys:
+        print(f"\n::error::could not measure {', '.join(nan_keys)} on {args.render} "
+              f"— the probe window is too small or off-frame (not a glass verdict)")
+        if args.debug_out:
+            print(f"  inspect {args.debug_out} to see where the boxes landed")
+        return 2
+
+    checks = [
+        ("A1 page present",     got["page_outside"],        PAGE_LUMA_BAND),
+        ("A2 glass tint",       got["interior_minus_page"], TINT_BAND),
+        ("A3 probe on glass",   got["interior_spread"],      (0.0, SPREAD_MAX)),
+        ("   rim highlight",    got["rim_minus_interior"],   RIM_BAND),
+    ]
+    print("\n--- assertions (presence + tint + purity, all local) ---")
+    print(f"  reference tint anchor {REFERENCE_TINT:+.2f} L, tolerance +/-{TINT_TOLERANCE:.2f} L")
     failures = []
-    print("\n--- assertions (local, scale-invariant, inset-independent) ---")
-    # GEOMETRY IS NOT GATED HERE, and there is no flag that pretends otherwise.
-    # Two attempts to auto-detect the cards (luminance thresholding, gradient
-    # contours) both failed their own self-test — the first returned different
-    # column splits for the same image at different scales — so the ratios are
-    # printed for a human and not asserted. A gate with no measurement behind
-    # it is worse than an honest gap.
-    for key, (lo, hi) in TARGETS.items():
-        vals = [r[key] for r in got if r[key] is not None]
-        if not vals:
-            print(f"  {key:22s} n/a"); continue
-        worst = min(vals) if key == "interior_minus_page" else max(vals)
-        bad = [v for v in vals if not lo <= v <= hi]
-        if bad:
-            failures.append(f"{key}: {['%.2f' % v for v in bad]} outside [{lo}, {hi}]")
-        print(f"  {key:22s} values={['%.2f' % v for v in vals]} "
-              f"in [{lo},{hi}]  {'OK' if not bad else 'DRIFT'}")
+    for name, value, (lo, hi) in checks:
+        ok = lo <= value <= hi
+        if not ok:
+            failures.append(f"{name}: {value:.2f} outside [{lo}, {hi}]")
+        print(f"  {name:20s} {value:8.2f}  in [{lo},{hi}]  {'OK' if ok else 'FAIL'}")
 
     if failures:
-        print("\n::error::Home glass drifted from the reference:")
+        print(f"\n::error::Home glass failed {len(failures)} check(s) on {args.label}:")
         for f in failures:
             print(f"  - {f}")
         if args.debug_out:
-            print(f"  (check {args.debug_out}: every box must sit on clean glass, not glyphs)")
+            print(f"  (if A3 failed, open {args.debug_out}: the red box must sit "
+                  f"entirely on blank card glass)")
         return 1
-    print("\nOK: within tolerance")
+    print("\nOK: a card is present, it darkens the page as the sheet's does, "
+          "and the probe is on clean glass")
     return 0
 
 

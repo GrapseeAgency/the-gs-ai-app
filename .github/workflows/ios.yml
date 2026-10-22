@@ -199,6 +199,11 @@ jobs:
       - name: Test (XCTest unit tests on iOS simulator)
         run: |
           set -o pipefail
+          # HomeRenderTests writes to /tmp/gs-home-renders because a step-level
+          # env var never reaches the simulator-launched host. Clear it first:
+          # otherwise a capture left behind by an earlier run would satisfy the
+          # probe below even if this run's harness produced nothing at all.
+          rm -rf /tmp/gs-home-renders
           RESULT_BUNDLE="ios/build/GSApp-tests-$(date +%Y%m%dT%H%M%S).xcresult"
           rm -rf "$RESULT_BUNDLE"
           xcodebuild test \
@@ -216,7 +221,13 @@ jobs:
           python-version: "3.11"
 
       - name: Install render-probe dependencies
-        run: python3 -m pip install --quiet --disable-pip-version-check numpy pillow
+        run: |
+          set -euo pipefail
+          # Pinned. This step feeds the numerics behind a blocking gate
+          # (np.median over a probe window), so an unpinned numpy or Pillow
+          # release could move a measured value and flip both platforms' verdict
+          # with no change on our side.
+          python3 -m pip install --quiet --disable-pip-version-check "numpy==2.1.3" "pillow==11.0.0"
 
       - name: Measure the iOS render against the reference
         run: |

@@ -32,6 +32,35 @@ import UIKit
 @MainActor
 final class HomeRenderTests: XCTestCase {
 
+    /// The identity the sheet greets. Restored after the run — see `tearDown`.
+    private static let fixtureName = "Arafat"
+
+    private var priorDisplayName = ""
+    private var priorFontScale: CGFloat = 1
+    private var windows: [UIWindow] = []
+
+    override func setUp() async throws {
+        // Snapshot before mutating. This test writes a persisted display name
+        // and a process-global font scale; without restoring them the next test
+        // class — and a developer's simulator — inherits "Arafat" and a pinned
+        // 1.0 scale that disagrees with whatever SettingsStore persisted.
+        priorDisplayName = AccountStore.shared.displayName
+        priorFontScale = GSAccessibilityFlags.shared.fontScale
+    }
+
+    override func tearDown() async throws {
+        AccountStore.shared.setDisplayName(priorDisplayName)
+        GSAccessibilityFlags.shared.fontScale = priorFontScale
+        // Release every key window this test made visible, or they stay in the
+        // process holding live @ObservedObject graphs that react to later
+        // store writes.
+        for window in windows {
+            window.rootViewController = nil
+            window.isHidden = true
+        }
+        windows.removeAll()
+    }
+
     /// Point sizes matching Android's HomeScreenshotTest widths.
     private static let targets: [(width: CGFloat, height: CGFloat, name: String)] = [
         (393, 852, "393x852"),
@@ -44,7 +73,8 @@ final class HomeRenderTests: XCTestCase {
     func testHomeRendersAtEveryWidth() async throws {
         // The reference greets a person; pin the identity so the hero renders
         // the same words the sheet shows instead of the "there" fallback.
-        AccountStore.shared.setDisplayName("Arafat")
+        // `tearDown` puts back whatever was there before.
+        AccountStore.shared.setDisplayName(Self.fixtureName)
         // Determinism: the greeting follows the wall clock and every type role
         // follows the Settings font-scale multiplier, so a capture taken at
         // 14:00 with the slider at 1.2 is not the same image as one taken at
@@ -52,12 +82,21 @@ final class HomeRenderTests: XCTestCase {
         GSAccessibilityFlags.shared.fontScale = 1.0
         let hour = 9
 
+        // The resume card appears above the greeting and pushes everything
+        // below it down. The gate's probe rects assume it is absent, so a
+        // capture taken after some other test seeded the store would be
+        // silently mis-registered. Say so instead of shipping a shifted frame.
+        XCTAssertTrue(ConversationStore.shared.activeConversations.isEmpty,
+                      "ConversationStore must be empty for the probe rects to land "
+                      + "on the elements they were measured against")
+
         let dir = Self.outputDirectory()
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
 
         for target in Self.targets {
             let size = CGSize(width: target.width, height: target.height)
-            guard let image = try await Self.renderHome(size: size, greetingHour: hour) else {
+            guard let image = try await Self.renderHome(size: size, greetingHour: hour,
+                                                        keeping: &windows) else {
                 XCTFail("drawHierarchy reported failure at \(target.name) — nothing was composited")
                 continue
             }
@@ -92,7 +131,8 @@ final class HomeRenderTests: XCTestCase {
     /// show every glass surface as empty and look perfectly fine while proving
     /// nothing. Drawing the live window goes through the same compositing path
     /// the device uses.
-    private static func renderHome(size: CGSize, greetingHour: Int) async throws -> UIImage? {
+    private static func renderHome(size: CGSize, greetingHour: Int,
+                                   keeping windows: inout [UIWindow]) async throws -> UIImage? {
         let view = HomeDashboardView(
             onNewChat: {},
             onOpenDrawer: {},
@@ -100,6 +140,8 @@ final class HomeRenderTests: XCTestCase {
             onOpenAgent: {},
             onOpenConversation: { _ in },
             onStartPrompt: { _ in },
+            onOpenVoice: {},
+            onOpenSettings: {},
             greetingHour: greetingHour
         )
         .frame(width: size.width, height: size.height)
@@ -112,6 +154,9 @@ final class HomeRenderTests: XCTestCase {
         window.rootViewController = host
         window.layoutIfNeeded()
         window.makeKeyAndVisible()
+        // Handed back so tearDown can dismantle it; a key window left visible
+        // keeps its SwiftUI graph alive and subscribed for the rest of the run.
+        windows.append(window)
 
         // SwiftUI lays out and the render server composites asynchronously;
         // without settling frames the capture can land before the glass does.
