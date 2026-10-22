@@ -841,7 +841,7 @@ private fun hasTimedRows(obj: JsonObject): Boolean {
         val time = (row["time"] ?: row["start"] ?: row["from"] ?: row["date"] ?: row["slot"]) as? JsonPrimitive
         val text = (row["text"] ?: row["label"] ?: row["title"]
             ?: row["activity"] ?: row["detail"] ?: row["task"]) as? JsonPrimitive
-        !time?.contentOrNull.isNullOrBlank() && !text?.contentOrNull.isNullOrBlank()
+        !(time?.contentOrNull.isNullOrBlank()) && !(text?.contentOrNull.isNullOrBlank())
     }
 }
 
