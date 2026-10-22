@@ -177,6 +177,16 @@ final class HomeRenderTests: XCTestCase {
         let format = UIGraphicsImageRendererFormat()
         format.scale = scale
         format.opaque = true
+        // Capture in sRGB, because that is the space everything else in this
+        // comparison is in. The default renderer follows the simulator's screen,
+        // which is Display P3, and `pngData()` then writes an iCCP/cICP-tagged
+        // P3 file — while Android's screenshot PNG and the reference sheet are
+        // both untagged sRGB. PIL does no colour management, so the gate read
+        // P3-encoded numbers with sRGB weights: neutrals were identical (the
+        // page strip agreed to 0.15 L) and saturated bloom came in +2.2 L bright,
+        // which is exactly the error that put the bento glass 0.45 L outside its
+        // band. Pinning the range makes the three files the same kind of file.
+        format.preferredRange = .sRGB
         let renderer = UIGraphicsImageRenderer(size: size, format: format)
         var drew = false
         let image = renderer.image { _ in
@@ -210,7 +220,9 @@ final class HomeRenderTests: XCTestCase {
         guard let cg = image.cgImage else { throw RenderError.noImage }
         let w = cg.width, h = cg.height
         var buf = [UInt8](repeating: 0, count: w * h * 4)
-        let space = CGColorSpaceCreateDeviceRGB()
+        // DeviceRGB is the screen's space, which on a P3 simulator is not the
+        // sRGB the weights below assume. Name the space the arithmetic is for.
+        let space = CGColorSpaceCreateWithName(kCGColorSpaceSRGB)
         guard let ctx = CGContext(data: &buf, width: w, height: h, bitsPerComponent: 8,
                                   bytesPerRow: w * 4, space: space,
                                   bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
