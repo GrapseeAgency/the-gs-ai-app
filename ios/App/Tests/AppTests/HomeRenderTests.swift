@@ -177,23 +177,38 @@ final class HomeRenderTests: XCTestCase {
         let format = UIGraphicsImageRendererFormat()
         format.scale = scale
         format.opaque = true
-        // Capture in sRGB, because that is the space everything else in this
-        // comparison is in. The default renderer follows the simulator's screen,
-        // which is Display P3, and `pngData()` then writes an iCCP/cICP-tagged
-        // P3 file — while Android's screenshot PNG and the reference sheet are
-        // both untagged sRGB. PIL does no colour management, so the gate read
-        // P3-encoded numbers with sRGB weights: neutrals were identical (the
-        // page strip agreed to 0.15 L) and saturated bloom came in +2.2 L bright,
-        // which is exactly the error that put the bento glass 0.45 L outside its
-        // band. Pinning the range makes the three files the same kind of file.
-        format.preferredRange = .sRGB
         let renderer = UIGraphicsImageRenderer(size: size, format: format)
         var drew = false
         let image = renderer.image { _ in
             drew = host.view.drawHierarchy(in: CGRect(origin: .zero, size: size),
                                            afterScreenUpdates: true)
         }
-        return drew ? (image, window) : nil
+        // Return the sRGB re-encode, not the renderer's own bitmap: see inSRGB.
+        return drew ? (try inSRGB(image), window) : nil
+    }
+
+    /// Redraw the capture into an sRGB bitmap, so the PNG written from it is the
+    /// same kind of file as the two it is compared against.
+    ///
+    /// The renderer follows the simulator's screen, which is Display P3, and
+    /// `pngData()` carries that profile out as iCCP/cICP chunks. Android's
+    /// screenshot PNG and the reference sheet are untagged sRGB, and PIL does no
+    /// colour management — so the gate applied sRGB Rec.709 weights to
+    /// P3-encoded values. That error has a signature, and the data had it:
+    /// neutrals agreed to 0.15 L while the saturated bloom came in +2.2 L bright,
+    /// which is where the bento card's ground is read from and enough to put the
+    /// glass outside its own band.
+    private static func inSRGB(_ image: UIImage) throws -> UIImage {
+        guard let cg = image.cgImage,
+              let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let ctx = CGContext(data: nil, width: cg.width, height: cg.height,
+                                  bitsPerComponent: 8, bytesPerRow: cg.width * 4,
+                                  space: space,
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { throw RenderError.noImage }
+        ctx.draw(cg, in: CGRect(x: 0, y: 0, width: cg.width, height: cg.height))
+        guard let out = ctx.makeImage() else { throw RenderError.noImage }
+        return UIImage(cgImage: out, scale: image.scale, orientation: .up)
     }
 
     private static func outputDirectory() -> URL {
@@ -217,12 +232,15 @@ final class HomeRenderTests: XCTestCase {
 
     /// Luminance per point-sized cell, sampled at the capture's own scale.
     private static func grayscale(_ image: UIImage) throws -> [[Double]] {
-        guard let cg = image.cgImage else { throw RenderError.noImage }
+        guard let cg = image.cgImage,
+              // DeviceRGB is the screen's space, which on a P3 simulator is not
+              // the sRGB the weights below assume. Name the space the arithmetic
+              // is for; renderHome already hands this a re-encoded bitmap, so a
+              // mismatch here would be the harness lying to its own assertions.
+              let space = CGColorSpace(name: CGColorSpace.sRGB)
+        else { throw RenderError.noImage }
         let w = cg.width, h = cg.height
         var buf = [UInt8](repeating: 0, count: w * h * 4)
-        // DeviceRGB is the screen's space, which on a P3 simulator is not the
-        // sRGB the weights below assume. Name the space the arithmetic is for.
-        let space = CGColorSpaceCreateWithName(kCGColorSpaceSRGB)
         guard let ctx = CGContext(data: &buf, width: w, height: h, bitsPerComponent: 8,
                                   bytesPerRow: w * 4, space: space,
                                   bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
