@@ -559,7 +559,7 @@ struct NexlyPlanCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 13) {
+        VStack(alignment: .leading, spacing: 10) {
             NexlyInlineText(
                 text: plan.title,
                 fontSize: 13.5,
@@ -570,7 +570,7 @@ struct NexlyPlanCard: View {
             if plan.rows.isEmpty {
                 skeleton
             } else {
-                VStack(alignment: .leading, spacing: 11) {
+                VStack(alignment: .leading, spacing: 6) {
                     ForEach(plan.rows) { row in
                         HStack(alignment: .center, spacing: 11) {
                             NexlyGlassGlyphTile(

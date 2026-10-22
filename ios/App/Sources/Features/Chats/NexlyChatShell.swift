@@ -127,7 +127,7 @@ struct NexlyComposerBar: View {
                 .focused(focused)
                 .submitLabel(.send)
                 .onSubmit(onSubmit)
-                .onChange(of: text.wrappedValue) { newValue in
+                .onChange(of: text) { newValue in
                     guard SettingsStore.shared.enterToSend, newValue.hasSuffix("\n") else { return }
                     text = String(newValue.dropLast())
                     onSubmit()
@@ -159,7 +159,7 @@ struct NexlyComposerBar: View {
                         )
                         .overlay(Circle().strokeBorder(Color.white.opacity(0.55), lineWidth: 1))
                         .shadow(color: Color(red: 0.86, green: 0.42, blue: 0.20).opacity(0.30), radius: 6, y: 2)
-                        .opacity(canSend ? 1 : 0.45)
+                        .opacity(canSend ? 1 : 0.75)
                 }
                 .buttonStyle(KineticPressStyle())
                 .disabled(!canSend)

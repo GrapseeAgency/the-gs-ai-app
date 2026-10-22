@@ -1307,9 +1307,9 @@ struct MessageBubble: View, Equatable {
                 Spacer(minLength: 44)
                 VStack(alignment: .trailing, spacing: 5) {
                     Text(message.content)
-                        .font(.system(size: 15.5))
+                        .font(.system(size: 15))
                         .foregroundStyle(Aero.text)
-                        .lineSpacing(3)
+                        .lineSpacing(2)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 11)
                         .background(
@@ -1331,7 +1331,7 @@ struct MessageBubble: View, Equatable {
                         )
                         .shadow(color: Color(red: 0.55, green: 0.32, blue: 0.24).opacity(0.12),
                                 radius: 6, y: 3)
-                        .frame(maxWidth: 300, alignment: .trailing)
+                        .frame(maxWidth: 320, alignment: .trailing)
                         .textSelection(.enabled)
 
                     // Reference delivery receipt: time, then the double tick.

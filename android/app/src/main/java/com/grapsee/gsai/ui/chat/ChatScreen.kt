@@ -1937,7 +1937,7 @@ internal fun UserMessage(
                         Box {
                             Box(
                                 modifier = Modifier
-                                    .widthIn(max = 300.dp)
+                                    .widthIn(max = 320.dp)
                                     .shadow(4.dp, RoundedCornerShape(24.dp))
                                     .clip(RoundedCornerShape(24.dp))
                                     .background(
@@ -1963,8 +1963,8 @@ internal fun UserMessage(
                                 Text(
                                     text = message.content,
                                     style = MaterialTheme.typography.bodyMedium.copy(
-                                        fontSize = 15.5.sp,
-                                        lineHeight = 22.sp
+                                        fontSize = 15.sp,
+                                        lineHeight = 21.sp
                                     ),
                                     color = colors.textPrimary
                                 )
@@ -2387,7 +2387,15 @@ private fun GsSendButton(enabled: Boolean, onSend: () -> Unit) {
                 if (enabled) {
                     Brush.linearGradient(listOf(Color(0xFFFFC08D), Color(0xFFF0813F)))
                 } else {
-                    Brush.linearGradient(listOf(colors.raisedSurface, colors.raisedSurface))
+                    // The reference keeps the peach send control visible even
+                    // with an empty field; the disabled state is the reduced
+                    // alpha, not a gray disc.
+                    Brush.linearGradient(
+                        listOf(
+                            Color(0xFFFFC08D).copy(alpha = 0.62f),
+                            Color(0xFFF0813F).copy(alpha = 0.62f)
+                        )
+                    )
                 }
             )
             .border(1.dp, Color.White.copy(alpha = 0.55f), CircleShape)
@@ -2404,7 +2412,7 @@ private fun GsSendButton(enabled: Boolean, onSend: () -> Unit) {
         NexlyGlyph(
             name = "send-2",
             size = 18.dp,
-            color = if (enabled) Color.White else colors.textSecondary
+            color = if (enabled) Color.White else Color.White.copy(alpha = 0.88f)
         )
     }
 }
@@ -3859,7 +3867,8 @@ private fun DaySeparator(label: String) {
 // Immutable, thread-safe formatters cached at process level — creating a
 // formatter per call re-parses the pattern and re-queries locale data on every
 // bubble stamp, on every recomposition of every visible turn.
-private val TIME_LABEL_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+private val TIME_LABEL_FORMAT: DateTimeFormatter =
+    DateTimeFormatter.ofPattern("h:mm a", java.util.Locale.US)
 private val DAY_LABEL_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM yyyy")
 
 private fun dayKey(iso: String): String? = runCatching {

@@ -489,7 +489,7 @@ fun NexlyPlanCard(
             .fillMaxWidth()
             .gsGlass(GsGlassRole.Card, RoundedCornerShape(24.dp))
             .padding(horizontal = 16.dp, vertical = 15.dp),
-        verticalArrangement = Arrangement.spacedBy(13.dp)
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         NexlyInlineRichText(
             text = cleanPlanText(plan.title, 160),
@@ -526,7 +526,7 @@ fun NexlyPlanCard(
                 }
             }
         } else {
-            Column(verticalArrangement = Arrangement.spacedBy(11.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 plan.rows.forEach { row ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         NexlyGlassGlyphTile(
