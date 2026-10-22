@@ -167,7 +167,11 @@ fun HomeDashboardScreen(
         // The sheet's backdrop is pearls and silk — no blossom. Repaint the
         // shared backdrop here without its branches so Home matches the hero
         // sheet while the rest of the app keeps the bloom.
-        ReferenceBackdrop(Modifier.matchParentSize(), showBlossom = false)
+        ReferenceBackdrop(
+            Modifier.matchParentSize(),
+            showBlossom = false,
+            bokeh = false
+        )
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             HomeHeader(onAssistant = onOpenVoice, onMenu = onOpenDrawer)
             Column(

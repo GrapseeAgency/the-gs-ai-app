@@ -94,6 +94,9 @@ fun ReferenceBackdrop(
      * matches the sheet; every other screen keeps the bloom.
      */
     showBlossom: Boolean = true,
+    /** Lens bokeh. Home's sheet shows soft orbs only, and skipping seven
+     *  gradient discs keeps the double-drawn hero cheap on software GPUs. */
+    bokeh: Boolean = true,
 ) {
     val colors = GsTheme.colors
     val dark = LocalGsIsDark.current
@@ -149,7 +152,7 @@ fun ReferenceBackdrop(
 
         // Bokeh: ringed discs read as lens blur, flat discs read as dirty
         // paper. The ring is what sells it.
-        val bokeh = listOf(
+        val bokehDiscs = listOf(
             floatArrayOf(0.86f, 0.20f, 0.075f, 0.20f),
             floatArrayOf(0.12f, 0.34f, 0.048f, 0.16f),
             floatArrayOf(0.72f, 0.66f, 0.030f, 0.13f),
@@ -158,7 +161,7 @@ fun ReferenceBackdrop(
             floatArrayOf(0.93f, 0.55f, 0.052f, 0.10f),
             floatArrayOf(0.06f, 0.90f, 0.070f, 0.13f),
         )
-        bokeh.forEach { b ->
+        if (bokeh) bokehDiscs.forEach { b ->
             val c = Offset(size.width * b[0], size.height * b[1])
             val r = size.width * b[2]
             val a = b[3]
