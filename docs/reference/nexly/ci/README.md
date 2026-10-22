@@ -42,6 +42,25 @@ screen. The assistant turn contains one prose glass card (preamble + Thinking
 card) and one separate plan glass card with its own orb, exactly as the
 reference does.
 
+## Sheet match
+
+The visual pass corrected the things that made the first native version read as
+a generic chat screen rather than the sheet:
+
+- the user turn is capped at **190pt on compact phones** (about half the
+  device width) instead of filling the row; the avatar keeps its own lane and
+  the time/tick sits under the bubble;
+- assistant cards are capped at **286pt (prose) / 290pt (plan)** on phones,
+  about 70% of the 393pt width, leaving the pearl field visible at the right;
+- the plan title is a single line at the sheet's lighter weight;
+- glyph chips use a **pale tone wash with the saturated colour in the glyph**
+  (not saturated chips with white ink);
+- cards use a thinner white veil and hairline rim (`thinMaterial` on iOS,
+  a translucent white draw on Android) with almost no shadow, so the
+  iridescent bubbles read through them;
+- the backdrop has defined pearl spheres with white rims, refraction bands and
+  specular highlights, plus the lotus in the lower-left.
+
 ## Size matrix
 
 Every row is rendered from the same production components; there is no
@@ -88,12 +107,12 @@ as a fabricated model transcript.
 
 ## Verified runs
 
-Both workflows completed green on commit `32e168b1`:
+Both workflows completed green on commit `33c61a17`:
 
-- Android: https://github.com/GrapseeAgency/the-gs-ai-app/actions/runs/39857096987
-  (run `39857096987`)
-- iOS: https://github.com/GrapseeAgency/the-gs-ai-app/actions/runs/39857063229
-  (run `39857063229`)
+- Android: https://github.com/GrapseeAgency/the-gs-ai-app/actions/runs/39865438005
+  (run `39865438005`)
+- iOS: https://github.com/GrapseeAgency/the-gs-ai-app/actions/runs/39865441786
+  (run `39865441786`)
 
 Android runs the full unit suite (267 tests, including `NexlyPlanTest`); the
 screenshot tests are gated behind `-PgsShots=true` and are excluded from the

@@ -142,10 +142,18 @@ catalogue, validator and web registry also know the `plan` kind.
   plan rows, closing, timestamp and composer) is visible at 393×852 and
   411×914. The column is capped at 640 and centered on tablets; the
   transcript scrolls on shorter devices while the composer stays on screen.
+- Sheet-scale correction: the user turn is capped at **190pt on compact
+  phones** (about half the device) with the avatar in its own lane; assistant
+  cards are capped at **286pt prose / 290pt plan** (about 70% of a 393pt
+  screen); the plan title is 12pt medium and one line at 393pt.
+- Glyph chips are now a **pale tone wash with the saturated colour in the
+  glyph**, not saturated chips with white ink. Cards use a thinner white veil,
+  a hairline rim and almost no shadow. The backdrop draws defined pearl
+  spheres (white rim, refraction band, specular crescent) and a stronger lotus
+  in the lower-left.
 - iOS landscape no longer pushes the composer below the screen edge: the
   harness pins the column to the geometry height, ignores the simulator safe
-  area, and keeps the composer in flow. The plan title uses the sheet's medium
-  weight and stays on one line at 393pt.
+  area, and keeps the composer in flow.
 - The user timestamp is 12-hour (`9:41 PM`) on both; the disabled send control
   stays peach rather than turning gray; plan/thinking spacing was compacted to
   the sheet's density.
@@ -153,8 +161,8 @@ catalogue, validator and web registry also know the `plan` kind.
   `ios/App/Tests/AppTests/NexlyPlanTests.swift`, expanded
   `scripts/test-nexly-plan.ts`, `F26_NEXLY_PLAN` fixtures on both parsers, and
   plan, adaptive-thinking, prose and full-screen renders on both platforms.
-- Native verification is green on commit `32e168b1`: Android CI run
-  `39857096987` (compile, Home render, Nexly response + adaptive + full-screen
+- Native verification is green on commit `33c61a17`: Android CI run
+  `39865438005` (compile, Home render, Nexly response + adaptive + full-screen
   renders at the full size matrix, 267 unit tests) and iOS CI run
-  `39857063229` (Xcode build, XCTest, Home render, the same Nexly renders).
+  `39865441786` (Xcode build, XCTest, Home render, the same Nexly renders).
   Evidence and run links are in `docs/reference/nexly/ci/README.md`.
