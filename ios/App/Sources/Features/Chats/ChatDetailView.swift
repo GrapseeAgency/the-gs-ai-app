@@ -641,6 +641,7 @@ struct ChatDetailView: View {
                 onStop: { vm.stop() },
                 onSubmit: submitComposer
             )
+        }
         .padding(.horizontal, Aero.Spacing.m)
         .padding(.top, 6)
         .padding(.bottom, 6)
