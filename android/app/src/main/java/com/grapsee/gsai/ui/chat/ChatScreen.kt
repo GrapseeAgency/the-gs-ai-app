@@ -2339,8 +2339,8 @@ private fun ThinkingRow(
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.labelSmall.copy(
-                    fontSize = 9.5.sp,
-                    lineHeight = 12.sp
+                    fontSize = 9.sp,
+                    lineHeight = 11.5.sp
                 ),
                 color = GsTheme.colors.textSecondary,
                 maxLines = 1,

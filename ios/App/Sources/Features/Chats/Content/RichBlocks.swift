@@ -61,7 +61,8 @@ struct NexlyAssistantBlocksView: View {
         }
         // The sheet keeps assistant cards at about 69% of the phone width,
         // leaving the pearl field visible to the right of the glass.
-        let cardMax: CGFloat = sizeClass == .regular ? 340 : 280
+        let cardMax: CGFloat = sizeClass == .regular ? 340 : 286
+        let planMax: CGFloat = sizeClass == .regular ? 350 : 290
         VStack(alignment: .leading, spacing: 12) {
             if groups.isEmpty {
                 HStack(alignment: .top, spacing: 9) {
@@ -84,7 +85,7 @@ struct NexlyAssistantBlocksView: View {
                         switch group {
                         case .plan(let plan, let open):
                             NexlyPlanCard(plan: plan, open: open, fallbackTimestamp: planTimestamp)
-                                .frame(maxWidth: cardMax, alignment: .leading)
+                                .frame(maxWidth: planMax, alignment: .leading)
                                 .layoutPriority(1)
                         case .prose(let prose):
                             proseCard(
@@ -122,14 +123,10 @@ struct NexlyAssistantBlocksView: View {
                     .foregroundStyle(Aero.text)
             }
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 13)
         .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(Color(red: 1.0, green: 0.945, blue: 0.915).opacity(0.22))
-        )
-        .gsGlass(.card, corner: 20)
+        .nexlyGlassCard(corner: 20)
         .environment(\.nexlyProseCompact, true)
         .padding(.top, isFirst ? 0 : 2)
     }

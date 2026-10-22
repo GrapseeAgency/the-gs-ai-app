@@ -134,6 +134,52 @@ extension EnvironmentValues {
     }
 }
 
+/// The sheet's cards are thinner than the app's standard card glass: a clear
+/// white veil over the pearl field, a hairline rim and barely any shadow.
+private struct NexlyCardGlass: ViewModifier {
+    @Environment(\.colorScheme) private var scheme
+    let corner: CGFloat
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: corner, style: .continuous)
+        content
+            .background(
+                shape
+                    .fill(.thinMaterial)
+                    .overlay(
+                        shape.fill(
+                            Color.white.opacity(scheme == .dark ? 0.10 : 0.18)
+                        )
+                    )
+            )
+            .overlay(
+                shape.strokeBorder(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(scheme == .dark ? 0.30 : 0.88),
+                            Color.white.opacity(scheme == .dark ? 0.10 : 0.32),
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 0.8
+                )
+            )
+            .shadow(
+                color: Color(red: 0.45, green: 0.28, blue: 0.20)
+                    .opacity(scheme == .dark ? 0.10 : 0.07),
+                radius: 5,
+                y: 2
+            )
+    }
+}
+
+extension View {
+    func nexlyGlassCard(corner: CGFloat = 20) -> some View {
+        modifier(NexlyCardGlass(corner: corner))
+    }
+}
+
 enum NexlyGlassTone: String, CaseIterable {
     case amber, lavender, blue, green, pink, peach, mint, lilac
 
@@ -553,7 +599,7 @@ struct NexlyThinkingCard: View {
                     .font(.system(size: 12, weight: .medium))
                     .foregroundColor(Aero.text)
                 Text(subtitle)
-                    .font(.system(size: 9.5))
+                    .font(.system(size: 9))
                     .foregroundColor(Aero.textMuted)
                     .lineLimit(1)
             }
@@ -586,13 +632,13 @@ struct NexlyPlanCard: View {
         VStack(alignment: .leading, spacing: 5) {
             NexlyInlineText(
                 text: plan.title,
-                fontSize: 12.5,
+                fontSize: 12,
                 glyphSize: 14,
                 color: Aero.text,
                 // The sheet's title is only a hair larger than the rows; at the
                 // narrower card width a bold title wrapped where the reference
                 // stays on one line.
-                weight: .regular
+                weight: .medium
             )
             if plan.rows.isEmpty {
                 skeleton
@@ -652,10 +698,10 @@ struct NexlyPlanCard: View {
                 }
             }
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 11)
         .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .gsGlass(.card, corner: 20)
+        .nexlyGlassCard(corner: 20)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(plan.title)
     }

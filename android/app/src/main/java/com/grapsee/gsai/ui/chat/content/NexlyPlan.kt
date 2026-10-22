@@ -395,6 +395,39 @@ data class NexlyTone(
  */
 internal val LocalNexlyProseStyle = androidx.compose.runtime.staticCompositionLocalOf<androidx.compose.ui.text.TextStyle?> { null }
 
+/**
+ * The sheet's cards are thinner than the app's standard card glass: a clear
+ * white veil over the pearl field, a hairline rim and almost no shadow. The
+ * shared `.gsGlass(Card)` is intentionally milkier for menus and sheets.
+ */
+@Composable
+internal fun Modifier.nexlyGlassCard(corner: Dp = 20.dp): Modifier {
+    val dark = isSystemInDarkTheme()
+    val shape = RoundedCornerShape(corner)
+    return this
+        .shadow(
+            elevation = 3.dp,
+            shape = shape,
+            ambientColor = Color(0x126B4A3A),
+            spotColor = Color(0x186B4A3A)
+        )
+        .clip(shape)
+        .background(
+            Brush.verticalGradient(
+                listOf(
+                    (if (dark) GsTheme.colors.surface else Color.White).copy(
+                        alpha = if (dark) 0.44f else 0.50f
+                    ),
+                    (if (dark) GsTheme.colors.surface else Color.White).copy(
+                        alpha = if (dark) 0.28f else 0.27f
+                    )
+                )
+            ),
+            shape
+        )
+        .border(0.8.dp, Color.White.copy(alpha = if (dark) 0.18f else 0.72f), shape)
+}
+
 private fun tone(name: String): NexlyTone = when (name) {
     "amber" -> NexlyTone(Color(0xFFFFF7E8), Color(0xFFFBE5C2), Color(0xFFE09A35), Color(0x55C9823A))
     "lavender" -> NexlyTone(Color(0xFFF7F1FF), Color(0xFFE8DDFB), Color(0xFF7863D4), Color(0x55705AD0))
@@ -495,16 +528,16 @@ fun NexlyPlanCard(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .gsGlass(GsGlassRole.Card, RoundedCornerShape(20.dp))
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+            .nexlyGlassCard(20.dp)
+            .padding(horizontal = 11.dp, vertical = 6.dp),
         verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
         NexlyInlineRichText(
             text = cleanPlanText(plan.title, 160),
             color = colors.textPrimary,
-            fontSize = 12.5.sp,
+            fontSize = 12.sp,
             glyphSize = 14.dp,
-            weight = FontWeight.Normal
+            weight = FontWeight.Medium
         )
         if (plan.rows.isEmpty()) {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -690,10 +723,10 @@ fun Modifier.nexlyPearlBackdrop(): Modifier {
         // Broad daylight from the top-left, as in the sheet's pearl field.
         drawRect(
             Brush.radialGradient(
-                colors = [
+                colors = listOf(
                     Color.White.copy(alpha = if (dark) 0.05f else 0.42f),
                     Color.Transparent
-                ],
+                ),
                 center = Offset(w * 0.12f, h * 0.02f),
                 radius = w * 0.9f
             )

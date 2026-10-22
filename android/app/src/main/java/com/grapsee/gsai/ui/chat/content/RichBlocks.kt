@@ -284,7 +284,8 @@ private fun NexlyAssistantBlocks(
     // The sheet keeps the assistant cards narrower than the phone: about 69%
     // of the device width, so the pearl backdrop stays visible at the right.
     val wide = LocalConfiguration.current.screenWidthDp >= 600
-    val cardMax = if (wide) 340.dp else 280.dp
+    val cardMax = if (wide) 340.dp else 286.dp
+    val planMax = if (wide) 350.dp else 290.dp
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         groups.forEach { group ->
             Row(
@@ -299,7 +300,7 @@ private fun NexlyAssistantBlocks(
                             plan = group.block.plan,
                             open = group.block.open,
                             fallbackTimestamp = planTimestamp,
-                            modifier = Modifier.widthIn(max = cardMax)
+                            modifier = Modifier.widthIn(max = planMax)
                         )
                         is NexlyGroup.Prose -> CompositionLocalProvider(
                             LocalNexlyProseStyle provides TextStyle(
@@ -312,8 +313,8 @@ private fun NexlyAssistantBlocks(
                             modifier = Modifier
                                 .widthIn(max = cardMax)
                                 .fillMaxWidth()
-                                .gsGlass(GsGlassRole.Card, RoundedCornerShape(20.dp))
-                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                                .nexlyGlassCard(20.dp)
+                                .padding(horizontal = 13.dp, vertical = 10.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             if (group.blocks.isEmpty() && isStreaming) {
