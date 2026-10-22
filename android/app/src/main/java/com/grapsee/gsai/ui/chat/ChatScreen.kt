@@ -2682,13 +2682,18 @@ private fun AssistantMessage(
     val planVisible = hasPlan || livePlanStarted
     var sawThinking by remember(message.id) { mutableStateOf(false) }
     var lastEffort by remember(message.id) { mutableStateOf<String?>(null) }
+    var lastReasoningHint by remember(message.id) { mutableStateOf<String?>(null) }
     LaunchedEffect(liveMode, liveReasoningActive) {
         if (liveMode == "thinking" || liveReasoningActive) sawThinking = true
     }
     LaunchedEffect(liveEffort) {
         if (!liveEffort.isNullOrBlank()) lastEffort = liveEffort
     }
+    LaunchedEffect(liveReasoningHint) {
+        if (!liveReasoningHint.isNullOrBlank()) lastReasoningHint = liveReasoningHint
+    }
     val cardEffort = liveEffort ?: lastEffort
+    val cardReasoningHint = liveReasoningHint ?: lastReasoningHint
     val thinkingPhase = when {
         !message.isStreaming -> NexlyThinkingPhase.DONE
         liveAnswerStarted -> NexlyThinkingPhase.EFFORT
@@ -2798,7 +2803,7 @@ private fun AssistantMessage(
                                 phase = thinkingPhase,
                                 effort = cardEffort,
                                 isPlan = planVisible,
-                                reasoningHint = liveReasoningHint
+                                reasoningHint = cardReasoningHint
                             )
                         }
                     } else {

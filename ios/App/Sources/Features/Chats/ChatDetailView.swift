@@ -1365,6 +1365,7 @@ private struct MessageBubble: View, Equatable {
     @State private var copied = false
     @State private var sawThinking = false
     @State private var lastEffort: String? = nil
+    @State private var lastReasoningHint: String? = nil
     @Environment(\.colorScheme) private var colorScheme
 
     /**
@@ -1412,6 +1413,7 @@ private struct MessageBubble: View, Equatable {
         }
         .onChange(of: reasoning) { value in
             if let value = value, !value.isEmpty { sawThinking = true }
+            if let hint = reasoningHint(value) { lastReasoningHint = hint }
         }
         .onChange(of: effectiveEffort) { value in
             if let value = value, !value.isEmpty { lastEffort = value }
@@ -1517,9 +1519,15 @@ private struct MessageBubble: View, Equatable {
     private var thinkingEffort: String? { effectiveEffort ?? lastEffort }
 
     /// The first meaningful sentence of the real reasoning, capped for one row.
+    /// `lastReasoningHint` keeps it after finalize, when the stream-only
+    /// reasoning text is cleared.
     private var thinkingReasoningHint: String? {
-        guard let reasoning, !reasoning.isEmpty else { return nil }
-        let collapsed = reasoning
+        reasoningHint(reasoning) ?? lastReasoningHint
+    }
+
+    private func reasoningHint(_ text: String?) -> String? {
+        guard let text, !text.isEmpty else { return nil }
+        let collapsed = text
             .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespaces)
         if let end = collapsed.firstIndex(where: { $0 == "." || $0 == "!" || $0 == "?" }) {
