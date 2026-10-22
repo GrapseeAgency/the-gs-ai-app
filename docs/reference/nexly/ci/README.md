@@ -39,9 +39,29 @@ preamble, Thinking card, all nine timetable rows, closing line, timestamp and
 composer — fits without scrolling. The density was tuned to the sheet; the
 393 variant is the tighter fit.
 
+## Live model capture (no mock wire)
+
+The plan and full-screen renders now use a **real OpenRouter response**, not a
+hand-authored demo. `scripts/live-nexly-model.ts` sends the production
+`SYSTEM_PROMPT + WIDGET_PROMPT` and the reference user message to
+`nvidia/nemotron-3-ultra-550b-a55b:free` with the real key pool, saves the raw
+answer and the server-compiled final wire under
+`docs/reference/nexly/live-model-{raw,final}.md`, and the native tests render
+that exact output.
+
+The captured answer contains **9 rows**, all icons valid, no emoji, and the
+compiler path is `model` with zero errors. It is content the model wrote, not
+the sample's rows: its title and closing differ from the sheet, which is the
+expected difference between a live generation and a static reference.
+
+The first live attempt (14 rows) and the nine-row retry are kept as
+`live-model-*-attempt1.md` / `live-model-*-nemotron9.md`. `z-ai/glm-4.6` was
+tried once and rejected with HTTP 402 (the OpenRouter account has no paid
+credits); no paid model was used.
+
 ## Adaptive thinking / effort
 
-The `*thinking*` images are a **non-plan question** (“Quantum entanglement…”).
+The `*thinking*` images are a deterministic component state render of a non-plan question (“Quantum entanglement…”), not a model call. They prove the card’s adaptive copy/active row; the live model render above proves the real plan wire.
 They prove the card is not fixed reference copy:
 
 - “Understanding your request…”

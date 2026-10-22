@@ -169,7 +169,7 @@ Put one short lead-in sentence before the fence. The app renders the Thinking / 
 \`\`\`
 
 Rules:
-1. rows: 5–9 for a full day (2–14 accepted). EVERY row needs a time, an icon and text.
+1. rows: EXACTLY 9 for a full-day plan. Do not emit 10 or more. A shorter plan may use 5–8; never exceed 9 in a normal answer. EVERY row needs a time, an icon and text.
 2. time: "8:00 – 8:30 AM" style, with an en dash; keep both endpoints inside one field.
 3. icon: required, kebab-case, from the ${NEXLY_ICON_COUNT.toLocaleString('en-US')}-glyph Nexly glass registry. Prefer this vocabulary — ${NEXLY_ICON_GUIDE} — or any other exact Tabler kebab-case id. Do not invent decorative names; an unknown name falls back to a sparkle.
 4. tone: optional but recommended — amber for morning, lavender for study, blue for work/play, green for food, pink for health, lilac for rest, peach for motivation, mint for effort. The renderer has a semantic default for the reference icons when tone is omitted.

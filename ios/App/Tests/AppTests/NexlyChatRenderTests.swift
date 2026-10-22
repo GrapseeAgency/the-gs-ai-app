@@ -257,30 +257,14 @@ private struct NexlyAdaptiveThinkingView: View {
     }
 }
 
-/// The exact response in the reference sheet, written in the wire contract.
+/// Captured from a REAL OpenRouter call (scripts/live-nexly-model.ts)
+/// using the production SYSTEM_PROMPT + WIDGET_PROMPT and the reference user
+/// message. No hand-authored plan rows.
 private let NEXLY_REFERENCE_WIRE = """
-Got it! I'll create a balanced plan for your tomorrow — focused on studies, productivity, health and rest.
-
-Let me think for a moment...
+Here's a balanced schedule for a productive tomorrow:
 
 ```plan
-{
-  "title": "Here's your personalized plan for tomorrow:",
-  "rows": [
-    { "time": "8:00 – 8:30 AM", "icon": "sunrise", "tone": "amber", "text": "Morning routine + light exercise" },
-    { "time": "9:00 – 11:00 AM", "icon": "book-2", "tone": "lavender", "text": "Classes" },
-    { "time": "11:30 – 1:00 PM", "icon": "device-laptop", "tone": "blue", "text": "Assignment / Study time" },
-    { "time": "1:00 – 2:00 PM", "icon": "tools-kitchen-2", "tone": "green", "text": "Lunch + short break" },
-    { "time": "2:00 – 4:00 PM", "icon": "file-text", "tone": "lavender", "text": "Continue assignments" },
-    { "time": "4:00 – 5:00 PM", "icon": "run", "tone": "pink", "text": "Workout / Physical activity" },
-    { "time": "5:00 – 7:00 PM", "icon": "device-gamepad-2", "tone": "blue", "text": "Free time / Hobbies" },
-    { "time": "7:00 – 9:00 PM", "icon": "book-2", "tone": "lavender", "text": "Light study / Review" },
-    { "time": "9:30 – 10:30 PM", "icon": "moon", "tone": "lilac", "text": "Wind down + Sleep" }
-  ],
-  "closing": "You got this, Arafat!",
-  "closingIcon": "flame",
-  "timestamp": "9:45 PM"
-}
+{"title":"Here's a balanced schedule for a productive tomorrow:","rows":[{"time":"7:00 – 8:00 AM","text":"Wake up, stretch, breakfast","icon":"sunrise","tone":"amber"},{"time":"8:00 – 11:00 AM","text":"Morning classes","icon":"book-2","tone":"lavender"},{"time":"11:00 – 11:30 AM","text":"Break & snack","icon":"apple","tone":"green"},{"time":"11:30 – 1:30 PM","text":"Assignments & focused study","icon":"notebook","tone":"lavender"},{"time":"1:30 – 2:30 PM","text":"Lunch + walk","icon":"salad","tone":"green"},{"time":"2:30 – 4:30 PM","text":"Afternoon classes / project work","icon":"device-laptop","tone":"blue"},{"time":"4:30 – 5:30 PM","text":"Exercise / workout","icon":"run","tone":"pink"},{"time":"5:30 – 7:30 PM","text":"Dinner + free time","icon":"tools-kitchen-2","tone":"green"},{"time":"7:30 – 10:00 PM","text":"Review, wind down, sleep","icon":"moon","tone":"lilac"}],"closing":"You've got this — make it count!","closingIcon":"flame","timestamp":"9:45 PM","palette":"meadow","accent":"#0b7285","variant":"editorial"}
 ```
 """
 

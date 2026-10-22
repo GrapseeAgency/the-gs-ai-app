@@ -49,7 +49,7 @@ assert.ok(NEXLY_PLAN_PROMPT.includes(NEXLY_ICON_GUIDE), 'prompt must carry the i
 assert.ok(NEXLY_PLAN_PROMPT.includes('tone: optional'), 'prompt must explain the semantic tones')
 assert.ok(NEXLY_PLAN_PROMPT.includes('"tone": "amber"'))
 assert.ok(NEXLY_PLAN_PROMPT.includes('```plan'))
-assert.ok(NEXLY_PLAN_PROMPT.includes('5–9'))
+assert.ok(NEXLY_PLAN_PROMPT.includes('EXACTLY 9'))
 assert.ok(WIDGET_PROMPT.includes('THE NEXLY PLAN GRAMMAR'), 'the live widget prompt must include the plan grammar')
 assert.ok(WIDGET_PROMPT.includes(NEXLY_ICON_GUIDE), 'the live widget prompt must carry the icon guide')
 
