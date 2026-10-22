@@ -503,7 +503,7 @@ struct NexlyThinkingCard: View {
                 active: phase == .effort)
         }
         .padding(.horizontal, 4)
-        .padding(.vertical, 3)
+        .padding(.vertical, 2)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 19, style: .continuous)
@@ -536,7 +536,7 @@ struct NexlyThinkingCard: View {
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 4)
-        .padding(.vertical, 1)
+        .padding(.vertical, 0)
     }
 }
 
@@ -570,7 +570,7 @@ struct NexlyPlanCard: View {
             if plan.rows.isEmpty {
                 skeleton
             } else {
-                VStack(alignment: .leading, spacing: 1) {
+                VStack(alignment: .leading, spacing: 0) {
                     ForEach(plan.rows) { row in
                         HStack(alignment: .center, spacing: 11) {
                             NexlyGlassGlyphTile(
@@ -581,13 +581,13 @@ struct NexlyPlanCard: View {
                             )
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(row.time)
-                                    .font(.system(size: 10.5, weight: .semibold))
+                                    .font(.system(size: 10, weight: .semibold))
                                     .foregroundColor(Aero.textMuted)
                                     .lineLimit(1)
                                 NexlyInlineText(
                                     text: row.text,
-                                    fontSize: 13,
-                                    glyphSize: 15,
+                                    fontSize: 12.5,
+                                    glyphSize: 14,
                                     color: Aero.text,
                                     weight: .medium
                                 )
@@ -602,8 +602,8 @@ struct NexlyPlanCard: View {
                     if let closing = plan.closing {
                         NexlyInlineText(
                             text: closing,
-                            fontSize: 14,
-                            glyphSize: 16,
+                            fontSize: 13.5,
+                            glyphSize: 15,
                             color: Aero.text,
                             weight: .medium
                         )
@@ -627,7 +627,7 @@ struct NexlyPlanCard: View {
             }
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 8)
+        .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
         .gsGlass(.card, corner: 24)
         .accessibilityElement(children: .combine)

@@ -152,7 +152,7 @@ private struct NexlyChatReferenceView: View {
         ZStack {
             NexlyChatBackdrop()
             ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: 12) {
+                VStack(spacing: 10) {
                     NexlyAssistantBlocksView(
                         blocks: parseBlocks(wire),
                         isStreaming: false,
@@ -190,7 +190,7 @@ private struct NexlyFullChatView: View {
                     menuMenu: { EmptyView() }
                 )
                 ScrollView(.vertical, showsIndicators: false) {
-                    VStack(spacing: 12) {
+                    VStack(spacing: 10) {
                         MessageBubble(
                             message: ChatViewModel.ChatMessage(
                                 role: "user",
@@ -210,7 +210,7 @@ private struct NexlyFullChatView: View {
                         )
                     }
                     .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
+                    .padding(.vertical, 8)
                 }
                 NexlyComposerBar(
                     text: .constant(""),
@@ -225,8 +225,8 @@ private struct NexlyFullChatView: View {
                     onSubmit: {}
                 )
                 .padding(.horizontal, Aero.Spacing.m)
-                .padding(.top, 4)
-                .padding(.bottom, 12)
+                .padding(.top, 3)
+                .padding(.bottom, 10)
             }
         }
     }
@@ -239,7 +239,7 @@ private struct NexlyAdaptiveThinkingView: View {
         ZStack {
             NexlyChatBackdrop()
             ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: 12) {
+                VStack(spacing: 10) {
                     NexlyAssistantBlocksView(
                         blocks: parseBlocks(NEXLY_THINKING_WIRE),
                         isStreaming: true,

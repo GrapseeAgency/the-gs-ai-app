@@ -52,7 +52,7 @@ class NexlyChatScreenshotTest {
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(horizontal = 16.dp, vertical = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 BlocksContent(
                     content = NEXLY_REFERENCE_WIRE,
@@ -73,7 +73,7 @@ class NexlyChatScreenshotTest {
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(horizontal = 16.dp, vertical = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 BlocksContent(
                     content = NEXLY_THINKING_WIRE,
@@ -115,8 +115,8 @@ class NexlyChatScreenshotTest {
                     modifier = Modifier
                         .weight(1f)
                         .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     UserMessage(
                         message = ChatUiMessage(
@@ -135,7 +135,7 @@ class NexlyChatScreenshotTest {
                         planTimestamp = "2026-10-22T21:45:00Z"
                     )
                 }
-                Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+                Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
                     ComposerRow(
                         draftText = { "" },
                         onDraftChange = {},

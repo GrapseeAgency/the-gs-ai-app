@@ -1311,7 +1311,7 @@ struct MessageBubble: View, Equatable {
                         .foregroundStyle(Aero.text)
                         .lineSpacing(2)
                         .padding(.horizontal, 15)
-                        .padding(.vertical, 8)
+                        .padding(.vertical, 7)
                         .background(
                             RoundedRectangle(cornerRadius: 24, style: .continuous)
                                 .fill(
