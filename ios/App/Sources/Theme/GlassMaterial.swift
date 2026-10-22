@@ -175,7 +175,13 @@ private struct GsGlassModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .background(glassShape)
-            .overlay { geometry in rim(in: geometry.size) }
+            // The label and the parameter type are both load-bearing: `overlay`
+            // also takes an unlabeled ShapeStyle, and a bare trailing closure
+            // with one parameter resolves against that overload first and fails
+            // the conformance check — "type '(_) -> some View' cannot conform to
+            // 'ShapeStyle'" — which is exactly what the first version of this line
+            // did on the CI compiler.
+            .overlay(content: { (geometry: GeometryProxy) in rim(in: geometry.size) })
             // Cue: warm, non-grey shadow — this is depth, not darkness.
             .shadow(
                 color: Color(red: 0.35, green: 0.16, blue: 0.10).opacity(role.elevation > 0 ? 0.14 : 0),
@@ -185,19 +191,34 @@ private struct GsGlassModifier: ViewModifier {
             )
     }
 
+    /// The backdrop blur, or nothing where the role has no material.
+    ///
+    /// `cardLight` and `cardDim` have none, and the reason is in their
+    /// documentation. An AnyShapeStyle keeps this one expression: a conditional
+    /// view here would fork the modifier chain the rim's gradient depends on.
+    private var baseStyle: AnyShapeStyle {
+        if let material = role.material {
+            return AnyShapeStyle(material)
+        }
+        return AnyShapeStyle(Color.clear)
+    }
+
     /// Material + interior luminance fall + top airlight, all clipped to shape.
-    @ViewBuilder private var glassShape: some View {
+    private var glassShape: some View {
         let shape = RoundedRectangle(cornerRadius: corner, style: .continuous)
-        let filled = shape
-            // 1 + 4. tinted fill, lighter at the top, deeper at the bottom.
-            .fill(
-                LinearGradient(
-                    colors: [
-                        role.tintColor.opacity(role.tintAlphaTop),
-                        role.tintColor.opacity(role.tintAlphaBottom)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
+        return shape
+            .fill(baseStyle)
+            .overlay(
+                // 1 + 4. tinted fill, lighter at the top, deeper at the bottom.
+                shape.fill(
+                    LinearGradient(
+                        colors: [
+                            role.tintColor.opacity(role.tintAlphaTop),
+                            role.tintColor.opacity(role.tintAlphaBottom)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
                 )
             )
             .overlay(
@@ -214,13 +235,6 @@ private struct GsGlassModifier: ViewModifier {
                     )
                 )
             )
-        // The backdrop blur sits under the fill only where the role has one.
-        // `cardLight` has none, and the reason is in its documentation.
-        if let material = role.material {
-            filled.background(shape.fill(material))
-        } else {
-            filled
-        }
     }
 
     /// 3. The lit rim — vertical with a lean, both ends brighter than the fill.
@@ -253,9 +267,11 @@ private struct GsCapsuleGlassModifier: ViewModifier {
     let role: GsGlassRole
 
     func body(content: Content) -> some View {
-        content
+        let capsule = Capsule()
+        let base: AnyShapeStyle = role.material.map { AnyShapeStyle($0) } ?? AnyShapeStyle(Color.clear)
+        return content
             .background(
-                Capsule().fill(
+                capsule.fill(
                     LinearGradient(
                         colors: [
                             Aero.surface.opacity(role.fillAlpha * 0.55),
@@ -266,13 +282,7 @@ private struct GsCapsuleGlassModifier: ViewModifier {
                     )
                 )
             )
-            .background {
-                // Only roles that have a material get the backdrop blur; see
-                // `cardLight` for why the sheet's own glass opts out of it.
-                if let material = role.material {
-                    Capsule().fill(material)
-                }
-            }
+            .background(capsule.fill(base))
             .overlay(
                 Capsule().strokeBorder(
                     LinearGradient(
