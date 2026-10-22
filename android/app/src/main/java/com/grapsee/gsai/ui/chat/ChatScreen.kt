@@ -2196,11 +2196,22 @@ private fun LiveStreamText(
  */
 enum class NexlyThinkingPhase { THINKING, REASONING, EFFORT, DONE }
 
+/** First meaningful sentence of the live reasoning, capped for one line. */
+private fun reasoningHint(text: String?): String? {
+    if (text.isNullOrBlank()) return null
+    val clean = text.replace(Regex("\\s+"), " ").trim()
+    if (clean.isEmpty()) return null
+    val end = clean.indexOfFirst { it == '.' || it == '!' || it == '?' }
+    val sentence = if (end >= 0) clean.substring(0, end + 1) else clean
+    return sentence.take(96).trim()
+}
+
 @Composable
 internal fun ReferenceThinkingCard(
     phase: NexlyThinkingPhase = NexlyThinkingPhase.DONE,
     effort: String? = null,
     isPlan: Boolean = true,
+    reasoningHint: String? = null,
 ) {
     val thinkingSubtitle = if (isPlan) {
         "Analyzing your goals and priorities..."
@@ -2210,7 +2221,7 @@ internal fun ReferenceThinkingCard(
     val reasoningSubtitle = if (isPlan) {
         "Planning the best structure and balance..."
     } else {
-        "Working through the best approach..."
+        reasoningHint?.takeIf { it.isNotBlank() } ?: "Working through the best approach..."
     }
     val effortSubtitle = when {
         isPlan -> "Creating a detailed, realistic schedule..."
@@ -2629,6 +2640,11 @@ private fun AssistantMessage(
     val liveReasoningActive by remember(live) {
         derivedStateOf { !live?.value?.reasoning.isNullOrEmpty() }
     }
+    // The first sentence changes only once or twice while reasoning streams,
+    // so the card does not join the per-token recomposition path.
+    val liveReasoningHint by remember(live) {
+        derivedStateOf { reasoningHint(live?.value?.reasoning) }
+    }
     val liveAnswerStarted by remember(live) {
         derivedStateOf { !live?.value?.streamText.isNullOrEmpty() }
     }
@@ -2781,7 +2797,8 @@ private fun AssistantMessage(
                             ReferenceThinkingCard(
                                 phase = thinkingPhase,
                                 effort = cardEffort,
-                                isPlan = planVisible
+                                isPlan = planVisible,
+                                reasoningHint = liveReasoningHint
                             )
                         }
                     } else {

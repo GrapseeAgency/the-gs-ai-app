@@ -153,6 +153,7 @@ private struct NexlyAdaptiveThinkingView: View {
                         showStatus: true,
                         thinkingPhase: .reasoning,
                         thinkingEffort: "high",
+                        thinkingReasoningHint: "Checking that the correlation cannot carry a signal.",
                         isPlanTurn: false
                     )
                 }

@@ -81,7 +81,8 @@ class NexlyChatScreenshotTest {
                         ReferenceThinkingCard(
                             phase = NexlyThinkingPhase.REASONING,
                             effort = "high",
-                            isPlan = false
+                            isPlan = false,
+                            reasoningHint = "Checking that the correlation cannot carry a signal."
                         )
                     }
                 )

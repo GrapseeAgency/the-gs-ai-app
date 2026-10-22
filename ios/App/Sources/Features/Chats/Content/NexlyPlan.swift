@@ -469,13 +469,16 @@ struct NexlyThinkingCard: View {
     var phase: NexlyThinkingPhase = .done
     var effort: String? = nil
     var isPlan: Bool = true
+    var reasoningHint: String? = nil
 
     private var thinkingSubtitle: String {
         isPlan ? "Analyzing your goals and priorities..." : "Understanding your request..."
     }
 
     private var reasoningSubtitle: String {
-        isPlan ? "Planning the best structure and balance..." : "Working through the best approach..."
+        if isPlan { return "Planning the best structure and balance..." }
+        if let reasoningHint, !reasoningHint.isEmpty { return reasoningHint }
+        return "Working through the best approach..."
     }
 
     private var effortSubtitle: String {

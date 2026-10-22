@@ -39,6 +39,7 @@ struct NexlyAssistantBlocksView: View {
     var showStatus: Bool = false
     var thinkingPhase: NexlyThinkingPhase = .done
     var thinkingEffort: String? = nil
+    var thinkingReasoningHint: String? = nil
     var isPlanTurn: Bool = false
     var citations: [Int: String] = [:]
     var planTimestamp: String? = nil
@@ -59,7 +60,7 @@ struct NexlyAssistantBlocksView: View {
                 HStack(alignment: .top, spacing: 9) {
                     NexlyAssistantOrb()
                     if showStatus {
-                        NexlyThinkingCard(phase: thinkingPhase, effort: thinkingEffort, isPlan: isPlanTurn)
+                        NexlyThinkingCard(phase: thinkingPhase, effort: thinkingEffort, isPlan: isPlanTurn, reasoningHint: thinkingReasoningHint)
                     } else {
                         Text("…")
                             .font(Aero.body())
@@ -100,7 +101,7 @@ struct NexlyAssistantBlocksView: View {
             }
             if isStatusHost && showStatus {
                 if !prose.isEmpty { Spacer().frame(height: 2) }
-                NexlyThinkingCard(phase: thinkingPhase, effort: thinkingEffort, isPlan: isPlanTurn)
+                NexlyThinkingCard(phase: thinkingPhase, effort: thinkingEffort, isPlan: isPlanTurn, reasoningHint: thinkingReasoningHint)
             } else if prose.isEmpty && isStreaming {
                 Text("…")
                     .font(Aero.body())

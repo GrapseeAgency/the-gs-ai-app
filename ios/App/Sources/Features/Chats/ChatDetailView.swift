@@ -1516,6 +1516,18 @@ private struct MessageBubble: View, Equatable {
 
     private var thinkingEffort: String? { effectiveEffort ?? lastEffort }
 
+    /// The first meaningful sentence of the real reasoning, capped for one row.
+    private var thinkingReasoningHint: String? {
+        guard let reasoning, !reasoning.isEmpty else { return nil }
+        let collapsed = reasoning
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespaces)
+        if let end = collapsed.firstIndex(where: { $0 == "." || $0 == "!" || $0 == "?" }) {
+            return String(collapsed[...end])
+        }
+        return String(collapsed.prefix(96))
+    }
+
     private var assistantBubble: some View {
         VStack(alignment: .leading, spacing: 6) {
             NexlyAssistantBlocksView(
@@ -1524,6 +1536,7 @@ private struct MessageBubble: View, Equatable {
                 showStatus: showThinkingCard,
                 thinkingPhase: thinkingPhase,
                 thinkingEffort: thinkingEffort,
+                thinkingReasoningHint: thinkingReasoningHint,
                 isPlanTurn: hasPlan,
                 citations: citationLinks,
                 planTimestamp: message.createdAt
