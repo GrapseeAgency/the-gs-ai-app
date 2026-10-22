@@ -565,7 +565,9 @@ struct NexlyPlanCard: View {
                 fontSize: 13.5,
                 glyphSize: 16,
                 color: Aero.text,
-                weight: .semibold
+                // Matches the sheet's medium title, and keeps a one-line title
+                // at 393pt where semibold wrapped one word onto a second line.
+                weight: .medium
             )
             if plan.rows.isEmpty {
                 skeleton

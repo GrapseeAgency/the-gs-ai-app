@@ -212,9 +212,12 @@ private struct NexlyFullChatView: View {
     @FocusState private var composerFocused: Bool
 
     var body: some View {
+        // The geometry is the real device size. The column is pinned to that
+        // exact height (and the host ignores the simulator safe area), so the
+        // transcript absorbs the slack and the composer stays on screen.
         GeometryReader { geo in
             let column = min(640, geo.size.width)
-            ZStack(alignment: .bottom) {
+            ZStack {
                 NexlyChatBackdrop()
                 VStack(spacing: 0) {
                     NexlyBrandHeader(
@@ -248,29 +251,24 @@ private struct NexlyFullChatView: View {
                         }
                         .padding(.horizontal, 16)
                         .padding(.vertical, 12)
-                        .padding(.bottom, 82)
                     }
+                    NexlyComposerBar(
+                        text: .constant(""),
+                        isStreaming: false,
+                        canSend: false,
+                        focused: $composerFocused,
+                        onAttach: {},
+                        onVoice: {},
+                        onSearch: {},
+                        onSend: {},
+                        onStop: {},
+                        onSubmit: {}
+                    )
+                    .padding(.horizontal, Aero.Spacing.m)
+                    .padding(.top, 3)
+                    .padding(.bottom, 10)
                 }
                 .frame(width: column, height: geo.size.height, alignment: .top)
-
-                // Anchor the composer to the geometry's bottom edge, not to
-                // the scroll content. The transcript then absorbs the slack and
-                // the capsule cannot be pushed below the screen.
-                NexlyComposerBar(
-                    text: .constant(""),
-                    isStreaming: false,
-                    canSend: false,
-                    focused: $composerFocused,
-                    onAttach: {},
-                    onVoice: {},
-                    onSearch: {},
-                    onSend: {},
-                    onStop: {},
-                    onSubmit: {}
-                )
-                .padding(.horizontal, Aero.Spacing.m)
-                .padding(.bottom, 14)
-                .frame(width: column)
             }
             .frame(width: geo.size.width, height: geo.size.height)
         }
@@ -285,7 +283,7 @@ private struct NexlyFullProseView: View {
     var body: some View {
         GeometryReader { geo in
             let column = min(640, geo.size.width)
-            ZStack(alignment: .bottom) {
+            ZStack {
                 NexlyChatBackdrop()
                 VStack(spacing: 0) {
                     NexlyBrandHeader(
@@ -319,26 +317,24 @@ private struct NexlyFullProseView: View {
                         }
                         .padding(.horizontal, 16)
                         .padding(.vertical, 12)
-                        .padding(.bottom, 82)
                     }
+                    NexlyComposerBar(
+                        text: .constant(""),
+                        isStreaming: false,
+                        canSend: false,
+                        focused: $composerFocused,
+                        onAttach: {},
+                        onVoice: {},
+                        onSearch: {},
+                        onSend: {},
+                        onStop: {},
+                        onSubmit: {}
+                    )
+                    .padding(.horizontal, Aero.Spacing.m)
+                    .padding(.top, 3)
+                    .padding(.bottom, 10)
                 }
                 .frame(width: column, height: geo.size.height, alignment: .top)
-
-                NexlyComposerBar(
-                    text: .constant(""),
-                    isStreaming: false,
-                    canSend: false,
-                    focused: $composerFocused,
-                    onAttach: {},
-                    onVoice: {},
-                    onSearch: {},
-                    onSend: {},
-                    onStop: {},
-                    onSubmit: {}
-                )
-                .padding(.horizontal, Aero.Spacing.m)
-                .padding(.bottom, 14)
-                .frame(width: column)
             }
             .frame(width: geo.size.width, height: geo.size.height)
         }
