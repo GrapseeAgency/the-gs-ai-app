@@ -269,14 +269,6 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Measure the iOS render against the reference
-        run: |
-          set -euo pipefail
-          DIR=ios/build/home-renders
-          python3 scripts/check_home_render.py \
-            --reference assets/reference/home-reference.png \
-            --render "$DIR/home-ios-393x852.png" --probe-set ios --label ios-393
-
       - name: Package — zip unsigned simulator .app
         run: |
           # XcodeGen's default PRODUCT_NAME = target name → the built bundle
@@ -333,6 +325,19 @@ jobs:
           name: GSApp-xcarchive-unsigned-${{ github.sha }}
           path: ios/build/GSApp.xcarchive
           if-no-files-found: error
+
+      # LAST, after every artifact is built and uploaded. The gate is blocking —
+      # a red here fails the job — but it used to sit between Test and Package,
+      # so a probe drift cost the .app and the .xcarchive too, and the run that
+      # needed inspecting was the one with nothing to inspect. Judgment goes
+      # after evidence, in this job as well as in android-app.yml.
+      - name: Measure the iOS render against the reference
+        run: |
+          set -euo pipefail
+          DIR=ios/build/home-renders
+          python3 scripts/check_home_render.py \
+            --reference assets/reference/home-reference.png \
+            --render "$DIR/home-ios-393x852.png" --probe-set ios --label ios-393
 
       - name: Upload full xcodebuild logs (failure diagnostics)
         if: failure()
